@@ -7,7 +7,8 @@ import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
+  'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return',
+  'warm-behind', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -66,6 +67,8 @@ const HELP = {
     + 'canary of its frames a second (0 by default)'],
   'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
     + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
+  'warm-behind': ['', 'boot: Start never pressed, the lobby watched till the fight has warmed behind it and 5 s after, '
+    + 'as a player who stays in the lobby meets it'],
   film: ['', 'boot: the loading screen\'s exit filmed, the screen\'s frames as the trace caught them, and any frame '
     + 'unlike those either side of it found (a flicker)'],
   'film-logo': ['', 'boot: --film at the window\'s full size, and its frames from the reveal on cut to the lobby\'s '
@@ -192,6 +195,7 @@ export function readOptions(argv) {
     before: written.before ?? null,
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
+    warmBehind: written['warm-behind'] === true,
     film: written.film === true || written['film-logo'] === true,
     filmLogo: written['film-logo'] === true,
     help: written.help === true,

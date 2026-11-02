@@ -177,7 +177,8 @@ async function playTraced(browser, page, options, picture) {
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, { ...options, picture });
   const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();
-  if (options.before) await page.evaluate(options.before);
+  const before = options.before ? await page.evaluate(options.before) : undefined;
+  if (before !== undefined) notes.push(`--before gave ${JSON.stringify(before)}`);
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
   if (options.read) notes.push(await readOff(page, options.read, picture));

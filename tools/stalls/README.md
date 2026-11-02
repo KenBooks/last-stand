@@ -110,7 +110,7 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
     warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till
     they're warm (the game's `fight warm` mark), Start pressed first where they aren't by then, as a first visit
-    leaves them for it (`page.mjs` `startIfCold`). `--cold-return`: the first visit leaves without pressing Start,
+    leaves them for it (`page.mjs` `startIfCold`). `--before`'s value, if it gives one, goes to `out/read-N.before.json`, its trace stopped by then (the page's frames with no trace on them). `--warm-behind`: Start is never pressed, and the lobby is watched till the fight has warmed behind it and 5 s after. `--cold-return`: the first visit leaves without pressing Start,
     so the return finds its maps kept and the fight's programs never compiled (a visit that never fought, a deploy
     that changed a shader); a build that warms its fight before the lobby is said to have left it warm all the
     same, its return no cold one. `--stall-lobby ms` holds up each of the lobby's frames for a second after its reveal, the

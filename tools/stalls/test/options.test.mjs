@@ -42,6 +42,7 @@ test('fills in the defaults', () => {
     before: null,
     read: null,
     coldReturn: false,
+    warmBehind: false,
     film: false,
     filmLogo: false,
     help: false,

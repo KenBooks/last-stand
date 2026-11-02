@@ -55,6 +55,17 @@ async function bootContext(browser, url, variant, options) {
   return context;
 }
 
+/** How long `--warm-behind` goes on watching the lobby once the fight is warm: its frames then are the lobby's own,
+ *  with nothing behind it. */
+const AFTER_WARM_MS = 5000;
+
+/** What `--before`'s expression gave, written beside `--read`'s (`read`'s path, `.before.json`): the trace stopped
+ *  by then, so it's how the page runs with no trace on it. */
+function writeBefore(value, read) {
+  if (value === undefined) return;
+  writeFileSync(read.replace(/\.json$/, '.before.json'), `${JSON.stringify(value, null, 1)}\n`);
+}
+
 /** Whether `visit` leaves without pressing Start (`--cold-return`: the first visit, so the return finds its maps
  *  kept and the fight's programs never compiled, as after a visit that never fought). */
 const leftCold = (visit, options) => options.coldReturn && visit === VISITS[0];
@@ -89,8 +100,9 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
-    await page.evaluate(startIfCold);
+    if (!options.warmBehind) await page.evaluate(startIfCold);
     await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+    if (options.warmBehind) await page.waitForTimeout(AFTER_WARM_MS);
   }
   if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
   const builds = options.builds ? await page.evaluate(readBuilds) : null;
@@ -99,7 +111,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const shots = film ? await film.stop() : [];
   await setRate(1);
   await viewForPicture(page, options.view);
-  if (options.before) await page.evaluate(options.before);
+  if (options.before) writeBefore(await page.evaluate(options.before), picture.read);
   await pictureEnd(page, options.cast, picture.end);
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
   if (builds) {
