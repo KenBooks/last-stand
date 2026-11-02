@@ -86,6 +86,32 @@ function mergeAlike(joint: THREE.Object3D): void {
   }
 }
 
+/** the geometries of the first dummy built, in the order its meshes are met (`shareGeometries`) */
+let sharedGeometries: THREE.BufferGeometry[] | null = null;
+
+/**
+ * Every dummy's meshes given the first one's geometries, marked as shared, so all of them are drawn in a crowd as the
+ * foes are: each material's parts of all the dummies one instanced draw (models/crowd.ts), where they were 29 of the
+ * lobby's scene draws a frame and 21 of its shadow's, at about 20 us of JS a draw on WebGPU.
+ */
+function shareGeometries(root: THREE.Object3D): void {
+  const meshes: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  });
+  const first = sharedGeometries === null;
+  sharedGeometries ??= meshes.map((mesh) => mesh.geometry);
+  meshes.forEach((mesh, i) => {
+    if (first) {
+      mesh.geometry.userData.shared = true;
+      return;
+    }
+    // (the straw's are made once already)
+    if (mesh.geometry !== sharedGeometries![i]) mesh.geometry.dispose();
+    mesh.geometry = sharedGeometries![i];
+  });
+}
+
 export function buildDummy(): Model {
   const kit = createKit(0xf0c860);
   const woodMat = kit.std({ ...pbrMaterialMaps(wood(), 1, 1.2), roughness: 1 });
@@ -168,5 +194,7 @@ export function buildDummy(): Model {
     head.rotation.set(-lean * 0.6, 0, -tilt * 0.8);
   }
 
+  shareGeometries(root);
+  root.userData.crowdKind = 'dummy';
   return { root, kit, animate, height: 1.95, dispose() { kit.dispose(); } };
 }

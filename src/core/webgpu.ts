@@ -499,7 +499,32 @@ type Monitored = {
   looksSeen?: Float32Array;
   /** whether its looks changed since its last draw: why it was refreshed in full (`fullBecause`) */
   looksChanged?: boolean;
+  /** a meshlet batch's place in its culling's buffers as this render object last drew it (`batchMoved`) */
+  batchSeen?: Float32Array;
 };
+
+/** each meshlet batch's draw materials' batch (`batchesBuiltApart`) */
+const batchOf = new WeakMap<THREE.Material, Batch>();
+
+/** how many buffers have been freed (`batchesBuiltApart`) */
+let buffersFreed = 0;
+
+/** Whether what `batch`'s draws read differs from what `seen` holds, `seen` set to it: where it lies in its culling's
+ *  buffers, which move as the culling is resized and as other batches come and go, and those buffers themselves,
+ *  which a resize or a grown pool replaces: drawn on with the old ones, whole passes were refused every frame
+ *  (`Buffer used in submit while destroyed`, 500 times a boot). Any buffer freed refreshes them all once: nothing is
+ *  freed in a steady frame. */
+function batchMoved(batch: Batch, seen: Float32Array): boolean {
+  const { dataOffset, queueOffset, counterOffset, maxWorkItems } = batch.rangeNodes;
+  let moved = seeAt(seen, 0, dataOffset.value);
+  moved = seeAt(seen, 1, queueOffset.value) || moved;
+  moved = seeAt(seen, 2, counterOffset.value) || moved;
+  moved = seeAt(seen, 3, maxWorkItems.value) || moved;
+  moved = seeAt(seen, 4, batch.instanceOffset?.value ?? 0) || moved;
+  moved = seeAt(seen, 5, batch.transformCount?.value ?? 0) || moved;
+  moved = seeAt(seen, 7, buffersFreed) || moved;
+  return seeAt(seen, 6, batch.transformPreviousCount?.value ?? 0) || moved;
+}
 
 /** how many numbers a kit material's looks are (`looksChanged`) */
 const LOOKS = 16;
@@ -544,7 +569,9 @@ function looksChanged(looks: KitLooks, seen: Float32Array): boolean {
  * change (`looksChanged`: its nodes read them off the material, `kitNodes` in core/shaderPorts.ts): refreshed at each
  * draw, the lobby's two training dummies standing still were 31 full refreshes a frame (and 16 more as they swayed).
  * Its looks are kept on each render object: three's observer is one for every render object of a node build, and
- * kept on it, the two dummies' looks took turns and refreshed every draw.
+ * kept on it, the two dummies' looks took turns and refreshed every draw. A meshlet batch's draws are too, and as
+ * the batch moves in its culling's buffers (`batchMoved`): they read everything else off buffers the culling fills,
+ * and were 38 full refreshes a frame, none of them changing anything.
  */
 function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
@@ -552,11 +579,16 @@ function stillWhereStill(renderer: WebGPURenderer): void {
   nodes.needsRefresh = (built) => {
     // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
     const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
-    const still = shadow || stillNodes.has(built.material);
+    const batch = batchOf.get(built.material);
+    const still = shadow || batch !== undefined || stillNodes.has(built.material);
     // (at every draw: three sets it again as each render object of the build is first drawn, and a still material
     // holds a node, `refreshedEachDraw` in core/shaderPorts.ts, for the meshlets' copy of it)
     if (still) built.getMonitor().hasNode = false;
     const type = needsRefresh(built);
+    if (batch !== undefined) {
+      built.batchSeen ??= new Float32Array(8).fill(NaN);
+      return batchMoved(batch, built.batchSeen) ? 2 : type;
+    }
     const looks = built.material.kitLooks;
     if (!looks || !still) return type;
     built.looksSeen ??= new Float32Array(LOOKS).fill(NaN);
@@ -678,7 +710,15 @@ function stillAlone<T>(drawing: T): T {
   return drawing;
 }
 
-type Batch = { meshes: THREE.Mesh[]; setupDraw(shared: unknown): void };
+type Batch = {
+  meshes: THREE.Mesh[];
+  prepassMeshes: THREE.Mesh[];
+  rangeNodes: Record<'dataOffset' | 'queueOffset' | 'counterOffset' | 'maxWorkItems', { value: number }>;
+  instanceOffset?: { value: number };
+  transformCount?: { value: number };
+  transformPreviousCount?: { value: number };
+  setupDraw(shared: unknown): void;
+};
 type NodeMaterialKey = { customProgramCacheKey(this: THREE.Material): string };
 
 /**
@@ -700,6 +740,15 @@ function batchesBuiltApart(MeshletBatch: unknown): void {
       const drawn = material as THREE.Material;
       drawn.customProgramCacheKey = () => nodeKey.call(drawn) + tag;
     }
+    // (their constructor makes the prepass's after `setupDraw`: found by the batch's draws as they're first refreshed)
+    for (const { material } of this.meshes) batchOf.set(material as THREE.Material, this);
+  };
+  // (what a batch's draws bind is replaced as buffers go: `batchMoved`)
+  const attribute = THREE.BufferAttribute.prototype as unknown as { dispose(this: object): void };
+  const dispose = attribute.dispose;
+  attribute.dispose = function (this: object) {
+    buffersFreed++;
+    dispose.call(this);
   };
 }
 

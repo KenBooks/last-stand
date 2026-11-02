@@ -286,7 +286,7 @@ if (crowdCast <= 0.0 || crowdCast < uMinCaster) gl_Position = vec4(0.0, 0.0, 2.0
 
 /**
  * `body` drawn in its kind's crowd from now on, its own meshes put on `CROWD_LAYER`: false when it isn't a creature
- * whose kind shares its geometry (a hero, the training dummy), which is drawn on its own.
+ * whose kind shares its geometry (a hero), which is drawn on its own.
  */
 export function joinCrowd(body: CrowdBody): boolean {
   const name = body.model.root.userData.crowdKind as string | undefined;

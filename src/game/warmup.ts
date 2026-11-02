@@ -186,6 +186,8 @@ export async function warmLobby(heroes = false): Promise<void> {
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
+  // (the dummies' crowd, shown from the first frame: hidden till then, its programs were made at the lobby's draws)
+  for (const dummy of G.enemies) for (const slot of crowdSlots(dummy.model)) slot.visible = true;
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
   });
