@@ -47,6 +47,14 @@ export const clustersBack = (): Promise<void> => clusters.back();
 
 /** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
+/** the renderer, for what's sent to the GPU outside a draw (`uploadTexture`) */
+let uploader: WebGPURenderer | null = null;
+/** `texture` sent to the GPU now, as it stands. A material three doesn't refresh sends none of its textures, so what
+ *  still meshes read that changes each frame is sent by what changes it (`models/drawAsOne.ts`). */
+export function uploadTexture(texture: THREE.Texture): void {
+  uploader?.initTexture(texture);
+}
+
 /** three's WebGPU build and its node language, loaded with the renderer: what node materials are made from */
 export let gpu: typeof import('three/webgpu');
 export let tsl: typeof import('three/tsl');
@@ -66,6 +74,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true, outputType,
   });
   await renderer.init();
+  uploader = renderer;
   // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
   // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
   if (RUNNING.meshlets) {
@@ -91,6 +100,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   walkedAtOnce(renderer);
   pipelinesBeside(renderer);
   stillWhereStill(renderer);
+  bundlesBeforeTransparents(renderer);
   if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
@@ -490,6 +500,9 @@ function recordDraws(renderer: WebGPURenderer): void {
  *  maps never change (a see-through prop's, core/shaderPorts.ts) */
 export const stillNodes = new WeakSet<THREE.Material>();
 
+/** how many numbers a kit material's looks are (`looksChanged`) */
+const LOOKS_COUNT = 16;
+
 /** a render object as three's refresh reads it: its material, and its build's observer */
 type Monitored = {
   material: THREE.Material & { kitLooks?: KitLooks };
@@ -501,7 +514,43 @@ type Monitored = {
   looksChanged?: boolean;
   /** a meshlet batch's place in its culling's buffers as this render object last drew it (`batchMoved`) */
   batchSeen?: Float32Array;
+  /** what a stand-in's base held as this render object last drew it (`baseChanged`) */
+  baseSeen?: Float32Array;
 };
+
+/** The materials standing in for another (`models/drawAsOne.ts`), by what they stand in for: nothing about their object
+ *  or geometry ever changes, so a draw of one looks at its base's values alone (`baseChanged`). */
+export const standInBases = new WeakMap<THREE.Material, THREE.Material>();
+
+/** a stand-in's base's values, those a game changes as it runs */
+type BaseValues = THREE.MeshPhysicalMaterial & { kitLooks?: KitLooks };
+
+/** how many numbers a stand-in's base is watched by (`baseChanged`) */
+const BASE_VALUES = LOOKS_COUNT + 15;
+
+/** Whether `base`'s values differ from what `seen` holds, `seen` set to them: three's observer compares each of the
+ *  85 properties of a material at every draw, a stand-in's through its accessors (1.5 ms of the frame's JS, profiled,
+ *  for a hero's 31 draws). A map swapped, a colour set, a glow's pulse or anything said by its `version` shows here. */
+function baseChanged(base: BaseValues, seen: Float32Array): boolean {
+  const looks = base.kitLooks;
+  let changed = looks ? looksChanged(looks, seen) : false;
+  let at = LOOKS_COUNT;
+  changed = seeAt(seen, at++, base.version) || changed;
+  changed = seeAt(seen, at++, base.color?.r ?? 0) || changed;
+  changed = seeAt(seen, at++, base.color?.g ?? 0) || changed;
+  changed = seeAt(seen, at++, base.color?.b ?? 0) || changed;
+  changed = seeAt(seen, at++, base.emissive?.r ?? 0) || changed;
+  changed = seeAt(seen, at++, base.emissive?.g ?? 0) || changed;
+  changed = seeAt(seen, at++, base.emissive?.b ?? 0) || changed;
+  changed = seeAt(seen, at++, base.emissiveIntensity ?? 0) || changed;
+  changed = seeAt(seen, at++, base.opacity) || changed;
+  changed = seeAt(seen, at++, base.roughness ?? 0) || changed;
+  changed = seeAt(seen, at++, base.metalness ?? 0) || changed;
+  changed = seeAt(seen, at++, base.envMapIntensity ?? 0) || changed;
+  changed = seeAt(seen, at++, base.map?.id ?? 0) || changed;
+  changed = seeAt(seen, at++, base.normalMap?.id ?? 0) || changed;
+  return seeAt(seen, at, base.roughnessMap?.id ?? 0) || changed;
+}
 
 /** each meshlet batch's draw materials' batch (`batchesBuiltApart`) */
 const batchOf = new WeakMap<THREE.Material, Batch>();
@@ -525,9 +574,6 @@ function batchMoved(batch: Batch, seen: Float32Array): boolean {
   moved = seeAt(seen, 7, buffersFreed) || moved;
   return seeAt(seen, 6, batch.transformPreviousCount?.value ?? 0) || moved;
 }
-
-/** how many numbers a kit material's looks are (`looksChanged`) */
-const LOOKS = 16;
 
 /** Whether `value` differs from `seen[i]`, `seen[i]` set to it (as the array holds it: a float32 never equals the
  *  double it rounded). */
@@ -577,6 +623,15 @@ function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
   const needsRefresh = nodes.needsRefresh.bind(nodes);
   nodes.needsRefresh = (built) => {
+    const base = standInBases.get(built.material);
+    if (base !== undefined && built.baseSeen) {
+      // (a stand-in's uniforms of the render, the camera's and the lights', each render)
+      return baseChanged(base as BaseValues, built.baseSeen) ? 2 : 1;
+    }
+    if (base !== undefined) {
+      built.baseSeen = new Float32Array(BASE_VALUES).fill(NaN);
+      baseChanged(base as BaseValues, built.baseSeen);
+    }
     // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
     const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
     const batch = batchOf.get(built.material);
@@ -591,10 +646,41 @@ function stillWhereStill(renderer: WebGPURenderer): void {
     }
     const looks = built.material.kitLooks;
     if (!looks || !still) return type;
-    built.looksSeen ??= new Float32Array(LOOKS).fill(NaN);
+    built.looksSeen ??= new Float32Array(LOOKS_COUNT).fill(NaN);
     built.looksChanged = looksChanged(looks, built.looksSeen);
     // (three's refresh types: none 0, shared 1, full 2)
     return built.looksChanged ? 2 : type;
+  };
+}
+
+/** a render context's state in three's WebGPU backend, as far as its render bundles go */
+type BundlesOfPass = { renderBundles: object[]; currentPass: { executeBundles(bundles: object[]): void } };
+type Bundling = {
+  backend: { get(context: unknown): BundlesOfPass; _resetRenderContextData(data: BundlesOfPass): void };
+  _currentRenderBundle: unknown;
+  _currentRenderContext: unknown;
+  _renderTransparents(...rest: unknown[]): void;
+};
+
+/**
+ * three executes a pass's render bundles as it ends, after what's blended, so a bundle's opaque meshes would be drawn
+ * over the glows and particles before them, which saw no depth of theirs to stop at. They're executed before the first
+ * blended draw instead, and the pass's state forgotten: executing a bundle clears what the pass had set.
+ */
+function bundlesBeforeTransparents(renderer: WebGPURenderer): void {
+  const r = renderer as unknown as Bundling;
+  const transparents = r._renderTransparents.bind(r);
+  r._renderTransparents = (...rest) => {
+    if (r._currentRenderBundle === null) {
+      const pass = r.backend.get(r._currentRenderContext);
+      // (none in a compile: it begins no pass)
+      if (pass.renderBundles?.length > 0) {
+        pass.currentPass.executeBundles(pass.renderBundles);
+        pass.renderBundles.length = 0;
+        r.backend._resetRenderContextData(pass);
+      }
+    }
+    transparents(...rest);
   };
 }
 

@@ -50,6 +50,17 @@ export function aroundShadows(around: AroundShadows): () => void {
   return () => aroundShadow.delete(around);
 }
 
+/** Work done round each render of a view on WebGPU, a camera of the scene's that isn't a light's (`aroundViews`). */
+const aroundView = new Set<AroundShadows>();
+
+/** `around` run round each render of the scene by a camera that isn't a light's (a hero's parts drawn as one,
+ *  `models/drawAsOne.ts`); the returned function lets go of it. A shadow drawn inside such a render runs its own
+ *  (`aroundShadows`) within it. */
+export function aroundViews(around: AroundShadows): () => void {
+  aroundView.add(around);
+  return () => aroundView.delete(around);
+}
+
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
 
 /** A mesh of `mesh`'s geometry and material casting its shadow, every instance of it, drawn by the shadow map alone. */
@@ -234,7 +245,10 @@ function shadowsAsRenders(scene: THREE.Scene): void {
     const camera = args[2];
     if (!isShadow(camera)) {
       cullFor(camera);
-      backs.push(NOTHING);
+      const after = [...aroundView].map((around) => around(camera));
+      backs.push(() => {
+        for (const undo of after) undo();
+      });
       return;
     }
     backs.push(intoShadow(camera));

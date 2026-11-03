@@ -20,6 +20,7 @@ import { BIOME_IDS } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from '../entities/models/index';
+import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
 import { crowdSlots, joinCrowd, leaveCrowd } from '../entities/models/crowd';
@@ -97,6 +98,8 @@ function heroAllWorn(model: string, at?: THREE.Vector3): Model {
   m.root.traverse((o) => { o.visible = true; });
   m.root.name = `warm-up: ${model}, all worn`;   // names show up in the perf report
   if (at) m.root.position.copy(at);
+  // (and on WebGPU his parts as a hero draws them, merged: each material drawn from the joints)
+  drawnAsOneSamples(m);
   return m;
 }
 

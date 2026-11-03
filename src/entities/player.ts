@@ -23,6 +23,7 @@ import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
+import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
@@ -148,6 +149,8 @@ export class Player {
   readonly handLight: THREE.PointLight | null;
   /** his pieces' shadow, cast in one draw (`models/castAsOne.ts`) */
   readonly shadow: OneShadow;
+  /** his parts drawn as one mesh a material, on WebGPU (`models/drawAsOne.ts`) */
+  readonly drawn: OneDraw;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
   private auraLit = 0;
   /** played here (a co-op partner is remote: driven by what its own game reports) */
@@ -265,6 +268,7 @@ export class Player {
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
+    this.drawn = drawAsOne(this.model);
     this.shadow = castAsOne(this.model.root, this.obj);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
 
@@ -283,6 +287,7 @@ export class Player {
     this.ward?.onEnd?.();
     G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
     this.shadow.dispose();
+    this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     // (its lights are the next hero's: `heroLights`)
