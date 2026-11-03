@@ -66,6 +66,8 @@ import type { Profile } from './types';
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
+/** how long the loading screen waits for the fight's warm-up on WebGPU (ms) */
+const FIGHT_UNDER_LOADING = 6000;
 
 async function boot() {
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
@@ -156,11 +158,17 @@ async function boot() {
   // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen
   if (firstVisit) await loadingStep('Gathering the heroes', 0.6);
   await warmLobby(firstVisit);
-  const rest = warmTheRest(loadingLeft);
+  const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();
+  }
+  // (on WebGPU the lobby held 66 to 108 frames a second for the 8 s the fight warmed behind it, where under the loading
+  // screen, in long slices, it takes a moment on a return; what a first visit hasn't done by then goes on behind)
+  if (WEBGPU) {
+    await loadingStep('Readying the fight', 0.7);
+    await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
   }
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)

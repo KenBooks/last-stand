@@ -436,13 +436,14 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
  * The programs the lobby doesn't use warmed (game/warm.ts): the fight's behind it once the loading screen has `left`
  * (its logo's exit draws over the lobby till then), where this build warmed them here before and the maps were kept
  * (`rememberWarmed`: else, a first visit or a new build's, its programs are new to the GPU's cache), and the other
- * heroes' once something needs them. On WebGPU the fight's are all compiled at once as the loading screen leaves,
- * every visit: three's async compile makes its pipelines on the GPU's threads and builds its nodes a slice a frame,
+ * heroes' once something needs them. On WebGPU the fight's are all compiled at once,
+ * every visit (under the loading screen, which waits for them up to `FIGHT_UNDER_LOADING` in main.ts: compiled as it
+ * left, the lobby held 66 to 108 frames a second for 8 s, where WebGL's starts at the screen's rate): three's async compile makes its pipelines on the GPU's threads and builds its nodes a slice a frame,
  * so the lobby never waits for one, and Chrome's cache never served them on a return (the bar was 2.4 s on every
  * visit). A part at a time there compiled a few at once, and was slower still. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
  * by a warm-up is counted as compiled late (main.ts `markLoaded`).
  */
-export async function warmTheRest(left: Promise<void>): Promise<void> {
+export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: Promise<void> } {
   const behind = async (): Promise<boolean> => {
     await Promise.race([left, wanted('fight')]);
     return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
@@ -451,13 +452,15 @@ export async function warmTheRest(left: Promise<void>): Promise<void> {
     rememberWarmed();
     performance.mark('fight warm');
   });
+  // (begun under the loading screen, in its long slices: main.ts waits for it there, as long as `FIGHT_UNDER_LOADING`)
+  if (WEBGPU) want('fight');
   if (WEBGPU) void left.then(() => {
-    want('fight');
     fitSlices(fightWarm);
     // (once it's warm, a compile's slices long while the fight's loading bar is up, nothing played under it)
     onReadying(() => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing));
   });
-  await Promise.all([fightWarm, warmNeed('heroes', heroParts(), async () => false)]);
+  const heroes = warmNeed('heroes', heroParts(), async () => false);
+  return { fight: fightWarm, all: Promise.all([fightWarm, heroes]).then(() => {}) };
 }
 
 /** how much shorter the compile's slice gets after a frame that missed the screen's refresh, and how much longer
