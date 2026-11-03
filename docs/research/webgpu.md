@@ -322,7 +322,9 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 - **Looks that are near WebGL's but not the same:**
   - The grass's wind takes each tuft's phase from an approximation of where it stands (`grassWindNode`).
   - The crypt floor's earth edge reads the cobbles' height at the unmoved place, not the relief's.
-  - The final grade hasn't been compared with WebGL's line by line.
+  - The final grade hasn't been compared with WebGL's line by line, and the frame reads darker than WebGL's: at one
+    camera in the forest, sRGB green 44.6 against 49.9 on the lit dais, 114 against 120 on the unlit sky, 4.3 against
+    8.0 in shadow (16.7 with `?envShadow=0`). The cause isn't found.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).

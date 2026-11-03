@@ -509,7 +509,8 @@ export async function initRenderer(container: HTMLElement) {
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   if (WEBGPU) {
     takePorts(renderer as unknown as WebGPURenderer);
-    shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
+    // (`?envShadow=0` leaves the environment unshadowed, to compare)
+    if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   }
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
