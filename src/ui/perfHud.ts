@@ -83,8 +83,8 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   el = $('#perf');
   // postprocessing issues several render calls per frame: count them all, reset per frame
   renderer.info.autoReset = false;
-  // (on WebGPU no GPU timing yet, its timestamp queries: core/webgpu.ts)
   if (WEBGPU) {
+    timesGpu = (renderer as unknown as WebGpuTimes).hasFeature('timestamp-query');
     // (and its switches: a report's frames hang on them)
     const flags = [RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean);
     gpuName = flags.length ? `WebGPU (${flags.join(', ')})` : 'WebGPU';
@@ -174,6 +174,7 @@ export function perfEndFrame(): void {
   stages = {};
   frameCalls = frameDraws();
   frameTris = renderer.info.render.triangles;
+  takeWebGpuTime();
   if (gl && timerExt && frameParts) {
     if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting }); }
     frameParts = null;
@@ -193,6 +194,32 @@ export function lastPerfFrame(): Readonly<{ cpu: number; upd: number; rnd: numbe
 
 /** The GPU's frames come back since the last take, oldest first (for a harness: tools/lab `perf`). */
 export const takeGpuFrames = (): GpuFrame[] => gpuTaken.splice(0);
+
+/** what of three's WebGPU renderer times the GPU */
+interface WebGpuTimes {
+  hasFeature(name: string): boolean;
+  resolveTimestampsAsync(type: 'render' | 'compute'): Promise<number | undefined>;
+}
+/** whether WebGPU's timestamp queries are there to read (WebGL's times come by `timerExt`) */
+let timesGpu = false;
+/** whether a read of them is under way: one at a time, each its latest frame's */
+let readingGpuTime = false;
+
+/** The latest frame's GPU time on WebGPU (all its passes, and the GPU-driven drawing's culling), asked for if none is
+ *  on its way. Not split into parts: three sums a frame's passes. */
+function takeWebGpuTime(): void {
+  if (!timesGpu || readingGpuTime) return;
+  readingGpuTime = true;
+  const gpuTimer = renderer as unknown as WebGpuTimes;
+  void Promise.all([gpuTimer.resolveTimestampsAsync('render'), gpuTimer.resolveTimestampsAsync('compute')])
+    .then(([render, compute]) => {
+      const ms = (render ?? 0) + (compute ?? 0);
+      if (ms <= 0) return;
+      gpuTimes.push({ t: frameNow, ms });
+      if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
+    })
+    .finally(() => { readingGpuTime = false; });
+}
 
 /** The GPU's frames whose times have come back, kept by the frame's timestamp `now`. */
 function pollQueries(now: number): void {
@@ -286,7 +313,7 @@ function draw(now: number): void {
   set('avg', fmtFps(s.avgFps));
   set('low', fmtFps(s.lowFps));
   set('cpu', fmt(s.cpu, 2));
-  set('gpu', timerExt ? fmt(s.gpu, 2) : 'n/a');
+  set('gpu', timerExt || timesGpu ? fmt(s.gpu, 2) : 'n/a');
   set('top', String(top));
   set('mid', String(top / 2));
   set('calls', kilo(frameCalls));
@@ -370,7 +397,7 @@ function report(): string {
     `Last Stand performance report (${new Date().toISOString()}, build ${BUILD})`,
     `URL ${location.href}`,
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
-    `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
+    `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt || timesGpu ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used`,
