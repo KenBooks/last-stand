@@ -835,9 +835,24 @@ function compileShadowsToo(renderer: WebGPURenderer): void {
 /** the meshes the meshlet pipeline may draw: what the biomes stand, which never moves (`stillForMeshlets`) */
 const still = new WeakSet<object>();
 
+/** what's done to each still mesh's material as it's given to the meshlet pipeline (`stillMaterialsGo`) */
+let givingMaterial: (material: THREE.Material) => void = () => {};
+/** `give` run on every still mesh's material from now on. */
+export function stillMaterialsGo(give: (material: THREE.Material) => void): void {
+  givingMaterial = give;
+}
+
 /** Everything under `roots` (the biomes and the hall as they're built) given to the meshlet pipeline. */
 export function stillForMeshlets(...roots: THREE.Object3D[]): void {
-  for (const root of roots) root.traverse((object) => still.add(object));
+  if (!RUNNING.meshlets) return;
+  for (const root of roots) {
+    root.traverse((object) => {
+      still.add(object);
+      const { material } = object as THREE.Mesh;
+      if (Array.isArray(material)) material.forEach(givingMaterial);
+      else if (material) givingMaterial(material);
+    });
+  }
 }
 
 type Meshlets = { _isMeshlet(object: object, ...rest: unknown[]): boolean };

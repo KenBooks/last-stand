@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, type KitLooks } from './materials';
 import type { SeeThrough } from './seeThrough';
-import { WEBGPU, gpu, stillNodes, tsl } from './webgpu';
+import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -151,6 +151,14 @@ function seeMask(of: SeeThrough): N {
   return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of)));
 }
 
+/** `material`'s see-through mask given it as a property of its own, as the GPU-driven drawing makes its draws' materials
+ *  from a material's own properties and never asks for it to be converted (the crypt's obelisks stood solid before the
+ *  hero). */
+function maskOwn(material: THREE.Material): void {
+  const see = (material as { seeThrough?: SeeThrough }).seeThrough;
+  if (see) (material as N).maskNode ??= seeMask(see);
+}
+
 /** each kind's see-through uniforms, by its hole (`SeeThrough.k`: one a kind) */
 const seeKinds = new WeakMap<object, { focus: N; k: N; minY: N }>();
 
@@ -181,7 +189,7 @@ function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
  *  material drawn: every kit's material of a kind shares the build. */
 function kitNodes(node: N): void {
   const {
-    materialReference, materialColor, materialOpacity, materialEmissive, positionGeometry, positionView, normalView,
+    materialReference, materialColor, materialEmissive, positionGeometry, positionView, normalView,
     positionViewDirection, varying, mix, vec3, vec4, smoothstep, clamp, pow, dot, select,
   } = tsl as any;
   const read = (name: string, type: string): N => materialReference(`kitLooks.${name}.value`, type);
@@ -192,8 +200,11 @@ function kitNodes(node: N): void {
   const at = varying(positionGeometry);
   const dn = noise3({ x: at.mul(7) }).mul(0.65).add(noise3({ x: at.mul(19) }).mul(0.35));
   const near = clamp(pow(positionView.z.negate().div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1);
-  const frost = mix(materialColor.rgb, vec3(0.55, 0.8, 1.0), frozen.mul(0.75));
-  node.colorNode = vec4(mix(frost, vec3(0.045, 0.035, 0.03), char.mul(0.9)), materialOpacity);
+  const shown = vec4(materialColor);
+  const frost = mix(shown.rgb, vec3(0.55, 0.8, 1.0), frozen.mul(0.75));
+  // (its alpha the map's: three multiplies the opacity in after. Taken from the opacity alone, a cut-out drew whole:
+  // the mage's ink, laid over his forearm, hid it, and that's what a copy given these looks showed)
+  node.colorNode = vec4(mix(frost, vec3(0.045, 0.035, 0.03), char.mul(0.9)), shown.a);
   const kept = dissolve.lessThanEqual(0).or(dn.greaterThanEqual(dissolve));
   node.maskNode = node.maskNode ? node.maskNode.and(kept) : kept;
   const edge = select(dissolve.greaterThan(0), smoothstep(dissolve, dissolve.add(0.09), dn).oneMinus(), 0);
@@ -266,6 +277,7 @@ export interface OwnLooks { webgpuLooks: (converted: N) => void }
 /** three's library made to take each ported material's node material in its place (its blending, sides and depth
  *  copied over every time three asks: the draw reads them off the game's material, the build off this one). */
 export function takePorts(renderer: WebGPURenderer): void {
+  stillMaterialsGo(maskOwn);
   const library = renderer.library as unknown as { fromMaterial(material: THREE.Material): THREE.Material | null };
   const fromMaterial = library.fromMaterial.bind(library);
   library.fromMaterial = (material) => {

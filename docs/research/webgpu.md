@@ -319,12 +319,15 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 
 **Not ported yet** (each shows as missing, not broken):
 
-- **The rest of the GLSL `onBeforeCompile` looks:**
-  - triplanar, fur sway, dual-quaternion hands
+- **Looks that are near WebGL's but not the same:**
+  - The grass's wind takes each tuft's phase from an approximation of where it stands (`grassWindNode`).
+  - The crypt floor's earth edge reads the cobbles' height at the unmoved place, not the relief's.
+  - The final grade hasn't been compared with WebGL's line by line.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).
-  - The perf overlay's GPU timing.
+  - The perf overlay's GPU time isn't split by pass.
+  - MSAA is chosen as the game starts and kept till a reload: a pipeline is made for one sample count.
   - The lab.
 - **The shadow-only casters** (`world/culling.ts` `shadowsAsRenders`): WebGPU draws each shadow map as a render of
   the scene by the light's camera, nested in the frame's, with no shadow map's `render` to wrap. So the casters only
