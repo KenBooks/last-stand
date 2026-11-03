@@ -4,9 +4,10 @@
 // one, level across the view while the cut through the eyes ran down it.
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
+import { portShader } from '../../core/shaderPorts';
 
 function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
+  return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) }, uProg: { value: 0 }, uFade: { value: 1 }, uDir: { value: 1 },
       uStart: { value: 0 }, uLen: { value: 1 }, uInner: { value: 0.3 }, uEven: { value: 0 },
@@ -34,6 +35,23 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
         float i = trail * edge * tips * uFade;
         gl_FragColor = vec4(mix(uColor, vec3(1.0), trail * r * 0.3) * i * 1.3, i);
       }`,
+  })), ({ wgslFn, positionGeometry, vec2, varying }, u) => ({
+    fragment: wgslFn(`fn slashArc(p: vec2f, color: vec3f, prog: f32, fade: f32, dir: f32, start: f32, len: f32,
+      inner: f32, even: f32) -> vec4f {
+      var a = clamp((atan2(p.y, p.x) - start) / len, 0.0, 1.0);
+      if (dir < 0.0) { a = 1.0 - a; }
+      let r = clamp((length(p) - inner) / (1.0 - inner), 0.0, 1.0);
+      let behind = prog - a;
+      if (behind < 0.0) { discard; }
+      let trail = mix(exp(-behind * 5.0), 1.0, even);
+      let edge = pow(r, 3.0) * 1.4 + r * 0.25;
+      let tips = smoothstep(0.0, 0.08, a) * (1.0 - smoothstep(0.92, 1.0, a));
+      let i = trail * edge * tips * fade;
+      return vec4f(mix(color, vec3f(1.0), trail * r * 0.3) * i * 1.3, i);
+    }`)({
+      p: varying(vec2(positionGeometry.x, positionGeometry.z.negate())), color: u.uColor, prog: u.uProg,
+      fade: u.uFade, dir: u.uDir, start: u.uStart, len: u.uLen, inner: u.uInner, even: u.uEven,
+    }),
   }));
 }
 

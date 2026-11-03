@@ -2,6 +2,7 @@
 // def.block times the block amount); this draws the ward in front and flares it on each block.
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
+import { portShader } from '../../core/shaderPorts';
 import { G } from '../../state';
 import { BLOCK } from '../../data/balance';
 import type { ChannelSkill } from './types';
@@ -13,7 +14,7 @@ const GOLD = new THREE.Color(0xffd08a);
 const geo = new THREE.CylinderGeometry(0.95, 0.95, 1.6, 28, 1, true, -BLOCK.arc, BLOCK.arc * 2);
 
 function guardMaterial(): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
+  return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uColor: { value: GOLD }, uFade: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -30,6 +31,14 @@ function guardMaterial(): THREE.ShaderMaterial {
         float i = sides * (0.05 + rim * 0.45 + bands * 0.04 + uHit * (0.25 + rim * 0.5)) * uFade;
         gl_FragColor = vec4(uColor * i * 0.7, i);
       }`,
+  })), ({ wgslFn, uv }, u) => ({
+    fragment: wgslFn(`fn guardWard(uv: vec2f, color: vec3f, fade: f32, hit: f32, time: f32) -> vec4f {
+      let sides = smoothstep(0.0, 0.18, uv.x) * (1.0 - smoothstep(0.82, 1.0, uv.x));
+      let rim = pow(abs(uv.y - 0.5) * 2.0, 6.0);
+      let bands = 0.5 + 0.5 * sin(uv.y * 40.0 - time * 6.0);
+      let i = sides * (0.05 + rim * 0.45 + bands * 0.04 + hit * (0.25 + rim * 0.5)) * fade;
+      return vec4f(color * i * 0.7, i);
+    }`)({ uv: uv(), color: u.uColor, fade: u.uFade, hit: u.uHit, time: u.uTime }),
   }));
 }
 

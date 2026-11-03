@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
+import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';
 import { particles, col, burst, smokePuff, debris } from './particles';
 import { shockwave, decal } from './effects';
 import { flashFree } from './lights';
@@ -80,8 +81,49 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Ma
         gl_FragColor = vec4(uColor * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
       }`,
   }));
+  portShader(m as THREE.ShaderMaterial, (t, u) => riftPort(t, u, kind, look));
   mats.set(key, m);
   return m;
+}
+
+/** Each bolt's material on WebGPU (core/shaderPorts.ts), its fragment shader above in WGSL */
+function riftPort(t: Tsl, u: Tsl, kind: 'orb' | 'halo' | 'tail', look: Look): Port {
+  const { wgslFn, positionGeometry, normalView, positionViewDirection, varying } = t;
+  const { noise3, fbm3: fbm } = wgslNoise();
+  const at = { pos: varying(positionGeometry), nrm: normalView, v: positionViewDirection, color: u.uColor, time: u.uTime };
+  if (kind === 'orb' && look === 'void') return { fragment: wgslFn(`fn riftVoid(pos: vec3f, nrm: vec3f, v: vec3f,
+    color: vec3f, time: f32) -> vec4f {
+    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
+    let rim = 1.0 - f;
+    let p = pos * 2.6;
+    let n = fbm3(p + vec3f(fbm3(p + time * 1.3), fbm3(p - time * 1.1), 0.0) * 2.0 - time * 0.6);
+    let band = pow(max(0.0, 1.0 - abs(n - 0.5) * 5.0), 2.0);
+    let c = color * 0.05 + color * (1.6 * rim * rim + 1.3 * band * rim) + vec3f(1.0, 0.85, 1.0) * pow(rim, 5.0) * 1.2;
+    return vec4f(c, 0.92);
+  }`, [fbm])(at) };
+  if (kind === 'orb') return { fragment: wgslFn(`fn riftMagma(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f,
+    time: f32) -> vec4f {
+    let n = fbm3(pos * 2.3 + 1.7);
+    let crack = pow(max(0.0, 1.0 - abs(n - 0.5) * 9.0), 1.5);
+    let pulse = 0.8 + 0.2 * sin(time * 9.0 + pos.x * 6.0);
+    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
+    let rock = vec3f(0.07, 0.05, 0.045) * (0.4 + 0.8 * f) + vec3f(0.12, 0.06, 0.03) * noise3(pos * 8.0);
+    let lava = mix(color, vec3f(1.0, 0.85, 0.45), crack) * 2.6 * pulse;
+    return vec4f(mix(rock, lava, crack) + color * pow(1.0 - f, 3.0) * 0.8, 1.0);
+  }`, [fbm, noise3])(at) };
+  if (kind === 'halo') return { fragment: wgslFn(`fn riftHalo(nrm: vec3f, v: vec3f, color: vec3f) -> vec4f {
+    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
+    return vec4f(color * f * f * (1.0 - smoothstep(0.7, 0.86, f)) * 1.2, 1.0);
+  }`)({ nrm: at.nrm, v: at.v, color: at.color }) };
+  return { fragment: wgslFn(`fn riftTail(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f, time: f32) -> vec4f {
+    let along = -pos.z;
+    var a = 0.0;
+    if (length(pos.xy) > 1e-5) { a = atan2(pos.y, pos.x); }
+    let s = fbm3(vec3f(cos(a) * 1.6, sin(a) * 1.6, along * 3.0 + time * 7.0));
+    let fade = pow(max(1.0 - along, 0.0), 1.6) * smoothstep(0.0, 0.08, along);
+    let edge = max(dot(normalize(nrm), normalize(v)), 0.0);
+    return vec4f(color * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
+  }`, [fbm])(at) };
 }
 
 /** The bolt's mesh, radius `size`: the orb, a soft halo round it and (void) a tail behind. */

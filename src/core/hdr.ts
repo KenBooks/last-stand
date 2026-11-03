@@ -8,6 +8,10 @@
 // The levels are the player's, as shares of the screen's white for SDR content (the OS's, which no page can read in
 // nits): `paper`, how bright the frame's white is, and `peak`, how far its highlights may go. SDR screens, a browser
 // without WebGPU and HDR set off draw as before, with no WebGPU device started.
+//
+// On the WebGPU renderer (core/webgpu.ts) the game's own canvas is put in extended range as the renderer is made, when
+// HDR is wanted then (`initHdrForWebGPU`): three configures its canvas once, so a change of the setting or the display
+// shows after a reload there (`reload`).
 import { readCookie, writeCookie } from './cookies';
 
 /** Auto: HDR on whenever the display is in HDR mode. */
@@ -20,7 +24,7 @@ export interface HdrSettings {
   peak: number;
 }
 /** What HDR is doing: on, set off, no HDR display, a browser that can't, or starting. */
-export type HdrStatus = 'on' | 'off' | 'sdr-display' | 'unsupported' | 'starting';
+export type HdrStatus = 'on' | 'off' | 'sdr-display' | 'unsupported' | 'starting' | 'reload';
 
 const COOKIE = 'last-stand-hdr';
 const DEFAULTS: HdrSettings = { mode: 'auto', paper: 1, peak: 3 };
@@ -57,6 +61,8 @@ let glCanvas: HTMLCanvasElement | null = null;
 let presenter: Presenter | null = null;
 let starting: Promise<void> | null = null;
 let unsupported = false;
+/** on the WebGPU renderer: whether its canvas was made in extended range (null: the WebGL renderer's presenter) */
+let onWebGPU: boolean | null = null;
 /** the lab's override of the display (null: the display's own) */
 let forced: boolean | null = FORCED === null ? null : FORCED === '1';
 let displayHdr = false;
@@ -123,6 +129,10 @@ function storeAs(format: number): void {
 
 /** Puts the output in the state wanted: HDR started and shown, or the WebGL canvas shown alone. */
 function apply(): void {
+  if (onWebGPU !== null) {
+    for (const listener of listeners) listener();
+    return;
+  }
   const on = wanted() && !unsupported;
   if (on && !presenter && !starting) {
     starting = start().finally(() => {
@@ -151,8 +161,22 @@ export function initHdr(canvas: HTMLCanvasElement, context: WebGL2RenderingConte
   apply();
 }
 
+/** Reads the settings and the display for the WebGPU renderer, about to be made: whether its canvas is to be made in
+ *  extended range (a browser that can't take it shows it as SDR). Watches the display for the settings' note. */
+export function initHdrForWebGPU(): boolean {
+  settings = readSettings();
+  const query = matchMedia(HDR_DISPLAY);
+  displayHdr = query.matches;
+  query.addEventListener('change', () => {
+    displayHdr = query.matches;
+    apply();
+  });
+  onWebGPU = wanted();
+  return onWebGPU;
+}
+
 /** Whether the frame is drawn and shown in HDR now. */
-export const hdrActive = (): boolean => presenter !== null && !presenter.canvas.hidden;
+export const hdrActive = (): boolean => onWebGPU ?? (presenter !== null && !presenter.canvas.hidden);
 
 /** The levels the grade draws at: the paper white and the peak (both 1 in SDR). */
 export function hdrLevels(): { paper: number; peak: number } {
@@ -162,6 +186,7 @@ export function hdrLevels(): { paper: number; peak: number } {
 
 /** What HDR is doing, for the settings. */
 export function hdrStatus(): HdrStatus {
+  if (onWebGPU !== null && onWebGPU !== wanted()) return 'reload';
   if (hdrActive()) return 'on';
   if (!wanted()) return forced === null && settings.mode === 'auto' ? 'sdr-display' : 'off';
   if (unsupported) return 'unsupported';

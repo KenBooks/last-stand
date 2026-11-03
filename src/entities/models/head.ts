@@ -999,6 +999,7 @@ function bothSidesOut(m: THREE.Material): void {
       THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
   };
   m.customProgramCacheKey = () => key() + '-bothsides';
+  (m as unknown as { litBothSides: boolean }).litBothSides = true;
 }
 
 /**

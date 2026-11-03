@@ -7,6 +7,8 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
+import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
+import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
@@ -50,7 +52,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   cullWhileDrawn(scene, renderer);
   const fog = scene.fog = new THREE.Fog(0);
 
-  const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome }>;
+  const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome; breakables: BreakableShadows }>;
   // (what a worker sculpts for a biome meanwhile: the forest's stump)
   await stumpPreloaded();
   for (const id of BIOME_IDS) {
@@ -62,10 +64,11 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     const b = BUILDERS[id](group);
     b.wall.seal();
     bakeStaticShadows(group);
+    const breakables = castBreakablesAsOne(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
     scene.add(group);
-    biomes[id] = { group, b };
+    biomes[id] = { group, b, breakables };
   }
   // (the hall of heroes' room, shown in the biomes' place while the hero selection screen is up: `showHall`)
   const hallGroup = new THREE.Group();
@@ -75,6 +78,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   trimShadowCasters(hallGroup, shadowCameraFor(moon, hall.look));
   hallGroup.visible = false;
   scene.add(hallGroup);
+  // (on WebGPU their point lights are drawn by one rig: its lit pipelines are keyed by its lights' ids)
+  rigPointLights(scene, [...BIOME_IDS.map((id) => biomes[id].group), hallGroup]);
+  stillForMeshlets(...BIOME_IDS.map((id) => biomes[id].group), hallGroup);
   if (import.meta.env.DEV) {
     const groups = [...BIOME_IDS.map((id) => biomes[id].group), hallGroup];
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
@@ -115,6 +121,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
     scene.environment = envMap(renderer, L.env);
+    oneEnvironment(scene);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
   }
@@ -163,6 +170,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       if (hallShown) hall.update(dt, t); else active.update(dt, t);
       // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
       if (stillDrawn.biome !== shown || stillDrawn.rev !== propState.rev) {
+        // (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`)
+        if (!hallShown) biomes[biome].breakables.refresh();
         drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
         stillDrawn.biome = shown;
         stillDrawn.rev = propState.rev;

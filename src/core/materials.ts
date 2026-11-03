@@ -39,6 +39,16 @@ float fxNoise(vec3 x){
 }
 `;
 
+/** A kit material's looks as WebGPU reads them (core/shaderPorts.ts `kitNodes`): the kit's uniforms, and the
+ *  material's own near glow and rim. */
+export interface KitLooks {
+  u: Record<'uDissolve' | 'uFrozen' | 'uChar' | 'uHit' | 'uShine', { value: number }> & { uEdge: { value: THREE.Color } };
+  near: { value: number };
+  rim: { value: THREE.Color };
+  /** the hood's shade (`Head.shade`): how deep, where up the mesh it's full, where it's gone, how much more aside */
+  shade: { value: THREE.Vector4 };
+}
+
 export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   const u = {
     uDissolve: { value: 0 },
@@ -63,6 +73,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     // towards the sides; the game's shadow map is too coarse to shade a face under a brim)
     const shade = { value: new THREE.Vector4() };
     m.userData.shade = shade;
+    // (what WebGPU reads its looks from, off the material drawn: core/shaderPorts.ts `kitNodes`; a property of its
+    // own, not copied to a clone, as its `onBeforeCompile` isn't)
+    const looks: KitLooks = { u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new THREE.Color(0) }, shade };
+    Object.defineProperty(m, 'kitLooks', { value: looks, configurable: true });
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
       shader.uniforms.uNear = { value: near ? 1 : 0 };
@@ -124,6 +138,13 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     }), near),
     dispose() { for (const m of mats) m.dispose(); },
   };
+}
+
+/** `copy`, a copy of a kit's material, given its looks on WebGPU, which `clone` leaves behind (what they read are the
+ *  kit's own uniforms, so it shows them as its original does). */
+export function sameLooks(copy: THREE.Material, original: THREE.Material): void {
+  const { kitLooks } = original as { kitLooks?: KitLooks };
+  if (kitLooks) (copy as unknown as { kitLooks: KitLooks }).kitLooks = kitLooks;
 }
 
 /**

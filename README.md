@@ -119,7 +119,7 @@ A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The 
 
 ## Tech
 
-- [Three.js](https://threejs.org/) 0.185 with an HDR post-processing chain (bloom, tone mapping, grading)
+- [Three.js](https://threejs.org/) 0.187 with an HDR post-processing chain (bloom, tone mapping, grading)
 - The Thornwood's trees are grown by [ez-tree](https://github.com/dgreenheck/ez-tree) (MIT), its geometry with our own procedural bark and leaves
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural textures (cobblestone, slabs, runes), procedural humanoid rigs and animation, CPU particles, pooled dynamic lights

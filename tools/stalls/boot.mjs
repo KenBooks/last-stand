@@ -5,11 +5,13 @@
 import { writeFileSync } from 'node:fs';
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
+import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
 import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
+import { VIEWS } from './options.mjs';
 import { resizeTrips, windFitRead, windFitRecording } from './windFit.mjs';
 
 /** the page's mark on the trace, where its clock starts */
@@ -34,8 +36,8 @@ const VISITS = [
 
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
  *  start (and where its exit draws, with `--resize`), `variant` (each of its parts) applied before the page's
- *  scripts, the performance overlay shown if `perf` and Auto's quality where `auto` says a device settled it (their
- *  cookies, set for `url`). */
+ *  scripts, the performance overlay shown if `perf`, Auto's quality where `auto` says a device settled it and the
+ *  battleground where `biome` is given (their cookies, set for `url`). */
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
@@ -47,9 +49,21 @@ async function bootContext(browser, url, variant, options) {
   const cookies = [
     ...(options.perf ? [{ name: 'last-stand-perf-hud', value: '1', url }] : []),
     ...(options.auto ? [{ name: 'last-stand-quality-auto', value: options.auto, url }] : []),
+    ...(options.biome ? [{ name: 'last-stand-biome', value: options.biome, url }] : []),
   ];
   if (cookies.length) await context.addCookies(cookies);
   return context;
+}
+
+/** How long `--warm-behind` goes on watching the lobby once the fight is warm: its frames then are the lobby's own,
+ *  with nothing behind it. */
+const AFTER_WARM_MS = 5000;
+
+/** What `--before`'s expression gave, written beside `--read`'s (`read`'s path, `.before.json`): the trace stopped
+ *  by then, so it's how the page runs with no trace on it. */
+function writeBefore(value, read) {
+  if (value === undefined) return;
+  writeFileSync(read.replace(/\.json$/, '.before.json'), `${JSON.stringify(value, null, 1)}\n`);
 }
 
 /** Whether `visit` leaves without pressing Start (`--cold-return`: the first visit, so the return finds its maps
@@ -72,7 +86,7 @@ const LEFT_NOTES = {
  *  (`picture.end`, the film's sheets beside it), taken at the CPU's full speed (`setRate`: slowed ten times, the page
  *  painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
-  const trace = await startTrace(browser, { js: options.js, angle: options.angle });
+  const trace = await startTrace(browser, { js: options.js, angle: options.angle, dawn: options.dawn });
   const film = options.film ? await startFilm(page, { full: options.filmLogo }) : null;
   await visit.load(page, url);
   const resized = options.resize ? resizeTrips(page, options) : null;
@@ -80,20 +94,30 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   await page.waitForTimeout(options.seconds * 1000);
   const windFit = options.resize ? await page.evaluate(windFitRead) : null;
   const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
-  // (a first visit opens on the hero selection screen: the hero in focus chosen, as a player chooses one)
-  await page.evaluate(chooseIfAsked);
+  // (a first visit opens on the hero selection screen: `--hero` chosen there, else the hero in focus, as a player
+  // chooses one; a return keeps him)
+  await page.evaluate(chooseIfAsked, options.hero);
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
-    await page.evaluate(startIfCold);
+    if (!options.warmBehind) await page.evaluate(startIfCold);
     await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+    if (options.warmBehind) await page.waitForTimeout(AFTER_WARM_MS);
   }
+  if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
+  const builds = options.builds ? await page.evaluate(readBuilds) : null;
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
   const shots = film ? await film.stop() : [];
   await setRate(1);
-  await page.screenshot({ path: picture.end });
+  await viewForPicture(page, options.view);
+  if (options.before) writeBefore(await page.evaluate(options.before), picture.read);
+  await pictureEnd(page, options.cast, picture.end);
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  if (builds) {
+    const bySteps = buildsBySteps(builds, findings.steps);
+    findings.steps.forEach((step, index) => { step.builds = bySteps[index]; });
+  }
   if (windFit) {
     const { trace, resizes, ...fit } = windFit;
     writeFileSync(picture.wind, `${JSON.stringify({ resizes, trace })}\n`);
@@ -124,10 +148,84 @@ function bootNotes(visit, options, left, errors, picture) {
   const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
-  const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
+  const failed = errors.length ? [`page errors: ${distinctErrors(errors).join(' | ')}`] : [];
+  const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
+  const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
-    ...failed];
+    ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
+}
+
+/** the most of an error's text a boot's notes keep (a WGSL compile error quotes its shader) */
+const ERROR_CHARS = 400;
+
+/** how long a press of V is held, and how long the camera takes to glide into the next view (ms) */
+const VIEW_KEY_MS = 90;
+const VIEW_GLIDE_MS = 1500;
+
+/** The fight the boot started put in `view` for its end picture, V pressed as a player does (the close views lock the
+ *  pointer, a headless Chrome's own). */
+async function viewForPicture(page, view) {
+  for (let press = 0; press < VIEWS.indexOf(view); press++) {
+    await page.keyboard.press('v', { delay: VIEW_KEY_MS });
+    await page.waitForTimeout(VIEW_GLIDE_MS);
+  }
+}
+
+/** The fight pictured into `path`, with `cast`'s key held its time first where given (a skill's look shown: its
+ *  key let go after the picture). */
+async function pictureEnd(page, cast, path) {
+  if (!cast) {
+    await page.screenshot({ path });
+    return;
+  }
+  await page.keyboard.down(cast.key);
+  await page.waitForTimeout(cast.ms);
+  await page.screenshot({ path });
+  await page.keyboard.up(cast.key);
+}
+
+/** the most distinct errors a boot's notes list */
+const ERRORS_SHOWN = 6;
+
+/** `errors` each told once, with how many times it came where more than once, in the order they first came. */
+function distinctErrors(errors) {
+  const counts = new Map();
+  for (const error of errors) counts.set(error, (counts.get(error) ?? 0) + 1);
+  const told = [...counts].map(([error, count]) => (count > 1 ? `${error} (x${count})` : error));
+  const more = told.length > ERRORS_SHOWN ? [`${told.length - ERRORS_SHOWN} more`] : [];
+  return [...told.slice(0, ERRORS_SHOWN), ...more];
+}
+
+/** `page`'s errors kept in `errors` as they come: its uncaught ones, and those it logs (three logs a shader that
+ *  failed to compile, and draws on without it). */
+function keepErrors(page, errors) {
+  const keep = (text) => errors.push(text.slice(0, ERROR_CHARS));
+  page.on('pageerror', (error) => keep(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') keep(`logged: ${message.text()}`);
+  });
+}
+
+/** What the loading screen says it's doing, and how far its bar is (a boot that never ended stopped there). */
+function loadingStep() {
+  const step = document.querySelector('#loading .ld-sub')?.textContent ?? 'no loading screen';
+  const fill = document.querySelector('#loading .ld-fill');
+  return `${step} (the bar at ${fill ? fill.style.width || 'its start' : 'none'})`;
+}
+
+/** `boot` as it ends, or its failure with where the loading screen stood and the page's errors added (a lobby that
+ *  never showed timed out bare). */
+async function withErrorsTold(boot, page, errors) {
+  try {
+    return await boot;
+  } catch (failure) {
+    const step = await page.evaluate(loadingStep).catch(() => 'unread');
+    const told = [failure.message, `the loading screen: ${step}`];
+    if (errors.length) told.push(`page errors: ${distinctErrors(errors).join(' | ')}`);
+    // (a new error: an error's stack, which Node prints, keeps the message it was made with)
+    throw new Error(told.join('\n'), { cause: failure });
+  }
 }
 
 /**
@@ -145,13 +243,15 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           const context = await bootContext(chrome.browser, url, variant, options);
           const page = await context.newPage();
           const errors = [];
-          page.on('pageerror', (error) => errors.push(String(error)));
+          keepErrors(page, errors);
           const setRate = await slowCpu(page, options.cpuSlowdown);
           options.sourceOf = sourcesFor(url);
           for (const visit of VISITS) {
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
-            const { findings, left } = await bootTraced(chrome.browser, page, url, visit, options, picture, setRate);
+            const loaded = options.builds ? withBuilds(url) : url;
+            const traced = bootTraced(chrome.browser, page, loaded, visit, options, picture, setRate);
+            const { findings, left } = await withErrorsTold(traced, page, errors);
             const group = `${options.nameOf(url)} ${variant}, ${visit.name}`;
             const notes = bootNotes(visit, options, left, errors, picture);
             measured({ name: `${group} (round ${round})`, group, notes, findings });

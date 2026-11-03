@@ -12,6 +12,8 @@ import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
 import { CROWD_LAYER } from '../../core/layers';
+import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
+import { crowdNodeMaterial } from './crowdNodes';
 
 const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
 
@@ -125,11 +127,14 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   parts.forEach((list, slot) => {
     const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
     const geometry = merged(list, rootInv, rootScale, base.vertexColors);
-    const mesh = new THREE.Mesh(geometry, crowdMaterial(base, kind, slot));
+    const material = WEBGPU ? crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS, minCaster, eyeClear: EYE_CLEAR }, slot)
+      : crowdMaterial(base, kind, slot);
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
-    mesh.customDepthMaterial = depthMaterial(kind);
+    // (on WebGPU the shadow is drawn by the slot's own material, skinned by its position node)
+    if (!WEBGPU) mesh.customDepthMaterial = depthMaterial(kind);
     mesh.visible = false;
     mesh.name = `crowd ${model.root.userData.crowdKind}`;
     kind.slots.push(mesh);
@@ -281,7 +286,7 @@ if (crowdCast <= 0.0 || crowdCast < uMinCaster) gl_Position = vec4(0.0, 0.0, 2.0
 
 /**
  * `body` drawn in its kind's crowd from now on, its own meshes put on `CROWD_LAYER`: false when it isn't a creature
- * whose kind shares its geometry (a hero, the training dummy), which is drawn on its own.
+ * whose kind shares its geometry (a hero), which is drawn on its own.
  */
 export function joinCrowd(body: CrowdBody): boolean {
   const name = body.model.root.userData.crowdKind as string | undefined;
@@ -336,13 +341,15 @@ function hookScene(): void {
   const before = G.scene.onBeforeRender;
   G.scene.onBeforeRender = (...args) => {
     before.apply(G.scene, args);
-    writeRows();
+    // (on WebGPU a shadow is a render of the scene of its own, the arms too: the bodies stand as they did)
+    if (!WEBGPU || args[2] === G.camera) writeRows();
   };
 }
 
 /** Every crowd's rows written from its bodies as they stand this frame. */
 function writeRows(): void {
   minCaster.value = QUALITY[qualityLevel()].minCasterRadius;
+  for (const mesh of grown.splice(0)) refreshedInFull.delete(mesh);
   for (const kind of kinds.values()) {
     const n = kind.seats.length;
     for (const slot of kind.slots) {
@@ -353,8 +360,13 @@ function writeRows(): void {
     if (n > kind.rows) grow(kind, n);
     kind.seats.forEach((seat, i) => writeRow(kind, seat, i * kind.row));
     kind.uniforms.uCrowd.value.needsUpdate = true;
+    // (its materials are still: their refresh sends no texture, core/webgpu.ts)
+    if (WEBGPU) uploadTexture(kind.uniforms.uCrowd.value);
   }
 }
+
+/** the slots refreshed in full this frame, their texture made anew (`grow`) */
+const grown: THREE.Mesh[] = [];
 
 /** A body's row, from float `at`: its joints' matrices, then its looks. */
 function writeRow(kind: Kind, seat: Seat, at: number): void {
@@ -384,4 +396,11 @@ function grow(kind: Kind, n: number): void {
   texture.dispose();
   texture.image = { data: kind.data, width: kind.row / 4, height: kind.rows };
   texture.needsUpdate = true;
+  // (a new texture on the GPU: its slots' bindings told of it, by a full refresh for a frame)
+  if (WEBGPU) {
+    for (const mesh of kind.slots) {
+      refreshedInFull.add(mesh);
+      grown.push(mesh);
+    }
+  }
 }

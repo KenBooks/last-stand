@@ -13,10 +13,12 @@ import { nodeName } from '../lab/node/layers.mjs';
 import { priorityNow } from '../lab/node/priority.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
+import { measureWebgpuCache, WEBGPU_CACHE } from './webgpuCache.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
-  chooseIfAsked, equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
+  chooseIfAsked, equipmentShown, fightWarm, loaded, menuStowed, recordFromNow, seededProfile, seedStash, startRecording,
+  stopRecording, useStyle,
 } from './page.mjs';
 import { bootRoundsText, bootText, measureText, roundsText, summaryText } from './report.mjs';
 import { pickHero, SCENARIOS } from './scenarios.mjs';
@@ -77,11 +79,25 @@ async function openGame(context, url, options) {
   return { page, errors };
 }
 
-/** Waits out the loading screen and the lobby's panels (a first visit's hero chosen on the screen it opens on). */
+/** Whether the page at `url` warms the fight behind its lobby on every visit: WebGPU's does, as the loading screen
+ *  leaves (`warmTheRest` in `src/game/warmup.ts`). */
+function warmsBehindTheLobby(url) {
+  const renderer = new URL(url).searchParams.get('renderer') ?? '';
+  return renderer.startsWith('webgpu');
+}
+
+/**
+ * Waits out the loading screen and the lobby's panels (a first visit's hero chosen on the screen it opens on), and
+ * where the fight warms behind the lobby (`warmsBehindTheLobby`), that warm-up: a WebGPU lobby's scenario read its
+ * frames as the fight compiled under them, a median of 20.8 ms.
+ */
 async function waitLoaded(page) {
   await page.waitForFunction(loaded, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
   await page.evaluate(chooseIfAsked);
   await page.waitForFunction(equipmentShown, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
+  if (warmsBehindTheLobby(page.url())) {
+    await page.waitForFunction(fightWarm, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
+  }
 }
 
 /**
@@ -123,13 +139,15 @@ async function chooseView(page, view) {
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
 /** A boot's pictures: its end (`endPicture`), and its exit's film, the film's flickers (`--film`: `out/film-<n>.png`
  *  and `out/flickers-<n>.png`), its frames cut to the lobby logo (`--film-logo`: `out/logo-<n>.png`) and the
- *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`). */
+ *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`) and what was read off the page (`--read`:
+ *  `out/read-<n>.json`). */
 const bootPictures = (index) => ({
   end: endPicture(index),
   film: join(OUT, `film-${index + 1}.png`),
   flickers: join(OUT, `flickers-${index + 1}.png`),
   logo: join(OUT, `logo-${index + 1}.png`),
   wind: join(OUT, `wind-${index + 1}.json`),
+  read: join(OUT, `read-${index + 1}.json`),
 });
 
 /** A Chrome of its own for a measure, as `options` have its window. */
@@ -139,19 +157,34 @@ function chromeFor(options) {
   return startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height });
 }
 
+/** `expression` read off `page` into the JSON file beside its end picture (`--read`): what it was read into. */
+async function readOff(page, expression, picture) {
+  const path = picture.replace(/end-(\d+)\.png$/, 'read-$1.json');
+  // (a URL beside may not define it, as WebGL's page has no WebGPU records: said, not thrown, so the other runs go on)
+  const read = await page.evaluate(expression).then((value) => ({ value }), (error) => ({ error }));
+  if (read.error) return `${expression} not read: ${read.error.message.split('\n')[0]}`;
+  writeFileSync(path, `${JSON.stringify(read.value, null, 1)}\n`);
+  return `${expression} read into ${path}`;
+}
+
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
-  const { js, angle, passes, paints } = options;
-  const trace = await startTrace(browser, { js, angle, passes, paints });
+  const { js, angle, dawn, passes, paints } = options;
+  const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
-  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
+  await page.evaluate(recordFromNow);
+  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, { ...options, picture });
   const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();
+  const before = options.before ? await page.evaluate(options.before) : undefined;
+  if (before !== undefined) notes.push(`--before gave ${JSON.stringify(before)}`);
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
+  if (options.read) notes.push(await readOff(page, options.read, picture));
   const painted = paints ? await paintedNames(page, events) : new Map();
-  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf, painted) };
+  const findings = analyze(record, events, MARK, options.listed, options.sourceOf, painted, options.jsUnder);
+  return { notes, findings };
 }
 
 /** The elements the page painted (`--paints`, `trace.mjs` `paintOf`), named as the lab's layers name them (their
@@ -291,6 +324,12 @@ async function main() {
   // desktop's work would read as the game's)
   console.log(`stalls: running at ${priorityNow()} priority`);
   mkdirSync(OUT, { recursive: true });
+  if (options.scenario === WEBGPU_CACHE) {
+    const text = await measureWebgpuCache(join(OUT, 'profiles'), options.urls);
+    writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
+    console.log(`${text}\n\n(written to ${join(OUT, 'report.txt')})`);
+    return;
+  }
   const asked = options.urls.length ? options.urls : [THIS_TREE];
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });
   const urls = asked.map(served.urlOf);

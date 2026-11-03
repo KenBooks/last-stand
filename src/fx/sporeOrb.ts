@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { particles, col } from './particles';
+import { portShader, wgslNoise } from '../core/shaderPorts';
 
 const geo = new THREE.SphereGeometry(1, 20, 14);
 /** one per colour (same program); their time moves together */
@@ -35,6 +36,21 @@ function material(color: number): THREE.ShaderMaterial {
         gl_FragColor = vec4(c, smoothstep(0.0, 0.6, f) * min(1.0, 0.2 + 0.75 * dense + vein));
       }`,
     transparent: true, depthWrite: false,
+  }));
+  portShader(m, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying }, u) => ({
+    fragment: wgslFn(`fn sporeOrb(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f, time: f32) -> vec4f {
+      let p = pos * 2.2;
+      let w = vec3f(fbm3(p + vec3f(0.0, time * 0.9, 0.0)), fbm3(p + vec3f(5.2, 0.0, time * 0.7)),
+        fbm3(p - vec3f(time * 0.8, 1.3, 0.0)));
+      let n = fbm3(p + w * 2.5 + time * 0.4);
+      let vein = pow(max(0.0, 1.0 - abs(n - 0.5) * 7.0), 3.0);
+      let dense = smoothstep(0.3, 0.75, n);
+      let c = mix(color * 0.1, color * 0.75, dense) + color * 1.4 * vein;
+      let f = max(dot(normalize(nrm), normalize(v)), 0.0);
+      return vec4f(c, smoothstep(0.0, 0.6, f) * min(1.0, 0.2 + 0.75 * dense + vein));
+    }`, [wgslNoise().fbm3])({
+      pos: varying(positionGeometry), nrm: normalView, v: positionViewDirection, color: u.uColor, time: u.uTime,
+    }),
   }));
   return m;
 }

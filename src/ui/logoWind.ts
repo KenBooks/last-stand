@@ -686,9 +686,11 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
       if (disposed) return;
       disposed = true;
       // hide first, tear down a little later: removing a full-screen WebGL canvas and losing its
-      // context in the same frame can flash the whole page in some browsers
+      // context in the same frame can flash the whole page in some browsers. Its context goes with the canvas, never
+      // lost by hand: `loseContext` waits for the GPU process, and on WebGPU, busy making the lobby's pipelines, it held
+      // the page up 1.9 s just after the reveal.
       canvas.style.display = 'none';
-      setTimeout(() => { canvas.remove(); gl.getExtension('WEBGL_lose_context')?.loseContext(); }, 500);
+      setTimeout(() => canvas.remove(), 500);
     },
   };
 }

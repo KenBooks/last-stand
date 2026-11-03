@@ -8,6 +8,7 @@
 // the head itself: a star of light there read as a bright spark, and was too bright in every view.
 import * as THREE from 'three';
 import { addEffect } from './effects';
+import { portShader } from '../core/shaderPorts';
 import type { Player } from '../entities/player';
 
 /** (a deep gold: paler, tone mapping washed it to white) */
@@ -31,7 +32,7 @@ const quad = new THREE.PlaneGeometry(2, 2);
 quad.userData.shared = true;
 
 function motesMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return portShader(new THREE.ShaderMaterial({
     uniforms: {
       uStrength: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(COLOR) },
     },
@@ -80,6 +81,61 @@ function motesMaterial(): THREE.ShaderMaterial {
         float k = light * ${BRIGHT.toFixed(2)} * uStrength;
         gl_FragColor = vec4(uColor * k, k);
       }`,
+  }), ({ wgslFn, positionGeometry, modelViewMatrix, cameraProjectionMatrix, varying }, u) => {
+    const centre = wgslFn(`fn glintCentre(mv: mat4x4f) -> vec4f {
+      let c = mv * vec4f(0.0, 0.0, 0.0, 1.0);
+      return vec4f(c.xyz * (1.0 - ${LIFT.toFixed(3)} / max(length(c.xyz), ${(LIFT * 2).toFixed(3)})), c.w);
+    }`);
+    const tall = wgslFn(`fn glintTall(centre: vec4f, proj: mat4x4f) -> f32 {
+      return 2.0 * max(-centre.z, 0.05) / proj[1][1];
+    }`);
+    const reach = wgslFn(`fn glintReach(tall: f32) -> f32 {
+      return min(${REACH.toFixed(3)}, ${REACH_SHARE.toFixed(3)} * tall);
+    }`);
+    const vertex = wgslFn(`fn glintVertex(p: vec2f, mv: mat4x4f, proj: mat4x4f) -> vec4f {
+      let centre = glintCentre(mv);
+      return proj * vec4f(centre.xy + p * glintReach(glintTall(centre, proj)), centre.zw);
+    }`, [centre, tall, reach]);
+    const dotWidth = wgslFn(`fn glintDot(mv: mat4x4f, proj: mat4x4f) -> f32 {
+      let tall = glintTall(glintCentre(mv), proj);
+      return ${DOT.toFixed(4)} * tall / glintReach(tall);
+    }`, [centre, tall, reach]);
+    const hash = wgslFn(`fn moteHash(n: f32) -> f32 {
+      return fract(sin(n * 12.9898) * 43758.5453);
+    }`);
+    const moteAt = wgslFn(`fn moteAt(life: f32, start: f32, turn: f32) -> vec2f {
+      let r = 0.08 + 0.84 * pow(1.0 - clamp(life, 0.0, 1.0), 1.4);
+      let ang = start + life * turn;
+      return vec2f(cos(ang), sin(ang)) * r;
+    }`);
+    const motes = wgslFn(`fn glintMotes(at: vec2f, dotWidth: f32, strength: f32, time: f32, color: vec3f) -> vec4f {
+      var light = 0.0;
+      for (var i = 0; i < ${MOTES}; i++) {
+        let fi = f32(i);
+        let speed = 0.8 + 0.6 * moteHash(fi + 1.0);
+        let phase = moteHash(fi + 31.0);
+        let start = moteHash(fi + 57.0) * 6.2831853;
+        let turn = 1.8 + 1.2 * moteHash(fi + 83.0);
+        let life = fract(time * speed + phase);
+        let head = moteAt(life, start, turn);
+        let tail = moteAt(life - ${TRAIL.toFixed(2)}, start, turn);
+        let along = head - tail;
+        let u = clamp(dot(at - tail, along) / max(dot(along, along), 1e-6), 0.0, 1.0);
+        let d = length(at - tail - along * u);
+        let fade = smoothstep(0.0, 0.25, life) * smoothstep(${NEAR.toFixed(2)}, ${DIM_FROM.toFixed(2)}, length(head));
+        light += exp(-d * d / (dotWidth * dotWidth)) * (0.15 + 0.85 * u * u) * fade;
+      }
+      let k = light * ${BRIGHT.toFixed(2)} * strength;
+      return vec4f(color * k, k);
+    }`, [hash, moteAt]);
+    const matrices = { mv: modelViewMatrix, proj: cameraProjectionMatrix };
+    return {
+      vertex: vertex({ p: positionGeometry.xy, ...matrices }),
+      fragment: motes({
+        at: varying(positionGeometry.xy), dotWidth: varying(dotWidth(matrices)), strength: u.uStrength,
+        time: u.uTime, color: u.uColor,
+      }),
+    };
   });
 }
 

@@ -25,6 +25,7 @@ import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
+import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
@@ -183,6 +184,7 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-hdr-peak').oninput = (e) => { setHdrSettings({ peak: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
   // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
   onHdrChange(renderHdrOptions);
+  initRendererOptions();
   $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
   // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
   // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
@@ -794,6 +796,7 @@ function renderQualityOptions(): void {
 /** what Auto says HDR is doing */
 const HDR_NOTES: Record<HdrStatus, string> = {
   on: '(on)', off: '', 'sdr-display': '(no HDR display)', unsupported: '(not in this browser)', starting: '(starting)',
+  reload: '(reload to switch)',
 };
 function renderHdrOptions(): void {
   const s = hdrSettings(), status = hdrStatus();
@@ -807,6 +810,40 @@ function renderHdrOptions(): void {
   $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
 }
 
+/** what the renderer's row says */
+const RENDERER_NOTES = {
+  trial: 'WebGPU is a trial, slower for now. It opens at its own address: the game\'s plain address stays on WebGL.',
+  held: 'Switch renderer in the lobby, out of co-op: it loads the game again.',
+  missing: 'This browser or graphics card has no WebGPU.',
+};
+
+/** The renderer's row: a press loads the game at that renderer's address. */
+function initRendererOptions(): void {
+  document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => {
+    b.onclick = () => { sfx.click(); void switchRenderer(b.dataset.r as RendererKind); };
+  });
+}
+
+/** Leaves for `kind`'s address, unless it runs already or the machine has none to give. */
+async function switchRenderer(kind: RendererKind): Promise<void> {
+  if ((kind === 'webgpu') === RUNNING.webgpu) return;
+  if (kind === 'webgpu' && !await navigator.gpu?.requestAdapter().catch(() => null)) {
+    $('.renderer-note').textContent = RENDERER_NOTES.missing;
+    return;
+  }
+  location.assign(addressOn(kind));
+}
+
+/** what the renderer's row shows: what this page runs, and neither to press where loading again would lose a run */
+function renderRendererOptions(): void {
+  const held = G.mode === 'run' || isCoop();
+  document.querySelectorAll<HTMLButtonElement>('#opt-renderer button').forEach((b) => {
+    b.classList.toggle('active', (b.dataset.r === 'webgpu') === RUNNING.webgpu);
+    b.disabled = held;
+  });
+  $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
+}
+
 export function showPause(v: boolean): void {
   if (v) {
     renderControlsHelp();
@@ -815,6 +852,7 @@ export function showPause(v: boolean): void {
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
     renderHdrOptions();
+    renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';

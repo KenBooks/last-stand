@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
+import { portShader, type Tsl } from '../core/shaderPorts';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
@@ -58,6 +59,62 @@ const dotFrag = /* glsl */`
     gl_FragColor = vec4(uColor * (0.5 + 1.2 * core), uAlpha * max(core, halo * 0.45));
   }`;
 
+// The line and the dot on WebGPU (core/shaderPorts.ts), the shaders above in WGSL
+function linePort(t: Tsl, u: Tsl) {
+  const { wgslFn, attribute, positionGeometry, modelViewMatrix, cameraProjectionMatrix, varying } = t;
+  const vertex = wgslFn(`fn laserLine(pos: vec3f, next: vec3f, side: f32, mv: mat4x4f, proj: mat4x4f, res: vec2f,
+    width: f32) -> vec4f {
+    let a = proj * mv * vec4f(pos, 1.0);
+    let b = proj * mv * vec4f(next, 1.0);
+    let d = (b.xy / max(b.w, 1e-4) - a.xy / max(a.w, 1e-4)) * res;
+    let l = length(d);
+    var n = vec2f(0.0, 1.0);
+    if (l > 1e-5) { n = vec2f(-d.y, d.x) / l; }
+    return vec4f(a.xy + n * side * width / res * a.w, a.zw);
+  }`);
+  const fade = wgslFn(`fn laserFade(pos: vec3f, along: f32, mv: mat4x4f, near0: f32, near1: f32) -> f32 {
+    let z = -(mv * vec4f(pos, 1.0)).z;
+    return smoothstep(near0, near1, z) * (1.0 - smoothstep(0.8, 1.0, along));
+  }`);
+  const colour = wgslFn(`fn laserLineColour(fade: f32, side: f32, color: vec3f, alpha: f32) -> vec4f {
+    let k = 1.0 - side * side;
+    return vec4f(color * (0.35 + 0.65 * k), alpha * clamp(fade, 0.0, 1.0) * (0.4 + 0.6 * k));
+  }`);
+  const side = attribute('side', 'float');
+  return {
+    vertex: vertex({
+      pos: positionGeometry, next: attribute('next', 'vec3'), side, mv: modelViewMatrix, proj: cameraProjectionMatrix,
+      res: u.uRes, width: u.uWidth,
+    }),
+    fragment: colour({
+      fade: varying(fade({ pos: positionGeometry, along: attribute('along', 'float'), mv: modelViewMatrix,
+        near0: u.uNear0, near1: u.uNear1 })),
+      side: varying(side), color: u.uColor, alpha: u.uAlpha,
+    }),
+  };
+}
+function dotPort(t: Tsl, u: Tsl) {
+  const { wgslFn, attribute, positionGeometry, modelViewMatrix, cameraProjectionMatrix, varying } = t;
+  const vertex = wgslFn(`fn laserDot(pos: vec3f, corner: vec2f, mv: mat4x4f, proj: mat4x4f, res: vec2f,
+    width: f32) -> vec4f {
+    let a = proj * mv * vec4f(pos, 1.0);
+    return vec4f(a.xy + corner * width / res * a.w, a.zw);
+  }`);
+  const colour = wgslFn(`fn laserDotColour(c: vec2f, color: vec3f, alpha: f32) -> vec4f {
+    let r = length(c);
+    let core = 1.0 - smoothstep(0.25, 0.45, r);
+    let halo = 1.0 - smoothstep(0.3, 1.0, r);
+    return vec4f(color * (0.5 + 1.2 * core), alpha * max(core, halo * 0.45));
+  }`);
+  const corner = attribute('corner', 'vec2');
+  return {
+    vertex: vertex({
+      pos: positionGeometry, corner, mv: modelViewMatrix, proj: cameraProjectionMatrix, res: u.uRes, width: u.uWidth,
+    }),
+    fragment: colour({ c: varying(corner), color: u.uColor, alpha: u.uAlpha }),
+  };
+}
+
 const uniforms = {
   uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: WIDTH }, uNear0: { value: NEAR0 }, uNear1: { value: NEAR1 },
   uColor: { value: COLOR.clone().multiplyScalar(GLOW) }, uAlpha: { value: 0 },
@@ -65,8 +122,8 @@ const uniforms = {
 // (the dot shares the line's uniforms but its width)
 const dotUniforms = { ...uniforms, uWidth: { value: DOT } };
 const shaderOpts = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide } as const;
-const lineMat = new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts });
-const dotMat = new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts });
+const lineMat = portShader(new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort);
+const dotMat = portShader(new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort);
 
 function lineGeometry(): THREE.BufferGeometry {
   const n = LASER_LINES * LASER_POINTS * 2, g = new THREE.BufferGeometry();

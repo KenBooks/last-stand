@@ -197,6 +197,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
+  and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
+  without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's
+  load falls on both. Every lit standard material looks its environment up twice a pixel; three r187 swapped the
+  packed atlas's lookup (`textureCubeUV`: a face picked, up to four fetches) for a cube map's one, and `perf --ab`
+  read the scene pass 1.5 ms cheaper, about as far as a commit against itself read apart. With `--ab` each commit
+  is timed against itself (an exported commit whose lockfile differs is served its own packages). `--canary` draws
+  the frame twice with the environment: it must read 1.6 times the frame without. The GPU's timer counts the
+  time its queue took, others' work with it: on a GPU another program holds at 100% the canary failed (1.24
+  times) and the readings were noise; check `nvidia-smi` first. On the owner's idle 4070 Ti the lookups cost under
+  a millisecond on both 0.185 and 0.187 (0.3 to 0.9 ms against frames of 3.9 to 6.7), while one scene's whole frame
+  read 3.8 to 11.8 ms from run to run: run it twice, and believe only what both runs agree on.
 - `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
   `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
   stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
@@ -593,7 +605,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
   watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
   (a draw's program is linked as it's drawn, the page held up meanwhile); each kind (the material's type and its
-  shader), with the fields of its key that set its programs apart (`page/programKeys.ts`: three r185's key read by
+  shader), with the fields of its key that set its programs apart (`page/programKeys.ts`: three r187's key read by
   field, the names held to three's own code by `test/programKeys.test.mjs`; `custom` is the material's own key,
   three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
   of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby

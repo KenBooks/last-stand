@@ -29,8 +29,10 @@ test('the parameters and flags are those three joins a key from, in its order', 
   const masks = bodyOf(source, 'getProgramCacheKeyBooleans').split('array.push( _programLayers.mask )').slice(0, 2);
   const flags = masks.map((mask) => {
     const set = [...mask.matchAll(/if \( parameters\.(\w+)(?: > 0)? \)\s+_programLayers\.enable\( (\d+) \)/g)];
-    set.forEach((match, bit) => assert.equal(Number(match[2]), bit));
-    return set.map((match) => match[1].replace(/^numLightProbeGrids$/, 'lightProbeGrids'));
+    // (by bit: r187 sets bits 24 and 25 before 20)
+    const byBit = set.sort((a, b) => Number(a[2]) - Number(b[2]));
+    byBit.forEach((match, bit) => assert.equal(Number(match[2]), bit));
+    return byBit.map((match) => match[1].replace(/^numLightProbeGrids$/, 'lightProbeGrids'));
   });
   assert.deepEqual(flags, FLAGS);
 });

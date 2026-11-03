@@ -8,6 +8,7 @@
 // their edges, as a shell of smoke and fire is seen through: with wide ribbons solid up to 0.95 and a grain of fibres
 // across them, it read as painted walls, not a storm.
 import * as THREE from 'three';
+import { portShader, wgslNoise, type Tsl } from '../core/shaderPorts';
 import { NEAR_GLOW } from '../core/materials';
 import { groundHeight } from '../world/ground';
 import { floorPatch, lay } from './floorPatch';
@@ -84,6 +85,50 @@ const FUNNEL_VERTEX = /* glsl */`
     gl_Position = projectionMatrix * view;
   }`;
 
+// The storm on WebGPU (core/shaderPorts.ts), its shaders here in WGSL: the noise's octaves and the glow's dimming
+// near the camera, made once
+let storm: { fbm: unknown; near: unknown } | null = null;
+function stormNodes({ wgslFn }: Tsl): { fbm: unknown; near: unknown } {
+  if (storm) return storm;
+  const fbm = wgslFn(`fn fsFbm(start: vec3f) -> f32 {
+    var p = start;
+    var s = 0.0;
+    var a = 0.5;
+    for (var i = 0; i < 3; i++) {
+      s += a * noise3(p);
+      p *= 2.03;
+      a *= 0.5;
+    }
+    return s;
+  }`, [wgslNoise().noise3]);
+  const near = wgslFn(`fn fsNear(depth: f32) -> f32 {
+    return clamp(pow(depth / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0);
+  }`);
+  return storm = { fbm, near };
+}
+
+/** The funnel swaying and snaking as `FUNNEL_VERTEX` moves it, in the object's own space */
+function funnelPosition({ wgslFn, positionGeometry, uv }: Tsl, u: Tsl): unknown {
+  return wgslFn(`fn funnelPosition(pos: vec3f, uv: vec2f, time: f32) -> vec3f {
+    var p = pos;
+    p.x += (sin(time * 2.3 + p.y * 2.0) * 0.06 + sin(time * 1.1 + p.y * 4.3) * 0.03) * p.y;
+    p.z += (cos(time * 1.9 + p.y * 1.7) * 0.06 + cos(time * 1.3 + p.y * 3.7) * 0.03) * p.y;
+    let ang = uv.x * 6.2831853;
+    let bulge = noise3(vec3f(cos(ang) * 1.5, p.y * 3.0 - time * 0.8, sin(ang) * 1.5));
+    let k = 1.0 + (bulge - 0.5) * 0.22;
+    return vec3f(p.x * k, p.y, p.z * k);
+  }`, [wgslNoise().noise3])({ pos: positionGeometry, uv: uv(), time: u.uTime });
+}
+
+/** What the funnel's fragments read of its vertices: their place round it, their depth and how squarely they face */
+function funnelVaryings({ uv, varying, positionView, normalView, positionViewDirection }: Tsl): Tsl {
+  return {
+    uv: uv(),
+    depth: varying(positionView.z.negate()),
+    facing: varying(normalView.normalize().dot(positionViewDirection).abs()),
+  };
+}
+
 /** How thick a wall seen squarely is against one seen edge on (a shell's depth through it grows towards its edges). */
 const FACE_ON = 0.55;
 
@@ -97,7 +142,7 @@ interface Ribbons {
 }
 
 function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return portShader(new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 }, uFade: { value: 0 }, uBands: { value: 3 }, uTwist: { value: 1 }, uSpeed: { value: 1 },
       uHeat: { value: 1 }, uSeed: { value: 0 },
@@ -144,11 +189,45 @@ function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
         float cover = a * mix(0.45, 0.9, smoothstep(0.2, 0.7, heat + edge * 0.4));
         gl_FragColor = vec4(c * mix(1.0, uHeat, fsNear(vDepth)) * a, cover);
       }`,
+  }), (t, u) => {
+    const { fbm, near } = stormNodes(t);
+    return {
+      position: funnelPosition(t, u),
+      fragment: t.wgslFn(`fn fsRibbon(uv: vec2f, depth: f32, facing: f32, time: f32, fade: f32, bands: f32, twist: f32,
+        speed: f32, heatK: f32, seed: f32) -> vec4f {
+        let ang = uv.x * 6.2831853;
+        let v = uv.y;
+        let around = vec3f(cos(ang), 0.0, sin(ang));
+        let warp = fsFbm(around * 1.6 + vec3f(0.0, v * 3.0 - time * 0.7, 0.0) + seed);
+        let churn = noise3(around * 3.4 + vec3f(0.0, v * 6.0 - time * 1.4, 0.0) + seed * 2.0);
+        let f = fract(uv.x * bands + v * twist - time * speed + (warp - 0.5) * 1.1 + (churn - 0.5) * 0.35);
+        let band = smoothstep(0.0, 0.04, f) * pow(1.0 - f, 2.6);
+        let edge = smoothstep(0.0, 0.02, f) * (1.0 - smoothstep(0.02, 0.09, f));
+        let streak = smoothstep(0.35, 0.75,
+          fsFbm(around * 0.8 + vec3f(f * 9.0, v * 1.6 - time * 1.5, f * 9.0) + seed * 3.0));
+        let tear = fsFbm(around * 2.4 + vec3f(f * 2.5, v * 3.5 - time * 1.1, 0.0) + seed * 5.0);
+        let whole = mix(0.25, 1.0, smoothstep(0.28, 0.58, tear));
+        let heat = band * (0.4 + 0.8 * streak) * whole;
+        let puff = fsFbm(around * 2.0 + vec3f(0.0, v * 2.5 - time * 0.9, 0.0) + seed * 7.0);
+        let haze = 0.16 * smoothstep(0.42, 0.8, puff);
+        let ends = smoothstep(0.03, 0.2, v) * (1.0 - smoothstep(0.86, 1.0, v));
+        let thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(max(1.0 - facing, 0.0), 1.5));
+        let a = clamp(heat * 1.5 + edge * 0.7 * whole + haze, 0.0, 0.85) * thick * ends * fade
+          * smoothstep(1.5, 7.0, depth);
+        var c = mix(vec3f(0.55, 0.04, 0.0), vec3f(0.95, 0.28, 0.02), smoothstep(0.05, 0.35, heat));
+        c = mix(c, vec3f(1.0, 0.72, 0.3), smoothstep(0.45, 0.85, heat + edge * 0.6));
+        let cover = a * mix(0.45, 0.9, smoothstep(0.2, 0.7, heat + edge * 0.4));
+        return vec4f(c * mix(1.0, heatK, fsNear(depth)) * a, cover);
+      }`, [fbm, near, wgslNoise().noise3])({
+        ...funnelVaryings(t), time: u.uTime, fade: u.uFade, bands: u.uBands, twist: u.uTwist, speed: u.uSpeed,
+        heatK: u.uHeat, seed: u.uSeed,
+      }),
+    };
   });
 }
 
 function smokeMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return portShader(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uColor: { value: new THREE.Color(SMOKE) } },
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: FUNNEL_VERTEX,
@@ -168,11 +247,27 @@ function smokeMaterial(): THREE.ShaderMaterial {
         float a = smoothstep(0.3, 0.7, n) * (0.35 + 0.65 * streak) * 0.7 * thick * ends * uFade * smoothstep(1.5, 7.0, vDepth);
         gl_FragColor = vec4(uColor, a);
       }`,
-  });
+  }), (t, u) => ({
+    position: funnelPosition(t, u),
+    fragment: t.wgslFn(`fn fsSmoke(uv: vec2f, depth: f32, facing: f32, time: f32, fade: f32, color: vec3f) -> vec4f {
+      let ang = uv.x * 6.2831853;
+      let v = uv.y;
+      let around = vec3f(cos(ang), 0.0, sin(ang));
+      let warp = fsFbm(around * 1.3 + vec3f(0.0, v * 2.2 - time * 0.5, 0.0) + 11.0);
+      let wind = fract(uv.x * 5.0 + v * 2.4 - time * 0.3 + warp * 0.8);
+      let streak = smoothstep(0.0, 0.25, wind) * (1.0 - smoothstep(0.35, 0.9, wind));
+      let n = fsFbm(around * 2.0 + vec3f(wind * 3.0, v * 3.0 - time * 0.9, 0.0) + 17.0);
+      let ends = smoothstep(0.05, 0.3, v) * (1.0 - smoothstep(0.8, 1.0, v));
+      let thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(max(1.0 - facing, 0.0), 1.5));
+      let a = smoothstep(0.3, 0.7, n) * (0.35 + 0.65 * streak) * 0.7 * thick * ends * fade
+        * smoothstep(1.5, 7.0, depth);
+      return vec4f(color, a);
+    }`, [stormNodes(t).fbm])({ ...funnelVaryings(t), time: u.uTime, fade: u.uFade, color: u.uColor }),
+  }));
 }
 
 function floorMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return portShader(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uReach: { value: 1 } },
     transparent: true, depthWrite: false, ...OVER,
     vertexShader: /* glsl */`
@@ -203,6 +298,26 @@ function floorMaterial(): THREE.ShaderMaterial {
         float a = clamp(scorch + glow, 0.0, 0.9) * uFade;
         gl_FragColor = vec4(c * glow * mix(1.0, 1.5, fsNear(vDepth)) * uFade, a);
       }`,
+  }), (t, u) => {
+    const { fbm, near } = stormNodes(t);
+    return {
+      fragment: t.wgslFn(`fn fsFloor(at: vec2f, depth: f32, time: f32, fade: f32, reach: f32) -> vec4f {
+        let r = length(at) / reach;
+        let ang = atan2(at.y, at.x + 1e-5);
+        let n = fsFbm(vec3f(at * 1.3, time * 0.5));
+        let arms = fract(ang / 6.2831853 * 3.0 + r * 1.6 + time * 0.9 + n * 0.5);
+        let arm = smoothstep(0.0, 0.1, arms) * pow(1.0 - arms, 3.0);
+        let inside = 1.0 - smoothstep(0.15, 1.0, r);
+        let glow = arm * inside * (0.5 + n);
+        let scorch = 0.45 * inside * (0.6 + 0.4 * n);
+        let c = mix(vec3f(0.5, 0.05, 0.0), vec3f(1.0, 0.42, 0.08), smoothstep(0.2, 0.8, glow));
+        let a = clamp(scorch + glow, 0.0, 0.9) * fade;
+        return vec4f(c * glow * mix(1.0, 1.5, fsNear(depth)) * fade, a);
+      }`, [fbm, near])({
+        at: t.varying(t.positionGeometry.xz), depth: t.varying(t.positionView.z.negate()), time: u.uTime,
+        fade: u.uFade, reach: u.uReach,
+      }),
+    };
   });
 }
 

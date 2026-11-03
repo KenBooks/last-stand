@@ -11,6 +11,8 @@ import { rand } from '../util';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import type { Updater } from './props';
 import { runPhase } from './runPhase';
+import { WEBGPU } from '../core/webgpu';
+import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from './fireNodes';
 
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
@@ -319,6 +321,12 @@ const FLAME_FRAGMENT = /* glsl */`
     gl_FragColor = vec4(light * stride * ${glsl(GLOW_PER_METRE)} * uGlow * (1.0 - seeFade()), 1.0);
   }`;
 
+/** the numbers the flames' shader is written with, for its WGSL (fireNodes.ts) */
+const FLAME_SHAPE = {
+  steps: STEPS, glowPerMetre: GLOW_PER_METRE, sootPerMetre: SOOT_PER_METRE, foot: FLAME_FOOT, tip: FLAME_TIP,
+  tongueBend: TONGUE_BEND, bendFoot: BEND_FOOT, noise: NOISE_SCALE,
+};
+
 /** A fire's flames' box over its bed's middle (m): as far round as their tongues bend, as high as their tallest puff. */
 function flameBox(radius: number, height: number): THREE.Vector3 {
   const reach = radius * FLAME_REACH;
@@ -439,6 +447,10 @@ export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE
         #include <aomap_fragment>`);
   };
   mat.customProgramCacheKey = () => 'fire-ember';
+  // (on WebGPU, its look as nodes: world/fireNodes.ts; its own values a property of its own, read off it as drawn)
+  const looks: EmberLooks = { time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue };
+  Object.defineProperty(mat, 'emberLooks', { value: looks, configurable: true });
+  Object.defineProperty(mat, 'webgpuLooks', { value: emberNodes, configurable: true });
   return seeThrough(mat, 'prop');
 }
 
@@ -484,7 +496,8 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   flames.uniforms.uGlow.value = spec.glow ?? 1;
   if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   const box = flameBox(radius, height);
-  const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), flames);
+  const drawnWith = WEBGPU ? flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE) : flames;
+  const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
   // (its box stands over the bed unturned: the shader reads the ray in the world, from `uCentre`)
   volume.position.copy(at);
   // (drawn after the smoke, before the glows)

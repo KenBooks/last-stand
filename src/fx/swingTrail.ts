@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
+import { portShader } from '../core/shaderPorts';
 import { tunable } from '../core/tuning';
 import { armsLayerOf } from '../entities/viewModel';
 import type { Blade, Model } from '../types';
@@ -25,7 +26,7 @@ const COLUMNS = SAMPLES * STEPS_MOST + 1;
 /** the least distance between two points of the curve counted (m): one frame's place twice */
 const EPS = 1e-4;
 
-const material = nearGlow(new THREE.ShaderMaterial({
+const material = portShader(nearGlow(new THREE.ShaderMaterial({
   uniforms: { uGlow: { value: TRAIL.glow }, uBand: { value: TRAIL.band } },
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
   vertexShader: /* glsl */`
@@ -43,6 +44,13 @@ const material = nearGlow(new THREE.ShaderMaterial({
       float i = vT.z * fade * (edge + uBand * vT.y) * uGlow;
       gl_FragColor = vec4(vec3(i), i);
     }`,
+})), ({ wgslFn, attribute, varying }, u) => ({
+  fragment: wgslFn(`fn swingTrail(t: vec3f, glow: f32, band: f32) -> vec4f {
+    let fade = (1.0 - t.x) * (1.0 - t.x);
+    let edge = pow(t.y, 6.0);
+    let i = t.z * fade * (edge + band * t.y) * glow;
+    return vec4f(vec3f(i), i);
+  }`)({ t: varying(attribute('trail', 'vec3')), glow: u.uGlow, band: u.uBand }),
 }));
 
 /** A frame's place of the striking part (the model's root's space) and when, how fast its edge moved there (m/s), and

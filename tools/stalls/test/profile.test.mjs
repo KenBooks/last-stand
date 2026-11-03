@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyze } from '../analyze.mjs';
+import { jsUnder } from '../profile.mjs';
 import { measureText } from '../report.mjs';
 import { decode, placeIn, readMap, shortSource, vlqs } from '../sourceMap.mjs';
 
@@ -79,4 +80,20 @@ test('puts the page\'s JS samples on its clock and sums a phase\'s by function',
   // (without a map, by the script's file and line)
   const [unnamed] = analyze(record, events, MARK).phases;
   assert.equal(unnamed.js.own[0].name, 'draw index.js:30');
+});
+
+test('breaks a function\'s time down by what it calls, from its innermost call', () => {
+  // (each stack leaf first: the leaf's own time is the callee's, or the function's own where it's the leaf)
+  const samples = [
+    { at: 10, ms: 2, stack: ['upload three.js:5', 'render three.js:1', 'frame main.ts:9'] },
+    { at: 11, ms: 1, stack: ['render three.js:1', 'frame main.ts:9'] },
+    { at: 12, ms: 3, stack: ['draw three.js:7', 'render three.js:1', 'project three.js:3', 'render three.js:1'] },
+    { at: 13, ms: 4, stack: ['animate player.ts:2', 'frame main.ts:9'] },
+    { at: 99, ms: 8, stack: ['upload three.js:5', 'render three.js:1'] },
+  ];
+  assert.deepEqual(jsUnder(samples, 0, 50, 2, 'render'), [
+    { name: 'draw three.js:7', ms: 1.5 },
+    { name: 'upload three.js:5', ms: 1 },
+    { name: '(its own)', ms: 0.5 },
+  ]);
 });

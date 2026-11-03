@@ -1,7 +1,8 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
 import {
-  choiceClosed, deciding, heroesShown, inRun, itemBoxes, markPhase, menuStowed, runOver, scoresShown, stowsRecorded,
+  choiceClosed, deciding, heroesShown, inRun, itemBoxes, loaded, markPhase, menuStowed, runOver, scoresShown,
+  stowsRecorded,
 } from './page.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
@@ -344,6 +345,85 @@ async function heroes(page, ms) {
     + `${(half / 1000).toFixed(1)} s each way`];
 }
 
+/** the heroes `switch` picks in turn, ending on the one it began with when that's the mage (`--hero`'s default) */
+const SWITCHES = ['warrior', 'ranger', 'mage'];
+
+/**
+ * Another hero picked from the hero selection screen, each of `SWITCHES` in turn ("changing hero is a little
+ * slow"): a fifth of `ms` in the lobby first, then each pick a phase of its own, from the hero clicked in the hall
+ * to the lobby a while after. Its notes say how long each choice took to bring the lobby back, by the page's clock.
+ */
+async function switchHero(page, ms) {
+  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: switched nothing'];
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const each = (ms * 4) / 5 / SWITCHES.length;
+  const notes = [];
+  for (const hero of SWITCHES) {
+    await page.click('#btn-hero');
+    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
+    await page.waitForTimeout(500);
+    await page.evaluate(markPhase, `to the ${hero}`);
+    const chosen = await page.evaluate(() => performance.now());
+    await page.click('#heroes .hs-choose');
+    await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS, polling: 'raf' });
+    const back = await page.evaluate(() => performance.now());
+    notes.push(`the ${hero}'s lobby back ${Math.round(back - chosen)} ms after his choice`);
+    await page.waitForTimeout(each);
+  }
+  return notes;
+}
+
+/** how many times `pause` opens the pause menu and closes it, and how long the screen is pictured after each press
+ *  (ms), a picture every `PAUSE_PICTURE_MS` */
+const PAUSES = 2;
+const PAUSE_FILMED_MS = 1500;
+const PAUSE_PICTURE_MS = 150;
+
+/**
+ * The pause menu opened and closed with Esc, `PAUSES` times (from play on WebGPU: "after pressing esc dummies
+ * disappear, and after pressing it again, they appear but first this hollow brown sphere appears", the menu shown
+ * a second late): a fifth of `ms` in the lobby first, then each press a phase of its own, the screen pictured every
+ * `PAUSE_PICTURE_MS` for `PAUSE_FILMED_MS` after it (`<end picture>-pause-<press>-<n>.png`). Its notes say how long
+ * the menu took to show or go after each press, by the page's clock.
+ */
+async function pause(page, ms, { picture }) {
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const notes = [];
+  for (let press = 1; press <= PAUSES * 2; press++) {
+    const opening = press % 2 === 1;
+    await page.evaluate(markPhase, `${opening ? 'opening' : 'closing'} ${Math.ceil(press / 2)}`);
+    const pressed = await page.evaluate(() => performance.now());
+    await tap(page, 'Escape');
+    const shownAt = page.waitForFunction(pauseShown, opening, { timeout: PAUSE_FILMED_MS * 4, polling: 'raf' })
+      .then(() => page.evaluate(() => performance.now()));
+    const pictures = [];
+    for (let n = 0; n * PAUSE_PICTURE_MS < PAUSE_FILMED_MS; n++) {
+      const path = picture.replace(/\.png$/, `-pause-${press}-${String(n).padStart(2, '0')}.png`);
+      await page.screenshot({ path });
+      pictures.push(path);
+      await page.waitForTimeout(PAUSE_PICTURE_MS);
+    }
+    const took = (await shownAt) - pressed;
+    notes.push(`press ${press}: the pause menu ${opening ? 'shown' : 'gone'} ${took.toFixed(0)} ms after Esc; `
+      + `pictured ${pictures.length} times from ${pictures[0]}`);
+    await page.waitForTimeout(ms / 5 / 2);
+  }
+  return notes;
+}
+
+/** Whether the pause menu is shown (`shown`) or gone (not). */
+function pauseShown(shown) {
+  const box = document.getElementById('pause');
+  return Boolean(box) && box.classList.contains('hidden') !== shown;
+}
+
 /** Stands in the lobby, then walks round it, for `ms` in all. */
 async function lobby(page, ms) {
   await page.waitForTimeout(ms / 4);
@@ -351,6 +431,75 @@ async function lobby(page, ms) {
   return ['stood in the lobby, then walked round it'];
 }
 
+/** how long a shot is held and how long between shots (ms), and how far the aim swings either way of the dummies */
+const SHOT_HOLD_MS = 450;
+const SHOT_GAP_MS = 60;
+const DUMMIES_SWING = 0.45;
+
+/** Shoots with the left button for `ms`, the aim swinging about `angle` round the screen's middle. */
+async function shootAbout(page, ms, angle) {
+  const started = Date.now();
+  let shots = 0;
+  while (Date.now() - started < ms) {
+    await aimRound(page, angle + Math.sin(shots * MOUSE_TURN) * DUMMIES_SWING);
+    await page.mouse.down();
+    await page.waitForTimeout(SHOT_HOLD_MS);
+    await page.mouse.up();
+    await page.waitForTimeout(SHOT_GAP_MS);
+    shots++;
+  }
+  return shots;
+}
+
+/** Shoots at the lobby's dummies (up the screen in the top-down view), as the owner's "when I start firing at targets". */
+async function firing(page, ms) {
+  return [`${await shootAbout(page, ms, -Math.PI / 2)} shots at the lobby's dummies`];
+}
+
+/** The same shots down the screen, away from the dummies: what `firing` costs over this is what striking them costs. */
+async function firingPast(page, ms) {
+  return [`${await shootAbout(page, ms, Math.PI / 2)} shots away from the lobby's dummies`];
+}
+
+/** how long a page of `rendererSwitch` may take to load (ms) */
+const RENDERER_LOAD_MS = 60_000;
+
+/** Which renderer the pause menu says this page runs, with the menu opened and left open. */
+async function rendererShown(page) {
+  await page.waitForFunction(loaded, undefined, { timeout: RENDERER_LOAD_MS });
+  await tap(page, 'Escape');
+  await page.waitForFunction(pauseShown, true, { timeout: RENDERER_LOAD_MS, polling: 'raf' });
+  return page.evaluate(() => document.querySelector('#opt-renderer button.active')?.dataset.r);
+}
+
+/**
+ * The pause menu's renderer switch, on a page of its own (a load would lose the scenario's recording): the plain
+ * address on WebGL, its WebGPU button loading the WebGPU address, and the plain address on WebGL again, with the cookie
+ * an earlier build kept the choice in set to WebGPU, as nothing may be kept.
+ */
+async function rendererSwitch(page, ms, { picture }) {
+  const trial = await page.context().newPage();
+  const plain = page.url();
+  const notes = [];
+  const expect = (what, seen, wanted) => notes.push(`${seen === wanted ? 'ok' : 'WRONG'}: ${what}: ${seen}`);
+  await trial.goto(plain);
+  expect('the plain address runs', await rendererShown(trial), 'webgl');
+  await trial.screenshot({ path: picture.replace(/\.png$/, '-renderer.png') });
+  await trial.click('#opt-renderer [data-r="webgpu"]');
+  await trial.waitForURL(/[?&]renderer=webgpu/, { timeout: RENDERER_LOAD_MS });
+  expect('its WebGPU button leaves for', new URL(trial.url()).search, '?renderer=webgpu&meshlets=1');
+  expect('that address runs', await rendererShown(trial), 'webgpu');
+  await trial.screenshot({ path: picture.replace(/\.png$/, '-renderer-webgpu.png') });
+  const kept = await trial.evaluate(() => document.cookie.includes('renderer'));
+  expect('a cookie keeps the choice', kept, false);
+  await trial.evaluate(() => { document.cookie = 'last-stand-renderer=webgpu; path=/'; });
+  await trial.goto(plain);
+  expect('the plain address, an old cookie saying WebGPU, runs', await rendererShown(trial), 'webgl');
+  await trial.close();
+  return notes;
+}
+
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes };
+export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
+  renderer: rendererSwitch };

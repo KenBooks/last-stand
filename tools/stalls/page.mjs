@@ -2,6 +2,15 @@
 // so it can use nothing from here.
 
 /**
+ * Starts the WebGPU build's own sums again from now (`?builds`: what each render drew, each draw refreshed in full and
+ * why; `recordFromNow` in src/core/webgpu.ts), so a `--read` of them is the scenario's frames alone: summed from the
+ * boot, a steady lobby's were read with the loading screen's and its dummies rising.
+ */
+export function recordFromNow() {
+  window.__webgpuRecordFrom?.();
+}
+
+/**
  * Records every animation frame's interval (and whether a tooltip was shown in it), every change to the page's HTML
  * and, with the game's perf overlay shown (`--perf`), each new GPU time it reads (ms a frame: its timer queries over
  * the game's draws, the GPU's other work between them with them), from now on, into `window.__stalls`, and marks the
@@ -194,11 +203,12 @@ export function heroesShown() {
   return Boolean(screen?.checkVisibility());
 }
 
-/** The hero in focus chosen where the hero selection screen is up, as a first visit's player chooses one before the
- *  lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
-export function chooseIfAsked() {
+/** `hero` (or the hero in focus) chosen where the hero selection screen is up, as a first visit's player chooses one
+ *  before the lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
+export function chooseIfAsked(hero) {
   const screen = document.getElementById('heroes');
   if (!screen || !screen.checkVisibility()) return false;
+  if (hero) screen.querySelector(`.hs-tabs [data-c="${hero}"]`).click();
   screen.querySelector('.hs-choose').click();
   return true;
 }

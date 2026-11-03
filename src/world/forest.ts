@@ -18,7 +18,9 @@ import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, 
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
-import { floorRelief } from '../core/parallax';
+import { floorRelief, reliefContext } from '../core/parallax';
+import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
+import { grassWindNode, mossColorNode } from './forestNodes';
 import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
@@ -75,6 +77,14 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
  * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
  */
 function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
+  if (WEBGPU) {
+    // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
+    const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
+    updaters.push((_dt, t) => { clock.value = t; });
+    m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
+    stillNodes.add(m);
+    return m;
+  }
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   m.onBeforeCompile = (shader) => {
@@ -99,6 +109,11 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
  *  leaves stand up out of the soil (core/parallax.ts). */
 function mossyGround<M extends THREE.Material>(m: M): M {
+  if (WEBGPU) {
+    (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+    reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vMossXZ;')
@@ -382,6 +397,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   rollStumps(stumps, pool, BOOT_ROLL);
 
   const logSpots = [[21, 1.15, 0.9], [11, 4.75, -0.4], [22, 3.0, 0.3]];
+  // (the bark alone casts: the heartwood's ends and the moss lie within its shadow, and each cast a draw a log)
   // (both sides: past the heartwood's rim, 0.2 m in, an end is the bark's shell alone, and from outside only it
   // showed the floor through the log's wall)
   const log = buildLogGeo(rng), logBark = barkAt(BARK_REPEATS.log);
@@ -393,7 +409,7 @@ export const buildForest: BiomeBuilder = (scene) => {
       m.name = 'fallen log';
       m.position.set(x, 0.38, z);
       m.rotation.y = yaw;
-      m.castShadow = mat !== capMat; m.receiveShadow = true;
+      m.castShadow = mat === logBark; m.receiveShadow = true;
       scene.add(m);
       parts.push(m);
     }
@@ -971,25 +987,34 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   for (let i = 0; i < sp.count; i++) { const y = sp.getY(i), k = 1 + (1 - y) ** 3 * 0.5; sp.setXYZ(i, sp.getX(i) * k + y * y * 0.8, y, sp.getZ(i) * k); }
   stemGeo.computeVertexNormals();
   const shrooms: [number, number, number, number][] = [[0, 0, 1.5, 0.55], [0.55, 0.25, 0.95, 0.38], [-0.4, 0.45, 0.7, 0.3], [0.1, -0.55, 0.55, 0.26], [-0.55, -0.3, 0.35, 0.18], [0.3, 0.65, 0.3, 0.15]];
+  // (each part of the cluster's mushrooms merged into one mesh, placed: a mesh a stem, cap and gills, the four
+  // clusters were 46 of the lobby's shadow draws a frame, and on WebGPU each draw is about 20 µs of its JS)
+  const placed = { stems: [] as THREE.BufferGeometry[], caps: [] as THREE.BufferGeometry[], gills: [] as THREE.BufferGeometry[] };
+  const at = new THREE.Object3D();
+  const place = (geo: THREE.BufferGeometry): THREE.BufferGeometry => {
+    at.updateMatrix();
+    return geo.clone().applyMatrix4(at.matrix);
+  };
   for (const [dx, dz, ht, cr] of shrooms) {
     const lean = (rng() - 0.5) * 0.3, yaw = rng() * TAU;
-    const st = new THREE.Mesh(stemGeo, stem);
-    st.position.set(x + dx, 0, z + dz);
-    st.scale.set(cr * 0.22, ht, cr * 0.22);
-    st.rotation.set(0, yaw, lean);
-    st.castShadow = true;
-    scene.add(st);
+    at.position.set(x + dx, 0, z + dz);
+    at.scale.set(cr * 0.22, ht, cr * 0.22);
+    at.rotation.set(0, yaw, lean);
+    placed.stems.push(place(stemGeo));
     // the cap sits on the top of the bowed stem
-    const top = new THREE.Vector3(0.8 * cr * 0.22, ht, 0).applyEuler(st.rotation);
-    for (const [geo, mat] of [[capGeo, cap], [gillGeo, stem]] as const) {
-      const c = new THREE.Mesh(geo, mat);
-      c.position.set(x + dx + top.x, top.y, z + dz + top.z);
-      c.scale.setScalar(cr);
-      c.rotation.set(0, yaw, lean);
-      c.castShadow = mat === cap;
-      scene.add(c);
-    }
+    const top = new THREE.Vector3(0.8 * cr * 0.22, ht, 0).applyEuler(at.rotation);
+    at.position.set(x + dx + top.x, top.y, z + dz + top.z);
+    at.scale.setScalar(cr);
+    placed.caps.push(place(capGeo));
+    placed.gills.push(place(gillGeo));
   }
+  for (const [geos, mat, cast] of [[placed.stems, stem, true], [placed.caps, cap, true], [placed.gills, stem, false]] as const) {
+    const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+    mesh.castShadow = cast;
+    scene.add(mesh);
+    for (const geo of geos) geo.dispose();
+  }
+  for (const geo of [stemGeo, capGeo, gillGeo]) geo.dispose();
   const light = new THREE.PointLight(0x40ffc8, 5, 10, 2);
   light.position.set(x, 1.9, z);
   scene.add(light);
@@ -1008,17 +1033,20 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
 }
 
 function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[]): void {
-  const ringGeo = boulderGeo(47, 0.2, 1);
+  // (the ring's stones merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the sun's shadow)
+  const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
-    const s = new THREE.Mesh(ringGeo, stone);
-    s.name = 'bonfire stones';
-    s.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
-    s.scale.set(1.2, 0.8, 1);
-    s.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
-    s.castShadow = true;
-    scene.add(s);
+    at.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
+    at.scale.set(1.2, 0.8, 1);
+    at.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
+    at.updateMatrix();
+    stones.push(ringGeo.clone().applyMatrix4(at.matrix));
   }
+  const ring = new THREE.Mesh(mergeGeometries(stones), stone);
+  ring.name = 'bonfire stones';
+  ring.castShadow = true;
+  scene.add(ring);
   // a teepee of logs leaning in over the bed, two more lying across it; where the flames lick them, charred and
   // glowing through their char
   // (each log's bark and char merged: drawn a mesh a part, its charred end apart, a bonfire's logs were 22 draws)

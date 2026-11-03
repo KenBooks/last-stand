@@ -18,6 +18,7 @@ import type { PracticeOptions } from './practice';
 import type { TrailOptions } from './trail';
 import type { LightOptions } from './light';
 import type { FireOptions } from './fire';
+import type { EnvCostOptions } from './envCost';
 import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
@@ -322,6 +323,13 @@ export async function light(lab: Lab, command: LightOptions): Promise<Report> {
 export async function fire(lab: Lab, command: FireOptions): Promise<Report> {
   const { fire: fireRound } = await import('./fire');
   return fireRound(lab, command);
+}
+
+/** `lab envcost`, one scenario: what the environment's lookups take of the frame on the GPU, with it and without in
+ *  turns; a canary missed is a problem. */
+export async function envCost(lab: Lab, command: EnvCostOptions): Promise<Report> {
+  const { envCost: envCostRound } = await import('./envCost');
+  return envCostRound(lab, command);
 }
 
 /** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a

@@ -9,7 +9,7 @@ import { createServer } from 'vite';
 import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { lowerProcesses, PAGE_SCRIPTS, takeKeptContext } from './browser.mjs';
-import { exportedTreePaths } from './commits.mjs';
+import { exportedTreePaths, packagesRoot } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
 import { mapsCodeOf } from './mapsCode.mjs';
 import { watchLayers } from './layers.mjs';
@@ -438,7 +438,7 @@ export class Side {
         strictPort: false,
         hmr: false,
         watch: null,
-        fs: { allow: [this.root, join(this.repo, 'node_modules')] },
+        fs: { allow: [this.root, join(packagesRoot(this.root, this.repo), 'node_modules')] },
       },
     };
   }

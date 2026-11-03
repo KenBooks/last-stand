@@ -131,7 +131,7 @@ export async function slowCpu(page, rate) {
 /**
  * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`, its screen scaled
  * `scale`) and connects to it.
- * Returns the browser and `close`, which kills its process tree and deletes its profile.
+ * Returns the browser, its profile's folder and `close`, which kills its process tree and deletes its profile.
  */
 export async function startChrome({ outDir, headed = false, width = 1536, height = 864, scale = 1 }) {
   const profile = join(outDir, `profile-${Date.now()}`);
@@ -144,6 +144,7 @@ export async function startChrome({ outDir, headed = false, width = 1536, height
     const browser = await connect(port);
     return {
       browser,
+      profile,
       async close() {
         // (its tree first: once the browser has closed itself, the processes it leaves are no longer under it)
         kill();

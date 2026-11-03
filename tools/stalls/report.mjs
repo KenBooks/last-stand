@@ -131,8 +131,8 @@ function lookLines(look) {
   ];
 }
 
-/** A measure's section: its name, what the scenario did, the frames (each phase's), the programs (each with
- *  `links`) and the long stalls. */
+/** A measure's section: its name, what the scenario did, the frames (each phase's), a frame's JS by function
+ *  (`--js`), the programs (each with `links`) and the long stalls. */
 export function measureText(measure, { links = false } = {}) {
   const { name, notes, findings } = measure;
   const frames = findings.frames;
@@ -142,6 +142,9 @@ export function measureText(measure, { links = false } = {}) {
     `  ${frames.count} frames, median ${frames.median.toFixed(1)} ms; ${frames.stalls} over ${STALL_MS} ms, `
       + `${seconds(frames.stalled)} in them; the worst ${frames.worst.map((value) => value.toFixed(0)).join(', ')} ms`,
     `  Skia programs linked: ${programs.count}, ${ms(programs.total)} in all, the longest ${ms(programs.longest)}`,
+    ...(findings.js?.own.length ? [jsLine('a frame\'s JS, each function\'s own time', findings.js.own)] : []),
+    ...(findings.js?.within.length ? [jsLine('and with what it calls', findings.js.within)] : []),
+    ...(findings.js?.under ? [jsLine(`under ${findings.js.under.name}, by what it calls`, findings.js.under.calls)] : []),
     ...(findings.phases ?? []).flatMap(phaseLines),
   ];
   if (links) lines.push(...linkLines(findings.built));
@@ -255,6 +258,22 @@ function gpuCompilesLine({ threads, mean, most, steps }) {
     + `${most} at most; each ${step} s: ${each}`;
 }
 
+/** Dawn's work in a boot's step (`analyze.mjs` `dawnIn`), as a line of its own: each kind's count and time. */
+function dawnLine(kinds) {
+  const pieces = kinds.map((kind) => `${kind.count} ${kind.name} (${ms(kind.ms)})`);
+  return `    Dawn's work: ${pieces.join('; ')}`;
+}
+
+/** A step's WebGPU node builds (`--builds`, `builds.mjs`): how many, those reusing another's shaders and those a
+ *  draw made, the new shaders and their WGSL, the JS they took; then the kinds with the most new WGSL. */
+function buildsLines({ count, reused, byDraw, shaders, kb, ms: took, kinds }) {
+  const drawn = byDraw ? `, ${byDraw} at a draw` : '';
+  const head = `    node builds: ${count} (${reused} reusing another's shaders${drawn}), ${shaders} new shaders `
+    + `(${kb.toFixed(0)} kB of WGSL), ${ms(took)} of JS`;
+  const pieces = kinds.map((kind) => `${kind.count} ${kind.name} (${kind.shaders} new, ${kind.kb.toFixed(0)} kB)`);
+  return [head, `    the most new WGSL: ${pieces.join('; ')}`];
+}
+
 /** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
  *  page was held up in it, its long tasks and Skia programs, what the threads spent its time on in all, and the
  *  threads its GPU compiles ran on. */
@@ -272,6 +291,8 @@ function bootStepLines(step, { links = false } = {}) {
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
+  if (step.dawn) lines.push(dawnLine(step.dawn));
+  if (step.builds) lines.push(...buildsLines(step.builds));
   if (links && step.links?.length) lines.push(builtInLine(step.links));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));

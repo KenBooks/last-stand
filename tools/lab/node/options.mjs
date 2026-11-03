@@ -631,6 +631,33 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  envcost: {
+    help: 'what the environment\'s lookups take of the GPU: the frame drawn with the scene\'s environment and '
+      + 'without it, in turns within one page (a run\'s load is both sides\'), the hero standing in each biome and '
+      + 'view; with --ab, each commit timed against itself',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third',
+        help: 'the views: top, third, first',
+      },
+      rounds: { kind: 'number', usage: 'n', default: '8', help: 'the rounds of turns, each of 6 renders a side' },
+      canary: {
+        kind: 'switch',
+        help: 'draw the frame twice with the environment: it must read at least 1.6 times the frame without',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   haze: {
     help: 'the hero\'s held weapons\' light through the eyes (or his hands\', or over the shoulder: --part, --view): '
       + 'the frame drawn with them and without, each with the '

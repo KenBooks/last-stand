@@ -314,6 +314,21 @@ function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number, lef
   clampAnkleRoll(ankle.quaternion, left);
 }
 
+/** The world matrices of `root` and what's under it, its leaf meshes left out: what a pose reads between its steps is its
+ *  joints, and a hero's meshes (most of what's under him) are made again as the scene is drawn, or as he ends his pose.
+ *  Each whole walk took about 0.25 ms of a frame, up to 8 a frame as a ranger shoots. */
+export function updateJoints(root: THREE.Object3D): void {
+  if (root.matrixAutoUpdate) root.updateMatrix();
+  if (root.parent) root.matrixWorld.multiplyMatrices(root.parent.matrixWorld, root.matrix);
+  else root.matrixWorld.copy(root.matrix);
+  root.matrixWorldNeedsUpdate = false;
+  const kids = root.children;
+  for (let i = 0; i < kids.length; i++) {
+    const kid = kids[i];
+    if (kid.children.length || !(kid as THREE.Mesh).isMesh) updateJoints(kid);
+  }
+}
+
 export function groundFeet(j: Joints, footH: number): void {
   const root = j.root;
   root.updateMatrixWorld(true);

@@ -2,8 +2,12 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
+import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
+import { portShader } from '../core/shaderPorts';
+import { membraneMaterial, spillMaterial } from './portalNodes';
+import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { drawingStill, inShadowsOnly } from './culling';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bySide, casterMaterial, piecesOf, type Piece } from './breakableShadows';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
 import { particles } from '../fx/particles';
@@ -131,7 +135,10 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   shown: THREE.Group, kept: THREE.LightShadow): void {
   const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
   if (!lights.length) return;
-  stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
+  // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
+  // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
+  // up 260 to 300 ms)
+  const into = WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
   const hidden: THREE.Object3D[] = [];
   const uncast: THREE.Object3D[] = [];
   hideBodies(scene, shown, hidden, uncast);
@@ -139,9 +146,9 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
   kept.autoUpdate = false;
-  renderer.setRenderTarget(stillTarget);
+  renderer.setRenderTarget(into);
   try {
-    drawingStill(shown, () => renderer.render(scene, camera));
+    drawingStill(shown, () => pipelinesAtOnce(() => renderer.render(scene, camera)));
   } finally {
     renderer.setRenderTarget(target);
     kept.autoUpdate = keptAuto;
@@ -436,7 +443,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   });
   // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
   seeThroughFade(mat, 'prop');
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), WEBGPU ? membraneMaterial(uniforms) : mat);
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
   // light spilling across the floor in front of the gate
@@ -452,7 +459,8 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
         gl_FragColor = vec4(mix(uB, uCore, 0.3) * g * uPower * 0.55, 1.0);
       }`,
   });
-  const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI), spillMat);
+  const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI),
+    WEBGPU ? spillMaterial(uniforms) : spillMat);
   spill.position.set(0, 0.04, 2.0);
   parent.add(spill);
   // its light on what stands round it: the arch, the wall, the floor, a body coming through (a glow on the floor alone,
@@ -527,7 +535,7 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? nightSkyMaterial(mat.uniforms) : mat);
   sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
@@ -561,7 +569,7 @@ export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3)
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? daySkyMaterial(mat.uniforms) : mat);
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
@@ -581,71 +589,76 @@ const envMaps = new Map<string, THREE.Texture>();
 const envKey = ({ sky, panel }: EnvColours): string => `${sky} ${panel}`;
 /** an environment's size, a cube face's side (three's default) */
 const ENV_SIZE = 256;
+/** the blur over the captured scene before it's convolved, in radians */
+const ENV_BLUR = 0.04;
 
-/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator, the scene it captures for
- *  each one's colours, and a stand-in for the generator's backdrop, whose program it would make as it first drew. */
-let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene>; backdrop: THREE.Mesh } | undefined;
+/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator and the scene it captures
+ *  for each one's colours. */
+let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene> } | undefined;
 
 /**
  * Every biome's environment's programs compiled now (`colours`), for the targets they're drawn into: the scene the
- * generator captures and its backdrop, its blur and its convolution. The GPU's threads link them while the arena is
- * built; each map is made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on
- * the convolution's link, compiled as it was first drawn: three compiles none of its own programs ahead but those
- * it converts a cube or a panorama with, so its private parts are reached for (`compileGenerator`).
+ * generator captures, its blur and its convolution. The GPU's threads link them while the arena is built; each map is
+ * made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on the convolution's
+ * link, compiled as it was first drawn: three compiles none of its own programs ahead but those it converts a cube or
+ * a panorama with, so its private parts are reached for (`compileGenerator`). (The capture's backdrop is the clear
+ * colour, a clear: no program.)
  */
 export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): void {
-  const pm = new THREE.PMREMGenerator(renderer);
+  const pm = generator(renderer);
   const scenes = new Map(colours.map((c) => [envKey(c), envScene(c)]));
-  // (as the generator makes its backdrop: a box round the capture, the clear colour, as no background is set)
-  const backdrop = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({
-    name: 'PMREM.Background', side: THREE.BackSide, depthWrite: false, depthTest: false,
-  }));
-  ahead = { pm, scenes, backdrop };
+  ahead = { pm, scenes };
   const target = compileGenerator(renderer, pm);
   if (!target) return;
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
   const capture = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
   for (const scene of scenes.values()) renderer.compile(scene, capture);
-  renderer.compile(backdrop, capture);
   renderer.setRenderTarget(prev);
   target.dispose();
+}
+
+/** An environment's generator: WebGPU's own there (WebGL's draws with shaders WebGPU can't run: its maps were left
+ *  dark, the dais's reflection of the sky with them) */
+function generator(renderer: THREE.WebGLRenderer): THREE.PMREMGenerator {
+  return WEBGPU ? new gpu.PMREMGenerator(renderer as never) as unknown as THREE.PMREMGenerator
+    : new THREE.PMREMGenerator(renderer);
 }
 
 /** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
 interface GeneratorInside {
   _setSize?: (cubeSize: number) => void;
-  _allocateTargets?: () => THREE.WebGLRenderTarget;
-  _blurMaterial?: THREE.Material | null;
-  _ggxMaterial?: THREE.Material | null;
+  _allocateTarget?: () => THREE.WebGLCubeRenderTarget;
+  _getSourceTarget?: (depthBuffer: boolean) => THREE.WebGLCubeRenderTarget;
+  _blur?: (target: THREE.WebGLCubeRenderTarget, sigma: number) => void;
+  _applyPMREM?: (target: THREE.WebGLCubeRenderTarget) => void;
+  _compileMaterial?: (material: THREE.Material) => void;
+  _renderCube?: (target: THREE.WebGLCubeRenderTarget, lod: number, material: THREE.Material) => void;
 }
 
 /**
- * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them (it keeps both for
- * the size): a target of that kind, to compile the capture's programs for, the caller's to dispose. None where
- * three's private parts have changed: nothing compiled ahead then, the maps made as before.
+ * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them: its own passes run
+ * with each draw of a cube's faces (`_renderCube`) swapped for a compile into that target, so it makes its materials
+ * as it would and draws nothing. Returns a target of that kind, to compile the capture's programs for, the caller's
+ * to dispose. None where three's private parts have changed: nothing compiled ahead then, the maps made as before.
  */
 function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerator): THREE.WebGLRenderTarget | null {
   const inside = pm as unknown as GeneratorInside;
-  if (typeof inside._setSize !== 'function' || typeof inside._allocateTargets !== 'function') return null;
-  inside._setSize(ENV_SIZE);
-  const target = inside._allocateTargets();
-  const own = [inside._blurMaterial, inside._ggxMaterial];
-  if (!own.every((m) => m instanceof THREE.Material)) {
-    target.dispose();
-    return null;
-  }
-  // (drawn as three draws them: a flat camera, planes of positions and uvs alone; a bare geometry, as three compiles
-  // its own with, is another program, keyed by having no positions, and so are normals)
-  const planes = new THREE.BufferGeometry();
-  planes.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0], 3));
-  planes.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1], 2));
+  const parts = [inside._setSize, inside._allocateTarget, inside._getSourceTarget, inside._blur, inside._applyPMREM,
+    inside._compileMaterial, inside._renderCube];
+  if (!parts.every((f) => typeof f === 'function')) return null;
+  inside._setSize!(ENV_SIZE);
+  const target = inside._allocateTarget!();
+  inside._getSourceTarget!(true);
   const prev = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
-  const flat = new THREE.OrthographicCamera();
-  for (const material of own) renderer.compile(new THREE.Mesh(planes, material!), flat);
+  inside._renderCube = (into, _lod, material) => {
+    renderer.setRenderTarget(into);
+    inside._compileMaterial!(material);
+  };
+  inside._blur!(target, ENV_BLUR);
+  inside._applyPMREM!(target);
+  delete inside._renderCube;
   renderer.setRenderTarget(prev);
-  planes.dispose();
   return target;
 }
 
@@ -655,25 +668,29 @@ function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerato
  * own.
  */
 export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
+  // (drawn once: every pass's pipeline made before it draws, none left out while made beside the frames)
+  return pipelinesAtOnce(() => envMapNow(renderer, colours));
+}
+
+function envMapNow(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
   const made = envMaps.get(envKey(colours));
   if (made) return made;
   if (!ahead) return makeEnvMap(renderer, colours);
-  const { pm, scenes, backdrop } = ahead;
+  const { pm, scenes } = ahead;
   ahead = undefined;
   for (const [key, scene] of scenes) {
-    envMaps.set(key, pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture);
+    envMaps.set(key, pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture);
     disposeScene(scene);
   }
   pm.dispose();
-  disposeScene(backdrop);
   return envMaps.get(envKey(colours)) ?? makeEnvMap(renderer, colours);
 }
 
 /** `colours`' environment made with a generator of its own */
 function makeEnvMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
-  const pm = new THREE.PMREMGenerator(renderer);
+  const pm = generator(renderer);
   const scene = envScene(colours);
-  const texture = pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture;
+  const texture = pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture;
   pm.dispose();
   disposeScene(scene);
   envMaps.set(envKey(colours), texture);
@@ -692,14 +709,18 @@ function disposeScene(root: THREE.Object3D): void {
 // Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
 function envScene({ sky, panel }: EnvColours): THREE.Scene {
   const envScene = new THREE.Scene();
-  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), portShader(new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: { uSky: { value: new THREE.Vector3(...sky) } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `varying vec3 vP; uniform vec3 uSky; void main(){ float y = normalize(vP).y;
       vec3 c = mix(vec3(0.02,0.02,0.03), uSky, smoothstep(-0.2, 1.0, y));
       gl_FragColor = vec4(c, 1.0); }`,
-  }));
+  }), ({ wgslFn, positionGeometry, varying }, u) => ({
+    fragment: wgslFn(`fn envSky(p: vec3f, sky: vec3f) -> vec4f {
+      return vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(p).y)), 1.0);
+    }`)({ p: varying(positionGeometry), sky: u.uSky }),
+  })));
   envScene.add(skyMesh);
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
@@ -709,27 +730,34 @@ function envScene({ sky, panel }: EnvColours): THREE.Scene {
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
- * every frame. Merge them (positions only) into one caster drawn by the shadow map alone
+ * every frame. Merge them (positions only) into one caster for each way their faces cast (a material's side: in one
+ * front-sided caster a double-sided mesh cast from its back faces alone), drawn by the shadow map alone
  * (`inShadowsOnly`), and stop the originals casting. Instanced props are already one call, and a mesh that can
- * still go (`userData.noBake`: a breakable prop) keeps casting for itself.
+ * still go (`userData.noBake`: a breakable prop) is cast by its biome's breakables' casters (`breakableShadows.ts`).
  */
 export function bakeStaticShadows(group: THREE.Group): void {
   group.updateMatrixWorld(true);
-  const parts: THREE.BufferGeometry[] = [];
+  const pieces: Piece[] = [];
   group.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh || m.userData.noBake) return;
-    const g = new THREE.BufferGeometry().setAttribute('position', m.geometry.getAttribute('position'));
-    g.setIndex(m.geometry.getIndex());
-    parts.push((g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(m.matrixWorld));
+    pieces.push(...piecesOf(m));
     m.castShadow = false;
   });
-  if (!parts.length) return;
-  const caster = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
-  caster.castShadow = true;
-  inShadowsOnly(caster);
-  caster.name = `${group.name} static shadow caster`;
-  group.add(caster);
+  for (const { side, shadowSide, pieces: ofSide } of bySide(pieces)) {
+    const positions = new Float32Array(ofSide.reduce((sum, piece) => sum + piece.positions.length, 0));
+    let at = 0;
+    for (const piece of ofSide) {
+      positions.set(piece.positions, at);
+      at += piece.positions.length;
+    }
+    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const caster = new THREE.Mesh(geometry, casterMaterial(side, shadowSide));
+    caster.castShadow = true;
+    inShadowsOnly(caster);
+    caster.name = `${group.name} static shadow caster`;
+    group.add(caster);
+  }
 }
 
 /** Tube along `curve` whose radius tapers linearly from r0 to r1. */

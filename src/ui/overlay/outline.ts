@@ -10,6 +10,8 @@ import { G } from '../../state';
 import { uiScales } from '../scale';
 import { CROWD_LAYER } from '../../core/layers';
 import { passCamera, passTriangle } from '../../core/renderer';
+import { portShader } from '../../core/shaderPorts';
+import { WEBGPU, drawOverFrame } from '../../core/webgpu';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;
@@ -114,12 +116,12 @@ function swapOut(swapped: Swapped[]): void {
   }
 }
 
-/** the mask: white where the outlined thing is, at the canvas's pixels */
-let maskTarget: THREE.WebGLRenderTarget | null = null;
+/** the mask: white where the outlined thing is, at the canvas's pixels (its texture the same one through a resize,
+ *  as WebGPU's edge samples it) */
+const maskTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
 const canvasSize = new THREE.Vector2();
 
 function maskOfSize(width: number, height: number): THREE.WebGLRenderTarget {
-  maskTarget ??= new THREE.WebGLRenderTarget(width, height, { depthBuffer: false });
   if (maskTarget.width !== width || maskTarget.height !== height) maskTarget.setSize(width, height);
   return maskTarget;
 }
@@ -170,6 +172,22 @@ const edgeMaterial = new THREE.ShaderMaterial({
   depthTest: false,
   depthWrite: false,
   toneMapped: false,
+});
+// (on WebGPU: the same 16 ways round, the mask read where the pixel is on the screen)
+portShader(edgeMaterial, ({ texture, screenUV, positionGeometry, vec2, float, min, max, vec4 }, u) => {
+  // (the mask's own texture, the same through a resize)
+  const mask = texture(maskTarget.texture);
+  const cover = (at: unknown) => min(1, mask.sample(at).a.mul(2));
+  const inside = cover(screenUV);
+  let line = float(0);
+  let glow = float(0);
+  for (let i = 0; i < 16; i++) {
+    const way = vec2(Math.cos(i * 0.39269908), Math.sin(i * 0.39269908));
+    line = max(line, max(cover(screenUV.add(way.mul(u.uLine))), cover(screenUV.add(way.mul(u.uLine).mul(0.5)))));
+    glow = max(glow, cover(screenUV.add(way.mul(u.uGlow))));
+  }
+  const lit = max(line, glow.mul(GLOW_SHARE)).mul(inside.oneMinus()).mul(u.uStrength);
+  return { vertex: vec4(positionGeometry.xy, 0, 1), fragment: vec4(u.uColor.mul(lit), lit) };
 });
 const edgeQuad = new FullScreenQuad(edgeMaterial);
 /** the edge's pass compiled on a triangle of its own, as its quad's is three's */
@@ -248,6 +266,8 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   gl.autoClear = false;
   gl.setRenderTarget(null);
   if (within) {
+    // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)
+    if (WEBGPU) within.y = canvasSize.y - within.y - within.w;
     // (in css px: the renderer scales the scissor by its pixel ratio)
     gl.setScissor(within.divideScalar(gl.getPixelRatio()));
     gl.setScissorTest(true);
@@ -262,7 +282,9 @@ export function drawOutline(): void {
   const look = current;
   if (!look || !look.root.parent) return;
   const gl = G.renderer;
-  drawEdge(gl, drawMask(gl, look.root), look);
+  const mask = drawMask(gl, look.root);
+  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
+  else drawEdge(gl, mask, look);
 }
 
 /**
@@ -283,7 +305,11 @@ export function warmOutline(roots: THREE.Object3D[], { edge = true } = {}): void
     target = drawMask(gl, root);
     for (const object of culled) object.frustumCulled = true;
   }
-  if (edge && target && roots[0]) drawEdge(gl, target, { root: roots[0], color: new THREE.Color(), strength: 0 });
+  if (!edge || !target || !roots[0]) return;
+  const look = { root: roots[0], color: new THREE.Color(), strength: 0 };
+  const mask = target;
+  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
+  else drawEdge(gl, mask, look);
 }
 
 /** `root`'s masks compiled into the mask's target, alone (no lights, no fog, as `drawMask` draws it), what draws no

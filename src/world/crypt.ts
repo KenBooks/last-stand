@@ -3,6 +3,9 @@
 // flagstone paths from the gates and a ring walk, spirit beacons and braziers. Broken columns,
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
 import * as THREE from 'three';
+import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
+import { WEBGPU } from '../core/webgpu';
+import { dampNodes, outsideOutputNode } from './cryptNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
 import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
@@ -10,7 +13,7 @@ import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
-import { floorRelief } from '../core/parallax';
+import { floorRelief, reliefContext } from '../core/parallax';
 import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
@@ -80,7 +83,13 @@ function dimOutside(shader: THREE.WebGLProgramParametersWithUniforms): void {
     .replace('#include <opaque_fragment>', `outgoingLight *= 1.0 - uOutside * 0.8 * smoothstep(${(WALL_R + 1.5).toFixed(1)}, ${(WALL_R + 7).toFixed(1)}, length(vOutXZ));
       #include <opaque_fragment>`);
 }
+/** how `dimOutside` darkens past the wall (WebGPU's nodes: `outsideOutputNode`) */
+const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
 function outsideDim<M extends THREE.Material>(m: M): M {
+  if (WEBGPU) {
+    (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
+    return m;
+  }
   m.onBeforeCompile = dimOutside;
   m.customProgramCacheKey = () => 'outsidedim';
   return m;
@@ -148,6 +157,18 @@ const EARTH = { reach: 1.4, ragged: 0.45, tile: 3, stones: 0.4, washed: [0.25, 0
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
   const damp = { value: dampMap() };
   const litter = pbrMaterialMaps(soil(), 1);
+  if (WEBGPU) {
+    const nodes = dampNodes(m, {
+      map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
+      tile: EARTH.tile, soil: litter,
+    });
+    Object.assign(m, {
+      colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
+      outputNode: outsideOutputNode(outside, OUTSIDE),
+    });
+    reliefContext(m, COBBLE_RELIEF);
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     dimOutside(shader);
     shader.uniforms.uDamp = damp;
@@ -1143,6 +1164,27 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
   });
   // (it fades as the beacon under it dissolves, not left burning in the air)
   seeThroughFade(mat, 'prop');
+  portShader(mat, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying, vec4 }, u) => {
+    const moved = wgslFn(`fn beaconPosition(pos: vec3f, time: f32) -> vec3f {
+      var p = pos;
+      let w = sin(time * 7.0 + p.y * 9.0) * 0.06 + sin(time * 11.0 - p.y * 5.0) * 0.04;
+      p = vec3f(p.x * (1.0 + w * p.y), p.y, p.z * (1.0 + w * p.y));
+      p.x += sin(time * 3.0 + p.y * 4.0) * 0.05 * p.y * p.y;
+      return p;
+    }`)({ pos: positionGeometry, time: u.uTime });
+    const kept = seeKept(seeUniforms(mat.uniforms));
+    return {
+      position: moved,
+      fragment: vec4(kept, kept, kept, 1).mul(wgslFn(`fn beaconFlame(p: vec3f, nrm: vec3f, v: vec3f, time: f32) -> vec4f {
+        let rim = pow(max(1.0 - abs(dot(normalize(nrm), v)), 0.0), 1.6);
+        let bands = noise2(vec2f(p.x * 6.0 + p.z * 4.0, p.y * 5.0 - time * 3.2)) * 0.6
+          + noise2(vec2f(p.z * 11.0 - p.x * 3.0, p.y * 9.0 - time * 5.0)) * 0.4;
+        let fade = 1.0 - smoothstep(0.45, 1.05, p.y + bands * 0.25);
+        let c = mix(vec3f(0.1, 0.35, 1.0), vec3f(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - p.y) * 0.3);
+        return vec4f(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade, 1.0);
+      }`, [wgslNoise().noise2])({ p: varying(moved), nrm: normalView, v: positionViewDirection, time: u.uTime })),
+    };
+  });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
   return mat;
 }

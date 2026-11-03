@@ -1,20 +1,20 @@
 // A three.js program's cache key read by field, and the programs of each kind set apart by what differs (tools/lab,
-// `lab programs`). three r185 joins a program's key from its shader (an id, or a custom shader's two), each define's
-// name and value, then for every material but a raw shader 48 parameters, two masks of flags and the output colour
+// `lab programs`). three r187 joins a program's key from its shader (an id, or a custom shader's two), each define's
+// name and value, then for every material but a raw shader 53 parameters, two masks of flags and the output colour
 // space, and last the material's own key (`WebGLPrograms.js` `getProgramCacheKey`); `test/programKeys.test.mjs`
 // holds these names to the installed three's source, so a three that moves them fails there.
 
 /** the parameters in a key, in its order (`getProgramCacheKeyParameters`) */
 export const PARAMETERS = [
-  'precision', 'outputColorSpace', 'envMapMode', 'envMapCubeUVHeight', 'mapUv', 'alphaMapUv', 'lightMapUv', 'aoMapUv',
-  'bumpMapUv', 'normalMapUv', 'displacementMapUv', 'emissiveMapUv', 'metalnessMapUv', 'roughnessMapUv',
-  'anisotropyMapUv', 'clearcoatMapUv', 'clearcoatNormalMapUv', 'clearcoatRoughnessMapUv', 'iridescenceMapUv',
-  'iridescenceThicknessMapUv', 'sheenColorMapUv', 'sheenRoughnessMapUv', 'specularMapUv', 'specularColorMapUv',
-  'specularIntensityMapUv', 'transmissionMapUv', 'thicknessMapUv', 'combine', 'fogExp2', 'sizeAttenuation',
-  'morphTargetsCount', 'morphAttributeCount', 'numDirLights', 'numPointLights', 'numSpotLights', 'numSpotLightMaps',
-  'numHemiLights', 'numRectAreaLights', 'numDirLightShadows', 'numPointLightShadows', 'numSpotLightShadows',
-  'numSpotLightShadowsWithMaps', 'numLightProbes', 'shadowMapType', 'toneMapping', 'numClippingPlanes',
-  'numClipIntersection', 'depthPacking',
+  'precision', 'outputColorSpace', 'envMapMode', 'envMapPMREM', 'envMapMaxLod', 'envMapSize', 'mapUv', 'alphaMapUv',
+  'lightMapUv', 'aoMapUv', 'bumpMapUv', 'normalMapUv', 'displacementMapUv', 'emissiveMapUv', 'metalnessMapUv',
+  'roughnessMapUv', 'anisotropyMapUv', 'clearcoatMapUv', 'clearcoatNormalMapUv', 'clearcoatRoughnessMapUv',
+  'diffuseRoughnessMapUv', 'iridescenceMapUv', 'iridescenceThicknessMapUv', 'sheenColorMapUv', 'sheenRoughnessMapUv',
+  'specularMapUv', 'specularColorMapUv', 'specularIntensityMapUv', 'transmissionMapUv', 'thicknessMapUv', 'combine',
+  'fogExp2', 'sizeAttenuation', 'morphTargetsCount', 'numSunLights', 'numDirLights', 'numPointLights', 'numSpotLights',
+  'numSpotLightMaps', 'numHemiLights', 'numRectAreaLights', 'numSunLightShadows', 'numDirLightShadows',
+  'numPointLightShadows', 'numSpotLightShadows', 'numSpotLightShadowsWithMaps', 'numLightProbes', 'numLightProbeGrids',
+  'shadowMapType', 'toneMapping', 'numClippingPlanes', 'numClipIntersection', 'depthPacking',
 ];
 
 /** the flags of each mask, by bit (`getProgramCacheKeyBooleans`; the second's bit 22 is `numLightProbeGrids > 0`) */
@@ -23,7 +23,7 @@ export const FLAGS = [
     'instancing', 'instancingColor', 'instancingMorph', 'matcap', 'envMap', 'normalMapObjectSpace',
     'normalMapTangentSpace', 'clearcoat', 'iridescence', 'alphaTest', 'vertexColors', 'vertexAlphas', 'vertexUv1s',
     'vertexUv2s', 'vertexUv3s', 'vertexTangents', 'anisotropy', 'alphaHash', 'batching', 'dispersion',
-    'batchingColor', 'gradientMap', 'packedNormalMap', 'vertexNormals',
+    'batchingColor', 'gradientMap', 'packedNormalMap', 'vertexNormals', 'retroreflection', 'diffuseRoughness',
   ],
   [
     'fog', 'useFog', 'flatShading', 'logarithmicDepthBuffer', 'reversedDepthBuffer', 'skinning', 'morphTargets',

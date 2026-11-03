@@ -4,6 +4,7 @@
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import * as THREE from 'three';
+import { WEBGPU, clustersBack, compiled as webgpuCompiled, holdClusters } from './webgpu';
 import { G } from '../state';
 import { CROWD_LAYER, WARM_LAYER } from './layers';
 import { drawnInShadowsOnly } from '../world/culling';
@@ -123,6 +124,8 @@ function shadowStandIn(caster: THREE.Mesh, material: Casting, kind: ShadowKind):
  * undisposed: their programs are pinned whatever happens to them.
  */
 export function compileShadows(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene): Compiled {
+  // (WebGPU's shadows are its shadow nodes', not three's WebGL depth materials: made as each shadow is first drawn)
+  if (WEBGPU) return new Set();
   // (a point light that casts draws its casters' distance from it: the biomes' warmest, #298)
   let pointShadows = false;
   scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) pointShadows = true; });
@@ -279,7 +282,7 @@ function describeNew(name: string, key: string[]): string {
 /** Logs every program that failed to link, where three checked none as it was first used (production builds: its
  *  checks held the boot up, `initRenderer`), once the game is shown and the programs are long linked. */
 export function checkPrograms(renderer: THREE.WebGLRenderer): void {
-  if (renderer.debug.checkShaderErrors) return;
+  if (WEBGPU || renderer.debug.checkShaderErrors) return;
   const gl = renderer.getContext();
   for (const p of renderer.info.programs ?? []) {
     const program = (p as unknown as { program: WebGLProgram }).program;
@@ -378,6 +381,11 @@ interface Linking { done?: (share: number) => void; poll: Step; step?: Step; giv
  * Whether they all linked: false where one wasn't `giveUpMs` after the commands were done (not from the GPU's cache).
  */
 async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, how: Linking): Promise<boolean> {
+  // (WebGPU's pipelines are compiled by its `compileAsync`, started where `compile` is asked: core/webgpu.ts)
+  if (WEBGPU) {
+    await webgpuCompiled();
+    return true;
+  }
   await commandsDone(renderer, how.poll);
   const programs = new Set<Program>();
   for (const material of materials) {
@@ -419,10 +427,13 @@ export interface WarmUp {
   drawn?: THREE.Object3D[];
   /** shown in place of `hide` for the draw alone (a biome the lobby doesn't show, for its shadows' programs, made as
    *  they're drawn: one in place of the other, so the lights counted are as many) */
-  swap?: { show: THREE.Object3D; hide: THREE.Object3D };
+  swap?: Swap;
   /** called just before the draw: what the lobby's frames mustn't draw before its programs are linked brought in (a
    *  foe seated in its crowd, which draws it whatever the camera sees) */
   show?: () => void;
+  /** `show` undone: on WebGPU what it brings in is shown for the compile's walk of the scene alone (a crowd with
+   *  no foe seated draws nothing, and its pipelines were made at the draw: the fight's 2.6 s) */
+  hide?: () => void;
   /** awaited before the uploads, given the textures the compiled materials draw with (their maps, still coming) */
   before?: (textures: Set<THREE.Texture>) => Promise<void>;
   /** told how much of the warm-up is done, 0 to 1 (the share each step takes is a guess: the links, most) */
@@ -434,6 +445,11 @@ export interface WarmUp {
    *  one not from the GPU's cache, behind the lobby (compiled cold behind it, a return's lobby drew 3 frames a second) */
   giveUpMs?: number;
 }
+
+/** What a warm-up shows in place of what (`WarmUp.swap`), and on WebGPU the scene's look it's shown with (`look`:
+ *  put on, returning its undoing): there a pipeline is keyed by the scene's environment and fog too, so the hall of
+ *  heroes compiled in the biome's look was built again in its own at its first frames (a first visit's 6 s hold). */
+export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void }
 
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
@@ -519,6 +535,7 @@ export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
  * maps are uploaded and the programs' links waited for first (`uploaded`, `linked`).
  */
 export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
+  if (WEBGPU) return warmUpWebGPU(renderer, scene, camera, target, how);
   const { objects = [], leaveOut = [], swap, before, progress, step } = how;
   const compiled = how.compile ?? [scene, ...objects];
   const prev = renderer.getRenderTarget();
@@ -570,10 +587,87 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
   drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
   if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+  how.hide?.();
   const drawMs = performance.now() - at;
   renderer.setRenderTarget(prev);
   pinPrograms(renderer);
   for (const o of objects) scene.remove(o);
   progress?.(1);
   return { compileMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
+}
+
+/**
+ * `warmUp` on WebGPU: its draw's pipelines made by `compileAsync` first, on the GPU's threads, with the node builds a
+ * slice a frame. Started with everything as the draw will have it (its objects in, its layer, unculled, the other
+ * biomes out), as three keys each pipeline by the lights and target it's drawn with: compiled each root as the WebGL
+ * code does, the draw built them all again on the main thread (3.8 s on a return). The scene's walk is synchronous,
+ * so it's all put back before the compile's first wait, which the lobby's frames may draw through.
+ */
+async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, how: WarmUp): Promise<WarmedUp> {
+  const { objects = [], leaveOut = [], swap, progress, step } = how;
+  const gpu = renderer as unknown as { compileAsync: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<void> };
+  // (a look of its own keys every lit pipeline afresh, so all the scene is compiled and drawn in it, not its part)
+  const drawn = swap?.look ? undefined : how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
+  const asDrawn = (run: () => void): void => {
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(target);
+    for (const o of objects) scene.add(o);
+    const unlook = swap?.look?.();
+    if (swap) { swap.show.visible = true; swap.hide.visible = false; }
+    try {
+      drawnAlone(scene, camera, target, drawn, () => without(leaveOut, run));
+    } finally {
+      if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+      unlook?.();
+      for (const o of objects) scene.remove(o);
+      renderer.setRenderTarget(prev);
+    }
+  };
+  const compile = (): Promise<void> => {
+    let compiling: Promise<void> = Promise.resolve();
+    asDrawn(() => {
+      if (how.hide) how.show?.();
+      try {
+        compiling = gpu.compileAsync(scene, camera);
+      } finally {
+        how.hide?.();
+      }
+    });
+    return compiling;
+  };
+  let at = performance.now();
+  // (`?meshlets`: the walk asks the clusters of what has none, drawn as before till they come; once let in, a batch
+  // draws them with materials of its own, compiled here before any frame can draw it: built at the lobby's draws,
+  // they held its frames up to 270 ms)
+  const release = holdClusters();
+  let compiling: Promise<void>;
+  try {
+    compiling = compile();
+  } catch (e) {
+    release();
+    throw e;
+  }
+  const compileMs = performance.now() - at;
+  at = performance.now();
+  try {
+    await compiling;
+    await clustersBack();
+  } finally {
+    if (release() > 0) await compile();
+  }
+  const linksMs = performance.now() - at;
+  progress?.(LINKS_DONE);
+  await step?.();
+  at = performance.now();
+  // (and taken out again: the fight's foes left in their crowds, the lobby's frames drew every kind as the other
+  // biomes warmed after, 943 node builds at its draws, 0.6 s of its JS)
+  how.show?.();
+  try {
+    asDrawn(() => renderer.render(scene, camera));
+  } finally {
+    how.hide?.();
+  }
+  const drawMs = performance.now() - at;
+  progress?.(1);
+  return { compileMs, mapsMs: 0, uploadsMs: 0, linksMs, drawMs, cold: false };
 }

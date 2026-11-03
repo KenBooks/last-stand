@@ -15,7 +15,7 @@
 // `LookAt` turns the neck and head onto a point of interest, within limits.
 import * as THREE from 'three';
 import type { Joints } from './rig';
-import { reachArm } from './rig';
+import { reachArm, updateJoints } from './rig';
 import { groundHeight } from '../../world/ground';
 import { angleDamp, damp } from '../../util';
 import { ROM, ROM_ON, clampAnkle, clampAnkleRoll, twistAngle } from './anatomy';
@@ -839,7 +839,7 @@ export class LegIK {
   captureArms(): void {
     if (!IK) return;
     const j = this.j;
-    j.root.updateMatrixWorld(true);
+    updateJoints(j.root);
     j.handL.getWorldQuaternion(this.hq[0]);
     j.handR.getWorldQuaternion(this.hq[1]);
     this.armsCaptured = true;
@@ -856,7 +856,7 @@ export class LegIK {
     this.armsCaptured = false;
     if (weight <= 0) return;
     const j = this.j;
-    j.root.updateMatrixWorld(true);
+    updateJoints(j.root);
     for (let i = 0; i < 2; i++) {
       const shoulder = i === 0 ? j.shoulderL : j.shoulderR;
       const elbow = i === 0 ? j.elbowL : j.elbowR;

@@ -19,6 +19,9 @@ const JS_CATEGORIES = ['disabled-by-default-v8.cpu_profiler', 'disabled-by-defau
 /** with `--angle`, ANGLE's own work on the GPU process: a shader compiled at a draw (`D3DCompile`), a program
  *  linked, read back from the cache or waited for */
 const ANGLE_CATEGORIES = ['gpu.angle'];
+/** with `--dawn`, Dawn's own work (WebGPU): its shaders translated by Tint and compiled, its pipelines made, its
+ *  cache read */
+const DAWN_CATEGORIES = ['gpu.dawn', 'disabled-by-default-gpu.dawn'];
 /** with `--passes`, the compositor's draws as it made them: each render pass begun, each quad drawn and of what */
 const PASSES_CATEGORY = 'disabled-by-default-viz.quads';
 /** Chrome's trace buffer with `--passes` (kB): the draws are hundreds of events a frame, and a sweep's filled the
@@ -71,6 +74,13 @@ function drawOf(event) {
   return { ph: 'D', kind, material: event.args?.material ?? null, pid: event.pid, ts: event.ts };
 }
 
+/** `event` as a piece of Dawn's work (`--dawn`), however short (a read from its cache is microseconds), or null if
+ *  it's none. Kept apart from the threads' work, inside which it runs. */
+function dawnOf(event) {
+  if (event.ph !== 'X' || !event.cat?.includes('gpu.dawn')) return null;
+  return { ph: 'W', name: event.name, pid: event.pid, tid: event.tid, ts: event.ts, dur: event.dur };
+}
+
 /** `event` as a paint of the page's (`PAINT`), or null if it's none. */
 function paintOf(event) {
   if (event.name !== PAINT || event.ph !== 'X') return null;
@@ -82,7 +92,8 @@ function paintOf(event) {
  * compositor's draws (`drawOf`) and with `paints` each of the page's paints (`paintOf`). Returns `stop`, which ends
  * the trace and gives its kept events, or throws `TraceLost` if Chrome never ends it.
  */
-export async function startTrace(browser, { js = false, angle = false, passes = false, paints = false } = {}) {
+export async function startTrace(browser, options = {}) {
+  const { js = false, angle = false, dawn = false, passes = false, paints = false } = options;
   const session = await browser.newBrowserCDPSession();
   const events = [];
   session.on('Tracing.dataCollected', ({ value }) => {
@@ -92,12 +103,15 @@ export async function startTrace(browser, { js = false, angle = false, passes = 
       if (draw) events.push(draw);
       const paint = paints ? paintOf(event) : null;
       if (paint) events.push(paint);
+      const work = dawn ? dawnOf(event) : null;
+      if (work) events.push(work);
     }
   });
   const categories = [
     ...CATEGORIES,
     ...(js ? JS_CATEGORIES : []),
     ...(angle ? ANGLE_CATEGORIES : []),
+    ...(dawn ? DAWN_CATEGORIES : []),
     ...(passes ? [PASSES_CATEGORY] : []),
   ];
   const traceConfig = { includedCategories: categories, recordMode: 'recordContinuously' };

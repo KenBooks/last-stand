@@ -2,6 +2,7 @@
 // circle that opens into turning rune rings); only once it is open does the lance pour out of it.
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
+import { portShader, wgslNoise } from '../../core/shaderPorts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -73,7 +74,7 @@ const portalGeo = new THREE.PlaneGeometry(2, 2);
 const RIM = 0.85;
 
 function beamMaterial(core: boolean): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
+  return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uLen: { value: 10 }, uColor: { value: COLOR.clone() }, uCore: { value: core ? 1 : 0 }, uFade: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -109,7 +110,32 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         float a = body * ends * (uCore > 0.5 ? 1.0 : (0.35 + flow * 0.65)) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
-  }));
+  })), ({ wgslFn, uv, varying, normalView, positionViewDirection, modelViewMatrix, vec4 }, u) => {
+    const { noise2 } = wgslNoise();
+    const fres = wgslFn(`fn lanceFres(n: vec3f, v: vec3f, axis: vec3f) -> f32 {
+      let across = v - axis * dot(v, axis);
+      let l = length(across);
+      if (l > 1e-3) { return abs(dot(normalize(n), across / l)); }
+      return 1.0;
+    }`);
+    const axis = modelViewMatrix.mul(vec4(0, 1, 0, 0)).xyz.normalize();
+    return {
+      fragment: wgslFn(`fn lanceBeam(uv: vec2f, fres: f32, time: f32, len: f32, color: vec3f, core: f32,
+        fade: f32) -> vec4f {
+        let along = uv.y * len;
+        let flow = noise2(vec2f(uv.x * 10.0, along * 1.4 - time * 14.0)) * 0.6
+          + noise2(vec2f(uv.x * 22.0, along * 3.0 - time * 22.0)) * 0.4;
+        let ends = smoothstep(0.0, 0.03, uv.y) * (1.0 - smoothstep(0.9, 1.0, uv.y));
+        let body = pow(fres, select(1.2, 2.5, core > 0.5));
+        let c = select(color * (0.35 + flow * 1.1), mix(color, vec3f(1.0), 0.7) * 1.6, core > 0.5);
+        let a = body * ends * select(0.35 + flow * 0.65, 1.0, core > 0.5) * fade;
+        return vec4f(c * a, a);
+      }`, [noise2])({
+        uv: uv(), fres: varying(fres({ n: normalView, v: positionViewDirection, axis })), time: u.uTime,
+        len: u.uLen, color: u.uColor, core: u.uCore, fade: u.uFade,
+      }),
+    };
+  });
 }
 
 /**
@@ -118,7 +144,7 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
  * fading in (0.4..1). Added light, no depth write.
  */
 function portalMaterial(): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
+  return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uFade: { value: 1 }, uColor: { value: COLOR.clone() } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -164,7 +190,51 @@ function portalMaterial(): THREE.ShaderMaterial {
         vec3 c = spark * rim * 2.2 + uColor * runes * 2.6 + uColor * inner * 1.4;
         gl_FragColor = vec4(c * uFade, 1.0);
       }`,
-  }));
+  })), ({ wgslFn, positionGeometry, varying }, u) => {
+    const { hash2, noise2 } = wgslNoise();
+    // (smoothstep's edges the right way round: falling ones as 1 - the rising, WGSL leaves them undefined)
+    return {
+      fragment: wgslFn(`fn lancePortal(p: vec2f, time: f32, open: f32, fade: f32, color: vec3f) -> vec4f {
+        let TAU = 6.2831853;
+        let R = ${RIM.toFixed(2)};
+        let r = length(p);
+        if (r > 1.0) { discard; }
+        var a = 0.0;
+        if (r >= 1e-4) { a = atan2(p.x, p.y); }
+        let u = fract(a / TAU + 1.0);
+        let trace = clamp(open / 0.7, 0.0, 1.0);
+        let behind = trace - u;
+        let drawn = select(step(0.0, behind), 1.0, trace >= 1.0);
+        let head = select(exp(-max(behind, 0.0) * 18.0) * drawn, 0.0, trace >= 1.0);
+        let crackle = noise2(vec2f(u * 90.0 - time * 30.0, time * 9.0)) * 0.7
+          + noise2(vec2f(u * 260.0 + time * 55.0, 3.0)) * 0.6;
+        let d1 = (r - R) / (0.018 + 0.02 * crackle);
+        let d2 = (r - R) / 0.09;
+        let d3 = (r - R) / 0.06;
+        let band = exp(-d1 * d1);
+        let halo = exp(-d2 * d2) * 0.25;
+        let rim = (band * (0.6 + crackle) + halo) * drawn + head * (exp(-d3 * d3) * 3.0);
+        let k2 = smoothstep(0.4, 1.0, open);
+        let cell1 = floor(u * 48.0 + time * 0.8);
+        let len1 = 0.012 + 0.03 * hash2(vec2f(cell1, 1.0));
+        let ring1 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.72 * R) - len1);
+        let ticks1 = step(0.72, fract(u * 48.0 + time * 0.8)) * step(0.15, fract(u * 6.0 + time * 0.13));
+        let ring2 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.56 * R) - 0.014);
+        let ticks2 = step(0.62, fract(u * 30.0 - time * 0.9));
+        let lines = (1.0 - smoothstep(0.0, 0.01, abs(r - 0.8 * R) - 0.004))
+          + (1.0 - smoothstep(0.0, 0.01, abs(r - 0.64 * R) - 0.003));
+        let spokes = exp(-abs(sin((a + time * 0.25) * 4.0)) * 30.0) * step(0.3 * R, r) * step(r, 0.56 * R);
+        let runes = (ring1 * ticks1 + ring2 * ticks2 * 0.8 + lines * 0.6 + spokes * 0.5) * k2;
+        let sw = noise2(vec2f(u * 6.0 + r * 5.0 - time * 1.5, r * 7.0 - time * 2.0));
+        let inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * (1.0 - smoothstep(0.3, R, r));
+        let spark = mix(color, vec3f(1.0, 0.98, 0.85), 0.55);
+        let c = spark * rim * 2.2 + color * runes * 2.6 + color * inner * 1.4;
+        return vec4f(c * fade, 1.0);
+      }`, [hash2, noise2])({
+        p: varying(positionGeometry.xy), time: u.uTime, open: u.uOpen, fade: u.uFade, color: u.uColor,
+      }),
+    };
+  });
 }
 
 const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3();

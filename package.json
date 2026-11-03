@@ -23,12 +23,12 @@
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",
-    "three": "0.185.1"
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
-    "@types/three": "0.185.4",
+    "@types/three": "0.187.0",
     "playwright-core": "^1.61.1",
     "sass": "^1.105.0",
     "typescript": "6.0.2",

@@ -6,6 +6,7 @@ import { flash, flashFree, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
+import { portShader } from '../core/shaderPorts';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
 import { entry, strikesBody } from './strikes';
@@ -27,12 +28,20 @@ const orbShader = {
     }`,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
 };
+/** `orbShader` on WebGPU (core/shaderPorts.ts) */
+const orbPort: Parameters<typeof portShader>[1] = ({ wgslFn, normalView, positionViewDirection }, u) => ({
+  fragment: wgslFn(`fn boltOrb(n: vec3f, v: vec3f, color: vec3f) -> vec4f {
+    let f = max(dot(normalize(n), normalize(v)), 0.0);
+    return vec4f(color * (0.15 + 1.1 * f * f), 1.0);
+  }`)({ n: normalView, v: positionViewDirection, color: u.uColor }),
+});
 function coreMat(color: THREE.ColorRepresentation, intensity: number, orb: boolean): THREE.Material {
   const key = `${color}:${intensity}:${orb}`;
   let m = matCache.get(key);
   if (!m) {
     const c = new THREE.Color(color).multiplyScalar(intensity);
-    m = orb ? nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })) : nearGlow(new THREE.MeshBasicMaterial({ color: c }));
+    m = orb ? portShader(nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })), orbPort)
+      : nearGlow(new THREE.MeshBasicMaterial({ color: c }));
     matCache.set(key, m);
   }
   return m;

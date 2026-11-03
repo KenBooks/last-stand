@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { overFrame } from '../../core/renderer';
+import { WEBGPU, drawOverFrame, labelsMaterial } from '../../core/webgpu';
 import { uiScales } from '../scale';
 import { drawOutline } from './outline';
 import {
@@ -106,7 +107,10 @@ let fontLoads = 0;
 if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => { fontLoads++; });
 
 // --- drawing: one instanced quad a label, its box in canvas pixels and its slot's corners in the atlas
-let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial> | null = null;
+let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material> | null = null;
+/** the size of the canvas the labels are placed in (px), and the atlas they show: the material's, either renderer's */
+const view = new THREE.Vector2();
+let setAtlas: (texture: THREE.Texture) => void = () => {};
 let rects: THREE.InstancedBufferAttribute, uvs: THREE.InstancedBufferAttribute, alphas: THREE.InstancedBufferAttribute;
 const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera();
 /** drawn once at load whatever is shown, so its program compiles then (as every other does) */
@@ -116,6 +120,8 @@ function makeMesh(room: number): void {
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3));
   geo.setIndex([0, 2, 1, 1, 2, 3]);
+  // (three's start is Infinity, which WebGL clamps to the attributes' room, and WebGPU's draw refuses)
+  geo.instanceCount = 0;
   rects = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
   uvs = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
   alphas = new THREE.InstancedBufferAttribute(new Float32Array(room), 1).setUsage(THREE.DynamicDrawUsage);
@@ -127,8 +133,8 @@ function makeMesh(room: number): void {
     mesh.geometry = geo;
     return;
   }
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uAtlas: { value: atlasTexture() }, uView: { value: new THREE.Vector2(1, 1) } },
+  const mat = WEBGPU ? nodeMaterial() : new THREE.ShaderMaterial({
+    uniforms: { uAtlas: { value: atlasTexture() }, uView: { value: view } },
     vertexShader: /* glsl */ `
       attribute vec4 aRect;
       attribute vec4 aUv;
@@ -147,6 +153,9 @@ function makeMesh(room: number): void {
       varying vec2 vUv;
       varying float vAlpha;
       void main() { gl_FragColor = texture2D(uAtlas, vUv) * vAlpha; }`,
+  });
+  if (!WEBGPU) setAtlas = (texture) => { (mat as THREE.ShaderMaterial).uniforms.uAtlas.value = texture; };
+  Object.assign(mat, {
     // (premultiplied by alpha: the atlas is, from the canvas)
     blending: THREE.CustomBlending,
     blendSrc: THREE.OneFactor,
@@ -163,7 +172,13 @@ function makeMesh(room: number): void {
   scene.add(mesh);
 }
 
-const view = new THREE.Vector2();
+/** The labels' material on WebGPU: the same draw, as nodes (core/webgpu.ts). */
+function nodeMaterial(): THREE.Material {
+  const made = labelsMaterial(atlasTexture(), view);
+  setAtlas = made.setAtlas;
+  return made.material;
+}
+
 /** the labels drawn last frame, in the order drawn (lowest first) */
 let drawn: Label[] = [];
 
@@ -237,14 +252,16 @@ function drawLabels(): void {
   warmed = true;
   const gl = G.renderer;
   gl.getDrawingBufferSize(view);
-  mesh!.material.uniforms.uView.value.copy(view);
   // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
-  mesh!.material.uniforms.uAtlas.value = atlasTexture();
-  const auto = gl.autoClear;
-  gl.autoClear = false;
-  gl.setRenderTarget(null);
-  gl.render(scene, camera);
-  gl.autoClear = auto;
+  setAtlas(atlasTexture());
+  if (WEBGPU) drawOverFrame(gl, () => gl.render(scene, camera));
+  else {
+    const auto = gl.autoClear;
+    gl.autoClear = false;
+    gl.setRenderTarget(null);
+    gl.render(scene, camera);
+    gl.autoClear = auto;
+  }
   if (count === 0) mesh!.geometry.instanceCount = 0;
 }
 // (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)

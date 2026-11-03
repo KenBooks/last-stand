@@ -7,6 +7,7 @@
 // Every vertex knows how far along its piece it is (`aAlong`): a piece is grown to `grow` metres (`uGrow`), each part
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
 import * as THREE from 'three';
+import { portShader, type Port, type Tsl } from '../core/shaderPorts';
 import { groundHeight } from '../world/ground';
 
 /** the braid: its middle over the floor, each strand's radius and how far it winds from the middle (m), how fast it
@@ -65,6 +66,50 @@ const FRAG = /* glsl */`uniform vec3 uBark; uniform vec3 uSap; uniform float uTi
     float vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
     gl_FragColor = vec4(c + uSap * (0.02 + vein * pulse * 0.8 + vHead * 0.45), 1.0);
   }`;
+
+/** `VERT` and `FRAG` on WebGPU (core/shaderPorts.ts), in WGSL */
+function vinePort({ wgslFn, attribute, positionGeometry, normalLocal, modelWorldMatrix, vec4, varying }: Tsl,
+  u: Tsl): Port {
+  const along = attribute('aAlong', 'float');
+  const head = wgslFn(`fn vineHead(along: f32, grow: f32, headK: f32) -> f32 {
+    let h = 1.0 - clamp((grow - along) / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
+    return h * h * headK;
+  }`)({ along, grow: u.uGrow, headK: u.uHead });
+  const position = wgslFn(`fn vinePosition(pos: vec3f, off: vec3f, fan: vec3f, along: f32, head: f32, grow: f32,
+    wither: f32, time: f32, rise: f32, side: vec3f) -> vec3f {
+    let k = clamp((grow - along) / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - wither);
+    var p = pos + fan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + off * sqrt(k);
+    p.y += rise * head * ${HEAD.rise.toFixed(2)};
+    p += side * rise * head * sin(time * 9.0 - along * 5.0) * ${HEAD.weave.toFixed(2)};
+    return p;
+  }`)({
+    pos: positionGeometry, off: attribute('aOff', 'vec3'), fan: attribute('aFan', 'vec3'), along, head,
+    grow: u.uGrow, wither: u.uWither, time: u.uTime, rise: u.uRise, side: u.uSide,
+  });
+  const colour = wgslFn(`fn vineColour(nIn: vec3f, along: f32, kind: f32, head: f32, bark: vec3f, sap: vec3f,
+    time: f32) -> vec4f {
+    let n = normalize(nIn);
+    let facing = dot(n, normalize(vec3f(0.3, 0.9, 0.2)));
+    let isLeaf = kind > 0.5 && kind < 1.5;
+    let lit = 0.3 + 0.7 * select(max(facing, 0.0), abs(facing), isLeaf);
+    let pulse = 0.6 + 0.4 * sin(along * 2.2 - time * 6.0);
+    if (isLeaf) {
+      let leaf = mix(vec3f(0.025, 0.06, 0.012), vec3f(0.07, 0.16, 0.03), lit);
+      return vec4f(leaf * (0.5 + 0.5 * lit) + sap * 0.04, 1.0);
+    }
+    let groove = 0.5 + 0.5 * sin(along * 23.0 + n.x * 3.0 + n.z * 2.0);
+    let c = bark * lit * (0.7 + 0.4 * groove) * select(1.0, 1.2, kind > 1.5);
+    let vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
+    return vec4f(c + sap * (0.02 + vein * pulse * 0.8 + head * 0.45), 1.0);
+  }`);
+  return {
+    position,
+    fragment: colour({
+      nIn: varying(modelWorldMatrix.mul(vec4(normalLocal, 0)).xyz), along: varying(along),
+      kind: varying(attribute('aKind', 'float')), head: varying(head), bark: u.uBark, sap: u.uSap, time: u.uTime,
+    }),
+  };
+}
 
 /** One piece of vine: its mesh, grown to `grow` metres and withered by `wither` (0 to 1) each frame. */
 export interface Vine {
@@ -179,7 +224,8 @@ function material(bark: number, sap: number, rise: number, side: THREE.Vector3) 
     uGrow: { value: 0 }, uWither: { value: 0 }, uTime: { value: 0 }, uRise: { value: rise }, uHead: { value: 1 },
     uSide: { value: side.clone() }, uBark: { value: new THREE.Color(bark) }, uSap: { value: new THREE.Color(sap) },
   };
-  const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide });
+  const mat = portShader(new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide }),
+    vinePort);
   return { mat, uniforms };
 }
 

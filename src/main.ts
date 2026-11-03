@@ -1,6 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
+import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
@@ -65,6 +66,8 @@ import type { Profile } from './types';
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
+/** how long the loading screen waits for the fight's warm-up on WebGPU (ms) */
+const FIGHT_UNDER_LOADING = 6000;
 
 async function boot() {
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
@@ -78,11 +81,14 @@ async function boot() {
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
-  const { scene, renderer } = initRenderer($('#game'));
-  steadyShadowPrograms(renderer);
-  watchPrograms(renderer);
-  // (the environments' programs linked as the arena is built, each made as its biome is first shown)
-  compileEnvMaps(renderer);
+  const { scene, renderer } = await initRenderer($('#game'));
+  // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
+  if (!WEBGPU) {
+    steadyShadowPrograms(renderer);
+    watchPrograms(renderer);
+    // (the environments' programs linked as the arena is built, each made as its biome is first shown)
+    compileEnvMaps(renderer);
+  }
   initInput(renderer.domElement);
   initAltCursor(renderer.domElement);
   particles.init(scene);
@@ -94,7 +100,7 @@ async function boot() {
   initQuality();
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
-  const heroLit = compileTheBiome();
+  compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   layOutMenuAhead();
 
@@ -105,7 +111,6 @@ async function boot() {
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
-  heroLit();
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
 
@@ -153,11 +158,17 @@ async function boot() {
   // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen
   if (firstVisit) await loadingStep('Gathering the heroes', 0.6);
   await warmLobby(firstVisit);
-  const rest = warmTheRest(loadingLeft);
+  const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();
+  }
+  // (on WebGPU the lobby held 66 to 108 frames a second for the 8 s the fight warmed behind it, where under the loading
+  // screen, in long slices, it takes a moment on a return; what a first visit hasn't done by then goes on behind)
+  if (WEBGPU) {
+    await loadingStep('Readying the fight', 0.7);
+    await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
   }
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
@@ -170,6 +181,7 @@ async function boot() {
   updateCamera(0, G.player.pos, G.player.model.height);
   loadingDone(() => {
     revealed = true;
+    if (WEBGPU) pipelinesAtOnceFromNow();
     setTimeout(() => checkPrograms(renderer));
     void rest.then(() => checkPrograms(renderer));
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)

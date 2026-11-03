@@ -48,8 +48,20 @@ function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof type
   uniforms.uSeeMinY = u.minY;
 }
 
+/** What a material dissolves by, as WebGPU reads it off the material (`SeeThrough`, core/shaderPorts.ts `seeMask`):
+ *  the followed character, and its kind's hole and floor. */
+export interface SeeThrough { focus: { value: THREE.Vector3 }; k: { value: THREE.Vector4 }; minY: { value: number } }
+
+/** `m`'s dissolve given it for WebGPU (`seeThrough`, a property of its own: not copied to a clone, as its
+ *  `onBeforeCompile` isn't). */
+function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
+  const value: SeeThrough = { focus, k: kinds[kind].k, minY: kinds[kind].minY };
+  Object.defineProperty(m, 'seeThrough', { value, configurable: true });
+}
+
 /** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. */
 export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof kinds): M {
+  markSeeThrough(m, kind);
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
   m.onBeforeCompile = (shader, renderer) => {
     prev.call(m, shader, renderer);

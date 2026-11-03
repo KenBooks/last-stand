@@ -1,7 +1,8 @@
 // Another commit of the game for an A/B (tools/lab, `--ab`): exported with `git archive` (no worktree, no links into
-// this tree's folders), and served by a Vite config that finds its packages in this tree's node_modules.
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// this tree's folders), and served by a Vite config that finds its packages in this tree's node_modules, or in its
+// own where its lockfile differs from this tree's (a package bumped: three.js measured against the one it replaces).
+import { execFileSync, execSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
 
@@ -9,6 +10,9 @@ import { labError } from './errors.mjs';
 const EXPORTS_KEPT = 3;
 /** the file an export's folder holds once it's complete: its commit's sha */
 const COMPLETE = '.lab-sha';
+/** the file an export's own node_modules holds once its packages are installed */
+const INSTALLED = '.lab-installed';
+const LOCKFILE = 'package-lock.json';
 
 const toSlashes = (path) => path.split('\\').join('/');
 
@@ -53,8 +57,41 @@ export function exportCommit(repoRoot, outDir, ref) {
     rmSync(archive);
     writeFileSync(join(dir, COMPLETE), sha);
   }
+  installOwnPackages(repoRoot, dir);
   pruneExports(base, dir);
   return { sha, dir };
+}
+
+/** Whether the exported tree `dir` locks other packages than this tree (`repoRoot`). */
+function locksOtherPackages(repoRoot, dir) {
+  const ours = join(repoRoot, LOCKFILE);
+  const theirs = join(dir, LOCKFILE);
+  if (!existsSync(ours) || !existsSync(theirs)) return false;
+  return readFileSync(ours, 'utf8') !== readFileSync(theirs, 'utf8');
+}
+
+/**
+ * The exported tree's own packages installed (once), where its lockfile differs from this tree's: served with this
+ * tree's, an A/B of a bumped package measured the new one on both sides. Installed without their scripts: the side
+ * only serves the game's modules.
+ */
+function installOwnPackages(repoRoot, dir) {
+  const modules = join(dir, 'node_modules');
+  if (existsSync(join(modules, INSTALLED)) || !locksOtherPackages(repoRoot, dir)) return;
+  rmSync(modules, { recursive: true, force: true });
+  console.log(`lab: ${dir} locks other packages than this tree; installing its own (npm ci)`);
+  try {
+    // (through the shell, which finds npm's own launcher on Windows)
+    execSync('npm ci --ignore-scripts --no-audit --no-fund', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    throw labError(`--ab: npm ci failed in ${dir}: ${error.stderr?.toString().trim() ?? error.message}`);
+  }
+  writeFileSync(join(modules, INSTALLED), 'installed by the lab');
+}
+
+/** The tree whose node_modules serve the exported tree `treeRoot`: its own where it has them, else this tree's. */
+export function packagesRoot(treeRoot, repoRoot) {
+  return existsSync(join(treeRoot, 'node_modules', INSTALLED)) ? treeRoot : repoRoot;
 }
 
 /** Keeps the newest few exports besides `keep`. */
@@ -67,14 +104,14 @@ function pruneExports(base, keep) {
 }
 
 /**
- * A Vite plugin for an exported tree, whose config finds its packages in its own node_modules, which it hasn't:
- * they are this tree's. It points the tree's ez-tree alias, and the stub for ez-tree's textures, at them, written
+ * A Vite plugin for an exported tree, whose config finds its packages in its own node_modules, which it hasn't
+ * unless its lockfile differs (`packagesRoot`): they are this tree's. It points the tree's ez-tree alias, and the stub for ez-tree's textures, at them, written
  * exactly as this tree's config writes them: a path cased otherwise opens the same file on Windows but is another
  * module to Vite (its lowercased alias bundled ez-tree with a second copy of three, and the two sides drew random
  * numbers apart).
  */
 export function exportedTreePaths(treeRoot, repoRoot) {
-  const ezTree = toSlashes(join(repoRoot, 'node_modules/@dgreenheck/ez-tree/src/lib/'));
+  const ezTree = toSlashes(join(packagesRoot(treeRoot, repoRoot), 'node_modules/@dgreenheck/ez-tree/src/lib/'));
   return {
     name: 'lab-exported-tree-paths',
     enforce: 'pre',

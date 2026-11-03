@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { pointScale } from '../core/renderer';
+import { WEBGPU } from '../core/webgpu';
+import { starQuads, type StarQuads } from './particleNodes';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -52,10 +54,12 @@ const SPIN = 1.8, ORBIT = 0.42, BOB = 0.06, FADE = 0.25, STARS = 3, SIZE = 0.26;
 const MOST = STARS * 160;
 
 const pos = new Float32Array(MOST * 3), size = new Float32Array(MOST), alpha = new Float32Array(MOST);
+// (an instance's on WebGPU, a quad each: it draws points a pixel wide; a vertex's for WebGL's points)
+const Attribute = WEBGPU ? THREE.InstancedBufferAttribute : THREE.BufferAttribute;
 const attrs = [
-  new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage),
-  new THREE.BufferAttribute(size, 1).setUsage(THREE.DynamicDrawUsage),
-  new THREE.BufferAttribute(alpha, 1).setUsage(THREE.DynamicDrawUsage),
+  new Attribute(pos, 3).setUsage(THREE.DynamicDrawUsage),
+  new Attribute(size, 1).setUsage(THREE.DynamicDrawUsage),
+  new Attribute(alpha, 1).setUsage(THREE.DynamicDrawUsage),
 ];
 const geo = new THREE.BufferGeometry();
 geo.setAttribute('position', attrs[0]);
@@ -67,10 +71,19 @@ const mat = new THREE.ShaderMaterial({
   uniforms: { uScale: { value: 400 }, uFill: { value: new THREE.Color(0xffe27a) }, uRim: { value: new THREE.Color(0xc07818) } },
   transparent: true, depthWrite: false,
 });
-const points = new THREE.Points(geo, mat);
-points.name = 'dazed stars';
-points.frustumCulled = false;
-points.renderOrder = 10;
+let quads: StarQuads | null = null;
+let points: THREE.Object3D = new THREE.Points(geo, mat);
+
+/** the stars' mesh made for the renderer that draws it (WebGPU's quads are nodes, made once it's loaded) */
+function madeForRenderer(): void {
+  if (WEBGPU) {
+    quads = starQuads(attrs as THREE.InstancedBufferAttribute[], mat.uniforms.uFill.value, mat.uniforms.uRim.value);
+    points = quads.mesh;
+  }
+  points.name = 'dazed stars';
+  points.frustumCulled = false;
+  points.renderOrder = 10;
+}
 /** the stars set this frame */
 let count = 0;
 
@@ -90,15 +103,24 @@ export function dazedStars(x: number, y: number, z: number, t: number, left: num
 /** The dazed foes' stars, drawn among the particles (`fx/particles.ts`): put in the scene, drawn as each frame set
  *  them, and none. */
 export const dazedField = {
-  init(scene: THREE.Scene): void { scene.add(points); },
+  init(scene: THREE.Scene): void {
+    madeForRenderer();
+    scene.add(points);
+  },
   /** this frame's stars drawn, the next frame's set afresh */
   update(): void {
     geo.setDrawRange(0, count);
+    if (quads) quads.geo.instanceCount = count;
     // (not drawn while there are none, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     points.visible = count > 0;
     if (count) for (const a of attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, count * a.itemSize); a.needsUpdate = true; }
     mat.uniforms.uScale.value = pointScale();
+    if (quads) quads.scale.value = pointScale();
     count = 0;
   },
-  clear(): void { count = 0; geo.setDrawRange(0, 0); },
+  clear(): void {
+    count = 0;
+    geo.setDrawRange(0, 0);
+    if (quads) quads.geo.instanceCount = 0;
+  },
 };

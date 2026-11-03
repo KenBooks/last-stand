@@ -7,6 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setSceneSamples, setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget } from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -15,6 +16,8 @@ import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER } from './layers';
+import { takePorts } from './shaderPorts';
+import type { WebGPURenderer } from 'three/webgpu';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -220,8 +223,11 @@ export function compilePasses(onScreen: THREE.Scene[]): void {
     gl.compile(holder, passCamera);
   };
   const prev = gl.getRenderTarget();
-  compiled(passMaterials.intoTargets, sceneRT);
-  compiled(passMaterials.toScreen, null);
+  // (WebGPU draws its own pipeline: the WebGL chain's passes are never drawn there, makePipeline in webgpu.ts)
+  if (!WEBGPU) {
+    compiled(passMaterials.intoTargets, sceneRT);
+    compiled(passMaterials.toScreen, null);
+  }
   for (const scene of onScreen) gl.compile(scene, passCamera);
   gl.setRenderTarget(prev);
   quad.dispose();
@@ -348,6 +354,71 @@ function drawArmsOver(): void {
   G.scene.background = background;
 }
 
+/** The world's lights' shadows held as they are for `draw` (`shadow.autoUpdate`: on WebGPU each camera's draw would
+ *  draw every shadow map again). */
+function withShadowsKept(draw: () => void): void {
+  const held: THREE.LightShadow[] = [];
+  G.scene.traverse((object) => {
+    const shadow = (object as THREE.DirectionalLight).shadow;
+    if (!(object as THREE.Light).isLight || !shadow?.autoUpdate) return;
+    shadow.autoUpdate = false;
+    held.push(shadow);
+  });
+  draw();
+  for (const shadow of held) shadow.autoUpdate = true;
+}
+
+/** `drawArmsOver` on WebGPU: into the scene's pass's target as it stands, its colour kept and its depth cleared, as
+ *  the post chain reads it next. */
+function drawArmsOverPass(): void {
+  if (armsFov === null) return;
+  placeArmsCamera();
+  const target = gl.getRenderTarget();
+  const clearing = gl as unknown as { autoClearColor: boolean; autoClearDepth: boolean; autoClearStencil: boolean };
+  const { autoClearColor, autoClearDepth, autoClearStencil } = clearing;
+  const { autoClear } = gl;
+  const background = G.scene.background;
+  gl.autoClear = true;
+  clearing.autoClearColor = false;
+  clearing.autoClearDepth = true;
+  clearing.autoClearStencil = false;
+  G.scene.background = null;
+  gl.setRenderTarget(webgpuSceneTarget() as THREE.WebGLRenderTarget);
+  withShadowsKept(() => gl.render(G.scene, armsCam));
+  gl.setRenderTarget(target);
+  G.scene.background = background;
+  gl.autoClear = autoClear;
+  clearing.autoClearColor = autoClearColor;
+  clearing.autoClearDepth = autoClearDepth;
+  clearing.autoClearStencil = autoClearStencil;
+}
+
+/** the frames over which the sun's shadow is drawn every other one on WebGPU: from about 90 a second (ms a frame) */
+const SHADOW_IN_TURNS_MS = 1000 / 65;
+/** how much of the frames' mean a new frame moves (about the last 10 frames') */
+const FRAME_MEAN_SHARE = 0.1;
+const SHADOW_EVERY_FRAME = typeof location !== 'undefined' && /[?&]shadowEvery=1/.test(location.search);
+let lastFrameAt = 0;
+let frameMean = SHADOW_IN_TURNS_MS;
+let shadowDrawnLast = false;
+
+/**
+ * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
+ * and at 144 a second its 72 show no lag. Told by the frames' mean: by each frame's own time, a frame that missed the
+ * screen's refresh (13.9 ms at 144 Hz) had the next draw the shadow too, which missed it again, and the game stayed at
+ * half the screen's rate with the shadow in every frame. A 60 Hz screen's stay whole. (`?shadowEvery=1` draws it every
+ * frame, to compare.)
+ */
+function sunShadowInTurns(): void {
+  const now = performance.now();
+  frameMean += (Math.min(now - lastFrameAt, 2 * SHADOW_IN_TURNS_MS) - frameMean) * FRAME_MEAN_SHARE;
+  const fast = frameMean < SHADOW_IN_TURNS_MS;
+  lastFrameAt = now;
+  const skip = fast && shadowDrawnLast && !SHADOW_EVERY_FRAME;
+  shadowDrawnLast = !skip;
+  G.arena.moon.shadow.autoUpdate = !skip;
+}
+
 /** top-down (the default), over the shoulder, or through the character's eyes */
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
@@ -456,10 +527,17 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
   provoking?.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
 }
 
-export function initRenderer(container: HTMLElement) {
+export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
-  const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  if (WEBGPU) drawOverScene(drawArmsOverPass);
+  const renderer = gl = WEBGPU ? await makeWebGPURenderer()
+    : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  if (WEBGPU) {
+    takePorts(renderer as unknown as WebGPURenderer);
+    // (`?envShadow=0` leaves the environment unshadowed, to compare)
+    if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
+  }
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -474,9 +552,9 @@ export function initRenderer(container: HTMLElement) {
   // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
   // programs)
   renderer.capabilities.getMaxAnisotropy();
-  firstVertexProvokes(renderer.getContext());
+  if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
-  initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
+  if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
@@ -520,6 +598,13 @@ export function initRenderer(container: HTMLElement) {
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
 
+  if (WEBGPU) {
+    const looks = {
+      highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
+      hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO], bloom: BLOOM_LEVELS,
+    } as const;
+    await makePipeline(renderer, scene, camera, looks, grade.uniforms as never);
+  }
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
@@ -582,7 +667,7 @@ function fitViewport(): boolean {
 }
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
+export const sceneTarget = (): THREE.WebGLRenderTarget => (WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : sceneRT);
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
@@ -598,6 +683,7 @@ function applySceneRatio(): boolean {
   if (r === appliedSceneRatio) return false;
   appliedSceneRatio = r;
   composer.setPixelRatio(r);
+  if (WEBGPU) setSceneShare(sceneShare());
   return true;
 }
 
@@ -616,6 +702,7 @@ export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
   if (applySceneRatio()) fitSceneTarget();
   // a render target re-initialises with the new sample count on its next use
   if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
+  if (WEBGPU) setSceneSamples(p.msaa);
 }
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }
@@ -820,6 +907,7 @@ export const overFrame = { draw: (): void => {} };
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
+  // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   fitBloodMask(gl.domElement.width, gl.domElement.height);
@@ -835,6 +923,12 @@ export function render(): void {
   u.uPaper.value = hdr.paper;
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
+  if (WEBGPU) {
+    sunShadowInTurns();
+    renderWebGPU();
+    overFrame.draw();
+    return;
+  }
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);

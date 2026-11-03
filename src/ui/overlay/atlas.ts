@@ -2,6 +2,7 @@
 // own, and a slot uploaded alone when its label changes (its region, straight from the canvas it was painted on).
 import * as THREE from 'three';
 import { G } from '../../state';
+import { WEBGPU, copyCanvasInto } from '../../core/webgpu';
 
 /** the atlas's side, px, for each canvas pixel a px of a label's art takes (the canvas's ratio times the UI's scale;
  *  rounded up to a multiple of `SIDE_STEP`, at least `SIDE_MIN`): a label's pixels go with that ratio's square, and
@@ -183,5 +184,8 @@ export function uploadSlot(slot: Slot): void {
   region.min.set(0, 0);
   region.max.set(slot.w, slot.h);
   at.set(slot.x, slot.y);
+  if (WEBGPU && copyCanvasInto(G.renderer, canvas!, target!.texture, slot.w, slot.h, slot.x, slot.y)) return;
+  // (on WebGPU's WebGL 2 backend three copies the canvas's texture as last uploaded: uploaded again first)
+  if (WEBGPU) source!.needsUpdate = true;
   G.renderer.copyTextureToTexture(source!, target!.texture, region, at);
 }

@@ -9,6 +9,8 @@ import { mulberry } from '../../util';
 import { part, joint } from './rig';
 
 const STIFFNESS = 70, DAMPING = 5;
+/** how little of a lean and its speed (rad, rad/s) the spring is let go at, standing still */
+const AT_REST = 1e-4;
 /** the stream its straw is drawn from: every dummy alike */
 const STRAW_SEED = 4417;
 /** the straw's two geometries (spilling out of the sack and the sleeves, and out of the head), made once and shared by
@@ -52,6 +54,62 @@ function strawBundle(rng: () => number, count: number, radius: number, length: [
     straws.push(straw);
   }
   return mergeGeometries(straws);
+}
+
+/**
+ * The meshes right under `joint` that share a material and cast alike merged into one, each placed in the joint's
+ * space: a dummy was 23 meshes and 12 shadow casters, three of them a third of the lobby's draws (on WebGPU each
+ * draw is about 20 µs of the frame's JS), and they move only as their joints do.
+ */
+function mergeAlike(joint: THREE.Object3D): void {
+  const alike = new Map<string, THREE.Mesh[]>();
+  for (const child of joint.children) {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || mesh.geometry.userData.shared) continue;
+    const key = `${(mesh.material as THREE.Material).uuid} ${mesh.castShadow}`;
+    alike.set(key, [...alike.get(key) ?? [], mesh]);
+  }
+  for (const meshes of alike.values()) {
+    if (meshes.length < 2) continue;
+    const placed = meshes.map((mesh) => {
+      mesh.updateMatrix();
+      return mesh.geometry.applyMatrix4(mesh.matrix);
+    });
+    const merged = mergeGeometries(placed);
+    if (!merged) continue;
+    const one = part(merged, meshes[0].material as THREE.Material, joint);
+    one.castShadow = meshes[0].castShadow;
+    for (const mesh of meshes) {
+      joint.remove(mesh);
+      mesh.geometry.dispose();
+    }
+  }
+}
+
+/** the geometries of the first dummy built, in the order its meshes are met (`shareGeometries`) */
+let sharedGeometries: THREE.BufferGeometry[] | null = null;
+
+/**
+ * Every dummy's meshes given the first one's geometries, marked as shared, so all of them are drawn in a crowd as the
+ * foes are: each material's parts of all the dummies one instanced draw (models/crowd.ts), where they were 29 of the
+ * lobby's scene draws a frame and 21 of its shadow's, at about 20 us of JS a draw on WebGPU.
+ */
+function shareGeometries(root: THREE.Object3D): void {
+  const meshes: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  });
+  const first = sharedGeometries === null;
+  sharedGeometries ??= meshes.map((mesh) => mesh.geometry);
+  meshes.forEach((mesh, i) => {
+    if (first) {
+      mesh.geometry.userData.shared = true;
+      return;
+    }
+    // (the straw's are made once already)
+    if (mesh.geometry !== sharedGeometries![i]) mesh.geometry.dispose();
+    mesh.geometry = sharedGeometries![i];
+  });
 }
 
 export function buildDummy(): Model {
@@ -114,7 +172,10 @@ export function buildDummy(): Model {
   }
   part(new THREE.CircleGeometry(0.025, 16), rune, target).castShadow = false;
 
-  // spring wobble: lean back when struck, sway a little sideways
+  for (const joint of [root, sway, head, target]) mergeAlike(joint);
+
+  // spring wobble: lean back when struck, sway a little sideways; at rest it stands still (a sway of 0.01 rad, 2 cm
+  // at its head, moved every part each frame: on WebGPU each moved part's draw is refreshed in full)
   let lean = 0, leanV = 0, tilt = 0, tiltV = 0, prevHit = 0;
   function animate(st: AnimState): void {
     const dt = st.dt;
@@ -123,11 +184,17 @@ export function buildDummy(): Model {
       tiltV += (Math.random() - 0.5) * 2.4;
     }
     prevHit = st.hit;
+    if (lean === 0 && leanV === 0 && tilt === 0 && tiltV === 0) return;
     leanV += (-STIFFNESS * lean - DAMPING * leanV) * dt; lean += leanV * dt;
     tiltV += (-STIFFNESS * tilt - DAMPING * tiltV) * dt; tilt += tiltV * dt;
-    sway.rotation.set(lean + Math.sin(st.t * 0.9) * 0.01, 0, tilt);
+    if (Math.abs(lean) + Math.abs(tilt) < AT_REST && Math.abs(leanV) + Math.abs(tiltV) < AT_REST) {
+      lean = leanV = tilt = tiltV = 0;
+    }
+    sway.rotation.set(lean, 0, tilt);
     head.rotation.set(-lean * 0.6, 0, -tilt * 0.8);
   }
 
+  shareGeometries(root);
+  root.userData.crowdKind = 'dummy';
   return { root, kit, animate, height: 1.95, dispose() { kit.dispose(); } };
 }

@@ -110,3 +110,22 @@ export function jsIn(samples, from, to, count) {
   }
   return { own: listed(own, count, OWN_SHOWN), within: listed(within, count, WITHIN_SHOWN) };
 }
+
+/** Whether a listed function's name (`nameOf`: its own, then where it's written) is `wanted`'s. */
+const namedAs = (name, wanted) => name === wanted || name.startsWith(`${wanted} `);
+
+/** What `under` (a function's name, as listed or its own alone) spent `count` frames' time on in `[from, to)` of the
+ *  page's clock: each function it calls with what that calls, and its own time, the most first (`--js-under`). Where
+ *  it runs inside itself, from its innermost call: three draws the post chain's quad by the same function as each
+ *  object of the scene, the scene's pass run inside it. */
+export function jsUnder(samples, from, to, count, under) {
+  const beneath = new Map();
+  for (const { at, ms, stack } of samples) {
+    if (at < from || at >= to) continue;
+    const innermost = stack.findIndex((name) => namedAs(name, under));
+    if (innermost < 0) continue;
+    const callee = innermost === 0 ? '(its own)' : stack[innermost - 1];
+    beneath.set(callee, (beneath.get(callee) ?? 0) + ms);
+  }
+  return listed(beneath, count, WITHIN_SHOWN);
+}

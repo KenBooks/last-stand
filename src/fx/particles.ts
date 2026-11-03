@@ -5,6 +5,8 @@ import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { pointScale } from '../core/renderer';
 import { dazedField } from './dazed';
+import { WEBGPU } from '../core/webgpu';
+import { particleQuads, type ParticleQuads } from './particleNodes';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -54,7 +56,9 @@ class Pool {
   readonly aPos: THREE.BufferAttribute; readonly aCol: THREE.BufferAttribute; readonly aSize: THREE.BufferAttribute;
   private readonly attrs: THREE.BufferAttribute[];
   readonly mat: THREE.ShaderMaterial;
-  readonly points: THREE.Points;
+  readonly points: THREE.Points | THREE.Mesh;
+  /** on WebGPU, the pool as instanced quads (particleNodes.ts) */
+  private readonly quads: ParticleQuads | null = null;
 
   constructor(max: number, blending: THREE.Blending, soft: number) {
     this.max = max;
@@ -74,9 +78,11 @@ class Pool {
     this.drag = new Float32Array(max);
 
     const geo = new THREE.BufferGeometry();
-    this.aPos = new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this.aCol = new THREE.BufferAttribute(this.col, 4).setUsage(THREE.DynamicDrawUsage);
-    this.aSize = new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
+    // (an instance's on WebGPU, a quad each; a vertex's for WebGL's points)
+    const Attribute = WEBGPU ? THREE.InstancedBufferAttribute : THREE.BufferAttribute;
+    this.aPos = new Attribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
+    this.aCol = new Attribute(this.col, 4).setUsage(THREE.DynamicDrawUsage);
+    this.aSize = new Attribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('position', this.aPos);
     geo.setAttribute('aColor', this.aCol);
     geo.setAttribute('aSize', this.aSize);
@@ -89,7 +95,11 @@ class Pool {
     });
     // glowing (additive) particles dim with distance like every effect glow
     if (blending === THREE.AdditiveBlending) nearGlow(this.mat);
-    this.points = new THREE.Points(geo, this.mat);
+    if (WEBGPU) {
+      const attrs = [this.aPos, this.aCol, this.aSize] as THREE.InstancedBufferAttribute[];
+      this.quads = particleQuads(attrs[0], attrs[1], attrs[2], blending, soft);
+    }
+    this.points = this.quads?.mesh ?? new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;
   }
@@ -130,12 +140,14 @@ class Pool {
       this.col[i4 + 3] = this.a0[i] * Math.min(1, t * 12) * (1 - t * t);
       i++;
     }
-    this.points.geometry.setDrawRange(0, this.count);
+    if (this.quads) this.quads.mesh.geometry.instanceCount = this.count;
+    else this.points.geometry.setDrawRange(0, this.count);
     // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = pointScale();
+    if (this.quads) this.quads.scale.value = pointScale();
   }
 
   kill(i: number): void {

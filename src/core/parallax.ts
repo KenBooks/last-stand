@@ -2,8 +2,14 @@
 // read along the view ray, so the grout between the crypt's cobbles and the soil round the forest's pebbles and leaves
 // lie sunk below their tops and shift against them as the view moves. Only the hollows sink: the tops stay at the
 // floor's own level, where everything on the floor stands (feet, arrows, marks). The steps a ray takes are a uniform the
-// quality preset sets (none on Low), so switching presets compiles nothing.
+// quality preset sets (none on Low), so switching presets compiles nothing. On WebGPU the same walk is WGSL, and the
+// build's context moves each of the floor's maps to where it meets the ray (`reliefContext`).
 import type * as THREE from 'three';
+import { tsl } from './webgpu';
+
+// (untyped: TSL's types don't follow its conversions across these calls yet)
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type N = any;
 
 /** How a floor's relief lies. */
 export interface FloorRelief {
@@ -61,6 +67,77 @@ vec2 reliefUv(vec2 uv, vec2 dx, vec2 dy) {
   return at;
 }
 `;
+
+/** The walk down the view ray as WGSL (`RELIEF_GLSL`'s `reliefUv`), in the maps' own uv before their repeat: a
+ *  metre of the floor is `relief.y` of it, and the heights are read at the repeat (made once). */
+let reliefWalk: N = null;
+function reliefWalkFn(): N {
+  const { wgslFn } = tsl as any;
+  reliefWalk ??= wgslFn(`fn reliefUv(uv: vec2f, repeat: vec2f, dx: vec2f, dy: vec2f, world: vec3f, eye: vec3f,
+    relief: vec3f, steps: f32, heights: texture_2d<f32>, heightsAt: sampler) -> vec2f {
+    var toEye = eye - world;
+    let dist = length(toEye);
+    toEye = toEye / dist;
+    let depth = relief.x * (1.0 - smoothstep(relief.z * 0.6, relief.z, dist));
+    if (steps <= 0.0 || depth <= 0.0 || toEye.y <= 0.0) {
+      return uv;
+    }
+    let slide = vec2f(-toEye.x, toEye.z) / max(toEye.y, 0.25) * relief.y;
+    let n = max(1.0, floor(mix(steps * 0.5, steps, 1.0 - toEye.y)));
+    let layer = 1.0 / n;
+    let stepUv = slide * depth * layer;
+    var at = uv;
+    var ray = 0.0;
+    var surface = 1.0 - textureSampleGrad(heights, heightsAt, at * repeat, dx, dy).r;
+    if (surface <= 0.0) {
+      return uv;
+    }
+    for (var i = 0; i < 64; i++) {
+      if (f32(i) >= n) {
+        break;
+      }
+      let next = at + stepUv;
+      let nextRay = ray + layer;
+      let nextSurface = 1.0 - textureSampleGrad(heights, heightsAt, next * repeat, dx, dy).r;
+      if (nextRay >= nextSurface) {
+        let above = surface - ray;
+        let below = nextRay - nextSurface;
+        return at + stepUv * clamp(above / max(above + below, 1e-4), 0.0, 1.0);
+      }
+      at = next;
+      ray = nextRay;
+      surface = nextSurface;
+    }
+    return at;
+  }`);
+  return reliefWalk;
+}
+
+/**
+ * A floor's relief on WebGPU, set as its material's build context: its map, normal map and roughness map (tiling
+ * alike, by their repeat alone) each read where the view ray meets the relief, their gradients the floor's own (in a
+ * loop the GPU's are undefined, and the moved uv's jump at each stone's edge). Other textures keep their own uv.
+ */
+export function reliefContext(material: THREE.MeshStandardMaterial, relief: FloorRelief): void {
+  const { context, uv, dFdx, dFdy, positionWorld, cameraPosition, reference, vec3, float, texture, sampler } =
+    tsl as any;
+  const heightsMap = material.roughnessMap!;
+  const maps = new Set<THREE.Texture | null>([material.map, material.normalMap, material.roughnessMap]);
+  const repeat = heightsMap.repeat;
+  const own = uv();
+  const tiled = own.mul(repeat);
+  const gradients = [dFdx(own), dFdy(own)];
+  const heights = texture(heightsMap);
+  const at = reliefWalkFn()({
+    uv: own, repeat, dx: dFdx(tiled), dy: dFdy(tiled), world: positionWorld, eye: cameraPosition,
+    relief: vec3(relief.depth, relief.perMetre / repeat.x, relief.fade),
+    steps: float(reference('value', 'int', steps)), heights, heightsAt: sampler(heights),
+  });
+  (material as unknown as { contextNode: N }).contextNode = context({
+    getUV: (node: N) => (maps.has(node.value) ? at : null),
+    getTextureGradient: (node: N) => (maps.has(node.value) ? gradients : null),
+  });
+}
 
 /**
  * Gives a floor's standard material (a map, a normal map and a roughness map, tiling alike) its relief: applied in its

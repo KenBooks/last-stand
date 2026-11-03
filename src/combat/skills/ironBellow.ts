@@ -2,6 +2,7 @@
 // the warrior as a damage-absorbing ward; each blow they soak flares them, and they shatter at the end.
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
+import { portShader } from '../../core/shaderPorts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, groundFlash, crackDecal } from '../../fx/effects';
@@ -44,7 +45,7 @@ const rimGeo = new THREE.ShapeGeometry(rimShape, 12);
 const emblemGeo = new THREE.ShapeGeometry(kite(0.34), 8);
 
 function faceMaterial(): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
+  return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uColor: { value: new THREE.Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -62,6 +63,15 @@ function faceMaterial(): THREE.ShaderMaterial {
         float i = (0.12 + edge * 0.35 + scan * 0.35) * lines + uFlash * 0.35;
         gl_FragColor = vec4(mix(uColor, vec3(1.0), uFlash * 0.3) * i * uFade, i * uFade);
       }`,
+  })), ({ wgslFn, positionGeometry, varying }, u) => ({
+    fragment: wgslFn(`fn bellowFace(p: vec2f, color: vec3f, fade: f32, flash: f32, time: f32) -> vec4f {
+      let edge = smoothstep(0.1, 0.4, length(p * vec2f(1.0, 0.85)));
+      let s = fract(p.y * 1.2 - time * 0.9) - 0.5;
+      let scan = exp(-s * s * 60.0);
+      let lines = 0.75 + 0.25 * sin(p.y * 120.0 + time * 4.0);
+      let i = (0.12 + edge * 0.35 + scan * 0.35) * lines + flash * 0.35;
+      return vec4f(mix(color, vec3f(1.0), flash * 0.3) * i * fade, i * fade);
+    }`)({ p: varying(positionGeometry.xy), color: u.uColor, fade: u.uFade, flash: u.uFlash, time: u.uTime }),
   }));
 }
 

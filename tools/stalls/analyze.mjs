@@ -1,7 +1,7 @@
 // What a measure of the stalls found (tools/stalls): the page's frames and the trace's Skia program links put on one
 // clock, each stall with the programs built in it, the tasks they were built inside, and what the page changed just
 // before it.
-import { jsIn, jsSamples } from './profile.mjs';
+import { jsIn, jsSamples, jsUnder } from './profile.mjs';
 
 /** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
  *  (`--listed`, down to `LISTED_LEAST`: the trace keeps tasks of 20 ms and more, `trace.mjs`) */
@@ -452,15 +452,21 @@ function onPage(record, events, mark, sourceOf) {
     .map((paint) => ({ node: paint.node, at: toPage(paint.ts) }))
     .filter((paint) => paint.at !== null);
   const samples = jsSamples(events, toPage, names, sourceOf);
-  return { stamp, tasks, names, toPage, placed, samples, links, draws, paints };
+  const dawn = events
+    .filter((event) => event.ph === 'W')
+    .map((work) => ({ name: work.name, ms: work.dur / 1000, at: toPage(work.ts) }))
+    .filter((work) => work.at !== null);
+  return { stamp, tasks, names, toPage, placed, samples, links, draws, paints, dawn };
 }
 
 /**
  * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
  * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
- * (`sourceMap.mjs` `sourcesOf`), `painted` the elements it painted by their node ids (`stalls.mjs` `paintedNames`).
+ * (`sourceMap.mjs` `sourcesOf`), `painted` the elements it painted by their node ids (`stalls.mjs` `paintedNames`),
+ * `under` a function whose time the whole measure's JS breaks down by what it calls (`--js-under`).
  */
-export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null, painted = new Map()) {
+export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null, painted = new Map(),
+  under = null) {
   const traced = onPage(record, events, mark, sourceOf);
   const { stamp, tasks, names, toPage, placed, samples, links, draws, paints } = traced;
   const markTs = stamp?.ts ?? null;
@@ -483,6 +489,11 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
     });
   const spans = phaseSpans(record);
   const refresh = refreshOf(spans.map(({ frames }) => frames), record.frames);
+  // (the whole measure's JS a frame, for a scenario of no phases: the lobby stood in, a fight)
+  const end = record.frames.length ? record.frames[record.frames.length - 1].at : record.start;
+  const counted = samples.length && record.frames.length;
+  const js = counted ? jsIn(samples, record.start, end, record.frames.length) : null;
+  if (js && under) js.under = { name: under, calls: jsUnder(samples, record.start, end, record.frames.length, under) };
   const built = inRecording.map((link) => ({
     ...link,
     at: link.at === null ? null : (link.at - record.start) / 1000,
@@ -494,6 +505,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
     others: stamp ? othersWork(placed, stamp.pid, record.start) : { ms: 0, most: [] },
     built,
     frames: frameSummary(record.frames),
+    js,
     phases: phaseSummaries(spans, refresh, {
       kinds: (kept, count) => workIn(placed, kept, count),
       browser: (from, to) => browserWorkIn(placed, from, to),
@@ -747,6 +759,22 @@ function gpuCompilesIn(placed, from, to) {
   };
 }
 
+/** Dawn's work that started in the page's `[from, to)` (`--dawn`), by its name: how many and how long in all, the
+ *  longest first, `WORK_SHOWN` kinds of it. Whether its cache was read (a shader or pipeline's blob) or its
+ *  compiles run (Tint's, DXC's). Null where none was traced. */
+function dawnIn(dawn, from, to) {
+  const byName = new Map();
+  for (const work of dawn) {
+    if (work.at < from || work.at >= to) continue;
+    const kind = byName.get(work.name) ?? { name: work.name, count: 0, ms: 0 };
+    kind.count++;
+    kind.ms += work.ms;
+    byName.set(work.name, kind);
+  }
+  if (!byName.size) return null;
+  return [...byName.values()].sort((a, b) => b.ms - a.ms).slice(0, WORK_SHOWN);
+}
+
 /** A boot's step from `from` to `to` (the page's ms): its frames' summary (the longest the page was held up in it,
  *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all, the GPU
  *  process's main thread apart, and the threads its compiles ran on (`gpuCompilesIn`). */
@@ -771,6 +799,7 @@ function bootStep(name, from, to, record, traced) {
     work: sharedWork(totals, 1).slice(0, BOOT_WORK_SHOWN),
     gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
     gpuCompiles: gpuCompilesIn(traced.placed, from, to),
+    dawn: dawnIn(traced.dawn, from, to),
     js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
   };
 }

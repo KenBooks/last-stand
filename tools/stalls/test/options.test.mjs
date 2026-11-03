@@ -17,6 +17,7 @@ test('fills in the defaults', () => {
     view: 'top',
     biome: 'forest',
     hero: null,
+    cast: null,
     stash: 0,
     scale: 1,
     cpuSlowdown: 1,
@@ -31,11 +32,17 @@ test('fills in the defaults', () => {
     headed: false,
     perf: false,
     js: false,
+    jsUnder: null,
     angle: false,
+    dawn: false,
+    builds: false,
     passes: false,
     paints: false,
     links: false,
+    before: null,
+    read: null,
     coldReturn: false,
+    warmBehind: false,
     film: false,
     filmLogo: false,
     help: false,
@@ -53,8 +60,12 @@ test('reads values either way, and switches', () => {
   assert.equal(readOptions(['--scenario', 'lobby']).scenario, 'lobby');
   assert.equal(readOptions(['--view', 'first']).view, 'first');
   assert.equal(readOptions(['--biome=crypt']).biome, 'crypt');
+  assert.equal(readOptions(['--scenario', 'boot']).biome, null);
+  assert.equal(readOptions(['--scenario', 'boot', '--biome', 'crypt']).biome, 'crypt');
   assert.equal(readOptions(['--scale', '1.25']).scale, 1.25);
   assert.equal(readOptions(['--hero', 'warrior']).hero, 'warrior');
+  assert.deepEqual(readOptions(['--cast', '3']).cast, { key: '3', ms: 600 });
+  assert.deepEqual(readOptions(['--cast=2@900']).cast, { key: '2', ms: 900 });
   assert.equal(readOptions(['--stash=40']).stash, 40);
   assert.deepEqual(readOptions(['--window', '1536x695']).window, { width: 1536, height: 695 });
   assert.equal(readOptions(['--listed', '40']).listed, 40);
@@ -62,6 +73,9 @@ test('reads values either way, and switches', () => {
   assert.deepEqual(resized.resize, { width: 1920, height: 1080 });
   assert.equal(resized.trips, 2);
   assert.equal(resized.staleWind, true);
+  const read = readOptions(['--scenario', 'boot', '--read', 'window.__builds']);
+  assert.equal(read.read, 'window.__builds');
+  assert.equal(readOptions(['--scenario', 'storm', '--read', 'window.__builds']).read, 'window.__builds');
   const logo = readOptions(['--scenario', 'boot', '--film-logo']);
   assert.equal(logo.film, true);
   assert.equal(logo.filmLogo, true);
@@ -89,6 +103,7 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--window', '1536']), /--window must be a size in css px/);
   assert.throws(() => readOptions(['--listed', '10']), /--listed must be a number of ms, 20 or more/);
   assert.throws(() => readOptions(['--resize', '1920x1080']), /--resize is the boot scenario's/);
+  assert.throws(() => readOptions(['--builds']), /--builds is the boot scenario's/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--resize', 'full']), /--resize must be a size in css px/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--trips', '0']), /--trips must be a whole number/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--stale-wind']), /--stale-wind is a canary of --resize/);
@@ -100,4 +115,10 @@ test('the usage lists every option', () => {
   for (const name of [...names, 'window', ...boot, 'item-ms', 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
+});
+
+test('a function to break down samples the JS', () => {
+  const options = readOptions(['--scenario', 'lobby', '--js-under', '_renderObjectDirect']);
+  assert.equal(options.js, true);
+  assert.equal(options.jsUnder, '_renderObjectDirect');
 });

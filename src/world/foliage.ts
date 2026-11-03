@@ -2,6 +2,8 @@
 // leaf) cut out with alpha test, and the geometry that carries them: canopies and bushes of leaf cards
 // round a dark core, fern clumps, leaf litter, and shafts of sunlight slanting down through the canopy.
 import * as THREE from 'three';
+import { WEBGPU } from '../core/webgpu';
+import { shaftsMaterial } from './forestNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ctx2d, textureFromCanvas } from '../core/textures';
 import { lumpy } from './props';
@@ -176,18 +178,21 @@ export function lightShafts(spots: [number, number, number][], dir: THREE.Vector
         gl_FragColor = vec4(uColor * a, 1.0);
       }`,
   });
+  const drawnWith = WEBGPU ? shaftsMaterial(mat.uniforms.uTime, color) : mat;
   const group = new THREE.Group();
   const d = dir.clone().normalize(), up = new THREE.Vector3(0, 1, 0);
-  const L = 26;
+  const L = 26, at = new THREE.Object3D(), shafts: THREE.BufferGeometry[] = [];
+  at.quaternion.setFromUnitVectors(up, d);
   for (const [x, z, rad] of spots) {
     // an open cone, its uv.y 0 at the ground end and 1 up in the canopy
-    const geo = new THREE.CylinderGeometry(rad * 1.25, rad, L, 20, 1, true).translate(0, L / 2, 0);
-    const m = new THREE.Mesh(geo, mat);
-    m.quaternion.setFromUnitVectors(up, d);
-    m.position.set(x, 0, z);
-    m.renderOrder = 5;
-    m.frustumCulled = false;
-    group.add(m);
+    at.position.set(x, 0, z);
+    at.updateMatrix();
+    shafts.push(new THREE.CylinderGeometry(rad * 1.25, rad, L, 20, 1, true).translate(0, L / 2, 0).applyMatrix4(at.matrix));
   }
+  // (all in one mesh: added light, so their order is nothing; a mesh a shaft, they were 9 draws a frame)
+  const m = new THREE.Mesh(mergeGeometries(shafts), drawnWith);
+  m.renderOrder = 5;
+  m.frustumCulled = false;
+  group.add(m);
   return { group, update: (t) => { mat.uniforms.uTime.value = t; } };
 }

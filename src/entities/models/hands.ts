@@ -7,6 +7,9 @@ import * as THREE from 'three';
 import { joint } from './rig';
 import { dualQuaternionSkinned } from './dualQuaternion';
 import { triplanar } from './triplanar';
+import { handNodes } from './handNodes';
+import { sameLooks, type KitLooks } from '../../core/materials';
+import type { OwnLooks } from '../../core/shaderPorts';
 import { sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
 import { clamp } from '../../util';
 import type { JointPoint } from './armor';
@@ -81,6 +84,8 @@ function ownCopy(material: THREE.Material): THREE.Material {
   const copy = material.clone();
   copy.onBeforeCompile = material.onBeforeCompile;
   copy.customProgramCacheKey = material.customProgramCacheKey;
+  sameLooks(copy, material);
+  (copy as unknown as OwnLooks).webgpuLooks = handNodes(GRAIN_TILE);
   return dualQuaternionSkinned(triplanar(copy, GRAIN_TILE));
 }
 
@@ -95,6 +100,9 @@ export function glowOutline(h: Hand, rim: THREE.Color, body?: THREE.Color): void
     if (!mesh) continue;
     const material = mesh.material as THREE.MeshStandardMaterial;
     if (body) material.emissive = body;
+    // (on WebGPU the kit's rim is read off its looks, these copies' own: core/shaderPorts.ts `kitNodes`)
+    const { kitLooks } = material as THREE.MeshStandardMaterial & { kitLooks?: KitLooks };
+    if (kitLooks) (material as unknown as { kitLooks: KitLooks }).kitLooks = { ...kitLooks, rim: { value: rim } };
     const before = material.onBeforeCompile;
     material.onBeforeCompile = (shader, renderer) => {
       before.call(material, shader, renderer);
@@ -122,6 +130,8 @@ function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material
   // (its bounds are the pose it was sculpted in)
   mesh.frustumCulled = false;
   mesh.customDepthMaterial = HAND_DEPTH;
+  // (its bones blended and its maps read as it alone is: models/drawAsOne.ts would merge it skinned as the rest)
+  mesh.userData.drawsAlone = true;
   vis.add(mesh);
   mesh.bind(skeleton);
   return mesh;

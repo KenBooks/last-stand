@@ -28,6 +28,21 @@ function cpuCanvas() {
   };
 }
 
+/**
+ * `Math.random` drawn from one seed (mulberry32), so every page rolls alike: a fresh profile's gear is rolled, and
+ * two URLs' heroes in one A/B wore different gear, a different count of draws (WebGPU's draws merged, `drawAsOne`).
+ */
+function seeded(seed) {
+  let state = seed >>> 0;
+  Math.random = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
 const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
 
@@ -183,6 +198,8 @@ export const VARIANTS = {
       + ' will-change: translate; }',
   },
   diagStill: { script: styled, arg: '#diag { left: calc(10px * var(--ui, 1)) !important; }' },
+  // (every page's dice from one seed: the same gear on each URL's fresh profile)
+  seeded: { script: seeded, arg: 1 },
   // (and the glow's loops run on the item hovered and the slots alone, the other stash items that fit lit steady, or
   // pulsing)
   focusLoops: {

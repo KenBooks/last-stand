@@ -1,12 +1,14 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
 import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
+import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
+  'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return',
+  'warm-behind', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -36,7 +38,8 @@ const HELP = {
     + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`); either '
     + 'with a query asked of its page (`this,this?castAsOne=0`: a switch of the game\'s in turns, one build)'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default); ${BOOT}: the `
-    + 'game loaded as a first visit, then a return, each step of its loading timed'],
+    + 'game loaded as a first visit, then a return, each step of its loading timed; '
+    + `${WEBGPU_CACHE}: whether Chrome's cache serves a WebGPU page's pipelines as it loads again (a page of its own)`],
   seconds: ['n', `how long the scenario plays (45 by default; ${BOOT}: the lobby watched once revealed, `
     + `${BOOT_SECONDS})`],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
@@ -45,9 +48,14 @@ const HELP = {
     + `${Object.keys(VARIANTS).join(', ')} (base)`],
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
     + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
-  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top)`],
-  biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default)`],
-  hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
+  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top; `
+    + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
+  biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
+    + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
+  cast: ['key@ms', 'boot: its end pictured with this key held this long (a skill cast: 600 ms by default), its '
+    + 'look seen in the picture'],
+  hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default; ${BOOT}: chosen `
+    + 'on its first visit\'s hero screen)'],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
@@ -59,6 +67,8 @@ const HELP = {
     + 'canary of its frames a second (0 by default)'],
   'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
     + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
+  'warm-behind': ['', 'boot: Start never pressed, the lobby watched till the fight has warmed behind it and 5 s after, '
+    + 'as a player who stays in the lobby meets it'],
   film: ['', 'boot: the loading screen\'s exit filmed, the screen\'s frames as the trace caught them, and any frame '
     + 'unlike those either side of it found (a flicker)'],
   'film-logo': ['', 'boot: --film at the window\'s full size, and its frames from the reveal on cut to the lobby\'s '
@@ -80,9 +90,20 @@ const HELP = {
     + 'its functions named from its source maps)'],
   angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
     + 'linked or read back from the cache'],
+  dawn: ['', 'Dawn\'s own work traced too (WebGPU, `?renderer=webgpu`): its shaders translated and compiled, its '
+    + 'pipelines made, and what it read back from its cache'],
+  builds: ['', `${BOOT}: the WebGPU node builds each step made (\`?builds\`, \`recordNodeBuilds\` in `
+    + 'src/core/webgpu.ts): how many, the new shaders and their WGSL (each a compile of Chrome\'s on every visit), '
+    + 'the kinds with the most'],
   passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
   paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
+  'js-under': ['name', 'with `--js`, a measure\'s JS a frame under this function, by what it calls (the name as listed, '
+    + 'or the function\'s own: `_renderObjectDirect`)'],
+  before: ['expr', 'this expression run on the page (and awaited) just before its end is pictured: a change made to '
+    + 'see what it does, as a material or a pass switched off'],
+  read: ['expr', 'this expression read off the page once a visit or a scenario is done (a boot: its fight warm), '
+    + 'written to `out/read-N.json`: something the page keeps of its own'],
   help: ['', 'this'],
 };
 
@@ -125,6 +146,16 @@ function sizeOf(written, name) {
  * The command line read and checked: the URLs (none: this tree built and served), the scenario, its length in
  * seconds, the variants, and the switches. Throws, saying what was wrong.
  */
+/** how long `--cast` holds its key before the picture, unless it says (ms) */
+const CAST_MS = 600;
+
+/** A `--cast` written as `key` or `key@ms`: the key a skill is cast by, and how long it's held for the picture. */
+function castOf(written) {
+  const [key, ms] = String(written).split('@');
+  if (!key) throw new Error(`--cast: a key to hold, as 2 or 2@900, not "${written}"`);
+  return { key, ms: Number(ms ?? CAST_MS) };
+}
+
 export function readOptions(argv) {
   const written = readWritten(argv);
   const options = {
@@ -135,8 +166,9 @@ export function readOptions(argv) {
     variants: (written.variants ?? 'base').split(','),
     rounds: Number(written.rounds ?? 1),
     view: written.view ?? 'top',
-    biome: written.biome ?? 'forest',
+    biome: written.biome ?? (written.scenario === BOOT ? null : 'forest'),
     hero: written.hero ?? null,
+    cast: written.cast === undefined ? null : castOf(written.cast),
     stash: Number(written.stash ?? 0),
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
     pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
@@ -152,23 +184,30 @@ export function readOptions(argv) {
     staleWind: written['stale-wind'] === true,
     headed: written.headed === true,
     perf: written.perf === true,
-    js: written.js === true,
+    js: written.js === true || written['js-under'] !== undefined,
+    jsUnder: written['js-under'] ?? null,
     angle: written.angle === true,
+    dawn: written.dawn === true,
+    builds: written.builds === true,
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
+    before: written.before ?? null,
+    read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
+    warmBehind: written['warm-behind'] === true,
     film: written.film === true || written['film-logo'] === true,
     filmLogo: written['film-logo'] === true,
     help: written.help === true,
   };
-  if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {
-    throw new Error(`stalls: no scenario ${options.scenario} (${[...Object.keys(SCENARIOS), BOOT].join(', ')})`);
+  const own = [BOOT, WEBGPU_CACHE];
+  if (!SCENARIOS[options.scenario] && !own.includes(options.scenario)) {
+    throw new Error(`stalls: no scenario ${options.scenario} (${[...Object.keys(SCENARIOS), ...own].join(', ')})`);
   }
   const unknown = options.variants.flatMap(partsOf).find((part) => !VARIANTS[part]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
   if (!VIEWS.includes(options.view)) throw new Error(`stalls: no view ${options.view} (${VIEWS.join(', ')})`);
-  if (!BIOMES.includes(options.biome)) throw new Error(`stalls: no biome ${options.biome} (${BIOMES.join(', ')})`);
+  if (options.biome !== null && !BIOMES.includes(options.biome)) throw new Error(`stalls: no biome ${options.biome} (${BIOMES.join(', ')})`);
   if (options.hero !== null && !HEROES.includes(options.hero)) {
     throw new Error(`stalls: no hero ${options.hero} (${HEROES.join(', ')})`);
   }
@@ -192,6 +231,7 @@ export function readOptions(argv) {
     throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
   }
   if (options.resize && options.scenario !== BOOT) throw new Error(`stalls: --resize is the ${BOOT} scenario's`);
+  if (options.builds && options.scenario !== BOOT) throw new Error(`stalls: --builds is the ${BOOT} scenario's`);
   if (!(Number.isInteger(options.trips) && options.trips >= 1)) {
     throw new Error('stalls: --trips must be a whole number, 1 or more');
   }
