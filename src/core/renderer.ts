@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { WEBGPU, makeWebGPURenderer, makePipeline, renderWebGPU, webgpuSceneTarget } from './webgpu';
+import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, webgpuSceneTarget } from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -354,6 +354,45 @@ function drawArmsOver(): void {
   G.scene.background = background;
 }
 
+/** The world's lights' shadows held as they are for `draw` (`shadow.autoUpdate`: on WebGPU each camera's draw would
+ *  draw every shadow map again). */
+function withShadowsKept(draw: () => void): void {
+  const held: THREE.LightShadow[] = [];
+  G.scene.traverse((object) => {
+    const shadow = (object as THREE.DirectionalLight).shadow;
+    if (!(object as THREE.Light).isLight || !shadow?.autoUpdate) return;
+    shadow.autoUpdate = false;
+    held.push(shadow);
+  });
+  draw();
+  for (const shadow of held) shadow.autoUpdate = true;
+}
+
+/** `drawArmsOver` on WebGPU: into the scene's pass's target as it stands, its colour kept and its depth cleared, as
+ *  the post chain reads it next. */
+function drawArmsOverPass(): void {
+  if (armsFov === null) return;
+  placeArmsCamera();
+  const target = gl.getRenderTarget();
+  const clearing = gl as unknown as { autoClearColor: boolean; autoClearDepth: boolean; autoClearStencil: boolean };
+  const { autoClearColor, autoClearDepth, autoClearStencil } = clearing;
+  const { autoClear } = gl;
+  const background = G.scene.background;
+  gl.autoClear = true;
+  clearing.autoClearColor = false;
+  clearing.autoClearDepth = true;
+  clearing.autoClearStencil = false;
+  G.scene.background = null;
+  gl.setRenderTarget(webgpuSceneTarget() as THREE.WebGLRenderTarget);
+  withShadowsKept(() => gl.render(G.scene, armsCam));
+  gl.setRenderTarget(target);
+  G.scene.background = background;
+  gl.autoClear = autoClear;
+  clearing.autoClearColor = autoClearColor;
+  clearing.autoClearDepth = autoClearDepth;
+  clearing.autoClearStencil = autoClearStencil;
+}
+
 /** top-down (the default), over the shoulder, or through the character's eyes */
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
@@ -465,6 +504,7 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
 export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
+  if (WEBGPU) drawOverScene(drawArmsOverPass);
   const renderer = gl = WEBGPU ? await makeWebGPURenderer()
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   if (WEBGPU) takePorts(renderer as unknown as WebGPURenderer);

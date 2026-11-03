@@ -1177,6 +1177,12 @@ function inHdr(colour: any, u: GradeUniforms, knee: number): any {
   return vec4(select(read(u.uHdr).greaterThan(0.5), shown, colour.rgb), colour.a);
 }
 
+/** what draws into the scene's target after its pass, before the post chain reads it (the arms: `core/renderer.ts`) */
+let overScene: () => void = () => {};
+export function drawOverScene(draw: () => void): void {
+  overScene = draw;
+}
+
 /** The post chain on WebGPU: the scene's pass, its bloom added, adapted to the light round each pixel, its highlights
  *  compressed, tone mapped keeping a large glare's hue and in sRGB, then graded there as WebGL's grade is
  *  (`graded`), its NaN and Inf pixels cleaned out first (`sanitized`), and in HDR grown past white (`inHdr`). */
@@ -1193,6 +1199,12 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const size = gpu.getDrawingBufferSize(new THREE.Vector2());
   scenePass.setSize(size.x, size.y);
   sceneTarget = scenePass.renderTarget;
+  const drawScene = scenePass.updateBefore.bind(scenePass);
+  scenePass.updateBefore = (frame: Parameters<typeof drawScene>[0]) => {
+    const drawn = drawScene(frame);
+    overScene();
+    return drawn;
+  };
   const raw = scenePass.getTextureNode('output');
   const color = sanitized(raw);
   pipeline = new RenderPipeline(gpu);
