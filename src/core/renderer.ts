@@ -394,18 +394,25 @@ function drawArmsOverPass(): void {
 }
 
 /** the frames over which the sun's shadow is drawn every other one on WebGPU: from about 90 a second (ms a frame) */
-const SHADOW_IN_TURNS_MS = 1000 / 90;
+const SHADOW_IN_TURNS_MS = 1000 / 65;
+/** how much of the frames' mean a new frame moves (about the last 10 frames') */
+const FRAME_MEAN_SHARE = 0.1;
 const SHADOW_EVERY_FRAME = typeof location !== 'undefined' && /[?&]shadowEvery=1/.test(location.search);
 let lastFrameAt = 0;
+let frameMean = SHADOW_IN_TURNS_MS;
 let shadowDrawnLast = false;
 
 /**
  * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
- * and at 144 a second its 72 show no lag. (`?shadowEvery=1` draws it every frame, to compare.)
+ * and at 144 a second its 72 show no lag. Told by the frames' mean: by each frame's own time, a frame that missed the
+ * screen's refresh (13.9 ms at 144 Hz) had the next draw the shadow too, which missed it again, and the game stayed at
+ * half the screen's rate with the shadow in every frame. A 60 Hz screen's stay whole. (`?shadowEvery=1` draws it every
+ * frame, to compare.)
  */
 function sunShadowInTurns(): void {
   const now = performance.now();
-  const fast = now - lastFrameAt < SHADOW_IN_TURNS_MS;
+  frameMean += (Math.min(now - lastFrameAt, 2 * SHADOW_IN_TURNS_MS) - frameMean) * FRAME_MEAN_SHARE;
+  const fast = frameMean < SHADOW_IN_TURNS_MS;
   lastFrameAt = now;
   const skip = fast && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
