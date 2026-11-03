@@ -345,6 +345,7 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
   recordDraws(renderer);
   recordRenders(renderer);
   recordBatches(renderer);
+  recordWrites();
   Object.assign(window, { __webgpuRecordFrom: recordFromNow });
 }
 
@@ -356,6 +357,37 @@ function summed<T extends Record<string, unknown>>(name: string, record: T): T {
   Object.assign(window, { [name]: record });
   sumsKept.push(record);
   return record;
+}
+
+/** What the page sends the GPU's process, kept as `window.__webgpuWrites` with the frames counted (`frames`): each kind of
+ *  write by its size, its calls and bytes, and the submits. That process decodes it all on its main thread, where a frame
+ *  waits for it, and no timer of the page's sees it (`Late` in the perf report; `CommandBufferService:PutChanged`). */
+function recordWrites(): void {
+  const writes = summed<Record<string, number>>('__webgpuWrites', { frames: 0 });
+  const count = (): void => {
+    writes.frames++;
+    requestAnimationFrame(count);
+  };
+  requestAnimationFrame(count);
+  const add = (what: string, bytes: number): void => {
+    writes[`${what} calls`] = (writes[`${what} calls`] ?? 0) + 1;
+    writes[`${what} bytes`] = (writes[`${what} bytes`] ?? 0) + bytes;
+  };
+  const queue = GPUQueue.prototype;
+  const { writeBuffer, writeTexture, submit } = queue;
+  queue.writeBuffer = function (this: GPUQueue, ...args: Parameters<GPUQueue['writeBuffer']>) {
+    const given = args[4] ?? (args[2] as ArrayBufferView).byteLength ?? 0;
+    add(`buffer of ${args[0].size}`, Number(given));
+    return writeBuffer.apply(this, args);
+  };
+  queue.writeTexture = function (this: GPUQueue, destination, data, layout, size) {
+    add('texture', (data as ArrayBufferView).byteLength ?? 0);
+    return writeTexture.call(this, destination, data, layout, size as Iterable<number>);
+  };
+  queue.submit = function (this: GPUQueue, ...args: Parameters<GPUQueue['submit']>) {
+    add('submit', 0);
+    return submit.apply(this, args);
+  };
 }
 
 /** The sums started again from this frame (`window.__webgpuRecordFrom`, which `npm run stalls` calls as its scenario

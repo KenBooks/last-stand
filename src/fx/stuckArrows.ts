@@ -154,9 +154,21 @@ function write(s: Spent): void {
     _p.copy(s.p).sub(s.tip).multiplyScalar(k).add(s.tip);
     _m.compose(_p, s.q, _s.setScalar(k));
   }
-  const m = meshes![s.lod];
+  const m = meshes![s.lod], at = m.instanceMatrix, from = s.slot * 16, was = at.array as Float32Array, now = _m.elements;
+  // (one riding a body that stands still hasn't moved: sent anyway, the whole of both meshes' matrices went up every frame
+  // an arrow was in a dummy, 140 KB, and on WebGPU each new version refreshes their draws in full)
+  let same = true;
+  for (let i = 0; i < 16 && same; i++) same = was[from + i] === Math.fround(now[i]);
+  if (same) return;
   m.setMatrixAt(s.slot, _m);
-  m.instanceMatrix.needsUpdate = true;
+  // (the slots written this frame as one range: the renderers let go of it as they send it)
+  const range = at.updateRanges[0];
+  if (range) {
+    const end = Math.max(range.start + range.count, from + 16);
+    range.start = Math.min(range.start, from);
+    range.count = end - range.start;
+  } else at.addUpdateRange(from, 16);
+  at.needsUpdate = true;
 }
 
 function step(dt: number): boolean {

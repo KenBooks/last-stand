@@ -100,6 +100,8 @@ const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new TH
 const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
 const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [GIRDLE.protraction[0], -12, 0, 12, GIRDLE.protraction[1]];
+/** how near its rest the girdle counts as there (degrees: 0.03 mm at the shoulder) */
+const G_HOME = 0.01;
 const G_PLACES = G_ELEV.flatMap((e) => G_PRO.map((pr): [number, number] => [e, pr]));
 
 /** Pose the arm (`left` or right) for `g`. The arm's joints are set, not their world matrices. */
@@ -298,6 +300,10 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     }
     // (eased towards it: the girdle is slow next to the arm)
     if (pg) { gE = pg[0] + (gE - pg[0]) * 0.35; gP = pg[1] + (gP - pg[1]) * 0.35; }
+    // (home once it's a hair off: eased alone a float takes some 1700 frames to reach nothing, and till then every frame
+    // searched all these places, 12 s after each shot at 144 frames a second, always while shooting)
+    if (Math.abs(gE) < G_HOME) gE = 0;
+    if (Math.abs(gP) < G_HOME) gP = 0;
     girdlePlace(rest, left, gE, gP, _S); gNow = gP;
     [roll, slant] = glided(turnsFor(!!g.slant));
     setup(roll, slant);

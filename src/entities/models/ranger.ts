@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
@@ -653,7 +653,7 @@ export function buildRanger(): Model {
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
     const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0 });
-    root.updateMatrixWorld(true);
+    updateJoints(root);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
     // little further along it). (Placed first and the hand fitted to it, the bow turned in a fist that couldn't follow)
@@ -700,7 +700,7 @@ export function buildRanger(): Model {
     if (tilt) _q2.premultiply(_qt.setFromAxisAngle(_rx.set(0, -1, 0).applyQuaternion(_q2), tilt));
     solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, wristW: drawK > 0 ? DRAW_WRIST : 0, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
       roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(1, 0, 0).applyQuaternion(_q2), range: HOOK_ROLL, at } : undefined, glide: w > 0.5 && HOOK_ROLL ? 1 - Math.exp(-GLIDE * dtNow) : undefined });
-    root.updateMatrixWorld(true);
+    updateJoints(root);
   };
 
   /** the arrow in the draw hand's fingers by its nock: drawn up through the quiver's mouth (pointing back down into it, its
@@ -835,8 +835,8 @@ export function buildRanger(): Model {
       legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1); groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
-    root.updateMatrixWorld(true);
-    if (st.dead >= 0) { tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt); bendShoulders(); return; }
+    updateJoints(root);
+    if (st.dead >= 0) { root.updateMatrixWorld(true); tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt); bendShoulders(); return; }
 
     // the arrow's line: the heading the shot flies and its angle above level
     const facing = Math.atan2(_a.set(0, 0, 1).transformDirection(root.matrixWorld).x, _a.z);
@@ -849,7 +849,7 @@ export function buildRanger(): Model {
       j.head.getWorldDirection(_a);
       const dy = Math.atan2(Math.sin(yaw - Math.atan2(_a.x, _a.z)), Math.cos(yaw - Math.atan2(_a.x, _a.z)));
       j.neck.rotation.y += dy * 0.4 * aim; j.head.rotation.y += dy * 0.6 * aim; j.head.rotation.x -= pitch * 0.5 * aim;
-      root.updateMatrixWorld(true);
+      updateJoints(root);
     }
     anchor.getWorldPosition(anchorW);
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
@@ -966,7 +966,7 @@ export function buildRanger(): Model {
     const nocked = bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)];
     tip.position.copy(nocked.position);
     arrowHead.position.set(0, 0, ARROW / 2 - HEAD_MIDDLE).applyQuaternion(nocked.quaternion).add(nocked.position);
-    root.updateMatrixWorld(true);
+    updateJoints(root);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
 
     // the draw hand: on the string at the nock, or following through and fetching the next arrow (the other skills'
@@ -1102,13 +1102,14 @@ export function buildRanger(): Model {
     if (loose > 0.001) {
       j.shoulderR.quaternion.slerp(fk[0], loose); j.elbowR.quaternion.slerp(fk[1], loose); j.handR.quaternion.slerp(fk[2], loose);
       // (the gestures' and the draught's arm brought within its ranges, the hand where they put it)
-      if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
+      if (!fp) { updateJoints(root); fitArm(j, false, undefined, body); }
     }
     hook(handR, hk, pinch);
     // (the draught's fist over the hook: the draw hand has let go of the string)
     if (flaskOut > 0.01) holdFlask(handR, flask, flaskOut);
     j.chest.worldToLocal(j.handR.getWorldPosition(lastHandC));
     // the coat's skirt last: over the legs, and behind the hands and the bow where they are now (through the eyes neither shows)
+    // (all of him, the meshes too: what reads them next, this frame's, finds them where they were always found)
     root.updateMatrixWorld(true);
     legBodies.place(hem);
     if (!fp) { if (hasBow) stringOffThigh(); handBodies.place(hem); bowBodies.place(hem); arrowBodies.place(hem); }
