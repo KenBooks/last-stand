@@ -7,7 +7,7 @@ import { RUNNING } from './rendererChoice';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';
 
-/** Whether this page draws with WebGPURenderer: chosen in the pause menu, or by the address (`?renderer=webgpu`;
+/** Whether this page draws with WebGPURenderer: by its address alone (`?renderer=webgpu`, which the pause menu opens;
  *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
 export const WEBGPU = RUNNING.webgpu;
 

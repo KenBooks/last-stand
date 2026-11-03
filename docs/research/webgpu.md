@@ -305,8 +305,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   --read "(__G.player.stats.maxLife = __G.player.life * 12, 1)"`): drained and bled as WebGL's, the drips from the top.
 - **The environment maps are WebGPU's generator's** (`generator` in `world/props.ts`): WebGL's draws with shaders
   WebGPU can't run, and its maps left the dais darker than on WebGL from every view. Now the same.
-- **The renderer is chosen in the pause menu** (`core/rendererChoice.ts`: WebGL or WebGPU, and WebGPU's meshlets and
-  lights written out, kept in cookies for the next load, a reload offered), the address's `?renderer=` over it.
+- **WebGPU is a trial, opened from the pause menu** (`core/rendererChoice.ts`): a press loads the game at
+  `?renderer=webgpu&meshlets=1`, and nothing is kept, so the plain address always loads WebGL. It stays below 144 fps
+  and unoptimized for the time being: firing in the lobby as the ranger drew about 92 to 97 frames a second in turns,
+  where WebGL drew 145.
 - **What's still open on the way:** a boot logs a `GPUValidationError` copying 128x32 into a 1x1 texture: the still
   shadows' 1x1 target meets a viewport texture's copy. Not found yet.
 

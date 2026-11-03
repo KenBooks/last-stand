@@ -563,15 +563,10 @@
             <label class="hdr-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
           </div>
         </div>
-        <!-- the renderer and WebGPU's flags (core/rendererChoice.ts): kept for the next load, a reload switches them -->
+        <!-- the renderer (core/rendererChoice.ts): a press loads the game at its address, and nothing is kept -->
         <div class="opt-row quality-row renderer-row"><span>Renderer</span>
           <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
-          <div class="renderer-flags">
-            <label class="renderer-flag" title="three's GPU-driven drawing: static props drawn as clusters, culled on the GPU"><input type="checkbox" id="opt-meshlets"> Meshlets</label>
-            <label class="renderer-flag" title="Every point light written out in each shader, as three has it (slower to compile; to compare)"><input type="checkbox" id="opt-lights-each"> Lights written out</label>
-          </div>
           <div class="renderer-note"></div>
-          <button class="btn hidden" id="btn-renderer-reload">Reload to switch</button>
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>

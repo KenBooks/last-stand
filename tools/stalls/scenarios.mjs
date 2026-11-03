@@ -1,7 +1,8 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
 import {
-  choiceClosed, deciding, heroesShown, inRun, itemBoxes, markPhase, menuStowed, runOver, scoresShown, stowsRecorded,
+  choiceClosed, deciding, heroesShown, inRun, itemBoxes, loaded, markPhase, menuStowed, runOver, scoresShown,
+  stowsRecorded,
 } from './page.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
@@ -460,6 +461,45 @@ async function firingPast(page, ms) {
   return [`${await shootAbout(page, ms, Math.PI / 2)} shots away from the lobby's dummies`];
 }
 
+/** how long a page of `rendererSwitch` may take to load (ms) */
+const RENDERER_LOAD_MS = 60_000;
+
+/** Which renderer the pause menu says this page runs, with the menu opened and left open. */
+async function rendererShown(page) {
+  await page.waitForFunction(loaded, undefined, { timeout: RENDERER_LOAD_MS });
+  await tap(page, 'Escape');
+  await page.waitForFunction(pauseShown, true, { timeout: RENDERER_LOAD_MS, polling: 'raf' });
+  return page.evaluate(() => document.querySelector('#opt-renderer button.active')?.dataset.r);
+}
+
+/**
+ * The pause menu's renderer switch, on a page of its own (a load would lose the scenario's recording): the plain
+ * address on WebGL, its WebGPU button loading the WebGPU address, and the plain address on WebGL again, with the cookie
+ * an earlier build kept the choice in set to WebGPU, as nothing may be kept.
+ */
+async function rendererSwitch(page, ms, { picture }) {
+  const trial = await page.context().newPage();
+  const plain = page.url();
+  const notes = [];
+  const expect = (what, seen, wanted) => notes.push(`${seen === wanted ? 'ok' : 'WRONG'}: ${what}: ${seen}`);
+  await trial.goto(plain);
+  expect('the plain address runs', await rendererShown(trial), 'webgl');
+  await trial.screenshot({ path: picture.replace(/\.png$/, '-renderer.png') });
+  await trial.click('#opt-renderer [data-r="webgpu"]');
+  await trial.waitForURL(/[?&]renderer=webgpu/, { timeout: RENDERER_LOAD_MS });
+  expect('its WebGPU button leaves for', new URL(trial.url()).search, '?renderer=webgpu&meshlets=1');
+  expect('that address runs', await rendererShown(trial), 'webgpu');
+  await trial.screenshot({ path: picture.replace(/\.png$/, '-renderer-webgpu.png') });
+  const kept = await trial.evaluate(() => document.cookie.includes('renderer'));
+  expect('a cookie keeps the choice', kept, false);
+  await trial.evaluate(() => { document.cookie = 'last-stand-renderer=webgpu; path=/'; });
+  await trial.goto(plain);
+  expect('the plain address, an old cookie saying WebGPU, runs', await rendererShown(trial), 'webgl');
+  await trial.close();
+  return notes;
+}
+
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause };
+export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
+  renderer: rendererSwitch };

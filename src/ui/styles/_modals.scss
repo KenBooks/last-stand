@@ -105,10 +105,7 @@
 .pb-opts .quality-row > span { color: var(--ink-dim); font-size: 13px; }
 /* HDR's levels: a slider each, its name before it and its value after */
 .hdr-levels { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.renderer-flags { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-dim); }
-.renderer-flag { display: flex; align-items: center; gap: 6px; cursor: $cursor-hand; }
 .renderer-note { font-size: 12px; color: var(--ink-dim); }
-.renderer-note:empty { display: none; }
 .hdr-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
 .hdr-level > span { width: 76px; }
 .opt-row .hdr-level input { flex: 1; width: auto; min-width: 0; height: 16px; }

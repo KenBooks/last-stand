@@ -25,7 +25,7 @@ import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
-import { chooseFlags, chooseRenderer, chosenFlags, chosenRenderer, RUNNING, setByAddress, type RendererKind } from '../core/rendererChoice';
+import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
@@ -810,35 +810,38 @@ function renderHdrOptions(): void {
   $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
 }
 
-/** The renderer's row: its choice and WebGPU's flags kept for the next load, a reload offered once they differ from
- *  what this page runs. */
+/** what the renderer's row says */
+const RENDERER_NOTES = {
+  trial: 'WebGPU is a trial, slower for now. It opens at its own address: the game\'s plain address stays on WebGL.',
+  held: 'Switch renderer in the lobby, out of co-op: it loads the game again.',
+  missing: 'This browser or graphics card has no WebGPU.',
+};
+
+/** The renderer's row: a press loads the game at that renderer's address. */
 function initRendererOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => {
-    b.onclick = () => { sfx.click(); chooseRenderer(b.dataset.r as RendererKind); renderRendererOptions(); };
+    b.onclick = () => { sfx.click(); void switchRenderer(b.dataset.r as RendererKind); };
   });
-  const flagBox = (id: string): HTMLInputElement => $<HTMLInputElement>(id);
-  const keepFlags = (): void => {
-    chooseFlags({ meshlets: flagBox('#opt-meshlets').checked, lightsEach: flagBox('#opt-lights-each').checked });
-    renderRendererOptions();
-  };
-  flagBox('#opt-meshlets').onchange = keepFlags;
-  flagBox('#opt-lights-each').onchange = keepFlags;
-  $('#btn-renderer-reload').onclick = () => { sfx.click(); location.reload(); };
-  renderRendererOptions();
 }
 
-/** what the renderer's row shows: the choice kept, its flags while it's WebGPU, and whether a reload is due */
+/** Leaves for `kind`'s address, unless it runs already or the machine has none to give. */
+async function switchRenderer(kind: RendererKind): Promise<void> {
+  if ((kind === 'webgpu') === RUNNING.webgpu) return;
+  if (kind === 'webgpu' && !await navigator.gpu?.requestAdapter().catch(() => null)) {
+    $('.renderer-note').textContent = RENDERER_NOTES.missing;
+    return;
+  }
+  location.assign(addressOn(kind));
+}
+
+/** what the renderer's row shows: what this page runs, and neither to press where loading again would lose a run */
 function renderRendererOptions(): void {
-  const kind = chosenRenderer(), flags = chosenFlags();
-  document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => b.classList.toggle('active', b.dataset.r === kind));
-  $('.renderer-flags').classList.toggle('hidden', kind !== 'webgpu');
-  $<HTMLInputElement>('#opt-meshlets').checked = flags.meshlets;
-  $<HTMLInputElement>('#opt-lights-each').checked = flags.lightsEach;
-  const differs = (kind === 'webgpu') !== RUNNING.webgpu
-    || (kind === 'webgpu' && (flags.meshlets !== RUNNING.meshlets || flags.lightsEach !== RUNNING.lightsEach));
-  // (the address's own renderer stands over the choice: a reload of it changes nothing)
-  $('.renderer-note').textContent = setByAddress ? 'This page\'s address sets the renderer: open the game without it to use this.' : '';
-  $('#btn-renderer-reload').classList.toggle('hidden', !differs || setByAddress);
+  const held = G.mode === 'run' || isCoop();
+  document.querySelectorAll<HTMLButtonElement>('#opt-renderer button').forEach((b) => {
+    b.classList.toggle('active', (b.dataset.r === 'webgpu') === RUNNING.webgpu);
+    b.disabled = held;
+  });
+  $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
 export function showPause(v: boolean): void {
@@ -849,6 +852,7 @@ export function showPause(v: boolean): void {
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
     renderHdrOptions();
+    renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';
