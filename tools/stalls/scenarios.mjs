@@ -430,6 +430,36 @@ async function lobby(page, ms) {
   return ['stood in the lobby, then walked round it'];
 }
 
+/** how long a shot is held and how long between shots (ms), and how far the aim swings either way of the dummies */
+const SHOT_HOLD_MS = 450;
+const SHOT_GAP_MS = 60;
+const DUMMIES_SWING = 0.45;
+
+/** Shoots with the left button for `ms`, the aim swinging about `angle` round the screen's middle. */
+async function shootAbout(page, ms, angle) {
+  const started = Date.now();
+  let shots = 0;
+  while (Date.now() - started < ms) {
+    await aimRound(page, angle + Math.sin(shots * MOUSE_TURN) * DUMMIES_SWING);
+    await page.mouse.down();
+    await page.waitForTimeout(SHOT_HOLD_MS);
+    await page.mouse.up();
+    await page.waitForTimeout(SHOT_GAP_MS);
+    shots++;
+  }
+  return shots;
+}
+
+/** Shoots at the lobby's dummies (up the screen in the top-down view), as the owner's "when I start firing at targets". */
+async function firing(page, ms) {
+  return [`${await shootAbout(page, ms, -Math.PI / 2)} shots at the lobby's dummies`];
+}
+
+/** The same shots down the screen, away from the dummies: what `firing` costs over this is what striking them costs. */
+async function firingPast(page, ms) {
+  return [`${await shootAbout(page, ms, Math.PI / 2)} shots away from the lobby's dummies`];
+}
+
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes, switch: switchHero, pause };
+export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause };

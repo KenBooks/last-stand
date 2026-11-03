@@ -100,6 +100,7 @@ const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new TH
 const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
 const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [GIRDLE.protraction[0], -12, 0, 12, GIRDLE.protraction[1]];
+const G_PLACES = G_ELEV.flatMap((e) => G_PRO.map((pr): [number, number] => [e, pr]));
 
 /** Pose the arm (`left` or right) for `g`. The arm's joints are set, not their world matrices. */
 export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
@@ -235,11 +236,13 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     // (one whose own cost already reaches the best isn't searched, as for the girdle's places, until gliding needs it:
     // its search depends on it alone; NaN, not yet searched)
     const cs = sls.map(() => rolls.map(() => NaN));
-    sls.forEach((sl, i) => rolls.forEach((ro, k) => {
-      if (bounded && own(ro, sl) >= bestC) return;
+    // (the cheapest of themselves first: tried from one end of the rolls, few were passed over)
+    const tries = sls.flatMap((sl, i) => rolls.map((ro, k) => ({ i, k, sl, ro, of: own(ro, sl) }))).sort((x, y) => x.of - y.of);
+    for (const { i, k, sl, ro, of } of tries) {
+      if (bounded && of >= bestC) continue;
       const c = cs[i][k] = costOf(ro, sl);
       if (c < bestC) { bestC = c; roll = ro; slant = sl; bi = i; bk = k; }
-    }));
+    }
     const costAt = (i: number, k: number) => (Number.isNaN(cs[i][k]) ? (cs[i][k] = costOf(rolls[k], sls[i])) : cs[i][k]);
     // (gliding, between the ones tried: where a parabola through the best and its neighbours is least)
     if (g.glide !== undefined) {
@@ -282,7 +285,10 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     let bestC = Infinity;
     // (a place whose own cost already reaches the best can't be it, and its arm isn't searched: each place searched every
     // roll and slant, most of the ranger's draw)
-    for (const e of G_ELEV) for (const pr of G_PRO) {
+    // (the cheapest of themselves first, so the best is found early and the rest passed over: from the far corner, up to
+    // 9.5 ms of a frame at a shot, the hero's whole `player` lap of the owner's report)
+    const ownOf = (e: number, pr: number): number => 0.3 * (Math.abs(e) + Math.abs(pr)) + (pg ? 0.3 * (Math.abs(e - pg[0]) + Math.abs(pr - pg[1])) : 0);
+    for (const [e, pr] of [...G_PLACES].sort((x, y) => ownOf(x[0], x[1]) - ownOf(y[0], y[1]))) {
       const lift = 0.3 * (Math.abs(e) + Math.abs(pr)), fromLast = pg ? 0.3 * (Math.abs(e - pg[0]) + Math.abs(pr - pg[1])) : 0;
       // (summed as the cost is, the arm's first: rounded, a sum only grows with what's added)
       if (bounded && lift + fromLast >= bestC) continue;

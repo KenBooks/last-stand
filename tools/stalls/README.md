@@ -77,6 +77,8 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `fight`: the warrior through a wave and its choice into the next. Steel Tempest is held with the mouse circling
     and the left button down, now and then another skill, and Continue after a few seconds.
   - `lobby`: standing, then walking round the lobby.
+  - `firing`: shooting at the lobby's dummies with the left button, a shot about every half a second (`--hero ranger`).
+  - `firingPast`: the same shots away from the dummies: what `firing` costs over it is what striking them costs.
   - `hover`: the lobby's items hovered, a quarter of the time each: the mouse gliding over the world (the frames to
     beat); over each equipment slot and the stash's first ten items in turn, its tooltip following; swept along the
     stash's items in view, a new one every 250 ms (`--item-ms`), as a player runs a row down looking for one; then
