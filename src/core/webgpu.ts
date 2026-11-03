@@ -29,6 +29,12 @@ export function compileSlice(ms: number): void {
 
 let pipeline: RenderPipeline | null = null;
 let sceneTarget: THREE.RenderTarget | null = null;
+/** the passes the scene's share of the screen's pixels sizes (`setSceneShare`) */
+const sizedByShare: { setResolutionScale(share: number): unknown }[] = [];
+/** the scene's samples, chosen once (`setSceneSamples`); null until they are */
+let samplesChosen: number | null = null;
+/** the scene's pass as far as its samples go */
+let samplesOf: { options: { samples?: number }; renderTarget: THREE.RenderTarget } | null = null;
 /** the compiles started and not yet waited for (`compiled`) */
 const compiling: Promise<unknown>[] = [];
 
@@ -47,6 +53,58 @@ export const clustersBack = (): Promise<void> => clusters.back();
 
 /** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
+/** a light node of three's as `shadeEnvironmentNodes` reads it */
+type LitNode = { light?: THREE.DirectionalLight; shadowNode?: { x: unknown } | null };
+
+/**
+ * The ambient light and the environment's reflection darkened in the sun's shadow, as `shadeEnvironment` in
+ * core/renderer.ts has WebGL's chunks do it (`inShadow` the share of each left there). The lights' nodes have all added
+ * to the lighting's terms when `setupLights` ends, and three lights a surface by those terms next. The sun's shadow is
+ * kept in a variable, as the direct light and the terms here both read it: its map read once a pixel.
+ */
+export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: number }): void {
+  const { LightsNode, DirectionalLightNode } = gpu;
+  const { mix, shadow } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const directional = DirectionalLightNode.prototype as unknown as { setupShadowNode(this: LitNode): unknown };
+  directional.setupShadowNode = function (this: LitNode) {
+    return shadow(this.light).toVar();
+  };
+  type Terms = Record<'irradiance' | 'iblIrradiance' | 'radiance', { mulAssign(by: unknown): void } | undefined>;
+  type Building = { object: THREE.Object3D; context: Terms };
+  const lights = LightsNode.prototype as unknown as { setupLights(builder: Building, nodes: LitNode[]): void };
+  const setupLights = lights.setupLights;
+  lights.setupLights = function (builder, nodes) {
+    setupLights.call(this, builder, nodes);
+    if (!builder.object.receiveShadow) return;
+    const sun = nodes.find((node) => node.light?.isDirectionalLight && node.light.castShadow)?.shadowNode;
+    if (!sun) return;
+    const ambient = mix(inShadow.ambient, 1, sun.x);
+    builder.context.irradiance?.mulAssign(ambient);
+    builder.context.iblIrradiance?.mulAssign(ambient);
+    builder.context.radiance?.mulAssign(mix(inShadow.environment, 1, sun.x));
+  };
+}
+
+/** The scene and bloom drawn at `share` of the screen's pixels each way (the quality's and Auto's, `sceneShare` in
+ *  core/renderer.ts), the last pass scaling it up to the canvas. */
+export function setSceneShare(share: number): void {
+  for (const pass of sizedByShare) pass.setResolutionScale(share);
+}
+
+/**
+ * The scene's MSAA samples, taken from the quality as the game starts and kept until a reload (`?msaa=N` chooses them
+ * instead). WebGL's target only makes its buffers again for a new count, where a WebGPU pipeline is made for one count:
+ * a change would make every pipeline of the frame again, at its draws.
+ */
+export function setSceneSamples(samples: number): void {
+  if (samplesChosen !== null) return;
+  const asked = new URLSearchParams(location.search).get('msaa');
+  samplesChosen = asked === null ? samples : Number(asked);
+  if (!samplesOf) return;
+  samplesOf.options.samples = samplesChosen;
+  samplesOf.renderTarget.samples = samplesChosen;
+}
+
 /** the renderer, for what's sent to the GPU outside a draw (`uploadTexture`) */
 let uploader: WebGPURenderer | null = null;
 /** `texture` sent to the GPU now, as it stands. A material three doesn't refresh sends none of its textures, so what
@@ -1028,7 +1086,12 @@ export interface GradeLooks {
   adaptAlike: readonly [number, number];
   hue: readonly [number, number];
   glare: readonly [number, number];
+  /** each blur level's weight in bloom, tightest to widest (renderer.ts `BLOOM_LEVELS`) */
+  bloom: readonly number[];
 }
+
+/** the weights three's bloom gives its levels: a level's tint is what the game's weight asks of it */
+const THREE_BLOOM_LEVELS = [1, 0.8, 0.6, 0.4, 0.2];
 
 /** `colour` with a NaN or Inf pixel made black and the rest held to 0..64, as WebGL's sanitize pass makes the scene
  *  before bloom: bloom smears a single bad pixel into black boxes across the frame. */
@@ -1199,6 +1262,12 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const size = gpu.getDrawingBufferSize(new THREE.Vector2());
   scenePass.setSize(size.x, size.y);
   sceneTarget = scenePass.renderTarget;
+  samplesOf = scenePass as unknown as NonNullable<typeof samplesOf>;
+  if (samplesChosen !== null) {
+    samplesOf.options.samples = samplesChosen;
+    samplesOf.renderTarget.samples = samplesChosen;
+  }
+  sizedByShare.push(scenePass);
   const drawScene = scenePass.updateBefore.bind(scenePass);
   scenePass.updateBefore = (frame: Parameters<typeof drawScene>[0]) => {
     const drawn = drawScene(frame);
@@ -1211,6 +1280,8 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;
   const glow = bloom(color, 0.85, 0, 0.9);
+  sizedByShare.push(glow as unknown as (typeof sizedByShare)[number]);
+  looks.bloom.forEach((weight, i) => glow.bloomTintColors[i].setScalar(weight / THREE_BLOOM_LEVELS[i]));
   // (untyped in three's types: its output as a texture node)
   const glowTexture = (glow as unknown as { getTextureNode(): any }).getTextureNode(); // eslint-disable-line @typescript-eslint/no-explicit-any
   // (after bloom, as on WebGL: the eye adapts to all the light that reaches it, halos included)

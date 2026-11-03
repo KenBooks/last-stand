@@ -140,6 +140,13 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   };
 }
 
+/** `copy`, a copy of a kit's material, given its looks on WebGPU, which `clone` leaves behind (what they read are the
+ *  kit's own uniforms, so it shows them as its original does). */
+export function sameLooks(copy: THREE.Material, original: THREE.Material): void {
+  const { kitLooks } = original as { kitLooks?: KitLooks };
+  if (kitLooks) (copy as unknown as { kitLooks: KitLooks }).kitLooks = kitLooks;
+}
+
 /**
  * Makes an effect material (built-in or a ShaderMaterial writing gl_FragColor at the end of main) dim
  * with distance, see NEAR_GLOW. Only for effects: the world's own glows keep their look.

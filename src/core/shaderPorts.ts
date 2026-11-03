@@ -162,11 +162,13 @@ const seeKinds = new WeakMap<object, { focus: N; k: N; minY: N }>();
 function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
   const made = seeKinds.get(of.k);
   if (made) return made;
-  const { uniform } = tsl as any;
+  const { uniform, renderGroup } = tsl as any;
+  // (in the render's group: a still prop's refresh sends only what's shared, and in the object's these stayed at the
+  // warm-up's, nothing dissolved)
   const nodes = {
-    focus: uniform(new THREE.Vector3()).onRenderUpdate(() => of.focus.value),
-    k: uniform(new THREE.Vector4()).onRenderUpdate(() => of.k.value),
-    minY: uniform(0).onRenderUpdate(() => of.minY.value),
+    focus: uniform(new THREE.Vector3()).setGroup(renderGroup).onRenderUpdate(() => of.focus.value),
+    k: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.k.value),
+    minY: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.minY.value),
   };
   seeKinds.set(of.k, nodes);
   return nodes;
@@ -280,6 +282,11 @@ export function takePorts(renderer: WebGPURenderer): void {
       // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
       if (converted && !(material as N).isNodeMaterial) {
         if (see) (converted as N).maskNode = seeMask(see);
+        // (a hair card: `bothSidesOut` in models/head.ts, its normal the surface's, not turned over for a back face)
+        if ((material as { litBothSides?: boolean }).litBothSides) (converted as N).normalNode = (tsl as any).normalViewGeometry;
+        // (an effect's plain material: `nearGlow`'s GLSL patch is WebGL's alone. Its node reads nothing of the frame's
+        // that three must refresh)
+        if (material.customProgramCacheKey() === 'nearGlow') (converted as N).colorNode = nearGlowed((tsl as any).vec4((tsl as any).materialColor));
         if (kit) kitNodes(converted);
         if (own) own(converted);
         // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh; a

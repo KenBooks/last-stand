@@ -127,7 +127,7 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   parts.forEach((list, slot) => {
     const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
     const geometry = merged(list, rootInv, rootScale, base.vertexColors);
-    const material = WEBGPU ? crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS }, slot)
+    const material = WEBGPU ? crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS, minCaster, eyeClear: EYE_CLEAR }, slot)
       : crowdMaterial(base, kind, slot);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));

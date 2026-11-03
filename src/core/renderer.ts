@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, webgpuSceneTarget } from './webgpu';
+import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setSceneSamples, setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget } from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -507,7 +507,10 @@ export async function initRenderer(container: HTMLElement) {
   if (WEBGPU) drawOverScene(drawArmsOverPass);
   const renderer = gl = WEBGPU ? await makeWebGPURenderer()
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  if (WEBGPU) takePorts(renderer as unknown as WebGPURenderer);
+  if (WEBGPU) {
+    takePorts(renderer as unknown as WebGPURenderer);
+    shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
+  }
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -571,7 +574,7 @@ export async function initRenderer(container: HTMLElement) {
   if (WEBGPU) {
     const looks = {
       highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
-      hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO],
+      hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO], bloom: BLOOM_LEVELS,
     } as const;
     await makePipeline(renderer, scene, camera, looks, grade.uniforms as never);
   }
@@ -653,6 +656,7 @@ function applySceneRatio(): boolean {
   if (r === appliedSceneRatio) return false;
   appliedSceneRatio = r;
   composer.setPixelRatio(r);
+  if (WEBGPU) setSceneShare(sceneShare());
   return true;
 }
 
@@ -671,6 +675,7 @@ export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
   if (applySceneRatio()) fitSceneTarget();
   // a render target re-initialises with the new sample count on its next use
   if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
+  if (WEBGPU) setSceneSamples(p.msaa);
 }
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }

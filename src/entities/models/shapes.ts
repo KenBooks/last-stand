@@ -3,6 +3,7 @@
 // of each joint per material into one mesh, so a detailed creature stays a few draw calls. A creature
 // is built once per kind: later ones replay the merged geometry (see Sculpt), so spawning stays cheap.
 import * as THREE from 'three';
+import { sameLooks } from '../../core/materials';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from '../../util';
 
@@ -446,7 +447,7 @@ export class Sculpt {
         // its own copy of the material: one shared with rigid meshes makes three rebuild its program's
         // parameters on every switch between the two (it was the whole cost of a crowd)
         let sm = twins.get(mat);
-        if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; }
+        if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; sameLooks(sm, mat); }
         const mesh = new THREE.SkinnedMesh(g, sm);
         // (its sphere the bind pose's: three would pose every vertex for it at its first draw)
         mesh.boundingSphere = g.boundingSphere!.clone();

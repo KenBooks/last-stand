@@ -1,12 +1,20 @@
 // A crowd slot's material on WebGPU (core/webgpu.ts): crowd.ts's GLSL, the body skinned from its row of the float
 // texture by its instance, and the kit's looks (core/materials.ts: dissolve and its edge, frost, char, hit flash)
-// from its row, as TSL nodes. Not yet ported: the near glow, the rim, the screen door at the camera and the
-// shadow's caster sizes.
+// from its row, its glows dimmed near the camera and its rim as the kit has them, dissolved as a screen door at the
+// camera, as TSL nodes; and its shadow, skinned the same, its pieces too small for the quality's shadows cut.
 import * as THREE from 'three';
+import { NEAR_GLOW, type KitLooks } from '../../core/materials';
 import { gpu, tsl } from '../../core/webgpu';
 
 /** What a slot's material reads of its kind: its rows, how many joints a row holds, the texels of looks after them. */
-export interface Rows { texture: THREE.DataTexture; joints: number; looks: number }
+export interface Rows {
+  texture: THREE.DataTexture;
+  joints: number;
+  looks: number;
+  /** the smallest piece that casts a shadow (the quality's), and how near a body's dissolved at the camera */
+  minCaster: { value: number };
+  eyeClear: { from: number; to: number };
+}
 
 // (untyped: TSL's types don't follow its int conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -33,7 +41,8 @@ function fxNoise(x: N): N {
 export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, slot: number): THREE.Material {
   const {
     Fn, If, Discard, attribute, textureLoad, ivec2, int, instanceIndex, mat4, vec3, vec4, positionLocal, normalLocal,
-    positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep, uniform,
+    positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep, uniform, clamp, pow,
+    positionView, screenCoordinate, fract, dot, vec2, normalView, positionViewDirection, reference, select, or,
   } = tsl as any;
   const source = base.clone();
   source.emissiveIntensity = 1;
@@ -65,17 +74,35 @@ export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, 
   const edgeColor = varying(texel(looksAt.add(1)).xyz);
   const glow = varying(texel(glowAt).element(glowLane));
   const at = varying(positionGeometry);
+  const looks = (base as { kitLooks?: KitLooks }).kitLooks;
+  const nearGlow = clamp(pow(positionView.z.negate().div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1);
+  const dimmed = looks ? mix(1, nearGlow, reference('value', 'float', looks.near)) : 1;
+  const facing = clamp(dot(normalView, positionViewDirection), 0, 1);
+  const rim = looks ? reference('value', 'color', looks.rim).mul(pow(facing.oneMinus(), 3)) : vec3(0);
+  const door = fract(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))).mul(52.9829189));
+  const atEye = smoothstep(rows.eyeClear.from, rows.eyeClear.to, positionView.z.negate()).oneMinus();
   const dn = fxNoise(at.mul(7)).mul(0.65).add(fxNoise(at.mul(19)).mul(0.35)).toVar();
   node.colorNode = Fn(() => {
     If(fx.x.greaterThan(0).and(dn.lessThan(fx.x)), () => { Discard(); });
+    If(door.lessThan(atEye), () => { Discard(); });
     const frozen = mix(materialColor.rgb, vec3(0.55, 0.8, 1.0), fx.y.mul(0.75));
     return vec4(mix(frozen, vec3(0.045, 0.035, 0.03), fx.z.mul(0.9)), materialOpacity);
   })();
   const edge = fx.x.greaterThan(0).select(smoothstep(fx.x, fx.x.add(0.09), dn).oneMinus(), 0);
-  node.emissiveNode = materialEmissive.mul(glow).mul(fx.z.mul(-0.7).add(1))
+  node.emissiveNode = materialEmissive.mul(glow).mul(dimmed)
+    .add(rim)
     .add(edgeColor.mul(edge).mul(3))
     .add(vec3(0.25, 0.55, 0.9).mul(fx.y).mul(0.35))
-    .add(vec3(1.0, 0.32, 0.06).mul(fx.z).mul(smoothstep(0.6, 0.78, dn)).mul(1.6))
-    .add(vec3(1.0, 0.9, 0.85).mul(fx.w).mul(0.45));
+    .mul(fx.z.mul(-0.7).add(1))
+    .add(vec3(1.0, 0.32, 0.06).mul(fx.z).mul(smoothstep(0.6, 0.78, dn)).mul(1.6).mul(nearGlow))
+    .add(vec3(1.0, 0.9, 0.85).mul(fx.w).mul(0.45).mul(nearGlow));
+  // (a piece too small, or a body casting none, drawn at a point: no pixels)
+  const caster = attribute('crowdCaster', 'float').mul(texel(looksAt.add(1)).w);
+  const minCaster = reference('value', 'float', rows.minCaster);
+  const casts = select(or(caster.lessThanEqual(0), caster.lessThan(minCaster)), 0, 1);
+  (m as unknown as { castShadowPositionNode: N }).castShadowPositionNode = Fn(() => {
+    const skin = joint(index.x).mul(weight.x).add(joint(index.y).mul(weight.y));
+    return skin.mul(vec4(positionLocal, 1)).xyz.mul(casts);
+  })();
   return m;
 }

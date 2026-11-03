@@ -4,6 +4,9 @@
 // `furTufts` scales it by three), so roots stay put and tips swing. One material copy per mesh, because a
 // uniform is only uploaded when the material changes, and the meshes each have their own lag.
 import * as THREE from 'three';
+import { sameLooks } from '../../core/materials';
+import type { OwnLooks } from '../../core/shaderPorts';
+import { tsl } from '../../core/webgpu';
 
 /** `?fur=0` keeps the fur still, for A/B comparison */
 const FUR = typeof location === 'undefined' || !/[?&]fur=0/.test(location.search);
@@ -35,10 +38,26 @@ export class FurSway {
           transformed += (uFurLag + vec3(sin(uFurT * 5.1 + fph), sin(uFurT * 4.3 + fph * 1.7) * 0.4, sin(uFurT * 4.7 + fph * 0.6)) * 0.0035) * fw;`);
     };
     m.customProgramCacheKey = () => key() + '-fur';
+    sameLooks(m, base);
+    (m as unknown as OwnLooks).webgpuLooks = (node) => this.swayNodes(node);
+    // (each mesh's lag its own: models/drawAsOne.ts would merge it still)
+    mesh.userData.drawsAlone = true;
     mesh.material = m;
     mesh.userData.furLag = this.lag;   // (read by probes)
     mesh.geometry.computeBoundingSphere();
     this.centre.copy(mesh.geometry.boundingSphere!.center);
+  }
+
+  /** The sway on WebGPU, where the GLSL above is WebGL's alone. */
+  private swayNodes(node: { positionNode: unknown }): void {
+    const { positionGeometry, reference, sin, uv, vec3, dot } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const along = uv().y.div(3);
+    const phase = dot(positionGeometry, vec3(127.1, 311.7, 74.7));
+    const time = reference('value', 'float', this.time);
+    const flutter = vec3(sin(time.mul(5.1).add(phase)), sin(time.mul(4.3).add(phase.mul(1.7))).mul(0.4),
+      sin(time.mul(4.7).add(phase.mul(0.6))));
+    const sway = reference('value', 'vec3', this.lag).add(flutter.mul(0.0035)).mul(along).mul(along);
+    node.positionNode = positionGeometry.add(sway);
   }
 
   /** after the pose, the mesh's world matrix current */
