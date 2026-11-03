@@ -7,6 +7,7 @@
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
 import * as THREE from 'three';
 import { TAU } from '../util';
+import { WEBGPU } from '../core/webgpu';
 
 /** The cell an instance standing `at` (in its mesh's frame), the `i`th, is in. */
 export type CellOf = (at: THREE.Vector3, i: number) => string | number;
@@ -111,10 +112,12 @@ export function cullInCells(mesh: THREE.InstancedMesh, cellOf: CellOf): THREE.In
     }
   }
   (from as Float32Array).set(matrices);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // (on WebGPU the usage stays static: three refreshes a mesh of dynamic instances in full at every draw, where a new
+  // version of them is enough for it to see they changed)
+  if (!WEBGPU) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   if (colors) {
     (fromColors as Float32Array).set(colors);
-    mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+    if (!WEBGPU) mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
   }
   mesh.castShadow = false;
   mesh.computeBoundingSphere();

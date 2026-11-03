@@ -4,7 +4,7 @@
 // camera, as TSL nodes; and its shadow, skinned the same, its pieces too small for the quality's shadows cut.
 import * as THREE from 'three';
 import { NEAR_GLOW, type KitLooks } from '../../core/materials';
-import { gpu, tsl } from '../../core/webgpu';
+import { gpu, stillNodes, tsl } from '../../core/webgpu';
 
 /** What a slot's material reads of its kind: its rows, how many joints a row holds, the texels of looks after them. */
 export interface Rows {
@@ -37,12 +37,15 @@ function fxNoise(x: N): N {
   })();
 }
 
+/** the smallest piece that casts, as a uniform (`crowdNodeMaterial`) */
+let minCasterNode: N = null;
+
 /** A copy of `base` as a node material, skinned from `rows`, its looks and glow the body's own (`slot`'s, from its row). */
 export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, slot: number): THREE.Material {
   const {
     Fn, If, Discard, attribute, textureLoad, ivec2, int, instanceIndex, mat4, vec3, vec4, positionLocal, normalLocal,
     positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep, uniform, clamp, pow,
-    positionView, screenCoordinate, fract, dot, vec2, normalView, positionViewDirection, reference, select, or,
+    positionView, screenCoordinate, fract, dot, vec2, normalView, positionViewDirection, reference, select, or, renderGroup,
   } = tsl as any;
   const source = base.clone();
   source.emissiveIntensity = 1;
@@ -98,11 +101,15 @@ export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, 
     .add(vec3(1.0, 0.9, 0.85).mul(fx.w).mul(0.45).mul(nearGlow));
   // (a piece too small, or a body casting none, drawn at a point: no pixels)
   const caster = attribute('crowdCaster', 'float').mul(texel(looksAt.add(1)).w);
-  const minCaster = reference('value', 'float', rows.minCaster);
+  // (one node, in the render's group: a still material's refresh sends nothing of the object's)
+  minCasterNode ??= uniform(0).setGroup(renderGroup).onRenderUpdate(() => rows.minCaster.value);
+  const minCaster = minCasterNode;
   const casts = select(or(caster.lessThanEqual(0), caster.lessThan(minCaster)), 0, 1);
   (m as unknown as { castShadowPositionNode: N }).castShadowPositionNode = Fn(() => {
     const skin = joint(index.x).mul(weight.x).add(joint(index.y).mul(weight.y));
     return skin.mul(vec4(positionLocal, 1)).xyz.mul(casts);
   })();
+  // (its rows are sent by what writes them, and all else it reads is set once)
+  stillNodes.add(m);
   return m;
 }

@@ -393,6 +393,25 @@ function drawArmsOverPass(): void {
   clearing.autoClearStencil = autoClearStencil;
 }
 
+/** the frames over which the sun's shadow is drawn every other one on WebGPU: from about 90 a second (ms a frame) */
+const SHADOW_IN_TURNS_MS = 1000 / 90;
+const SHADOW_EVERY_FRAME = typeof location !== 'undefined' && /[?&]shadowEvery=1/.test(location.search);
+let lastFrameAt = 0;
+let shadowDrawnLast = false;
+
+/**
+ * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
+ * and at 144 a second its 72 show no lag. (`?shadowEvery=1` draws it every frame, to compare.)
+ */
+function sunShadowInTurns(): void {
+  const now = performance.now();
+  const fast = now - lastFrameAt < SHADOW_IN_TURNS_MS;
+  lastFrameAt = now;
+  const skip = fast && shadowDrawnLast && !SHADOW_EVERY_FRAME;
+  shadowDrawnLast = !skip;
+  G.arena.moon.shadow.autoUpdate = !skip;
+}
+
 /** top-down (the default), over the shoulder, or through the character's eyes */
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
@@ -898,6 +917,7 @@ export function render(): void {
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   if (WEBGPU) {
+    sunShadowInTurns();
     renderWebGPU();
     overFrame.draw();
     return;

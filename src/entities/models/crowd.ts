@@ -12,7 +12,7 @@ import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
 import { CROWD_LAYER } from '../../core/layers';
-import { WEBGPU } from '../../core/webgpu';
+import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
 const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
@@ -341,13 +341,15 @@ function hookScene(): void {
   const before = G.scene.onBeforeRender;
   G.scene.onBeforeRender = (...args) => {
     before.apply(G.scene, args);
-    writeRows();
+    // (on WebGPU a shadow is a render of the scene of its own, the arms too: the bodies stand as they did)
+    if (!WEBGPU || args[2] === G.camera) writeRows();
   };
 }
 
 /** Every crowd's rows written from its bodies as they stand this frame. */
 function writeRows(): void {
   minCaster.value = QUALITY[qualityLevel()].minCasterRadius;
+  for (const mesh of grown.splice(0)) refreshedInFull.delete(mesh);
   for (const kind of kinds.values()) {
     const n = kind.seats.length;
     for (const slot of kind.slots) {
@@ -358,8 +360,13 @@ function writeRows(): void {
     if (n > kind.rows) grow(kind, n);
     kind.seats.forEach((seat, i) => writeRow(kind, seat, i * kind.row));
     kind.uniforms.uCrowd.value.needsUpdate = true;
+    // (its materials are still: their refresh sends no texture, core/webgpu.ts)
+    if (WEBGPU) uploadTexture(kind.uniforms.uCrowd.value);
   }
 }
+
+/** the slots refreshed in full this frame, their texture made anew (`grow`) */
+const grown: THREE.Mesh[] = [];
 
 /** A body's row, from float `at`: its joints' matrices, then its looks. */
 function writeRow(kind: Kind, seat: Seat, at: number): void {
@@ -389,4 +396,11 @@ function grow(kind: Kind, n: number): void {
   texture.dispose();
   texture.image = { data: kind.data, width: kind.row / 4, height: kind.rows };
   texture.needsUpdate = true;
+  // (a new texture on the GPU: its slots' bindings told of it, by a full refresh for a frame)
+  if (WEBGPU) {
+    for (const mesh of kind.slots) {
+      refreshedInFull.add(mesh);
+      grown.push(mesh);
+    }
+  }
 }

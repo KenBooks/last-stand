@@ -558,6 +558,10 @@ function recordDraws(renderer: WebGPURenderer): void {
  *  maps never change (a see-through prop's, core/shaderPorts.ts) */
 export const stillNodes = new WeakSet<THREE.Material>();
 
+/** the objects refreshed in full whatever they are (`stillWhereStill`): a still mesh whose texture was made anew, which
+ *  its bindings must be told of. Whoever adds one takes it out after a frame. */
+export const refreshedInFull = new WeakSet<THREE.Object3D>();
+
 /** how many numbers a kit material's looks are (`looksChanged`) */
 const LOOKS_COUNT = 16;
 
@@ -681,6 +685,7 @@ function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
   const needsRefresh = nodes.needsRefresh.bind(nodes);
   nodes.needsRefresh = (built) => {
+    if (refreshedInFull.has((built as unknown as { object: THREE.Object3D }).object)) return 2;
     const base = standInBases.get(built.material);
     if (base !== undefined && built.baseSeen) {
       // (a stand-in's uniforms of the render, the camera's and the lights', each render)
@@ -1305,6 +1310,10 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const grid = boxDown(lightAt, 64, 36);
   const small = boxDown((at) => grid.sample(at), 16, 9);
   const large = boxDown((at) => small.sample(at), 4, 3);
+  for (const grid_ of [grid, small, large]) {
+    grid_.autoUpdate = false;
+    lightGrids.push(grid_);
+  }
   // (bloom's widest level: how large a bright spot is)
   const widest = (glow as unknown as { _renderTargetsVertical: THREE.RenderTarget[] })._renderTargetsVertical.at(-1)!;
   const lit = compressed(adapted(color.add(glow), small, large, grade, looks), looks.highlights, grade);
@@ -1385,6 +1394,10 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   };
 }
 
+/** the adaptation's grids of the frame's light, made again in turn (`renderWebGPU`) */
+const lightGrids: { autoUpdate: boolean; textureNeedsUpdate: boolean }[] = [];
+let nextGrid = 0;
+
 /** Draws a frame through the WebGPU post chain. */
 /**
  * The frame: its last pass drawn onto the canvas. three's pipeline draws it into whatever target is set, and an async
@@ -1393,6 +1406,8 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
  */
 export function renderWebGPU(): void {
   if (!pipeline) return;
+  // (one of the adaptation's three grids a frame: the eye's adapting is slow, and each was a render of its own)
+  if (lightGrids.length > 0) lightGrids[(nextGrid++) % lightGrids.length].textureNeedsUpdate = true;
   const renderer = (pipeline as unknown as { renderer: WebGPURenderer }).renderer;
   renderer.setRenderTarget(null);
   pipeline.render();

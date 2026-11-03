@@ -19,7 +19,7 @@ import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
 import { floorRelief, reliefContext } from '../core/parallax';
-import { tsl, WEBGPU } from '../core/webgpu';
+import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
 import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
@@ -78,9 +78,11 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
  */
 function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
   if (WEBGPU) {
-    const clock = tsl.uniform(0);
+    // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
+    const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
     updaters.push((_dt, t) => { clock.value = t; });
     m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
+    stillNodes.add(m);
     return m;
   }
   const time = { value: 0 };
