@@ -406,9 +406,37 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
 
+/** The longest a frame of the lobby may be held while a part warms behind it (ms): held longer, the rest waits for
+ *  what needs it, under its loading bar, as a first visit's does. A phone's return held its lobby 170 to 970 ms a
+ *  part, its programs from the cache all the same (each linked in time: the part's own JS and the GPU's process took
+ *  it), from play on an S25 Edge "still lagging hard" (15 s at 21 frames a second, its worst 5). */
+const HELD_MOST_MS = 120;
+
+/** The longest gap between the page's frames from now until it's stopped (ms), a hidden page's time left out. */
+function framesHeld(): { worst: () => number; stop: () => void } {
+  let last = 0;
+  let worst = 0;
+  let on = true;
+  const shownAgain = (): void => { last = 0; };
+  document.addEventListener('visibilitychange', shownAgain);
+  const tick = (now: number): void => {
+    if (!on) return;
+    if (last && document.visibilityState === 'visible') worst = Math.max(worst, now - last);
+    last = now;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const stop = (): void => {
+    on = false;
+    document.removeEventListener('visibilitychange', shownAgain);
+  };
+  return { worst: () => worst, stop };
+}
+
 /**
  * `need`'s `parts` warmed: a part at a time behind the lobby, a step a frame, where `behind` says so once it's time
- * and while they come from a cache (a part found cold left for later), the rest at once when something needs them
+ * and while they come from a cache and hold no frame of the lobby long (a part found cold, or a frame held past
+ * `HELD_MOST_MS`, leaves the rest for later), the rest at once when something needs them
  * (game/warm.ts `wanted`; what's left of a part then goes on without waiting for frames); then what waited for them
  * goes ahead.
  */
@@ -419,10 +447,13 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   const step = (): Promise<void> => (hurried ? nextTask() : nextFrame());
   let cold = !(await behind());
   let next = 0;
+  const held = framesHeld();
   while (next < parts.length && !cold && !hurried) {
-    cold = await inTurn(() => warmPart(parts[next], step));
-    if (!cold) warming(need, ++next / parts.length);
+    const partCold = await inTurn(() => warmPart(parts[next], step));
+    if (!partCold) warming(need, ++next / parts.length);
+    cold = partCold || held.worst() > HELD_MOST_MS;
   }
+  held.stop();
   if (next < parts.length) {
     await wanted(need);
     const done = next / parts.length;
