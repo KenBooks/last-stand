@@ -3,8 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { findItems, newestFinished } from '../find.mjs';
-import { pagesApi } from '../pages.mjs';
-import { REPO, fakeGithub, pr, run } from './fakes.mjs';
+import { REPO, fakeGithub, fakeStore, pr, run } from './fakes.mjs';
 
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
@@ -19,7 +18,7 @@ async function itemsOf(setup, { trigger, claims = {} } = {}) {
   const items = await findItems({
     github,
     repo: REPO,
-    pages: pagesApi(github, REPO),
+    store: fakeStore(setup),
     trigger,
     fetchArtifact: artifacts(claims),
     log: () => {},
@@ -27,11 +26,11 @@ async function itemsOf(setup, { trigger, claims = {} } = {}) {
   return items.map(({ number, mode, id }) => ({ number, mode, id }));
 }
 
-/** One PR at `SHA_A` with build 10, gh-pages' latest.json for it as given. */
+/** One PR at `SHA_A` with build 10, the service's latest.json for it as given. */
 const onePr = (latestJson) => ({
   pulls: [pr(7, SHA_A)],
   runs: [run(10, SHA_A)],
-  pages: { 'pr-preview/pr-7/latest.json': latestJson },
+  latests: { 7: latestJson },
 });
 
 const latest = (sha, state, runId) => ({
@@ -54,9 +53,9 @@ test('a build whose publish was cancelled is caught up by the next run', async (
     {
       pulls: [pr(7, SHA_A), pr(8, SHA_B)],
       runs: [run(10, SHA_A), run(11, SHA_B)],
-      pages: {
-        'pr-preview/pr-7/latest.json': latest(SHA_A, 'building', 10),
-        'pr-preview/pr-8/latest.json': latest(SHA_B, 'building', 11),
+      latests: {
+        7: latest(SHA_A, 'building', 10),
+        8: latest(SHA_B, 'building', 11),
       },
     },
     { trigger: run(11, SHA_B), claims: { 10: { number: 7, action: 'opened' }, 11: { number: 8, action: 'opened' } } },
@@ -72,24 +71,15 @@ test('a dispatched run catches up without a trigger, and leaves what is publishe
     {
       pulls: [pr(7, SHA_A), pr(8, SHA_B), pr(9, SHA_C)],
       runs: [run(10, SHA_A), run(11, SHA_B), run(12, SHA_C)],
-      pages: {
-        'pr-preview/pr-7/latest.json': latest(SHA_A, 'ready', 10),
-        'pr-preview/pr-8/latest.json': latest(SHA_B, 'failed', 11),
-        // published at the preview's root, before #299
-        'pr-preview/pr-9/preview-metadata.json': { headSha: SHA_C },
+      latests: {
+        7: latest(SHA_A, 'ready', 10),
+        8: latest(SHA_B, 'failed', 11),
+        9: latest(SHA_C, 'ready', 12),
       },
     },
     { claims: { 10: { number: 7 }, 11: { number: 8 }, 12: { number: 9 } } },
   );
   assert.deepEqual(items, []);
-});
-
-test('a build deployed but not served yet is published again by the next run, its own included', async () => {
-  const unserved = onePr(latest(SHA_A, 'unserved', 10));
-  const caughtUp = await itemsOf(unserved, { claims: { 10: { number: 7 } } });
-  assert.deepEqual(caughtUp, [{ number: 7, mode: 'publish', id: 10 }]);
-  const again = await itemsOf(unserved, { trigger: run(10, SHA_A), claims: { 10: { number: 7, action: 'opened' } } });
-  assert.deepEqual(again, [{ number: 7, mode: 'publish', id: 10 }]);
 });
 
 test("a build a catch-up published isn't published again when its own run comes", async () => {
@@ -111,7 +101,7 @@ test('a build of a commit the PR has moved past is skipped', async () => {
 test("a pr.json naming another PR is believed only if that PR's head is the commit built", async () => {
   // a fork's build claims PR 8, whose head is another commit: nothing is published for it
   const items = await itemsOf(
-    { pulls: [pr(7, SHA_A), pr(8, SHA_B)], runs: [run(10, SHA_A)], pages: {} },
+    { pulls: [pr(7, SHA_A), pr(8, SHA_B)], runs: [run(10, SHA_A)] },
     { trigger: run(10, SHA_A), claims: { 10: { number: 8, action: 'opened' } } },
   );
   assert.deepEqual(items, []);
@@ -142,7 +132,7 @@ test('cancelled and skipped builds publish nothing of their own', async () => {
   }
 });
 
-test('a PR closed unmerged has its preview removed; a merged one is left for production', async () => {
+test("a PR closed unmerged has its preview removed; a merged one's closing publishes nothing", async () => {
   const closedRun = run(10, SHA_A);
   const unmerged = await itemsOf(
     { pulls: [pr(7, SHA_A, { state: 'closed' })], runs: [closedRun] },
@@ -156,12 +146,14 @@ test('a PR closed unmerged has its preview removed; a merged one is left for pro
   assert.deepEqual(merged, []);
 });
 
-test('a removal that was lost is caught up from what gh-pages still holds', async () => {
+test('a preview kept of a PR no longer open, merged or not, is removed', async () => {
   const items = await itemsOf({
-    pulls: [pr(7, SHA_A, { state: 'closed' }), pr(8, SHA_B, { state: 'closed', merged: true })],
-    pages: { 'pr-preview': 'dir', 'pr-preview/pr-7': 'dir', 'pr-preview/pr-8': 'dir', 'pr-preview/index.html': 'x' },
+    pulls: [pr(7, SHA_A, { state: 'closed' }), pr(8, SHA_B, { state: 'closed', merged: true }), pr(9, SHA_C)],
+    runs: [run(12, SHA_C)],
+    latests: { 9: latest(SHA_C, 'ready', 12) },
+    kept: [7, 8, 9],
   });
-  assert.deepEqual(items, [{ number: 7, mode: 'remove', id: 0 }]);
+  assert.deepEqual(items, [{ number: 7, mode: 'remove', id: 0 }, { number: 8, mode: 'remove', id: 0 }]);
 });
 
 test('the newest finished build is caught up, unless a newer one is still running', () => {

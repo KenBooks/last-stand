@@ -11,7 +11,7 @@ import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
 /** pages allowed to open a socket (a browser always sends its Origin; anything else is turned away) */
-const ORIGINS = new Set((process.env.ORIGINS ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,http://localhost:5173,http://localhost:5199').split(',').map((o) => o.trim()).filter(Boolean));
+const ORIGINS = new Set((process.env.ORIGINS ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://ls.wellscoped.dev,http://localhost:5173,http://localhost:5199').split(',').map((o) => o.trim()).filter(Boolean));
 const ROOM_MAX = 4, ROOMS_MAX = 500, MSG_MAX = 64 * 1024, GRACE = 8000, PING = 20000;
 /** each socket's budget: messages and bytes a second, with a burst of two seconds' worth (a game sends ~60 a second) */
 const RATE = { msgs: 400, bytes: 1 << 20 };
