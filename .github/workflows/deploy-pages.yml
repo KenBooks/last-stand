@@ -1,8 +1,8 @@
 name: Deploy GitHub Pages
 
-# Production deploy. The site is served from an aggregate `gh-pages` branch that
-# holds production at the root and open PR previews under `pr-preview/pr-N/`
-# (see pr-preview.yml); this job refreshes production and keeps open previews.
+# Production deploy, from the `gh-pages` branch, which holds production alone.
+# The PR previews are served by our own service on Dokci (server/previews,
+# pr-preview.yml), not by Pages.
 
 on:
   push:
@@ -22,7 +22,6 @@ jobs:
     permissions:
       contents: write
       pages: write
-      pull-requests: read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -47,25 +46,8 @@ jobs:
       - name: Verify Pages-safe asset paths
         run: npm run check:pages
 
-      - name: Collect open PR previews
-        id: open-previews
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const openPullRequests = await github.paginate(github.rest.pulls.list, {
-              owner,
-              repo,
-              state: 'open',
-              per_page: 100,
-            });
-            const paths = openPullRequests.map(({ number }) => `pr-preview/pr-${number}`);
-            core.setOutput('paths', paths.join('\n'));
-
-      - name: Stage production and retain open PR previews
+      - name: Stage production
         shell: bash
-        env:
-          OPEN_PREVIEWS: ${{ steps.open-previews.outputs.paths }}
         run: |
           set -euo pipefail
           pages_dir="${RUNNER_TEMP}/pages"
@@ -79,21 +61,11 @@ jobs:
             git -C "${pages_dir}" rm -rf --ignore-unmatch .
           fi
 
-          # replace production content, keep the pr-preview directory
+          # replace everything but the branch's own git files: production alone (the PR previews' old
+          # `pr-preview/` folders go with it: the previews are served by server/previews now)
           find "${pages_dir}" -mindepth 1 -maxdepth 1 \
             ! -name .git \
-            ! -name pr-preview \
             -exec rm -rf {} +
-
-          # drop previews of pull requests that are no longer open
-          if [[ -d "${pages_dir}/pr-preview" ]]; then
-            while IFS= read -r -d '' preview_dir; do
-              relative_path="pr-preview/$(basename "${preview_dir}")"
-              if ! grep -Fxq "${relative_path}" <<< "${OPEN_PREVIEWS}"; then
-                rm -rf "${preview_dir}"
-              fi
-            done < <(find "${pages_dir}/pr-preview" -mindepth 1 -maxdepth 1 -type d -name 'pr-*' -print0)
-          fi
 
           cp -a dist/. "${pages_dir}/"
           touch "${pages_dir}/.nojekyll"
@@ -106,7 +78,7 @@ jobs:
             git -C "${pages_dir}" push origin HEAD:gh-pages
           fi
 
-      - name: Upload aggregated Pages artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/pages
