@@ -45,7 +45,8 @@ spec:
   # Each open PR's preview, built by Dokci from its head (server/game-preview): the game at its own host,
   # https://pr-N.ls.wellscoped.dev/, under the DNS's wildcard *.ls.wellscoped.dev. Dokci reads this policy from main
   # alone, takes only same-repository PRs by collaborators (no forks, no drafts), and links each ready preview from
-  # the PR's "Dokci preview" check.
+  # the PR's "Dokci preview" check. feedback.comment also posts a new PR comment for every build: the link and its
+  # times when ready, the reason when it failed (Dokci ADR 0068; needs the App's Pull requests: write).
   previews:
     - name: pr
       baseBranches:
@@ -73,3 +74,5 @@ spec:
         pidsLimit: 64
         storageLimit: 512MiB
         routeLimit: 1
+      feedback:
+        comment: true
