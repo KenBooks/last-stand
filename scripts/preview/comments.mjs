@@ -7,6 +7,13 @@ export function buildingMessage({ sha, run }) {
     + `it's published.\n\n[Watch the build](${run})`;
 }
 
+/** A finished build being put on Pages by `run` (the publish run's own page: the build's is done by then, and a
+ *  "building" comment linking it read as stuck while the deploy took minutes). */
+export function publishingMessage({ sha, run }) {
+  return `**PR preview:** built \`${sha}\`, now publishing it to GitHub Pages. The preview's page goes to it once `
+    + `Pages serves it.\n\n[Watch it publish](${run})`;
+}
+
 /** What an item came to (`result`, from staging or probing; none when the job failed before it). */
 export function itemMessage(item, result, { origin, thisRun }) {
   if (item.mode === 'failed') return `**PR preview:** build failed.\n\n[Open workflow run](${item.run})`;
