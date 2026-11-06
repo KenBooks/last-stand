@@ -1,4 +1,5 @@
-# Dokci deploys the co-op relay (server/relay) on every push to main; the game itself stays on GitHub Pages.
+# Dokci deploys the co-op relay (server/relay) and the PR previews service (server/previews) on every push to main;
+# the game itself stays on GitHub Pages.
 apiVersion: compose.control/v1alpha1
 kind: Project
 metadata:
@@ -14,6 +15,10 @@ spec:
     resources:
       cpuLimit: "0.5"
       memoryLimit: 128MiB
+  configuration:
+    LS_PREVIEWS_TOKEN:
+      description: The secret pr-preview.yml sends PR builds with (the repo's pr-preview environment's PREVIEWS_TOKEN).
+      whenMissing: Previews kept are still served; no build can be sent, so every publish fails.
   environments:
     production:
       source:
@@ -28,5 +33,12 @@ spec:
           entryPoint: websecure
           certificateResolver: letsencrypt
           healthProbePath: /health
+        - service: previews
+          port: 8080
+          host: ls.wellscoped.dev
+          pathPrefix: /pr-preview
+          entryPoint: websecure
+          certificateResolver: letsencrypt
+          healthProbePath: /pr-preview/health
       deploymentPolicy:
         requireManualApproval: false

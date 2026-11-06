@@ -1,7 +1,8 @@
 // Which builds a publish run publishes: the one that triggered it, and every open PR's newest finished build that
-// gh-pages doesn't record yet (a publish cancelled while it waited in the group). Each build's artifact ran PR
-// code, so the PR its pr.json names is believed only when the API agrees: that PR's head is the commit built.
-import { SETTLED, isPublished, latestOf } from './pages.mjs';
+// the previews service doesn't record yet (a publish lost or cancelled). Each build's artifact ran PR code, so the
+// PR its pr.json names is believed only when the API agrees: that PR's head is the commit built. `store` is the
+// service as server.mjs reads it: `latest(number)` (a PR's latest.json, or null) and `previews()` (what's kept).
+import { SETTLED } from './latest.mjs';
 
 const BUILD_WORKFLOW = 'pr-preview-build.yml';
 const FAILED = ['failure', 'timed_out', 'startup_failure'];
@@ -24,7 +25,7 @@ export function newestFinished(runs) {
 }
 
 /** The builds to look at: the trigger (a finished PR build), then each open PR's head not yet published. */
-export async function findBuilds({ github, repo, pages, prs, trigger, log }) {
+export async function findBuilds({ github, repo, store, prs, trigger, log }) {
   const builds = new Map();
   const consider = (run, why) => {
     log(`build ${run.id} (${run.head_sha.slice(0, 7)}, ${run.conclusion}): ${why}`);
@@ -32,7 +33,7 @@ export async function findBuilds({ github, repo, pages, prs, trigger, log }) {
   };
   if (trigger?.event === 'pull_request' && finished(trigger)) consider(trigger, 'triggered this run');
   for (const pr of prs) {
-    if (await isPublished(pages, pr.number, pr.head.sha)) continue;
+    if (await isPublished(store, pr.number, pr.head.sha)) continue;
     const { data } = await github.rest.actions.listWorkflowRuns({
       ...repo,
       workflow_id: BUILD_WORKFLOW,
@@ -48,7 +49,7 @@ export async function findBuilds({ github, repo, pages, prs, trigger, log }) {
 
 /** What a build is for, as the API has it: { mode: publish | remove | failed, number } or null (nothing to do).
  *  `artifact` is { claim, site } from its download: claim is its pr.json, null when missing or unreadable. */
-export async function checkBuild({ github, repo, pages, prs, build, artifact, log }) {
+export async function checkBuild({ github, repo, store, prs, build, artifact, log }) {
   const item = { id: build.id, sha: build.sha, run: build.url, site: artifact?.site ?? null };
   if (build.conclusion !== 'success' || !artifact?.claim) {
     const number = prs.find((pr) => pr.head.sha === build.sha)?.number;
@@ -68,7 +69,7 @@ export async function checkBuild({ github, repo, pages, prs, build, artifact, lo
   }
   if (pr.state !== 'open') return null;
   // a build a catch-up already published isn't published again when its own run comes
-  const latest = await latestOf(pages, number);
+  const latest = await store.latest(number);
   if (latest?.headSha === build.sha && latest.run === build.url && SETTLED.includes(latest.state)) {
     log(`PR #${number}: ${build.sha.slice(0, 7)} already ${latest.state}`);
     return null;
@@ -76,23 +77,24 @@ export async function checkBuild({ github, repo, pages, prs, build, artifact, lo
   return { ...item, mode: 'publish', number };
 }
 
-/** Previews whose PR was closed unmerged, left when their removal was lost (merged ones go with production's
- *  deploy). `skip` holds the PRs already handled. */
-export async function findClosed({ github, repo, pages, prs, skip }) {
+/** Whether PR `number`'s head `sha` is published: its latest.json records it ready or failed. */
+export async function isPublished(store, number, sha) {
+  const latest = await store.latest(number);
+  return latest?.headSha === sha && SETTLED.includes(latest.state);
+}
+
+/** Previews kept of PRs no longer open, merged or closed, left when their removal was lost (or never made: a merge
+ *  builds nothing). `skip` holds the PRs already handled. */
+export async function findClosed({ store, prs, skip }) {
   const open = new Set(prs.map((pr) => pr.number));
-  const closed = [];
-  for (const entry of await pages.list('pr-preview')) {
-    const number = Number(/^pr-(\d+)$/.exec(entry.name)?.[1]);
-    if (entry.type !== 'dir' || !number || open.has(number) || skip.has(number)) continue;
-    const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: number });
-    if (pr.state === 'closed' && !pr.merged) closed.push({ id: 0, mode: 'remove', number });
-  }
-  return closed;
+  return (await store.previews())
+    .filter(({ number }) => !open.has(number) && !skip.has(number))
+    .map(({ number }) => ({ id: 0, mode: 'remove', number }));
 }
 
 /** Everything this run publishes, one item a PR (its newest build's). `fetchArtifact(build)` downloads a
  *  successful build's artifact and returns { claim, site }. */
-export async function findItems({ github, repo, pages, trigger, fetchArtifact, log }) {
+export async function findItems({ github, repo, store, trigger, fetchArtifact, log }) {
   const prs = await github.paginate(github.rest.pulls.list, { ...repo, state: 'open', per_page: 100 });
   const items = new Map();
   const add = (item) => {
@@ -100,11 +102,11 @@ export async function findItems({ github, repo, pages, trigger, fetchArtifact, l
     log(`PR #${item.number}: ${item.mode} ${item.sha ?? ''}`);
     items.set(item.number, item);
   };
-  for (const build of await findBuilds({ github, repo, pages, prs, trigger, log })) {
+  for (const build of await findBuilds({ github, repo, store, prs, trigger, log })) {
     const artifact = build.conclusion === 'success' ? await fetchArtifact(build) : null;
-    const item = await checkBuild({ github, repo, pages, prs, build, artifact, log });
+    const item = await checkBuild({ github, repo, store, prs, build, artifact, log });
     if (item) add(item);
   }
-  for (const item of await findClosed({ github, repo, pages, prs, skip: new Set(items.keys()) })) add(item);
+  for (const item of await findClosed({ store, prs, skip: new Set(items.keys()) })) add(item);
   return [...items.values()];
 }

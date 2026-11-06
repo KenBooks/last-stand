@@ -1,0 +1,9 @@
+{
+  "name": "last-stand-previews",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Last Stand PR previews: each PR's builds, sent by pr-preview.yml, served as static files",
+  "type": "module",
+  "main": "serve.mjs",
+  "scripts": { "start": "node serve.mjs", "test": "node --test test/*.test.mjs" }
+}

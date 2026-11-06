@@ -1,50 +1,31 @@
 name: PR preview
 
-# Publishes what pr-preview-build.yml built into the aggregate `gh-pages`
-# branch, redeploys Pages, and keeps a sticky PR comment with the preview link.
-# Closing the PR without merging removes the preview; merged previews are
-# cleaned up by the next production deploy.
+# Publishes what pr-preview-build.yml built on our own previews service (server/previews, deployed by Dokci beside
+# the co-op relay, PREVIEW_ORIGIN), and keeps a sticky PR comment with the preview link. A closed or merged PR's
+# preview is removed.
 #
-# Each build is published in a folder of its own, `pr-preview/pr-N/<sha7>/`
-# (#299): Pages' CDN caches a path for up to 10 minutes, 404s included, and
-# ignores a query string, so a build published over the last one at the same
-# path was still served old (the "building" placeholder, or a page asking for
-# assets the publish had removed) minutes after the comment said ready. A
-# commit's folder is a path nothing has asked for before it's served. The
-# PR's stable page, `pr-preview/pr-N/` (`.github/preview-index.html`, main's
-# copy), sends the visitor to the newest one by `latest.json`, which it reads
-# from this branch through GitHub's API, never through the CDN:
+# Each build is served from a folder of its own, `pr-preview/pr-N/<sha7>/`, the moment the service has it: the
+# service unpacks it beside and moves it into place, and answers once it's served (no Pages deploy queue, which
+# held each publish 100 to 330 s and sometimes over 600, and no CDN holding a path's old copy). The PR's stable page,
+# `pr-preview/pr-N/` (`.github/preview-index.html`, main's copy, sent with each publish), goes to the newest build
+# by the PR's `latest.json`, which the service serves beside it, never cached:
 #   { headSha, state: building | ready | failed, folder, since, run }
-# While a push builds it says `building` and the stable page shows how long
-# (the last build's folder still there, linked as the previous one: #292). A
-# build's folder is `ready` only once Pages serves it, read from probe files
-# published with it (a 404 the CDN caches lands on a probe, never on the
-# build). The newest KEEP_FOLDERS folders are kept, so a stable page served
-# from the cache never sends anyone to a folder that's gone.
+# While a push builds it says `building` and the stable page shows how long, the last build still linked (#292).
 #
-# Everything that writes `gh-pages` or deploys Pages shares the
-# `pages-publisher` group (production's deploy too), so pushes and deploys go
-# in order. GitHub keeps one pending job a group: a third arriving cancels the
-# pending one, so a publish is lost when several PRs' builds finish at once
-# (#329's on 2026-10-31, its comment left at "building"). So the publish job
-# publishes more than its own build: holding the group, it catches up every
-# open PR whose newest finished build `latest.json` doesn't record yet,
-# downloading that build's artifact and checking it as its own. It runs for
-# every finished build (cancelled and skipped ones too) and after every
-# production deploy, so the last job to hold the group is always a publish,
-# and it sees every build that finished before it. Run this workflow by hand
-# (workflow_dispatch) to catch up without a build.
+# Each publish catches up the others: every open PR whose newest finished build `latest.json` doesn't record yet
+# (a run lost or failed) is published too, its artifact downloaded and checked as its own, and every preview kept of
+# a PR no longer open is removed. It runs for every finished build (cancelled and skipped ones too) and after every
+# production deploy; run it by hand (workflow_dispatch) to catch up without a build.
 #
-# This runs on `workflow_run`, so it uses the workflow from main with a write
-# token even for fork PRs. It never runs PR code: the artifact is only copied as
-# static files, and its PR number is checked against the API (the PR's head
-# must be the commit that was built). What each step does is a module in
-# `scripts/preview/` (its tests: `npm run preview:test`), checked out from
-# this run's commit, main's head, beside the stable page: never the PR's.
+# This runs on `workflow_run`, so it uses the workflow from main with the preview service's secret even for fork
+# PRs. It never runs PR code: the artifact is only packed and sent as files, and its PR number is checked against
+# the API (the PR's head must be the commit that was built). What each step does is a module in `scripts/preview/`
+# (its tests: `npm run preview:test`), checked out from this run's commit, main's head, beside the stable page:
+# never the PR's.
 
 on:
   workflow_run:
-    # (production's deploy only for its completion: a catch-up after it)
+    # (production's deploy only for its completion: a merged PR's preview removed soon after)
     workflows: [PR preview build, Deploy GitHub Pages]
     types: [requested, completed]
   workflow_dispatch:
@@ -53,35 +34,22 @@ permissions:
   contents: read
 
 env:
-  # a stable page in the CDN's cache is at most 10 minutes old: three pushes inside that are rare
-  KEEP_FOLDERS: 3
-  # each deploy is waited for until Pages reports it live (scripts/preview/deploy.mjs, not actions/deploy-pages:
-  # that named every preview deploy by main's head and read an older one's "succeed" at once)
-  DEPLOY_CHECK_SECONDS: 5
-  DEPLOY_TIMEOUT_MINUTES: 10
-  # probe files published with each build, asked for in turn until Pages serves one once it's deployed; a build
-  # still unserved then is recorded `unserved`, not failed, and checked again by the next publish
-  PROBES: 24
-  PROBE_EVERY_SECONDS: 5
+  # the previews service (server/previews): the relay's host unless the repo's PREVIEW_ORIGIN variable says another
+  PREVIEW_ORIGIN: ${{ vars.PREVIEW_ORIGIN || 'https://ls.wellscoped.dev' }}
 
 jobs:
   building:
     name: Mark the PR preview as building
     if: github.event.workflow_run.event == 'pull_request' && github.event.action == 'requested'
     runs-on: ubuntu-24.04
-    # Pages deployments can wait in GitHub's queue for a few minutes.
-    timeout-minutes: 15
-    concurrency:
-      group: pages-publisher
-      cancel-in-progress: false
+    timeout-minutes: 5
     permissions:
       actions: read
-      contents: write
-      pages: write
-      id-token: write
+      contents: read
       pull-requests: write
+    # (its secret, PREVIEWS_TOKEN, is this environment's: only main's copy of this workflow can reach it)
     environment:
-      name: github-pages-preview
+      name: pr-preview
     steps:
       # this run's commit, main's head: never the PR's
       - name: Check out the stable page and the scripts
@@ -94,68 +62,27 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      - name: Find the open pull request
-        id: pr
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { findBuildingPr } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await findBuildingPr({ github, context, core });
-
-      - name: Check out gh-pages
-        if: steps.pr.outputs.number != ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: gh-pages
-          path: pages
-
       - name: Say the preview is building
-        id: stage
-        if: steps.pr.outputs.number != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PREVIEWS_TOKEN: ${{ secrets.PREVIEWS_TOKEN }}
         with:
           script: |
-            const { markBuilding } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            markBuilding({ context, core });
+            const { markBuildingPr } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await markBuildingPr({ github, context, core });
 
-      - name: Upload aggregated Pages artifact
-        if: steps.stage.outputs.deploy == 'true'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: pages
-          include-hidden-files: true
-
-      - name: Deploy aggregated Pages artifact
-        if: steps.stage.outputs.deploy == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { deployStaged } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await deployStaged({ github, context, core });
-
-  # Publishes the build that triggered it and catches up every other one left unpublished: whichever run holds the
-  # group last sees every build that finished before it, so a publish cancelled while it waited is made by the next.
-  # It runs for every finished build, cancelled and skipped ones too, and after every production deploy, so the last
-  # job to hold the group is always one of these. The steps are scripts/preview/steps.mjs's (main's copy).
+  # Publishes the build that triggered it and catches up every other one left unpublished.
   publish:
     name: Publish PR previews
     if: github.event_name == 'workflow_dispatch' || github.event.action == 'completed'
     runs-on: ubuntu-24.04
-    # Pages deployments can wait in GitHub's queue for a few minutes, and each build caught up is probed in turn.
-    timeout-minutes: 25
-    concurrency:
-      group: pages-publisher
-      cancel-in-progress: false
+    timeout-minutes: 15
     permissions:
       actions: read
-      contents: write
-      pages: write
-      id-token: write
+      contents: read
       pull-requests: write
     environment:
-      name: github-pages-preview
+      name: pr-preview
     steps:
       # this run's commit, main's head: never the PR's
       - name: Check out the stable page and the scripts
@@ -168,65 +95,27 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      # The triggering build, and each open PR's newest finished build gh-pages doesn't record yet: each artifact
+      # The triggering build, and each open PR's newest finished build the service doesn't record yet: each artifact
       # downloaded, its pr.json believed only when the API agrees (the PR's head is the commit built).
       - name: Find the builds to publish
         id: find
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_TOKEN: ${{ github.token }}
-          ASKED_ORIGIN: ${{ vars.SITE_ORIGIN }}
+          PREVIEWS_TOKEN: ${{ secrets.PREVIEWS_TOKEN }}
         with:
           script: |
             const { findPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
             await findPublish({ github, context, core, exec });
 
-      - name: Check out gh-pages
+      # each build packed and sent, read back at its public address, then the stable page sent to it; each PR's
+      # comment a checklist while it goes, then what came of it
+      - name: Publish each build
         if: steps.find.outputs.count != '0'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: gh-pages
-          path: pages
-
-      - name: Stage or remove previews
-        id: stage
-        if: steps.find.outputs.stage == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { stagePublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            stagePublish({ core });
-
-      - name: Upload aggregated Pages artifact
-        if: steps.stage.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: pages
-          include-hidden-files: true
-
-      - name: Deploy aggregated Pages artifact
-        id: deploy
-        if: steps.stage.outputs.changed == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { deployStaged } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await deployStaged({ github, context, core });
-
-      - name: Wait for Pages to serve each build, and record it
-        if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0' && steps.stage.outcome != 'failure'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          DEPLOY: ${{ steps.deploy.outcome }}
+          PREVIEWS_TOKEN: ${{ secrets.PREVIEWS_TOKEN }}
         with:
           script: |
-            const { recordPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await recordPublish({ github, context, core });
-
-      - name: Say what each preview is
-        if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { commentPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await commentPublish({ github, context });
+            const { publish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await publish({ github, context, core });

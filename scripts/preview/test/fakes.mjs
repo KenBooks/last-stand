@@ -1,5 +1,6 @@
-// A GitHub API as small as the scripts use: pull requests, build runs, gh-pages files and issue comments, held in
-// plain objects a test sets up, with the writes it was asked for kept to look at.
+// A GitHub API as small as the scripts use: pull requests, build runs and issue comments, held in plain objects a
+// test sets up, with the writes it was asked for kept to look at; and the previews service's store as find.mjs reads
+// it. publish.test.mjs runs the real service.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,9 +28,8 @@ export const run = (id, sha, { status = 'completed', conclusion = 'success', cre
   html_url: `https://github.com/owner/game/actions/runs/${id}`,
 });
 
-/** `pulls`: every PR, open or not; `runs`: the build runs; `pages`: gh-pages' files by path, each a value
- *  (written as JSON) or the string 'dir' for a directory; `comments`: by PR number. */
-export function fakeGithub({ pulls = [], runs = [], pages = {}, comments = {} } = {}) {
+/** `pulls`: every PR, open or not; `runs`: the build runs; `comments`: by PR number. */
+export function fakeGithub({ pulls = [], runs = [], comments = {} } = {}) {
   const writes = [];
   const github = {
     writes,
@@ -48,18 +48,6 @@ export function fakeGithub({ pulls = [], runs = [], pages = {}, comments = {} } 
           data: { workflow_runs: runs.filter((r) => r.head_sha === head_sha) },
         }),
       },
-      repos: {
-        getContent: async ({ path: filePath }) => {
-          if (pages[filePath] === 'dir') {
-            const children = Object.keys(pages)
-              .filter((key) => key.startsWith(`${filePath}/`) && !key.slice(filePath.length + 1).includes('/'))
-              .map((key) => ({ name: key.slice(filePath.length + 1), type: pages[key] === 'dir' ? 'dir' : 'file' }));
-            return { data: children };
-          }
-          if (!(filePath in pages)) throw notFound();
-          return { data: { content: Buffer.from(JSON.stringify(pages[filePath])).toString('base64') } };
-        },
-      },
       issues: {
         listComments: async ({ issue_number }) => ({ data: comments[issue_number] ?? [] }),
         updateComment: async (params) => writes.push({ update: params }),
@@ -68,6 +56,15 @@ export function fakeGithub({ pulls = [], runs = [], pages = {}, comments = {} } 
     },
   };
   return github;
+}
+
+/** The service's store as find.mjs reads it: `latests` by PR number; `kept`, the PRs with anything kept (those
+ *  with a latest.json by default). */
+export function fakeStore({ latests = {}, kept } = {}) {
+  return {
+    latest: async (number) => latests[number] ?? null,
+    previews: async () => (kept ?? Object.keys(latests).map(Number)).map((number) => ({ number })),
+  };
 }
 
 /** A directory of its own under the OS's temp, removed after the test. */
