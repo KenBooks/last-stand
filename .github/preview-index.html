@@ -4,9 +4,11 @@
   `pr-preview/pr-N/<sha7>/`, a path no cache has held before, and this page sends the visitor to the newest one.
   Pages' CDN caches this page and everything at a fixed path for up to 10 minutes, 404s included, and ignores a
   query string, so the page reads where to go from the PR's `latest.json` on the gh-pages branch through GitHub's
-  API, which the CDN never serves: `{ headSha, state: building | ready | failed, folder, since, run }`, written by
-  pr-preview.yml (`ready` only once Pages serves the folder). Never ask for a folder before `latest.json` names
-  it: a 404 the CDN cached for it would stand for 10 minutes after it's published.
+  API, which the CDN never serves:
+  `{ headSha, state: building | ready | unserved | failed, folder, pending, since, run }`, written by pr-preview.yml (`ready` only once Pages serves the folder; `unserved`: Pages reported the deploy of
+  `pending` done but didn't serve it within the run's probes). Never ask for a folder before `latest.json` names
+  it: a 404 the CDN cached for it would stand for 10 minutes after it's published. A pending folder is asked for
+  only its metadata, so a 404 cached there holds the move to it up, never the build's own page.
   The tokens are filled in where the page is put in place: the repository, the PR, and the newest folder known
   then, gone to if neither copy of `latest.json` can be read (a build published by main's copy of pr-preview.yml
   before #299 has none).
@@ -46,6 +48,7 @@
   <p class="elapsed" id="elapsed" aria-live="off" hidden></p>
   <p id="status">Finding the newest build.</p>
   <p id="run" hidden><a id="run-link" href="#">Open the build's run</a></p>
+  <p id="pending" hidden><a id="pending-link" href="#">This commit's build</a></p>
   <p id="previous" hidden><a id="previous-link" href="#">The previous build</a></p>
   <p class="note" id="note" hidden>Each build stays at a link of its own: this page is the newest.</p>
 </main>
@@ -152,6 +155,29 @@
       element('status').classList.add('slow');
       element('status').textContent = 'The newest push didn\'t build or wasn\'t published.';
     };
+    /** Published, Pages not serving it yet when the run stopped probing: this page goes there once it does. */
+    const showUnserved = (latest) => {
+      element('title').textContent = `PR #${PR} preview is published`;
+      showCommit(latest);
+      showRun(latest);
+      showPrevious(latest);
+      element('pending').hidden = false;
+      element('pending-link').href = `./${latest.pending}/`;
+      element('pending-link').textContent = `This commit's build (${latest.pending})`;
+      element('elapsed').hidden = true;
+      element('status').classList.remove('slow');
+      element('status').textContent = 'GitHub Pages deployed it but wasn\'t serving it yet. This page goes to it '
+        + 'once it does.';
+    };
+    /** Whether Pages serves the pending folder: its metadata names the commit. */
+    const pendingServed = async (latest) => {
+      try {
+        const reply = await fetch(`./${latest.pending}/preview-metadata.json`, { cache: 'no-store' });
+        return reply.ok && (await reply.json()).headSha === latest.headSha;
+      } catch {
+        return false;
+      }
+    };
     const showUnknown = (limited) => {
       element('status').textContent = limited
         ? 'GitHub\'s API is limiting requests from this address; trying again in a minute.'
@@ -165,7 +191,10 @@
       if (!read.latest && FOLDER.test(KNOWN_FOLDER)) return goTo(KNOWN_FOLDER);
       const latest = read.latest ?? await readPagesCopy();
       if (latest?.state === 'ready' && FOLDER.test(latest.folder ?? '')) return goTo(latest.folder);
-      if (latest?.state === 'building') showBuilding(latest);
+      const unserved = latest?.state === 'unserved' && FOLDER.test(latest.pending ?? '');
+      if (unserved && await pendingServed(latest)) return goTo(latest.pending);
+      if (unserved) showUnserved(latest);
+      else if (latest?.state === 'building') showBuilding(latest);
       else if (latest?.state === 'failed') showFailed(latest);
       else showUnknown(limited);
       // (a failed build waits for the next push, which takes minutes: no need to ask often)

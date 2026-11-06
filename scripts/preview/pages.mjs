@@ -5,7 +5,8 @@ import path from 'node:path';
 /** A commit's folder in a preview: its seven characters. */
 export const COMMIT_FOLDER = /^[0-9a-f]{7}$/;
 
-/** States latest.json ends a build in: anything else (`building`) is still waiting for a publish. */
+/** States latest.json ends a build in: anything else (`building`, `unserved`: published, Pages not serving it yet)
+ *  is still waiting for a publish, which the next publish run makes. */
 export const SETTLED = ['ready', 'failed'];
 
 export const previewPath = (number) => `pr-preview/pr-${number}`;
@@ -66,10 +67,11 @@ export async function isPublished(pages, number, sha) {
   return root?.headSha === sha;
 }
 
-/** latest.json, which the stable page reads: { headSha, state, folder, since?, run }. */
-export function writeLatest(dir, { sha, state, folder, since, run }) {
+/** latest.json, which the stable page reads: { headSha, state, folder, pending?, since?, run }. */
+export function writeLatest(dir, { sha, state, folder, pending, since, run }) {
   fs.mkdirSync(dir, { recursive: true });
   const latest = { headSha: sha, state, folder: folder || null };
+  if (pending) latest.pending = pending;
   if (since) latest.since = since;
   latest.run = run;
   writeJson(path.join(dir, 'latest.json'), latest);

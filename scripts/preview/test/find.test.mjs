@@ -84,6 +84,14 @@ test('a dispatched run catches up without a trigger, and leaves what is publishe
   assert.deepEqual(items, []);
 });
 
+test('a build deployed but not served yet is published again by the next run, its own included', async () => {
+  const unserved = onePr(latest(SHA_A, 'unserved', 10));
+  const caughtUp = await itemsOf(unserved, { claims: { 10: { number: 7 } } });
+  assert.deepEqual(caughtUp, [{ number: 7, mode: 'publish', id: 10 }]);
+  const again = await itemsOf(unserved, { trigger: run(10, SHA_A), claims: { 10: { number: 7, action: 'opened' } } });
+  assert.deepEqual(again, [{ number: 7, mode: 'publish', id: 10 }]);
+});
+
 test("a build a catch-up published isn't published again when its own run comes", async () => {
   const items = await itemsOf(
     onePr(latest(SHA_A, 'ready', 10)),

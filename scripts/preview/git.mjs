@@ -29,3 +29,6 @@ export function commitChanges(dir, lines, options) {
   if (changed.length > 0) commit(dir, lines, options);
   return changed;
 }
+
+/** The commit the checkout is at: what a deploy of it is named by, unique to each push. */
+export const headCommit = (dir) => git(dir, 'rev-parse', 'HEAD').trim();

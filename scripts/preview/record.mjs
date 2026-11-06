@@ -37,12 +37,21 @@ export async function waitServed({ fetch, sleep, folderUrl, sha, probes, every, 
   return false;
 }
 
-/** latest.json for a build: ready sends the stable page to its folder, failed leaves it at the last one. */
+/** latest.json for a build: ready sends the stable page to its folder; failed and unserved leave it at the last
+ *  one, an unserved build's own folder named as `pending` (published, Pages not serving it yet). */
 export function recordBuild(pagesDir, { number, sha, run, state }) {
   const dir = previewDir(pagesDir, number);
-  const folder = state === 'ready' ? sha.slice(0, 7) : previousFolder(dir);
-  writeLatest(dir, { sha, state, folder, run });
+  const own = sha.slice(0, 7);
+  const folder = state === 'ready' ? own : previousFolder(dir);
+  writeLatest(dir, { sha, state, folder, pending: state === 'unserved' ? own : '', run });
 }
+
+/** What a folder build came to: `ready` once served; `unserved` when deployed but not served yet, or `undeployed`
+ *  when the deploy failed, both recorded `unserved` (not settled: the next publish run checks it again). */
+const outcome = (deployed, served) => {
+  if (served) return 'ready';
+  return deployed ? 'unserved' : 'undeployed';
+};
 
 /** Each folder build probed and recorded, each failed build recorded: what each came to, with its link. */
 export async function recordItems({ pagesDir, staged, failed, deployed, origin, probe }) {
@@ -50,9 +59,9 @@ export async function recordItems({ pagesDir, staged, failed, deployed, origin, 
   for (const entry of staged.filter((built) => built.layout === 'folder')) {
     const folderUrl = `${origin}/pr-preview/pr-${entry.number}/${entry.sha.slice(0, 7)}`;
     const served = deployed && (await probe(folderUrl, entry.sha));
-    const state = served ? 'ready' : 'failed';
-    recordBuild(pagesDir, { ...entry, state });
-    results.push({ number: entry.number, sha: entry.sha, state: served ? 'ready' : 'unserved', link: `${folderUrl}/` });
+    const state = outcome(deployed, served);
+    recordBuild(pagesDir, { ...entry, state: state === 'ready' ? 'ready' : 'unserved' });
+    results.push({ number: entry.number, sha: entry.sha, state, link: `${folderUrl}/` });
   }
   for (const item of failed) {
     recordBuild(pagesDir, { ...item, state: 'failed' });
