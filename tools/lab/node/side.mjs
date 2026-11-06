@@ -48,25 +48,30 @@ function bootOutcome(cold) {
 }
 
 /**
- * How a page boots: at `quality`, as Auto's cookie holds it (`low@518400`; null: the lab's own, High), and `cold` or
- * not (`bootOutcome`). The lab's own boot asks for everything the game warms after the lobby shows and waits for it.
+ * How a page boots: at `quality`, as Auto's cookie holds it (`low@518400`; null: the lab's own, High), `cold` or
+ * not (`bootOutcome`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
+ * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
+ * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too.
  */
-export const LAB_BOOT = Object.freeze({ quality: null, cold: false });
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false });
 
-/** The boot a command's `options` ask for (`--boot`, `--cold`). */
+/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`). */
 export function bootOf(options) {
-  return { quality: options.boot ?? null, cold: Boolean(options.cold) };
+  const first = Boolean(options.first);
+  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first };
 }
 
-/** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, or nothing for the lab's own. */
+/** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, `, a first visit`, or nothing for the
+ *  lab's own. */
 export function bootText(boot) {
   const at = boot.quality ? ` at ${boot.quality}` : '';
-  return `${at}${boot.cold ? ', cold' : ''}`;
+  const kind = boot.first ? ', a first visit' : boot.cold ? ', cold' : '';
+  return `${at}${kind}`;
 }
 
 /** Whether two boots are the same. */
 function sameBoot(a, b) {
-  return a.quality === b.quality && a.cold === b.cold;
+  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first);
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -500,6 +505,9 @@ export class Side {
         await lab.mapsCome();
         return lab.install().heroes();
       });
+      if (booted.hero !== heroClass && how.first) {
+        throw labError(`--first boots a first visit's hero, the ${booted.hero}: run it with --class ${booted.hero}`);
+      }
       if (booted.hero !== heroClass) {
         throw labError(`--class ${heroClass}: no such hero (the heroes: ${booted.heroes.join(', ')})`);
       }
@@ -560,12 +568,14 @@ export class Side {
    * side's (each after `prefix`), booted as `how` asks: at its `quality` (Auto's cookie), on Auto settled there.
    */
   async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
-    const { quality, cold } = how;
+    const { quality, cold, first } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
     const settled = quality ? { 'last-stand-quality': 'auto', 'last-stand-quality-auto': quality } : {};
-    const cookies = { ...BOOT_COOKIES, ...settled, 'last-stand-class': heroClass };
+    // (a first visit's has no saved hero: the game boots its default one, and opens on the hero selection screen)
+    const hero = first ? {} : { 'last-stand-class': heroClass };
+    const cookies = { ...BOOT_COOKIES, ...settled, ...hero };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
     // (the maps made once kept in the context's store, under a name for their code: src/core/kept.ts `keepAs`)

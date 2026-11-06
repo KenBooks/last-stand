@@ -106,6 +106,12 @@ const COMMON_OPTIONS = {
       + 'for, the fight\'s and the other heroes\' programs cold until something needs them (the lab\'s own boot asks '
       + 'for them at once and waits)',
   },
+  first: {
+    kind: 'switch',
+    help: 'the page booted as a player\'s first visit: no saved hero, so the game boots its default one (--class '
+      + 'it) and opens on the hero selection screen, cold as --cold leaves it (programs --first: what its first '
+      + 'frames compile at a draw)',
+  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',
