@@ -37,6 +37,7 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   set as a player sets it, which starts it over from High, and fed each frame's time as a GPU-bound device takes it:
   in proportion to the scene's pixels, at the level's cost (the integrated GPU of trace JGNM-1NCF and its tester's
   report, 5 frames a second at High on a 2864x1536 canvas: run it `--screen 1432x768@2`). Each step is listed with
-  when it came, and the time until the device holds 50 frames a second must be at most 20 s (12.6 s there; 36.7 at
-  the old pace, a step a 4 s window and half the pixels a step). A fast device's frames with an 800 ms hitch every
+  when it came, and the time until the device holds 50 frames a second, or reaches Low where at the screen's own
+  pixels it can't (Auto keeps them at every level), must be at most 8 s (to Low in 3.4 s there, where it holds 7.8
+  frames a second; 12.5 at the old pace, a level a 4 s window). A fast device's frames with an 800 ms hitch every
   2 s must never step it down (Auto never steps back up). `--canary` runs the old pace too, which must be too slow.
