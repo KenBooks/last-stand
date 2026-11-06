@@ -36,7 +36,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
+import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -177,15 +177,13 @@ const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
- *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
- *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s), then the hall of heroes'
- *  room drawn in the biome's place: the `heroes` need warm. */
-export async function warmLobby(heroes = false): Promise<void> {
+ *  `hall` (a first visit, which opens on the hero selection screen), the hall of heroes' room too, drawn in the
+ *  biome's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). */
+export async function warmLobby(hall = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await nextTask();
   const hero = heroAllWorn(G.player.cls.model);
-  const others = heroes ? heroModelParts().map((part) => part.build()) : [];
-  const extra = [...lobbyExtras, hero.root, ...others.flatMap((b) => b.objects)];
+  const extra = [...lobbyExtras, hero.root];
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
@@ -199,10 +197,11 @@ export async function warmLobby(heroes = false): Promise<void> {
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
-  for (const b of others) b.done();
-  if (heroes) {
+  // (a first visit opens on the hall of heroes: its room warmed with the lobby, its other heroes after the reveal, a
+  // hero at a time, each shown as he's warm: warmed with the lobby, the two held a low-end laptop's loading screen)
+  if (hall) {
     await warmBuilt([hallPart().build()]);
-    markWarm('heroes');
+    hallWarm = true;
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(dummies());
@@ -288,7 +287,9 @@ async function buildAhead(parts: Part[]): Promise<void> {
 
 /** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
  *  (`heroModelParts`). */
-const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
+const heroParts = (): Part[] => [...(hallWarm ? [] : [hallPart()]), ...heroModelParts()];
+/** whether the hall of heroes' room was warmed with the lobby (a first visit's) */
+let hallWarm = false;
 
 /** The hall of heroes' look put on the scene, and its undoing: the look it's shown in, which WebGPU keys its
  *  pipelines by (`Swap.look`). */
@@ -406,9 +407,70 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
 
+/** how many parts `warmInTasks` gives the GPU at a time */
+const PARTS_AT_ONCE = 4;
+
+/**
+ * `parts` warmed as something waits for them, `PARTS_AT_ONCE` at a time, each lot's programs linked before the next
+ * lot's are compiled (the link wait letting the page go between programs, `core/shaders.ts` `linked`), `progress` told
+ * how far along: timed as `warm the <need> at once`. All compiled in one go, a GPU with little to spare (a laptop's
+ * integrated one) had them all to link at once, the page's own frames waiting behind them, and where the browser
+ * links a program only as it's first read (no KHR_parallel_shader_compile) every one was linked in one task: from
+ * play, a low-end laptop joining a room froze its tab, "Chrome offers to kill the tab, I wait, and it offers second
+ * time" (`npm run stalls -- --scenario boot --variants base,noParallelCompile`). A part at a time, each a step a
+ * task, the cold Start's bar took 17.4 s where at once it took 4.4.
+ */
+async function warmInTasks(need: Need, parts: Part[], progress: (share: number) => void, size: number): Promise<void> {
+  const start = performance.now();
+  for (let from = 0; from < parts.length; from += size) {
+    const lot = parts.slice(from, from + size);
+    const built: Built[] = [];
+    for (const part of lot) {
+      if (!part.built) await nextTask();
+      built.push(part.built ?? part.build());
+      part.built = undefined;
+    }
+    const share = (s: number): void => {
+      progress((from + s * lot.length) / parts.length);
+      if (need === 'heroes') for (const part of lot) heroWarming(part.name, s);
+    };
+    await warmBuilt(built, { progress: share });
+    if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
+  }
+  performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });
+}
+
+/** The longest a frame of the lobby may be held while a part warms behind it (ms): held longer, the rest waits for
+ *  what needs it, under its loading bar, as a first visit's does. A phone's return held its lobby 170 to 970 ms a
+ *  part, its programs from the cache all the same (each linked in time: the part's own JS and the GPU's process took
+ *  it), from play on an S25 Edge "still lagging hard" (15 s at 21 frames a second, its worst 5). */
+const HELD_MOST_MS = 120;
+
+/** The longest gap between the page's frames from now until it's stopped (ms), a hidden page's time left out. */
+function framesHeld(): { worst: () => number; stop: () => void } {
+  let last = 0;
+  let worst = 0;
+  let on = true;
+  const shownAgain = (): void => { last = 0; };
+  document.addEventListener('visibilitychange', shownAgain);
+  const tick = (now: number): void => {
+    if (!on) return;
+    if (last && document.visibilityState === 'visible') worst = Math.max(worst, now - last);
+    last = now;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const stop = (): void => {
+    on = false;
+    document.removeEventListener('visibilitychange', shownAgain);
+  };
+  return { worst: () => worst, stop };
+}
+
 /**
  * `need`'s `parts` warmed: a part at a time behind the lobby, a step a frame, where `behind` says so once it's time
- * and while they come from a cache (a part found cold left for later), the rest at once when something needs them
+ * and while they come from a cache and hold no frame of the lobby long (a part found cold, or a frame held past
+ * `HELD_MOST_MS`, leaves the rest for later), the rest at once when something needs them
  * (game/warm.ts `wanted`; what's left of a part then goes on without waiting for frames); then what waited for them
  * goes ahead.
  */
@@ -419,14 +481,22 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   const step = (): Promise<void> => (hurried ? nextTask() : nextFrame());
   let cold = !(await behind());
   let next = 0;
+  const held = framesHeld();
   while (next < parts.length && !cold && !hurried) {
-    cold = await inTurn(() => warmPart(parts[next], step));
-    if (!cold) warming(need, ++next / parts.length);
+    const partCold = await inTurn(() => warmPart(parts[next], step));
+    if (!partCold && need === 'heroes') heroWarming(parts[next].name, 1);
+    if (!partCold) warming(need, ++next / parts.length);
+    cold = partCold || held.worst() > HELD_MOST_MS;
   }
+  held.stop();
   if (next < parts.length) {
     await wanted(need);
     const done = next / parts.length;
-    await inTurn(() => warmAtOnce(need, parts.slice(next), (s) => warming(need, done + (1 - done) * s)));
+    const left = parts.slice(next);
+    const told = (s: number): void => warming(need, done + (1 - done) * s);
+    // (the heroes a hero at a time, each shown in the hall as he's warm)
+    const lot = need === 'heroes' ? 1 : PARTS_AT_ONCE;
+    await inTurn(() => (WEBGPU ? warmAtOnce(need, left, told) : warmInTasks(need, left, told, lot)));
   }
   warming(need, 1);
   markWarm(need);

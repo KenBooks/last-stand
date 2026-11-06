@@ -45,7 +45,7 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
@@ -160,12 +160,16 @@ async function boot() {
   // a first visit opens on the hero selection screen, no hero chosen yet: the logo's exit gathers into its logo
   const firstVisit = !hasSavedClass();
   if (!firstVisit) lobbyLaidOut();
-  // the lobby's shaders compiled before it shows, the fight's and the other heroes' behind it (game/warmup.ts); on a
-  // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen
-  if (firstVisit) await loadingStep('Gathering the heroes', 0.6);
+  // the lobby's shaders compiled before it shows with its own hero's alone, the fight's and the other heroes' behind it
+  // (game/warmup.ts): a first visit opens on the hall of heroes, its room warmed with the lobby's and its other heroes
+  // once the loading screen has left, a hero at a time, each shown on his plinth as he's warm (from play, "we can only
+  // load currently selected/default hero... and then load the two others": warmed under the loading screen, a low-end
+  // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
+  if (firstVisit) await loadingStep('Readying the hall', 0.6);
   await warmLobby(firstVisit);
   const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
+    void loadingLeft.then(() => want('heroes'));
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();
@@ -195,7 +199,7 @@ async function boot() {
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room
     const room = invitedRoom();
-    if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code), READYING.coop)(room);
+    if (room) whenWarm(['heroes'], (code: string) => void joinRoom(code), READYING.coop)(room);
   });
   requestAnimationFrame(frame);
 }

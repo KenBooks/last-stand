@@ -5,6 +5,8 @@
 // (ui/readying.ts), saying what it readies: Start and a biome pick need the fight's; a class pick the heroes'; a save
 // slot pick and a co-op room, both (a partner's hero is any class, and a guest's run starts with the host's).
 
+import { G } from '../state';
+
 /** what's warmed after the lobby shows: the fight's programs, the other heroes' */
 export type Need = 'fight' | 'heroes';
 const NEEDS: Need[] = ['fight', 'heroes'];
@@ -76,11 +78,28 @@ export function warming(need: Need, share: number): void {
 export function markWarm(need: Need): void {
   needs[need].warm = true;
   needs[need].resolveWarm();
+  changed();
+}
+
+/** how far each other class's hero is warmed, by his model (0 to 1; 1 warm): the hall of heroes shows him once he is,
+ *  and his tab's bar till then (from play, "we can only load currently selected/default hero... and then load the two
+ *  others, show some loading bars on those heroes") */
+const heroShares = new Map<string, number>();
+/** How far the hero of `model` is warmed (0 to 1): the lobby's own and every hero once the heroes are, 1. */
+export const heroShare = (model: string): number =>
+  (needs.heroes.warm || model === G.player?.cls.model ? 1 : heroShares.get(model) ?? 0);
+/** The hero of `model` warmed `share` of the way. */
+export function heroWarming(model: string, share: number): void {
+  heroShares.set(model, share);
+  changed();
 }
 
 /** The lab's: `need` cold again till `markWarm` (tools/lab `ui --states readyingHeroes`), so a press that needs it waits
  *  under the fight's loading bar as a first visit's does (the lab's boot warms every need at once). */
-export function chill(need: Need): void { needs[need] = needState(); }
+export function chill(need: Need): void {
+  needs[need] = needState();
+  if (need === 'heroes') heroShares.clear();
+}
 
 /**
  * `act`, done at once if what it needs (`of`) is warm, else as soon as it is: pressed again meanwhile, its last

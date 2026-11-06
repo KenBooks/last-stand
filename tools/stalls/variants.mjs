@@ -43,6 +43,25 @@ function seeded(seed) {
   };
 }
 
+/**
+ * WebGL without KHR_parallel_shader_compile, as some GPUs and browsers give it: three takes every program as linked at
+ * once, and the first read of one links it there, the page waiting (from play, a low-end laptop's join froze its tab,
+ * "Chrome offers to kill the tab").
+ */
+function noParallelCompile() {
+  const NAME = 'KHR_parallel_shader_compile';
+  for (const gl of [WebGLRenderingContext, WebGL2RenderingContext]) {
+    const getExtension = gl.prototype.getExtension;
+    gl.prototype.getExtension = function (name) {
+      return name === NAME ? null : getExtension.call(this, name);
+    };
+    const supported = gl.prototype.getSupportedExtensions;
+    gl.prototype.getSupportedExtensions = function () {
+      return (supported.call(this) ?? []).filter((name) => name !== NAME);
+    };
+  }
+}
+
 /** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
 const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
 
@@ -75,6 +94,7 @@ export const VARIANTS = {
   // (the lobby's panels at their own size, not zoomed with the UI's scale: the logo's SVG laid out as its snapshot is)
   noPanelZoom: { script: styled, arg: '#menu .panel { zoom: 1 !important; }' },
   cpuCanvas: { script: cpuCanvas },
+  noParallelCompile: { script: noParallelCompile },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
   // (and the slot's focus with no look at all: its classes still change, but nothing they style shows)
