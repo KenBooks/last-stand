@@ -583,7 +583,11 @@ function frame(timestamp: number): void {
   const t0 = perfClock.now();
   if (!G.paused && revealed) {
     if (isWarming()) holdQuality();
-    else sampleQuality(rawDt);
+    else {
+      // (each of Auto's steps marked in the performance trace: a slow start is Auto walking down from High)
+      const stepped = sampleQuality(rawDt);
+      if (stepped) recorder.mark(`quality auto: ${stepped}`);
+    }
     G.dt = dt;
     G.time += dt;
     update(dt);

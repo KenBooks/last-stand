@@ -707,6 +707,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  auto: {
+    each(side, options) {
+      return side.command('auto', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   health: {
     check(options) {
       const wrong = options.shares.find((share) => !(Number(share) >= 0 && Number(share) <= 1));

@@ -30,6 +30,16 @@ let level: QualityLevel = 'high';
 /** the most pixels Auto lets the scene render (Infinity: as many as the level's resolution gives) */
 let budget = Infinity;
 let frames = 0, time = 0, settle = 0;
+/** the window's frame times up to `longestFrame` (s), and their sum: the quick path's median reads them */
+const quick: number[] = [];
+let quickTime = 0;
+
+/** The window started again, both paths. */
+function restart(): void {
+  frames = time = 0;
+  quick.length = 0;
+  quickTime = 0;
+}
 
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
 
@@ -87,7 +97,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setReliefSteps(p.relief);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
-  frames = time = 0;
+  restart();
   settle = AUTO_QUALITY.settle;
 }
 
@@ -111,38 +121,72 @@ export function applyShadowDetail(root: THREE.Object3D): void {
  * frames a second, and Auto would have halved the pixels for good). Sampling starts again a settle after.
  */
 export function holdQuality(): void {
-  frames = time = 0;
+  restart();
   settle = AUTO_QUALITY.settle;
 }
 
-/** Feed the real (unclamped) frame delta each frame while the game is running. */
-export function sampleQuality(dt: number): void {
-  if (setting !== 'auto' || atBottom()) return;
-  if (dt > 0.25) return;                 // tab switch, breakpoint: not a performance signal
-  if (settle > 0) { settle -= dt; return; }   // let a level change take effect first
-  frames++; time += dt;
-  if (time < AUTO_QUALITY.window) return;
-  if (frames / time < AUTO_QUALITY.minFps) {
-    stepDown();
-    writeAuto();
+/** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
+ *  (`low@518400`), for the performance trace to mark. */
+export function sampleQuality(dt: number): string | null {
+  if (setting !== 'auto' || atBottom()) return null;
+  if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
+  if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
+  quick.push(dt);
+  quickTime += dt;
+  // (far below the target, judged by the window's middle frame, which a hitch doesn't move: a step a second, its
+  // pixels cut by how far below; a device too slow for the 4 s path's frames, over `HITCH` each, stepped never)
+  if (quickTime >= AUTO_QUALITY.quickWindow) {
+    const fps = 1 / median(quick);
+    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(fps);
   }
-  frames = time = 0;
+  // (the 4 s path as it always was: the mean of frames up to `HITCH`, half the pixels a step)
+  if (dt > HITCH) return null;
+  frames++; time += dt;
+  if (time < AUTO_QUALITY.window) return null;
+  const fps = frames / time;
+  restart();
+  return fps < AUTO_QUALITY.minFps ? step(AUTO_QUALITY.minFps / 2) : null;
+}
+
+/** a frame the 4 s path leaves out of its mean (s): a hitch, not the device's pace */
+const HITCH = 0.25;
+
+/** A step down at `fps`, kept for the next session; what it went to (`low@518400`). */
+function step(fps: number): string {
+  restart();
+  stepDown(fps);
+  writeAuto();
+  return `${level}@${Math.round(scenePixels())}`;
+}
+
+/** The middle of `values` (sorted in place). */
+function median(values: number[]): number {
+  values.sort((a, b) => a - b);
+  return values[Math.floor(values.length / 2)];
 }
 
 /** Whether Auto has nothing left to lower: Low, at its fewest pixels (or the screen's own, if fewer). */
 const atBottom = (): boolean => level === 'low' && scenePixels() <= AUTO_QUALITY.fewest * AT_FLOOR;
 
-/** Auto's step down: High's pixels halved to `AUTO_QUALITY.highFloor`, then a level (the pixels kept), then Low's
- *  pixels halved to `AUTO_QUALITY.fewest`. */
-function stepDown(): void {
+/** Auto's step down at `fps`: High's pixels cut to `AUTO_QUALITY.highFloor`, then a level (the pixels kept), then
+ *  Low's pixels cut to `AUTO_QUALITY.fewest`, each cut by how far `fps` is below the target (`pixelsKept`). */
+function stepDown(fps: number): void {
   const now = scenePixels();
+  const kept = now * pixelsKept(fps);
   if (level === 'high' && now > AUTO_QUALITY.highFloor * AT_FLOOR) {
-    apply('high', Math.max(AUTO_QUALITY.highFloor, now / 2));
+    apply('high', Math.max(AUTO_QUALITY.highFloor, kept));
     return;
   }
   if (level !== 'low') {
     apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1], budget);
     return;
   }
-  apply('low', Math.max(AUTO_QUALITY.fewest, now / 2));
+  apply('low', Math.max(AUTO_QUALITY.fewest, kept));
 }
+
+/** The share of its pixels a step keeps at `fps`: the frame rate's share of the target, from half to `deepest`. */
+const pixelsKept = (fps: number): number =>
+  Math.min(0.5, Math.max(AUTO_QUALITY.deepest, fps / AUTO_QUALITY.minFps));
+
+/** Whether Auto has stepped as far down as it goes (a harness's: `lab auto`). */
+export const autoAtBottom = (): boolean => atBottom();
