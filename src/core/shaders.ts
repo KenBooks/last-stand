@@ -306,6 +306,41 @@ type Program = THREE.WebGLProgram & { isReady(): boolean; getAttributes(): unkno
  *  behind the lobby (a frame at 144 Hz is 7 ms, the lobby's own 5 of it) */
 const UPLOAD_SLICE_MS = 25, UPLOAD_SLICE_BEHIND_MS = 2;
 
+/** Behind the lobby, the most of a frame a root's compile takes before the page is let paint (ms), and the meshes
+ *  compiled at a time between looks at the clock: a part's root compiled in one task held an S25 Edge's village
+ *  160 to 215 ms a part (its perf traces), each program's three-side build a few ms on a phone's CPU. */
+const COMPILE_SLICE_BEHIND_MS = 8, MESHES_AT_A_TIME = 6;
+
+/** The meshes (lines, points) under `root` that a compile makes programs for, in `MESHES_AT_A_TIME`s. */
+function meshesIn(root: THREE.Object3D): THREE.Object3D[][] {
+  const meshes: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    const drawable = (o as THREE.Mesh).isMesh || (o as THREE.Line).isLine || (o as THREE.Points).isPoints;
+    if (drawable && (o as THREE.Mesh).material) meshes.push(o);
+  });
+  const lots: THREE.Object3D[][] = [];
+  for (let at = 0; at < meshes.length; at += MESHES_AT_A_TIME) lots.push(meshes.slice(at, at + MESHES_AT_A_TIME));
+  return lots;
+}
+
+/** `run` with only `lot`'s meshes under `root` holding their materials (three's compile, and `compileCasters`, pass
+ *  over a mesh with none), every one put back after, in the same task: no frame sees them go. */
+function onlyThese<T>(root: THREE.Object3D, lot: THREE.Object3D[], run: () => T): T {
+  const kept = new Set(lot);
+  const set: { mesh: THREE.Mesh; material: THREE.Mesh['material'] }[] = [];
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (kept.has(o) || !mesh.material) return;
+    set.push({ mesh, material: mesh.material });
+    mesh.material = null as unknown as THREE.Mesh['material'];
+  });
+  try {
+    return run();
+  } finally {
+    for (const { mesh, material } of set) mesh.material = material;
+  }
+}
+
 /**
  * `compile` run with what no pass draws with its own material left out (put back after, where it was): the crowds'
  * bodies' own meshes, which their crowd draws (models/crowd.ts), and the casters the shadow map alone draws
@@ -465,11 +500,14 @@ export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () =>
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
 
-/** What a warm-up took (ms): its compile and its draw (each one task, the compile a task a root with `step`), its
- *  wait for the maps it draws with (`WarmUp.before`) and their uploads, and the wait for its programs' links (the
- *  GPU's process's work: long where no program came from a cache, a first visit's); and whether it was given up on
- *  as cold (`WarmUp.giveUpMs`: nothing drawn). */
-export interface WarmedUp { compileMs: number; mapsMs: number; uploadsMs: number; linksMs: number; drawMs: number; cold: boolean }
+/** What a warm-up took (ms): its compile and its draw (each one task, the compile with `step` in slices of a few ms,
+ *  `compileStepMs` its longest), its wait for the maps it draws with (`WarmUp.before`) and their uploads, and the wait
+ *  for its programs' links (the GPU's process's work: long where no program came from a cache, a first visit's); and
+ *  whether it was given up on as cold (`WarmUp.giveUpMs`: nothing drawn). */
+export interface WarmedUp {
+  compileMs: number; compileStepMs: number; mapsMs: number; uploadsMs: number; linksMs: number; drawMs: number;
+  cold: boolean;
+}
 
 /** `run` with `out` taken out of their parents' lists (put back after, where they were): nothing else sees them go. */
 function without<T>(out: THREE.Object3D[], run: () => T): T {
@@ -554,20 +592,39 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   // loading screen stays live; the target is set because program variants depend on it
   renderer.setRenderTarget(target);
   let compileMs = 0;
+  let compileStepMs = 0;
   const materials = new Set<THREE.Material>();
-  for (const root of compiled) {
-    const at = performance.now();
+  const compileOf = (root: THREE.Object3D): void => {
     const made = without(leaveOut, () => withoutUndrawn(root, () => renderer.compile(root, camera, scene)));
     const shadows = without(leaveOut, () => compileShadows(renderer, root, camera, scene));
-    compileMs += performance.now() - at;
     for (const material of [...made, ...shadows]) materials.add(material);
-    // (behind the lobby a root's programs a frame: each is brought in from the GPU's cache on its process's main
-    // thread, which draws the lobby's frames too)
-    if (step) {
+  };
+  for (const root of compiled) {
+    if (!step) {
+      const at = performance.now();
+      compileOf(root);
+      compileMs += performance.now() - at;
+      compileStepMs = Math.max(compileStepMs, performance.now() - at);
+      continue;
+    }
+    // (behind the lobby a slice of a root's programs a frame: each is built by three on the page's main thread and
+    // brought in from the GPU's cache on its process's main thread, which draws the lobby's frames too)
+    let slice = performance.now();
+    for (const lot of meshesIn(root)) {
+      const at = performance.now();
+      onlyThese(root, lot, () => compileOf(root));
+      compileMs += performance.now() - at;
+      if (performance.now() - slice < COMPILE_SLICE_BEHIND_MS) continue;
+      compileStepMs = Math.max(compileStepMs, performance.now() - slice);
       renderer.setRenderTarget(prev);
       await step();
       renderer.setRenderTarget(target);
+      slice = performance.now();
     }
+    compileStepMs = Math.max(compileStepMs, performance.now() - slice);
+    renderer.setRenderTarget(prev);
+    await step();
+    renderer.setRenderTarget(target);
   }
   renderer.setRenderTarget(prev);
   for (const material of how.also?.() ?? []) materials.add(material);
@@ -586,7 +643,7 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   const ready = await linked(renderer, materials, { done: links, poll, step, giveUpMs: how.giveUpMs });
   const linksMs = performance.now() - at;
   pinPrograms(renderer);
-  if (!ready) return { compileMs, mapsMs, uploadsMs, linksMs, drawMs: 0, cold: true };
+  if (!ready) return { compileMs, compileStepMs, mapsMs, uploadsMs, linksMs, drawMs: 0, cold: true };
   await step?.();
   renderer.setRenderTarget(target);
   at = performance.now();
@@ -604,7 +661,7 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   pinPrograms(renderer);
   for (const o of objects) scene.remove(o);
   progress?.(1);
-  return { compileMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
+  return { compileMs, compileStepMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
 }
 
 /**
@@ -680,5 +737,5 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
   }
   const drawMs = performance.now() - at;
   progress?.(1);
-  return { compileMs, mapsMs: 0, uploadsMs: 0, linksMs, drawMs, cold: false };
+  return { compileMs, compileStepMs: compileMs, mapsMs: 0, uploadsMs: 0, linksMs, drawMs, cold: false };
 }

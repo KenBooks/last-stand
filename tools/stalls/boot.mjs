@@ -70,13 +70,33 @@ function writeBefore(value, read) {
  *  kept and the fight's programs never compiled, as after a visit that never fought). */
 const leftCold = (visit, options) => options.coldReturn && visit === VISITS[0];
 
+/** Whether `visit` stays in the lobby till the fight has warmed behind it (`--warm-behind`): the return alone, as a
+ *  first visit warms nothing behind its lobby (no build of this code warmed here before: `src/game/warmup.ts`), and
+ *  its fight waited for a Start that never came, the run's 120 s out. */
+const staysBehind = (visit, options) => options.warmBehind && visit !== VISITS[0];
+
+/** How long `--warm-behind` waits for the fight to warm behind the lobby (ms): one given up there waits for a Start
+ *  that never comes (on a phone's CPU, the lobby's own frames ran past what it may hold, and the run timed out). */
+const BEHIND_MOST_MS = 30_000;
+
 /** What a visit left without pressing Start says of the fight, read off the page as it's left (`fightWarm`): a
  *  build that warms the fight before its lobby (production before the fight's loading bar) left it warm all the
- *  same, and its return is no cold one. */
+ *  same, and its return is no cold one; `behind`, a return given up behind its lobby (`--warm-behind`). */
 const LEFT_NOTES = {
   cold: 'left without pressing Start, the fight never compiled',
   warm: 'left without pressing Start, its fight warm all the same (warmed before the lobby): not a cold return',
+  behind: `the fight not warm ${BEHIND_MOST_MS / 1000} s into the lobby: given up behind it (a frame held past the `
+    + "game's HELD_MOST_MS, or a part cold), the rest left for Start",
 };
+
+/** The lobby watched till the fight has warmed behind it and `AFTER_WARM_MS` more: null, or `behind` where it was
+ *  given up there (`BEHIND_MOST_MS`). */
+async function warmedBehind(page) {
+  const warm = await page.waitForFunction(fightWarm, null, { timeout: BEHIND_MOST_MS, polling: 250 })
+    .then(() => true, () => false);
+  await page.waitForTimeout(AFTER_WARM_MS);
+  return warm ? null : 'behind';
+}
 
 /** One visit of `page` traced: loaded as `visit` loads it (the window taken to `--resize`'s size and back as it
  *  loads, `windFit.mjs`), the lobby revealed and watched `options.seconds` more,
@@ -100,9 +120,11 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
-    if (!options.warmBehind) await page.evaluate(startIfCold);
-    await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
-    if (options.warmBehind) await page.waitForTimeout(AFTER_WARM_MS);
+    if (staysBehind(visit, options)) left = await warmedBehind(page);
+    else {
+      await page.evaluate(startIfCold);
+      await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+    }
   }
   if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
   const builds = options.builds ? await page.evaluate(readBuilds) : null;
