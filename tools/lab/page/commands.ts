@@ -19,6 +19,7 @@ import type { TrailOptions } from './trail';
 import type { LightOptions } from './light';
 import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
+import type { SceneCostOptions } from './sceneCost';
 import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
@@ -325,6 +326,12 @@ export async function light(lab: Lab, command: LightOptions): Promise<Report> {
 export async function fire(lab: Lab, command: FireOptions): Promise<Report> {
   const { fire: fireRound } = await import('./fire');
   return fireRound(lab, command);
+}
+
+/** `lab scenecost`, one scenario: what each part of the scene pass takes of the GPU, at the screen's pixels. */
+export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Report> {
+  const { sceneCost: sceneCostRound } = await import('./sceneCost');
+  return sceneCostRound(lab, command);
 }
 
 /** `lab envcost`, one scenario: what the environment's lookups take of the frame on the GPU, with it and without in
