@@ -22,6 +22,11 @@ const APP = 'last-stand-coop-1';
 /** the relay server every game meets on (`VITE_COOP_SERVER` at build time, `?server=` to try another) */
 const SERVER: string = import.meta.env.VITE_COOP_SERVER ?? 'wss://ls.wellscoped.dev';
 
+/** The server's address over HTTP(S), as `?server=` or the build names it (its health check, the traces it takes:
+ *  `src/perf/upload.ts`). */
+export const serverHttp = (): string =>
+  (new URLSearchParams(location.search).get('server') ?? SERVER).replace(/^ws/, 'http').replace(/\/+$/, '');
+
 /** The server didn't answer: co-op isn't available (said so plainly, not as an error). */
 export class ServerDown extends Error {}
 /** what a player is told when the co-op server doesn't answer */
@@ -34,7 +39,7 @@ export const SERVER_DOWN = "The co-op server is offline, so playing together isn
 export async function serverUp(): Promise<boolean> {
   const q = new URLSearchParams(location.search);
   if (q.get('net') === 'local') return true;
-  const url = (q.get('server') ?? SERVER).replace(/^ws/, 'http').replace(/\/+$/, '') + '/health';
+  const url = serverHttp() + '/health';
   try {
     const r = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(CHECK_TIMEOUT * 1000) });
     return r.ok && (await r.text()).trim() === 'ok';

@@ -20,7 +20,8 @@
     "preview:test": "node --test \"scripts/preview/test/*.test.mjs\"",
     "previews:test": "node --test \"server/previews/test/*.test.mjs\"",
     "stalls": "node tools/stalls/stalls.mjs",
-    "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\""
+    "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
+    "traces:test": "node --test \"server/traces/test/*.test.mjs\""
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",

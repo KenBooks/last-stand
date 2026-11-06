@@ -10,6 +10,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
+import { recorder } from '../perf/recorder';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveProps } from '../world/collision';
@@ -611,6 +612,7 @@ export class Player {
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
     if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing, ...(s.def.draw ? { k: power } : {}), ...(target.y > 0 ? { y: Math.round(target.y * 100) / 100 } : {}) });
+    if (this.local) recorder.mark(`cast ${s.def.impl}`);
     s.impl.cast(this, s.def, target, power);
   }
 
@@ -741,6 +743,7 @@ export class Player {
     // a broken guard can't be raised again until the shield recovers
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
+    if (this.local) recorder.mark(`channel ${s.def.impl}`);
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
     this.queued = null;
     actionSink?.({ t: 'chs', s: s.def.impl, k: key });

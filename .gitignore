@@ -23,6 +23,8 @@ tools/photos/__pycache__/
 
 # the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
 tools/lab/out/
+# the token the lab reads performance traces with (npm run lab -- trace): a secret, never in the repo
+tools/lab/traces.env
 tools/stalls/out/
 
 server/relay/node_modules/

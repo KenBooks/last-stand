@@ -17,7 +17,7 @@ const CANARY_WIDTH = '300px';
 export const DECISION_CANARY = { name: 'runs onto', what: 'the choice too narrow for its labels' };
 
 /** The lines `element`'s text is laid out on: its boxes, each starting below the line before it. */
-function linesOf(element: HTMLElement): number {
+export function linesOf(element: HTMLElement): number {
   const range = document.createRange();
   range.selectNodeContents(element);
   const rects = [...range.getClientRects()].filter((rect) => rect.width > 0).sort((a, b) => a.top - b.top);

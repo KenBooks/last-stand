@@ -1,0 +1,9 @@
+{
+  "name": "last-stand-traces",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Last Stand performance traces: slow games send theirs with their player's consent, agents read them",
+  "type": "module",
+  "main": "serve.mjs",
+  "scripts": { "start": "node serve.mjs", "test": "node --test test/*.test.mjs" }
+}

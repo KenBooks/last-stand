@@ -30,7 +30,7 @@ import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { showDecision } from '../../../src/ui/hud';
 import { closeDecision, DECISION_CANARY, decisionShown } from './uiDecision';
-import { hideSummary, showPause, showSummary } from '../../../src/ui/menus';
+import { hideSummary, showSummary } from '../../../src/ui/menus';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
 import { openBook } from '../../../src/ui/loadoutEditor';
@@ -40,6 +40,11 @@ import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
+import {
+  ABANDON_CANARY, PAUSE_CANARY, closePause, closePauseAbandon, openPause, openPauseAbandon, pauseAbandonChecked,
+  pauseShown,
+} from './uiPause';
+import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import {
@@ -51,9 +56,10 @@ import {
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
-  | 'logLobby'
+  | 'logLobby' | 'perfAsk'
   | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
-  | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch';
+  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
+  | 'perfAskTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -65,7 +71,8 @@ export interface UiOptions {
 
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
-  'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log',
+  'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch',
 ];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
@@ -689,6 +696,8 @@ let skillSlots = 0;
 let openedBy = 'the mouse';
 /** with the canary, each skill's tooltip made as tall as the window: the check must find it past the window */
 let tallTips = false;
+/** whether this command plants its canaries (`--canary`) */
+let canaryAsked = false;
 
 /** A block as tall as the window, the canary's. */
 function windowTall(): HTMLElement {
@@ -884,6 +893,7 @@ const STEPS: Record<UiState, Steps> = {
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
+  perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
   litTouch: {
@@ -894,7 +904,17 @@ const STEPS: Record<UiState, Steps> = {
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
   perf: { open: () => setPerfHud(true, false), close: () => setPerfHud(false, false) },
   decision: { open: showDecision, close: closeDecision, check: decisionShown },
-  pause: { open: () => showPause(true), close: () => showPause(false) },
+  perfAskBreak: { open: openPerfAskBreak, close: closePerfAsk, check: (canary) => perfAskShown('perfAskBreak', canary) },
+  pause: { open: () => openPause('controls', canaryAsked), close: closePause, check: () => pauseShown('controls') },
+  pauseSettings: {
+    open: () => openPause('settings', canaryAsked), close: closePause, check: () => pauseShown('settings'),
+  },
+  // (held through, it abandons the run: the next run state sets one up again)
+  pauseAbandon: {
+    open: (lab) => openPauseAbandon(lab, canaryAsked),
+    close: () => { closePauseAbandon(); runReady = false; },
+    check: (_canary, lab) => pauseAbandonChecked(lab),
+  },
   summary: { open: openSummary, close: hideSummary },
   skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
   log: { open: openLog, close: closeLog, check: logShown },
@@ -902,6 +922,7 @@ const STEPS: Record<UiState, Steps> = {
   logTouch: { open: openLogTouch, close: closeLog, check: logTouchShown },
   hudTouch: { open: openHudTouch, close: () => undefined, check: hudTouchShown },
   decisionTouch: { open: openDecisionTouch, close: closeDecisionTouch, check: decisionTouchShown },
+  perfAskTouch: { open: openPerfAskTouch, close: closePerfAsk, check: (canary) => perfAskShown('perfAskTouch', canary) },
 };
 
 /** whether this page's run is set up for the run's states (each command's page is booted for it: false at first) */
@@ -922,6 +943,7 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   }
   const steps = STEPS[state];
   tallTips = !!options.canary;
+  canaryAsked = !!options.canary;
   plantLitCanary(!!options.canary);
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
@@ -942,6 +964,16 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const jumped = digits.problems.some((problem) => problem.includes(where));
     lines.push(`  canary: old-style digits in ${where} ${jumped ? 'caught' : 'went unseen'}`);
     if (!jumped) missed.push(`${state}: the canary's old-style digits in ${where} went unseen`);
+  }
+  if (state === 'pauseAbandon') {
+    const caught = found.problems.some((problem) => problem.includes(ABANDON_CANARY.name));
+    lines.push(`  canary: ${ABANDON_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${ABANDON_CANARY.what} went unseen`);
+  }
+  if (state === 'pause' || state === 'pauseSettings') {
+    const caught = found.problems.some((problem) => problem.includes(PAUSE_CANARY.name));
+    lines.push(`  canary: ${PAUSE_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${PAUSE_CANARY.what} went unseen`);
   }
   for (const { name, what } of state === 'glow' ? Object.values(GLOW_CANARIES) : []) {
     const caught = found.problems.some((problem) => problem.includes(name));
@@ -974,6 +1006,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));
     lines.push(`  canary: ${DECISION_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${DECISION_CANARY.what} went unseen`);
+  }
+  if (state === 'perfAskBreak' || state === 'perfAskTouch') {
+    const caught = found.problems.some((problem) => problem.includes(ASK_CANARY.name));
+    lines.push(`  canary: ${ASK_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${ASK_CANARY.what} went unseen`);
   }
   if (state === 'hudTouch' || state === 'decisionTouch') {
     const { name, what } = TOUCH_CANARIES[state];

@@ -3,6 +3,7 @@
 import { TIPS } from '../data/tips';
 import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
 import { qualityLevel } from '../core/quality';
+import { recorder } from '../perf/recorder';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
 const sub = (): HTMLElement => el().querySelector<HTMLElement>('.ld-sub')!;
@@ -18,6 +19,7 @@ function showTip(): void {
 export async function loadingStep(label: string, progress: number): Promise<void> {
   if (!tipTimer) { showTip(); tipTimer = window.setInterval(showTip, 6000); }
   sub().textContent = label;
+  recorder.bootStep(label);
   el().style.setProperty('--p', String(progress));
   await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r)));
 }

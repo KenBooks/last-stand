@@ -1,5 +1,6 @@
 // Sanctuary (main menu with equipment & stash), summary, pause and help modals.
 import { G } from '../state';
+import { holdToConfirm, resetHold } from './holdButton';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
@@ -35,6 +36,7 @@ import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
+import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -170,7 +172,14 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
-  $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
+  // held 2 s, never a click: a stray click or tap lost the run's spoils
+  holdToConfirm($('#btn-abandon'), { ms: ABANDON_HOLD_MS, hint: 'Hold to abandon', done: () => { sfx.click(); hooks.abandon(); } });
+  document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
+    b.onclick = () => { sfx.click(); pauseTab(b.dataset.pauseTab as PauseTab); };
+  });
+  document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
+  });
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
@@ -786,6 +795,10 @@ export function hideSummary(): void { $('#summary').classList.add('hidden'); hid
 const REVEAL_STEP = 0.22;
 let revealTimers: ReturnType<typeof setTimeout>[] = [];
 function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers = []; }
+function renderTraceOptions(): void {
+  const t = traceConsent();
+  document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => b.classList.toggle('active', b.dataset.t === t));
+}
 function renderQualityOptions(): void {
   const s = qualitySetting();
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));
@@ -844,18 +857,40 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
+/** the pause menu's pages: the controls (shown first each time it opens) and the settings */
+export type PauseTab = 'controls' | 'settings';
+
+/** The pause menu's page `tab` shown, the other hidden in the same cell (the box keeps its size). */
+export function pauseTab(tab: PauseTab): void {
+  document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
+    const on = b.dataset.pauseTab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll<HTMLElement>('[data-pause-page]').forEach((page) => {
+    page.classList.toggle('off', page.dataset.pausePage !== tab);
+  });
+}
+
+/** how long Abandon run is held before it abandons (ms) */
+export const ABANDON_HOLD_MS = 2000;
+
 export function showPause(v: boolean): void {
+  resetHold($('#btn-abandon'));
   if (v) {
+    pauseTab('controls');
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
+    renderTraceOptions();
     renderHdrOptions();
     renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
-    $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';
+    // (short beside the title: what it costs is its tooltip)
+    $('#btn-abandon').textContent = isCoop() ? 'Leave the run' : 'Abandon run';
     $('.pause-note').classList.toggle('hidden', !isCoop() || G.mode !== 'run');
   }
   $('#pause').classList.toggle('hidden', !v);
