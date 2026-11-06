@@ -14,7 +14,7 @@
 // a second, flickered the loading screen as it left for the lobby)
 #diag.booting { display: none; }
 #diag > * { flex-shrink: 0; pointer-events: auto; }
-body.touch #diag { --top: #{touch(128px)}; }
+body.touch #diag { --top: #{touch(180px)}; }
 #perf { width: 212px; padding: 9px 11px 8px;
   font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; color: #cfe9d8; text-align: left;
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);

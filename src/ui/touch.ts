@@ -122,12 +122,32 @@ export function initTouch(): void {
   window.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 
   $('#btn-pause').addEventListener('click', () => input.pressed.add('escape'));
+  initFullScreen();
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
   ring.name = 'touch-aim-ring';
   ring.visible = false;
   ring.renderOrder = 5;
   G.scene.add(ring);
+}
+
+/**
+ * The full screen icon under the pause button, as the pause menu's Fullscreen: the browser's bars take a lot of a
+ * phone's screen (from play, "lets also add full screen button near bag, just the icon"). Its arrows say which way it
+ * goes, and it's left out where the page can't go full screen (an iPhone's).
+ */
+function initFullScreen(): void {
+  const full = $('#btn-full');
+  full.classList.toggle('cant', !document.fullscreenEnabled);
+  const syncFull = (): void => { full.classList.toggle('on', !!document.fullscreenElement); };
+  full.addEventListener('click', () => {
+    const asked = document.fullscreenElement
+      ? document.exitFullscreen()
+      : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    asked.catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', syncFull);
+  syncFull();
 }
 
 /** Rebuild the skill buttons from the player's loadout (and gear, which can change a key's skill). */

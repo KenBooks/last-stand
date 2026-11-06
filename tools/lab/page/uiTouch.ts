@@ -22,7 +22,7 @@ export interface TouchFound {
 /** the most a top corner's control may stand in from its edge of the window (css px) */
 const EDGE_PX = 24;
 /** the touch HUD's controls round the screen's corners, which none may lie over another */
-const CORNERS = ['#btn-pause', '#btn-scores', '#bottombar', '#minimap-wrap', '#touch-skills'];
+const CORNERS = ['#btn-pause', '#btn-full', '#btn-scores', '#bottombar', '#minimap-wrap', '#touch-skills'];
 /** a short screen's height (css px; the short-screen layout, src/ui/AGENTS.md) */
 const SHORT_SCREEN = 520;
 /** the most of a short screen's height the choice after a wave may reach down */
@@ -94,7 +94,7 @@ function cornersFound(): TouchFound {
   const lines = [`  the safe area's insets: ${insets.left} px left, ${insets.right} px right`];
   const problems: string[] = [];
   if (!document.body.classList.contains('touch')) problems.push('hudTouch: the tap left the page out of touch mode');
-  for (const selector of ['#btn-pause', '#btn-scores', '#bottombar']) {
+  for (const selector of ['#btn-pause', '#btn-full', '#btn-scores', '#bottombar']) {
     const box = boxOf(selector);
     if (!box) continue;
     lines.push(`  ${selector} from the left edge: ${box.left.toFixed(1)} px`);
