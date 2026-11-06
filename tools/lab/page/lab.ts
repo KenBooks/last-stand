@@ -877,6 +877,20 @@ export class Lab {
     await this.click(at);
   }
 
+  /**
+   * The mouse's left button pressed at `at` (css px) and held there until `mouseUp`, as a mouse holds it (a button
+   * held to act: the pause menu's Abandon run). No frame runs.
+   */
+  async mouseDown(at: PagePoint): Promise<void> {
+    await this.mouseTo(at);
+    await this.sendMouse('mousePressed', at);
+  }
+
+  /** The mouse's left button let go at `at` (css px). No frame runs. */
+  async mouseUp(at: PagePoint): Promise<void> {
+    await this.sendMouse('mouseReleased', at);
+  }
+
   /** The mouse moved to `at` (css px) as a mouse moves, its events and all. No frame runs. */
   async mouseTo(at: PagePoint): Promise<void> {
     // (the browser makes no pointer move of a move to where the mouse is: a second click there waited for one)

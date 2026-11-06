@@ -94,6 +94,14 @@
 .pb-top #btn-abandon { grid-column: 1; justify-self: start; }
 .pb-top #btn-resume { grid-column: 3; justify-self: end; }
 .pb-top .btn { max-width: 100%; padding-left: 18px; padding-right: 18px; }
+/* a button held to act (ui/holdButton.ts): its fill runs across it as it's held, and let go early it says to hold */
+.hold-btn { position: relative; isolation: isolate; overflow: hidden; touch-action: none; user-select: none;
+  -webkit-user-select: none; -webkit-touch-callout: none; }
+.hold-btn::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; transform: scaleX(0);
+  transform-origin: left; background: linear-gradient(90deg, rgba(255,140,90,.25), rgba(255,170,110,.55)); }
+.hold-btn.holding::before { transform: scaleX(1); transition: transform var(--hold-ms, 2s) linear; }
+.hold-btn.hinting::after { content: attr(data-hint); position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; background: inherit; white-space: nowrap; font-size: .85em; }
 .pb-title { grid-column: 2; position: relative; width: min(300px, 34vw / var(--ui, 1)); aspect-ratio: 600 / 120; }
 .pb-title svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .pb-title .logo-glow { opacity: .75; }

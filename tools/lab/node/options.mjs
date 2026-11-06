@@ -26,7 +26,7 @@ export const UI_STATES = [
   'behindProps',
   'logLobby', 'perfAsk',
   'skillTipsTouch', 'sheetTouch', 'litTouch',
-  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'summary', 'skillTips', 'log', 'logTouch',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch', 'perfAskTouch',
 ];
 

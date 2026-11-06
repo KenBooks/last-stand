@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,
-perfAskBreak,pause,pauseSettings,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch`, every one by default (the
+perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch`, every one by default (the
 performance report's prompt, `page/uiPerfAsk.ts`: over the lobby, under the choice after a wave and so on touch, inside
 the window, each button on one line, a finger's 28 px tall on touch, over none of the choice, the wave's badge, the
 bars or the touch HUD's corners; `--canary` moves it down onto the choice, which must be found):
@@ -82,7 +82,10 @@ narrow for them, which must be found; put away at once as it closes: folded back
 timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`, as it
 opens every time) and its Settings tab (`pauseSettings`), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
-`--canary` makes a settings row 600 px tall, which must make it scroll), the run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
+`--canary` makes a settings row 600 px tall, which must make it scroll), Abandon run held as a player holds it
+(`pauseAbandon`, with `lab.mouseDown`/`mouseUp`: clicked, it says to hold and stays; held a second and let go, it
+fills and stays; held 2 s, it leaves the run; `--canary` makes its hold 0 ms, and the click must be caught abandoning),
+the run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
 tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
 listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as

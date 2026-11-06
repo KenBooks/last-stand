@@ -1,5 +1,6 @@
 // Sanctuary (main menu with equipment & stash), summary, pause and help modals.
 import { G } from '../state';
+import { holdToConfirm, resetHold } from './holdButton';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
@@ -171,7 +172,8 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
-  $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
+  // held 2 s, never a click: a stray click or tap lost the run's spoils
+  holdToConfirm($('#btn-abandon'), { ms: ABANDON_HOLD_MS, hint: 'Hold to abandon', done: () => { sfx.click(); hooks.abandon(); } });
   document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
     b.onclick = () => { sfx.click(); pauseTab(b.dataset.pauseTab as PauseTab); };
   });
@@ -870,7 +872,11 @@ export function pauseTab(tab: PauseTab): void {
   });
 }
 
+/** how long Abandon run is held before it abandons (ms) */
+export const ABANDON_HOLD_MS = 2000;
+
 export function showPause(v: boolean): void {
+  resetHold($('#btn-abandon'));
   if (v) {
     pauseTab('controls');
     renderControlsHelp();
