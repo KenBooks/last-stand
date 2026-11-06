@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { needsDeploy, openPrFor, stageBuilding } from './building.mjs';
-import { buildingMessage, itemMessage, say } from './comments.mjs';
+import { buildingMessage, itemMessage, publishingMessage, say } from './comments.mjs';
 import { findItems } from './find.mjs';
 import { artifactId, deployPages } from './deploy.mjs';
 import { commitChanges, headCommit } from './git.mjs';
@@ -18,6 +18,7 @@ const workspace = (...parts) => path.join(env('GITHUB_WORKSPACE'), ...parts);
 const temp = (...parts) => path.join(env('RUNNER_TEMP'), ...parts);
 const pagesDir = () => workspace('pages');
 const template = () => fs.readFileSync(workspace('trusted', '.github', 'preview-index.html'), 'utf8');
+const runUrl = (context) => `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 const files = { items: () => temp('preview-items.json'), staged: () => temp('preview-staged.json') };
 
 /** Where Pages serves the site, as its settings have it (a custom domain's, `https://last-stand.cc`, once one is set:
@@ -121,6 +122,10 @@ export async function findPublish({ github, context, core, exec }) {
   fs.writeFileSync(files.staged(), '[]');
   core.setOutput('count', String(items.length));
   core.setOutput('stage', String(items.some((item) => item.mode !== 'failed')));
+  // from here the comment links this run, which the deploy and the probes still take minutes of
+  for (const item of items.filter((each) => each.mode === 'publish')) {
+    await say(github, repo, item.number, publishingMessage({ sha: item.sha, run: runUrl(context) }));
+  }
 }
 
 export function stagePublish({ core }) {
@@ -178,8 +183,7 @@ export async function recordPublish({ core }) {
 export async function commentPublish({ github, context }) {
   const repo = context.repo;
   const results = new Map((readJson(files.staged()) ?? []).map((result) => [result.number, result]));
-  const thisRun = `${context.serverUrl}/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
-  const links = { origin: env('SITE_ORIGIN'), thisRun };
+  const links = { origin: env('SITE_ORIGIN'), thisRun: runUrl(context) };
   for (const item of readJson(files.items()) ?? []) {
     await say(github, repo, item.number, itemMessage(item, results.get(item.number), links));
   }

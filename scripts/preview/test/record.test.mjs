@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { MARKER, itemMessage, say } from '../comments.mjs';
+import { MARKER, itemMessage, publishingMessage, say } from '../comments.mjs';
 import { commitChanges, commitMessage } from '../git.mjs';
 import { recordItems, waitServed } from '../record.mjs';
 import { REPO, fakeGithub, readJsonFile, tempDir, writeFiles } from './fakes.mjs';
@@ -128,6 +128,9 @@ test('each item gets the comment its result calls for', () => {
   assert.match(itemMessage(publish, undefined, links), /publication failed/);
   assert.match(itemMessage({ ...publish, mode: 'failed' }, undefined, links), /build failed[\s\S]*https:\/\/build/);
   assert.equal(itemMessage({ number: 7, mode: 'remove' }, { state: 'removed' }, links), '**PR preview:** removed.');
+  const publishing = publishingMessage({ sha: SHA, run: 'https://run' });
+  assert.match(publishing, /built `1234567a+`, now publishing it/);
+  assert.match(publishing, /\[Watch it publish\]\(https:\/\/run\)/);
 });
 
 test("the sticky comment is the bot's marked one, edited; else a new one", async () => {
