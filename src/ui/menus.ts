@@ -172,6 +172,9 @@ export function initMenus(h: MenuHooks): void {
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
+  document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
+    b.onclick = () => { sfx.click(); pauseTab(b.dataset.pauseTab as PauseTab); };
+  });
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
     b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
   });
@@ -852,8 +855,24 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
+/** the pause menu's pages: the controls (shown first each time it opens) and the settings */
+export type PauseTab = 'controls' | 'settings';
+
+/** The pause menu's page `tab` shown, the other hidden in the same cell (the box keeps its size). */
+export function pauseTab(tab: PauseTab): void {
+  document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
+    const on = b.dataset.pauseTab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll<HTMLElement>('[data-pause-page]').forEach((page) => {
+    page.classList.toggle('off', page.dataset.pausePage !== tab);
+  });
+}
+
 export function showPause(v: boolean): void {
   if (v) {
+    pauseTab('controls');
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
@@ -864,7 +883,8 @@ export function showPause(v: boolean): void {
     renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
-    $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';
+    // (on two short lines beside the title: on one it wrapped wherever it was cut)
+    $('#btn-abandon').innerHTML = `${isCoop() ? 'Leave the run' : 'Abandon run'}<small>spoils lost</small>`;
     $('.pause-note').classList.toggle('hidden', !isCoop() || G.mode !== 'run');
   }
   $('#pause').classList.toggle('hidden', !v);
