@@ -15,8 +15,8 @@ export interface AskFound {
 }
 
 /** what the prompt may not lie over */
-const AROUND = ['#decision', '#wavebadge', '#bottombar', '#btn-pause', '#btn-scores', '#minimap-wrap', '#touch-skills',
-  '#party', '#lobby-rail'];
+const AROUND = ['#decision', '#wavebadge', '#bottombar', '#btn-pause', '#btn-full', '#btn-scores', '#minimap-wrap',
+  '#touch-skills', '#party', '#lobby-rail'];
 /** the least height of its buttons on touch (css px): a finger's */
 const BUTTON_PX = 28;
 /** where a finger taps the world to put the page in touch mode, as shares of the window (clear of every control) */
