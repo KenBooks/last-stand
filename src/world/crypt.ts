@@ -21,6 +21,7 @@ export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05
 import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
+import { cullInCells, eachInstance, gridCell } from './culling';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { valueNoise3 } from '../core/patterns';
@@ -1018,7 +1019,8 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     mesh.count = used[k];
     mesh.castShadow = true;
     mesh.name = `dead trees: ${DEAD_TREES[k].preset}`;
-    scene.add(mesh);
+    // (a tree a cell, as the forest's: drawn whole, 101k of their 113k triangles in the top view lay outside it)
+    scene.add(...cullInCells(mesh, eachInstance));
   });
 }
 
@@ -1255,6 +1257,10 @@ function buildCandles(scene: THREE.Object3D, spots: [number, number, number][], 
   });
 }
 
+/** the floor's clutter culled in squares of 8 m, as the forest's grass and ferns: drawn whole, the 24 skulls alone
+ *  were 104k triangles a pass (4356 each), over half of them outside the top view (`lab draws`) */
+const CLUTTER_CELLS = gridCell(8);
+
 function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.Material, bone: THREE.Material, iron: THREE.Material): void {
   const r = (a: number, b: number) => a + rng() * (b - a);
   // rubble: on the dais, heaped along the wall, and round the columns' feet
@@ -1271,7 +1277,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     rocks.setMatrixAt(i, m.compose(p, q, s));
   }
   rocks.castShadow = rocks.receiveShadow = true;
-  scene.add(rocks);
+  scene.add(...cullInCells(rocks, CLUTTER_CELLS));
 
   // bones (a shaft with knobbed ends) & skulls
   const boneGeo = mergeGeometries([
@@ -1288,7 +1294,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     bones.setMatrixAt(i, m.compose(p, q, s));
   }
   bones.castShadow = true;
-  scene.add(bones);
+  scene.add(...cullInCells(bones, CLUTTER_CELLS));
   const skullGeo = skullGeometry();
   const skulls = new THREE.InstancedMesh(skullGeo, bone, 24);
   for (let i = 0; i < skulls.count; i++) {
@@ -1301,5 +1307,5 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     skulls.setMatrixAt(i, m.compose(p, q, s));
   }
   skulls.castShadow = true;
-  scene.add(skulls);
+  scene.add(...cullInCells(skulls, CLUTTER_CELLS));
 }
