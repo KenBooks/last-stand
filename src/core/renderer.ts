@@ -620,6 +620,30 @@ export async function initRenderer(container: HTMLElement) {
 const fitted = { w: 0, h: 0, dpr: 0 };
 /** the most pixels the scene renders: the quality's, and Auto's budget (core/quality.ts) */
 let pixelCap = Infinity;
+/** the MSAA samples the quality level asks for, at one pixel per css px (`samplesOn` divides them by the screen's) */
+let askedSamples = 0;
+/**
+ * The MSAA samples on a screen of `ratio` pixels per css px: the level's divided by it, to 4, 2 or none. A dense
+ * screen's pixels are already as fine as its samples would make an edge, and its samples cost the most: High's 4
+ * at a ratio of 3 is 2 at 1.5 and none at 3 (a laptop's 4K panel at 300% drew 6.1 Mpx with 4 samples a pixel, its
+ * integrated GPU's frame 119 ms, trace 11CW-PY3R). The share of an edge smoothed per css px stays about the same.
+ */
+function samplesOn(asked: number, ratio: number): number {
+  const share = asked / ratio;
+  if (share >= 4) return 4;
+  return share >= 2 ? 2 : 0;
+}
+/** Sets the scene target's MSAA to the level's samples on this screen (it's made again on its next use). */
+function fitSamples(): void {
+  const samples = samplesOn(askedSamples, canvasRatio());
+  if (sceneRT.samples !== samples) {
+    sceneRT.samples = samples;
+    sceneRT.dispose();
+  }
+  if (WEBGPU) setSceneSamples(samples);
+}
+/** The MSAA samples the scene renders with now. */
+export const sceneSamples = (): number => sceneRT.samples;
 let pixelBudget = Infinity;
 /** a scene of fewer pixels than the screen's renders a share of its pixels each way rounded down to a multiple of
  *  this (a power of two: the share times the screen's pixels comes out the same whatever the OS's scaling) */
@@ -668,6 +692,8 @@ function fitViewport(): boolean {
   applySceneRatio();
   composer.setSize(w, h);
   fitSceneTarget();
+  // (another screen's density asks for other samples)
+  if (!WEBGPU) fitSamples();
   return true;
 }
 
@@ -706,8 +732,8 @@ export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
   // (the canvas keeps the screen's pixels: the scene alone renders fewer)
   if (applySceneRatio()) fitSceneTarget();
   // a render target re-initialises with the new sample count on its next use
-  if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
-  if (WEBGPU) setSceneSamples(p.msaa);
+  askedSamples = p.msaa;
+  fitSamples();
 }
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }

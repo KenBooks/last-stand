@@ -11,7 +11,7 @@ import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
-import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
+import { gpuMarks, viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
 const COOKIE = 'last-stand-perf-hud';
@@ -420,7 +420,7 @@ function report(): string {
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt || timesGpu ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
-    `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used`,
+    `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
 
