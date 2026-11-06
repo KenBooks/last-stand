@@ -24,7 +24,7 @@ export interface HdrSettings {
   peak: number;
 }
 /** What HDR is doing: on, set off, no HDR display, a browser that can't, or starting. */
-export type HdrStatus = 'on' | 'off' | 'sdr-display' | 'unsupported' | 'starting' | 'reload';
+export type HdrStatus = 'on' | 'off' | 'sdr-display' | 'unsupported' | 'starting' | 'reload' | 'quality';
 
 const COOKIE = 'last-stand-hdr';
 const DEFAULTS: HdrSettings = { mode: 'auto', paper: 1, peak: 3 };
@@ -66,6 +66,8 @@ let onWebGPU: boolean | null = null;
 /** the lab's override of the display (null: the display's own) */
 let forced: boolean | null = FORCED === null ? null : FORCED === '1';
 let displayHdr = false;
+/** whether the quality level lets HDR show (`QualityPreset.hdr`): Low doesn't */
+let allowed = true;
 const listeners: (() => void)[] = [];
 
 const clamp = (value: number, [least, most]: readonly [number, number]): number => Math.min(most, Math.max(least, value));
@@ -83,7 +85,19 @@ function readSettings(): HdrSettings {
 /** Whether HDR is wanted now: the setting, the display (or the lab's override). */
 function wanted(): boolean {
   if (forced !== null) return forced;
-  return settings.mode === 'auto' && displayHdr;
+  return settings.mode === 'auto' && displayHdr && allowed;
+}
+
+/**
+ * Whether the quality level lets HDR show (Low doesn't): its way out costs a float16 drawing buffer and a copy of
+ * the frame onto the HDR canvas every frame, at the screen's own pixels. On a laptop's integrated GPU with a 4K
+ * panel (3840x2160) that was 26 ms of a 38 ms frame, the scene 4.6 (trace BN6P-FN12). The lab's override still
+ * holds.
+ */
+export function setHdrAllowed(on: boolean): void {
+  if (allowed === on) return;
+  allowed = on;
+  apply();
 }
 
 /** Starts the WebGPU side: its device and an extended-range canvas over the game's. Sets `unsupported` if it can't. */
@@ -188,6 +202,7 @@ export function hdrLevels(): { paper: number; peak: number } {
 export function hdrStatus(): HdrStatus {
   if (onWebGPU !== null && onWebGPU !== wanted()) return 'reload';
   if (hdrActive()) return 'on';
+  if (forced === null && settings.mode === 'auto' && displayHdr && !allowed) return 'quality';
   if (!wanted()) return forced === null && settings.mode === 'auto' ? 'sdr-display' : 'off';
   if (unsupported) return 'unsupported';
   return 'starting';

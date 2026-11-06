@@ -20,12 +20,15 @@ export interface QualityPreset {
   ikRange: number;
   /** the floors' relief: the most steps down each view ray (core/parallax.ts), 0 = flat */
   relief: number;
+  /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
+   *  the frame at the screen's pixels cost a 4K laptop's integrated GPU 26 ms of 38 */
+  hdr: boolean;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16 },
-  medium: { label: 'Medium', pixels: 2560 * 1440, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8 },
-  low:    { label: 'Low',    pixels: 1920 * 1080, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true },
+  medium: { label: 'Medium', pixels: 2560 * 1440, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false },
+  low:    { label: 'Low',    pixels: 1920 * 1080, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];

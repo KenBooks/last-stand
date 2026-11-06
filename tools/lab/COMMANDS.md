@@ -209,7 +209,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   from run to run, so check `nvidia-smi`, run it twice with `--rounds 12`, and believe what both agree on. It
   found the point lights at 59 to 70% of the forest's scene pass (each pixel lit all 20, the pool's idle ones and
   those out of reach too), 2.29 ms of 3.9 on the owner's 4070 Ti at 4.4 Mpx, 0.96 once skipped where they light
-  nothing (`--ab`).
+  nothing (`--ab`). `--frame` times the whole frame too (`page/frameTurns.ts`), by the browser's clock with the GPU
+  waited for (WebGL's `finish` and the HDR output's WebGPU queue), each change on and off in turns: HDR's output
+  (forced on, a WebGPU copy the GPU's timer queries can't see) and the level's MSAA against none; with `--canary` the
+  frame drawn twice must read 1.6 times once. At a 4K laptop's screen (`--screen 1280x720@3`) HDR's output was 7.1 to
+  9.0 ms of a 12 ms frame on the owner's 4070 Ti, as on the laptop (26 ms of 38, trace BN6P-FN12), and MSAA 0.5 to
+  0.6 ms.
 - `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
   and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
   without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's

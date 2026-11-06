@@ -809,7 +809,7 @@ function renderQualityOptions(): void {
 /** what Auto says HDR is doing */
 const HDR_NOTES: Record<HdrStatus, string> = {
   on: '(on)', off: '', 'sdr-display': '(no HDR display)', unsupported: '(not in this browser)', starting: '(starting)',
-  reload: '(reload to switch)',
+  reload: '(reload to switch)', quality: '(off on Low)',
 };
 function renderHdrOptions(): void {
   const s = hdrSettings(), status = hdrStatus();

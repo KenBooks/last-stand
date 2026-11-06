@@ -8,7 +8,7 @@ import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
 import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
-import { sceneRatio, sceneSize, viewMode } from '../core/renderer';
+import { sceneRatio, sceneSamples, sceneSize, viewMode } from '../core/renderer';
 import { hdrActive } from '../core/hdr';
 import { lateCompiles } from '../core/shaders';
 import { isCoop } from '../net/role';
@@ -53,7 +53,7 @@ function settings(): Record<string, number | string | boolean> {
     quality: level,
     setting: qualitySetting(),
     budgetPx: Number.isFinite(qualityBudget()) ? qualityBudget() : 0,
-    msaa: QUALITY[level].msaa,
+    msaa: sceneSamples(),
     shadowMap: QUALITY[level].shadowMap,
     scene: `${scene.x}x${scene.y}`,
     sceneRatio: Math.round(sceneRatio() * 100) / 100,

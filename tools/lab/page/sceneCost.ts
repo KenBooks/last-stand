@@ -14,6 +14,8 @@ import { QUALITY, type QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
 import { standIn } from './light';
 import { costInTurns, type TurnsCost } from './gpuTurns';
+import { frameCostInTurns, type FrameCost } from './frameTurns';
+import { hdrOutput } from './hdrOutput';
 
 export interface SceneCostOptions {
   biome: BiomeId;
@@ -25,7 +27,12 @@ export interface SceneCostOptions {
   canary: boolean;
   /** each see-through or cut-out mesh timed alone too, the costliest listed */
   each: boolean;
+  /** the whole frame timed by the browser's clock too, with HDR's output and the level's MSAA and without */
+  frame: boolean;
 }
+
+/** `--frame`'s turns: rounds of frames a side */
+const FRAME_TURNS = { rounds: 4, frames: 8 };
 
 /** the costliest see-through meshes `--each` lists */
 const EACH_LISTED = 8;
@@ -157,6 +164,64 @@ async function eachSeeThrough(draw: () => void, renders: number): Promise<string
   return ['  the costliest see-through or cut-out meshes, each alone:', ...costliest];
 }
 
+/** A whole frame part's line: the frame with it and without (by the browser's clock), what it takes and its share. */
+function frameLine(name: string, cost: FrameCost): string {
+  const takes = cost.on - cost.off;
+  const share = cost.on > 0 ? (100 * takes) / cost.on : 0;
+  return `  ${name}: ${takes.toFixed(1)} ms, ${share.toFixed(0)}% (the frame ${cost.on.toFixed(1)} with it, `
+    + `${cost.off.toFixed(1)} without, the median of ${cost.frames} each)`;
+}
+
+/** Waits for the GPU to finish the frame: WebGL's commands, then the HDR output's WebGPU queue. */
+async function gpuFinished(): Promise<void> {
+  G.renderer.getContext().finish();
+  const hdr = await hdrOutput();
+  await hdr?.hdrDevice()?.queue.onSubmittedWorkDone();
+}
+
+/** The scene target's MSAA set to `samples` (made again at its next use). */
+function sampleScene(samples: number): void {
+  const target = renderer.sceneTarget();
+  if (target.samples === samples) return;
+  target.samples = samples;
+  target.dispose();
+}
+
+/** The frame's canary: the frame drawn twice must read `CANARY_LEAST` times once, or the clock saw nothing. */
+async function frameCanary(name: string, lines: string[], problems: string[]): Promise<void> {
+  let twice = false;
+  const draw = () => {
+    renderer.render();
+    if (twice) renderer.render();
+  };
+  const cost = await frameCostInTurns((on) => { twice = on; }, draw, gpuFinished, FRAME_TURNS);
+  const read = cost.on / cost.off;
+  lines.push(`    canary: the frame drawn twice read ${read.toFixed(2)} times once`);
+  if (read < CANARY_LEAST) problems.push(`${name}: canary: the whole frame drawn twice went unseen`);
+}
+
+/** The whole frame timed with HDR's output and without, and with `level`'s MSAA and without, as lines. */
+async function frameParts(level: QualityLevel): Promise<string[]> {
+  const lines = ['  the whole frame, by the browser\'s clock (the GPU waited for):'];
+  const draw = () => renderer.render();
+  const hdr = await hdrOutput();
+  if (hdr) {
+    const cost = await frameCostInTurns((on) => hdr.forceHdr(on), draw, gpuFinished, FRAME_TURNS);
+    const shown = hdr.hdrStatus();
+    lines.push(frameLine(`  HDR's output (${shown === 'on' ? 'shown' : `not shown: ${shown}`})`, cost));
+    await hdr.forceHdr(null);
+  }
+  const samples = QUALITY[level].msaa;
+  if (samples > 0) {
+    const kept = renderer.sceneTarget().samples;
+    const cost = await frameCostInTurns((on) => sampleScene(on ? samples : 0), draw, gpuFinished, FRAME_TURNS);
+    sampleScene(kept);
+    lines.push(frameLine(`  ${QUALITY[level].label}'s MSAA, ${samples} samples a pixel, against none`, cost));
+  }
+  lines.push(`  (the scene's MSAA on this screen: ${renderer.sceneTarget().samples} samples)`);
+  return lines;
+}
+
 /** The level's settings, the scene rendering every pixel of the screen. */
 function atFullPixels(level: QualityLevel): string {
   useQuality(level);
@@ -186,6 +251,8 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
       lines.push(partLine(part, cost));
     }
     if (command.each) lines.push(...await eachSeeThrough(draw, TURN_RENDERS));
+    if (command.frame) lines.push(...await frameParts(level));
+    if (command.frame && command.canary) await frameCanary(name, lines, problems);
     if (command.canary) {
       const twice = await costInTurns(G.renderer, (on) => { times = on ? 2 : 1; }, draw, turns);
       const read = twice ? twice.on / twice.off : 0;
