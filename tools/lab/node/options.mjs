@@ -637,6 +637,38 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  scenecost: {
+    help: 'what each part of the scene pass takes of the GPU at the screen\'s own pixels and a level\'s other '
+      + 'settings: the point lights, their shadows, the sun\'s, the environment, the lit shading, what\'s see-through, '
+      + 'the particles, the hero, each taken out in turns within one page',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top',
+        help: 'the views: top, third, first',
+      },
+      level: {
+        kind: 'choice',
+        usage: 'level',
+        choices: ['high', 'medium', 'low'],
+        default: 'low',
+        help: 'the quality level whose settings the scene takes, its pixels all the screen\'s',
+      },
+      rounds: { kind: 'number', usage: 'n', default: '6', help: 'the rounds of turns, each of 6 renders a side' },
+      canary: { kind: 'switch', help: 'draw the scene twice: it must read at least 1.6 times once' },
+      each: { kind: 'switch', help: 'time each see-through or cut-out mesh alone too, the costliest listed' },
+      ...COMMON_OPTIONS,
+    },
+  },
   envcost: {
     help: 'what the environment\'s lookups take of the GPU: the frame drawn with the scene\'s environment and '
       + 'without it, in turns within one page (a run\'s load is both sides\'), the hero standing in each biome and '

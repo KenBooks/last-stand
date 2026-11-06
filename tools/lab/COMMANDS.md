@@ -197,6 +197,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
+  settings (`--level`, low) and the screen's own pixels, whatever the level's cap: the resolution is never what's
+  cut, what a pixel costs is. The scene pass alone is drawn, each part taken out and put back in turns
+  (`page/gpuTurns.ts`, `--rounds` of 6 renders a side): the point lights, their shadows, the sun's shadow, the
+  environment, the lit shading against a plain colour, what's see-through or cut out, the particles, the hero;
+  `--each` times each see-through or cut-out mesh alone too and lists the costliest. Run it on the screen that's
+  slow (`--screen 1432x768@2`: a laptop's 2864x1536 at 200%, whose integrated GPU spent 86% of a 10 fps frame on
+  the scene pass). `--canary` draws the scene twice, which must read 1.6 times once. The GPU's timer counts what
+  else holds the GPU: with another session's work on it (40%, its clock at 1320 MHz) a part read -0.9 to +1.9 ms
+  from run to run, so check `nvidia-smi`, run it twice with `--rounds 12`, and believe what both agree on. It
+  found the point lights at 59 to 70% of the forest's scene pass (each pixel lit all 20, the pool's idle ones and
+  those out of reach too), 2.29 ms of 3.9 on the owner's 4070 Ti at 4.4 Mpx, 0.96 once skipped where they light
+  nothing (`--ab`).
 - `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
   and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
   without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's

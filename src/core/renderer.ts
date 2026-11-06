@@ -427,7 +427,9 @@ export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
 /** the end of its written-out loop, the block's last line before its `#endif` */
 const POINT_LIGHTS_END = '#pragma unroll_loop_end';
-/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop */
+/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop; each
+ *  lit (and its shadow looked up) only where its colour isn't 0, out of its reach or idle in the pool (three lights
+ *  every one at every pixel, adding nothing) */
 const POINT_LIGHTS_LOOPED = [
   POINT_LIGHTS_IF,
   '\tPointLight pointLight;',
@@ -437,14 +439,16 @@ const POINT_LIGHTS_LOOPED = [
   '\tfor ( int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i ++ ) {',
   '\t\tpointLight = pointLights[ i ];',
   '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
+  '\t\tif ( directLight.visible ) {',
   '\t\t#if defined( SHADOWMAP_TYPE_PCF ) || defined( SHADOWMAP_TYPE_BASIC )',
   '\t\tpointLightShadow = pointLightShadows[ i ];',
-  '\t\tdirectLight.color *= ( directLight.visible && receiveShadow ) ? getPointShadow( pointShadowMap[ i ], '
+  '\t\tdirectLight.color *= receiveShadow ? getPointShadow( pointShadowMap[ i ], '
     + 'pointLightShadow.shadowMapSize, pointLightShadow.shadowIntensity, pointLightShadow.shadowBias, '
     + 'pointLightShadow.shadowRadius, vPointShadowCoord[ i ], pointLightShadow.shadowCameraNear, '
     + 'pointLightShadow.shadowCameraFar ) : 1.0;',
   '\t\t#endif',
   '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+  '\t\t}',
   '\t}',
   '\t#pragma unroll_loop_end',
   '\tconst int unshadowedFrom = NUM_POINT_LIGHT_SHADOWS;',
@@ -454,7 +458,8 @@ const POINT_LIGHTS_LOOPED = [
   '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
   '\t\tpointLight = pointLights[ i ];',
   '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
-  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+  '\t\tif ( directLight.visible ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, '
+    + 'geometryClearcoatNormal, material, reflectedLight );',
   '\t}',
 ].join('\n');
 

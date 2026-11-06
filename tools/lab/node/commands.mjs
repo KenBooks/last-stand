@@ -742,6 +742,28 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  scenecost: {
+    check(options) {
+      if (!(options.rounds >= 1)) throw labError(`scenecost --rounds: ${options.rounds} is not a count of rounds`);
+    },
+    async each(side, options) {
+      const reports = [];
+      for (const biome of options.biomes) {
+        for (const view of options.views) {
+          const { level, rounds } = options;
+          const command = { biome, view, level, rounds, canary: Boolean(options.canary), each: Boolean(options.each) };
+          reports.push(await side.command('sceneCost', command));
+        }
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+      };
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   envcost: {
     check(options) {
       if (!(options.rounds >= 1)) throw labError(`envcost --rounds: ${options.rounds} is not a count of rounds`);
