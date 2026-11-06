@@ -1,0 +1,23 @@
+// The prompt asking to send a performance report when the game ran slowly, and its note once sent (perf/consent.ts).
+// It blocks nothing: a small card at the top of the screen, shown only outside a fight, its width a share of the
+// window's at most, zoomed with the UI.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+#perf-ask { position: fixed; top: 12px; left: 50%; translate: -50% 0; z-index: 46; zoom: var(--ui, 1);
+  width: min(440px, calc((100vw - 24px) / var(--ui, 1))); box-sizing: border-box; padding: 10px 12px 12px 14px;
+  font-size: 13px; line-height: 1.35; color: var(--ink);
+  background: linear-gradient(rgba(20,17,16,.97), rgba(8,7,8,.97)); @include frame(var(--frame), 0 6px 18px rgba(0,0,0,.7)); }
+#perf-ask.hidden { display: none; }
+#perf-ask .pa-title { font-family: Cinzel, Georgia, serif; font-weight: 700; font-size: 15px; color: var(--accent); margin-bottom: 4px; }
+#perf-ask .pa-text { color: var(--ink-dim); }
+#perf-ask .pa-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+#perf-ask .btn { padding: 5px 12px; font-size: 13px; }
+#perf-ask .pa-done { display: none; align-items: center; gap: 10px; }
+#perf-ask .pa-close { margin-left: auto; padding: 2px 9px; font-size: 16px; line-height: 1; }
+#perf-ask:not(.asking) .pa-ask { display: none; }
+#perf-ask:is(.sending, .sent) .pa-done { display: flex; }
+#perf-ask.sending .pa-close { display: none; }
+// (a finger's buttons: tall enough to tap, sized by the touch scale as the touch controls are and 34 px at least;
+// the box is zoomed by the UI's scale, so that's taken out)
+body.touch #perf-ask .btn { min-height: calc(max(32px * var(--touch, 1), 34px) / var(--ui, 1)); padding-inline: 14px; }

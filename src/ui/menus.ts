@@ -35,6 +35,7 @@ import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
+import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -171,6 +172,9 @@ export function initMenus(h: MenuHooks): void {
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
+  document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
+  });
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
@@ -786,6 +790,10 @@ export function hideSummary(): void { $('#summary').classList.add('hidden'); hid
 const REVEAL_STEP = 0.22;
 let revealTimers: ReturnType<typeof setTimeout>[] = [];
 function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers = []; }
+function renderTraceOptions(): void {
+  const t = traceConsent();
+  document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => b.classList.toggle('active', b.dataset.t === t));
+}
 function renderQualityOptions(): void {
   const s = qualitySetting();
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));
@@ -851,6 +859,7 @@ export function showPause(v: boolean): void {
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
+    renderTraceOptions();
     renderHdrOptions();
     renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it

@@ -1,5 +1,6 @@
 // Optional performance overlay: FPS history graph, frame / CPU / GPU timings and
-// renderer stats. Off by default; toggled from the pause menu, persisted in a cookie.
+// renderer stats. Off by default; toggled from the pause menu, persisted in a cookie. Its timings run whether it's
+// shown or not, for the always-on recorder (src/perf/recorder.ts), which they hand every frame to.
 import * as THREE from 'three';
 import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
@@ -11,6 +12,7 @@ import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
+import { recorder } from '../perf/recorder';
 
 const COOKIE = 'last-stand-perf-hud';
 // the hashed bundle name identifies the build a report came from
@@ -38,6 +40,8 @@ let renderer: THREE.WebGLRenderer;
 let gpuName = 'unknown';
 const samples: Sample[] = [];   // one per frame inside WINDOW_MS
 let lastFrame = 0, cpuStart = 0, lastDraw = 0;
+/** this frame's place in the recorder's ring */
+let ringAt = 0;
 /** the latest frame's timestamp */
 let frameNow = 0;
 let frameCalls = 0, frameTris = 0;
@@ -52,7 +56,8 @@ type Part = [label: string, q: WebGLQuery];
 const SPLIT_EVERY = 4;
 let frameParts: Part[] | null = null;   // the frame being timed
 let frameNo = 0, splitting = false;
-const pendingFrames: { parts: Part[]; split: boolean }[] = [];
+/** the frames whose GPU time is on its way, each with its place in the recorder's ring */
+const pendingFrames: { parts: Part[]; split: boolean; ring: number }[] = [];
 const gpuTimes: { t: number; ms: number }[] = [];
 const gpuParts: Record<string, number>[] = [];   // the latest split frames
 /** A frame's GPU time as it came back (ms), and its parts' if it was timed in parts. */
@@ -73,9 +78,13 @@ const longFramesSeen = (): boolean => PerformanceObserver.supportedEntryTypes?.i
 const longFrames: { seen: number; frame: LongFrame }[] = [];
 function watchLongFrames(): void {
   if (!longFramesSeen()) return;
+  // (buffered: the boot's, from before this was set up, go to the recorder too)
   new PerformanceObserver((list) => {
-    if (enabled) for (const e of list.getEntries()) longFrames.push({ seen: frameNow, frame: e as unknown as LongFrame });
-  }).observe({ type: LONG_FRAMES });
+    for (const e of list.getEntries()) {
+      recorder.longFrame(e as unknown as LongFrame);
+      if (enabled) longFrames.push({ seen: frameNow, frame: e as unknown as LongFrame });
+    }
+  }).observe({ type: LONG_FRAMES, buffered: true });
 }
 
 export function initPerfHud(r: THREE.WebGLRenderer): void {
@@ -128,11 +137,13 @@ export function setPerfHud(on: boolean, persist = true): void {
 /** Call at the very start of a rAF callback. */
 export function perfBeginFrame(now: number): void {
   renderer.info.reset();
-  if (!enabled) return;
   cpuStart = perfClock.now();
   frameNow = now;
-  if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: performance.now() - now, stages: {}, ctx: '' });
-  lastFrame = now;
+  ringAt = recorder.begin(now);
+  if (enabled) {
+    if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: performance.now() - now, stages: {}, ctx: '' });
+    lastFrame = now;
+  }
   if (gl && timerExt) {
     pollQueries(now);
     if (pendingFrames.length < 3) { frameParts = []; splitting = ++frameNo % SPLIT_EVERY === 0; }
@@ -156,9 +167,11 @@ export function perfSplit(upd: number, rnd: number): void { split.upd = upd; spl
 let lapT = 0, stages: Stages = {};
 /** Update-stage timer: call with no name to start, then with a stage name after each stage. */
 export function perfLap(stage?: string): void {
-  if (!enabled) return;
   const now = perfClock.now();
-  if (stage) stages[stage] = (stages[stage] ?? 0) + now - lapT;
+  if (stage) {
+    recorder.lap(stage, now - lapT);
+    if (enabled) stages[stage] = (stages[stage] ?? 0) + now - lapT;
+  }
   lapT = now;
 }
 // (WebGPU's `calls` counts its renders since the page started; the frame's draws are its `drawCalls`)
@@ -167,18 +180,20 @@ const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${parti
 
 /** Call after the frame has been rendered. */
 export function perfEndFrame(): void {
-  if (!enabled) return;
   const end = perfClock.now();
+  frameCalls = frameDraws();
+  frameTris = renderer.info.render.triangles;
+  recorder.end(end - cpuStart, split.upd, split.rnd, frameCalls, frameTris, renderer.info.programs?.length ?? 0,
+    G.enemies.length, particles.glow.count + particles.smoke.count);
+  takeWebGpuTime();
+  if (gl && timerExt && frameParts) {
+    if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting, ring: ringAt }); }
+    frameParts = null;
+  }
+  if (!enabled) return;
   const last = samples[samples.length - 1];
   if (last) { last.cpu = end - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
   stages = {};
-  frameCalls = frameDraws();
-  frameTris = renderer.info.render.triangles;
-  takeWebGpuTime();
-  if (gl && timerExt && frameParts) {
-    if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting }); }
-    frameParts = null;
-  }
   const cutoff = frameNow - WINDOW_MS;
   while (samples.length && samples[0].t < cutoff) samples.shift();
   while (gpuTimes.length && gpuTimes[0].t < cutoff) gpuTimes.shift();
@@ -210,12 +225,14 @@ let readingGpuTime = false;
 function takeWebGpuTime(): void {
   if (!timesGpu || readingGpuTime) return;
   readingGpuTime = true;
+  const at = ringAt;
   const gpuTimer = renderer as unknown as WebGpuTimes;
   void Promise.all([gpuTimer.resolveTimestampsAsync('render'), gpuTimer.resolveTimestampsAsync('compute')])
     .then(([render, compute]) => {
       const ms = (render ?? 0) + (compute ?? 0);
       if (ms <= 0) return;
-      gpuTimes.push({ t: frameNow, ms });
+      recorder.gpu(at, ms, null);
+      if (enabled) gpuTimes.push({ t: frameNow, ms });
       if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
     })
     .finally(() => { readingGpuTime = false; });
@@ -237,9 +254,12 @@ function pollQueries(now: number): void {
       parts[label] = (parts[label] ?? 0) + v; ms += v;
     }
     if (disjoint) continue;
+    // (a frame timed in parts is slowed by its queries: its parts go to the recorder, its time none)
+    recorder.gpu(f.ring, f.split ? -1 : ms, f.split ? parts : null);
+    if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
+    if (!enabled) continue;
     if (!f.split) gpuTimes.push({ t: now, ms });
     else if (gpuParts.push(parts) > 30) gpuParts.shift();
-    if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
   }
 }
 
@@ -422,6 +442,12 @@ function report(): string {
     ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
   ].join('\n');
 }
+
+/** The GPU as the browser names it, and the fixed CPU workload's time now (ms), for a trace's device (src/perf). */
+export const perfGpuName = (): string => gpuName;
+export const perfJsBench = (): number => jsBench();
+/** The build a report or trace came from (its bundle's hashed name). */
+export const perfBundle = BUILD;
 
 /** The report as the overlay copies it (for a harness: tools/lab `perf`). */
 export const perfReport = (): string => report();

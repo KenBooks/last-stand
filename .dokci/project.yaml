@@ -1,5 +1,5 @@
-# Dokci deploys the co-op relay (server/relay) and the PR previews service (server/previews) on every push to main;
-# the game itself stays on GitHub Pages.
+# Dokci deploys the co-op relay (server/relay), the PR previews service (server/previews) and the traces service
+# (server/traces) on every push to main; the game itself stays on GitHub Pages.
 apiVersion: compose.control/v1alpha1
 kind: Project
 metadata:
@@ -19,6 +19,9 @@ spec:
     LS_PREVIEWS_TOKEN:
       description: The secret pr-preview.yml sends PR builds with (the repo's pr-preview environment's PREVIEWS_TOKEN).
       whenMissing: Previews kept are still served; no build can be sent, so every publish fails.
+    LS_TRACES_TOKEN:
+      description: The secret agents read the performance traces with (npm run lab -- trace).
+      whenMissing: Traces are still taken from the games and kept; nothing can read them.
   environments:
     production:
       source:
@@ -40,5 +43,12 @@ spec:
           entryPoint: websecure
           certificateResolver: letsencrypt
           healthProbePath: /pr-preview/health
+        - service: traces
+          port: 8080
+          host: ls.wellscoped.dev
+          pathPrefix: /traces
+          entryPoint: websecure
+          certificateResolver: letsencrypt
+          healthProbePath: /traces/health
       deploymentPolicy:
         requireManualApproval: false

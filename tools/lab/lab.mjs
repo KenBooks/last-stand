@@ -66,6 +66,10 @@ async function main() {
     const { runCheck } = await import('./node/check.mjs');
     return runCheck(call.options);
   }
+  if (call.command === 'trace') {
+    const { runTrace } = await import('./node/trace.mjs');
+    return runTrace(call.options);
+  }
   if (call.command === 'pwa') {
     stoppable('pwa');
     const { runPwa } = await import('./node/pwa.mjs');

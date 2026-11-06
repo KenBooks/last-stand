@@ -529,6 +529,16 @@
     <button class="btn primary ut-reload">Reload</button><button class="btn ut-later">Later</button>
   </div>
 
+  <!-- the game ran slowly: may a performance report be sent? (perf/consent.ts) -->
+  <div id="perf-ask" class="hidden" role="dialog" aria-live="polite" aria-label="Performance report">
+    <div class="pa-ask">
+      <div class="pa-title">The game ran slowly</div>
+      <div class="pa-text">Send a performance report so it can be made to run better? It holds the last minute's frame timings, what was on screen, your device and graphics settings, nothing about you (<span class="pa-size"></span>).</div>
+      <div class="pa-buttons"><button class="btn primary pa-send">Send</button><button class="btn pa-later">Not now</button><button class="btn pa-always">Always send</button></div>
+    </div>
+    <div class="pa-done"><span class="pa-note"></span><button class="btn pa-close" aria-label="Close">&times;</button></div>
+  </div>
+
   <!-- touch: what to do with a tapped item -->
   <div id="item-sheet" class="modal hidden"><div class="modal-box">
     <div class="is-card"></div>
@@ -567,6 +577,10 @@
         <div class="opt-row quality-row renderer-row"><span>Renderer</span>
           <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
           <div class="renderer-note"></div>
+        </div>
+        <!-- a report sent when the game runs slowly (perf/consent.ts): asked first, sent without asking, or never -->
+        <div class="opt-row quality-row"><span>Slow-game reports</span>
+          <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>

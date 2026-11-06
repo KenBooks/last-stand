@@ -54,6 +54,10 @@ jobs:
         if: github.event.action != 'closed'
         run: npm run lab:test
 
+      - name: Test the traces service
+        if: github.event.action != 'closed'
+        run: npm run traces:test
+
       # (pr-preview.yml runs main's copy of these scripts: a PR's are tested here before they get there)
       - name: Test the preview publish's scripts
         if: github.event.action != 'closed'

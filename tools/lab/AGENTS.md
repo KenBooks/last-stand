@@ -67,6 +67,8 @@ screen's edges, and the choice after a wave within a short screen's top 30%) wit
 - `throws`: what the slammers throw at a hero too far off to slam (the Brute's lava at him stood still: landing where he stood as it was thrown, its ring there every frame it flies, its splash and pool hurting him; stepped off, nothing hurting him; up close, a slam and no throw; the Hulk's vine holding him for its hold, his walking going nowhere; stepped aside, never caught; stepped back onto it as it lies, held; a dash tearing him free)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look, through the eyes what the arms' own camera drew, the hero's arms and what they hold alone; the scene's objects whose matrices are made again each frame)
+- `trace [code]`: a performance trace a slow game sent (`src/perf`), fetched from the traces service with the token in `tools/lab/traces.env` and read as the perf overlay's report reads (why it was sent, the boot's steps, the frame rate, timings, device and settings, the histories a second at a time, the worst stretches with what happened before each, the worst and long frames, the stages, and the `perf` command that plays it again on its settings); `--latest`, `--build <sha>`, `--list`, `--file` (runs in its own process, no browser)
+- `recorder`: what the always-on performance recorder costs a frame in a fight (its calls timed against 0.05 ms a frame), the trace a send would make of it, sent to a traces service of the lab's own and read back with its token
 - `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked
 - `programs`: the programs the boot compiled, from the game's dev-only ledger (how many each loading step made, behind the lobby too, by the warm-ups' compile or by a draw; each kind with the fields of its key that set its programs apart; those never drawn; those made after the reveal); `--cost`: each compiled again alone, salted so no cache answers, and timed (by kind, by what uses them, each step's by what uses them, by its point lights, the longest, a plain lit material by part)
 - `compiles`: whether the boot's warm-up compiled what a fight draws (a prop of every kind broken, the first wave fought and a Brute's and a Hulk's throws in each biome, and again by a hero built afresh: every program compiled meanwhile, and the draw that first used it; the point lights each pass is lit by, against the boot's; `--switch` picks another class on the hero selection screen first, each hero shown in the hall of heroes, whose room and skills are warmed with the heroes)
@@ -106,7 +108,7 @@ Each command in full (what it measures and what it was measured against, its opt
 the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this file, which every session working on
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command gets its line in Commands at a glance above and its entry there. The largest entries are
-notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`), a line in
+notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `traces`), a line in
 `COMMANDS.md` pointing to each, as `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 
@@ -264,6 +266,8 @@ loading screen never says it failed, and the command after it waited behind it.
     stale copy of a module) and booted in a page; `commits.mjs`: another commit exported for an A/B.
   - `browser.mjs`: Playwright's Chromium in its native headless mode, and the scripts every page runs first (the
     clock, seeded random numbers, no pointer lock but the page's own when asked, fresh storage).
+  - `trace.mjs`: `lab trace`, a trace fetched from the traces service and reported (`src/perf/traceReport.ts`), kept
+    in `out/traces`; `tracesService.mjs`: `lab recorder`'s traces service of its own (`server/traces`).
   - `pwa.mjs`: `lab pwa`, two production builds served in turn by `staticHost.mjs` (as Pages serves the game) to a
     browser of its own, the offline worker and all.
   - `compare.mjs` (the reports' verdict), `pictures.mjs` (the pictures'), `profile.mjs` and `sourceMaps.mjs`

@@ -24,10 +24,10 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
-  'logLobby',
+  'logLobby', 'perfAsk',
   'skillTipsTouch', 'sheetTouch', 'litTouch',
-  'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
-  'hudTouch', 'decisionTouch',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'hudTouch', 'decisionTouch', 'perfAskTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -1759,6 +1759,44 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  recorder: {
+    help: 'what the always-on performance recorder (src/perf) costs a frame: a fight played with the foes coming '
+      + 'and every frame drawn, each of its calls timed by the browser\'s clock against a budget of 0.05 ms a '
+      + 'frame; then the trace a send would make of it, packed, gzipped and read back as lab trace reports it',
+    options: {
+      frames: { kind: 'number', usage: 'n', help: 'the frames played and timed (300 by default)' },
+      canary: { kind: 'switch', help: 'each frame\'s recording made 0.2 ms slower: it must break the budget' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  trace: {
+    help: 'a performance trace a slow game sent (src/perf/AGENTS.md), fetched from the traces service with the '
+      + 'token in tools/lab/traces.env and read as the perf overlay\'s report reads: why it was sent, the frame '
+      + 'rate and timings, the device and settings, the histories a second at a time, the worst stretches with what '
+      + 'happened before each, the worst frames, the long frames, the stages, and the lab perf command that plays '
+      + 'it again on its settings (runs in this process, not the server)',
+    argument: 'code',
+    mayOmit: true,
+    options: {
+      latest: { kind: 'switch', help: 'the newest trace sent' },
+      build: {
+        kind: 'text',
+        usage: 'sha',
+        help: 'the newest from this commit (or a PR\'s number, or a bundle\'s name)',
+      },
+      list: { kind: 'switch', help: 'list the traces kept (newest first; with --build, that build\'s alone)' },
+      file: {
+        kind: 'text',
+        usage: 'path',
+        help: 'a trace saved before (.lspt.gz or .lspt), read without the server',
+      },
+      server: {
+        kind: 'text',
+        usage: 'url',
+        help: 'the traces service (TRACES_SERVER in traces.env, else https://ls.wellscoped.dev)',
+      },
+    },
+  },
   pwa: {
     help: 'a deploy as a returning player meets it, the offline worker and all: another commit\'s production build '
       + 'served as Pages serves the game and loaded in a fresh browser until its worker has the page and its fonts, '
@@ -2069,7 +2107,9 @@ export function parseCommandLine(argv) {
     }
   }
   checkTogether(options);
-  if (definition.argument && options._.length === 0) throw labError(`${name} needs its ${definition.argument}`);
+  if (definition.argument && !definition.mayOmit && options._.length === 0) {
+    throw labError(`${name} needs its ${definition.argument}`);
+  }
   if (!definition.argument && options._.length > 0) {
     throw labError(`${name} takes no ${JSON.stringify(options._[0])} (options start with --)`);
   }
@@ -2111,7 +2151,8 @@ export function usage() {
   const lines = ['npm run lab -- <command> [options]', ''];
   for (const [name, definition] of Object.entries(COMMANDS)) {
     if (name === 'help') continue;
-    const head = definition.argument ? `${name} <${definition.argument}>` : name;
+    const argument = definition.mayOmit ? `[${definition.argument}]` : `<${definition.argument}>`;
+    const head = definition.argument ? `${name} ${argument}` : name;
     lines.push(helpEntry(`  ${head}`, definition.help));
     for (const [optionName, spec] of Object.entries(definition.options)) {
       if (!shared.has(optionName)) lines.push(optionEntry(optionName, spec));

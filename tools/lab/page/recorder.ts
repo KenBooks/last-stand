@@ -1,0 +1,144 @@
+// `lab recorder`: what the always-on performance recorder (src/perf/recorder.ts) costs a frame, and the trace it
+// would send. A fight played as the player plays it (the biome's foes coming, the basic attack held, every frame drawn
+// so the GPU's times come back), each of the recorder's calls timed by the browser's clock (the page's stands still
+// within a frame), its frame's sum against a budget of 0.05 ms; then a snapshot packed and gzipped as a send packs it,
+// read back and reported as `lab trace` reports it (the frames, the stages, the GPU's parts, the casts marked).
+// Canary: each frame's recording made 0.2 ms slower, which must break the budget.
+import type { Lab, Report } from './lab';
+import { recorder, type Slow } from '../../../src/perf/recorder';
+import { gzip, sendTrace, traceOf } from '../../../src/perf/upload';
+import { decodeTrace } from '../../../src/perf/traceFormat';
+import { traceReport } from '../../../src/perf/traceReport';
+import { foesAhead } from './cast';
+import { quantile, timeCalls, type Timing } from './timing';
+import { G } from '../../../src/state';
+
+export interface RecorderOptions {
+  /** frames played and timed */
+  frames: number;
+  canary: boolean;
+  /** the traces service the trace is sent to (the lab's own: node/tracesService.mjs) */
+  send: string;
+}
+
+/** the recorder's work a frame may take (ms): 0.3% of a 60th of a second */
+const BUDGET_MS = 0.05;
+/** the canary's cost a frame (ms) */
+const CANARY_MS = 0.2;
+/** the recorder's calls the game makes each frame (or as its results come) */
+const CALLS = ['begin', 'lap', 'end', 'gpu', 'longFrame'] as const;
+/** the foes that come at the hero */
+const FOES = 10;
+/** the basic attack pressed for this many frames of every so many */
+const ATTACK_EVERY = 50;
+const ATTACK_HELD = 35;
+/** the trace's report lines shown */
+const REPORT_LINES = 14;
+
+/** Busy for `ms` by the browser's clock. */
+function busyFor(ms: number): void {
+  const start = window.__labClock.realNow();
+  while (window.__labClock.realNow() - start < ms) {
+    // (busy)
+  }
+}
+
+/** The recorder's `begin` made `ms` slower; the way back. */
+function slowedBegin(ms: number): () => void {
+  const begin = recorder.begin;
+  recorder.begin = (now: number) => {
+    busyFor(ms);
+    return begin(now);
+  };
+  return () => {
+    recorder.begin = begin;
+  };
+}
+
+/** The fight played `frames` frames, the recorder's calls timed; each frame's sum of them (ms). */
+async function timedFight(lab: Lab, frames: number): Promise<number[]> {
+  const timings: Timing[] = CALLS.map((method) => timeCalls(recorder, method));
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    // (pressed and let go: a bow looses as it's let go)
+    const perFrame = await lab.step(frames, (frame) => ({ m0: frame % ATTACK_EVERY < ATTACK_HELD }), () => {
+      let sum = 0;
+      for (const timing of timings) sum += timing.lap();
+      return sum;
+    });
+    return perFrame;
+  } finally {
+    lab.drawing = drawing;
+    for (const timing of timings) timing.stop();
+  }
+}
+
+/** What a frame's recording cost, in a line, and whether it's within the budget. */
+function costLine(label: string, perFrame: number[]): { line: string; mean: number } {
+  const sorted = [...perFrame].sort((a, b) => a - b);
+  const mean = perFrame.reduce((sum, ms) => sum + ms, 0) / Math.max(1, perFrame.length);
+  const line = `  ${label}: ${mean.toFixed(4)} ms a frame on average, p90 ${quantile(sorted, 0.9).toFixed(2)}, `
+    + `most ${sorted[sorted.length - 1]?.toFixed(2)} (budget ${BUDGET_MS} ms) over ${perFrame.length} frames`;
+  return { line, mean };
+}
+
+/** A send's trace of now, packed, gzipped, read back: its lines, size and what it holds. */
+async function traceNow(send: string): Promise<{ lines: string[]; problems: string[] }> {
+  const start = window.__labClock.realNow();
+  const verdict = recorder.judged();
+  // (taken as the detector finds a slow stretch, mid-fight: its own time said apart; the packing waits for a calm)
+  const snapshot = recorder.snapshot();
+  const snapshotMs = window.__labClock.realNow() - start;
+  const slow: Slow = { scene: 'fight', verdict, tookMs: 0, at: performance.now(), snapshot };
+  const packed = traceOf(slow);
+  const gzipped = await gzip(packed);
+  const took = window.__labClock.realNow() - start;
+  const trace = decodeTrace(packed);
+  const names = Object.keys(trace.columns);
+  const stages = names.filter((name) => !name.startsWith('gpu') && !['interval', 'late', 'cpu', 'upd', 'rnd', 'draws',
+    'tris', 'programs', 'foes', 'particles', 'state'].includes(name));
+  const parts = names.filter((name) => name.startsWith('gpu '));
+  const casts = trace.header.marks.filter(([, text]) => text.startsWith('cast')).length;
+  const timedOnGpu = [...trace.columns.gpu].filter((ms) => ms >= 0).length;
+  const lines = [
+    `  the trace: ${trace.header.frames} frames, ${names.length} columns (${stages.length} stages, ${parts.length} GPU `
+      + `parts), ${trace.header.marks.length} marks (${casts} casts), ${Math.round(packed.length / 1024)} KB packed, `
+      + `${Math.round(gzipped.length / 1024)} KB gzipped, made in ${took.toFixed(1)} ms (its snapshot `
+      + `${snapshotMs.toFixed(1)}); ${timedOnGpu} frames timed whole on the GPU (few or none here: the lab's frames `
+      + `run back to back without a yield, and the queries come back only after one); the detector: ${verdict.slow ? `slow (${verdict.why})` : 'not slow'}`,
+    '  as lab trace reports it:',
+    ...traceReport(trace).slice(0, REPORT_LINES).map((line) => `    ${line}`),
+  ];
+  const problems: string[] = [];
+  const sent = await sendTrace(gzipped, send);
+  if ('code' in sent) lines.push(`  sent to the traces service: ${sent.code}`);
+  else problems.push(`the trace couldn't be sent: ${sent.error}`);
+  if (!stages.length) problems.push('the trace holds no update stage');
+  if (!casts) problems.push('the trace marks no cast, though the hero attacked throughout');
+  if (!(trace.header.frames > 0)) problems.push('the trace holds no frame');
+  return { lines, problems };
+}
+
+export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<Report> {
+  await lab.setup({});
+  await foesAhead(lab, G.arena.biome, FOES);
+  const fight = costLine('the recorder', await timedFight(lab, options.frames));
+  const lines = ['the always-on performance recorder, the basic attack held into the foes, every frame drawn:', fight.line];
+  const problems: string[] = [];
+  if (fight.mean > BUDGET_MS) problems.push(`the recorder took ${fight.mean.toFixed(3)} ms a frame, over ${BUDGET_MS}`);
+  const trace = await traceNow(options.send);
+  lines.push(...trace.lines);
+  problems.push(...trace.problems);
+  if (!options.canary) return { text: lines.join('\n'), problems };
+  const restore = slowedBegin(CANARY_MS);
+  let planted: { line: string; mean: number };
+  try {
+    planted = costLine(`canary, ${CANARY_MS} ms more a frame`, await timedFight(lab, Math.min(120, options.frames)));
+  } finally {
+    restore();
+  }
+  const caught = planted.mean > BUDGET_MS;
+  lines.push(planted.line, `  canary: ${caught ? 'the slower recording caught' : 'the slower recording went unseen'}`);
+  return { text: lines.join('\n'), problems: caught ? problems : [...problems, 'canary: the slower recording went unseen'] };
+}

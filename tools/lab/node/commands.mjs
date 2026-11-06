@@ -688,6 +688,25 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  recorder: {
+    check(options) {
+      if (options.frames !== undefined && !(options.frames >= 60)) throw labError('recorder --frames: 60 or more');
+    },
+    async each(side, options) {
+      // (a traces service of the lab's own, for the page's origin: the trace sent and read back as a report goes)
+      const { checkSent, startTracesService } = await import('./tracesService.mjs');
+      const service = await startTracesService(new URL(side.url).origin);
+      try {
+        const command = { frames: Math.round(options.frames ?? 300), canary: Boolean(options.canary), send: service.url };
+        return await checkSent(await side.command('recorder', command), service);
+      } finally {
+        await service.close();
+      }
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   health: {
     check(options) {
       const wrong = options.shares.find((share) => !(Number(share) >= 0 && Number(share) <= 1));

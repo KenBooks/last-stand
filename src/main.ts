@@ -37,6 +37,8 @@ import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
+import { initTraceConsent } from './perf/consent';
+import { recorder } from './perf/recorder';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
@@ -117,6 +119,7 @@ async function boot() {
   initHud();
   initTouch();
   initPerfHud(renderer);
+  initTraceConsent();
   initNetHud();
   initBattleLog();
   buildHotbar(G.player);
@@ -181,6 +184,7 @@ async function boot() {
   updateCamera(0, G.player.pos, G.player.model.height);
   loadingDone(() => {
     revealed = true;
+    recorder.revealed(!navigator.serviceWorker?.controller);
     if (WEBGPU) pipelinesAtOnceFromNow();
     setTimeout(() => checkPrograms(renderer));
     void rest.then(() => checkPrograms(renderer));

@@ -40,6 +40,7 @@ import type { ThrowsOptions } from './throws';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
+import type { RecorderOptions } from './recorder';
 import type { CompilesOptions } from './compiles';
 import type { ProgramsOptions } from './programs';
 import type { MapsOptions } from './maps';
@@ -574,6 +575,14 @@ export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
 export async function perf(lab: Lab, command: PerfOptions): Promise<Report> {
   const { perf: perfOf } = await import('./perf');
   return perfOf(lab, command);
+}
+
+/** `lab recorder`: what the always-on performance recorder costs a frame in a fight, against its budget, and the
+ *  trace a send would pack of it, read back; a cost over the budget, a trace without stages or casts, or a canary
+ *  unseen, are problems. */
+export async function recorder(lab: Lab, command: RecorderOptions): Promise<Report> {
+  const { recorderCost } = await import('./recorder');
+  return recorderCost(lab, command);
 }
 
 /** `lab shots`: the hero's basic attack loosed over each biome's boss and the foes round it, in each view; a shot
