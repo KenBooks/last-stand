@@ -92,3 +92,15 @@ test('answers its health without the token, and reads nothing for a page', async
   assert.equal(await (await fetch(`${base}/traces/health`)).text(), 'ok');
   assert.equal((await read('/traces', '')).status, 401);
 });
+
+test('takes each PR preview\'s host by its pattern, and no other', async () => {
+  const { originsFrom } = await import('../traces.mjs');
+  const origins = originsFrom('https://last-stand.cc, https://pr-*.ls.wellscoped.dev');
+  assert.equal(origins.has('https://last-stand.cc'), true);
+  assert.equal(origins.has('https://pr-352.ls.wellscoped.dev'), true);
+  assert.equal(origins.has('https://pr-.ls.wellscoped.dev'), false);
+  assert.equal(origins.has('https://pr-1.evil.ls.wellscoped.dev'), false);
+  assert.equal(origins.has('https://pr-1.ls.wellscoped.dev.evil.example'), false);
+  assert.equal(origins.has('http://pr-1.ls.wellscoped.dev'), false);
+  assert.equal(origins.has('https://prX1.ls.wellscoped.dev'), false);
+});

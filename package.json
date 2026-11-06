@@ -17,8 +17,6 @@
     "lab": "node tools/lab/lab.mjs",
     "lab:serve": "node tools/lab/lab.mjs serve",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
-    "preview:test": "node --test \"scripts/preview/test/*.test.mjs\"",
-    "previews:test": "node --test \"server/previews/test/*.test.mjs\"",
     "stalls": "node tools/stalls/stalls.mjs",
     "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
     "traces:test": "node --test \"server/traces/test/*.test.mjs\""

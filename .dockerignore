@@ -1,0 +1,14 @@
+# Docker builds with the repo's root as their context (server/game-preview, a PR's preview) get only what the game's
+# build reads: everything else (node_modules, tools' out/, .tmp, .git) is left out.
+*
+!package.json
+!package-lock.json
+!index.html
+!vite.config.ts
+!tsconfig.json
+!src/
+!public/
+!scripts/pwa.ts
+!server/game-preview/nginx.conf
+**/AGENTS.md
+**/CLAUDE.md

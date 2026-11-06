@@ -9,7 +9,7 @@ stalls are the real browser's, at its own pace.
 ```bash
 npm run stalls                                   # this tree built and served, a 45 s fight in headless Chrome
 npm run stalls -- --url https://last-stand.cc/      # production
-npm run stalls -- --url https://last-stand.cc/pr-preview/pr-194/,https://last-stand.cc/
+npm run stalls -- --url https://pr-194.ls.wellscoped.dev/,https://last-stand.cc/
 npm run stalls -- --url this,https://last-stand.cc/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU

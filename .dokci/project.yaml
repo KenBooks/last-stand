@@ -1,5 +1,5 @@
-# Dokci deploys the co-op relay (server/relay), the PR previews service (server/previews) and the traces service
-# (server/traces) on every push to main; the game itself stays on GitHub Pages.
+# Dokci deploys the co-op relay (server/relay) and the traces service (server/traces) on every push to main, and
+# each open PR's preview (server/game-preview) at a host of its own; production itself stays on GitHub Pages.
 apiVersion: compose.control/v1alpha1
 kind: Project
 metadata:
@@ -16,9 +16,6 @@ spec:
       cpuLimit: "0.5"
       memoryLimit: 128MiB
   configuration:
-    LS_PREVIEWS_TOKEN:
-      description: The secret pr-preview.yml sends PR builds with (the repo's pr-preview environment's PREVIEWS_TOKEN).
-      whenMissing: Previews kept are still served; no build can be sent, so every publish fails.
     LS_TRACES_TOKEN:
       description: The secret agents read the performance traces with (npm run lab -- trace).
       whenMissing: Traces are still taken from the games and kept; nothing can read them.
@@ -36,13 +33,6 @@ spec:
           entryPoint: websecure
           certificateResolver: letsencrypt
           healthProbePath: /health
-        - service: previews
-          port: 8080
-          host: ls.wellscoped.dev
-          pathPrefix: /pr-preview
-          entryPoint: websecure
-          certificateResolver: letsencrypt
-          healthProbePath: /pr-preview/health
         - service: traces
           port: 8080
           host: ls.wellscoped.dev
@@ -52,3 +42,34 @@ spec:
           healthProbePath: /traces/health
       deploymentPolicy:
         requireManualApproval: false
+  # Each open PR's preview, built by Dokci from its head (server/game-preview): the game at its own host,
+  # https://pr-N.ls.wellscoped.dev/, under the DNS's wildcard *.ls.wellscoped.dev. Dokci reads this policy from main
+  # alone, takes only same-repository PRs by collaborators (no forks, no drafts), and links each ready preview from
+  # the PR's "Dokci preview" check.
+  previews:
+    - name: pr
+      baseBranches:
+        - main
+      stack:
+        composeFiles:
+          - server/game-preview/compose.yaml
+      hostTemplate: "pr-{{ pullRequest.number }}.ls.wellscoped.dev"
+      routes:
+        - service: game
+          port: 8080
+          entryPoint: websecure
+          certificateResolver: letsencrypt
+          healthProbePath: /health
+      trust:
+        allowForks: false
+        requireRepositoryCollaborator: true
+      cleanup:
+        deleteVolumes: true
+        closedPreviewRetention: 0m
+        orphanTtl: 7d
+      resources:
+        cpuLimit: "0.25"
+        memoryLimit: 64MiB
+        pidsLimit: 64
+        storageLimit: 512MiB
+        routeLimit: 1

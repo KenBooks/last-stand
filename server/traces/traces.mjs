@@ -16,6 +16,22 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 const env = process.env;
+/** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
+ *  each PR's preview, at a host of its own), as something with `has(origin)` (the relay has its own copy: each
+ *  service is a Docker build of its own folder). */
+export function originsFrom(list) {
+  const exact = new Set();
+  const patterns = [];
+  for (const origin of list.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (!origin.includes('*')) {
+      exact.add(origin);
+      continue;
+    }
+    const parts = origin.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'));
+    patterns.push(new RegExp(`^${parts.join('[a-z0-9-]+')}$`));
+  }
+  return { has: (origin) => exact.has(origin) || patterns.some((pattern) => pattern.test(origin)) };
+}
 /** The service's settings, from the environment (`start` may give others: the lab's local one, its tests'). */
 function settingsFrom(vars) {
   return {
@@ -23,8 +39,8 @@ function settingsFrom(vars) {
     data: vars.DATA ?? '/data',
     /** pages allowed to send (the relay's: the game's own domain, the github.io address it moved from, the dev
      *  server) */
-    origins: new Set((vars.ORIGINS ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,http://localhost:5173')
-      .split(',').map((o) => o.trim()).filter(Boolean)),
+    origins: originsFrom(vars.ORIGINS
+      ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://pr-*.ls.wellscoped.dev,http://localhost:5173'),
     token: vars.TRACES_TOKEN ?? '',
     maxBytes: Number(vars.MAX_BYTES ?? 1 << 20),
     keepDays: Number(vars.KEEP_DAYS ?? 30),

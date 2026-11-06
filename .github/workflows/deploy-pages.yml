@@ -1,8 +1,7 @@
 name: Deploy GitHub Pages
 
 # Production deploy, from the `gh-pages` branch, which holds production alone.
-# The PR previews are served by our own service on Dokci (server/previews,
-# pr-preview.yml), not by Pages.
+# The PR previews are Dokci's (server/game-preview), each at a host of its own.
 
 on:
   push:
@@ -61,8 +60,7 @@ jobs:
             git -C "${pages_dir}" rm -rf --ignore-unmatch .
           fi
 
-          # replace everything but the branch's own git files: production alone (the PR previews' old
-          # `pr-preview/` folders go with it: the previews are served by server/previews now)
+          # replace everything but the branch's own git files: production alone
           find "${pages_dir}" -mindepth 1 -maxdepth 1 \
             ! -name .git \
             -exec rm -rf {} +

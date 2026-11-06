@@ -119,7 +119,7 @@ This is what the scripts do, step by step.
 - **Link the PR with `Closes #N` in its body.** A closing keyword in the title does nothing, and a PR never copies the issue text. With `Closes #N` in the body, the PR shows the issue under "Development", the issue shows the PR, and merging closes the issue.
 - **Keep branches linear.** Rebase onto `upstream/main` and never merge `main` into your branch: the `branch-policy` check fails any PR that contains merge commits.
 - **A branch must be up to date with `main` to merge.** The maintainer may update it with GitHub's "Update branch", which rebases the branch on your fork. Your local copy is then stale, so `git branch -d` refuses to delete it after the merge: use `-D`.
-- **Fork PRs get a preview too.** A sticky comment links it at `https://last-stand.cc/pr-preview/pr-N/` once it's built. Still add screenshots for UI changes.
-- **Every push waits for approval.** GitHub holds the workflow runs on a fork PR (checks and preview) until a maintainer approves them, for every push, not just your first PR.
+- **Fork PRs get no live preview.** Previews are built on our own host, which never builds a fork's code; add screenshots (and a short clip for anything that moves) to show your change.
+- **Every push waits for approval.** GitHub holds the workflow runs on a fork PR (the checks) until a maintainer approves them, for every push, not just your first PR.
 - **Delete your fork's branch yourself.** Upstream deletes merged branches automatically only in its own repo.
 - **One PR per feature.** Keep PRs focused.

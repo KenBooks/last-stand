@@ -10,8 +10,19 @@ import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
+/** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
+ *  each PR's preview, at a host of its own), as something with `has(origin)` and the list as `names`. */
+export function originsFrom(list) {
+  const exact = new Set(), patterns = [];
+  for (const o of list.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (!o.includes('*')) { exact.add(o); continue; }
+    const parts = o.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'));
+    patterns.push(new RegExp(`^${parts.join('[a-z0-9-]+')}$`));
+  }
+  return { names: [...exact, ...patterns.map(String)], has: (origin) => exact.has(origin) || patterns.some((p) => p.test(origin)) };
+}
 /** pages allowed to open a socket (a browser always sends its Origin; anything else is turned away) */
-const ORIGINS = new Set((process.env.ORIGINS ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://ls.wellscoped.dev,http://localhost:5173,http://localhost:5199').split(',').map((o) => o.trim()).filter(Boolean));
+const ORIGINS = originsFrom(process.env.ORIGINS ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://ls.wellscoped.dev,https://pr-*.ls.wellscoped.dev,http://localhost:5173,http://localhost:5199');
 const ROOM_MAX = 4, ROOMS_MAX = 500, MSG_MAX = 64 * 1024, GRACE = 8000, PING = 20000;
 /** each socket's budget: messages and bytes a second, with a burst of two seconds' worth (a game sends ~60 a second) */
 const RATE = { msgs: 400, bytes: 1 << 20 };
@@ -90,5 +101,5 @@ setInterval(() => {
   for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; ws.ping(); }
 }, PING);
 
-http.listen(PORT, () => log(`co-op relay on :${PORT}, origins ${[...ORIGINS].join(' ')}`));
+http.listen(PORT, () => log(`co-op relay on :${PORT}, origins ${ORIGINS.names.join(' ')}`));
 for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { log('stopping'); process.exit(0); });
