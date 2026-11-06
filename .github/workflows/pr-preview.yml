@@ -221,7 +221,7 @@ jobs:
         with:
           script: |
             const { recordPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
-            await recordPublish({ core });
+            await recordPublish({ github, context, core });
 
       - name: Say what each preview is
         if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0'

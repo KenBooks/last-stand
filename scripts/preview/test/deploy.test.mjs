@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ARTIFACT, artifactId, deployPages } from '../deploy.mjs';
+import { statusText, throttle } from '../steps.mjs';
 import { REPO } from './fakes.mjs';
 
 const VERSION = 'f'.repeat(40);
@@ -34,6 +35,7 @@ function fakePages(statuses) {
 /** deployPages on a fake clock, 5 s a check: { live, seconds, asked }. */
 async function deploy(statuses, { timeout = 60000 } = {}) {
   const { asked, github } = fakePages(statuses);
+  const told = [];
   let clock = 0;
   const live = await deployPages({
     github,
@@ -46,8 +48,9 @@ async function deploy(statuses, { timeout = 60000 } = {}) {
     every: 5000,
     timeout,
     log: () => {},
+    onStatus: async (status, seconds) => { told.push([status, seconds]); },
   });
-  return { live, seconds: clock / 1000, asked };
+  return { live, seconds: clock / 1000, asked, told };
 }
 
 test('a deploy is named by the commit it deploys, and waited for until that deployment succeeds', async () => {
@@ -56,6 +59,20 @@ test('a deploy is named by the commit it deploys, and waited for until that depl
   assert.equal(live, true);
   assert.equal(seconds, 15);
   assert.deepEqual(asked.created, [{ ...REPO, artifact_id: 42, pages_build_version: VERSION, oidc_token: 'oidc' }]);
+});
+
+test('each status read is told with its time, for the comment to show', async () => {
+  const { told } = await deploy({ [VERSION]: ['deployment_queued', 'syncing_files', 'succeed'] });
+  assert.deepEqual(told, [['deployment_queued', 5], ['syncing_files', 10], ['succeed', 15]]);
+  assert.deepEqual(['deployment_queued', 'syncing_files', ''].map(statusText), ['queued', 'syncing files', 'status unreadable']);
+});
+
+test('the comment says a status again only every so often', () => {
+  let clock = 0;
+  const due = throttle(15000, () => clock);
+  const said = [];
+  for (clock = 0; clock <= 40000; clock += 5000) if (due()) said.push(clock / 1000);
+  assert.deepEqual(said, [0, 15, 30]);
 });
 
 test('an unreadable status is asked again', async () => {

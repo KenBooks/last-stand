@@ -7,11 +7,33 @@ export function buildingMessage({ sha, run }) {
     + `it's published.\n\n[Watch the build](${run})`;
 }
 
-/** A finished build being put on Pages by `run` (the publish run's own page: the build's is done by then, and a
- *  "building" comment linking it read as stuck while the deploy took minutes). */
-export function publishingMessage({ sha, run }) {
-  return `**PR preview:** built \`${sha}\`, now publishing it to GitHub Pages. The preview's page goes to it once `
-    + `Pages serves it.\n\n[Watch it publish](${run})`;
+/** The publish's stages in order, each as the comment says it under way and done. */
+export const STAGES = [
+  { name: 'staging', doing: 'Copying it onto gh-pages', done: 'Copied onto gh-pages' },
+  { name: 'deploying', doing: 'Deploying to GitHub Pages', done: 'Deployed to GitHub Pages' },
+  { name: 'serving', doing: 'Waiting for GitHub Pages to serve it', done: 'Served by GitHub Pages' },
+];
+
+/** A time in seconds as the comment shows it: `45 s`, `2 min 05 s`. */
+export function duration(seconds) {
+  const whole = Math.max(0, Math.round(seconds));
+  if (whole < 60) return `${whole} s`;
+  return `${Math.floor(whole / 60)} min ${String(whole % 60).padStart(2, '0')} s`;
+}
+
+/** A finished build being published by `run`, a checklist of its stages: those done, the one under way with what
+ *  it's at (`detail`), those to come. The publish run's own link (the build's run is done by then: a "building"
+ *  comment linking it read as stuck while the deploy took minutes). */
+export function progressMessage({ sha, build, run, stage, detail = '' }) {
+  const at = STAGES.findIndex((each) => each.name === stage);
+  const lines = [`- ✅ Built ([its run](${build}))`];
+  STAGES.forEach((each, i) => {
+    if (i < at) lines.push(`- ✅ ${each.done}`);
+    else if (i === at) lines.push(`- ⏳ **${each.doing}**${detail ? `: ${detail}` : ''}`);
+    else lines.push(`- ⬜ ${each.done}`);
+  });
+  return `**PR preview:** publishing \`${sha}\`. The preview's page goes to it once Pages serves it.\n\n`
+    + `${lines.join('\n')}\n\n[Watch it publish](${run})`;
 }
 
 /** What an item came to (`result`, from staging or probing; none when the job failed before it). */
