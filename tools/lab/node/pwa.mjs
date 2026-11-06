@@ -13,7 +13,6 @@ import { launchBrowser } from './browser.mjs';
 import { exportCommit, exportedTreePaths } from './commits.mjs';
 import { describeError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
-import { playPreviewService } from './pwaPreviews.mjs';
 import { StaticHost } from './staticHost.mjs';
 
 /** where the builds go */
@@ -348,9 +347,6 @@ async function playLoads(builds, canary) {
     const installed = await playInstalled({ page, context, host, url, builds, canary });
     lines.push(...installed.lines);
     problems.push(...installed.problems);
-    const service = await playPreviewService({ browser, builds, productionUrl: url, canary });
-    lines.push(...service.lines);
-    problems.push(...service.problems);
   } finally {
     await browser.close();
     await host.close();
@@ -364,13 +360,11 @@ function canaryVerdict(problems) {
   const fonts = problems.some((problem) => problem.includes('the system\'s fonts'));
   const offline = problems.some((problem) => problem.startsWith('the app started offline'));
   const gone = problems.some((problem) => problem.startsWith('the app at a closed PR'));
-  const unsent = problems.some((problem) => problem.startsWith('the previews service: the stable page'));
   const caught = [
     ['stale page', stale],
     ['broken font stylesheet', fonts],
     ['deleted production cache', offline],
     ['plain 404', gone],
-    ['unsent latest.json of a preview', unsent],
   ];
   const lines = caught.map(([what, seen]) => `canary: the ${what} ${seen ? 'caught' : 'went unseen'}`);
   const missed = caught.filter(([, seen]) => !seen).map(([what]) => `the canary's ${what} went unseen`);

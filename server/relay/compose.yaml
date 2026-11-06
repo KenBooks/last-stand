@@ -1,6 +1,6 @@
-# The co-op relay, the PR previews service and the traces service as Dokci deploys them (.dokci/project.yaml routes
-# the public host to the relay over Traefik, its /pr-preview to the previews, server/previews, and its /traces to the
-# traces, server/traces: each a process of its own so an upload never holds rooms up).
+# The co-op relay and the traces service as Dokci deploys them (.dokci/project.yaml routes the public host to the
+# relay over Traefik and its /traces to the traces, server/traces: a process of its own so an upload never holds
+# rooms up). The PR previews are stacks of their own (server/game-preview).
 services:
   relay:
     build:
@@ -19,31 +19,6 @@ services:
     restart: unless-stopped
     cpus: "0.5"
     mem_limit: 128MiB
-  previews:
-    build:
-      context: ../previews
-      dockerfile: Dockerfile
-    environment:
-      PORT: "8080"
-      DATA: /data
-      # (the secret pr-preview.yml sends builds with: Dokci's configuration, never in the repo; unset, nothing can
-      # be sent and what's kept is still served)
-      PREVIEWS_TOKEN: ${LS_PREVIEWS_TOKEN:-}
-      KEEP: "3"
-      DISK_MAX: "2147483648"
-      SITE: https://last-stand.cc/
-    volumes:
-      - previews-data:/data
-    expose:
-      - "8080"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/pr-preview/health"]
-      interval: 5s
-      timeout: 2s
-      retries: 12
-    restart: unless-stopped
-    cpus: "0.5"
-    mem_limit: 256MiB
   traces:
     build:
       context: ../traces
@@ -69,5 +44,4 @@ services:
     cpus: "0.25"
     mem_limit: 96MiB
 volumes:
-  previews-data:
   traces-data:

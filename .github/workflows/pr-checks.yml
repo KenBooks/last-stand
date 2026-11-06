@@ -1,0 +1,49 @@
+name: PR checks
+
+# Checks every pull request, forks included: the tools' and services' unit tests, the typecheck, the build and its
+# asset paths. It runs the PR's code, so it gets a read-only token and no secrets, and publishes nothing: the PR's
+# preview is Dokci's (server/game-preview), built from the PR's head on our own host.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Test, type-check and build
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test the lab's own code
+        run: npm run lab:test
+
+      - name: Test the traces service
+        run: npm run traces:test
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Verify asset paths
+        run: npm run check:pages

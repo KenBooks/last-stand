@@ -994,15 +994,10 @@ a channel, looked up once (matched against every part's colour, a picture took 1
   folder pruned (a game must show: its worker's cached build, or this tree's by the 404 page) and at a closed PR's
   build never served (the build's `404.html` answering it, as Pages does, must send it to the game at
   `/last-stand/`). Under main's worker the offline start fails.
-  Then the previews as the previews service serves them (`node/pwaPreviews.mjs`; `server/previews`, run in this
-  process on an origin of its own, keeping one build a PR so the second prunes the first): each preview build sent as
-  `pr-preview.yml` sends it (packed by `scripts/preview/tar.mjs`, its stable page and `latest.json` beside it), the
-  stable page opened (it must go to that build), its worker installed and the build reloaded offline; then the first
-  build's address opened once pruned (its worker's build, or the newest by the stable page) and a closed PR's (the
-  service sends it to production's game).
+  (The previews were served under production's origin by Pages until #352, so players' browsers may still hold
+  their workers there; Dokci serves each now at a host of its own, `server/game-preview`.)
   `--canary` serves a stale page on the first reload after the swap and the font stylesheet's address broken after
-  it, deletes production's cache before the offline start, answers a missing path with a plain 404, and leaves the
-  newest preview's `latest.json` unsent (its stable page goes to the build before): all five must be found. About 40 s to 100 s (the canary's two and a half minutes: its waits run out). (The owner's
+  it, deletes production's cache before the offline start, answers a missing path with a plain 404: all four must be found. About 40 s to 100 s (the canary's two and a half minutes: its waits run out). (The owner's
   installed app on their phone opened Pages' plain 404: it was left on a PR preview's build, pruned since, and the
   previews' workers had deleted the caches that would have shown it.) (The owner, of #263's preview:
   the page's font stylesheet had been asked for with CORS, and the previous deploy's worker answered with the copy
