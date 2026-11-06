@@ -18,6 +18,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { constants as zlibConstants, brotliCompress, createGunzip, gzip } from 'node:zlib';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { readTar } from './tar.mjs';
 
@@ -99,11 +100,27 @@ async function readJson(file) {
   }
 }
 
+/** errors a rename meets while another process holds a file just written (on Windows, its scanner or indexer) */
+const HELD = ['EPERM', 'EACCES', 'EBUSY'];
+
+/** `from` renamed to `to`, tried again for up to a second while a file in it is held: on Windows a folder of files
+ *  just written failed to move one upload in a few (EPERM), and the build answered 500. */
+async function moveWhenFree(from, to) {
+  for (let wait = 10; ; wait *= 2) {
+    try {
+      return await rename(from, to);
+    } catch (error) {
+      if (!HELD.includes(error.code) || wait > 640) throw error;
+      await sleep(wait);
+    }
+  }
+}
+
 /** A file written whole or not at all: beside, then moved over. */
 async function writeAtomic(file, contents) {
   const beside = `${file}.${randomBytes(4).toString('hex')}.part`;
   await writeFile(beside, contents);
-  await rename(beside, file);
+  await moveWhenFree(beside, file);
 }
 
 async function entries(dir) {
@@ -281,8 +298,11 @@ async function putBuild(req, number, folder, sha) {
     await mkdir(prDir(number), { recursive: true });
     const target = folderDir(number, folder);
     const replaced = `${incoming}-replaced`;
-    await rename(target, replaced).catch(() => {});
-    await rename(incoming, target);
+    // (a build sent again: its old folder moved aside first; none there is the usual case)
+    await moveWhenFree(target, replaced).catch((error) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+    await moveWhenFree(incoming, target);
     await rm(replaced, { recursive: true, force: true });
     await prune(number);
     const ms = Date.now() - started;
