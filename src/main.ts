@@ -162,13 +162,14 @@ async function boot() {
   if (!firstVisit) lobbyLaidOut();
   // the lobby's shaders compiled before it shows with its own hero's alone, the fight's and the other heroes' behind it
   // (game/warmup.ts): a first visit opens on the hall of heroes, its room warmed with the lobby's and its other heroes
-  // right after, a hero at a time, each shown on his plinth as he's warm (from play, "we can only load currently
-  // selected/default hero... and then load the two others": warmed under the loading screen, a low-end laptop's froze)
+  // once the loading screen has left, a hero at a time, each shown on his plinth as he's warm (from play, "we can only
+  // load currently selected/default hero... and then load the two others": warmed under the loading screen, a low-end
+  // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
   if (firstVisit) await loadingStep('Readying the hall', 0.6);
   await warmLobby(firstVisit);
   const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
-    want('heroes');
+    void loadingLeft.then(() => want('heroes'));
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();
