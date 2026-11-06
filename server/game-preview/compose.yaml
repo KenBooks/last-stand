@@ -1,0 +1,17 @@
+# A PR's preview as Dokci runs it (.dokci/project.yaml `previews`): one stack per PR, at https://pr-N.ls.wellscoped.dev/,
+# built from the PR's head. DOKCI_SOURCE_SHA is the commit Dokci checked out.
+services:
+  game:
+    build:
+      context: ../..
+      dockerfile: server/game-preview/Dockerfile
+      args:
+        SOURCE_COMMIT: ${DOKCI_SOURCE_SHA:-}
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    restart: unless-stopped
