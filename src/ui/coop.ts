@@ -26,8 +26,8 @@ const who = (p: Player): string => `${p.slot === 0 ? 'Host' : 'Partner'} · ${p.
 
 let touchRevive = false;
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['fight', 'heroes'], () => void hostRoom(), READYING.coop);
-const join = whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code), READYING.coop);
+const host = whenWarm(['heroes'], () => void hostRoom(), READYING.coop);
+const join = whenWarm(['heroes'], (code: string) => void joinRoom(code), READYING.coop);
 /** Whether the touch revive button is held. */
 export const touchReviving = (): boolean => touchRevive;
 

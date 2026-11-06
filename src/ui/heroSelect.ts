@@ -17,6 +17,7 @@ import { hideTooltip } from './tooltip';
 import { renderAttributes } from './attributes';
 import { renderHeroGear } from './heroGear';
 import { openSaves } from './saves';
+import { heroShare, onReadying } from '../game/warm';
 import type { ClassDef, Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -108,6 +109,36 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   }
   new ResizeObserver(layOut).observe($('.hs-panel'));
   window.addEventListener('resize', layOut);
+  // (the heroes warmed after the lobby shows, a hero at a time: each tab's bar, and the choice, as they get further)
+  onReadying(readied);
+}
+
+/** How far the hero of class `id` is warmed (0 to 1). */
+const readiness = (id: string): number => heroShare(CLASSES[id].model);
+
+/** Each tab's bar and the choice told how far their heroes are warmed (none once they are). */
+function readied(): void {
+  if (!heroSelectOpen()) return;
+  document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => {
+    const share = readiness(b.dataset.c!);
+    b.classList.toggle('cold', share < 1);
+    b.style.setProperty('--ready', String(share));
+  });
+  chooseLabel();
+}
+
+/** The choice's words: what choosing the hero in focus does, or how far he is from ready (it waits till he is). */
+function chooseLabel(): void {
+  const { id } = hallHeroes()[hallFocus()];
+  const cls = CLASSES[id];
+  const share = readiness(id);
+  const button = $('.hs-choose');
+  button.classList.toggle('cold', share < 1);
+  if (share < 1) {
+    button.textContent = `Readying the ${cls.name} ${Math.round(share * 100)}%`;
+    return;
+  }
+  button.textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
 }
 
 /** One class's card: its name in the logo's forged steel, its role, tagline, how it plays, its skills, its records. */
@@ -280,7 +311,7 @@ function shown(): void {
   $('#heroes').style.setProperty('--cc', cls.accent);
   renderHeroGear(hero.profile, $('.hs-equip'), $('.hs-stash'), $('.hs-stash-count'));
   renderAttributes($('.hs-stats'), hero.player, hero.profile);
-  $('.hs-choose').textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
+  readied();
   hover(false);
   placeChoice();
 }
@@ -288,6 +319,8 @@ function shown(): void {
 function choose(): void {
   if (!hallOpen()) return;
   const { id, profile } = hallHeroes()[hallFocus()];
+  // (not yet warm: his bar says how far; chosen now, the lobby would draw him before his programs are linked)
+  if (readiness(id) < 1) return;
   closeHeroSelect({ id, profile });
 }
 

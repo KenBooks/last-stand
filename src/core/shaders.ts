@@ -393,19 +393,30 @@ async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, how: L
     if (program) programs.add(program);
   }
   let linkedSoFar = 0;
+  let since = performance.now();
   for (const program of programs) {
     const asked = performance.now();
     while (!program.isReady()) {
       if (how.giveUpMs !== undefined && performance.now() - asked > how.giveUpMs) return false;
       await how.poll();
+      since = performance.now();
     }
     program.getUniforms();
     program.getAttributes();
     how.done?.(++linkedSoFar / programs.size);
     await how.step?.();
+    // (where the browser links a program only as it's first read, no KHR_parallel_shader_compile, each read above
+    // links it: the page let go between them, or a fight's were linked in one task that froze a laptop's tab)
+    if (!how.step && performance.now() - since > LINK_SLICE_MS) {
+      await how.poll();
+      since = performance.now();
+    }
   }
   return true;
 }
+
+/** the most of a task the programs' reads take, each linking its program where the browser links as it's read (ms) */
+const LINK_SLICE_MS = 40;
 
 /** How a warm-up goes (`warmUp`). */
 export interface WarmUp {

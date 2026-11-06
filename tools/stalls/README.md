@@ -13,6 +13,7 @@ npm run stalls -- --url https://pr-194.ls.wellscoped.dev/,https://last-stand.cc/
 npm run stalls -- --url this,https://last-stand.cc/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
+npm run stalls -- --scenario boot --variants base,noParallelCompile  # then WebGL without parallel shader links
 npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=webgpu,this?renderer=webgpu&x=0"
                                                  # two URLs' heroes in the same gear (every page's dice one seed)
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby

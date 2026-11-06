@@ -50,6 +50,10 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 .hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(10px); height: ui(10px); translate: -50% 0; rotate: 45deg;
   border: 1px solid rgba($frame, .7); background: #120e0a; }
 .hs-tabs button:hover { color: var(--ink); }
+/* a hero still warming after the lobby shows (game/warm.ts): his tab's bar fills as he gets further, gone once he's
+   ready ("show some loading bars on those heroes") */
+.hs-tabs button.cold::before { content: ''; position: absolute; left: 18%; right: 18%; bottom: ui(13px); height: ui(3px);
+  border-radius: ui(2px); background: linear-gradient(to right, var(--cc) calc(var(--ready, 0) * 100%), rgba(255,255,255,.18) 0); }
 .hs-tabs button.active { color: var(--cc); text-shadow: 0 0 ui(12px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; }
 .hs-tabs button.active::after { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 ui(8px) var(--cc); }
 .hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
@@ -118,6 +122,8 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; opacity: 0; transition: opacity .18s ease-out; }
 #heroes.over-hero .hs-choose, .hs-choose:is(:hover, :focus-visible) { opacity: .92; }
 .hs-choose:hover { filter: none; background: rgba(30,20,12,.55); }
+/* (his choice waits till he's warm: it says how far along he is) */
+.btn.hs-choose.cold { cursor: default; opacity: .85; font-variant-numeric: tabular-nums; }
 @media (hover: none) { .btn.hs-choose { opacity: .85; } }
 
 /* ---------- short screens (phones held sideways): a narrower, tighter panel ---------- */

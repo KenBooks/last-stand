@@ -21,6 +21,7 @@ import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
+import { heroShare } from './warm';
 
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
@@ -288,6 +289,11 @@ export function updateHall(dt: number): void {
   if (!hallOpen()) return;
   const t = G.time;
   for (const h of heroes) {
+    // (a hero not yet warm left out of the frame, his plinth empty, and his showcase held till he is: drawn, his programs
+    // would be made in the frame; his tab's bar says how far along he is, ui/heroSelect.ts)
+    const ready = heroShare(h.player.cls.model) >= 1;
+    h.player.obj.visible = ready;
+    if (!ready) h.due = Math.max(h.due, t + SHOWCASE.after);
     if (t >= h.due) showOff(h, t);
     stepCast(h, t);
     // (his showcase first: no glance round while it's due or under way)
@@ -296,7 +302,7 @@ export function updateHall(dt: number): void {
     turnTo(h, dt);
     r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;
     h.player.update(dt);
-    haloRound(h.player, dt);
+    if (ready) haloRound(h.player, dt);
   }
   const at = spot(nearest(hallAlong()));
   const [key, rim] = lights;
