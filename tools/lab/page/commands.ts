@@ -34,6 +34,7 @@ import type { LogOptions } from './log';
 import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
 import type { SpinOptions } from './spin';
+import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
 import type { ThrowsOptions } from './throws';
@@ -444,6 +445,15 @@ export async function tooltips(lab: Lab, command: TooltipsOptions): Promise<Repo
 export async function cursor(lab: Lab, command: CursorOptions): Promise<Report> {
   const { cursor: cursorRound } = await import('./cursor');
   return cursorRound(lab, command);
+}
+
+/**
+ * `lab auto`: Auto quality's walk down from High on a slow device, fed a GPU-bound device's frame times: each step and
+ * the time until the device holds its target.
+ */
+export async function auto(_lab: Lab, command: AutoOptions): Promise<Report> {
+  const { autoQuality } = await import('./autoQuality');
+  return autoQuality(command);
 }
 
 /**

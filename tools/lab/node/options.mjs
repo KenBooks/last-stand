@@ -1775,6 +1775,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  auto: {
+    help: 'Auto quality\'s walk down from High on a slow device (src/core/quality.ts): Auto set as a player sets it, '
+      + 'fed each frame\'s time as a GPU-bound device takes it (in proportion to the scene\'s pixels, at the '
+      + 'level\'s cost: an integrated GPU\'s, 5 frames a second at High on a 2864x1536 canvas), each step listed and '
+      + 'the time until the device holds 50 frames a second, at most 20 s (--screen 1432x768@2: the tester\'s)',
+    options: {
+      canary: { kind: 'switch', help: 'Auto\'s old pace too, a step a 4 s window and half the pixels: too slow' },
+      ...COMMON_OPTIONS,
+    },
+  },
   trace: {
     help: 'a performance trace a slow game sent (src/perf/AGENTS.md), fetched from the traces service with the '
       + 'token in tools/lab/traces.env and read as the perf overlay\'s report reads: why it was sent, the frame '

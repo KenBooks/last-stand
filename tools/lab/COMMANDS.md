@@ -572,8 +572,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
   of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
   their camera, not the hero's.
-- `trace [code]` and `recorder`: the performance traces slow games send, read back, and what recording them costs:
-  in full in [`commands/traces.md`](commands/traces.md).
+- `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
+  costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
 - `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
   biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
   (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each

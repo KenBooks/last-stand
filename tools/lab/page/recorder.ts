@@ -120,6 +120,61 @@ async function traceNow(send: string): Promise<{ lines: string[]; problems: stri
   return { lines, problems };
 }
 
+/** A slow boot's trace must hold at least this share of its wait after the reveal */
+const TAIL_HELD = 0.95;
+/** the mark a slow boot's reveal leaves (src/perf/recorder.ts `slowBootRevealed`) */
+const TAIL_MARK = 'slow: boot, its trace waits';
+
+/** How long the trace runs on after the last mark that starts with `text` (ms); -1 if it has none. */
+function afterMark(trace: ReturnType<typeof decodeTrace>, text: string): number {
+  const marked = trace.header.marks.findLast(([, said]) => said.startsWith(text));
+  if (!marked) return -1;
+  let span = 0;
+  for (const ms of trace.columns.interval) span += ms;
+  return span - marked[0];
+}
+
+/**
+ * A slow boot's trace: its reveal stood in for (`slowBootRevealed`), the lobby played on through its wait, then the
+ * trace taken read back. It must hold the play after the reveal, judged beside the boot's time: taken at the reveal,
+ * a laptop's held one second, 17 frames, where its player saw 5 frames a second for a minute (trace JGNM-1NCF).
+ * `tailMs` is the wait (the canary's 0: taken at once, as before).
+ */
+async function bootTail(lab: Lab, tailMs: number): Promise<{ lines: string[]; problems: string[]; held: number }> {
+  const wanted = recorder.wanted;
+  const kept = recorder.bootTailMs;
+  recorder.wanted = () => true;
+  recorder.bootTailMs = tailMs;
+  recorder.release();
+  try {
+    recorder.slowBootRevealed(performance.now());
+    const early = recorder.pending();
+    await lab.until(() => recorder.pending() !== null, Math.ceil(tailMs / 16) + 120, 'a slow boot\'s trace taken');
+    const slow = recorder.pending()!;
+    const trace = decodeTrace(traceOf(slow));
+    const held = afterMark(trace, TAIL_MARK);
+    const why = traceReport(trace).find((line) => line.startsWith('Sent because')) ?? '(no reason line)';
+    const lines = [
+      `  a slow boot's trace, waiting ${(tailMs / 1000).toFixed(0)} s: ${trace.header.frames} frames, `
+        + `${(held / 1000).toFixed(1)} s of them after the reveal`,
+      `    ${why}`,
+    ];
+    const problems: string[] = [];
+    if (early && tailMs > 0) problems.push('a slow boot\'s trace was taken at the reveal, not after its wait');
+    if (slow.scene !== 'boot') problems.push(`a slow boot's trace was sent for the ${slow.scene}`);
+    if (held < tailMs * TAIL_HELD) {
+      problems.push(`a slow boot's trace holds ${(held / 1000).toFixed(1)} s after the reveal, under its wait's `
+        + `${(tailMs * TAIL_HELD / 1000).toFixed(1)}`);
+    }
+    if (!why.includes('the play after it')) problems.push('a slow boot\'s trace says nothing of the play after it');
+    return { lines, problems, held };
+  } finally {
+    recorder.release();
+    recorder.wanted = wanted;
+    recorder.bootTailMs = kept;
+  }
+}
+
 export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<Report> {
   await lab.setup({});
   await foesAhead(lab, G.arena.biome, FOES);
@@ -130,7 +185,14 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const trace = await traceNow(options.send);
   lines.push(...trace.lines);
   problems.push(...trace.problems);
+  const tail = await bootTail(lab, recorder.bootTailMs);
+  lines.push(...tail.lines);
+  problems.push(...tail.problems);
   if (!options.canary) return { text: lines.join('\n'), problems };
+  const tailCanary = await bootTail(lab, 0);
+  const tailCaught = tailCanary.problems.length > 0;
+  lines.push(`  canary, a slow boot's trace taken at the reveal: ${tailCaught ? 'caught' : 'went unseen'}`);
+  if (!tailCaught) problems.push('canary: a slow boot\'s trace taken at the reveal went unseen');
   const restore = slowedBegin(CANARY_MS);
   let planted: { line: string; mean: number };
   try {

@@ -19,6 +19,11 @@ const SETTLE_MS = 3000;
 const MOST_NAMED = 32;
 const MOST_MARKS = 400;
 const MOST_LONG = 200;
+/** How long a slow boot's trace waits after the reveal, recording the play after it, before it's taken (ms). Taken at
+ *  the reveal, a laptop's held its last second alone, 17 frames, while its player saw 5 frames a second "for the first
+ *  minute or two", and the one ask a session went on it (trace JGNM-1NCF). The snapshot keeps the minute before it is
+ *  taken, so the loading screen's last frames come with it. */
+const BOOT_TAIL_MS = 45_000;
 
 /** the frames' fixed columns, each a value a frame */
 const FIXED = ['interval', 'late', 'cpu', 'upd', 'rnd', 'gpu', 'draws', 'tris', 'programs', 'foes', 'particles', 'state'] as const;
@@ -65,6 +70,8 @@ const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: f
 let readyingSince = 0, wasHidden = false;
 const listeners: ((slow: Slow) => void)[] = [];
 let pending: Slow | null = null;
+/** when a slow boot was revealed, its trace waiting for the play after it (`BOOT_TAIL_MS`); 0: none waits */
+let slowBootAt = 0;
 
 /** what the scene was last frame: a change marks it and settles the frames after it */
 const seen = { mode: '', phase: '', wave: 0, biome: '', player: null as unknown, hall: false };
@@ -121,8 +128,10 @@ function judgeNow(now: number): void {
 }
 
 function found(where: Scene, verdict: Verdict | null, tookMs: number): void {
+  // (a slow boot's trace, still waiting, takes in whatever else is slow meanwhile: the one ask a session is its)
+  if (slowBootAt && where !== 'boot') return;
   if (pending || !recorder.wanted()) return;
-  mark(`slow: ${verdict ? verdict.why : where}`);
+  mark(`slow: ${where === 'boot' ? 'boot' : verdict ? verdict.why : where}`);
   pending = { scene: where, verdict, tookMs, at: performance.now(), snapshot: takeSnapshot() };
   for (const fn of listeners) fn(pending);
 }
@@ -205,6 +214,7 @@ export const recorder = {
     fixed.draws[head] = draws; fixed.tris[head] = tris; fixed.programs[head] = programs;
     fixed.foes[head] = foes; fixed.particles[head] = particles;
     if (lastFrame - lastJudged >= JUDGE_EVERY_MS) { lastJudged = lastFrame; judgeNow(lastFrame); }
+    if (slowBootAt && lastFrame - slowBootAt >= recorder.bootTailMs) bootTail();
   },
 
   /** A frame's GPU time as it came back (ms), and its parts' when it was timed in parts, by its place in the ring. */
@@ -247,8 +257,18 @@ export const recorder = {
     boot.downloadMs = Math.round(downloadTime());
     boot.steps.push([boot.revealMs, 'shown']);
     mark('shown', now);
-    if (slowBoot(boot.revealMs, boot.downloadMs)) found('boot', null, boot.revealMs);
+    if (slowBoot(boot.revealMs, boot.downloadMs)) recorder.slowBootRevealed(now);
   },
+
+  /** A slow boot revealed at `now`: its trace waits `bootTailMs` for the play after it (the lab's `recorder` calls it
+   *  to check the wait). */
+  slowBootRevealed(now: number): void {
+    if (pending || !recorder.wanted()) return;
+    slowBootAt = now;
+    mark('slow: boot, its trace waits for the play after it', now);
+  },
+  /** how long a slow boot's trace waits after the reveal (ms): `BOOT_TAIL_MS`, the lab's canary none */
+  bootTailMs: BOOT_TAIL_MS,
 
   /** Whether a slow stretch found now could go anywhere (`consent.ts` says): none is snapshotted otherwise. */
   wanted: (): boolean => false,
@@ -262,6 +282,12 @@ export const recorder = {
   snapshot: takeSnapshot,
   judged: (): Verdict => judge(framesNow(), refreshMs),
 };
+
+/** A slow boot's trace taken, the play after its reveal judged beside it. */
+function bootTail(): void {
+  slowBootAt = 0;
+  found('boot', judge(framesNow(), refreshMs), boot.revealMs);
+}
 
 /** How long the page waited on its files (ms): the time any of the document, its scripts, styles and fetches was
  *  coming, as the browser timed them (overlaps counted once), up to now. */

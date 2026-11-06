@@ -48,12 +48,21 @@ const FIXED = new Set(['interval', 'late', 'cpu', 'upd', 'rnd', 'gpu', 'draws', 
 
 /** Why the trace was sent, in a line: what took long, or what the detector saw (a number it never had, -1, left out). */
 function whyText(r: Record<string, number | string>): string {
-  if (r.why === 'boot') return `the boot took ${sec(Number(r.tookMs))}`;
+  if (r.why === 'boot') {
+    const took = `the boot took ${sec(Number(r.tookMs))}`;
+    // (a trace from before the boot's waited for the play after it has no verdict on it)
+    return r.playMs === undefined ? took : `${took}; the play after it: ${playText(r)}`;
+  }
   if (r.why === 'readying') return `a loading bar was up ${sec(Number(r.tookMs))}`;
+  return `${r.why || 'not slow (taken by a harness)'}: ${playText(r)}`;
+}
+
+/** What the detector saw of the play, in a line. */
+function playText(r: Record<string, number | string>): string {
   const rate = Number(r.lowFps) >= 0
     ? `1% low ${fps(Number(r.lowFps))} fps, mean ${fps(Number(r.meanFps))}, missed ${fmt(Number(r.missed) * 100, 0)}% of the display's frames, `
     : 'the frame rate not judged (too little play), ';
-  return `${r.why || 'not slow (taken by a harness)'}: ${rate}${r.stalls} stalls (longest ${fmt(Number(r.longestMs), 0)} ms) over ${sec(Number(r.playMs))} of play`;
+  return `${rate}${r.stalls} stalls (longest ${fmt(Number(r.longestMs), 0)} ms) over ${sec(Number(r.playMs))} of play`;
 }
 
 /** The lab command that plays the trace's moment again on its settings (a guess at its CPU: a phone's is 4x). */

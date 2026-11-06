@@ -29,4 +29,14 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   apart (taken mid-fight as a slow stretch is found), packed and gzipped, read back as `trace` reports it, sent to a
   traces service of the lab's own (`node/tracesService.mjs`, for the page's origin alone) and read back with its
   token: a trace without stages or casts, one never sent or changed on its way, are problems. `--canary` makes each
-  frame's recording 0.2 ms slower, which must break the budget.
+  frame's recording 0.2 ms slower, which must break the budget. Then a slow boot's trace: its reveal stood in for
+  (`slowBootRevealed`) and the lobby played on through its wait (`BOOT_TAIL_MS`, 45 s), the trace taken read back: it
+  must hold the 45 s after the reveal and say the play after it beside the boot's time; `--canary` also takes it at
+  the reveal, as before, which must be caught.
+- `auto`: Auto quality's walk down from High on a slow device (`page/autoQuality.ts`, `src/core/quality.ts`). Auto is
+  set as a player sets it, which starts it over from High, and fed each frame's time as a GPU-bound device takes it:
+  in proportion to the scene's pixels, at the level's cost (the integrated GPU of trace JGNM-1NCF and its tester's
+  report, 5 frames a second at High on a 2864x1536 canvas: run it `--screen 1432x768@2`). Each step is listed with
+  when it came, and the time until the device holds 50 frames a second must be at most 20 s (12.6 s there; 36.7 at
+  the old pace, a step a 4 s window and half the pixels a step). A fast device's frames with an 800 ms hitch every
+  2 s must never step it down (Auto never steps back up). `--canary` runs the old pace too, which must be too slow.
