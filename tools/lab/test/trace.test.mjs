@@ -75,6 +75,11 @@ test('slow play is found by its 1% low, by frames missed, and by stalls, in any 
   assert.deepEqual([missed.slow, missed.why], [true, 'missed']);
   // the same on 144 Hz at 100 frames a second: missed a third, but the mean over 50
   assert.equal(judge(ring(frames(25, 10)), 1000 / 144).slow, false);
+  // a steady 60 on a 120 Hz display, a frame now and then two refreshes late (33.4 ms, its refreshes' 33.3 by the
+  // display's jitter): its low is 30, not slow (trace R2XY-H2DW, an S25 Edge sent as slow at 60 frames a second)
+  const sixty = [];
+  for (let second = 0; second < 25; second++) sixty.push(...frames(1, 16.7), ...frames(0.02, 33.4));
+  assert.equal(judge(ring(sixty), 1000 / 120).slow, false);
   const stalled = judge(ring([...frames(20, 16.7), [1500, 0]]), display);
   assert.deepEqual([stalled.slow, stalled.why], [true, 'stalls']);
   // (the lobby's stalls count as much as a fight's)
