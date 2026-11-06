@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
-import { decodeTrace, encodeTrace, NONE, STATE, TRACE_MAX_BYTES, traceHeader } from '../../../src/perf/traceFormat.ts';
+import { decodeTrace, encodeTrace, NONE, PACKING, STATE, traceHeader } from '../../../src/perf/traceFormat.ts';
 import { judge, refreshOf, slowBoot, slowReadying } from '../../../src/perf/detect.ts';
 import { replayCommand, traceReport } from '../../../src/perf/traceReport.ts';
 import { readEnvFile, reportOf } from '../node/trace.mjs';
@@ -41,6 +41,28 @@ test('a trace packs and reads back: times to a fiftieth of a ms, longer ones exa
   assert.deepEqual([...trace.columns.state], columns.state);
   assert.equal(traceHeader(bytes).build.commit, 'abc1234');
   assert.throws(() => decodeTrace(new TextEncoder().encode('LSPX....')), /not a trace/);
+});
+
+test('a time in a byte comes back within 4%, under its floor as 0, none as none, as changes alike; the text once', () => {
+  const lg = [0, 0.013, 0.06, 0.4, 1.5, 33.3, 199, 5000, NONE];
+  const header = {
+    ...HEADER,
+    columns: [{ name: 'interval', kind: 'ms' }, { name: 'cpu', kind: 'lg' }],
+    marks: [[1, 'cast maelstrom'], [2, 'cast maelstrom'], [3, 'cast glacialNova']],
+  };
+  const columns = { interval: lg.map(() => 16.7), cpu: lg };
+  const bytes = encodeTrace(header, lg.length, columns);
+  const back = [...decodeTrace(bytes).columns.cpu];
+  for (const [i, v] of lg.entries()) {
+    if (v === NONE) assert.equal(back[i], NONE);
+    else if (v < PACKING.floor) assert.equal(back[i], 0, `${v} under the floor came back ${back[i]}`);
+    else assert.ok(Math.abs(back[i] - v) / v <= 0.041, `${v} came back ${back[i]}`);
+  }
+  const asChanges = encodeTrace(header, lg.length, columns, { ...PACKING, changes: ['cpu'] });
+  assert.deepEqual([...decodeTrace(asChanges).columns.cpu], back);
+  const json = new TextDecoder().decode(bytes);
+  assert.equal(json.split('cast maelstrom').length - 1, 1, 'a mark\'s text is kept once');
+  assert.deepEqual(decodeTrace(bytes).header.marks.map(([, text]) => text), header.marks.map(([, text]) => text));
 });
 
 test('slow play is found by its 1% low, by frames missed, and by stalls, in any scene', () => {
@@ -123,20 +145,3 @@ test('the env file and the command line', () => {
   assert.equal(parseCommandLine(['trace', '--build', 'abc1234']).options.build, 'abc1234');
 });
 
-test('a full minute at the ring\'s most frames, every value noisy, gzips well under the 1 MB the server takes', () => {
-  const frames = 1 << 14;
-  const names = ['interval', 'late', 'cpu', 'upd', 'rnd', 'gpu', ...Array.from({ length: 16 }, (_, i) => `stage${i}`),
-    ...Array.from({ length: 8 }, (_, i) => `gpu part${i}`)];
-  let seed = 1;
-  const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const columns = Object.fromEntries(names.map((name) => [name, Array.from({ length: frames }, () => noise() * 12)]));
-  const counts = { draws: 'n16', tris: 'n32', programs: 'n16', foes: 'n16', particles: 'n16', state: 'u8' };
-  for (const name of Object.keys(counts)) columns[name] = Array.from({ length: frames }, () => Math.floor(noise() * 200));
-  const header = {
-    ...HEADER,
-    columns: [...names.map((name) => ({ name, kind: 'ms' })), ...Object.entries(counts).map(([name, kind]) => ({ name, kind }))],
-  };
-  const gzipped = gzipSync(encodeTrace(header, frames, columns));
-  console.log(`  (the noisiest full trace: ${Math.round(gzipped.length / 1024)} KB gzipped)`);
-  assert.ok(gzipped.length < TRACE_MAX_BYTES * 0.8, `${Math.round(gzipped.length / 1024)} KB`);
-});

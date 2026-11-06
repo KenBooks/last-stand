@@ -7,7 +7,8 @@
 //   GET  /traces/latest           the newest trace's gzip (token), its code in X-Trace-Code
 //   GET  /traces/<code>           a trace's gzip (token)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`): a report's code alone reads nothing. Kept
-// for KEEP_DAYS, the oldest dropped first past DISK_MAX; each address may send PER_HOUR an hour and PER_DAY a day.
+// for KEEP_DAYS, the oldest dropped first past DISK_MAX; each address may send PER_DAY in any 24 hours
+// (10: what a game holds itself to, src/perf/consent.ts).
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -28,8 +29,7 @@ function settingsFrom(vars) {
     maxBytes: Number(vars.MAX_BYTES ?? 1 << 20),
     keepDays: Number(vars.KEEP_DAYS ?? 30),
     diskMax: Number(vars.DISK_MAX ?? 512 << 20),
-    perHour: Number(vars.PER_HOUR ?? 6),
-    perDay: Number(vars.PER_DAY ?? 20),
+    perDay: Number(vars.PER_DAY ?? 10),
   };
 }
 let settings = settingsFrom(env);
@@ -91,8 +91,7 @@ function addressOf(req) {
 /** Whether `address` may send one more now (and counts it). */
 function allowed(address, now = Date.now()) {
   const times = (sent.get(address) ?? []).filter((t) => now - t < 86_400_000);
-  const lastHour = times.filter((t) => now - t < 3_600_000).length;
-  if (lastHour >= settings.perHour || times.length >= settings.perDay) { sent.set(address, times); return false; }
+  if (times.length >= settings.perDay) { sent.set(address, times); return false; }
   times.push(now);
   sent.set(address, times);
   return true;

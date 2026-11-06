@@ -39,6 +39,7 @@ import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
 import { recorder } from './perf/recorder';
+import { traceNow } from './perf/upload';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
@@ -150,6 +151,8 @@ async function boot() {
   window.addEventListener('keydown', unlockAudio);
 
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
+  // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
+  Object.assign(window, { __traceNow: traceNow });
   if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry } });
 
   await loadingStep('Conjuring spells', 0.55);

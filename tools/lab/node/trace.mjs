@@ -4,10 +4,11 @@
 // kept in tools/lab/out/traces/<code>.lspt.gz, read again from there without the server.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { gunzipSync } from 'node:zlib';
-import { decodeTrace } from '../../../src/perf/traceFormat.ts';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { decodeTrace, traceParts } from '../../../src/perf/traceFormat.ts';
 import { traceReport } from '../../../src/perf/traceReport.ts';
 import { labError } from './errors.mjs';
+import { packingsCompared } from './tracePacking.mjs';
 import { OUT } from './paths.mjs';
 
 const ENV_FILE = resolve(import.meta.dirname, '../traces.env');
@@ -45,6 +46,40 @@ export function unpacked(bytes) {
   return bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;
 }
 
+/** A trace saved as a file: as sent (.lspt.gz), as packed (.lspt), or as the stalls tool reads it off a page
+ *  (`--read "window.__traceNow()"`: a JSON string of its packed bytes in base64). */
+export function bytesOfFile(path) {
+  const bytes = readFileSync(path);
+  if (!path.endsWith('.json')) return bytes;
+  return Buffer.from(JSON.parse(bytes.toString('utf8')), 'base64');
+}
+
+/** What each part of a trace weighs, gzipped alone and in all: the header, and each column by kind, heaviest first. */
+export function sizesOf(bytes, code = '') {
+  const raw = unpacked(bytes);
+  const { header, columns } = traceParts(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
+  const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+  const whole = gzipSync(raw).length;
+  const rows = [
+    { name: 'header (JSON)', kind: '', bytes: header },
+    ...columns,
+  ].map(({ name, kind, bytes: part }) => ({ name, kind, raw: part.length, gz: gzipSync(part).length }));
+  const frames = columns.length ? columns[0].bytes.length / (columns[0].kind === 'ms' ? 2 : 1) : 0;
+  const lines = [
+    `${code || 'trace'}: ${frames} frames, ${kb(raw.length)} packed, ${kb(whole)} gzipped in all `
+      + `(${(whole / Math.max(1, frames)).toFixed(2)} B a frame)`,
+    'each part gzipped alone (raw -> gzipped, its share of their sum):',
+  ];
+  const sum = rows.reduce((total, row) => total + row.gz, 0);
+  for (const row of rows.sort((a, b) => b.gz - a.gz)) {
+    const share = `${((100 * row.gz) / sum).toFixed(1)}%`;
+    const sizes = `${kb(row.raw).padStart(9)} -> ${kb(row.gz).padStart(8)}`;
+    lines.push(`  ${row.name.padEnd(16)} ${row.kind.padEnd(4)} ${sizes}  ${share}`);
+  }
+  lines.push(...packingsCompared(decodeTrace(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))));
+  return lines.join('\n');
+}
+
 /** The trace's report, from its bytes as sent. */
 export function reportOf(bytes, code = '') {
   const raw = unpacked(bytes);
@@ -58,7 +93,8 @@ const listLine = (t) =>
 /** Runs `lab trace`; its exit code. */
 export async function runTrace(options) {
   if (options.file) {
-    console.log(reportOf(readFileSync(resolve(options.file))));
+    const bytes = bytesOfFile(resolve(options.file));
+    console.log(options.sizes ? sizesOf(bytes) : reportOf(bytes));
     return 0;
   }
   const where = settings(options);
@@ -86,7 +122,7 @@ export async function runTrace(options) {
     mkdirSync(KEPT, { recursive: true });
     writeFileSync(join(KEPT, `${code}.lspt.gz`), bytes);
   }
-  console.log(reportOf(bytes, code));
+  console.log(options.sizes ? sizesOf(bytes, code) : reportOf(bytes, code));
   console.log(`(kept in ${join(KEPT, `${code}.lspt.gz`)}: --file reads it again without the server)`);
   return 0;
 }

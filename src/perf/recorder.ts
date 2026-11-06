@@ -7,7 +7,7 @@ import { G } from '../state';
 import { isReadying, isWarming } from '../game/warm';
 import { hallOpen } from '../game/hall';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
-import { STATE, type LongFrameRow, type MarkRow } from './traceFormat.ts';
+import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
 /** frames the ring holds (a minute at 240 frames a second and more), and the most a snapshot keeps (ms) */
 const RING = 1 << 14;
@@ -23,6 +23,11 @@ const MOST_LONG = 200;
 /** the frames' fixed columns, each a value a frame */
 const FIXED = ['interval', 'late', 'cpu', 'upd', 'rnd', 'gpu', 'draws', 'tris', 'programs', 'foes', 'particles', 'state'] as const;
 type Fixed = (typeof FIXED)[number];
+/** how each is packed (traceFormat.ts): the interval exact, the frames' times from it; any other time a byte */
+const KINDS: Record<Fixed, Snapshot['kinds'][string]> = {
+  interval: 'ms', late: 'lg', cpu: 'lg', upd: 'lg', rnd: 'lg', gpu: 'lg',
+  draws: 'n16', tris: 'n32', programs: 'n16', foes: 'n16', particles: 'n16', state: 'u8',
+};
 
 /** Where the game was when it was slow. */
 export type Scene = 'boot' | 'heroes' | 'lobby' | 'fight' | 'break' | 'readying';
@@ -41,7 +46,7 @@ export interface Slow {
 export interface Snapshot {
   frames: number;
   columns: Record<string, Float64Array>;
-  kinds: Record<string, 'ms' | 'n16' | 'n32' | 'u8'>;
+  kinds: Record<string, ColumnKind>;
   longFrames: LongFrameRow[];
   marks: MarkRow[];
   boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean };
@@ -136,9 +141,10 @@ function takeSnapshot(): Snapshot {
     kinds[name] = kind;
   };
   for (const name of FIXED) {
-    copy(name, fixed[name], name === 'tris' ? 'n32' : name === 'state' ? 'u8' : ['draws', 'programs', 'foes', 'particles'].includes(name) ? 'n16' : 'ms');
+    copy(name, fixed[name], KINDS[name]);
   }
-  for (const [name, column] of named) copy(name, column, 'ms');
+  // (the update's stages and the GPU's parts: times, a byte each)
+  for (const [name, column] of named) copy(name, column, 'lg');
   const since = <T extends { t: number }>(rows: T[]): T[] => rows.filter((r) => r.t >= t0 - 1);
   const at = (ms: number): number => Math.round((ms - t0) * 10) / 10;
   return {

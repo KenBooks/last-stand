@@ -15,7 +15,7 @@ let server, base;
 
 before(async () => {
   mkdirSync(DATA, { recursive: true });
-  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: ORIGIN, PER_HOUR: '4', PER_DAY: '50', DISK_MAX: '1000' });
+  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: ORIGIN, PER_DAY: '4', DISK_MAX: '1000' });
   const { start } = await import('../traces.mjs');
   server = await start(0);
   base = `http://127.0.0.1:${server.address().port}`;
@@ -69,7 +69,7 @@ test('turns away other pages, what isn\'t a trace and what is too big', async ()
   assert.equal((await send(big, { address: '10.0.0.4' })).status, 413);
 });
 
-test('takes so many an hour from one address, and others still', async () => {
+test('takes so many a day from one address, and others still', async () => {
   const statuses = [];
   for (let i = 0; i < 5; i++) statuses.push((await send(trace(), { address: '10.0.0.9' })).status);
   assert.deepEqual(statuses, [201, 201, 201, 201, 429]);

@@ -8,7 +8,11 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   the token: `TRACES_TOKEN=...` in `tools/lab/traces.env` (ignored by git; the owner's, Dokci's `LS_TRACES_TOKEN`) or
   the environment. A code, `--latest`, or `--build <sha>` (the newest from a commit, a PR's number or a bundle's
   name); `--list` lists those kept, newest first (`--build` one's alone); `--file <path>` reads one saved before
-  without the server (each fetched is kept in `tools/lab/out/traces/<code>.lspt.gz`). Read as the perf overlay's
+  without the server (each fetched is kept in `tools/lab/out/traces/<code>.lspt.gz`), or the JSON the stalls tool
+  reads off a page (`npm run stalls -- --scenario lobby --read "window.__traceNow()"`: a real trace of the installed
+  Chrome's); `--sizes` says what each part weighs gzipped, and the trace packed each other way the format can
+  (`node/tracePacking.mjs`: other steps, floors, columns as each frame's change) against its own, which the format is
+  tuned by. Read as the perf overlay's
   report reads (`src/perf/traceReport.ts`): why it was sent (the scene, the detector's verdict, or the boot's or a
   loading bar's time), the boot's steps and how long it waited on its files, the frame rate and frame times over its
   play, the CPU and GPU, draws, triangles and programs, the quality and screen, the GPU by pass, the device; the

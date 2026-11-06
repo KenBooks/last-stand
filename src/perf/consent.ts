@@ -2,7 +2,8 @@
 // that isn't a fight (the choice after a wave, the summary, the lobby, the hero selection screen), then the player is
 // asked in a small prompt that blocks nothing: Send, Not now or Always. Always is kept and sends from then on without
 // asking (the pause menu's Slow-game reports turns it back, or off); Not now asks no more this session, and after
-// three the game stops asking. In co-op each game asks its own player about its own frames.
+// three the game stops asking. However asked, a game sends at most 10 in any 24 hours, kept across reloads (the
+// traces server holds each address to the same). In co-op each game asks its own player about its own frames.
 import { G } from '../state';
 import { sfx } from '../core/audio';
 import { isReadying } from '../game/warm';
@@ -11,13 +12,15 @@ import { canSend, packTrace, sendTrace } from './upload';
 
 /** what the player chose: asked each time, sent without asking, or never */
 export type TraceConsent = 'ask' | 'always' | 'off';
-interface Kept { consent: TraceConsent; refusals: number }
+/** what's kept: the choice, the Not nows, and when each send in the last day was tried (ms since 1970) */
+interface Kept { consent: TraceConsent; refusals: number; sent: number[] }
 
 const KEY = 'last-stand-perf-traces';
 /** after this many Not nows the game stops asking */
 const MOST_REFUSALS = 3;
-/** sent without asking: at most this many a session, this long apart (ms) */
-const MOST_SENT = 3;
+/** at most this many sends in any `DAY_MS`, asked or not, and sent without asking this long apart (ms) */
+export const MOST_A_DAY = 10;
+const DAY_MS = 24 * 60 * 60_000;
 const SENT_APART_MS = 10 * 60_000;
 /** how often a waiting stretch looks for its moment (ms), how long after a moment starts it's shown (ms) */
 const LOOK_EVERY_MS = 1000;
@@ -28,7 +31,6 @@ const UNDER_GAP = 8;
 const NOTE_MS = 9000;
 
 let askedThisSession = false;
-let sentThisSession = 0, lastSent = -Infinity;
 let calmSince = 0, packing = false, sending = false, noteTimer = 0;
 /** the stretch the player was asked about (shown again after a fight hid it) */
 let askedFor: Slow | null = null;
@@ -40,21 +42,22 @@ function kept(): Kept {
   try {
     const k = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Kept> | null;
     const consent = k?.consent === 'always' || k?.consent === 'off' ? k.consent : 'ask';
-    return { consent, refusals: Number(k?.refusals) || 0 };
-  } catch { return { consent: 'ask', refusals: 0 }; }
+    const sent = Array.isArray(k?.sent) ? k.sent.filter((t) => typeof t === 'number' && Date.now() - t < DAY_MS) : [];
+    return { consent, refusals: Number(k?.refusals) || 0, sent };
+  } catch { return { consent: 'ask', refusals: 0, sent: [] }; }
 }
 function keep(k: Kept): void { try { localStorage.setItem(KEY, JSON.stringify(k)); } catch { /* private mode */ } }
 
 export const traceConsent = (): TraceConsent => kept().consent;
 /** The pause menu's choice: asking again starts the refusals over. */
-export function setTraceConsent(consent: TraceConsent): void { keep({ consent, refusals: 0 }); }
+export function setTraceConsent(consent: TraceConsent): void { keep({ ...kept(), consent, refusals: 0 }); }
 
 /** Whether a slow stretch found now could go anywhere: the recorder snapshots one only then. */
 function wanted(): boolean {
   if (!canSend()) return false;
   const k = kept();
-  if (k.consent === 'off') return false;
-  if (k.consent === 'always') return sentThisSession < MOST_SENT && performance.now() - lastSent > SENT_APART_MS;
+  if (k.consent === 'off' || k.sent.length >= MOST_A_DAY) return false;
+  if (k.consent === 'always') return Date.now() - Math.max(0, ...k.sent) > SENT_APART_MS;
   return !askedThisSession && k.refusals < MOST_REFUSALS;
 }
 
@@ -67,7 +70,7 @@ export function initTraceConsent(): void {
   recorder.wanted = wanted;
   const box = $('#perf-ask');
   box.querySelector<HTMLElement>('.pa-send')!.onclick = () => { sfx.click(); void send(); };
-  box.querySelector<HTMLElement>('.pa-always')!.onclick = () => { sfx.click(); keep({ consent: 'always', refusals: 0 }); void send(); };
+  box.querySelector<HTMLElement>('.pa-always')!.onclick = () => { sfx.click(); setTraceConsent('always'); void send(); };
   box.querySelector<HTMLElement>('.pa-later')!.onclick = () => {
     sfx.click();
     const k = kept();
@@ -126,12 +129,13 @@ async function send(): Promise<void> {
   const body = packed?.body;
   if (!body || sending) return;
   sending = true;
+  // (counted as it's tried: a send that fails still counts, so a failing one never repeats past the day's)
+  const k = kept();
+  keep({ ...k, sent: [...k.sent, Date.now()] });
   box.className = 'sending';
   box.querySelector('.pa-note')!.textContent = 'Sending the performance report...';
   const sent = await sendTrace(body);
   sending = false;
-  sentThisSession++;
-  lastSent = performance.now();
   box.querySelector('.pa-note')!.innerHTML = 'code' in sent
     ? `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
     : `The performance report couldn't be sent (${sent.error}).`;

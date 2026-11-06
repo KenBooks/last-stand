@@ -15,7 +15,7 @@ import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
 import { perfBundle, perfGpuName, perfJsBench } from '../ui/perfHud';
 import { encodeTrace, TRACE_MAX_BYTES, type ColumnInfo } from './traceFormat.ts';
-import type { Slow, Snapshot } from './recorder';
+import { recorder, type Slow, type Snapshot } from './recorder';
 
 declare const __BUILD__: { ref: string; time: string };
 
@@ -120,6 +120,16 @@ export async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 /** The slow stretch's trace, packed and gzipped, ready to send (its size shown when the player is asked). */
+/** The trace of now, packed (not gzipped), as base64: a harness's (`window.__traceNow`, read by tools/stalls `--read`
+ *  to keep the real game's traces, which the format is tuned on: `lab trace --file <read> --sizes`). Sends nothing. */
+export function traceNow(): string {
+  const slow: Slow = { scene: 'lobby', verdict: recorder.judged(), tookMs: 0, at: performance.now(), snapshot: recorder.snapshot() };
+  const bytes = traceOf(slow);
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
+}
+
 /** A trace over the server's 1 MB is cut to its newest half until it fits (a minute at 240 frames a second of noisy
  *  values came to 0.8 MB: tools/lab/test/trace.test.mjs). */
 export async function packTrace(slow: Slow): Promise<Uint8Array> {

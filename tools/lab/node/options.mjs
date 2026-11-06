@@ -1785,10 +1785,15 @@ export const COMMANDS = {
         help: 'the newest from this commit (or a PR\'s number, or a bundle\'s name)',
       },
       list: { kind: 'switch', help: 'list the traces kept (newest first; with --build, that build\'s alone)' },
+      sizes: {
+        kind: 'switch',
+        help: 'what each part of the trace weighs gzipped (its header, each column by kind), for tuning its format',
+      },
       file: {
         kind: 'text',
         usage: 'path',
-        help: 'a trace saved before (.lspt.gz or .lspt), read without the server',
+        help: 'a trace saved before (.lspt.gz, .lspt, or the JSON a stalls --read "window.__traceNow()" writes), '
+          + 'read without the server',
       },
       server: {
         kind: 'text',

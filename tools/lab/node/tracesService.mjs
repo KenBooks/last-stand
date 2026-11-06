@@ -22,7 +22,7 @@ export async function startTracesService(origin) {
   const { start } = await import('../../../server/traces/traces.mjs');
   rmSync(DATA, { recursive: true, force: true });
   const token = randomBytes(16).toString('hex');
-  const server = await start(0, { DATA, ORIGINS: origin, TRACES_TOKEN: token, PER_HOUR: '100', PER_DAY: '100' });
+  const server = await start(0, { DATA, ORIGINS: origin, TRACES_TOKEN: token, PER_DAY: '100' });
   const url = `http://127.0.0.1:${server.address().port}`;
   return {
     url,
