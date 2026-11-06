@@ -30,8 +30,11 @@ async function statusOf(github, repo, id) {
 }
 
 /** Artifact `artifact` deployed as `version` (unique to it): whether Pages reported it live within `timeout` ms,
- *  asked every `every` ms. A deployment that doesn't finish in time is cancelled. */
-export async function deployPages({ github, repo, artifact, version, idToken, sleep, now, every, timeout, log }) {
+ *  asked every `every` ms, each status told to `onStatus(status, seconds)`. A deployment that doesn't finish in time
+ *  is cancelled. */
+export async function deployPages({
+  github, repo, artifact, version, idToken, sleep, now, every, timeout, log, onStatus = async () => {},
+}) {
   const { data } = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
     ...repo,
     artifact_id: artifact,
@@ -48,6 +51,7 @@ export async function deployPages({ github, repo, artifact, version, idToken, sl
     const seconds = (now() - start) / 1000;
     if (status !== last) log(`Pages deployment ${id}: ${status || 'status unreadable'} after ${seconds} s`);
     last = status;
+    await onStatus(status, seconds);
     if (status === 'succeed') return true;
     if (FAILED.includes(status)) return false;
   }

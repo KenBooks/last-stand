@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { needsDeploy, openPrFor, stageBuilding } from './building.mjs';
-import { buildingMessage, itemMessage, publishingMessage, say } from './comments.mjs';
+import { buildingMessage, duration, itemMessage, progressMessage, say } from './comments.mjs';
 import { findItems } from './find.mjs';
 import { artifactId, deployPages } from './deploy.mjs';
 import { commitChanges, headCommit } from './git.mjs';
@@ -20,6 +20,42 @@ const pagesDir = () => workspace('pages');
 const template = () => fs.readFileSync(workspace('trusted', '.github', 'preview-index.html'), 'utf8');
 const runUrl = (context) => `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 const files = { items: () => temp('preview-items.json'), staged: () => temp('preview-staged.json') };
+
+/** how often a stage under way says how far it's got, at most (each say lists the PR's comments and edits one) */
+const PROGRESS_EVERY_MS = 15_000;
+
+/** The builds this job publishes (none in the building job: its temp folder holds no items). */
+function publishing() {
+  if (!fs.existsSync(files.items())) return [];
+  return (readJson(files.items()) ?? []).filter((item) => item.mode === 'publish');
+}
+
+/** Each of `items` has its comment say how far its publish has got; a comment not updated never fails the job. */
+async function sayProgress({ github, context, core }, items, stage, detail = '') {
+  for (const item of items) {
+    const message = progressMessage({ sha: item.sha, build: item.run, run: runUrl(context), stage, detail });
+    try {
+      await say(github, context.repo, item.number, message);
+    } catch (error) {
+      core.warning(`the comment on #${item.number} wasn't updated: ${error.message}`);
+    }
+  }
+}
+
+/** A function that says whether `every` ms have passed since it last said yes (yes the first time). */
+export function throttle(every, now = Date.now) {
+  let last = -Infinity;
+  return () => {
+    if (now() - last < every) return false;
+    last = now();
+    return true;
+  };
+}
+
+/** A Pages deployment's status as the comment says it (`deployment_queued`: queued). */
+export function statusText(status) {
+  return (status || 'status unreadable').replace(/^deployment_/, '').replaceAll('_', ' ');
+}
 
 /** Where Pages serves the site, as its settings have it (a custom domain's, `https://last-stand.cc`, once one is set:
  *  the github.io URL then answers with a redirect, and the probes read that and failed); SITE_ORIGIN, if set, wins. */
@@ -80,7 +116,16 @@ export async function deployStaged({ github, context, core }) {
     core.setFailed('no github-pages artifact in this run');
     return;
   }
+  const items = publishing();
+  const due = throttle(PROGRESS_EVERY_MS);
+  let shown = '';
+  await sayProgress({ github, context, core }, items, 'deploying', 'starting');
   const live = await deployPages({
+    onStatus: async (status, seconds) => {
+      if (status === 'succeed' || (status === shown && !due())) return;
+      shown = status;
+      await sayProgress({ github, context, core }, items, 'deploying', `${statusText(status)}, ${duration(seconds)}`);
+    },
     github,
     repo,
     artifact,
@@ -123,9 +168,7 @@ export async function findPublish({ github, context, core, exec }) {
   core.setOutput('count', String(items.length));
   core.setOutput('stage', String(items.some((item) => item.mode !== 'failed')));
   // from here the comment links this run, which the deploy and the probes still take minutes of
-  for (const item of items.filter((each) => each.mode === 'publish')) {
-    await say(github, repo, item.number, publishingMessage({ sha: item.sha, run: runUrl(context) }));
-  }
+  await sayProgress({ github, context, core }, publishing(), 'staging');
 }
 
 export function stagePublish({ core }) {
@@ -149,7 +192,29 @@ export function stagePublish({ core }) {
   core.setOutput('changed', String(changed.length > 0));
 }
 
-export async function recordPublish({ core }) {
+/** Pages asked for `sha`'s probes in turn, its comment saying how long it's been waited for. */
+function probeServed({ github, context, core }, folderUrl, sha) {
+  const items = publishing().filter((item) => item.sha === sha);
+  const probes = Number(env('PROBES'));
+  const every = Number(env('PROBE_EVERY_SECONDS')) * 1000;
+  const due = throttle(PROGRESS_EVERY_MS);
+  return waitServed({
+    fetch,
+    sleep,
+    folderUrl,
+    sha,
+    probes,
+    every,
+    log: (line) => core.info(line),
+    onProbe: async (probe) => {
+      if (!due()) return;
+      const waited = duration(((probe - 1) * every) / 1000);
+      await sayProgress({ github, context, core }, items, 'serving', `${waited}, check ${probe} of ${probes}`);
+    },
+  });
+}
+
+export async function recordPublish({ github, context, core }) {
   const items = readJson(files.items());
   const staged = readJson(files.staged()) ?? [];
   const deploy = env('DEPLOY');
@@ -159,15 +224,7 @@ export async function recordPublish({ core }) {
     failed: items.filter((item) => item.mode === 'failed'),
     deployed: deploy !== 'failure' && deploy !== 'cancelled',
     origin: env('SITE_ORIGIN'),
-    probe: (folderUrl, sha) => waitServed({
-      fetch,
-      sleep,
-      folderUrl,
-      sha,
-      probes: Number(env('PROBES')),
-      every: Number(env('PROBE_EVERY_SECONDS')) * 1000,
-      log: (line) => core.info(line),
-    }),
+    probe: (folderUrl, sha) => probeServed({ github, context, core }, folderUrl, sha),
   });
   // latest.json is read by the stable page from the branch: no deploy needed (Pages' copy is its fallback alone)
   commitChanges(pagesDir(), results.map((result) => `#${result.number}: ${result.state} ${result.sha}`));

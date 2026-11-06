@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { MARKER, itemMessage, publishingMessage, say } from '../comments.mjs';
+import { MARKER, duration, itemMessage, progressMessage, say } from '../comments.mjs';
 import { commitChanges, commitMessage } from '../git.mjs';
 import { recordItems, waitServed } from '../record.mjs';
 import { REPO, fakeGithub, readJsonFile, tempDir, writeFiles } from './fakes.mjs';
@@ -29,9 +29,10 @@ const served = (sha = SHA) => ({
   [`${FOLDER_URL}/preview-metadata.json`]: JSON.stringify({ headSha: sha }),
 });
 
-async function wait(fetch, probes = 6) {
+async function wait(fetch, probes = 6, onProbe = undefined) {
   let slept = 0;
   const ok = await waitServed({
+    onProbe,
     fetch,
     sleep: async () => { slept += 1; },
     folderUrl: FOLDER_URL,
@@ -46,6 +47,12 @@ async function wait(fetch, probes = 6) {
 test('a build is ready once a probe and its metadata are served', async () => {
   // probes 1 and 2 are 404s (as the CDN may have cached them), the third is served
   assert.deepEqual(await wait(site(served())), { ok: true, slept: 2 });
+});
+
+test('each probe is told before it is asked for, so the comment can say how long Pages has been waited for', async () => {
+  const told = [];
+  await wait(site(served()), 6, async (probe) => { told.push(probe); });
+  assert.deepEqual(told, [1, 2, 3]);
 });
 
 test('a probe served with an older build behind it is not ready', async () => {
@@ -128,9 +135,23 @@ test('each item gets the comment its result calls for', () => {
   assert.match(itemMessage(publish, undefined, links), /publication failed/);
   assert.match(itemMessage({ ...publish, mode: 'failed' }, undefined, links), /build failed[\s\S]*https:\/\/build/);
   assert.equal(itemMessage({ number: 7, mode: 'remove' }, { state: 'removed' }, links), '**PR preview:** removed.');
-  const publishing = publishingMessage({ sha: SHA, run: 'https://run' });
-  assert.match(publishing, /built `1234567a+`, now publishing it/);
-  assert.match(publishing, /\[Watch it publish\]\(https:\/\/run\)/);
+});
+
+test('a publish under way is a checklist: stages done, the one under way with where it is, those to come', () => {
+  const deploying = progressMessage({
+    sha: SHA, build: 'https://build', run: 'https://run', stage: 'deploying', detail: 'queued, 20 s',
+  });
+  assert.match(deploying, /publishing `1234567a+`/);
+  assert.deepEqual(deploying.split('\n').filter((line) => line.startsWith('- ')), [
+    '- ✅ Built ([its run](https://build))',
+    '- ✅ Copied onto gh-pages',
+    '- ⏳ **Deploying to GitHub Pages**: queued, 20 s',
+    '- ⬜ Served by GitHub Pages',
+  ]);
+  assert.match(deploying, /\[Watch it publish\]\(https:\/\/run\)/);
+  const staging = progressMessage({ sha: SHA, build: 'b', run: 'r', stage: 'staging' });
+  assert.match(staging, /- ⏳ \*\*Copying it onto gh-pages\*\*\n- ⬜ Deployed to GitHub Pages/);
+  assert.deepEqual([duration(0), duration(44.6), duration(60), duration(125)], ['0 s', '45 s', '1 min 00 s', '2 min 05 s']);
 });
 
 test("the sticky comment is the bot's marked one, edited; else a new one", async () => {

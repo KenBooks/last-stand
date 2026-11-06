@@ -13,9 +13,11 @@ async function bodyOf(fetch, url) {
   }
 }
 
-/** Whether Pages serves the build of `sha` at `folderUrl`: its probes are asked for in turn, `every` ms apart. */
-export async function waitServed({ fetch, sleep, folderUrl, sha, probes, every, log }) {
+/** Whether Pages serves the build of `sha` at `folderUrl`: its probes are asked for in turn, `every` ms apart, each
+ *  told to `onProbe(probe)` first. */
+export async function waitServed({ fetch, sleep, folderUrl, sha, probes, every, log, onProbe = async () => {} }) {
   for (let probe = 1; probe <= probes; probe++) {
+    await onProbe(probe);
     if ((await bodyOf(fetch, `${folderUrl}/${probeFile(probe)}`))?.trim() === sha) {
       const metadata = await bodyOf(fetch, `${folderUrl}/preview-metadata.json`);
       let got = '';

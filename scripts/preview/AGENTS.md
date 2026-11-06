@@ -10,7 +10,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - `deploy.mjs`: the Pages deploy of either job, named by the gh-pages commit and waited for by that deployment's own status (why not `actions/deploy-pages`: the workflows' AGENTS.md).
 - `record.mjs`: the probes after the deploy, and `latest.json` saying ready, unserved (deployed, not served yet: the next run publishes it again) or failed.
 - `building.mjs`: the building job's own work. `latest.json` says `building`, and the stable page links the previous build.
-- `comments.mjs`: the sticky PR comment, found by the marker `marocchino/sticky-pull-request-comment` used, so the comments made before this keep being the ones edited.
+- `comments.mjs`: the sticky PR comment (building; while a publish runs, its stages as a checklist, `progressMessage`, which `steps.mjs` says again as the deploy and the probes go, at most every 15 s; then what came of it), found by the marker `marocchino/sticky-pull-request-comment` used, so the comments made before this keep being the ones edited.
 - `git.mjs`: the gh-pages checkout committed and pushed as the bot.
 - `pages.mjs`: gh-pages' preview layout, read from a checkout or through the API.
 - `test/`: one file per area, run against a fake GitHub API (`test/fakes.mjs`) and temp directories.
