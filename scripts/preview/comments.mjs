@@ -16,6 +16,13 @@ export function itemMessage(item, result, { origin, thisRun }) {
     return `**PR preview:** ready for \`${item.sha}\`.\n\n[Open preview](${result.link}) (this commit's build). `
       + `The PR's own link, [pr-${item.number}/](${stable}), goes to its newest build.`;
   }
+  if (item.mode === 'publish' && result?.state === 'unserved') {
+    const stable = `${origin}/pr-preview/pr-${item.number}/`;
+    return `**PR preview:** published \`${item.sha}\`; GitHub Pages deployed it but wasn't serving it yet when `
+      + `this run stopped checking. Its link, [${result.link}](${result.link}), works once Pages catches up, and the `
+      + `next publish run checks it again. The PR's own link, [pr-${item.number}/](${stable}), goes to it once served.`
+      + `\n\n[Open workflow run](${thisRun})`;
+  }
   return `**PR preview:** publication failed.\n\n[Open workflow run](${thisRun})`;
 }
 

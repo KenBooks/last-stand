@@ -55,8 +55,13 @@ permissions:
 env:
   # a stable page in the CDN's cache is at most 10 minutes old: three pushes inside that are rare
   KEEP_FOLDERS: 3
-  # probe files published with each build, asked for in turn until Pages serves one
-  PROBES: 12
+  # each deploy is waited for until Pages reports it live (scripts/preview/deploy.mjs, not actions/deploy-pages:
+  # that named every preview deploy by main's head and read an older one's "succeed" at once)
+  DEPLOY_CHECK_SECONDS: 5
+  DEPLOY_TIMEOUT_MINUTES: 10
+  # probe files published with each build, asked for in turn until Pages serves one once it's deployed; a build
+  # still unserved then is recorded `unserved`, not failed, and checked again by the next publish
+  PROBES: 24
   PROBE_EVERY_SECONDS: 5
 
 jobs:
@@ -124,7 +129,11 @@ jobs:
 
       - name: Deploy aggregated Pages artifact
         if: steps.stage.outputs.deploy == 'true'
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { deployStaged } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await deployStaged({ github, context, core });
 
   # Publishes the build that triggered it and catches up every other one left unpublished: whichever run holds the
   # group last sees every build that finished before it, so a publish cancelled while it waited is made by the next.
@@ -135,7 +144,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.action == 'completed'
     runs-on: ubuntu-24.04
     # Pages deployments can wait in GitHub's queue for a few minutes, and each build caught up is probed in turn.
-    timeout-minutes: 20
+    timeout-minutes: 25
     concurrency:
       group: pages-publisher
       cancel-in-progress: false
@@ -198,7 +207,11 @@ jobs:
       - name: Deploy aggregated Pages artifact
         id: deploy
         if: steps.stage.outputs.changed == 'true'
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { deployStaged } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await deployStaged({ github, context, core });
 
       - name: Wait for Pages to serve each build, and record it
         if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0' && steps.stage.outcome != 'failure'

@@ -67,7 +67,7 @@ test('a network error counts as not served yet', async () => {
   assert.equal((await wait(flaky)).ok, true);
 });
 
-test('latest.json records each folder build ready or failed, and each failed build', async (t) => {
+test('latest.json records each folder build ready or unserved, and each failed build', async (t) => {
   const pagesDir = tempDir(t);
   writeFiles(pagesDir, { 'pr-preview/pr-8/latest.json': JSON.stringify({ folder: 'abcdef0' }) });
   const shaB = 'b'.repeat(40);
@@ -90,8 +90,9 @@ test('latest.json records each folder build ready or failed, and each failed bui
   ]);
   const latest = (number) => readJsonFile(path.join(pagesDir, 'pr-preview', `pr-${number}`, 'latest.json'));
   assert.deepEqual(latest(7), { headSha: SHA, state: 'ready', folder: '1234567', run: 'r7' });
-  // the stable page stays on the last build that was served
-  assert.deepEqual(latest(8), { headSha: shaB, state: 'failed', folder: 'abcdef0', run: 'r8' });
+  // the stable page stays on the last build that was served, the new one named as pending (not settled: the next
+  // publish run checks it again)
+  assert.deepEqual(latest(8), { headSha: shaB, state: 'unserved', folder: 'abcdef0', pending: 'bbbbbbb', run: 'r8' });
   assert.equal(latest(10).state, 'failed');
 });
 
@@ -107,7 +108,9 @@ test('nothing is probed when the deploy failed', async (t) => {
     probe: async () => { probed = true; return true; },
   });
   assert.equal(probed, false);
-  assert.equal(results[0].state, 'unserved');
+  assert.equal(results[0].state, 'undeployed');
+  const latest = readJsonFile(path.join(pagesDir, 'pr-preview', 'pr-7', 'latest.json'));
+  assert.equal(latest.state, 'unserved');
 });
 
 test('each item gets the comment its result calls for', () => {
@@ -117,7 +120,11 @@ test('each item gets the comment its result calls for', () => {
   assert.match(ready, /ready for `1234567a+`/);
   assert.match(ready, /\[Open preview\]\(https:\/\/site\.test\/pr-preview\/pr-7\/1234567\/\)/);
   assert.match(ready, /\[pr-7\/\]\(https:\/\/site\.test\/pr-preview\/pr-7\/\)/);
-  assert.match(itemMessage(publish, { state: 'unserved' }, links), /publication failed[\s\S]*https:\/\/run/);
+  const unserved = itemMessage(publish, { state: 'unserved', link: `${FOLDER_URL}/` }, links);
+  assert.match(unserved, /published `1234567a+`; GitHub Pages deployed it but wasn't serving it yet/);
+  assert.match(unserved, /\(https:\/\/site\.test\/pr-preview\/pr-7\/1234567\/\)/);
+  assert.doesNotMatch(unserved, /failed/);
+  assert.match(itemMessage(publish, { state: 'undeployed' }, links), /publication failed[\s\S]*https:\/\/run/);
   assert.match(itemMessage(publish, undefined, links), /publication failed/);
   assert.match(itemMessage({ ...publish, mode: 'failed' }, undefined, links), /build failed[\s\S]*https:\/\/build/);
   assert.equal(itemMessage({ number: 7, mode: 'remove' }, { state: 'removed' }, links), '**PR preview:** removed.');

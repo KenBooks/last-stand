@@ -7,7 +7,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { needsDeploy, openPrFor, stageBuilding } from './building.mjs';
 import { buildingMessage, itemMessage, say } from './comments.mjs';
 import { findItems } from './find.mjs';
-import { commitChanges } from './git.mjs';
+import { artifactId, deployPages } from './deploy.mjs';
+import { commitChanges, headCommit } from './git.mjs';
 import { pagesApi, readJson } from './pages.mjs';
 import { recordItems, waitServed } from './record.mjs';
 import { stageItems } from './stage.mjs';
@@ -65,6 +66,32 @@ export function markBuilding({ context, core }) {
   });
   const changed = commitChanges(pagesDir(), [`#${number}: building ${run.head_sha}`]);
   core.setOutput('deploy', String(needsDeploy(changed)));
+}
+
+// ---- both jobs ----
+
+/** This run's Pages artifact deployed, named by the gh-pages commit checked out, and waited for until Pages
+ *  reports that deployment live (deploy.mjs says why not actions/deploy-pages). */
+export async function deployStaged({ github, context, core }) {
+  const repo = context.repo;
+  const artifact = await artifactId(github, repo, context.runId);
+  if (!artifact) {
+    core.setFailed('no github-pages artifact in this run');
+    return;
+  }
+  const live = await deployPages({
+    github,
+    repo,
+    artifact,
+    version: headCommit(pagesDir()),
+    idToken: await core.getIDToken(),
+    sleep,
+    now: Date.now,
+    every: Number(env('DEPLOY_CHECK_SECONDS')) * 1000,
+    timeout: Number(env('DEPLOY_TIMEOUT_MINUTES')) * 60 * 1000,
+    log: (line) => core.info(line),
+  });
+  if (!live) core.setFailed('Pages did not deploy the artifact');
 }
 
 // ---- the publish job ----
@@ -141,8 +168,11 @@ export async function recordPublish({ core }) {
   commitChanges(pagesDir(), results.map((result) => `#${result.number}: ${result.state} ${result.sha}`));
   const done = staged.filter((entry) => entry.state).concat(results);
   fs.writeFileSync(files.staged(), JSON.stringify(done));
+  // deployed but not served yet: Pages catching up, which the next publish run checks again (not a failure)
   const unserved = results.filter((result) => result.state === 'unserved').length;
-  if (unserved > 0) core.setFailed(`${unserved} build(s) not served`);
+  if (unserved > 0) core.warning(`${unserved} build(s) deployed but not served yet: the next publish checks again`);
+  const undeployed = results.filter((result) => result.state === 'undeployed').length;
+  if (undeployed > 0) core.setFailed(`${undeployed} build(s) not deployed`);
 }
 
 export async function commentPublish({ github, context }) {
