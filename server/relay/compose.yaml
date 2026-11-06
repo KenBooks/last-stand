@@ -55,7 +55,7 @@ services:
       # (the secret agents read the traces with: Dokci's configuration, never in the repo; unset, reading is off)
       TRACES_TOKEN: ${LS_TRACES_TOKEN:-}
       KEEP_DAYS: "30"
-      DISK_MAX: "536870912"
+      DISK_MAX: "104857600"
     volumes:
       - traces-data:/data
     expose:

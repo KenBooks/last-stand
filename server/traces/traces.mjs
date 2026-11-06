@@ -7,7 +7,7 @@
 //   GET  /traces/latest           the newest trace's gzip (token), its code in X-Trace-Code
 //   GET  /traces/<code>           a trace's gzip (token)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`): a report's code alone reads nothing. Kept
-// for KEEP_DAYS, the oldest dropped first past DISK_MAX; each address may send PER_DAY in any 24 hours
+// for KEEP_DAYS, the oldest dropped first past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours
 // (10: what a game holds itself to, src/perf/consent.ts).
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -28,7 +28,7 @@ function settingsFrom(vars) {
     token: vars.TRACES_TOKEN ?? '',
     maxBytes: Number(vars.MAX_BYTES ?? 1 << 20),
     keepDays: Number(vars.KEEP_DAYS ?? 30),
-    diskMax: Number(vars.DISK_MAX ?? 512 << 20),
+    diskMax: Number(vars.DISK_MAX ?? 100 << 20),
     perDay: Number(vars.PER_DAY ?? 10),
   };
 }
@@ -153,7 +153,7 @@ async function upload(req, res) {
     await writeFile(fileOf(code), body);
     await writeFile(metaFileOf(code), JSON.stringify(meta));
     index.set(code, meta);
-    diskBytes += body.length;
+    diskBytes += onDisk(meta);
     log('trace', code, `${body.length} B`, meta.commit, meta.scene, meta.why);
     if (diskBytes > settings.diskMax) await prune();
     return answer(res, 201, { code }, headers);
@@ -196,13 +196,16 @@ async function handle(req, res) {
   return CODE.test(code) ? read(res, code) : answer(res, 404, 'not a code');
 }
 
+/** What a trace takes on the disk: its gzip and the line beside it. */
+const onDisk = (meta) => meta.bytes + Buffer.byteLength(JSON.stringify(meta));
+
 /** Drops what's older than KEEP_DAYS, then the oldest till the disk holds under DISK_MAX. */
 async function prune() {
   const oldest = Date.now() - settings.keepDays * 86_400_000;
   for (const [code, meta] of index) {
     if (Date.parse(meta.at) >= oldest && diskBytes <= settings.diskMax) break;
     index.delete(code);
-    diskBytes -= meta.bytes;
+    diskBytes -= onDisk(meta);
     await rm(fileOf(code), { force: true });
     await rm(metaFileOf(code), { force: true });
     log('dropped', code);
@@ -223,7 +226,7 @@ async function load() {
     } catch { /* half written: dropped below */ }
   }
   metas.sort((a, b) => a.at.localeCompare(b.at));
-  for (const meta of metas) { index.set(meta.code, meta); diskBytes += meta.bytes; }
+  for (const meta of metas) { index.set(meta.code, meta); diskBytes += onDisk(meta); }
   await prune();
 }
 

@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { encodeTrace } from '../../../src/perf/traceFormat.ts';
 
@@ -78,10 +78,12 @@ test('takes so many a day from one address, and others still', async () => {
 
 test('drops the oldest once the disk holds over its cap', async () => {
   const { traces } = await (await read('/traces?limit=500')).json();
-  const kept = traces.reduce((sum, t) => sum + t.bytes, 0);
-  assert.ok(kept <= 1000, `kept ${kept} B, over the 1000 B cap`);
-  // (seven were taken, some 270 B each: the newest three kept)
-  assert.equal(traces.length, 3);
+  const onDisk = readdirSync(DATA).reduce((sum, name) => sum + statSync(join(DATA, name)).size, 0);
+  assert.ok(onDisk <= 1000, `the disk holds ${onDisk} B, over the 1000 B cap`);
+  // (seven were taken, each some 270 B and its line some 250: the newest kept, the oldest dropped)
+  assert.ok(traces.length >= 1 && traces.length < 7, `${traces.length} kept`);
+  const newest = traces[0].code;
+  assert.ok(readdirSync(DATA).includes(`${newest}.lspt.gz`), 'the newest is kept');
   const files = readdirSync(DATA).filter((name) => name.endsWith('.lspt.gz'));
   assert.equal(files.length, traces.length);
 });
