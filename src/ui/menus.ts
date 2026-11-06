@@ -883,8 +883,8 @@ export function showPause(v: boolean): void {
     renderRendererOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
-    // (on two short lines beside the title: on one it wrapped wherever it was cut)
-    $('#btn-abandon').innerHTML = `${isCoop() ? 'Leave the run' : 'Abandon run'}<small>spoils lost</small>`;
+    // (short beside the title: what it costs is its tooltip)
+    $('#btn-abandon').textContent = isCoop() ? 'Leave the run' : 'Abandon run';
     $('.pause-note').classList.toggle('hidden', !isCoop() || G.mode !== 'run');
   }
   $('#pause').classList.toggle('hidden', !v);

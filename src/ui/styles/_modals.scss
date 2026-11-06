@@ -91,10 +91,9 @@
 .pause-box::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .22);
   @include corner-brackets; }
 .pb-top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; }
-.pb-top #btn-resume { grid-column: 1; justify-self: start; }
-.pb-top #btn-abandon { grid-column: 3; justify-self: end; }
-.pb-top .btn { width: 190px; max-width: 100%; }
-.pb-top .btn small { display: block; font: 600 10px var(--font-body); letter-spacing: .5px; opacity: .8; text-transform: none; }
+.pb-top #btn-abandon { grid-column: 1; justify-self: start; }
+.pb-top #btn-resume { grid-column: 3; justify-self: end; }
+.pb-top .btn { max-width: 100%; padding-left: 18px; padding-right: 18px; }
 .pb-title { grid-column: 2; position: relative; width: min(300px, 34vw / var(--ui, 1)); aspect-ratio: 600 / 120; }
 .pb-title svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .pb-title .logo-glow { opacity: .75; }
@@ -138,5 +137,5 @@
   /* the title over the two buttons */
   .pb-top { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
   .pb-title { grid-column: 1 / -1; grid-row: 1; justify-self: center; }
-  .pb-top #btn-resume, .pb-top #btn-abandon { grid-column: auto; grid-row: 2; justify-self: stretch; }
+  .pb-top #btn-abandon, .pb-top #btn-resume { grid-column: auto; grid-row: 2; justify-self: stretch; }
 }
