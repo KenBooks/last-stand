@@ -14,6 +14,7 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setHdrAllowed } from './hdr';
+import { setSkullDetail } from '../world/skull';
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
@@ -92,6 +93,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
   setHdrAllowed(p.hdr);
+  setSkullDetail(p.coarseProps);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

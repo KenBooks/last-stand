@@ -20,7 +20,7 @@ import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, s
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';
-import { restingLift, skullGeometry } from './skull';
+import { COARSE_CELL, restingLift, skullGeometry, skullsDrawn } from './skull';
 import { cullInCells, eachInstance, gridCell } from './culling';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
@@ -1307,5 +1307,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     skulls.setMatrixAt(i, m.compose(p, q, s));
   }
   skulls.castShadow = true;
-  scene.add(...cullInCells(skulls, CLUTTER_CELLS));
+  const culled = cullInCells(skulls, CLUTTER_CELLS);
+  skullsDrawn(culled, skullGeo, skullGeometry(COARSE_CELL));
+  scene.add(...culled);
 }
