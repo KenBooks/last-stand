@@ -460,6 +460,7 @@ export function bootText(measure, { links = false } = {}) {
     ...(findings.windFit ? windFitLines(findings.windFit) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...lobbyStallLines(findings),
+    ...runStallLines(findings),
     ...findings.steps.flatMap((step) => bootStepLines(step, { links })),
   ];
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: no step\'s work)');
@@ -473,6 +474,16 @@ function lobbyStallLines({ lobbyStalls, listedMs, revealedAt }) {
   if (!lobbyStalls.length) return [`  the lobby held up ${listedMs} ms or more: never`];
   const head = `  the lobby held up ${listedMs} ms or more: ${lobbyStalls.length} times (times from the reveal)`;
   return [head, ...lobbyStalls.flatMap((stall) => stallLines(stall).map((line) => `  ${line}`))];
+}
+
+/** The frames held up from Start (`analyze.mjs` `runStallsOf`): the fight's loading bar's, where it waited for its
+ *  programs, and the run's start, each as a stall is listed, its time from Start. */
+function runStallLines({ runStalls, listedMs, startedAt, warmAt }) {
+  if (startedAt === null || !runStalls) return [];
+  const bar = warmAt && warmAt > startedAt ? `, the loading bar down ${bootSeconds(warmAt - startedAt)} in` : '';
+  if (!runStalls.length) return [`  from Start held up ${listedMs} ms or more: never${bar}`];
+  const head = `  from Start held up ${listedMs} ms or more: ${runStalls.length} times (times from Start${bar})`;
+  return [head, ...runStalls.flatMap((stall) => stallLines(stall).map((line) => `  ${line}`))];
 }
 
 /** `values` (ms) as seconds: their median and range, `5.42 (5.21–5.90) s`. */

@@ -8,7 +8,7 @@ import { analyzeBoot } from './analyze.mjs';
 import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
-import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
+import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, startRun, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
 import { VIEWS } from './options.mjs';
@@ -58,6 +58,9 @@ async function bootContext(browser, url, variant, options) {
 /** How long `--warm-behind` goes on watching the lobby once the fight is warm: its frames then are the lobby's own,
  *  with nothing behind it. */
 const AFTER_WARM_MS = 5000;
+/** How long the run is watched once the fight is warm and Start pressed (ms): its countdown, the first wave's foes
+ *  rising and coming at the hero */
+const RUN_WATCHED_MS = 8000;
 
 /** What `--before`'s expression gave, written beside `--read`'s (`read`'s path, `.before.json`): the trace stopped
  *  by then, so it's how the page runs with no trace on it. */
@@ -124,6 +127,8 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
     else {
       await page.evaluate(startIfCold);
       await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+      await page.evaluate(startRun);
+      await page.waitForTimeout(RUN_WATCHED_MS);
     }
   }
   if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
