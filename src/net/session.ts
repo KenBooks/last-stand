@@ -17,12 +17,13 @@ import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
+import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 19;
+const PROTOCOL = 20;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -37,6 +38,8 @@ export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
  *  it did). */
 interface Peer {
   id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
+  /** its player's name tag (net/nameTag) */
+  tag: string;
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
@@ -57,6 +60,10 @@ export const session = {
   code: '',
   /** why joining failed */
   error: '',
+  /** joining failed as the room already has our name tag: we're asked for another */
+  renameAsked: false,
+  /** the local player's name tag in the room (net/nameTag) */
+  tag: '',
   /** the host's peer id, on a guest */
   hostId: '',
   /** the host's lobby choice, shown on a guest */
@@ -101,13 +108,33 @@ export function invitedRoom(): string | null {
 
 export const myLook = (): Look => ({ cls: G.profile.classId, eq: G.profile.equipped });
 
+/** Takes the local player's name tag for a room, kept for next time; false (the session failed, saying why) if it
+ *  can't be used. */
+function takeTag(typed: string): boolean {
+  const tag = cleanTag(typed);
+  const problem = tagProblem(tag);
+  if (problem) {
+    session.status = 'failed';
+    session.error = problem;
+    session.renameAsked = false;
+    hooks.changed();
+    return false;
+  }
+  session.tag = tag;
+  saveTag(tag);
+  return true;
+}
+
 // --- rooms -------------------------------------------------------------------------------
-export async function hostRoom(): Promise<void> {
+/** Opens a room with the local player as its host, named `tag`. */
+export async function hostRoom(tag: string): Promise<void> {
   if (link) return;
+  if (!takeTag(tag)) return;
   session.code = newCode();
   session.status = 'hosting';
   netLog(`hosting room ${session.code}`);
   session.error = '';
+  session.renameAsked = false;
   role.current = 'host';
   G.player.slot = 0;
   placeSpawns();
@@ -123,12 +150,15 @@ export async function hostRoom(): Promise<void> {
   hostSync();
 }
 
-export async function joinRoom(code: string): Promise<void> {
+/** Joins room `code` as `tag` (the host refuses a tag the room already has: `session.renameAsked`). */
+export async function joinRoom(code: string, tag: string): Promise<void> {
   if (link) leaveRoom();
   session.code = code.toUpperCase();
+  if (!takeTag(tag)) return;
   session.status = 'joining';
   netLog(`joining room ${session.code}`);
   session.error = '';
+  session.renameAsked = false;
   hooks.changed();
   try {
     link = await openLink(session.code);
@@ -170,11 +200,12 @@ export function leaveRoom(): void {
   hooks?.changed();
 }
 
-function fail(why: string): void {
+function fail(why: string, rename = false): void {
   netLog(`failed: ${why}`);
   leaveRoom();
   session.status = 'failed';
   session.error = why;
+  session.renameAsked = rename;
   hooks.changed();
 }
 
@@ -208,7 +239,18 @@ function wire(l: Link): void {
   });
 }
 
-const hello = () => ({ v: PROTOCOL, look: myLook(), slot: G.player.slot, host: role.current === 'host' });
+/** Who we are, to a game we meet: our slot is -1 until the host has given us one (another guest would take our 0 as
+ *  the host's slot). */
+const hello = () => ({
+  v: PROTOCOL, look: myLook(), tag: session.tag, host: role.current === 'host',
+  slot: session.status === 'joining' ? -1 : G.player.slot,
+});
+
+/** Whether `tag` is already someone else's in the room (the host's own, or a guest's), `from` aside. */
+function tagTaken(tag: string, from: string): boolean {
+  if (sameTag(tag, session.tag)) return true;
+  return [...session.peers.values()].some((p) => p.id !== from && sameTag(tag, p.tag));
+}
 
 function send(ch: Parameters<Link['send']>[0], data: unknown, to?: string): void { link?.send(ch, data, to); }
 
@@ -219,14 +261,17 @@ function onHello(from: string, m: Record<string, unknown>): void {
     return;
   }
   const look = m.look as Look;
+  const tag = cleanTag(typeof m.tag === 'string' ? m.tag : '');
   if (role.current === 'host') {
     // a new guest: a free slot, if the party has room (and no run is on: joining mid-run waits)
     if (session.peers.has(from)) return;
+    // its name tag must be one the room hasn't got: the host decides, and the guest is asked for another
+    if (tagProblem(tag) || tagTaken(tag, from)) { send('ctl', { t: 'refuse', why: 'name', tag }, from); return; }
     const used = new Set([0, ...[...session.peers.values()].map((p) => p.slot)]);
     let slot = 1;
     while (used.has(slot)) slot++;
     if (slot >= COOP.maxPlayers) { send('ctl', { t: 'refuse', why: 'full' }, from); return; }
-    addPeer(from, slot, look);
+    addPeer(from, slot, look, tag);
     send('ctl', { t: 'welcome', slot, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' }, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
@@ -236,7 +281,18 @@ function onHello(from: string, m: Record<string, unknown>): void {
   // a guest meets the host (or another guest)
   const slot = m.slot as number;
   if (m.host) session.hostId = from;
-  if (!session.peers.has(from) && slot >= 0) addPeer(from, slot, look);
+  const known = session.peers.get(from);
+  if (!known && slot >= 0) {
+    addPeer(from, slot, look, tag);
+    // (greeted back once, as our own hello may have reached it before its link knew us, and been dropped: a guest
+    // joining a room of three never knew one of the others)
+    if (session.status === 'joined') send('hello', hello(), from);
+  } else if (known && slot >= 0 && known.slot !== slot) {
+    // (met before the host gave it its slot)
+    known.slot = slot;
+    if (known.player) known.player.slot = slot;
+    placeSpawns();
+  }
   hooks.changed();
 }
 
@@ -262,7 +318,8 @@ function onControl(from: string, m: Record<string, unknown>): void {
       hooks.changed();
     } else if (m.t === 'refuse') {
       netLog(`refused: ${String(m.why)}`);
-      fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
+      if (m.why === 'name') fail(`Someone in that room is already called ${session.tag}: pick another name tag to join.`, true);
+      else fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
     } else if (m.t === 'lobby') {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
@@ -357,7 +414,7 @@ function onNumbers(from: string, m: NumbersMsg): void {
 
 /** A partner as the scoreboard shows it: its character, its numbers, its round trips to the server, and how far
  *  behind its own game this one shows it (ms: half of both round trips to the server, and the play-out's wait). */
-export interface PartnerBoard { player: Player; numbers: RunNumbers; rtt: number | null; pings: number[]; behind: number | null }
+export interface PartnerBoard { player: Player; tag: string; numbers: RunNumbers; rtt: number | null; pings: number[]; behind: number | null }
 
 export function partnerBoards(): PartnerBoard[] {
   const own = serverPings().rtt;
@@ -365,7 +422,7 @@ export function partnerBoards(): PartnerBoard[] {
     if (!peer.player) return [];
     const wait = peer.clock.started && !Number.isNaN(peer.clock.behind) ? peer.clock.behind : null;
     const behind = wait === null ? null : wait + ((own ?? 0) + (peer.rtt ?? 0)) / 2;
-    return [{ player: peer.player, numbers: peer.numbers, rtt: peer.rtt, pings: peer.pings, behind }];
+    return [{ player: peer.player, tag: peer.tag, numbers: peer.numbers, rtt: peer.rtt, pings: peer.pings, behind }];
   });
 }
 
@@ -402,10 +459,10 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 }
 
 // --- players -------------------------------------------------------------------------------
-function addPeer(id: string, slot: number, look: Look): void {
+function addPeer(id: string, slot: number, look: Look, tag: string): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, tag, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [],
   };
   session.peers.set(id, peer);
@@ -416,6 +473,7 @@ function makePlayer(peer: Peer): void {
   if (!peer.look || !CLASSES[peer.look.cls]) return;
   const p = new Player(peer.look.cls, peer.look.eq, false);
   p.slot = peer.slot;
+  p.tag = peer.tag;
   peer.player = p;
   G.players.push(p);
   placeSpawns();
@@ -442,13 +500,13 @@ function peerLeft(id: string): void {
   hooks.changed();
 }
 
-/** Spawn points side by side, by slot (solo: the middle). */
+/** how far apart the party's spawn points are (m) */
+const SPAWN_APART = 1.6;
+
+/** Spawn points side by side, by slot, the row of every slot the party can have centred (solo: the middle). */
 function placeSpawns(): void {
   const n = role.current === 'solo' ? 1 : COOP.maxPlayers;
-  for (const p of G.players) {
-    const k = n === 1 ? 0 : (p.slot / (n - 1) - 0.5) * 2.4;
-    p.spawn.set(k, 0, 3);
-  }
+  for (const p of G.players) p.spawn.set((p.slot - (n - 1) / 2) * SPAWN_APART, 0, 3);
 }
 
 /** A partner in the other place (the lobby while we're in a run, or the other way round) isn't shown. */

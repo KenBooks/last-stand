@@ -1,9 +1,10 @@
 // The lab's co-op (`npm run lab -- coop`): the host's game in the side's page and the guest's in a partner page beside
-// it, stepped together a turn of frames at a time on the lab's clock, the messages each sends carried to the other as
-// a link of `--ping` and `--jitter` delivers them: each way half the ping and up to the jitter later, in the order
-// sent (a WebSocket's TCP never reorders, so a late message holds up the ones behind it), and every couple of seconds
-// on average a stall of several times the jitter (a mobile network's). The pages play each scenario (page/coop.ts),
-// and what each showed is judged against the other (coopJudge.mjs).
+// it (`--party 3` or `4`: the party's other heroes in pages of their own), stepped together a turn of frames at a time
+// on the lab's clock, the messages each sends carried to every other as a link of `--ping` and `--jitter` delivers
+// them: each way half the ping and up to the jitter later, in the order sent (a WebSocket's TCP never reorders, so a
+// late message holds up the ones behind it), and every couple of seconds on average a stall of several times the
+// jitter (a mobile network's). The pages play each scenario (page/coop.ts), and what the host and the guest showed is
+// judged against each other (coopJudge.mjs); a party's room is judged as it fills (`judgeRoom`).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
@@ -29,6 +30,10 @@ const PRACTICE_FRAMES = 60;
 const START_FRAMES = 900;
 /** the seed the link's delays are drawn from */
 const LINK_SEED = 0x9e3779b9;
+/** each page's name tag: the host's, the guest's, the party's others' (the third first joins as the guest's) */
+export const PARTY_TAGS = ['Host', 'Guest', 'Third', 'Fourth'];
+/** the most heroes a party has (the game's `COOP.maxPlayers`) */
+export const PARTY_MOST = 4;
 
 /** Random numbers in [0, 1) from `seed`, the same every time (mulberry32). */
 export function seededRandom(seed) {
@@ -73,18 +78,63 @@ function callPage(page, fn, args = {}) {
   }, [fn, args]);
 }
 
-/** The two games and the link between them, stepped together. */
+/**
+ * The room as each of a party's pages knows it (page/coop.ts `CoopState`, the host's first): the problems with it.
+ * Every page must have every other as a partner, each in a slot of its own, and know each by its name tag.
+ */
+export function judgeRoom(states, tags) {
+  const problems = [];
+  const slots = states.map((state) => state.slot);
+  if (new Set(slots).size !== slots.length) problems.push(`two players share a slot (${slots.join(', ')})`);
+  states.forEach((state, index) => {
+    const others = states.filter((_, other) => other !== index);
+    if (state.partners !== others.length) {
+      problems.push(`${tags[index]}'s game has ${state.partners} partners, not ${others.length}`);
+      return;
+    }
+    const expected = others.slice().sort((a, b) => a.slot - b.slot);
+    const wantTags = expected.map((other) => other.tag).join(', ');
+    if (state.partnerTags.join(', ') !== wantTags) {
+      problems.push(`${tags[index]}'s game names its partners ${state.partnerTags.join(', ')}, not ${wantTags}`);
+    }
+    const wantSlots = expected.map((other) => other.slot).join(', ');
+    if (state.partnerSlots.join(', ') !== wantSlots) {
+      const slots = state.partnerSlots.join(', ');
+      problems.push(`${tags[index]}'s game has its partners in slots ${slots}, not ${wantSlots}`);
+    }
+  });
+  return problems;
+}
+
+/** Where each page stood when a wait gave up: its status, slot and the partners it had. */
+function describeStates(states) {
+  const described = states.map((state, index) => {
+    const partners = state.partnerTags?.length ? state.partnerTags.join(', ') : `${state.partners} partners`;
+    return `${PARTY_TAGS[index]}: ${state.status} in slot ${state.slot} with ${partners}`;
+  });
+  return described.join('; ');
+}
+
+/** The party's games (the host's, the guest's, any others') and the links between them, stepped together. */
 class Pair {
-  constructor({ host, guest, ping, jitter, frameMs }) {
-    this.host = host;
-    this.guest = guest;
+  constructor({ pages, ping, jitter, frameMs }) {
+    this.pages = pages;
     const random = seededRandom(LINK_SEED);
-    this.toGuest = new Way({ delay: ping / 2, jitter, random });
-    this.toHost = new Way({ delay: ping / 2, jitter, random });
-    this.forGuest = [];
-    this.forHost = [];
+    // (one way from each page to each other, all drawing from one stream: with two, the host's way to the guest
+    // and back, as a pair has always had them)
+    this.ways = pages.map((_, from) => pages.map((__, to) => (
+      from === to ? null : new Way({ delay: ping / 2, jitter, random }))));
+    this.inboxes = pages.map(() => []);
     // (a turn's messages are handed over after it, so none may be due before the next turn ends)
     this.turnFrames = Math.max(1, Math.min(MOST_TURN, Math.floor(ping / 2 / frameMs)));
+  }
+
+  get host() {
+    return this.pages[0];
+  }
+
+  get guest() {
+    return this.pages[1];
   }
 
   /** Runs `frames` frames on both games, a turn at a time, playing `scenario` (none: standing). */
@@ -97,25 +147,30 @@ class Pair {
   }
 
   /**
-   * Runs frames until `done(hostState, guestState)`, at most `limit`, and returns the two states; throws, saying
-   * `what` failed, if it never is.
+   * Runs frames until `done(hostState, guestState, states)` (`states`: every page's, the host's first), at most
+   * `limit`, and returns every page's states; throws, saying `what` failed, if it never is.
    */
   async until(done, limit, what) {
+    let states = [];
     for (let frames = 0; frames < limit; frames += this.turnFrames) {
-      const [hostState, guestState] = await this.turn(this.turnFrames);
-      if (done(hostState, guestState)) return [hostState, guestState];
+      states = await this.turn(this.turnFrames);
+      if (done(states[0], states[1], states)) return states;
     }
-    throw labError(`coop: ${what} (not within ${limit} frames)`);
+    throw labError(`coop: ${what} (not within ${limit} frames; ${describeStates(states)})`);
   }
 
+  /** Runs `frames` frames on every page, then carries what each sent to every other. Returns every page's state. */
   async turn(frames, scenario) {
-    const [hostTurn, guestTurn] = await Promise.all([
-      callPage(this.host, 'coopFrames', { arriving: this.forHost.splice(0), frames, scenario }),
-      callPage(this.guest, 'coopFrames', { arriving: this.forGuest.splice(0), frames, scenario }),
-    ]);
-    this.forGuest.push(...this.toGuest.carry(hostTurn.sent));
-    this.forHost.push(...this.toHost.carry(guestTurn.sent));
-    return [hostTurn.state, guestTurn.state];
+    const turns = await Promise.all(this.pages.map((page, index) => {
+      const arriving = this.inboxes[index].splice(0);
+      return callPage(page, 'coopFrames', { arriving, frames, scenario });
+    }));
+    turns.forEach((turn, from) => {
+      this.ways[from].forEach((way, to) => {
+        if (way) this.inboxes[to].push(...way.carry(turn.sent));
+      });
+    });
+    return turns.map((turn) => turn.state);
   }
 
   /**
@@ -143,9 +198,9 @@ class Pair {
     return files;
   }
 
-  /** Readies both pages' random numbers again, as a command does. */
+  /** Readies every page's random numbers again, as a command does. */
   async reseed() {
-    await Promise.all([this.host, this.guest].map((page) => page.evaluate(() => window.__lab.begin())));
+    await Promise.all(this.pages.map((page) => page.evaluate(() => window.__lab.begin())));
   }
 }
 
@@ -154,37 +209,74 @@ class Pair {
  * run started on both. Returns the problems of the start: a game whose hero casts freely in the run, as the guest's
  * did, begun in practice.
  */
-async function startTogether(pair, link) {
+async function startTogether(pair, link, lines) {
   await pair.reseed();
-  const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...link });
-  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, ...link });
+  const code = await callPage(pair.host, 'coopOpen', { role: 'host', tag: PARTY_TAGS[0], ...link });
+  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, tag: PARTY_TAGS[1], ...link });
   const joined = (host, guest) => guest.status === 'joined' && host.partners > 0 && guest.partners > 0;
   await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
+  const problems = await fillTheRoom(pair, code, link, lines);
   await callPage(pair.guest, 'coopPractise');
   const practising = (host, guest) => guest.stowed && !guest.free;
   await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
   await pair.reseed();
   await callPage(pair.host, 'coopStart');
-  const inRun = (host, guest) => host.mode === 'run' && guest.mode === 'run';
-  const states = await pair.until(inRun, START_FRAMES, 'the run never started on both games');
-  const roles = ['host', 'guest'];
-  const free = roles.filter((role, index) => states[index].free);
-  return free.map((role) => `the ${role}'s run kept the lobby's free casting (no costs or cooldowns)`);
+  const inRun = (host, guest, states) => states.every((state) => state.mode === 'run');
+  const states = await pair.until(inRun, START_FRAMES, 'the run never started on every game');
+  const free = states.flatMap((state, index) => (state.free ? [PARTY_TAGS[index]] : []));
+  problems.push(...free.map((tag) => `${tag}'s run kept the lobby's free casting (no costs or cooldowns)`));
+  return problems;
+}
+
+/**
+ * In a party of more, the others join the room the host and the guest are in: the third first as the guest's name
+ * tag, which the host must refuse and ask it to rename, then as its own, and the fourth. Returns the problems: a tag
+ * taken twice let in, or the room as any game knows it wrong (`judgeRoom`).
+ */
+async function fillTheRoom(pair, code, link, lines) {
+  const problems = [];
+  if (pair.pages.length < 3) return problems;
+  const third = pair.pages[2];
+  await callPage(third, 'coopOpen', { role: 'guest', code, tag: PARTY_TAGS[1], extra: 0, ...link });
+  const answered = (host, guest, states) => states[2].status !== 'joining';
+  let states = await pair.until(answered, JOIN_FRAMES, 'the third never heard from the host');
+  const taken = states[2];
+  if (taken.status === 'joined') problems.push(`the third joined as ${PARTY_TAGS[1]}, the guest's name tag`);
+  else if (!taken.renameAsked) problems.push(`the third, refused as ${PARTY_TAGS[1]}, wasn't asked to rename`);
+  lines.push(`the third joining as the guest's name tag: ${taken.renameAsked ? 'asked to rename' : taken.status}`);
+  await callPage(third, 'coopRejoin', { code, tag: PARTY_TAGS[2] });
+  for (let index = 3; index < pair.pages.length; index++) {
+    const opening = { role: 'guest', code, tag: PARTY_TAGS[index], extra: index - 2, ...link };
+    await callPage(pair.pages[index], 'coopOpen', opening);
+  }
+  const everyone = pair.pages.length - 1;
+  const full = (host, guest, all) => all.every((state) => state.status !== 'joining' && state.partners === everyone);
+  states = await pair.until(full, JOIN_FRAMES, `the room never held all ${pair.pages.length}`);
+  const tags = PARTY_TAGS.slice(0, pair.pages.length);
+  problems.push(...judgeRoom(states, tags));
+  const seenBy = (state, index) => `${tags[index]} in slot ${state.slot} sees ${state.partnerTags.join(', ')}`;
+  const seen = states.map(seenBy);
+  lines.push(`a room of ${pair.pages.length}: ${seen.join('; ')}`);
+  return problems;
 }
 
 /**
  * Runs `scenarios` (names of page/coop.ts's) on a side as host, a partner page as guest, over a link of `ping` and
  * `jitter` (ms). Returns the report: each scenario judged, and the problems found.
  */
-export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false }) {
-  const guest = await side.openPartner(side.heroClass);
+export async function runCoop(side, options) {
+  const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2 } = options;
+  if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
+  const partners = [];
+  for (let index = 1; index < party; index++) partners.push(await side.openPartner(side.heroClass));
+  const guest = partners[0];
   try {
     const frameMs = await side.page.evaluate(() => window.__labClock.frame);
     const about = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).COOP_SCENARIOS);
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
-    const pair = new Pair({ host: side.page, guest, ping, jitter, frameMs });
-    const problems = await startTogether(pair, { ping, jitter });
+    const pair = new Pair({ pages: [side.page, ...partners], ping, jitter, frameMs });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
+    const problems = await startTogether(pair, { ping, jitter }, lines);
     const casting = problems.length ? 'free casting' : 'a run\'s costs and cooldowns';
     lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);
     for (const name of scenarios ?? Object.keys(about)) {
@@ -195,7 +287,7 @@ export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = D
         lines.push(`${name}: not played (${unplayable})`);
         continue;
       }
-      await Promise.all([side.page, guest].map((page) => callPage(page, 'coopScenario', { name })));
+      await Promise.all(pair.pages.map((page) => callPage(page, 'coopScenario', { name })));
       const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
       if (pictures && at.length) {
         const files = await pair.runPicturing(settle + frames, name, at.map((frame) => settle + frame));

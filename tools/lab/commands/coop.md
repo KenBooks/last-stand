@@ -47,6 +47,15 @@ under its charge on each screen (each game's hooks on each hero's pose and `fire
 landed and whether the charge ran then, the frames the charge was shown in its place, and whether it was still
 building as it landed (a copy, replayed, was taken as landed as the charge cast over it landed, and its build-up
 stopped short). Scenarios run on from each other, so a scenario alone can differ.
+`--party 3` or `4` fills the room first (`node/coop.mjs` `fillTheRoom`): the party's others in partner pages of their
+own, every page's messages carried to every other over a way of its own (two pages draw their delays as a pair always
+has). The third joins first as the guest's name tag, which the host must refuse and ask it to rename
+(`session.renameAsked`), then as its own, and the fourth after it; every game must then have every other as a
+partner, each in a slot of its own, known by its tag (`judgeRoom`, unit-tested). The others stand off the scenarios'
+action (`EXTRA_SPOTS` in `page/coop.ts`) and play nothing; the host and the guest are judged as ever. Every page's
+random numbers are seeded alike, again each frame, so each of the others draws its share apart just before it joins
+(`drawApart`): two joining on the same frame drew the same link id, and the room took them for one. A wait that gives
+up says where each page stood (its status, slot and partners).
 `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
 arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
 the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would

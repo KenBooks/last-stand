@@ -67,7 +67,7 @@ export const BLOCK = { recovery: 0.7, arc: 1.4, guardBreak: 1.5 };
 
 /** Co-op: party size, reviving a downed teammate, and how much more the arena throws at a party. */
 export const COOP = {
-  maxPlayers: 2,
+  maxPlayers: 4,
   /** seconds a downed player lasts before bleeding out (the clock stops while a teammate raises them), and a
    *  teammate's hold (E) to raise them */
   bleedOut: 25,
@@ -76,12 +76,32 @@ export const COOP = {
   reviveRange: 2.4,
   reviveLife: 0.35,
   reviveGuard: 1.5,
-  /** per player beyond the first: more foes in a wave, and more life on each */
-  budgetPerPlayer: 0.6,
-  lifePerPlayer: 0.35,
   /** state updates sent per second */
   sendRate: 20,
 };
+
+/**
+ * What a party of 1 to `COOP.maxPlayers` meets, against one hero alone: the foes in a wave (`foes`), the life on each
+ * (`life`, a boss's summons too) and on a boss (`boss`), and the foes that may stand at once (`alive`, added to the
+ * wave's own most, `WAVES.maxAlive`, never past its cap). A wave's whole life is `foes * life`, a share more for each
+ * hero than one alone meets (1.08 for two, as it was; 1.12 for three, 1.13 for four), as the others are there to
+ * raise one who falls; the count grows slower than the heroes and the life faster, so four meet 2.5 times the foes
+ * and the frame stays within the crowd's budget (`WAVES.maxAlive`'s cap). A boss is one foe each hero strikes, so its
+ * life follows the heroes closer: 0.68 to 0.75 of each one's share. Four by the old rule per player (0.6 more foes,
+ * 0.35 more life) met 5.7 times one hero's wave, 1.4 times each one's share.
+ */
+export const PARTY = {
+  foes: [1, 1.6, 2.1, 2.5],
+  life: [1, 1.35, 1.6, 1.8],
+  boss: [1, 1.5, 2.1, 2.7],
+  alive: [0, 4, 7, 10],
+};
+
+/** What a party of `n` heroes meets (`PARTY`'s row for it, one hero's below one, four's above four). */
+export function partyScale(n: number): { foes: number; life: number; boss: number; alive: number } {
+  const i = Math.max(0, Math.min(PARTY.foes.length - 1, Math.round(n) - 1));
+  return { foes: PARTY.foes[i], life: PARTY.life[i], boss: PARTY.boss[i], alive: PARTY.alive[i] };
+}
 
 /** How a kill throws its body (combat/fling.ts): the speed any kill gives it (m/s, enough to topple it) and the most
  *  the overkill adds, at an overkill of `full` times its life, rising by its share to the power `curve` (the first

@@ -115,6 +115,13 @@ export interface CoopState {
   stowed: boolean;
   /** its own hero casting freely, as the lobby has him (no costs or cooldowns) */
   free: boolean;
+  /** its own party slot and name tag, and its partners' as it knows them, by slot (none in an older tree) */
+  slot: number;
+  tag: string;
+  partnerTags: string[];
+  partnerSlots: number[];
+  /** joining was refused for its name tag, and it is asked for another */
+  renameAsked: boolean;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -149,6 +156,9 @@ interface Scenario {
   hostInput(frame: number): Frame;
   guestInput(frame: number): Frame;
 }
+
+/** where the party's other heroes stand through every scenario, off its action (`--party`: the third and fourth) */
+const EXTRA_SPOTS: XZ[] = [[-22, 2], [-22, 6]];
 
 /** the frames a scenario plays before it is recorded: the heroes on their spots, their copies arrived */
 export const SETTLE_FRAMES = 90;
@@ -561,6 +571,8 @@ function reportRtt(): void {
 /** This page's role, the scenario it plays and what it recorded. */
 const play = {
   role: 'host' as Role,
+  /** which of the party's other heroes this page plays (`EXTRA_SPOTS`), or null: the host or the guest */
+  extra: null as number | null,
   scenario: '',
   frame: 0,
   samples: [] as Sample[],
@@ -587,11 +599,22 @@ function watchArrows(): void {
   };
 }
 
+/** What a page is told as it opens or joins the room. */
+interface CoopOpening {
+  role: Role;
+  code?: string;
+  /** its player's name tag (the host's 'Host' and a guest's 'Guest' by default) */
+  tag?: string;
+  /** one of the party's other heroes (`EXTRA_SPOTS`), joining as a guest */
+  extra?: number;
+  ping: number;
+  jitter: number;
+}
+
 /** The room opened (the host) or joined (the guest) over the lab's channels. Returns the room's code. */
-export async function coopOpen(
-  lab: Lab, open: { role: Role; code?: string; ping: number; jitter: number },
-): Promise<string> {
+export async function coopOpen(lab: Lab, open: CoopOpening): Promise<string> {
   const { role, code } = open;
+  play.extra = open.extra ?? null;
   history.replaceState(null, '', `${location.pathname}?net=local`);
   (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = LabChannel;
   wire.start = window.__labClock.t;
@@ -605,9 +628,29 @@ export async function coopOpen(
     lab.beforeFrame.push(reportRtt);
   }
   watchArrows();
-  if (role === 'host') await hostRoom();
-  else await joinRoom(code!);
+  drawApart();
+  if (role === 'host') await hostRoom(open.tag ?? 'Host');
+  else await joinRoom(code!, open.tag ?? 'Guest');
   return session.code;
+}
+
+/** draws each of the party's other heroes' pages makes before it joins, a share for each */
+const DRAWS_APART = 16;
+
+/**
+ * Sets this page's random numbers apart from the other pages' before it joins: every page's are seeded alike and
+ * seeded again each frame from the frames run, so two joining on the same frame drew the same link id
+ * (`localLink`'s `self`), and the room took them for one player.
+ */
+function drawApart(): void {
+  if (play.extra === null) return;
+  for (let draw = 0; draw < DRAWS_APART * (play.extra + 1); draw++) Math.random();
+}
+
+/** Joins the room again as `tag`: asked for another name tag, the player types one. */
+export async function coopRejoin(_lab: Lab, { code, tag }: { code: string; tag: string }): Promise<void> {
+  drawApart();
+  await joinRoom(code, tag);
 }
 
 /** The guest practising on the lobby's dummies while it waits for its host, as a player does: its lobby stowed, as
@@ -622,12 +665,19 @@ export function coopStart(): void {
 }
 
 function stateNow(): CoopState {
+  const partners = G.players.filter((player) => !player.local).sort((a, b) => a.slot - b.slot);
+  const known = session as { tag?: string; renameAsked?: boolean };
   return {
     mode: G.mode,
     status: session.status,
-    partners: G.players.length - 1,
+    partners: partners.length,
     stowed: menuStowed(),
     free: G.player.sandbox,
+    slot: G.player.slot,
+    tag: known.tag ?? '',
+    partnerTags: partners.map((player) => (player as { tag?: string }).tag ?? ''),
+    partnerSlots: partners.map((player) => player.slot),
+    renameAsked: Boolean(known.renameAsked),
   };
 }
 
@@ -657,11 +707,14 @@ export function coopScenario(lab: Lab, { name }: { name: string }): void {
   dodger = new Dodger();
   stickToward(0, 0);
   if (!lab.beforeFrame.includes(holdTheRun)) lab.beforeFrame.push(holdTheRun);
-  const [x, z] = play.role === 'host' ? scenario.host : scenario.guest;
+  const extraSpot = play.extra === null ? null : EXTRA_SPOTS[play.extra];
+  const [x, z] = extraSpot ?? (play.role === 'host' ? scenario.host : scenario.guest);
   G.player.place(new lab.THREE.Vector3(x, 0, z), Math.PI);
   G.player.vel.set(0, 0, 0);
   for (const player of G.players) makeUnhurt(player);
-  if (play.role === 'guest' && scenario.guestLife !== undefined) G.player.life = scenario.guestLife;
+  if (play.role === 'guest' && play.extra === null && scenario.guestLife !== undefined) {
+    G.player.life = scenario.guestLife;
+  }
   // (on both: the host clears its foes without a word to the guest, whose copies of them would stay where they were)
   clearEnemies();
   if (play.role !== 'host') return;
@@ -675,9 +728,12 @@ export function coopScenario(lab: Lab, { name }: { name: string }): void {
 /** Runs a turn of frames: the messages arrived meanwhile handed over as they arrive, the scenario's input. */
 export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResult> {
   wire.inbox.push(...turn.arriving);
+  // (in a party of more, each sender's come in its order, the senders' between each other by when they arrive)
+  wire.inbox.sort((a, b) => a.due - b.due);
   const scenario = turn.scenario ? SCENARIOS[turn.scenario] : null;
   const inputOf = (frame: number): Frame => {
-    if (!scenario) return {};
+    // (the party's other heroes stand where they were put)
+    if (!scenario || play.extra !== null) return {};
     const at = play.frame + frame - SETTLE_FRAMES;
     if (at < 0) return {};
     return play.role === 'host' ? scenario.hostInput(at) : scenario.guestInput(at);

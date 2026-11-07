@@ -4,7 +4,7 @@
 // like goes through `fx`, which co-op guests replay: their copies of the enemies don't think.
 import * as THREE from 'three';
 import { G } from '../state';
-import { DAMAGE_COLORS } from '../data/balance';
+import { DAMAGE_COLORS, partyScale } from '../data/balance';
 import { hurtPlayer, DAMAGE_TYPES } from '../combat/damage';
 import { spawnProjectile, type Projectile } from '../combat/projectiles';
 import { sporeOrb, sporeOrbTick } from '../fx/sporeOrb';
@@ -363,7 +363,7 @@ function bossSummon(e: Enemy): void {
   for (let i = 0; i < 4; i++) {
     const a = Math.random() * Math.PI * 2;
     const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * 3.5, 0, e.pos.z + Math.sin(a) * 3.5);
-    spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: e.lifeMult });
+    spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life });
   }
   fx('summon', e.pos.x, e.pos.z, e.def.accent ?? 0xb070ff);
 }

@@ -29,7 +29,7 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 
 ### Play together
 
-Two players can hold the arena together over the internet. In the lobby, **Play together** → **Open a room** gives a short code and an invite link to send a friend; opening the link (or entering the code) joins the room. The games talk through a small relay server of ours (`server/relay`, deployed by Dokci on every push to `main`), over a WebSocket that gets through any network a web page does.
+Up to four players can hold the arena together over the internet, each under a name tag of their own (asked for once, and unique in a room). In the lobby, **Play together** → **Open a room** gives a short code and an invite link to send friends; opening the link (or entering the code) joins the room. The games talk through a small relay server of ours (`server/relay`, deployed by Dokci on every push to `main`), over a WebSocket that gets through any network a web page does.
 
 - Each player brings their own hero, gear and loadout, and keeps their own spoils: loot goes to whoever lands the kill (a boss pays everyone), and each bag stays hidden until its owner banks.
 - The host picks the battleground and starting wave and starts the run. A party faces more foes, each with more life.

@@ -5,7 +5,8 @@ export const WAVES = {
   budget: (w: number) => 9 + w * 3.2,
   groups: (w: number) => Math.min(5, 2 + Math.floor(w / 3)),   // spawn bursts per wave
   groupInterval: 5.5,                                    // seconds between bursts
-  maxAlive: (w: number) => Math.min(38, 14 + w * 2),
+  // the most foes standing at once; a party's early waves allow more (`PARTY.alive`), never past the crowd's cap
+  maxAlive: (w: number, party = 0) => Math.min(38, 14 + w * 2 + party),
   bossEvery: 5,
   // the boss comes after the wave's first group, as that group would reach the players, give or take this (s): first
   // in, a ranger could bring it down before the rest of the wave came
