@@ -7,7 +7,7 @@
 import type { Lab, Report } from './lab';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { gzip, sendTrace, traceOf } from '../../../src/perf/upload';
-import { decodeTrace } from '../../../src/perf/traceFormat';
+import { decodeTrace, type ColumnInfo } from '../../../src/perf/traceFormat';
 import { traceReport } from '../../../src/perf/traceReport';
 import { foesAhead } from './cast';
 import { quantile, timeCalls, type Timing } from './timing';
@@ -83,8 +83,24 @@ function costLine(label: string, perFrame: number[]): { line: string; mean: numb
   return { line, mean };
 }
 
-/** A send's trace of now, packed, gzipped, read back: its lines, size and what it holds. */
-async function traceNow(send: string): Promise<{ lines: string[]; problems: string[] }> {
+/** the frames' counts, each packed as a count */
+const COUNTS = ['draws', 'tris', 'programs', 'foes', 'particles'];
+
+/** Each count column packed as anything but a count, or missing: an update stage named as a count took its column,
+ *  kind and all, and the report read a time as the count (0.0999 particles, trace Z8GY-RHSN). The lab's clock times
+ *  every stage at 0 ms, a whole number, so the values alone can't show it: the column's kind does. Problems. */
+function countsKept(columns: ColumnInfo[]): string[] {
+  const problems: string[] = [];
+  for (const name of COUNTS) {
+    const kind = columns.find((column) => column.name === name)?.kind;
+    if (kind !== 'n16' && kind !== 'n32') problems.push(`the trace's ${name} column is packed as ${kind}, not a count`);
+  }
+  return problems;
+}
+
+/** A send's trace of now, packed, gzipped, read back: its lines, size and what it holds. `canary`: a count's
+ *  column with a time planted in a copy of it, which must be found. */
+async function traceNow(send: string, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
   const start = window.__labClock.realNow();
   const verdict = recorder.judged();
   // (taken as the detector finds a slow stretch, mid-fight: its own time said apart; the packing waits for a calm)
@@ -117,6 +133,15 @@ async function traceNow(send: string): Promise<{ lines: string[]; problems: stri
   if (!stages.length) problems.push('the trace holds no update stage');
   if (!casts) problems.push('the trace marks no cast, though the hero attacked throughout');
   if (!(trace.header.frames > 0)) problems.push('the trace holds no frame');
+  problems.push(...countsKept(trace.header.columns));
+  if (!canary) return { lines, problems };
+  // (the particles' column packed as a time, as a stage of that name made it)
+  const planted = trace.header.columns.map((column) => (column.name === 'particles'
+    ? { ...column, kind: 'lg' as const }
+    : column));
+  const caught = countsKept(planted).some((problem) => problem.includes('particles'));
+  lines.push(`  canary, the particles' count packed as a time: ${caught ? 'caught' : 'went unseen'}`);
+  if (!caught) problems.push('canary: the particles\' count packed as a time went unseen');
   return { lines, problems };
 }
 
@@ -182,7 +207,7 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const lines = ['the always-on performance recorder, the basic attack held into the foes, every frame drawn:', fight.line];
   const problems: string[] = [];
   if (fight.mean > BUDGET_MS) problems.push(`the recorder took ${fight.mean.toFixed(3)} ms a frame, over ${BUDGET_MS}`);
-  const trace = await traceNow(options.send);
+  const trace = await traceNow(options.send, options.canary);
   lines.push(...trace.lines);
   problems.push(...trace.problems);
   const tail = await bootTail(lab, recorder.bootTailMs);

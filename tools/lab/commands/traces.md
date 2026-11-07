@@ -28,8 +28,12 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   owner's PC; the timer ticks in 0.1 ms, so the mean is read). Then the trace a send would make: its snapshot timed
   apart (taken mid-fight as a slow stretch is found), packed and gzipped, read back as `trace` reports it, sent to a
   traces service of the lab's own (`node/tracesService.mjs`, for the page's origin alone) and read back with its
-  token: a trace without stages or casts, one never sent or changed on its way, are problems. `--canary` makes each
-  frame's recording 0.2 ms slower, which must break the budget. Then a slow boot's trace: its reveal stood in for
+  token: a trace without stages or casts, one never sent or changed on its way, and a frame's count (draws, foes,
+  particles...) packed as anything but a count are problems (an update stage named `particles` took the count's
+  column, and the report read its time as the count: 0.0999 particles, trace Z8GY-RHSN; the lab's clock times every
+  stage at 0, so the column's kind shows it, not its values). `--canary` makes each frame's recording 0.2 ms slower,
+  which must break the budget, and packs the particles' count as a time in a copy of the header, which must be
+  caught. Then a slow boot's trace: its reveal stood in for
   (`slowBootRevealed`) and the lobby played on through its wait (`BOOT_TAIL_MS`, 45 s), the trace taken read back: it
   must hold the 45 s after the reveal and say the play after it beside the boot's time; `--canary` also takes it at
   the reveal, as before, which must be caught.
