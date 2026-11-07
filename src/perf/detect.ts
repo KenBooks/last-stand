@@ -15,6 +15,10 @@ export const LOW_FPS = 30;
 /** how far under `LOW_FPS` a 1% low may read and not be under it (frames a second): a frame of whole refreshes comes
  *  out a float's hair either side */
 const LOW_SLACK = 0.05;
+/** a 1% low no longer than this many of the game's own frames (its mean's) is a refresh missed now and then, not
+ *  slow play: a steady 60 on a 60 Hz screen whose browser's frames came on another screen's 145 Hz ticks showed a
+ *  frame for 5 ticks now and then, 34.7 ms, a low of 29 a second, and was sent as slow (trace T9NG-CZ79) */
+export const ONE_MISSED = 2.2;
 /** missed frames over this share, with a mean under `MEAN_FPS`, are slow */
 export const MISSED_SHARE = 0.2;
 export const MEAN_FPS = 50;
@@ -86,7 +90,9 @@ export function judge(frames: Frames, refreshMs: number): Verdict {
   // and then, four of its refreshes, 33.4 ms by the jitter, and read raw that's 29.9 a second, "slow": trace R2XY-H2DW)
   const lowFps = 1000 / Math.min(p99, Math.max(1, Math.round(p99 / refreshMs)) * refreshMs);
   const missed = 1 - played.length / due;
-  const why = lowFps < LOW_FPS - LOW_SLACK ? 'low' : missed > MISSED_SHARE && meanFps < MEAN_FPS ? 'missed' : stalled ? 'stalls' : '';
+  const oneMissed = p99 <= ONE_MISSED * (playMs / played.length);
+  const low = lowFps < LOW_FPS - LOW_SLACK && !oneMissed;
+  const why = low ? 'low' : missed > MISSED_SHARE && meanFps < MEAN_FPS ? 'missed' : stalled ? 'stalls' : '';
   return { slow: why !== '', why, playMs, meanFps, lowFps, missed, stalls, longest, refreshHz };
 }
 
