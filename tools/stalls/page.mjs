@@ -224,6 +224,17 @@ export function startIfCold() {
   document.getElementById('btn-start').click();
 }
 
+/**
+ * Presses the lobby's Start once the fight is warm where it wasn't pressed for it (`startIfCold`), so the run's
+ * start is watched on every visit (a return's fight warms behind its lobby, and Start was never pressed). When it was
+ * pressed is recorded (`runPressed`, the page's clock), apart from a press the loading bar waited on.
+ */
+export function startRun() {
+  if (window.__stalls.startPressed !== undefined) return;
+  window.__stalls.runPressed = performance.now();
+  document.getElementById('btn-start').click();
+}
+
 /** Stops the boot's recording (`bootRecording`) and returns it with when the page first painted (`paint`, ms), the
  *  files it fetched (each by name, kind, bytes over the network: none from a cache, and when it came) and the maps
  *  the game's workers made (its `map <key>` measures: `src/core/textures.ts` `preloadTextures`), each read back
@@ -260,13 +271,14 @@ export function stopBootRecording() {
   // (the game's mark of the fight's programs warm behind the lobby, `fightWarm`'s)
   const warm = performance.getEntriesByName('fight warm')[0]?.startTime ?? null;
   const pressed = record.startPressed ?? null;
+  const ran = record.runPressed ?? null;
   // (the game's warm-ups, each timed with what its steps took: `src/game/warmup.ts`)
   const warmUps = performance.getEntriesByType('measure')
     .filter((entry) => entry.name.startsWith('warm '))
     .map((entry) => ({ name: entry.name.slice('warm '.length), at: entry.startTime, ...entry.detail }));
   const paint = Object.fromEntries(paints);
   const { goneAt = null, origin, blinks } = record;
-  const ends = { exit, goneAt, origin, blinks, warm, pressed };
+  const ends = { exit, goneAt, origin, blinks, warm, pressed, ran };
   return { start, frames, changes: [], phases, longTasks, paint, files, maps, ...ends, warmUps };
 }
 

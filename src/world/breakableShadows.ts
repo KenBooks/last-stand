@@ -84,6 +84,17 @@ export function piecesOf(mesh: THREE.Mesh): Piece[] {
   });
 }
 
+/** The box round `meshes` where they stand, from each one's own box. */
+function boxRound(meshes: THREE.Mesh[]): THREE.Box3 {
+  const box = new THREE.Box3();
+  const one = new THREE.Box3();
+  for (const mesh of meshes) {
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    box.union(one.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));
+  }
+  return box;
+}
+
 /** Whether `held` still hold `casters` as they stand: the same meshes, geometries and places. */
 function stillHeld(held: Held[], casters: THREE.Mesh[]): boolean {
   if (held.length !== casters.length) return false;
@@ -129,6 +140,9 @@ export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
     letGo();
     const piecesByMesh = meshes.map(piecesOf);
     const where = new Map<Piece, Stretch>();
+    // (every caster's sphere round all the meshes' boxes: computed from its vertices, the forest's were 13 ms of the
+    // frame a run began in, its props rolled)
+    const sphere = boxRound(meshes).getBoundingSphere(new THREE.Sphere());
     for (const { side, shadowSide, pieces } of bySide(piecesByMesh.flat())) {
       const length = pieces.reduce((sum, piece) => sum + piece.positions.length, 0);
       const values = new Float32Array(length);
@@ -140,7 +154,7 @@ export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
         where.set(piece, { caster, start: at, positions: piece.positions });
         at += piece.positions.length;
       }
-      geometry.computeBoundingSphere();
+      geometry.boundingSphere = sphere.clone();
       caster.castShadow = true;
       caster.name = `${group.name} breakables' shadow caster`;
       caster.matrixAutoUpdate = false;

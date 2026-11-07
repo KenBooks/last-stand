@@ -59,6 +59,9 @@ export interface Biome {
   /** the props a run shapes anew built again from its seed (the crypt's columns, the forest's stumps): the same on
    *  every game in co-op, as each judges its own hits on them */
   roll?(seed: number): void;
+  /** What `roll` will build for `seed` made ahead, a piece a call, before the run that needs it (the lobby's next
+   *  run): true once it's all made. `roll` with that seed takes it, with any other lets it go. */
+  rollAhead?(seed: number): boolean;
 }
 
 export type BiomeBuilder = (group: THREE.Group) => Biome;

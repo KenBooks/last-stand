@@ -38,6 +38,17 @@ export function showHud(v: boolean, lobby = false): void {
   $('#hud').classList.toggle('lobby', lobby);
 }
 
+/**
+ * The run's HUD laid out under the loading screen, its banner with it (hidden again as the lobby is entered, the
+ * banner by its own fade): their first raster builds Skia's programs on the GPU process's main thread, and on a
+ * first visit the run's first frames after the fight's loading bar held up 285 ms for its 26 (`npm run stalls --
+ * --scenario boot`, the frames held up from Start).
+ */
+export function layOutHudAhead(): void {
+  showHud(true);
+  banner('The Last Stand', 'Wave 1');
+}
+
 /** Build the in-run hotbar from the player's current loadout, unless it shows it already (the lobby's practice
  *  built it again on every press of Space, every slot laid out and its icon painted afresh). */
 export function buildHotbar(player: Player): void {
@@ -78,11 +89,12 @@ export function makeSkillSlot(def: SkillDef | null, key?: SkillKey, tooltip: 'he
 }
 export function banner(title: string, sub = ''): void {
   const b = $('#banner');
-  b.classList.add('hidden');
-  void b.offsetWidth; // restart animation
+  // (shown, its fade begun again by its animations; hidden, shown it begins: a size read to begin it again laid the
+  // page out in the middle of a run's start, 11.5 ms of its frame, `npm run stalls -- --scenario boot`)
+  if (b.classList.contains('hidden')) b.classList.remove('hidden');
+  else for (const animation of b.getAnimations()) { animation.cancel(); animation.play(); }
   $('.b-title', b).textContent = title;
   $('.b-sub', b).textContent = sub;
-  b.classList.remove('hidden');
   // gone as its fade ends (its end follows the animation wherever it's taken: the lab ends it before a picture, and
   // left to a timer of its own it hid by the browser's clock, so a picture had it on the page or not, the HUD's
   // layers laid out another way); the timer only where no fade runs

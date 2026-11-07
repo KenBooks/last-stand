@@ -542,6 +542,16 @@ function lobbyStallsOf(record, traced, revealedAt, end, listedMs) {
     .map((frame) => ({ ...stallOf(frame, record, traced, links), at: (frame.at - revealedAt) / 1000 }));
 }
 
+/** The frames held up `listedMs` or longer from Start (`startedAt`) to `end`, its loading bar's and the run's, each
+ *  with what was busy through it (`stallOf`), `at` in seconds from Start. */
+function runStallsOf(record, traced, startedAt, end, listedMs) {
+  if (startedAt === null) return [];
+  const links = traced.links.filter((link) => link.at !== null);
+  return record.frames
+    .filter((frame) => frame.at - frame.ms >= startedAt && frame.at <= end && frame.ms >= listedMs)
+    .map((frame) => ({ ...stallOf(frame, record, traced, links), at: (frame.at - startedAt) / 1000 }));
+}
+
 /**
  * The changes of the page's look: the changes to its HTML made at once (the observer's one call: a script's in one
  * task), the earliest first, each with when, how many and which, its kind (the change it made most, as the page was
@@ -842,11 +852,13 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
   });
   const revealedAt = record.phases.find((phase) => phase.name === REVEALED)?.at ?? null;
   const refresh = bootRefresh(steps);
-  const lobbyEnd = record.pressed ?? end;
+  const lobbyEnd = record.pressed ?? record.ran ?? end;
+  const startedAt = record.pressed ?? record.ran ?? null;
   return {
     lobby: refresh === null ? null : lobbyRateOf(record.frames, revealedAt, lobbyEnd, refresh, traced),
     listedMs,
     lobbyStalls: lobbyStallsOf(record, traced, revealedAt, lobbyEnd, listedMs),
+    runStalls: runStallsOf(record, traced, startedAt, end, listedMs),
     clockFound: traced.stamp !== null,
     steps,
     revealedAt,
@@ -857,6 +869,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
     goneAt: record.goneAt ?? null,
     warmAt: record.warm ?? null,
     pressedAt: record.pressed ?? null,
+    startedAt,
     warmUps: record.warmUps ?? [],
   };
 }
