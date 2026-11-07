@@ -192,8 +192,9 @@ export async function warmLobby(hall = false): Promise<void> {
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
   });
-  // (its compile is made as it's called, the scene walked before the foes are built)
-  const ahead = buildAhead(theFight());
+  // (its compile is made as it's called, the scene walked before the foes are built; a first visit's other heroes
+  // after them, for the hall of heroes it opens on)
+  const ahead = buildAhead(theFight()).then(() => (hall ? buildHeroesAhead() : undefined));
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
@@ -285,6 +286,27 @@ async function buildAhead(parts: Part[]): Promise<void> {
   }
 }
 
+/** the other classes' heroes with all they can wear, built before the lobby shows (`buildHeroesAhead`), each taken
+ *  by his part's build */
+const heroesAhead = new Map<string, Model>();
+
+/** the models of the classes other than the lobby's hero's */
+const otherHeroModels = (): string[] =>
+  [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
+
+/**
+ * The other heroes built as the lobby's warm-up waits on the GPU, a task each, for a first visit's hall of heroes,
+ * whose warm-up takes them once the loading screen has left: built there, each hero's build was a task of 78 to
+ * 83 ms that held the lobby's frame up (`npm run stalls -- --scenario boot`, the lobby's frames held up). Their
+ * skills' samples are made with the part, as the lobby's warm-up clears the effects it ends with.
+ */
+async function buildHeroesAhead(): Promise<void> {
+  for (const model of otherHeroModels()) {
+    await nextTask();
+    if (!heroesAhead.has(model)) heroesAhead.set(model, heroAllWorn(model, AWAY));
+  }
+}
+
 /** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
  *  (`heroModelParts`). */
 const heroParts = (): Part[] => [...(hallWarm ? [] : [hallPart()]), ...heroModelParts()];
@@ -312,11 +334,11 @@ function hallPart(): Part {
 
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
 function heroModelParts(): Part[] {
-  const models = [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
-  return models.map((model): Part => ({
+  return otherHeroModels().map((model): Part => ({
     name: model,
     build() {
-      const hero = heroAllWorn(model, AWAY);
+      const hero = heroesAhead.get(model) ?? heroAllWorn(model, AWAY);
+      heroesAhead.delete(model);
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },
@@ -342,15 +364,16 @@ function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** How `warmBuilt` goes: behind the lobby a step a frame (`step`), else at once, told how far along (`progress`). */
-interface Warming { step?: () => Promise<void>; progress?: (share: number) => void }
+/** How `warmBuilt` goes: behind the lobby a step a frame (`step`), else at once, told how far along (`progress`);
+ *  `patient`, stepped but never given up on as cold (a first visit's hall, whose programs no cache holds). */
+interface Warming { step?: () => Promise<void>; progress?: (share: number) => void; patient?: boolean }
 
 /**
  * `built` warmed: compiled as the scene lights it, its programs' links waited for, drawn alone, outlined, let go.
  * Behind the lobby (`step`), a step a frame, and given up on, nothing drawn or let go, where a program is cold
  * (`COLD_LINK_MS`).
  */
-async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Promise<WarmedUp> {
+async function warmBuilt(built: Built[], { step, progress, patient }: Warming = {}): Promise<WarmedUp> {
   const swaps = built.filter((b) => b.swap);
   const took = await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     compile: built.flatMap((b) => b.compile),
@@ -363,7 +386,7 @@ async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Prom
     also: () => compileOutline(built.flatMap((b) => b.outlined), { edge: !step }),
     progress,
     step,
-    giveUpMs: step ? COLD_LINK_MS : undefined,
+    giveUpMs: step && !patient ? COLD_LINK_MS : undefined,
   });
   if (took.cold) return took;
   // (the other biomes each drawn in place of the lobby's, for their shadows' programs: compiled with the first)
@@ -407,6 +430,9 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
 
+/** The next frame, or the next task once a loading bar covers the page (nothing of it is seen). */
+const stepBehind = (): Promise<void> => (isReadying() ? nextTask() : nextFrame());
+
 /** how many parts `warmInTasks` gives the GPU at a time */
 const PARTS_AT_ONCE = 4;
 
@@ -434,7 +460,10 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
       progress((from + s * lot.length) / parts.length);
       if (need === 'heroes') for (const part of lot) heroWarming(part.name, s);
     };
-    await warmBuilt(built, { progress: share });
+    // (where no loading bar covers the page, a first visit's hall of heroes, a step a frame: a lot's compile in one
+    // task was 30 ms, and a hero chosen in it held the hall's frame up 104 ms)
+    const step = isReadying() ? undefined : stepBehind;
+    await warmBuilt(built, { progress: share, step, patient: true });
     if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
   }
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });

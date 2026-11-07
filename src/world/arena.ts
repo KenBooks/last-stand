@@ -96,8 +96,10 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
 
   let biome: BiomeId = BIOME_IDS[0];
   let active = biomes[biome].b;
-  /** the biome and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { biome: null as BiomeId | 'hall' | null, rev: -1 };
+  /** the props' revision each biome's (and the hall's) still shadows were last drawn at (`drawStillShadows`): each
+   *  keeps its own lights' maps, so a biome shown again with its props as they were needn't draw them again (closing
+   *  the hall of heroes drew the biome's again, 9 ms of the frame after a first visit's hero was chosen) */
+  const stillDrawn = new Map<BiomeId | 'hall', number>();
   /** whether the hall of heroes stands in the biomes' place */
   let hallShown = false;
 
@@ -126,6 +128,18 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     setAdaptScale(L.adapt ?? 1);
   }
   setBiome(biome);
+
+  /** The still shadows of what's shown's warmest lights, drawn again when what stands in it changed: shown,
+   *  broken, rolled (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`).
+   *  Called before the hall of heroes opens on a first visit, so its closing draws nothing (10.8 ms of the frame
+   *  after the hero was chosen: the biome had never been shown). */
+  function drawStill(): void {
+    const shown = hallShown ? 'hall' : biome;
+    if (stillDrawn.get(shown) === propState.rev) return;
+    if (!hallShown) biomes[biome].breakables.refresh();
+    drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
+    stillDrawn.set(shown, propState.rev);
+  }
 
   return {
     get biome() { return biome; },
@@ -166,16 +180,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     groupOf(id: BiomeId): THREE.Group { return biomes[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) biomes[id].b.setCalm(v); },
     update(dt: number, t: number) {
-      const shown = hallShown ? 'hall' : biome;
       if (hallShown) hall.update(dt, t); else active.update(dt, t);
-      // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
-      if (stillDrawn.biome !== shown || stillDrawn.rev !== propState.rev) {
-        // (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`)
-        if (!hallShown) biomes[biome].breakables.refresh();
-        drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
-        stillDrawn.biome = shown;
-        stillDrawn.rev = propState.rev;
-      }
+      drawStill();
     },
+    drawStill,
   };
 }
