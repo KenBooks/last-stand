@@ -48,6 +48,7 @@ import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
+import { runFrames } from './core/frameLoop';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
@@ -201,7 +202,7 @@ async function boot() {
     const room = invitedRoom();
     if (room) whenWarm(['heroes'], (code: string) => void joinRoom(code), READYING.coop)(room);
   });
-  requestAnimationFrame(frame);
+  runFrames(frame);
 }
 
 // --- flow -------------------------------------------------------------------------
@@ -571,7 +572,6 @@ function musicWanted(): MusicWanted {
 }
 
 function frame(timestamp: number): void {
-  requestAnimationFrame(frame);
   lastStep = performance.now();
 
   perfBeginFrame(timestamp);

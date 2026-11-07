@@ -1,6 +1,7 @@
 // Optional performance overlay: FPS history graph, frame / CPU / GPU timings and
 // renderer stats. Off by default; toggled from the pause menu, persisted in a cookie. Its timings run whether it's
 // shown or not, for the always-on recorder (src/perf/recorder.ts), which they hand every frame to.
+import { framesUncapped } from '../core/frameLoop';
 import * as THREE from 'three';
 import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
@@ -420,7 +421,7 @@ function report(): string {
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt || timesGpu ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
-    `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used`,
+    `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used | vsync ${framesUncapped() ? 'off' : 'on'}`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
 

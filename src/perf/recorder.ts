@@ -6,6 +6,7 @@
 import { G } from '../state';
 import { isReadying, isWarming } from '../game/warm';
 import { hallOpen } from '../game/hall';
+import { framesUncapped } from '../core/frameLoop';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -122,7 +123,8 @@ function judgeNow(now: number): void {
     s += fixed.interval[i];
     if (!(fixed.state[i] & (STATE.hidden | STATE.warming))) second.push(fixed.interval[i]);
   }
-  refreshMs = refreshOf(second, refreshMs);
+  // (uncapped frames come as fast as they're drawn: never the display's rate, core/frameLoop.ts)
+  if (!framesUncapped()) refreshMs = refreshOf(second, refreshMs);
   const verdict = judge(framesNow(), refreshMs);
   if (verdict.slow) found(scene(), verdict, 0);
 }

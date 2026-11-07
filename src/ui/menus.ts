@@ -25,6 +25,7 @@ import { perfHudEnabled, setPerfHud } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
+import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
@@ -186,6 +187,10 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
+  document.querySelectorAll<HTMLElement>('#opt-vsync button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setFramesUncapped(b.dataset.v === 'off'); renderVsyncOptions(); };
+  });
+  renderVsyncOptions();
   document.querySelectorAll<HTMLElement>('#opt-hdr button').forEach((b) => {
     b.onclick = () => { sfx.click(); setHdrSettings({ mode: b.dataset.hdr as HdrMode }); renderHdrOptions(); };
   });
@@ -799,6 +804,14 @@ function renderTraceOptions(): void {
   const t = traceConsent();
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => b.classList.toggle('active', b.dataset.t === t));
 }
+/** The Vsync setting's buttons, the one in effect lit (`?vsync=` may have set it for this visit). */
+function renderVsyncOptions(): void {
+  const on = framesUncapped() ? 'off' : 'on';
+  document.querySelectorAll<HTMLElement>('#opt-vsync button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.v === on);
+  });
+}
+
 function renderQualityOptions(): void {
   const s = qualitySetting();
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));
