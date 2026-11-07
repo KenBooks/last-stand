@@ -200,7 +200,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
   settings (`--level`, low) and the screen's own pixels, whatever the level's cap: the resolution is never what's
   cut, what a pixel costs is. The scene pass alone is drawn, each part taken out and put back in turns
-  (`page/gpuTurns.ts`, `--rounds` of 6 renders a side): the point lights, their shadows, the sun's shadow, the
+  (`page/gpuTurns.ts`, `--rounds` of 6 renders a side): the point lights, their lighting where they reach (the
+  lights put out of reach: the same programs, so the loop's own cost over them is left out; the most a shorter
+  reach can save, 0.08 ms of the forest's 4.3 at 8.3 Mpx), their shadows, the sun's shadow, the
   environment, the lit shading against a plain colour, what's see-through or cut out, the particles, the hero;
   `--each` times each see-through or cut-out mesh alone too and lists the costliest. Run it on the screen that's
   slow (`--screen 1432x768@2`: a laptop's 2864x1536 at 200%, whose integrated GPU spent 86% of a 10 fps frame on

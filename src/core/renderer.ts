@@ -455,8 +455,14 @@ const POINT_LIGHTS_LOOPED = [
   '\t#else',
   '\tconst int unshadowedFrom = 0;',
   '\t#endif',
+  '\tvec3 toLight;',
   '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
   '\t\tpointLight = pointLights[ i ];',
+  // (an idle light, or a point past a light's reach, where three's attenuation comes out 0, passed over on a test of
+  // the distance's square alone)
+  '\t\ttoLight = pointLight.position - geometryPosition;',
+  '\t\tif ( pointLight.color == vec3( 0.0 ) || ( pointLight.distance > 0.0 '
+    + '&& dot( toLight, toLight ) >= pointLight.distance * pointLight.distance ) ) continue;',
   '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
   '\t\tif ( directLight.visible ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, '
     + 'geometryClearcoatNormal, material, reflectedLight );',
