@@ -4,7 +4,9 @@
 // they did nothing ("menu, pause and full screen not clickable").
 // - buttonsTouch: the lobby with its panels shown, then its practice (stowed, as its Practice button stows it).
 // - buttonsRunTouch: the run's touch HUD.
-// Each button shown is checked as a finger finds it: its middle is the button's (else what lies over it is named),
+// Each button shown is checked as a finger finds it: its box clear of every other button's (on main the lobby's
+// practice's Back lay half over the pause button on the owner's phone, 751x298 at 3.75, while each middle was
+// still its own), its middle the button's (else what lies over it is named),
 // and a tap there does what the button is for (the pause menu opened, full screen asked, the scores shown, the
 // lobby stowed or shown). Each place is checked again with the overlays down the left shown (the performance
 // overlay and the battle log, from the pause menu): the owner had the performance overlay open. The canary lays
@@ -29,6 +31,8 @@ interface TouchButton {
 
 /** frames run after a tap, for the game's loop to act on it (a key the button presses is read the next frame) */
 const TAP_FRAMES = 2;
+/** how far two buttons' boxes may meet, css px each way (a hair of rounding where two stand side by side) */
+const OVERLAP_SLACK = 1;
 /** what the canary plants, and the problem it must raise */
 export const BUTTONS_CANARY = { name: 'lies over #btn-pause', what: 'a clear sheet over the pause button' };
 /** the canary's sheet's id */
@@ -137,10 +141,39 @@ async function buttonsIn(lab: Lab, state: string, place: string): Promise<TouchF
   return { lines, problems };
 }
 
+/** How far boxes `a` and `b` meet, css px across and down (0 or less where they don't). */
+function overlapOf(a: DOMRect, b: DOMRect): { across: number; down: number } {
+  const across = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const down = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return { across, down };
+}
+
+/** The buttons shown in `place` (and the canary's sheet, laid as one) whose boxes meet: lines and problems. */
+function overlapsIn(state: string, place: string): TouchFound {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const selectors = [...BUTTONS.map((button) => button.selector), `#${SHEET_ID}`];
+  const shown = selectors.flatMap((selector) => {
+    const box = boxOf(selector);
+    return box ? [{ selector, box }] : [];
+  });
+  for (let i = 0; i < shown.length; i++) {
+    for (let j = i + 1; j < shown.length; j++) {
+      const { across, down } = overlapOf(shown[i].box, shown[j].box);
+      if (across <= OVERLAP_SLACK || down <= OVERLAP_SLACK) continue;
+      const pair = `${shown[i].selector} and ${shown[j].selector}`;
+      lines.push(`    ${pair}: overlap ${across.toFixed(0)}x${down.toFixed(0)} px`);
+      problems.push(`${state}: in ${place}, ${pair} overlap by ${across.toFixed(0)}x${down.toFixed(0)} px`);
+    }
+  }
+  return { lines, problems };
+}
+
 /** Each button shown in `place` found and tapped: lines and problems. */
 async function buttonsTapped(lab: Lab, state: string, place: string): Promise<TouchFound> {
-  const lines = [`  ${place}:`];
-  const problems: string[] = [];
+  const overlaps = overlapsIn(state, place);
+  const lines = [`  ${place}:`, ...overlaps.lines];
+  const problems = [...overlaps.problems];
   for (const button of BUTTONS) {
     const box = boxOf(button.selector);
     if (!box) continue;

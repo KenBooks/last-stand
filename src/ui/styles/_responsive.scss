@@ -18,9 +18,10 @@ body.touch .stow-hint kbd { display: none; }
   #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
   // (and its Practice, Back now, stands in the touch HUD's corner under the pause button, where the run has its
   // scores: half way down the rail, the overlays down the left lay over it, and stood aside for it they left the
-  // edge)
-  #menu.stowed #rail-practice { position: fixed; left: $touch-edge; top: calc(10px + 52px * var(--touch, 1));
-    pointer-events: auto; }
+  // edge. Its panel's zoom, `--ui`, scales its offsets too, so they're the screen's divided by it: as they were, on
+  // a phone of a high ratio it lay half over the pause button, `lab ui --states buttonsTouch`)
+  #menu.stowed #rail-practice { position: fixed; left: calc(#{$touch-edge} / var(--ui, 1));
+    top: calc((10px + 52px * var(--touch, 1)) / var(--ui, 1)); pointer-events: auto; }
   #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
   #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
