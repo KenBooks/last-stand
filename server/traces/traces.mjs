@@ -3,17 +3,22 @@
 // co-op relay, on the same host under /traces, so an upload never holds a room's messages up.
 //   POST /traces                  a trace, gzipped (1 MB at most), from the game's own pages  -> 201 { code }
 //   GET  /traces/health           200 "ok"
-//   GET  /traces?build=&limit=    the traces kept, newest first (token)                     -> { traces: [...] }
-//   GET  /traces/latest           the newest trace's gzip (token), its code in X-Trace-Code
-//   GET  /traces/<code>           a trace's gzip (token)
-// Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`): a report's code alone reads nothing. Kept
-// for KEEP_DAYS, the oldest dropped first past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours
-// (10: what a game holds itself to, src/perf/consent.ts).
+//   GET  /traces?build=&q=&limit=&offset=  the traces kept, newest first (read)         -> { traces: [...], total }
+//   GET  /traces  (Accept: text/html)  the page to browse them (page.mjs), for a browser signed in by a Dokci link
+//   GET  /traces?dokci_link=v1.<exp>.<sig>  a Dokci link: one use, sets the session cookie, moves on to /traces
+//   GET  /traces/summary          how many are kept, their size, builds, scenes, the disk's budget (read)
+//   GET  /traces/latest           the newest trace's gzip (read), its code in X-Trace-Code
+//   GET  /traces/<code>           a trace's gzip (read)
+// Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`) or the session cookie a Dokci link set (a
+// browser never sees the token): a report's code alone reads nothing. Kept for KEEP_DAYS, the oldest dropped first
+// past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours (10:
+// what a game holds itself to, src/perf/consent.ts).
 import { createServer } from 'node:http';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { notePage, viewerPage } from './page.mjs';
 
 const env = process.env;
 /** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
@@ -113,13 +118,83 @@ function allowed(address, now = Date.now()) {
   return true;
 }
 
-/** Whether the request carries the token (compared in constant time). */
+/** Whether two strings are the same, in constant time (their digests compared, so their lengths don't show). */
+function same(a, b) {
+  const digest = (v) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(digest(a), digest(b));
+}
+
+/** base64url HMAC-SHA256 of `text` keyed by the token: a Dokci link's and the session's signature. */
+const sign = (text) => createHmac('sha256', settings.token).update(text, 'utf8').digest('base64url');
+
+/** How far ahead a Dokci link may expire (Dokci makes them 300 s), with 30 s of the clocks' skew. */
+const LINK_AHEAD = 330;
+const SESSION_S = 12 * 60 * 60;
+const COOKIE = 'ls_traces';
+/** a Dokci link's signature -> its expiry (s): each link signs in once, kept till it would have expired */
+const usedLinks = new Map();
+
+/** The host a link was signed for: the request's Host, lower-cased, without its port. */
+function hostOf(req) {
+  const host = String(req.headers.host ?? '').toLowerCase();
+  return host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.replace(/:\d+$/, '');
+}
+
+/** Whether `link` (`v1.<exp>.<sig>`) is a Dokci link for this host and path, unexpired and unused: it's then used. */
+function linkHolds(req, path, link, now = Date.now() / 1000) {
+  const match = /^v1\.(\d{1,12})\.([A-Za-z0-9_-]{43})$/.exec(link);
+  if (!match) return false;
+  const exp = Number(match[1]), sig = match[2];
+  if (!(exp > now && exp <= now + LINK_AHEAD)) return false;
+  if (!same(sig, sign(`dokci-link/v1\n${hostOf(req)}\n${path}\n${exp}`))) return false;
+  for (const [used, until] of usedLinks) if (until <= now) usedLinks.delete(used);
+  if (usedLinks.has(sig)) return false;
+  usedLinks.set(sig, exp);
+  return true;
+}
+
+/** A session's cookie, for 12 hours: its expiry signed by the token, so a new token ends every session. */
+function sessionCookie(now = Date.now() / 1000) {
+  const exp = Math.floor(now) + SESSION_S;
+  return `${COOKIE}=${exp}.${sign(`ls-traces-session/v1\n${exp}`)}; HttpOnly; Secure; SameSite=Strict; Path=/traces; `
+    + `Max-Age=${SESSION_S}`;
+}
+
+/** Whether the request carries a session cookie the token signed, unexpired. */
+function inSession(req, now = Date.now() / 1000) {
+  for (const part of String(req.headers.cookie ?? '').split(';')) {
+    const [name, value = ''] = part.trim().split('=');
+    const match = name === COOKIE && /^(\d{1,12})\.([A-Za-z0-9_-]{43})$/.exec(value);
+    if (match && Number(match[1]) > now && same(match[2], sign(`ls-traces-session/v1\n${match[1]}`))) return true;
+  }
+  return false;
+}
+
+/** Whether the request may read: the token (compared in constant time), or a session a Dokci link began. */
 function authorised(req) {
   if (!settings.token) return false;
   const given = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-  const digest = (v) => createHash('sha256').update(v).digest();
-  return timingSafeEqual(digest(given), digest(settings.token));
+  return (given !== '' && same(given, settings.token)) || inSession(req);
 }
+
+/** Whether a browser is asking for a page (its navigations say text/html; the lab's fetches don't). */
+const wantsPage = (req) => String(req.headers.accept ?? '').includes('text/html');
+
+/** An HTML page, under a CSP that allows only its own inline style and script: no frames, no referrer (a Dokci
+ *  link in the address must never leak). */
+function page(res, status, html, nonce, headers = {}) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+    'content-security-policy': `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; `
+      + `connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', ...headers,
+  });
+  res.end(html);
+}
+const note = (res, status, heading, text) => {
+  const nonce = randomBytes(16).toString('base64');
+  page(res, status, notePage(nonce, heading, text), nonce);
+};
 
 /** The body, up to `most` bytes (null past it). */
 function bodyOf(req, most) {
@@ -178,18 +253,66 @@ async function upload(req, res) {
   }
 }
 
-/** The list, newest first: `build` keeps a commit's (or a bundle's) alone, `limit` the newest so many. */
+/** Whether a trace's line holds `q` (the page's filter: any of its build, scene, why, GPU, quality or code). */
+function holds(meta, q) {
+  const fields = [meta.code, meta.commit, meta.pr ? `#${meta.pr}` : '', meta.bundle, meta.scene, meta.why, meta.gpu,
+    meta.quality];
+  return fields.some((field) => String(field).toLowerCase().includes(q));
+}
+
+/** The list, newest first: `build` keeps a commit's (or a bundle's, or a PR's) alone, `q` those whose line holds it,
+ *  `limit` so many from the `offset`th newest (the page asks for them a page at a time). */
 function list(url) {
   const build = url.searchParams.get('build') ?? '';
+  const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
   const limit = Math.min(500, Number(url.searchParams.get('limit')) || 50);
+  const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
   const all = [...index.values()].reverse()
-    .filter((m) => !build || m.commit.startsWith(build) || m.bundle === build || String(m.pr) === build.replace(/^#/, ''));
-  return { traces: all.slice(0, limit), total: all.length };
+    .filter((m) => !build || m.commit.startsWith(build) || m.bundle === build || String(m.pr) === build.replace(/^#/, ''))
+    .filter((m) => !q || holds(m, q));
+  return { traces: all.slice(offset, offset + limit), total: all.length };
+}
+
+/** What's kept, all of it (the list is a page at a time): counts, sizes, ages, builds, and the disk's budget. */
+function summary() {
+  const metas = [...index.values()];
+  const tally = (key) => metas.reduce((counts, m) => ({ ...counts, [m[key]]: (counts[m[key]] ?? 0) + 1 }), {});
+  return {
+    count: metas.length,
+    bytes: metas.reduce((sum, m) => sum + m.bytes, 0),
+    diskBytes,
+    oldest: metas[0]?.at ?? null,
+    newest: metas[metas.length - 1]?.at ?? null,
+    builds: new Set(metas.map((m) => m.commit || m.bundle).filter(Boolean)).size,
+    prs: new Set(metas.map((m) => m.pr).filter(Boolean)).size,
+    scenes: tally('scene'),
+    whys: tally('why'),
+    keepDays: settings.keepDays,
+    diskMax: settings.diskMax,
+    diskFull: settings.diskMax ? diskBytes / settings.diskMax : 0,
+  };
 }
 
 async function read(res, code) {
   if (!index.has(code)) return answer(res, 404, 'no such trace');
-  return answer(res, 200, await readFile(fileOf(code)), { 'x-trace-code': code });
+  return answer(res, 200, await readFile(fileOf(code)), {
+    'x-trace-code': code, 'content-disposition': `attachment; filename="${code}.lspt.gz"`,
+  });
+}
+
+/** A Dokci link (`?dokci_link=`): signs the browser in for a session and drops the link from the address. A page
+ *  that moves on to /traces, not a 303: the link is opened from Dokci, another site, and a browser sends no
+ *  SameSite=Strict cookie on a redirect that navigation began (Chrome showed "Not signed in"); the page's own
+ *  refresh is a navigation from this site, which does. */
+function signIn(req, res, path, link) {
+  if (!linkHolds(req, path, link)) {
+    return note(res, 401, 'Link expired', 'This sign-in link has expired, was already used or is invalid. Open the traces again from Dokci.');
+  }
+  log('signed in', addressOf(req));
+  const nonce = randomBytes(16).toString('base64');
+  page(res, 200, notePage(nonce, 'Signed in', 'Opening the traces...', '/traces'), nonce, {
+    'set-cookie': sessionCookie(),
+  });
 }
 
 async function handle(req, res) {
@@ -201,9 +324,23 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && path === '/traces') return upload(req, res);
   if (req.method !== 'GET' || !path.startsWith('/traces')) return answer(res, 404, 'not here');
-  if (!settings.token) return answer(res, 503, 'reading is off: no TRACES_TOKEN set');
-  if (!authorised(req)) return answer(res, 401, 'the token, please');
+  const browsing = path === '/traces' && wantsPage(req);
+  if (!settings.token) {
+    return browsing ? note(res, 503, 'Reading is off', 'The traces service has no token set, so nothing can read them.')
+      : answer(res, 503, 'reading is off: no TRACES_TOKEN set');
+  }
+  const link = url.searchParams.get('dokci_link');
+  if (path === '/traces' && link !== null) return signIn(req, res, path, link);
+  if (!authorised(req)) {
+    return browsing ? note(res, 401, 'Not signed in', 'Open the traces from Dokci: its link signs this browser in.')
+      : answer(res, 401, 'the token, please');
+  }
+  if (browsing) {
+    const nonce = randomBytes(16).toString('base64');
+    return page(res, 200, viewerPage(nonce), nonce);
+  }
   if (path === '/traces') return answer(res, 200, list(url));
+  if (path === '/traces/summary') return answer(res, 200, summary());
   if (path === '/traces/latest') {
     const newest = [...index.keys()].pop();
     return newest ? read(res, newest) : answer(res, 404, 'none kept');
@@ -252,6 +389,7 @@ export async function start(port, overrides = {}) {
   settings = settingsFrom({ ...env, ...overrides });
   index.clear();
   sent.clear();
+  usedLinks.clear();
   diskBytes = 0;
   await load();
   const http = createServer((req, res) => {
