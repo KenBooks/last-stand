@@ -27,12 +27,15 @@ export interface QualityPreset {
   /** whether the props sculpted for close looks are drawn coarser (the crypt's skulls: `setSkullDetail` in
    *  world/skull.ts) */
   coarseProps: boolean;
+  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
+   *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
+  bloomShare: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false },
-  medium: { label: 'Medium', pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false },
-  low:    { label: 'Low',    pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true },
+  high:   { label: 'High',   pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false, bloomShare: 1 },
+  medium: { label: 'Medium', pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false, bloomShare: 1 },
+  low:    { label: 'Low',    pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];

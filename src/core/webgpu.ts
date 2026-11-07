@@ -1145,8 +1145,8 @@ export interface GradeLooks {
 /** the weights three's bloom gives its levels: a level's tint is what the game's weight asks of it */
 const THREE_BLOOM_LEVELS = [1, 0.8, 0.6, 0.4, 0.2];
 
-/** `colour` with a NaN or Inf pixel made black and the rest held to 0..64, as WebGL's sanitize pass makes the scene
- *  before bloom: bloom smears a single bad pixel into black boxes across the frame. */
+/** `colour` with a NaN or Inf pixel made black and the rest held to 0..64, as WebGL's passes read the scene
+ *  (`SCENE_READ`): bloom smears a single bad pixel into black boxes across the frame. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sanitized(colour: any): any {
   const { clamp, select, vec4 } = tsl as any;

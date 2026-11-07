@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
-import { setRenderQuality } from './renderer';
+import { setBloomShare, setRenderQuality } from './renderer';
 
 import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
@@ -94,6 +94,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setReliefSteps(p.relief);
   setHdrAllowed(p.hdr);
   setSkullDetail(p.coarseProps);
+  setBloomShare(p.bloomShare);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
