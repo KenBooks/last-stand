@@ -2,6 +2,7 @@
 // the build in its header (nothing of the player's: no names, rooms, items or address beyond the page's path),
 // packed (`traceFormat.ts`), gzipped by the browser (`CompressionStream`) and posted to the traces service beside the
 // co-op relay (server/traces). The service worker never sees it: it only answers GETs of the game's own files.
+import { framesUncapped } from '../core/frameLoop';
 import * as THREE from 'three';
 import { G } from '../state';
 import { WEBGPU } from '../core/webgpu';
@@ -59,6 +60,7 @@ function settings(): Record<string, number | string | boolean> {
     sceneRatio: Math.round(sceneRatio() * 100) / 100,
     pixelRatio: G.renderer.getPixelRatio(),
     view: viewMode(),
+    vsync: framesUncapped() ? 'off' : 'on',
     renderer: WEBGPU ? ['webgpu', RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean).join(' ') : 'webgl',
     hdr: hdrActive(),
   };

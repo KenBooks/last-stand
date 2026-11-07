@@ -101,7 +101,7 @@ export function traceReport(trace: Trace, code = ''): string[] {
   const last = n - 1;
   lines.push(`Draw calls ${c.draws?.[last] ?? '--'} (max ${Math.max(...known(c.draws))}) | triangles ${c.tris?.[last] ?? '--'} | programs ${c.programs?.[last] ?? '--'} (compiled after load ${h.game.compiledLate ?? 0})`);
   const s = h.settings;
-  lines.push(`Quality ${s.quality} (setting ${s.setting}${Number(s.budgetPx) > 0 ? `, at most ${(Number(s.budgetPx) / 1e6).toFixed(2)} Mpx` : ''}) | MSAA ${s.msaa} | shadow map ${s.shadowMap} | scene ${s.scene} at ${s.sceneRatio} | pixel ratio ${s.pixelRatio} | view ${s.view} | renderer ${s.renderer}${s.hdr ? ' HDR' : ''}`);
+  lines.push(`Quality ${s.quality} (setting ${s.setting}${Number(s.budgetPx) > 0 ? `, at most ${(Number(s.budgetPx) / 1e6).toFixed(2)} Mpx` : ''}) | MSAA ${s.msaa} | shadow map ${s.shadowMap} | scene ${s.scene} at ${s.sceneRatio} | pixel ratio ${s.pixelRatio} | view ${s.view} | renderer ${s.renderer}${s.hdr ? ' HDR' : ''}${s.vsync === 'off' ? ' | vsync off' : ''}`);
   const parts = Object.keys(c).filter((k) => k.startsWith('gpu '));
   if (parts.length) {
     const sums = parts.map((k) => [k.slice(4), known(c[k]).reduce((a, v) => a + v, 0)] as const);
