@@ -13,7 +13,10 @@ body.touch .stow-hint kbd { display: none; }
   #lobby-rail button.active { color: var(--accent); background: $well-lit; box-shadow: inset 2px 0 0 var(--accent); }
   #lobby-rail .play { margin-top: auto; color: #ffe7b0; background: linear-gradient(#6a4a1c, #2a1c0a); border-color: var(--accent); }
   #menu:not(.stowed) #rail-practice .sh-show, #menu.stowed #rail-practice .sh-hide { display: none; }
-  #menu.stowed #lobby-rail { opacity: 1; pointer-events: auto; transform: none; background: none; border-color: transparent; box-shadow: none; }
+  // (stowed, the rail is gone from sight but for its Practice button, and lets every other tap through: it took the
+  // pause and full screen buttons' under it, which did nothing on a phone)
+  #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
+  #menu.stowed #rail-practice { pointer-events: auto; }
   #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
   #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
@@ -48,7 +51,8 @@ body.touch .stow-hint kbd { display: none; }
   #stash-filter { top: calc(100% + 6px); bottom: auto; }
   #minimap-wrap .mm-title, #minimap-wrap .objectives { display: none; }
   /* the minimap at the corner, a thin line round it in place of the bezel and its dark ring */
-  #minimap-wrap { width: 180px; align-items: flex-end; }
+  #hud { --mm-room: 180px; }
+  #minimap-wrap { align-items: flex-end; }
   #minimap { width: 144px; height: 144px; border-width: 1px; border-color: rgba(#6e6a62, .8); box-shadow: 0 2px 8px rgba(0,0,0,.6); }
   /* the choice after a wave kept to the top quarter, clear of the touch HUD's bars: a smaller title, its spoils and
      the risk on one line, the buttons as tall as anywhere (a thumb's) */

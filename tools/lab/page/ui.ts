@@ -48,6 +48,7 @@ import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTou
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
+import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
   SHEET_CANARIES, sheetTouchShown,
@@ -58,9 +59,9 @@ export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
   | 'logLobby' | 'perfAsk'
-  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
+  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
-  | 'perfAskTouch';
+  | 'perfAskTouch' | 'buttonsRunTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -73,7 +74,7 @@ export interface UiOptions {
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log',
-  'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch',
+  'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
@@ -901,6 +902,7 @@ const STEPS: Record<UiState, Steps> = {
   litTouch: {
     open: openLitTouch, close: closeLitTouch, check: litTouchShown, pictures: async () => litTouchPictures(),
   },
+  buttonsTouch: { open: openButtonsTouch, close: () => undefined, check: lobbyButtonsShown },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -925,6 +927,7 @@ const STEPS: Record<UiState, Steps> = {
   hudTouch: { open: openHudTouch, close: () => undefined, check: hudTouchShown },
   decisionTouch: { open: openDecisionTouch, close: closeDecisionTouch, check: decisionTouchShown },
   perfAskTouch: { open: openPerfAskTouch, close: closePerfAsk, check: (canary) => perfAskShown('perfAskTouch', canary) },
+  buttonsRunTouch: { open: openButtonsTouch, close: () => undefined, check: runButtonsShown },
 };
 
 /** whether this page's run is set up for the run's states (each command's page is booted for it: false at first) */
@@ -1019,6 +1022,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(name));
     lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
+  }
+  if (state === 'buttonsTouch' || state === 'buttonsRunTouch') {
+    const caught = found.problems.some((problem) => problem.includes(BUTTONS_CANARY.name));
+    lines.push(`  canary: ${BUTTONS_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${BUTTONS_CANARY.what} went unseen`);
   }
   if (state === 'heroesWarming') {
     const caught = found.problems.some((problem) => problem.includes(HEROES_WARMING_CANARY.name));
