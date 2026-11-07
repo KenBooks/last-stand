@@ -5,7 +5,7 @@
 // steps is listed with when it came, and the time until the device holds its target: from play, "for the first
 // minute or two, it was 5 fps". Run it on the tester's screen too: --screen 1432x768@2. The lab's frames are a 60th
 // of a second each, so Auto is fed the device's times directly, its own code run as the game runs it.
-// Canary: Auto's old pace (a step every 4 s window, half the pixels a step, frames over 250 ms not counted), which
+// Canary: Auto's old pace (a level every 4 s window, frames over 250 ms not counted), which
 // must be found too slow.
 import type { Report } from './lab';
 import { AUTO_QUALITY } from '../../../src/data/quality';
@@ -18,12 +18,13 @@ export interface AutoOptions { canary: boolean }
 
 /** The slow device: its frame's time (ms) a million scene pixels at each level (High's MSAA and shadows dearest). */
 const DEVICE: Record<QualityLevel, number> = { high: 45, medium: 36, low: 29 };
-/** the longest Auto may take to bring the device to its target (s) */
-const MOST_S = 20;
+/** the longest Auto may take to bring the device to its target, or to Low where its pixels can't (s): Auto keeps the
+ *  screen's own at every level (src/core/quality.ts) */
+const MOST_S = 8;
 /** the longest it's run before giving up (s) */
 const GIVE_UP_S = 300;
 /** Auto's pace before the walk was sped up: the canary's (its quick path never judged before the 4 s path) */
-const OLD_PACE = { quickWindow: Infinity, deepest: 0.5, longestFrame: 0.25 };
+const OLD_PACE = { quickWindow: Infinity, longestFrame: 0.25 };
 /** The fast device with hitches: its frame (s), a hitch every so many frames and how long (s), and for how long */
 const FAST_FRAME_S = 1 / 60;
 const HITCH_EVERY = 120;

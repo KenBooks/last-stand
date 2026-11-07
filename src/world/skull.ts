@@ -6,8 +6,11 @@ import * as THREE from 'three';
 import { ellipsoid, fieldOf, IDENTITY, type Part, type Shape } from '../entities/models/sdf';
 import { surfaceNets } from '../entities/models/surfaceNets';
 
-/** the grid it's meshed on (m): at 3 mm a skull was 31k triangles, 24 of them 750k */
+/** the grid it's meshed on (m): at 3 mm a skull was 31k triangles, 24 of them 750k; at 8 mm 4356 */
 const CELL = 0.008;
+/** the grid Low's skulls are meshed on (m): the crypt's 24 were 104k triangles a pass at 8 mm, a phone's lobby on
+ *  Low drawing 490k in all (`lab draws --biome crypt --count 0 --boot low@508717`) */
+export const COARSE_CELL = 0.016;
 /** how much larger than a man's it's drawn, to read from the camera's height */
 const SIZE = 1.25;
 /** the steps (m) the field is asked at along a vertex's normal for its hollows, and how dark the deepest go */
@@ -53,10 +56,10 @@ function skullParts(): Part[] {
 }
 
 /** The skull's geometry (positions, normals, vertex colours), made once. */
-export function skullGeometry(): THREE.BufferGeometry {
+export function skullGeometry(cell = CELL): THREE.BufferGeometry {
   const field = fieldOf(skullParts());
   const box = new THREE.Box3(new THREE.Vector3(-0.09, -0.01, -0.12), new THREE.Vector3(0.09, 0.18, 0.13));
-  const net = surfaceNets(field, box, CELL);
+  const net = surfaceNets(field, box, cell);
   const colours = new Float32Array(net.positions.length);
   for (let v = 0; v < net.positions.length; v += 3) {
     const shade = 1 - DARKEST * occlusion(field, net.positions, net.normals, v);
@@ -100,4 +103,29 @@ function occlusion(field: (x: number, y: number, z: number) => number, p: Float3
     weight *= 0.7;
   }
   return Math.min(1, closed / total * 1.6);
+}
+
+/** The skulls drawn, each with its two geometries, swapped by the quality level (`setSkullDetail`). */
+interface Drawn {
+  meshes: THREE.Mesh[];
+  full: THREE.BufferGeometry;
+  coarse: THREE.BufferGeometry;
+}
+const drawn: Drawn[] = [];
+/** whether the level wants the coarse skulls (Low's `coarseProps`) */
+let coarseWanted = false;
+
+/** Shows `meshes` (a mesh and its shadow's copy) at `full`'s detail or `coarse`'s as the level has it. The swap is
+ *  a geometry's alone, of the same attributes: no program changes. */
+export function skullsDrawn(meshes: THREE.Mesh[], full: THREE.BufferGeometry, coarse: THREE.BufferGeometry): void {
+  drawn.push({ meshes, full, coarse });
+  setSkullDetail(coarseWanted);
+}
+
+/** The skulls drawn at their coarse detail (Low) or their full. */
+export function setSkullDetail(coarse: boolean): void {
+  coarseWanted = coarse;
+  for (const skulls of drawn) {
+    for (const mesh of skulls.meshes) mesh.geometry = coarse ? skulls.coarse : skulls.full;
+  }
 }

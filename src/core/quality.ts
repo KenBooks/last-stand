@@ -1,34 +1,33 @@
 // Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
-// level in effect. Auto starts from the level it last settled on and steps down while
-// the frame rate stays low, High's resolution first (from the screen's own pixels, on
-// any device and at any of the OS's scaling: what the hardware holds is measured), then
-// the levels, then Low's resolution; it never steps back up on its own, to avoid
-// oscillating.
+// level in effect. Auto starts from the level it last settled on and steps down the
+// levels while the frame rate stays low; it never steps back up on its own, to avoid
+// oscillating. Every level renders the screen's own pixels: what's cut is other work,
+// never the resolution (from play, "I want to run the game at full phone res, if we need
+// to cut, we need to cut something else, not resolution").
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
-import { scenePixels, setRenderQuality } from './renderer';
+import { setRenderQuality } from './renderer';
 
-/** pixels within this share over a floor are at it: a step to it would change nothing you'd see */
-const AT_FLOOR = 1.05;
 import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setHdrAllowed } from './hdr';
+import { setSkullDetail } from '../world/skull';
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
 const PENUMBRA = 0.12;
 
 const COOKIE = 'last-stand-quality';
-// what Auto settled on, the next session starting there: its level, and the most pixels it lets the scene render
-// (`high@4147200`: a budget measured in pixels holds on a screen of any size or pixel ratio)
+// what Auto settled on, the next session starting there: its level (a budget of pixels after an `@`, which an
+// older Auto wrote, `low@518400`, is let go)
 const AUTO_COOKIE = 'last-stand-quality-auto';
 
 let setting: QualitySetting = 'auto';
 let level: QualityLevel = 'high';
-/** the most pixels Auto lets the scene render (Infinity: as many as the level's resolution gives) */
+/** the most pixels the scene renders (Infinity: the screen's own); only a harness sets one (`useQuality`) */
 let budget = Infinity;
 let frames = 0, time = 0, settle = 0;
 /** the window's frame times up to `longestFrame` (s), and their sum: the quick path's median reads them */
@@ -44,28 +43,25 @@ function restart(): void {
 
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
 
-/** Auto's level and budget from its cookie (`high`, `high@4147200`), the top when there's none. */
-function readAuto(): { level: QualityLevel; budget: number } {
-  const [saved, pixels] = (readCookie(AUTO_COOKIE) ?? '').split('@');
-  const most = Number(pixels);
-  return { level: isLevel(saved) ? saved : 'high', budget: most > 0 ? most : Infinity };
+/** Auto's level from its cookie, the top when there's none. */
+function readAuto(): QualityLevel {
+  const saved = (readCookie(AUTO_COOKIE) ?? '').split('@')[0];
+  return isLevel(saved) ? saved : 'high';
 }
 
 function writeAuto(): void {
-  writeCookie(AUTO_COOKIE, budget === Infinity ? level : `${level}@${Math.round(budget)}`);
+  writeCookie(AUTO_COOKIE, level);
 }
 
 export function initQuality(): void {
   const saved = readCookie(COOKIE);
   setting = saved === 'auto' || isLevel(saved) ? saved : 'auto';
-  const auto = readAuto();
-  if (setting === 'auto') apply(auto.level, auto.budget);
-  else apply(setting);
+  apply(setting === 'auto' ? readAuto() : setting);
 }
 
 export const qualitySetting = (): QualitySetting => setting;
 export const qualityLevel = (): QualityLevel => level;
-/** The most pixels Auto lets the scene render (Infinity: no budget). */
+/** The most pixels the scene renders (Infinity: the screen's own). */
 export const qualityBudget = (): number => budget;
 
 export function setQuality(s: QualitySetting): void {
@@ -97,6 +93,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
   setHdrAllowed(p.hdr);
+  setSkullDetail(p.coarseProps);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
@@ -128,37 +125,40 @@ export function holdQuality(): void {
 }
 
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
- *  (`low@518400`), for the performance trace to mark. */
+ *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
   if (setting !== 'auto' || atBottom()) return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
   if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
   quick.push(dt);
   quickTime += dt;
-  // (far below the target, judged by the window's middle frame, which a hitch doesn't move: a step a second, its
-  // pixels cut by how far below; a device too slow for the 4 s path's frames, over `HITCH` each, stepped never)
+  // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
+  // too slow for the 4 s path's frames, over `HITCH` each, stepped never)
   if (quickTime >= AUTO_QUALITY.quickWindow) {
     const fps = 1 / median(quick);
-    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(fps);
+    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(true);
+    quick.length = 0;
+    quickTime = 0;
   }
-  // (the 4 s path as it always was: the mean of frames up to `HITCH`, half the pixels a step)
+  // (the 4 s path as it always was: the mean of frames up to `HITCH`, a level a step)
   if (dt > HITCH) return null;
   frames++; time += dt;
   if (time < AUTO_QUALITY.window) return null;
   const fps = frames / time;
   restart();
-  return fps < AUTO_QUALITY.minFps ? step(AUTO_QUALITY.minFps / 2) : null;
+  return fps < AUTO_QUALITY.minFps ? step(false) : null;
 }
 
 /** a frame the 4 s path leaves out of its mean (s): a hitch, not the device's pace */
 const HITCH = 0.25;
 
-/** A step down at `fps`, kept for the next session; what it went to (`low@518400`). */
-function step(fps: number): string {
+/** A step down, every level at once when `far` below the target, kept for the next session; what it went to. */
+function step(far: boolean): string {
   restart();
-  stepDown(fps);
+  const steps = far ? QUALITY_ORDER.length : 1;
+  for (let i = 0; i < steps && !atBottom(); i++) stepDown();
   writeAuto();
-  return `${level}@${Math.round(scenePixels())}`;
+  return level;
 }
 
 /** The middle of `values` (sorted in place). */
@@ -167,28 +167,13 @@ function median(values: number[]): number {
   return values[Math.floor(values.length / 2)];
 }
 
-/** Whether Auto has nothing left to lower: Low, at its fewest pixels (or the screen's own, if fewer). */
-const atBottom = (): boolean => level === 'low' && scenePixels() <= AUTO_QUALITY.fewest * AT_FLOOR;
+/** Whether Auto has nothing left to lower: Low. */
+const atBottom = (): boolean => level === 'low';
 
-/** Auto's step down at `fps`: High's pixels cut to `AUTO_QUALITY.highFloor`, then a level (the pixels kept), then
- *  Low's pixels cut to `AUTO_QUALITY.fewest`, each cut by how far `fps` is below the target (`pixelsKept`). */
-function stepDown(fps: number): void {
-  const now = scenePixels();
-  const kept = now * pixelsKept(fps);
-  if (level === 'high' && now > AUTO_QUALITY.highFloor * AT_FLOOR) {
-    apply('high', Math.max(AUTO_QUALITY.highFloor, kept));
-    return;
-  }
-  if (level !== 'low') {
-    apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1], budget);
-    return;
-  }
-  apply('low', Math.max(AUTO_QUALITY.fewest, kept));
+/** Auto's step down: a level, the screen's own pixels kept (from play, "cut something else, not resolution"). */
+function stepDown(): void {
+  apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1]);
 }
-
-/** The share of its pixels a step keeps at `fps`: the frame rate's share of the target, from half to `deepest`. */
-const pixelsKept = (fps: number): number =>
-  Math.min(0.5, Math.max(AUTO_QUALITY.deepest, fps / AUTO_QUALITY.minFps));
 
 /** Whether Auto has stepped as far down as it goes (a harness's: `lab auto`). */
 export const autoAtBottom = (): boolean => atBottom();
