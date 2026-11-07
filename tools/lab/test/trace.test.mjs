@@ -80,6 +80,19 @@ test('slow play is found by its 1% low, by frames missed, and by stalls, in any 
   const sixty = [];
   for (let second = 0; second < 25; second++) sixty.push(...frames(1, 16.7), ...frames(0.02, 33.4));
   assert.equal(judge(ring(sixty), 1000 / 120).slow, false);
+  // a steady 60 on a 60 Hz screen whose browser's frames came on another screen's 145 Hz ticks: 2 and 3 ticks in turn,
+  // and now and then 5 (34.5 ms): a low of 29 that is a refresh missed, not slow (trace T9NG-CZ79)
+  const tick = 1000 / 145;
+  const ticked = [];
+  for (let second = 0; second < 25; second++) {
+    for (let frame = 0; frame < 30; frame++) ticked.push([2 * tick, 0], [3 * tick, 0]);
+    ticked.push([5 * tick, 0]);
+  }
+  assert.equal(judge(ring(ticked), tick).slow, false);
+  // a game at that screen's 145 with the same 34.5 ms frames is slow by its low: five of its own frames
+  const hitched = [];
+  for (let second = 0; second < 25; second++) hitched.push(...frames(1, tick), [5 * tick, 0], [5 * tick, 0]);
+  assert.deepEqual([judge(ring(hitched), tick).slow, judge(ring(hitched), tick).why], [true, 'low']);
   const stalled = judge(ring([...frames(20, 16.7), [1500, 0]]), display);
   assert.deepEqual([stalled.slow, stalled.why], [true, 'stalls']);
   // (the lobby's stalls count as much as a fight's)
