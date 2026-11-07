@@ -8,6 +8,8 @@ import { jsIn, jsSamples, jsUnder } from './profile.mjs';
 export const STALL_MS = 100;
 export const LISTED_MS = 300;
 export const LISTED_LEAST = 20;
+/** A boot's: its lobby's frames this long or longer listed (ms), 20 frames a second */
+export const LOBBY_LISTED_MS = 50;
 /** the page's changes this long before a stall are listed with it (ms) */
 const CHANGES_BEFORE_MS = 400;
 /** the most kinds of change listed with a stall */
@@ -473,20 +475,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
   const inRecording = links.filter((link) => link.at === null || link.at >= record.start);
   const stalls = record.frames
     .filter((frame) => frame.ms >= listedMs)
-    .map((frame) => {
-      const from = frame.at - frame.ms;
-      const built = inRecording.filter((link) => link.at !== null && link.at + link.ms >= from && link.at <= frame.at);
-      return {
-        at: (frame.at - record.start) / 1000,
-        ms: frame.ms,
-        built,
-        busy: busyIn(tasks, from, frame.at, toPage, names),
-        work: workIn(placed, [[from, frame.at]], 1).slice(0, STALL_WORK_SHOWN),
-        // (a phase's JS is a frame's mean, where one stall's is lost among the frames round it)
-        js: samples.length ? jsIn(samples, from, frame.at, 1) : null,
-        changes: changesBetween(record.changes, from - CHANGES_BEFORE_MS, from + 20),
-      };
-    });
+    .map((frame) => stallOf(frame, record, traced, inRecording));
   const spans = phaseSpans(record);
   const refresh = refreshOf(spans.map(({ frames }) => frames), record.frames);
   // (the whole measure's JS a frame, for a scenario of no phases: the lobby stood in, a fight)
@@ -520,6 +509,37 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
     stalls,
     looks: looksChanged(record, placed, quietOf(spans, placed), refresh),
   };
+}
+
+/**
+ * A frame the page was held up in (`frame`, of `record`'s), with what was busy through it: the Skia programs linked
+ * in it (of `links`), the longest tasks on any thread, the work in it as a frame's work is given, its JS by function
+ * (a phase's JS is a frame's mean, where one stall's is lost among the frames round it) and the page's changes just
+ * before it. `at` is in seconds from the recording's start.
+ */
+function stallOf(frame, record, traced, links) {
+  const { tasks, names, toPage, placed, samples } = traced;
+  const from = frame.at - frame.ms;
+  return {
+    at: (frame.at - record.start) / 1000,
+    ms: frame.ms,
+    built: links.filter((link) => link.at !== null && link.at + link.ms >= from && link.at <= frame.at),
+    busy: busyIn(tasks, from, frame.at, toPage, names),
+    work: workIn(placed, [[from, frame.at]], 1).slice(0, STALL_WORK_SHOWN),
+    js: samples.length ? jsIn(samples, from, frame.at, 1) : null,
+    changes: changesBetween(record.changes ?? [], from - CHANGES_BEFORE_MS, from + 20),
+  };
+}
+
+/** The lobby's frames from its reveal (`revealedAt`) to `end` held up `listedMs` or longer, each with what was busy
+ *  through it (`stallOf`), `at` in seconds from the reveal: a frame of 50 ms is 20 frames a second, and the lobby
+ *  must hold none (from play, "any freeze is not expected, even if its 50ms freeze"). */
+function lobbyStallsOf(record, traced, revealedAt, end, listedMs) {
+  if (revealedAt === null) return [];
+  const links = traced.links.filter((link) => link.at !== null);
+  return record.frames
+    .filter((frame) => frame.at - frame.ms >= revealedAt && frame.at <= end && frame.ms >= listedMs)
+    .map((frame) => ({ ...stallOf(frame, record, traced, links), at: (frame.at - revealedAt) / 1000 }));
 }
 
 /**
@@ -810,9 +830,10 @@ function bootStep(name, from, to, record, traced) {
  * recording's end (`bootStep`); when the lobby was revealed (`revealedAt`, ms from the navigation's start; null if
  * never) and the page first painted with content (`painted`); the files fetched (`filesOf`); how the loading screen
  * left (`exitOf`) and when it was gone (`goneAt`); the lobby's frames a second till Start was pressed
- * (`lobbyRateOf`). `sourceOf` names the page's functions where its JS was sampled.
+ * (`lobbyRateOf`) and its frames held up `listedMs` or longer in that time (`lobbyStallsOf`). `sourceOf` names the
+ * page's functions where its JS was sampled.
  */
-export function analyzeBoot(record, events, mark, sourceOf = () => null) {
+export function analyzeBoot(record, events, mark, sourceOf = () => null, listedMs = LOBBY_LISTED_MS) {
   const traced = onPage(record, events, mark, sourceOf);
   const end = record.frames.length ? record.frames[record.frames.length - 1].at : record.start;
   const steps = record.phases.map((phase, index) => {
@@ -824,6 +845,8 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null) {
   const lobbyEnd = record.pressed ?? end;
   return {
     lobby: refresh === null ? null : lobbyRateOf(record.frames, revealedAt, lobbyEnd, refresh, traced),
+    listedMs,
+    lobbyStalls: lobbyStallsOf(record, traced, revealedAt, lobbyEnd, listedMs),
     clockFound: traced.stamp !== null,
     steps,
     revealedAt,

@@ -119,7 +119,11 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     so the return finds its maps kept and the fight's programs never compiled (a visit that never fought, a deploy
     that changed a shader); a build that warms its fight before the lobby is said to have left it warm all the
     same, its return no cold one. `--stall-lobby ms` holds up each of the lobby's frames for a second after its reveal, the
-    canary of its frames a second (50 ms: 16 to 17). `--angle` traces ANGLE's own work too (any scenario): a shader
+    canary of its frames a second (50 ms: 16 to 17) and of the lobby's frames held up, listed below.
+    Every frame of the lobby's held up 50 ms or more from its reveal to Start (`--listed` sets it) is listed as a
+    scenario's stalls are, with what was busy in it and its JS by function, its time from the reveal: 50 ms is 20
+    frames a second, and the lobby must hold none (from play, "any freeze is not expected, even if its 50ms
+    freeze"). `--angle` traces ANGLE's own work too (any scenario): a shader
     compiled at a draw (`D3DCompile`), a program linked or waited for. Each boot says how long after the reveal the
     loading screen was gone (its plain fade is 0.9 s). `--film` films the loading screen's exit (`film.mjs`): the
     frames Chrome's compositor drew, from half a second before it begins to leave till half a second after it's gone,

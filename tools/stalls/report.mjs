@@ -459,10 +459,20 @@ export function bootText(measure, { links = false } = {}) {
     ...(findings.film ? filmLines(findings.film) : []),
     ...(findings.windFit ? windFitLines(findings.windFit) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
+    ...lobbyStallLines(findings),
     ...findings.steps.flatMap((step) => bootStepLines(step, { links })),
   ];
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: no step\'s work)');
   return lines.join('\n');
+}
+
+/** The lobby's frames held up from its reveal to Start (`analyze.mjs` `lobbyStallsOf`), each as a stall is listed,
+ *  its time from the reveal. */
+function lobbyStallLines({ lobbyStalls, listedMs, revealedAt }) {
+  if (revealedAt === null || !lobbyStalls) return [];
+  if (!lobbyStalls.length) return [`  the lobby held up ${listedMs} ms or more: never`];
+  const head = `  the lobby held up ${listedMs} ms or more: ${lobbyStalls.length} times (times from the reveal)`;
+  return [head, ...lobbyStalls.flatMap((stall) => stallLines(stall).map((line) => `  ${line}`))];
 }
 
 /** `values` (ms) as seconds: their median and range, `5.42 (5.21–5.90) s`. */

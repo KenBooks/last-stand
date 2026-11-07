@@ -135,7 +135,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   await viewForPicture(page, options.view);
   if (options.before) writeBefore(await page.evaluate(options.before), picture.read);
   await pictureEnd(page, options.cast, picture.end);
-  const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  const findings = analyzeBoot(record, events, MARK, options.sourceOf, options.listed);
   if (builds) {
     const bySteps = buildsBySteps(builds, findings.steps);
     findings.steps.forEach((step, index) => { step.builds = bySteps[index]; });
