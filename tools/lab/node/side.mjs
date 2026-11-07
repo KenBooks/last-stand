@@ -343,8 +343,8 @@ export class Side {
     this.url = null;
     this.context = null;
     this.page = null;
-    /** a co-op partner's page's context, while one is open (`coop`) */
-    this.partnerContext = null;
+    /** the co-op partners' pages' contexts, while any is open (`coop`: a guest, and in a party of more, the others) */
+    this.partnerContexts = [];
     /** the hero its page booted, null until one booted whole */
     this.heroClass = null;
     /** how its page booted (`LAB_BOOT`'s fields), null until one booted whole */
@@ -530,14 +530,14 @@ export class Side {
   }
 
   /**
-   * Opens a second page of this side's game in a context of its own, booted for `heroClass` and with the lab installed
-   * as `boot` does: a co-op partner (`coop`). Its errors count as this side's, said to be the partner's. Returns the
-   * page; `closePartner` closes it.
+   * Opens another page of this side's game in a context of its own, booted for `heroClass` and with the lab installed
+   * as `boot` does: a co-op partner (`coop`; a party of more opens one for each). Its errors count as this side's,
+   * said to be the partner's. Returns the page; `closePartner` closes every partner's.
    */
   async openPartner(heroClass) {
-    await this.closePartner();
-    this.partnerContext = await this.newContext();
-    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
+    const context = await this.newContext();
+    this.partnerContexts.push(context);
+    const page = await this.openPageIn(context, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
     await page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
       await lab.mapsCome();
@@ -546,10 +546,10 @@ export class Side {
     return page;
   }
 
-  /** Closes the co-op partner's page, if one is open. */
+  /** Closes the co-op partners' pages, if any is open. */
   async closePartner() {
-    await this.partnerContext?.close().catch(() => {});
-    this.partnerContext = null;
+    const contexts = this.partnerContexts.splice(0);
+    await Promise.all(contexts.map((context) => context.close().catch(() => {})));
   }
 
   /**
@@ -743,7 +743,7 @@ export class Side {
   useBrowser(browser) {
     this.browser = browser;
     this.context = null;
-    this.partnerContext = null;
+    this.partnerContexts = [];
     this.page = null;
     this.heroClass = null;
     this.bootedAs = null;

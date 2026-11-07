@@ -158,6 +158,8 @@ export class Player {
   readonly local: boolean;
   /** co-op: the player's place in the party (0 = the host), and its spawn point */
   slot = 0;
+  /** co-op: a partner's name tag, as its player chose it (net/nameTag; the local player's is `session.tag`) */
+  tag = '';
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
   readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };

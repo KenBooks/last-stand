@@ -2,7 +2,7 @@
 // (node/coopJudge.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Way, seededRandom } from '../node/coop.mjs';
+import { Way, judgeRoom, seededRandom } from '../node/coop.mjs';
 import { drops, follow, judgeBlows, judgeRush, judgeShots, judgeStrike } from '../node/coopJudge.mjs';
 
 /** A path along x at `speed` m a frame, `frames` long. */
@@ -117,4 +117,33 @@ test('a Power Strike landed in the charge cast over it is judged on each screen,
   assert.equal(copy.asCharge, 0, 'posed as the charge only once the strike was over');
   const unseen = judgeStrike(host.map((one) => ({ ...one, acts: undefined })), 'partner');
   assert.equal(unseen.landed, -1, 'a tree with no acts recorded never lands it');
+});
+
+/** A party's page state as page/coop.ts reports it, the room as `everyone` (slot and tag each) known to it. */
+function roomState(self, everyone) {
+  const partners = everyone.filter((other) => other.slot !== self.slot).sort((a, b) => a.slot - b.slot);
+  return {
+    slot: self.slot, tag: self.tag, partners: partners.length,
+    partnerTags: partners.map((other) => other.tag), partnerSlots: partners.map((other) => other.slot),
+  };
+}
+
+test('a room of four where every game knows every other by slot and tag is judged sound', () => {
+  const everyone = ['Host', 'Guest', 'Third', 'Fourth'].map((tag, slot) => ({ slot, tag }));
+  const states = everyone.map((self) => roomState(self, everyone));
+  assert.deepEqual(judgeRoom(states, everyone.map((one) => one.tag)), []);
+});
+
+test('a room where two share a slot, or a game misses or misnames a partner, is caught', () => {
+  const everyone = ['Host', 'Guest', 'Third'].map((tag, slot) => ({ slot, tag }));
+  const tags = everyone.map((one) => one.tag);
+  const shared = everyone.map((self) => roomState(self, everyone));
+  shared[2] = { ...shared[2], slot: 0 };
+  assert.ok(judgeRoom(shared, tags).some((problem) => problem.includes('share a slot')));
+  const missing = everyone.map((self) => roomState(self, everyone));
+  missing[1] = { ...missing[1], partners: 1, partnerTags: ['Host'], partnerSlots: [0] };
+  assert.ok(judgeRoom(missing, tags).some((problem) => problem.includes('1 partners, not 2')));
+  const misnamed = everyone.map((self) => roomState(self, everyone));
+  misnamed[2] = { ...misnamed[2], partnerTags: ['Host', 'Third'] };
+  assert.ok(judgeRoom(misnamed, tags).some((problem) => problem.includes('names its partners')));
 });

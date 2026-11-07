@@ -49,6 +49,7 @@ import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHero
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
+import { closeCoopDialog, COOP_CANARY, coopShown, openCoopDialog, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
   SHEET_CANARIES, sheetTouchShown,
@@ -58,8 +59,9 @@ import {
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
-  | 'logLobby' | 'perfAsk'
-  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'run' | 'scores' | 'perf'
+  | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
+  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch'
+  | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
@@ -896,6 +898,8 @@ const STEPS: Record<UiState, Steps> = {
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
+  coop: { open: openCoopDialog, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
+  coopRename: { open: openCoopRename, close: closeCoopDialog, check: (canary) => coopShown('coopRename', canary) },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
@@ -903,6 +907,7 @@ const STEPS: Record<UiState, Steps> = {
     open: openLitTouch, close: closeLitTouch, check: litTouchShown, pictures: async () => litTouchPictures(),
   },
   buttonsTouch: { open: openButtonsTouch, close: () => undefined, check: lobbyButtonsShown },
+  coopTouch: { open: openCoopTouch, close: closeCoopDialog, check: (canary) => coopShown('coopTouch', canary) },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -1011,6 +1016,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));
     lines.push(`  canary: ${DECISION_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${DECISION_CANARY.what} went unseen`);
+  }
+  if (state === 'coop' || state === 'coopRename' || state === 'coopTouch') {
+    const caught = found.problems.some((problem) => problem.includes(COOP_CANARY.name));
+    lines.push(`  canary: ${COOP_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${COOP_CANARY.what} went unseen`);
   }
   if (state === 'perfAskBreak' || state === 'perfAskTouch') {
     const caught = found.problems.some((problem) => problem.includes(ASK_CANARY.name));

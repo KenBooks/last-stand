@@ -7,6 +7,7 @@ import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
+import { cleanTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
 import { anchorLabel, removeLabel, project, onLayout } from './floaters';
 import { Label, ORDER } from './overlay/layer';
 import { ALLY_BAR, ALLY_NAME, barArt, barStep } from './overlay/bars';
@@ -22,12 +23,22 @@ import type { Player } from '../entities/player';
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-const who = (p: Player): string => `${p.slot === 0 ? 'Host' : 'Partner'} · ${p.cls.name}`;
+/** What a player is called in co-op: its name tag (the hero's class where it has none, solo). */
+export function nameOf(p: Player): string {
+  if (p.local) return isCoop() && session.tag ? session.tag : p.cls.name;
+  return p.tag || p.cls.name;
+}
+
+const who = (p: Player): string => `${nameOf(p)} · ${p.slot === 0 ? 'host' : 'partner'} · ${p.cls.name}`;
 
 let touchRevive = false;
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['heroes'], () => void hostRoom(), READYING.coop);
-const join = whenWarm(['heroes'], (code: string) => void joinRoom(code), READYING.coop);
+const host = whenWarm(['heroes'], (tag: string) => void hostRoom(tag), READYING.coop);
+const join = whenWarm(['heroes'], (code: string, tag: string) => void joinRoom(code, tag), READYING.coop);
+/** a room code from an invite link, waiting in the dialog for a name tag */
+let invited = '';
+/** what's wrong with the name tag as last tried, said under it */
+let tagNote = '';
 /** Whether the touch revive button is held. */
 export const touchReviving = (): boolean => touchRevive;
 
@@ -55,6 +66,37 @@ async function checkServer(): Promise<void> {
   renderCoop();
 }
 
+/**
+ * An invite link: straight into the friend's room as the name tag kept from last time, or with none kept, the room
+ * dialog asking for one, the room's code filled in.
+ */
+export function joinInvited(code: string): void {
+  const tag = savedTag();
+  if (!tagProblem(tag)) {
+    join(code, tag);
+    return;
+  }
+  invited = code;
+  openCoop(true);
+}
+
+/** The name tag typed in the dialog, or null (said under it, and the field focused) if it can't be used. */
+function typedTag(body: HTMLElement): string | null {
+  const field = $<HTMLInputElement>('#coop-tag', body);
+  const tag = cleanTag(field.value);
+  const problem = tagProblem(tag);
+  if (problem) {
+    tagNote = problem;
+    const note = $('.coop-tag-note', body);
+    note.textContent = problem;
+    note.classList.remove('hidden');
+    field.focus();
+    return null;
+  }
+  tagNote = '';
+  return tag;
+}
+
 function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
   if (!open) return;
@@ -70,28 +112,60 @@ export function renderCoop(): void {
   const others = partners();
   const s = session.status;
   if (s === 'off' || s === 'failed') {
+    const up = server === 'up';
+    // (asked to rename: the tag that was taken, picked for retyping, and the room's code kept to join again)
+    const rename = s === 'failed' && session.renameAsked;
+    const code = invited || (rename ? session.code : '');
+    const tagValue = rename ? session.tag : savedTag();
     body.innerHTML = `
       <p class="coop-intro">Fight side by side over the internet, up to ${COOP.maxPlayers} heroes. Each brings their own hero and gear and keeps their own spoils.</p>
       <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
       ${server === 'down' ? `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`
         : server === 'checking' ? '<p class="coop-checking" role="status">Checking the co-op server…</p>'
-        : s === 'failed' ? `<p class="coop-error">${esc(session.error)}</p>` : ''}
-      <div class="coop-choice${server === 'up' ? '' : ' off'}">
+        : s === 'failed' ? `<p class="coop-error" role="alert">${esc(session.error)}</p>` : ''}
+      <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
+        <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
+      <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
+      <div class="coop-choice${up ? '' : ' off'}">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
           <button class="btn primary" id="btn-coop-host"${server === 'up' ? '' : ' disabled'}>Open a room</button></div>
         <div class="coop-col"><div class="coop-h">Join</div><p>Enter the code your friend sent.</p>
-          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"${server === 'up' ? '' : ' disabled'}><button class="btn" type="submit"${server === 'up' ? '' : ' disabled'}>Join</button></form></div>
+          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${server === 'up' ? '' : ' disabled'}><button class="btn" type="submit"${server === 'up' ? '' : ' disabled'}>Join</button></form></div>
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
-    $('#btn-coop-host', body).onclick = () => { if (server !== 'up') return; sfx.click(); host(); };
+    $('#btn-coop-host', body).onclick = () => {
+      if (server !== 'up') return;
+      const tag = typedTag(body);
+      if (tag === null) return;
+      sfx.click();
+      invited = '';
+      host(tag);
+    };
+    const tagField = $<HTMLInputElement>('#coop-tag', body);
+    // (Enter in the name tag: join with the code if there is one, else just done typing)
+    tagField.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if ($<HTMLInputElement>('#coop-code', body).value.trim().length >= 4) $<HTMLFormElement>('.coop-join', body).requestSubmit();
+      else tagField.blur();
+    };
+    if (rename && up) {
+      tagField.focus();
+      tagField.select();
+    }
     const retry = $('#btn-coop-retry', body) as HTMLElement | null;
     if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();
-      const code = $<HTMLInputElement>('#coop-code', body).value.trim();
-      if (code.length >= 4 && server === 'up') { sfx.click(); join(code); }
+      const typed = $<HTMLInputElement>('#coop-code', body).value.trim();
+      if (typed.length < 4 || server !== 'up') return;
+      const tag = typedTag(body);
+      if (tag === null) return;
+      sfx.click();
+      invited = '';
+      join(typed, tag);
     };
     return;
   }
@@ -128,7 +202,7 @@ function renderBar(): void {
   bar.classList.toggle('hidden', session.status === 'off' || session.status === 'failed');
   const others = partners();
   const text = session.status === 'joining' ? `Joining room ${session.code}…`
-    : others.length ? `With ${others.map((p) => p.cls.name).join(', ')}` : 'Waiting for a friend…';
+    : others.length ? `With ${others.map(nameOf).join(', ')}` : 'Waiting for a friend…';
   bar.innerHTML = `<span class="cb-room">Room <b>${esc(session.code)}</b></span><span class="cb-who">${esc(text)}</span>`;
   bar.onclick = () => { sfx.click(); openCoop(true); };
   $('#btn-coop').textContent = isCoop() ? 'Room' : 'Play together';
@@ -182,7 +256,7 @@ function promptRaise(downed: Player | undefined, near: boolean): void {
   const shown = !!downed && near && !isTouch();
   el.classList.toggle('hidden', !shown);
   if (!shown) return;
-  $('span', el).textContent = downed.revive > 0 ? `Reviving the ${downed.cls.name}…` : `Hold to revive the ${downed.cls.name}`;
+  $('span', el).textContent = downed.revive > 0 ? `Reviving ${nameOf(downed)}…` : `Hold to revive ${nameOf(downed)}`;
   $('.rp-bar div', el).style.width = `${(downed.revive * 100).toFixed(0)}%`;
 }
 
@@ -261,7 +335,7 @@ function placeMark(): void {
   const second = Math.ceil(bleedLeft);
   // (while someone raises them their clock stops, and so does the beat)
   if (downed.revive <= 0) beat(second);
-  const what = near ? (isTouch() ? 'Hold Revive' : 'Hold E') : downed.revive > 0 ? 'Being raised' : `${downed.cls.name} is down`;
+  const what = near ? (isTouch() ? 'Hold Revive' : 'Hold E') : downed.revive > 0 ? 'Being raised' : `${nameOf(downed)} is down`;
   const far = `${Math.round(Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z))} m`;
   const since = performance.now() / 1000 - beatAt;
   const beating = downed.revive <= 0 && since < BEAT;
@@ -395,7 +469,7 @@ export function updateCoopHud(): void {
     const t = tagFor(p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
-    const look = { ...ALLY_BAR, name: p.cls.name, nameStyle: ALLY_NAME }, step = barStep(look, share);
+    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME }, step = barStep(look, share);
     if (step !== t.shown) { t.shown = step; t.label.show(barArt(look, share)); }
     const state = p.away ? 'In the lobby' : p.out === 'banked' ? 'Banked' : p.out === 'dead' ? 'Fallen'
       : p.downed ? (p.revive > 0 ? 'Being revived…' : `Down · ${Math.ceil(p.bleed)}s`) : '';
@@ -410,7 +484,8 @@ export function updateCoopHud(): void {
   const note = $('#down-note');
   note.classList.toggle('hidden', !me.downed);
   if (me.downed) {
-    note.innerHTML = `<b>You are down</b><span>${me.revive > 0 ? 'Your partner is raising you…' : `Bleeding out in ${Math.ceil(me.bleed)}s. A teammate can revive you.`}</span>
+    const raiser = others.find((p) => p.reviving && Math.hypot(p.pos.x - me.pos.x, p.pos.z - me.pos.z) < COOP.reviveRange);
+    note.innerHTML = `<b>You are down</b><span>${me.revive > 0 ? `${esc(raiser ? nameOf(raiser) : 'A teammate')} is raising you…` : `Bleeding out in ${Math.ceil(me.bleed)}s. A teammate can revive you.`}</span>
       <div class="dn-bar"><div style="width:${(me.revive * 100).toFixed(0)}%"></div></div>`;
   }
 
@@ -418,16 +493,23 @@ export function updateCoopHud(): void {
   const watching = me.out && G.run && G.run.phase !== 'over' ? others.find((p) => p.inRun) : undefined;
   const spec = $('#spectate');
   spec.classList.toggle('hidden', !watching || !$('#summary').classList.contains('hidden'));
-  if (watching) spec.textContent = `Watching the ${watching.cls.name}`;
+  if (watching) spec.textContent = `Watching ${nameOf(watching)}`;
 
-  // a downed partner: the marker on them (or at the screen's edge), and on touch the button to hold
-  const downed = me.active ? others.find((p) => p.downed && p.inRun) : undefined;
+  // a downed partner: the marker on the nearest (or at the screen's edge), and on touch the button to hold
+  const downed = me.active ? nearestDowned(others) : undefined;
   const near = !!downed && Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z) < COOP.reviveRange;
   markDowned(downed, near);
   promptRaise(downed, near);
   const rv = $('#btn-revive');
   rv.classList.toggle('hidden', !(near && isTouch()));
   if (!near) touchRevive = false;
+}
+
+/** The nearest partner down in the run (a party of four may have more than one). */
+function nearestDowned(others: Player[]): Player | undefined {
+  const me = G.player;
+  const far = (p: Player): number => Math.hypot(p.pos.x - me.pos.x, p.pos.z - me.pos.z);
+  return others.filter((p) => p.downed && p.inRun).sort((a, b) => far(a) - far(b))[0];
 }
 
 function hideRunBits(): void {
@@ -447,7 +529,7 @@ export function partyDecision(): string {
   const r = G.run;
   const rows = G.players.filter((p) => !p.local && !p.away).map((p) => {
     const s = p.out === 'banked' ? 'banked and left' : p.out === 'dead' ? 'fell' : r.votes.has(p.slot) ? 'continues' : 'is deciding…';
-    return `${p.slot === 0 ? 'The host' : 'Your partner'} (${p.cls.name}) ${s}`;
+    return `${nameOf(p)} (${p.slot === 0 ? 'host, ' : ''}${p.cls.name}) ${s}`;
   });
   return rows.join(' · ');
 }

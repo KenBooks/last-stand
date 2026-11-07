@@ -20,6 +20,16 @@
   .btn { flex: none; }
 }
 .coop-choice.off { opacity: .45; }
+// the player's name tag, asked for before a room is opened or joined (net/nameTag)
+.coop-tag {
+  display: flex; align-items: center; gap: 10px; align-self: stretch; justify-content: center; flex-wrap: wrap;
+  span { font-family: var(--font-display); font-size: 16px; color: var(--accent); }
+  input { font: 600 17px var(--font-body); width: 12em; max-width: 100%; padding: 7px 10px; color: #ffe7b0; background: #0a0909;
+    border: 1px solid rgba($frame, .55); border-radius: 3px; user-select: text; }
+  &.taken input { border-color: var(--danger); box-shadow: 0 0 0 1px rgba($danger, .5); }
+  &.off { opacity: .45; }
+}
+.coop-tag-note { margin: -4px 0 0; color: var(--danger); font-size: 14px; }
 .coop-netlog { margin: 0; color: var(--ink-dim); font-size: 13px; }
 .coop-netlog .link { padding: 0; font-size: inherit; color: $ally-text; }
 .coop-choice { display: flex; gap: 14px; align-self: stretch; }

@@ -7,7 +7,7 @@
 // the run is lost for everyone still in it.
 import * as THREE from 'three';
 import { G } from '../state';
-import { RUN, COOP } from '../data/balance';
+import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES, HERO, SCALING } from '../data/enemies';
 import { BIOMES } from '../data/biomes';
@@ -165,8 +165,8 @@ const inRun = (): Player[] => G.players.filter((p) => p.inRun);
 function buildWave(w: number): SpawnUnit[][] {
   const r = G.run!;
   const pool = BIOMES[G.arena.biome].pool(w);
-  // a party meets more foes
-  let budget = WAVES.budget(w) * (1 + COOP.budgetPerPlayer * (r.party - 1));
+  // a party meets more foes (and more life on each: `spawnGroup`)
+  let budget = WAVES.budget(w) * partyScale(r.party).foes;
   const units: SpawnUnit[] = [];
   if (w % WAVES.bossEvery === 0) budget *= 0.55;
   while (budget > 0) {
@@ -276,7 +276,7 @@ function spawnGroup(group: SpawnUnit[]): void {
   const sizes = lone ? [1] : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
   const gates = lone ? [randInt(0, portals.length - 1)] : gatesFor(r, sizes.length);
   const reaches: number[] = [];
-  const lifeMult = 1 + COOP.lifePerPlayer * (r.party - 1);
+  const party = partyScale(r.party);
   r.pending += group.length;
   let next = 0;
   sizes.forEach((size, pack) => {
@@ -290,7 +290,7 @@ function spawnGroup(group: SpawnUnit[]): void {
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
       schedule(j * SPAWN_GAP, () => {
         r.pending--;
-        if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult });
+        if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult: def.boss ? party.boss : party.life });
       });
     }
   });
@@ -316,7 +316,7 @@ export function updateRun(dt: number): void {
     r.waveTime += dt;
     const alive = G.enemies.filter((e) => e.alive).length;
     r.nextGroupT -= dt;
-    if (r.queue.length && (r.nextGroupT <= 0 || alive === 0) && alive < WAVES.maxAlive(r.wave)) {
+    if (r.queue.length && (r.nextGroupT <= 0 || alive === 0) && alive < WAVES.maxAlive(r.wave, partyScale(r.party).alive)) {
       spawnGroup(r.queue.shift()!);
       r.nextGroupT = WAVES.groupInterval;
     }

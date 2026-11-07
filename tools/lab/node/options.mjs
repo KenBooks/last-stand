@@ -24,8 +24,8 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
-  'logLobby', 'perfAsk',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
+  'logLobby', 'perfAsk', 'coop', 'coopRename',
+  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -291,6 +291,12 @@ export const COMMANDS = {
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
       pictures: { kind: 'switch', help: 'picture both screens at a scenario\'s moments (into out/coop)' },
+      party: {
+        kind: 'number',
+        usage: 'n',
+        help: 'the heroes in the room, 2 to 4 (2 by default): the others join after the guest, the third first as '
+          + 'the guest\'s name tag (refused, asked to rename), and stand off the scenarios\' action',
+      },
       ...COMMON_OPTIONS,
     },
   },

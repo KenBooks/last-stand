@@ -60,9 +60,9 @@ import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
 import { preloadStump } from './world/stump';
 import { initSync } from './net/sync';
-import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
+import { initSession, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
-import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
+import { initCoop, renderCoop, updateCoopHud, touchReviving, joinInvited } from './ui/coop';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -202,9 +202,9 @@ async function boot() {
     void rest.then(() => checkPrograms(renderer));
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
-    // an invite link: straight into the friend's room
+    // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
     const room = invitedRoom();
-    if (room) whenWarm(['heroes'], (code: string) => void joinRoom(code), READYING.coop)(room);
+    if (room) joinInvited(room);
   });
   runFrames(frame);
 }

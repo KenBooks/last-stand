@@ -10,6 +10,7 @@ import { partnerBoards, session } from '../net/session';
 import { serverPings } from '../net/netlog';
 import { mine, type RunNumbers } from '../game/stats';
 import { isTouch } from './touch';
+import { nameOf } from './coop';
 import type { Player } from '../entities/player';
 
 /** how often the numbers are written again while it shows, s */
@@ -75,13 +76,16 @@ function stateOf(p: Player): string {
   return '';
 }
 
+/** What a row's player is to us, and in co-op (its name tag in bold) its hero's class. */
+const whoOf = (r: Row): string => (isCoop() ? `${r.who} · ${esc(r.player.cls.name)}` : r.who);
+
 function rowHtml(r: Row): string {
   const n = r.numbers, p = r.player, state = stateOf(p);
   const ping = r.rtt === null ? '—' : `${Math.round(r.rtt)} ms`;
   const behind = r.behind === null ? '' : `<small>shown ${Math.round(r.behind)} ms behind</small>`;
   const blocked = n.mitigated >= 1 ? `<small>${short(n.mitigated)} blocked</small>` : '';
   return `<tr class="${p.local ? 'me' : ''}${state ? ` st-${state.split(' ')[0]}` : ''}">` +
-    `<td class="sb-who"><b>${esc(p.cls.name)}</b><small>${r.who}${state ? ` · ${state}` : ''}</small></td>` +
+    `<td class="sb-who"><b>${esc(nameOf(p))}</b><small>${whoOf(r)}${state ? ` · ${state}` : ''}</small></td>` +
     `<td class="sb-ping"><div><span class="q-${quality(r.rtt)}">${ping}</span>${graph(r.pings, r.rtt)}</div>${behind}</td>` +
     `<td>${short(n.dealt)}</td>` +
     `<td>${short(n.taken)}${blocked}</td><td class="sb-minor">${short(n.healed)}</td>` +
