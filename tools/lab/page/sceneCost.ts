@@ -1,10 +1,10 @@
 // tools/lab scenecost: what each kind of work in the scene pass takes of the GPU, at a quality level's settings and
 // the screen's own pixels (the resolution is never what's cut: what each pixel costs is). The scene pass alone is
 // drawn, with each part taken out and put back in turns (`gpuTurns.ts`), so a run's load falls on both sides: the
-// point lights, their shadows, the sun's shadow, the environment, the lit shading against a plain colour, what's
-// see-through or cut out, the particles, the hero. A laptop's integrated GPU spent 86% of its frame on the scene pass
-// at 2864x1536 (10 frames a second on Medium): this says what of it a level could do without. Its canary draws the
-// scene twice, which must read as more.
+// point lights (and their lighting where they reach), their shadows, the sun's shadow, the environment, the lit
+// shading against a plain colour, what's see-through or cut out, the particles, the hero. A laptop's integrated GPU
+// spent 86% of its frame on the scene pass at 2864x1536 (10 frames a second on Medium): this says what of it a level
+// could do without. Its canary draws the scene twice, which must read as more.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -79,6 +79,26 @@ function castingPart(name: string, lights: THREE.Light[]): Part {
   };
 }
 
+/** the reach a point light is given out of reach of everything (m): a pixel's loop then skips its lighting */
+const OUT_OF_REACH = 0.001;
+
+/**
+ * A part that puts `lights` out of reach of every pixel or gives them back their reach: the same programs either way
+ * (hidden, the lights' count and so the programs change), so it's what their lighting costs where they reach, apart
+ * from the loop's own cost over them; the most a shorter reach can save.
+ */
+function reachingPart(name: string, lights: THREE.PointLight[]): Part {
+  const reaches = lights.map((light) => light.distance);
+  return {
+    name: `${name} (${lights.length})`,
+    change: (on) => {
+      lights.forEach((light, index) => {
+        light.distance = on ? reaches[index] : OUT_OF_REACH;
+      });
+    },
+  };
+}
+
 /** The materials of a mesh, as a list. */
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -99,6 +119,7 @@ function partsOfScene(): Part[] {
   const environment = G.scene.environment;
   return [
     shownPart('the point lights', points),
+    reachingPart('the point lights where they reach', points.filter((light) => light.intensity > 0)),
     castingPart('the point lights\' shadows', points.filter((light) => light.castShadow)),
     castingPart('the sun\'s shadow', sun.filter((light) => light.castShadow)),
     {
