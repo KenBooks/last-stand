@@ -19,7 +19,8 @@
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
     "stalls": "node tools/stalls/stalls.mjs",
     "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
-    "traces:test": "node --test \"server/traces/test/*.test.mjs\""
+    "traces:build": "npm --prefix server/traces/web run build",
+    "traces:test": "npm run traces:build && node --test \"server/traces/test/*.test.mjs\""
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",

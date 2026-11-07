@@ -4,7 +4,8 @@
 //   POST /traces                  a trace, gzipped (1 MB at most), from the game's own pages  -> 201 { code }
 //   GET  /traces/health           200 "ok"
 //   GET  /traces?build=&q=&limit=&offset=  the traces kept, newest first (read)         -> { traces: [...], total }
-//   GET  /traces  (Accept: text/html)  the page to browse them (page.mjs), for a browser signed in by a Dokci link
+//   GET  /traces  (Accept: text/html)  the page to browse them (web/, built; page.mjs), signed in by a Dokci link
+//   GET  /traces/assets/<file>    the page's built script and style, named by their content's hash (cached for good)
 //   GET  /traces?dokci_link=v1.<exp>.<sig>  a Dokci link: one use, sets the session cookie, moves on to /traces
 //   GET  /traces/summary          how many are kept, their size, builds, scenes, the disk's budget (read)
 //   GET  /traces/latest           the newest trace's gzip (read), its code in X-Trace-Code
@@ -18,7 +19,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { notePage, viewerPage } from './page.mjs';
+import { asset, notePage, pageBuilt, viewerPage } from './page.mjs';
 
 const env = process.env;
 /** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
@@ -180,21 +181,31 @@ function authorised(req) {
 /** Whether a browser is asking for a page (its navigations say text/html; the lab's fetches don't). */
 const wantsPage = (req) => String(req.headers.accept ?? '').includes('text/html');
 
-/** An HTML page, under a CSP that allows only its own inline style and script: no frames, no referrer (a Dokci
- *  link in the address must never leak). */
-function page(res, status, html, nonce, headers = {}) {
-  res.writeHead(status, {
-    'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
-    'content-security-policy': `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; `
-      + `connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
-    'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', ...headers,
-  });
+/** The page's own files and nothing else (the build inlines nothing): no frames, no referrer (a Dokci link in
+ *  the address must never leak). */
+const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; "
+  + "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const PAGE_HEADERS = {
+  'content-security-policy': CSP, 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+};
+
+/** An HTML page, never cached (it names the hashed files of the build it came with). */
+function page(res, status, html, headers = {}) {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...PAGE_HEADERS,
+    ...headers });
   res.end(html);
 }
-const note = (res, status, heading, text) => {
-  const nonce = randomBytes(16).toString('base64');
-  page(res, status, notePage(nonce, heading, text), nonce);
-};
+const note = (res, status, heading, text) => page(res, status, notePage(heading, text));
+
+/** A built script or style: named by its content's hash, so cached for good. Public: it holds no trace. */
+function serveAsset(res, name) {
+  const file = asset(name);
+  if (!file) return answer(res, 404, 'no such file');
+  res.writeHead(200, { 'content-type': file.type, 'cache-control': 'public, max-age=31536000, immutable',
+    'x-content-type-options': 'nosniff' });
+  res.end(file.body);
+}
 
 /** The body, up to `most` bytes (null past it). */
 function bodyOf(req, most) {
@@ -309,10 +320,7 @@ function signIn(req, res, path, link) {
     return note(res, 401, 'Link expired', 'This sign-in link has expired, was already used or is invalid. Open the traces again from Dokci.');
   }
   log('signed in', addressOf(req));
-  const nonce = randomBytes(16).toString('base64');
-  page(res, 200, notePage(nonce, 'Signed in', 'Opening the traces...', '/traces'), nonce, {
-    'set-cookie': sessionCookie(),
-  });
+  page(res, 200, notePage('Signed in', 'Opening the traces...', '/traces'), { 'set-cookie': sessionCookie() });
 }
 
 async function handle(req, res) {
@@ -324,21 +332,21 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && path === '/traces') return upload(req, res);
   if (req.method !== 'GET' || !path.startsWith('/traces')) return answer(res, 404, 'not here');
-  const browsing = path === '/traces' && wantsPage(req);
+  if (path.startsWith('/traces/assets/')) return serveAsset(res, path.slice('/traces/assets/'.length));
+  const browsing = path === '/traces' && wantsPage(req) && pageBuilt();
   if (!settings.token) {
     return browsing ? note(res, 503, 'Reading is off', 'The traces service has no token set, so nothing can read them.')
       : answer(res, 503, 'reading is off: no TRACES_TOKEN set');
   }
   const link = url.searchParams.get('dokci_link');
-  if (path === '/traces' && link !== null) return signIn(req, res, path, link);
+  if (path === '/traces' && link !== null) {
+    return pageBuilt() ? signIn(req, res, path, link) : answer(res, 503, 'the page was not built');
+  }
   if (!authorised(req)) {
     return browsing ? note(res, 401, 'Not signed in', 'Open the traces from Dokci: its link signs this browser in.')
       : answer(res, 401, 'the token, please');
   }
-  if (browsing) {
-    const nonce = randomBytes(16).toString('base64');
-    return page(res, 200, viewerPage(nonce), nonce);
-  }
+  if (browsing) return page(res, 200, viewerPage());
   if (path === '/traces') return answer(res, 200, list(url));
   if (path === '/traces/summary') return answer(res, 200, summary());
   if (path === '/traces/latest') {

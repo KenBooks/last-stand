@@ -135,9 +135,20 @@ test('serves a browser the page, an API client the list', async () => {
   assert.match(csp, /default-src 'none'/);
   assert.equal(pageR.headers.get('x-frame-options'), 'DENY');
   assert.equal(pageR.headers.get('referrer-policy'), 'no-referrer');
+  assert.match(csp, /script-src 'self'/);
+  assert.equal(pageR.headers.get('cache-control'), 'no-store', 'the page names the build\'s files: never cached');
   const html = await pageR.text();
-  const nonce = /script-src 'nonce-([^']+)'/.exec(csp)[1];
-  assert.ok(html.includes(`<script nonce="${nonce}">`), 'the page\'s script carries the CSP\'s nonce');
+  assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>|<style/, 'nothing inline: the CSP allows none');
+  // Its script and style: the build's, named by their content's hash, cached for good, without signing in.
+  const files = [...html.matchAll(/(?:src|href)="(\/traces\/assets\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(files.some((f) => /\/index-[\w-]{8}\.js$/.test(f)) && files.some((f) => /-[\w-]{8}\.css$/.test(f)), files.join());
+  for (const file of files) {
+    const r = await fetch(base + file);
+    assert.equal(r.status, 200, file);
+    assert.match(r.headers.get('cache-control'), /immutable/);
+  }
+  assert.equal((await fetch(`${base}/traces/assets/..%2Ftraces.mjs`)).status, 404, 'only what the build made');
+  assert.equal((await fetch(`${base}/traces/assets/nothing-12345678.js`)).status, 404);
   const api = await read('/traces');
   assert.match(api.headers.get('content-type'), /^application\/json/);
   assert.ok(Array.isArray((await api.json()).traces));

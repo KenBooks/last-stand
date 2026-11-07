@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<!-- The traces page (served at GET /traces to a signed-in browser): the summary and the list, filled by src/main.ts. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Last Stand traces</title>
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <main>
+    <h1>Last Stand <span>traces</span></h1>
+    <p class="sub">
+      Performance traces slow games sent, with their player's consent.
+      Read one with <code>npm run lab -- trace CODE</code>.
+    </p>
+
+    <section class="cards" id="cards"></section>
+
+    <section class="split">
+      <div class="card"><h2>By scene</h2><div class="chips" id="scenes"></div></div>
+      <div class="card"><h2>By why</h2><div class="chips" id="whys"></div></div>
+    </section>
+
+    <div class="bar">
+      <input id="filter" type="search" placeholder="Filter by build, PR, scene, why, GPU..." autocomplete="off">
+      <span id="count"></span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th><th>When</th><th>Build</th><th>Scene</th><th>Why</th>
+          <th>Frames</th><th>Quality</th><th>GPU</th><th>Size</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="empty" id="empty" hidden>No traces.</p>
+    <button id="more" hidden>Show more</button>
+  </main>
+</body>
+</html>
