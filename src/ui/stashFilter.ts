@@ -87,8 +87,20 @@ export function openStashFilter(open: boolean): void {
   document.getElementById('stash-filter-btn')!.setAttribute('aria-expanded', String(open));
 }
 
+/** the chips' row's width as last laid out (px; 0 till it's been shown), kept by an observer: read off the row as
+ *  the chips were rendered, it laid the page out in the middle of the lobby's render, 17.5 ms of the click that
+ *  chose a first visit's hero (its width is the stash title's room, whatever chips it holds) */
+let chipsWidth = 0;
+
 export function initStashFilter(changed: () => void): void {
   onChange = changed;
+  new ResizeObserver(([entry]) => {
+    const width = entry.contentRect.width;
+    if (width <= 0 || width === chipsWidth) return;
+    chipsWidth = width;
+    // (as many chips as the new width fits, in the next frame: changed in the notification's own, a loop)
+    if (active.length) requestAnimationFrame(renderStashFilter);
+  }).observe(document.getElementById('stash-chips')!);
   const panel = document.getElementById('stash-filter')!;
   const btn = document.getElementById('stash-filter-btn')!;
   btn.onclick = () => { sfx.click(); openStashFilter(panel.classList.contains('hidden')); };
@@ -113,7 +125,7 @@ export function renderStashFilter(): void {
   sync();
   const chips = document.getElementById('stash-chips')!;
   chips.innerHTML = '';
-  const fit = Math.min(MAX_CHIPS, Math.max(1, Math.floor(chips.clientWidth / 90)));
+  const fit = Math.min(MAX_CHIPS, Math.max(1, Math.floor(chipsWidth / 90)));
   const shown = active.length > fit ? active.slice(0, fit - 1) : active;
   for (const k of shown) {
     const c = document.createElement('button');

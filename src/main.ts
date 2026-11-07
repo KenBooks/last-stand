@@ -171,6 +171,8 @@ async function boot() {
   const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
     void loadingLeft.then(() => want('heroes'));
+    // (the biome's still shadows drawn now, under the loading screen: else the frame after the hero is chosen)
+    G.arena.drawStill();
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();

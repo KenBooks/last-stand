@@ -482,7 +482,9 @@ export function renderMenu(): void {
   // (each as it is with the weapons held: a two-hander's cleave slower and heavier)
   const shown = (def: SkillDef) => (G.player.cls.id === cls.id ? G.player.known.get(def.impl)?.def : undefined) ?? def;
   for (const def of cls.skills) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
-  syncSkillStrip();
+  // (its arrows read off the row in the next frame: read here, its width laid the page out in the middle of the
+  // render, which went on changing it, 8.7 ms of the click that chose a first visit's hero)
+  requestAnimationFrame(syncSkillStrip);
 
   $('#btn-saves').textContent = `Save slot ${saveSlot()}`;
   const r = p.records;

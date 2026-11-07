@@ -3,7 +3,7 @@
 import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
 import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
-import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
+import { LISTED_LEAST, LISTED_MS, LOBBY_LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
@@ -43,7 +43,7 @@ const HELP = {
   seconds: ['n', `how long the scenario plays (45 by default; ${BOOT}: the lobby watched once revealed, `
     + `${BOOT_SECONDS})`],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
-    + '300 by default)'],
+    + `300 by default; ${BOOT}: the lobby's frames from its reveal to Start, ${LOBBY_LISTED_MS} by default)`],
   variants: ['a,b', 'changes tried on the page, each a measure of its own (a+b: both together): '
     + `${Object.keys(VARIANTS).join(', ')} (base)`],
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
@@ -162,7 +162,7 @@ export function readOptions(argv) {
     urls: written.url ? written.url.split(',').filter(Boolean) : [],
     scenario: written.scenario ?? 'fight',
     seconds: Number(written.seconds ?? (written.scenario === BOOT ? BOOT_SECONDS : 45)),
-    listed: Number(written.listed ?? LISTED_MS),
+    listed: Number(written.listed ?? (written.scenario === BOOT ? LOBBY_LISTED_MS : LISTED_MS)),
     variants: (written.variants ?? 'base').split(','),
     rounds: Number(written.rounds ?? 1),
     view: written.view ?? 'top',

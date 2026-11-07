@@ -601,6 +601,19 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
   provoking?.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
 }
 
+/**
+ * The unpacking state three reads back before a copy into part of a texture (`copyTextureToTexture`, and an upload
+ * of part of one) set to what it is, so three's state knows it: it asks the GPU's process for each value it hasn't
+ * set itself, a round trip that waits for everything sent before it, and a first visit's lobby frame waited 41 ms on
+ * the first label's copy into the overlays' atlas (`ui/overlay/atlas.ts`) while the hall's heroes' programs compiled
+ * (`npm run stalls -- --scenario boot`, the lobby's frames held up).
+ */
+function unpackStateKnown(renderer: THREE.WebGLRenderer): void {
+  const context = renderer.getContext() as WebGL2RenderingContext;
+  for (const name of [context.UNPACK_ROW_LENGTH, context.UNPACK_IMAGE_HEIGHT, context.UNPACK_SKIP_PIXELS,
+    context.UNPACK_SKIP_ROWS, context.UNPACK_SKIP_IMAGES]) renderer.state.pixelStorei(name, 0);
+}
+
 export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
@@ -626,6 +639,7 @@ export async function initRenderer(container: HTMLElement) {
   // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
   // programs)
   renderer.capabilities.getMaxAnisotropy();
+  if (!WEBGPU) unpackStateKnown(renderer as THREE.WebGLRenderer);
   if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
   if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
