@@ -25,9 +25,9 @@ export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
   'logLobby', 'perfAsk',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch',
+  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
-  'hudTouch', 'decisionTouch', 'perfAskTouch',
+  'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -379,7 +379,9 @@ export const COMMANDS = {
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
           + '30%, its buttons a finger\'s height), sheetTouch (a stash shield\'s sheet opened by a tap, its card '
           + 'beside the worn one\'s: its buttons within the window and the sheet), litTouch (a worn item pressed long: '
-          + 'the stash items that fit its slot lit until a tap elsewhere)',
+          + 'the stash items that fit its slot lit until a tap elsewhere), buttonsTouch and buttonsRunTouch '
+          + '(every touch button shown in the lobby, its practice and a run: nothing over its middle, and a '
+          + 'finger\'s tap there does what it\'s for; the canary lays a clear sheet over the pause button)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {

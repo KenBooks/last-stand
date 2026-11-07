@@ -45,14 +45,14 @@ export const TOUCH_CANARIES = {
 };
 
 /** The page put in touch mode by a finger's tap on the world, as a player's first touch puts it (if it isn't). */
-async function touchMode(lab: Lab): Promise<void> {
+export async function touchMode(lab: Lab): Promise<void> {
   if (document.body.classList.contains('touch')) return;
   await lab.tap({ x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y });
   await lab.step(TOUCH_FRAMES);
 }
 
 /** `selector`'s element's box, or null when it shows nothing. */
-function boxOf(selector: string): DOMRect | null {
+export function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
   const box = element.getBoundingClientRect();

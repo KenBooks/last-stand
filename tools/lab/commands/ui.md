@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,
-perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch`, every one by default (the
+perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the
 performance report's prompt, `page/uiPerfAsk.ts`: over the lobby, under the choice after a wave and so on touch, inside
 the window, each button on one line, a finger's 28 px tall on touch, over none of the choice, the wave's badge, the
 bars or the touch HUD's corners; `--canary` moves it down onto the choice, which must be found):
