@@ -1,7 +1,9 @@
 // Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
-// level in effect. Auto starts from the level it last settled on and steps down the
-// levels while the frame rate stays low; it never steps back up on its own, to avoid
-// oscillating. Every level renders the screen's own pixels: what's cut is other work,
+// level in effect. Auto steps down the levels while the frame rate stays low, and never
+// steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
+// tries the level above the one it last settled on, kept once it holds its frame rate for a
+// window, else left for the settled one at once (`bootAuto`). Every level renders the
+// screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
 import * as THREE from 'three';
@@ -27,6 +29,10 @@ const AUTO_COOKIE = 'last-stand-quality-auto';
 
 let setting: QualitySetting = 'auto';
 let level: QualityLevel = 'high';
+/** the level above the settled one still to be tried this session (`bootAuto`) */
+let aboveNext = false;
+/** the level Auto settled on while it tries the one above, null once it's kept or left */
+let trialFrom: QualityLevel | null = null;
 /** the most pixels the scene renders (Infinity: the screen's own); only a harness sets one (`useQuality`) */
 let budget = Infinity;
 let frames = 0, time = 0, settle = 0;
@@ -56,7 +62,32 @@ function writeAuto(): void {
 export function initQuality(): void {
   const saved = readCookie(COOKIE);
   setting = saved === 'auto' || isLevel(saved) ? saved : 'auto';
-  apply(setting === 'auto' ? readAuto() : setting);
+  if (setting === 'auto') bootAuto(readAuto());
+  else apply(setting);
+}
+
+/**
+ * Auto as a boot starts it, at the level it last `settled` on, the level above it tried once the game's frames are
+ * the device's (the first frame sampled after the reveal and its warm-ups: the boot, its warm-ups and the loading
+ * screen's exit stay the settled level's, Low's plain fade on a phone). A step down is kept for good, so a desktop
+ * slowed once (a build, another program on the GPU) stayed a level down from then on: from play, a 4070 Ti on Medium
+ * "somehow". The level above is kept (and saved) once a window's frames hold the target; missed, Auto goes back to
+ * the settled level at once and steps on from there as ever. A device that can't hold it spends a settle and a quick
+ * window there a boot (about 3 s), the cookie never changed. Exported for a harness (`lab auto`), which can't boot
+ * the page again.
+ */
+export function bootAuto(settled: QualityLevel): void {
+  trialFrom = null;
+  aboveNext = settled !== QUALITY_ORDER[0];
+  apply(settled);
+}
+
+/** The level above the settled one tried: what it went to, for the trace. */
+function tryAbove(): string {
+  aboveNext = false;
+  trialFrom = level;
+  apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) - 1]);
+  return `trying ${level}`;
 }
 
 export const qualitySetting = (): QualitySetting => setting;
@@ -66,6 +97,8 @@ export const qualityBudget = (): number => budget;
 
 export function setQuality(s: QualitySetting): void {
   setting = s;
+  trialFrom = null;
+  aboveNext = false;
   writeCookie(COOKIE, s);
   apply(s === 'auto' ? 'high' : s);
   // choosing Auto again starts over from the top
@@ -128,9 +161,10 @@ export function holdQuality(): void {
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
  *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || atBottom()) return null;
+  if (setting !== 'auto' || (atBottom() && !aboveNext)) return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
   if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
+  if (aboveNext) return tryAbove();
   quick.push(dt);
   quickTime += dt;
   // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
@@ -147,7 +181,15 @@ export function sampleQuality(dt: number): string | null {
   if (time < AUTO_QUALITY.window) return null;
   const fps = frames / time;
   restart();
-  return fps < AUTO_QUALITY.minFps ? step(false) : null;
+  if (fps < AUTO_QUALITY.minFps) return step(false);
+  return trialFrom ? keepTrial() : null;
+}
+
+/** The level tried above the settled one kept: it held the target for a window. What it kept, for the trace. */
+function keepTrial(): string {
+  trialFrom = null;
+  writeAuto();
+  return `${level} kept`;
 }
 
 /** a frame the 4 s path leaves out of its mean (s): a hitch, not the device's pace */
@@ -156,6 +198,12 @@ const HITCH = 0.25;
 /** A step down, every level at once when `far` below the target, kept for the next session; what it went to. */
 function step(far: boolean): string {
   restart();
+  if (trialFrom) {
+    // (the level tried above missed: back to the settled one alone, the cookie as it was)
+    apply(trialFrom);
+    trialFrom = null;
+    return level;
+  }
   const steps = far ? QUALITY_ORDER.length : 1;
   for (let i = 0; i < steps && !atBottom(); i++) stepDown();
   writeAuto();
@@ -178,3 +226,6 @@ function stepDown(): void {
 
 /** Whether Auto has stepped as far down as it goes (a harness's: `lab auto`). */
 export const autoAtBottom = (): boolean => atBottom();
+
+/** The level Auto would start from at the next boot, as its cookie keeps it (a harness's: `lab auto`). */
+export const autoSettled = (): QualityLevel => readAuto();
