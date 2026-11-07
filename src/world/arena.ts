@@ -100,6 +100,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
    *  keeps its own lights' maps, so a biome shown again with its props as they were needn't draw them again (closing
    *  the hall of heroes drew the biome's again, 9 ms of the frame after a first visit's hero was chosen) */
   const stillDrawn = new Map<BiomeId | 'hall', number>();
+  /** the props' revision each biome's breakables' shadows were last made at: in a frame's update they're made in one
+   *  frame and the still shadows drawn in the next (in one, a run's start held its frame up 24 ms for both) */
+  const breakablesAt = new Map<BiomeId, number>();
   /** whether the hall of heroes stands in the biomes' place */
   let hallShown = false;
 
@@ -133,10 +136,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
    *  broken, rolled (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`).
    *  Called before the hall of heroes opens on a first visit, so its closing draws nothing (10.8 ms of the frame
    *  after the hero was chosen: the biome had never been shown). */
-  function drawStill(): void {
+  function drawStill(inFrames = false): void {
     const shown = hallShown ? 'hall' : biome;
     if (stillDrawn.get(shown) === propState.rev) return;
-    if (!hallShown) biomes[biome].breakables.refresh();
+    if (!hallShown && breakablesAt.get(biome) !== propState.rev) {
+      biomes[biome].breakables.refresh();
+      breakablesAt.set(biome, propState.rev);
+      if (inFrames) return;
+    }
     drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
     stillDrawn.set(shown, propState.rev);
   }
@@ -151,6 +158,11 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** every biome's props whole again (a new run, the lobby) */
     restoreProps() { for (const id of BIOME_IDS) restoreProps(biomes[id].b.props); },
     /** every biome's run-shaped props built again from a run's seed (`Biome.roll`) */
+    /** One more piece of every biome's run-shaped props for `seed` built ahead (`Biome.rollAhead`): true once all
+     *  are. */
+    rollAhead(seed: number): boolean {
+      return BIOME_IDS.every((id) => biomes[id].b.rollAhead?.(seed) ?? true);
+    },
     rollProps(seed: number) {
       for (const id of BIOME_IDS) biomes[id].b.roll?.(seed);
       // (their circles' heights and girths: the navigation's grid made again)
@@ -181,7 +193,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     setCalm(v: number) { for (const id of BIOME_IDS) biomes[id].b.setCalm(v); },
     update(dt: number, t: number) {
       if (hallShown) hall.update(dt, t); else active.update(dt, t);
-      drawStill();
+      drawStill(true);
     },
     drawStill,
   };

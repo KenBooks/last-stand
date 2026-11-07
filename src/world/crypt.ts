@@ -599,6 +599,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     setCalm(v: number) { calmTarget = v; },
     update(dt: number, t: number) { for (const u of updaters) u(dt, t); },
     roll(seed: number) { rollColumns(columns, seed); },
+    rollAhead(seed: number) { return columnsAhead(columns, seed); },
   };
 };
 
@@ -761,15 +762,46 @@ function rollBreak(rng: () => number): Break {
   };
 }
 
-/** Every column built again from `seed`: its height and its break (a run's own, the same on every game in co-op). */
-function rollColumns(columns: Column[], seed: number): void {
+/** Each column's break for `seed`, in the columns' order. */
+function breaksOf(columns: Column[], seed: number): Break[] {
   const rng = mulberry(seed * 7919 + 17);
-  for (const column of columns) {
-    const broken = rollBreak(rng);
-    column.mesh.geometry.dispose();
-    column.mesh.geometry = buildColumnGeo(broken);
-    column.circle.h = broken.at;
+  return columns.map(() => rollBreak(rng));
+}
+
+/** a run's columns built ahead (`columnsAhead`): their seed, breaks and the geometries made so far */
+let ahead: { seed: number; breaks: Break[]; geometries: THREE.BufferGeometry[] } | null = null;
+
+/** The ahead's geometries let go (another seed came, or none will). */
+function dropAhead(): void {
+  for (const geometry of ahead?.geometries ?? []) geometry.dispose();
+  ahead = null;
+}
+
+/** One more of `seed`'s columns built ahead: true once they all are. Each column's geometry is a few ms, and all
+ *  of them at a run's start were one task of 43 to 56 ms, a frame held up as the run began (`npm run stalls --
+ *  --scenario boot`, the frames held up from Start). */
+function columnsAhead(columns: Column[], seed: number): boolean {
+  if (ahead?.seed !== seed) {
+    dropAhead();
+    ahead = { seed, breaks: breaksOf(columns, seed), geometries: [] };
   }
+  const { breaks, geometries } = ahead;
+  if (geometries.length < columns.length) geometries.push(buildColumnGeo(breaks[geometries.length]));
+  return geometries.length >= columns.length;
+}
+
+/** Every column built again from `seed`: its height and its break (a run's own, the same on every game in co-op),
+ *  each taken from what was built ahead for it (`columnsAhead`), the rest built now. */
+function rollColumns(columns: Column[], seed: number): void {
+  const built = ahead?.seed === seed ? ahead : null;
+  const breaks = built?.breaks ?? breaksOf(columns, seed);
+  columns.forEach((column, i) => {
+    column.mesh.geometry.dispose();
+    column.mesh.geometry = built?.geometries[i] ?? buildColumnGeo(breaks[i]);
+    column.circle.h = breaks[i].at;
+  });
+  if (built) ahead = null;
+  else dropAhead();
 }
 
 /** How high `broken` is at (x, z) on the shaft's axis: a plane sloping across it, a wave round it and chips out of

@@ -430,8 +430,25 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
 
-/** The next frame, or the next task once a loading bar covers the page (nothing of it is seen). */
-const stepBehind = (): Promise<void> => (isReadying() ? nextTask() : nextFrame());
+/** when `inSlices` last let the page go */
+let sliceFrom = 0;
+/** how long a task under a loading bar goes on before the page is let go (ms) */
+const BAR_SLICE_MS = 12;
+
+/**
+ * Under a loading bar: the page let go once `BAR_SLICE_MS` have passed since it last was. Let go at every step, its
+ * uniforms read a program a task and its uploads 2 ms a task, a return's fight held its bar up 1.4 to 1.6 s where in
+ * one task it took 0.3 to 0.6 (`npm run stalls -- --scenario boot`, when the loading bar came down); let go through a
+ * message (no timeout's 4 ms clamp), its tasks ran back to back and the bar's frames waited behind them, 50 to 160 ms.
+ */
+async function inSlices(): Promise<void> {
+  if (performance.now() - sliceFrom < BAR_SLICE_MS) return;
+  await nextTask();
+  sliceFrom = performance.now();
+}
+
+/** The next frame, or under a loading bar a slice's end (nothing of it is seen: `inSlices`). */
+const stepBehind = (): Promise<void> => (isReadying() ? inSlices() : nextFrame());
 
 /** how many parts `warmInTasks` gives the GPU at a time */
 const PARTS_AT_ONCE = 4;
@@ -460,10 +477,10 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
       progress((from + s * lot.length) / parts.length);
       if (need === 'heroes') for (const part of lot) heroWarming(part.name, s);
     };
-    // (where no loading bar covers the page, a first visit's hall of heroes, a step a frame: a lot's compile in one
-    // task was 30 ms, and a hero chosen in it held the hall's frame up 104 ms)
-    const step = isReadying() ? undefined : stepBehind;
-    await warmBuilt(built, { progress: share, step, patient: true });
+    // (a step a frame where no loading bar covers the page, a first visit's hall of heroes, and a step a task under
+    // one: a lot's compile in one task was 30 to 64 ms, a hero chosen in it held the hall's frame up 104 ms, and under
+    // the fight's bar each held its frame up as long, a frozen bar)
+    await warmBuilt(built, { progress: share, step: stepBehind, patient: true });
     if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
   }
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });

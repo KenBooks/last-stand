@@ -25,7 +25,7 @@ import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
-import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
+import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched } from './ui/heroSelect';
@@ -125,6 +125,8 @@ async function boot() {
   initNetHud();
   initBattleLog();
   buildHotbar(G.player);
+  // (the run's HUD rastered under the loading screen, as the lobby's panels are: ui/hud.ts)
+  layOutHudAhead();
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice });
@@ -225,6 +227,7 @@ function enterMenu() {
   setZoom(CAMERA.lobbyZoom);
   spawnDummies();
   renderCoop();
+  buildNextRunAhead();
 }
 
 function spawnDummies() {
@@ -232,12 +235,34 @@ function spawnDummies() {
   for (const [x, z] of LOBBY.dummies) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
 }
 
+/** the next run's seed, its props built ahead in the lobby (`buildNextRunAhead`) */
+let nextSeed = Math.floor(Math.random() * 2 ** 31);
+/** how many lobby visits have built the next run's props ahead: a visit's builder stops once another starts */
+let aheadVisit = 0;
+
+/**
+ * The next run's props (its columns: `Biome.rollAhead`) built ahead while the lobby stands, a piece a task, so the
+ * run's start only puts them in: built as it began, they were a task of 43 to 56 ms (`npm run stalls -- --scenario
+ * boot`, the frames held up from Start). A guest takes its host's seed at the start, and builds them then.
+ */
+function buildNextRunAhead(): void {
+  const visit = ++aheadVisit;
+  const step = (): void => {
+    if (visit !== aheadVisit || G.mode !== 'menu') return;
+    if (!G.arena.rollAhead(nextSeed)) setTimeout(step, AHEAD_PAUSE_MS);
+  };
+  setTimeout(step, AHEAD_PAUSE_MS);
+}
+/** the pause between two pieces of the next run's props built ahead (ms): one a frame or so */
+const AHEAD_PAUSE_MS = 16;
+
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
   rollBiome();
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
-  const seed = Math.floor(Math.random() * 2 ** 31);
+  const seed = nextSeed;
+  nextSeed = Math.floor(Math.random() * 2 ** 31);
   sendStart(G.arena.biome, selectedWave(), seed);
   beginRun(selectedWave(), seed);
 }
