@@ -29,6 +29,10 @@ const BOOT_TAIL_MS = 45_000;
 /** the frames' fixed columns, each a value a frame */
 const FIXED = ['interval', 'late', 'cpu', 'upd', 'rnd', 'gpu', 'draws', 'tris', 'programs', 'foes', 'particles', 'state'] as const;
 type Fixed = (typeof FIXED)[number];
+/** An update stage's column, its name kept apart from the fixed columns': the stage `particles` took the particles'
+ *  count's column, kind and all, and the report read its time as the count (0.0999 particles, trace Z8GY-RHSN). */
+export const stageColumn = (stage: string): string =>
+  ((FIXED as readonly string[]).includes(stage) ? `${stage} update` : stage);
 /** how each is packed (traceFormat.ts): the interval exact, the frames' times from it; any other time a byte */
 const KINDS: Record<Fixed, Snapshot['kinds'][string]> = {
   interval: 'ms', late: 'lg', cpu: 'lg', upd: 'lg', rnd: 'lg', gpu: 'lg',
@@ -75,7 +79,17 @@ let pending: Slow | null = null;
 let slowBootAt = 0;
 
 /** what the scene was last frame: a change marks it and settles the frames after it */
-const seen = { mode: '', phase: '', wave: 0, biome: '', player: null as unknown, hall: false };
+const seen = { mode: '', phase: '', wave: 0, biome: '', player: null as unknown, hall: false, window: '' };
+/** The window as the browser last sized it (css px), and full screen or not: read as it resizes, never a frame
+ *  (a size read mid-frame can lay the page out). A phone's trace held up 212 ms in a resize's listeners with nothing
+ *  in it saying the window had changed (trace Z8GY-RHSN). */
+let windowNow = '';
+function readWindow(): void {
+  windowNow = `${innerWidth}x${innerHeight}${document.fullscreenElement ? ' full screen' : ''}`;
+}
+readWindow();
+addEventListener('resize', readWindow);
+document.addEventListener('fullscreenchange', readWindow);
 
 function scene(): Scene {
   if (isReadying()) return 'readying';
@@ -99,8 +113,9 @@ function noteScene(now: number): void {
   if (biome !== seen.biome) changed.push(`biome ${biome}`);
   if (G.player !== seen.player) changed.push(`hero ${G.player?.cls?.id ?? ''} built`);
   if (hall !== seen.hall) changed.push(hall ? 'hero selection open' : 'hero selection closed');
+  if (windowNow !== seen.window) changed.push(`window ${windowNow}`);
   if (!changed.length) return;
-  Object.assign(seen, { mode: G.mode, phase, wave, biome, player: G.player, hall });
+  Object.assign(seen, { mode: G.mode, phase, wave, biome, player: G.player, hall, window: windowNow });
   mark(changed.join(', '), now);
   settleUntil = now + SETTLE_MS;
 }
@@ -202,10 +217,11 @@ export const recorder = {
 
   /** An update stage's time this frame (ms). */
   lap(stage: string, ms: number): void {
-    let column = named.get(stage);
+    const name = stageColumn(stage);
+    let column = named.get(name);
     if (!column) {
       if (named.size >= MOST_NAMED) return;
-      named.set(stage, (column = new Float32Array(RING).fill(-1)));
+      named.set(name, (column = new Float32Array(RING).fill(-1)));
     }
     column[head] = (column[head] > 0 ? column[head] : 0) + ms;
   },
