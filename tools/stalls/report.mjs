@@ -326,7 +326,10 @@ const WARM_UPS_SHOWN = 6;
 
 /** A warm-up's longest one-task step (its build, its compile or its draw, ms): what holds the lobby's frames up
  *  behind it. */
-const longestStep = (warmUp) => Math.max(warmUp.buildMs ?? 0, warmUp.compileMs ?? 0, warmUp.drawMs ?? 0);
+const longestStep = (warmUp) => {
+  const compile = warmUp.compileStepMs ?? warmUp.compileMs ?? 0;
+  return Math.max(warmUp.buildMs ?? 0, compile, warmUp.drawMs ?? 0);
+};
 
 /** The game's warm-ups (`src/game/warmup.ts`): how many, and those whose one-task steps took longest, each with
  *  its compile, its waits for its maps, their uploads and its links, and its draw (the maps and uploads where the
@@ -336,7 +339,9 @@ function warmUpsLine(warmUps) {
   const longest = [...warmUps].sort((a, b) => longestStep(b) - longestStep(a)).slice(0, WARM_UPS_SHOWN);
   const timed = (name, value) => (value === undefined ? '' : `${name} ${ms(value)}, `);
   const before = (w) => `${timed('maps', w.mapsMs)}${timed('uploads', w.uploadsMs)}`;
-  const compiled = (w) => `${timed('build', w.buildMs)}compile ${ms(w.compileMs)}, ${before(w)}`;
+  // (a build from before the compile was sliced says no step: its compile was one)
+  const compileStep = (w) => (w.compileStepMs === undefined ? '' : ` (its longest step ${ms(w.compileStepMs)})`);
+  const compiled = (w) => `${timed('build', w.buildMs)}compile ${ms(w.compileMs)}${compileStep(w)}, ${before(w)}`;
   const steps = (w) => `${compiled(w)}links ${ms(w.linksMs)}, draw ${ms(w.drawMs)}`;
   const shown = longest.map((w) => `${w.name} (${steps(w)})`);
   return `  ${warmUps.length} warm-ups, ms, the longest steps first: ${shown.join('; ')}`;
