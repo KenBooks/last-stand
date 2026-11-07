@@ -97,7 +97,8 @@ const COMMON_OPTIONS = {
   boot: {
     kind: 'text',
     usage: 'level[@pixels]',
-    help: 'the page booted as a device whose Auto settled on this quality (low@518400: a phone\'s): the boot\'s '
+    help: 'the page booted as a device that settled on this quality (low@518400: a phone\'s), set as the player\'s '
+      + 'setting: the boot\'s '
       + 'warm-ups run at it, and the hero is built at its detail (High, the lab\'s own, by default)',
   },
   cold: {

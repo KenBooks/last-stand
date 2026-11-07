@@ -40,4 +40,9 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   when it came, and the time until the device holds 50 frames a second, or reaches Low where at the screen's own
   pixels it can't (Auto keeps them at every level), must be at most 8 s (to Low in 3.4 s there, where it holds 7.8
   frames a second; 12.5 at the old pace, a level a 4 s window). A fast device's frames with an 800 ms hitch every
-  2 s must never step it down (Auto never steps back up). `--canary` runs the old pace too, which must be too slow.
+  2 s must never step it down (Auto never steps back up within a session). Then Auto as a boot starts it, at a level
+  it settled on before (`bootAuto`, its cookie set as a boot finds it): once its frames are the device's it tries the
+  level above, which a fast device settled on Medium or Low must keep (and save), and a device that holds only the
+  settled level must leave for it at once, never past it, the cookie as it was, each within 10 s (from play, a
+  4070 Ti on Medium "somehow", trace 0HSJ-60QV). `--canary` runs the old pace too, which must be too slow, and a boot
+  at the settled level as Auto used to, whose fast device must be found never stepped back up.

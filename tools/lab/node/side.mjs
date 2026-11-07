@@ -48,7 +48,7 @@ function bootOutcome(cold) {
 }
 
 /**
- * How a page boots: at `quality`, as Auto's cookie holds it (`low@518400`; null: the lab's own, High), `cold` or
+ * How a page boots: at `quality` (`low@518400`, the pixels let go; null: the lab's own, High), `cold` or
  * not (`bootOutcome`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
  * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too.
@@ -487,8 +487,8 @@ export class Side {
 
   /**
    * Boots a page for `heroClass`: the game loaded with nothing kept from the last boot, the lab installed once the
-   * loading screen is gone, and the hero checked, as `how` asks (`LAB_BOOT`'s fields). At its `quality` (Auto's
-   * cookie, `low@518400`), it boots as a device whose Auto settled there: the boot's warm-ups run at that level, the
+   * loading screen is gone, and the hero checked, as `how` asks (`LAB_BOOT`'s fields). At its `quality`
+   * (`low@518400`), it boots as a device that settled there: the boot's warm-ups run at that level, the
    * hero built at its detail; `cold`, it asks for nothing warmed after the lobby (`bootOutcome`). A boot that fails
    * leaves no page behind (none counts as fresh).
    */
@@ -565,14 +565,16 @@ export class Side {
 
   /**
    * Opens a page on the game for `heroClass` in `context` and waits out its loading screen, its errors kept as this
-   * side's (each after `prefix`), booted as `how` asks: at its `quality` (Auto's cookie), on Auto settled there.
+   * side's (each after `prefix`), booted as `how` asks: at its `quality`, set as the player's setting.
    */
   async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
     const { quality, cold, first } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
-    const settled = quality ? { 'last-stand-quality': 'auto', 'last-stand-quality-auto': quality } : {};
+    // (the level as the player's setting, not Auto's: a boot of Auto's tries the level above the one it settled on,
+    // and the lab's steady frames would keep it, src/core/quality.ts `bootAuto`; an older Auto's pixels let go)
+    const settled = quality ? { 'last-stand-quality': quality.split('@')[0] } : {};
     // (a first visit's has no saved hero: the game boots its default one, and opens on the hero selection screen)
     const hero = first ? {} : { 'last-stand-class': heroClass };
     const cookies = { ...BOOT_COOKIES, ...settled, ...hero };

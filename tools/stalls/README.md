@@ -127,7 +127,7 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     three) unlike the frames either side of it, where those are like each other, listed as a flicker, with a sheet of
     their own (`out/flickers-N.png`). `--blink-exit n` is its canary: the loading screen hidden for a frame n times,
     every 4th frame from the reveal, each of which the film must find. `--auto level@px` boots as a device whose Auto
-    settled there (a report's Quality line: `low (setting auto, at most 0.52 Mpx)` is `low@518400`): on Low the exit
+    settled there (as a player's: in the lobby it tries the level above, `src/core/quality.ts` `bootAuto`) (a report's Quality line: `low (setting auto, at most 0.52 Mpx)` is `low@518400`): on Low the exit
     is the plain fade, as on the owner's phone. `--resize WxH` takes the window to that size and back as the page
     loads, `--trips` times (5 by default): the first time it waits there till the exit is made ready, so it's made at
     one size and shown at another (`windFit.mjs`). At each of the exit's draws on screen, the places it draws with
