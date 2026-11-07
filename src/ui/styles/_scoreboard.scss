@@ -36,7 +36,7 @@
 }
 
 // on touch: a button under the pause button and the full screen one
-#btn-scores { position: absolute; top: calc(114px * var(--touch, 1)); left: $touch-edge; width: 44px; height: 44px;
+#btn-scores { position: absolute; top: calc(62px * var(--touch, 1)); left: $touch-edge; width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }
 #btn-scores.hidden { display: none; }

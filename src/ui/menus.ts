@@ -398,7 +398,8 @@ function restKey(): string {
  *  rapidly kept them sliding. */
 function clearance(): { x: number; y: number } {
   const menu = $('#menu');
-  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
+  if (menu.classList.contains('hidden')) return { x: 0, y: 0 };
+  if (menu.classList.contains('stowed')) return stowedClearance();
   if (!panelsWatched) {
     panelsWatched = true;
     menu.querySelectorAll('.menu-left, .menu-center, .menu-right, #hero-fold').forEach((el) => panelsResized.observe(el));
@@ -411,6 +412,20 @@ function clearance(): { x: number; y: number } {
   lastRead = { key, ...drawn, still: same ? lastRead!.still + 1 : 0 };
   if (lastRead.still >= STILL_FRAMES) restingClearance.set(key, drawn);
   return drawn;
+}
+
+/** Stowed on a short screen or an upright tablet, the lobby shows its rail's Practice alone: the overlays stand
+ *  beside it (over it, they took its taps, and the performance overlay kept a phone in practice). Read once a window
+ *  size, as it rests there. */
+function stowedClearance(): { x: number; y: number } {
+  if (!onePanel.matches) return { x: 0, y: 0 };
+  const key = `stowed ${innerWidth}x${innerHeight}`;
+  let rested = restingClearance.get(key);
+  if (!rested) {
+    rested = { x: $('#rail-practice').getBoundingClientRect().right, y: 0 };
+    restingClearance.set(key, rested);
+  }
+  return rested;
 }
 
 /** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels, once a frame

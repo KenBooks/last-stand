@@ -70,7 +70,9 @@
 #target.boss .t-bar { width: 520px; height: 16px; box-shadow: 0 0 0 1px #a060ff, 0 0 14px rgba(160,96,255,.5); }
 #target.boss .t-name { font-size: 24px; color: #d8b0ff; }
 
-#minimap-wrap { position: absolute; top: hud(8px); right: hud(12px); width: 212px; display: flex; flex-direction: column; align-items: center; }
+// (`--mm-room`: the minimap's width, which the touch HUD's full screen button stands beside, `_touch.scss`)
+#hud { --mm-room: 212px; }
+#minimap-wrap { position: absolute; top: hud(8px); right: hud(12px); width: var(--mm-room); display: flex; flex-direction: column; align-items: center; }
 .mm-title { font-family: var(--font-display); font-size: 16px; color: #f0e2c0; text-shadow: 0 2px 4px #000; margin-bottom: 2px; }
 #minimap { width: 200px; height: 200px; border-radius: 50%; border: 4px solid #6e6a62; box-shadow: 0 0 0 2px #000, inset 0 0 20px #000, 0 6px 14px rgba(0,0,0,.8); background: rgba(10,10,12,.55); }
 .objectives { align-self: stretch; margin-top: 12px; padding-left: 8px; }
