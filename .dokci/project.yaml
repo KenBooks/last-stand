@@ -33,6 +33,9 @@ spec:
           entryPoint: websecure
           certificateResolver: letsencrypt
           healthProbePath: /health
+          # A WebSocket relay, not a page: Dokci shows no link to it (Dokci ADR 0073).
+          link:
+            hidden: true
         - service: traces
           port: 8080
           host: ls.wellscoped.dev
@@ -40,6 +43,10 @@ spec:
           entryPoint: websecure
           certificateResolver: letsencrypt
           healthProbePath: /traces/health
+          # The traces page: Dokci opens it signed in with this environment's LS_TRACES_TOKEN, through a one-time
+          # link the service checks (server/traces/AGENTS.md); the token never leaves Dokci.
+          link:
+            signInWith: LS_TRACES_TOKEN
       deploymentPolicy:
         requireManualApproval: false
   # Each open PR's preview, built by Dokci from its head (server/game-preview): the game at its own host,

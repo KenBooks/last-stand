@@ -1,0 +1,4 @@
+# The image builds the page itself (Dockerfile): a local build or install never goes in.
+dist
+web/node_modules
+test

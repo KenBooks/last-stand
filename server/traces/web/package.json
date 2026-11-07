@@ -1,0 +1,15 @@
+{
+  "name": "last-stand-traces-page",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The traces service's page, built by Vite into ../dist (content-hashed assets)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "6.0.2",
+    "vite": "8.2.2"
+  }
+}
