@@ -397,26 +397,44 @@ function maelstromSpin(dur: number): () => void {
   return () => { if (!done && c.currentTime < endAt) v.end(0.4); done = true; };
 }
 
-/** Veilstep: the wizard pulled out of the world and set down again `dur` s later. A rush sucked inwards and cut
- *  short as he goes, a hollow pop, then a flanged breath outwards as he forms where he lands. */
+/** Veilstep: the wizard unmade and made again `dur` s later, all air and shimmer (no tone: its first pop was a sine
+ *  falling from 320 Hz, heard as "a beep"). Gone: a swirl of noise drawn up and in through a fast flanger, closing
+ *  with a soft whump of air. Crossing: a fizz of sparkle travelling from one ear to the other. Formed: the swirl let
+ *  out again, falling from bright to warm, and a breath of air where he lands. */
 function veilstepPass(dur: number): void {
-  const v = voice(0, 0.4);
+  const v = voice(0, 0.55);
   const { c, t } = v;
-  // the vanishing: noise swelling and rising fast, cut off as he's gone
-  const suck = v.sweep('bandpass', 600, 4200, 0.12, 1.4);
-  const sg = c.createGain(); sg.gain.setValueAtTime(0.0001, t); sg.gain.exponentialRampToValueAtTime(0.2, t + 0.1); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-  sg.connect(v.out); v.loop(suck); suck.connect(v.flange(sg, 2, 1.5, 5, 0.6));
-  // the pop
-  const sh = drive(2.5); sh.connect(blowAt(v, 0.1, 0.22, 0.12));
-  const o = v.osc('sine', 320, sh); o.frequency.setValueAtTime(320, t + 0.1); o.frequency.exponentialRampToValueAtTime(70, t + 0.2);
-  // the forming, where he lands
   const land = Math.max(0.15, dur);
-  const out = c.createBiquadFilter(); out.type = 'bandpass'; out.Q.value = 1;
-  out.frequency.setValueAtTime(4500, t + land); out.frequency.exponentialRampToValueAtTime(900, t + land + 0.4);
-  v.loop(out); out.connect(v.flange(blowAt(v, land, 0.15, 0.45, v.out, 0.02), 3, 2.5, 1.8, 0.65));
-  const thud = c.createBiquadFilter(); thud.type = 'lowpass'; thud.frequency.value = 350;
-  v.loop(thud); thud.connect(blowAt(v, land, 0.18, 0.2, v.out, 0.005));
-  v.start(); v.stopAt(t + land + 0.9);
+  // the vanishing: a swirl rising and swelling, cut off as he's gone
+  for (const [pan, rate] of [[-0.5, 7], [0.5, 9]]) {
+    const f = v.sweep('bandpass', 500, 5500, 0.14, 0.8);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    g.connect(v.lane(1, pan)); v.loop(f); f.connect(v.flange(g, 2.5, 2, rate, 0.55));
+  }
+  // the whump of air closing behind him: dark noise, no pitch
+  const whump = v.sweep('lowpass', 900, 160, 0.25, 0.9);
+  v.loop(whump); whump.connect(blowAt(v, 0.11, 0.3, 0.3, v.out, 0.01));
+  // the crossing: sparkle fizzing over from left to right, flickering
+  const fizz = c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 4500;
+  const travel = c.createStereoPanner(); travel.connect(v.out);
+  travel.pan.setValueAtTime(-0.7, t + 0.1); travel.pan.linearRampToValueAtTime(0.7, t + land + 0.2);
+  const fg = c.createGain(); fg.connect(travel);
+  fg.gain.setValueAtTime(0.0001, t + 0.08); fg.gain.exponentialRampToValueAtTime(0.07, t + 0.16);
+  fg.gain.setValueAtTime(0.07, t + land); fg.gain.exponentialRampToValueAtTime(0.0001, t + land + 0.5);
+  const flick = c.createGain(); flick.gain.value = 1; flick.connect(fg);
+  v.lfo(17, 0.6, flick.gain);
+  v.loop(fizz); fizz.connect(v.flange(flick, 1.5, 1, 3, 0.4));
+  // the forming: the swirl let out, bright falling to warm
+  for (const [pan, rate] of [[-0.45, 2.2], [0.45, 2.9]]) {
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.setValueAtTime(6000, t + land); f.frequency.exponentialRampToValueAtTime(700, t + land + 0.5);
+    v.loop(f); f.connect(v.flange(blowAt(v, land, 0.2, 0.6, v.lane(1, pan), 0.03), 3, 2.5, rate, 0.6));
+  }
+  // the breath of air where he lands
+  const breath = v.sweep('lowpass', 1200, 250, 0.4, 0.8);
+  breath.frequency.cancelScheduledValues(t); breath.frequency.setValueAtTime(1200, t + land); breath.frequency.exponentialRampToValueAtTime(250, t + land + 0.35);
+  v.loop(breath); breath.connect(blowAt(v, land, 0.24, 0.35, v.out, 0.01));
+  v.start(); v.stopAt(t + land + 1.1);
 }
 
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
