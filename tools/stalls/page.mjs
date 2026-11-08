@@ -225,6 +225,22 @@ export function startIfCold() {
 }
 
 /**
+ * Presses the lobby's Change hero (`--change-hero`), as the return of trace FD2V-NB48 did: the other heroes' programs
+ * are warmed then, under the fight's loading bar, and the hall of heroes opened once they are. When it was pressed is
+ * recorded as Start's is (`startPressed`), with what was pressed (`pressedWhat`).
+ */
+export function changeHero() {
+  window.__stalls.startPressed = performance.now();
+  window.__stalls.pressedWhat = 'Change hero';
+  document.getElementById('btn-hero').click();
+}
+
+/** Records when the hall of heroes showed after Change hero (`heroesShownAt`, the page's clock): its loading bar's end. */
+export function heroesShownAt() {
+  window.__stalls.heroesShownAt = performance.now();
+}
+
+/**
  * Presses the lobby's Start once the fight is warm where it wasn't pressed for it (`startIfCold`), so the run's
  * start is watched on every visit (a return's fight warms behind its lobby, and Start was never pressed). When it was
  * pressed is recorded (`runPressed`, the page's clock), apart from a press the loading bar waited on.
@@ -268,17 +284,20 @@ export function stopBootRecording() {
     }));
   const { start, frames, phases, longTasks } = record;
   const exit = { kind: record.exit ?? null, before: record.marksBefore, after: record.marks() };
-  // (the game's mark of the fight's programs warm behind the lobby, `fightWarm`'s)
-  const warm = performance.getEntriesByName('fight warm')[0]?.startTime ?? null;
+  // (the game's mark of the fight's programs warm behind the lobby, `fightWarm`'s; after Change hero, when the hall
+  // of heroes showed, its heroes warm: `heroesShownAt`)
+  const fightMark = performance.getEntriesByName('fight warm')[0]?.startTime ?? null;
+  const warm = record.heroesShownAt ?? fightMark;
   const pressed = record.startPressed ?? null;
   const ran = record.runPressed ?? null;
+  const pressedWhat = record.pressedWhat ?? 'Start';
   // (the game's warm-ups, each timed with what its steps took: `src/game/warmup.ts`)
   const warmUps = performance.getEntriesByType('measure')
     .filter((entry) => entry.name.startsWith('warm '))
     .map((entry) => ({ name: entry.name.slice('warm '.length), at: entry.startTime, ...entry.detail }));
   const paint = Object.fromEntries(paints);
   const { goneAt = null, origin, blinks } = record;
-  const ends = { exit, goneAt, origin, blinks, warm, pressed, ran };
+  const ends = { exit, goneAt, origin, blinks, warm, pressed, ran, pressedWhat };
   return { start, frames, changes: [], phases, longTasks, paint, files, maps, ...ends, warmUps };
 }
 

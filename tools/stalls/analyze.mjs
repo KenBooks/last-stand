@@ -869,6 +869,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
     goneAt: record.goneAt ?? null,
     warmAt: record.warm ?? null,
     pressedAt: record.pressed ?? null,
+    pressedWhat: record.pressedWhat ?? 'Start',
     startedAt,
     warmUps: record.warmUps ?? [],
   };

@@ -13,7 +13,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, grou
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
-import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
+import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
@@ -503,7 +503,7 @@ export function buildRanger(): Model {
     buildBoot(S, { leather: boot, sole: soleLeather, strap: strapLeather, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
   }
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
-  const head = buildHead(j.head, kit, 'ranger', { hair: 'swept', crop: true });
+  const head = buildHead(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger.hair);
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
   // (on the lips, under the moustache: at the others' height he drank at his nose)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);

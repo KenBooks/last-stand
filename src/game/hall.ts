@@ -172,11 +172,31 @@ function profileOf(id: string): Profile {
   return unplayed ? hero.profile : loadProfile(id);
 }
 
+/** what a hero kept for the hall is built for: the gear he wears and the detail he's built at */
+const gearOf = (profile: Profile): string => `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+
+/**
+ * Each class's hero the hall would show built ahead of its opening, out of the scene, a hero after each `step`, where
+ * none is kept in the gear he'd wear: built in the opening's task, the three held its first frame 290 to 400 ms on
+ * the owner's PC (trace FD2V-NB48). Called under the heroes' loading bar (game/warmup.ts), so the opening finds them
+ * kept; a hall already open (a first visit's) builds its own.
+ */
+export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
+  for (const id of CLASS_IDS) {
+    if (hallOpen()) return;
+    const profile = profileOf(id);
+    if (kept.get(id)?.gear === gearOf(profile)) continue;
+    await step();
+    if (hallOpen()) return;
+    G.scene.remove(heroIn(id, profile).obj);
+  }
+}
+
 /** Class `id`'s hero in the gear `profile` wears, in the scene: the one kept from the hall's last opening if he wore
  *  the same at the same detail (a save slot switched, gear changed or the quality's detail since builds him again),
  *  his shadows as the quality has them now. */
 function heroIn(id: string, profile: Profile): Player {
-  const gear = `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+  const gear = gearOf(profile);
   let hero = kept.get(id);
   if (hero?.gear !== gear) {
     if (hero) halos.delete(hero.player);

@@ -20,6 +20,7 @@ import { BIOME_IDS } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from '../entities/models/index';
+import { makeHeadAhead } from '../entities/models/head';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
@@ -36,6 +37,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
+import { buildHallAhead } from './hall';
 import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
@@ -216,6 +218,8 @@ interface Part {
   name: string;
   build(): Built;
   built?: Built;
+  /** what of its build is made in a task of its own before it (a hero's head: `makeHeadAhead`) */
+  ahead?: () => void;
 }
 /** A part built: what's compiled, what's added to the scene for the draw, what's drawn alone, what's shown in place
  *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`) and taken
@@ -342,6 +346,7 @@ function heroModelParts(): Part[] {
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },
+    ahead: heroesAhead.has(model) ? undefined : () => makeHeadAhead(model),
   }));
 }
 
@@ -399,10 +404,20 @@ async function warmBuilt(built: Built[], { step, progress, patient }: Warming = 
   return took;
 }
 
+/** What of `part`'s build is made ahead (`Part.ahead`), after `next`, where it isn't built yet: a task (or frame) of
+ *  its own, its build left the rest. */
+async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
+  if (part.built || !part.ahead) return;
+  await next();
+  part.ahead();
+  part.ahead = undefined;
+}
+
 /** `part` warmed on its own behind the lobby, a step a frame (`step`): whether it was cold (kept built for the
  *  warm-up at once). Timed as a user timing measure, `warm <part>`, its detail what its steps took (the stalls' boot
  *  lists them; its build only where it wasn't built ahead). */
 async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean> {
+  await aheadOf(part, step);
   await step();
   const start = performance.now();
   const ahead = part.built !== undefined;
@@ -421,7 +436,9 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   const start = performance.now();
   const built: Built[] = [];
   for (const [i, part] of parts.entries()) {
-    if (!part.built) await (isReadying() ? nextTask() : nextFrame());
+    const next = (): Promise<void> => (isReadying() ? nextTask() : nextFrame());
+    await aheadOf(part, next);
+    if (!part.built) await next();
     built.push(part.built ?? part.build());
     part.built = undefined;
     progress(BUILT * (i + 1) / parts.length);
@@ -469,6 +486,7 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
     const lot = parts.slice(from, from + size);
     const built: Built[] = [];
     for (const part of lot) {
+      await aheadOf(part, nextTask);
       if (!part.built) await nextTask();
       built.push(part.built ?? part.build());
       part.built = undefined;
@@ -544,6 +562,9 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
     const lot = need === 'heroes' ? 1 : PARTS_AT_ONCE;
     await inTurn(() => (WEBGPU ? warmAtOnce(need, left, told) : warmInTasks(need, left, told, lot)));
   }
+  // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
+  // frame 290 to 400 ms, trace FD2V-NB48)
+  if (need === 'heroes') await buildHallAhead(nextTask);
   warming(need, 1);
   markWarm(need);
 }
