@@ -1816,6 +1816,26 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  sound: {
+    help: 'the sounds of a skill as the player hears them, rendered offline as the game plays them (the same '
+      + 'master, compressor and hall) and written as WAV files in tools/lab/out/sound: bolt (Splintering Bolt held, '
+      + 'each bolt bursting on a foe and its splits on others), boltMiss (one striking nothing), lance (Void Lance: '
+      + 'its portal, the beam held and let go), lanceEarly (let go before the beam), or any sound of the game by '
+      + 'its name in sfx (bow, swing...), played once. Each one: its peak, loudest half second, level every tenth '
+      + 'of a second, share above 150 Hz, most tonal peak and the nodes it made; a sample not a number, a clip, a '
+      + 'note standing 15 dB over its noise in a scene of a spell and a sound still playing at its end are '
+      + 'problems (bolt,boltMiss,lance,lanceEarly by default; --ab only against a commit with src/core/audio.ts '
+      + '`playInto`)',
+    argument: 'sounds',
+    mayOmit: true,
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measures must catch: the first scene again under a 440 Hz note never stopped',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',

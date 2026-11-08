@@ -969,6 +969,25 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--canary` plays a round again with four faults planted: the biome's battle track played as another's, the
   lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
   started from its top.
+- `sound [scenes]`: a skill's sounds as the player hears them, rendered offline and written as WAV files to listen to
+  (`page/sound.ts`, in `tools/lab/out/sound`; with `--ab` the other side's as `main-<scene>.wav`). The game's
+  effects are played into an `OfflineAudioContext` as it plays them (`playInto` in `src/core/audio.ts`: the same
+  master, compressor and hall, the throttles on the context's clock), each call at its moment of the scene. The
+  scenes (`SCENES`, comma separated, `bolt,boltMiss,lance,lanceEarly` by default): `bolt`, Splintering Bolt held,
+  four casts at its pace each bursting on a foe 0.3 s out and its two splits on two others; `boltMiss`, one cast
+  striking nothing; `lance`, Void Lance's portal drawn, the beam held 4 s and let go; `lanceEarly`, let go as the
+  portal is drawn. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
+  hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
+  peak, its loudest half second (the level to hold against the other heroes' sounds: on #413 a bow's shot was
+  -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its share above 150 Hz and
+  its spectrum's most tonal peak (over a channel's hold for `lance`: the bin standing furthest over the median of
+  the third of an octave round it, Welch's spectrum of 4096-sample windows; noise stands 2 to 8 dB, a flanger's
+  comb about 10), and the nodes it made, by kind (what a cast costs). A sample not a number, a clip, a note
+  standing 15 dB over its noise in a spell's scene (the music hears it as a second tune: #413's "the background
+  music gets duplicated"; the warrior's clang may ring, as metal does) and a sound still playing at its end (over
+  -60 dB in its last quarter second) are problems. `--canary` renders the first scene again under a 440 Hz note
+  never stopped, which must be caught as both. `--ab` runs only against a commit that has `playInto`. The
+  measures are pure functions in `page/soundMeasure.ts`, tested in `test/soundMeasure.test.mjs`.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
   hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:
   awaited, it never settled, and held up every command after it till the server was stopped; the browser's next

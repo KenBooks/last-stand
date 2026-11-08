@@ -265,6 +265,34 @@ function textWithPictureFiles(results, dir) {
   return written.length ? `${text}\n\n${pictureList(written, dir)}` : text;
 }
 
+/** the scenes `sound` renders unless it's given some (page/sound.ts `SCENES`) */
+const SOUNDS = ['bolt', 'boltMiss', 'lance', 'lanceEarly'];
+
+/** The scenes or sounds `sound` renders: its argument's names, comma separated, else `SOUNDS`. */
+function soundsFrom(options) {
+  const named = options._[0]?.split(',').filter(Boolean);
+  return named?.length ? named : SOUNDS;
+}
+
+/**
+ * Each side's text under its name, and each sound it rendered (a report's `wavs`) written in `dir` as
+ * `<filePrefix><name>.wav`, the folder emptied of an earlier run's first.
+ */
+function textWithWavs(results, dir) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const written = [];
+  for (const [side, result] of results) {
+    for (const wav of result?.wavs ?? []) {
+      const name = `${side.filePrefix}${wav.name}.wav`;
+      writeFileSync(join(dir, name), Buffer.from(wav.base64, 'base64'));
+      written.push(name);
+    }
+  }
+  return written.length ? `${text}\n\nsounds in ${relative(REPO, dir)}: ${written.join(', ')}` : text;
+}
+
 /** the most picture files a run's text names one by one */
 const PICTURES_NAMED = 24;
 
@@ -1563,6 +1591,17 @@ export const COMMANDS = {
   music: {
     each(side, options) {
       return side.command('music', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  sound: {
+    each(side, options) {
+      return side.command('sound', { sounds: soundsFrom(options), canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithWavs(results, session.outFor('sound'));
     },
     textOf: asText,
     problemsOf: problemsIn,

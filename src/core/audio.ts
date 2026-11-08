@@ -1,36 +1,76 @@
 // Procedural sound effects with WebAudio (no audio files; the music is `music.ts`).
-let ctx: AudioContext | null = null;
+/** the game's own context, which the music shares */
+let live: AudioContext | null = null;
+/** where the effects are played: the game's context, or one the lab renders them into (`playInto`) */
+let ctx: BaseAudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
-const last: Record<string, number> = {};
+let crackleBuf: AudioBuffer | null = null;
+let last: Record<string, number> = {};
+/** the effects' level, as the settings' volume starts it */
+const LEVEL = 0.45;
 
 /** Called at boot (the context starts suspended: opening the audio device is slow, so it happens
  *  behind the loading screen) and on every user gesture (which lets it resume). */
 export function initAudio(): void {
-  if (ctx) { if (ctx.state === 'suspended') void ctx.resume(); return; }
+  if (live) { if (live.state === 'suspended') void live.resume(); return; }
   try {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    ctx = new Ctor();
+    live = new Ctor();
   } catch { return; }
-  master = ctx.createGain();
-  master.gain.value = 0.45;
-  const comp = ctx.createDynamicsCompressor();
-  master.connect(comp).connect(ctx.destination);
-  noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate);
+  wire(live);
+}
+
+/** The effects' graph made in `c`: the master and its compressor, the noise they're made of and the hall. */
+function wire(c: BaseAudioContext): void {
+  ctx = c;
+  master = c.createGain();
+  master.gain.value = LEVEL;
+  const comp = c.createDynamicsCompressor();
+  master.connect(comp).connect(c.destination);
+  noiseBuf = c.createBuffer(1, c.sampleRate * 1.5, c.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  crackleBuf = crackles(c);
   // (the spells' hall made here, behind the loading screen, not at a first cast)
+  hall = null;
   space();
+}
+
+/** Crackle: sparse clicks of random size and sign, each dying in a fraction of a millisecond, about 260 a second, as
+ *  an electric discharge or a sparkler spits. Looped through a filter it is arcane energy fizzing, and it has no pitch. */
+function crackles(c: BaseAudioContext): AudioBuffer {
+  const buf = c.createBuffer(1, c.sampleRate * 1.5, c.sampleRate);
+  const d = buf.getChannelData(0);
+  const chance = 260 / c.sampleRate, fall = Math.exp(-1 / (c.sampleRate * 0.0004));
+  let level = 0;
+  for (let i = 0; i < d.length; i++) {
+    if (Math.random() < chance) level = (Math.random() < 0.5 ? -1 : 1) * (0.2 + 0.8 * Math.random() ** 2);
+    d[i] = level * (Math.random() * 0.6 + 0.4);
+    level *= fall;
+  }
+  return buf;
 }
 
 export function setVolume(v: number): void { if (master) master.gain.value = v; }
 
 /** The shared context (null before boot or where WebAudio is missing), for the music (`core/music.ts`). */
-export const audioContext = (): AudioContext | null => ctx;
+export const audioContext = (): AudioContext | null => live;
 
+/** The effects played into `c` until the returned function puts the game's own back: made there as the game makes
+ *  them, through a master, a compressor and a hall of their own at the default level. The lab's `sound` renders them
+ *  so into an `OfflineAudioContext`. */
+export function playInto(c: BaseAudioContext): () => void {
+  const kept = { ctx, master, noiseBuf, crackleBuf, hall, last };
+  last = {};
+  wire(c);
+  return () => ({ ctx, master, noiseBuf, crackleBuf, hall, last } = kept);
+}
+
+/** whether a sound of this name played within `ms` (by the context's own clock, which an offline render keeps too) */
 function throttle(name: string, ms: number): boolean {
-  const now = performance.now();
-  if (last[name] && now - last[name] < ms) return true;
+  const now = ctx!.currentTime * 1000;
+  if (last[name] !== undefined && now - last[name] < ms) return true;
   last[name] = now;
   return false;
 }
