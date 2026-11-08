@@ -46,7 +46,35 @@
 .coop-room .coop-code { display: block; }
 .coop-list { list-style: none; margin: 0; padding: 0; font-size: 16px; }
 .coop-list li { padding: 2px 0; }
-.coop-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: $ally; box-shadow: 0 0 6px $ally; }
+.coop-dot {
+  display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%;
+  background: var(--dot, $ally); box-shadow: 0 0 6px var(--dot, $ally);
+}
+/* the hero's colour (ui/colourPicker.ts): a swatch a colour and Any, a finger's width apart on touch */
+.coop-colour {
+  display: flex; align-items: center; gap: 10px; align-self: stretch; justify-content: center; flex-wrap: wrap;
+  > span { font-family: var(--font-display); font-size: 16px; color: var(--accent); }
+  &.off { opacity: .7; }
+}
+.cc-swatches { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.cc-swatch {
+  width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: $cursor-hand; background: var(--swatch);
+  border: 2px solid rgba($frame, .55); box-shadow: inset 0 0 0 2px rgba(0,0,0,.45);
+  &[aria-checked="true"] {
+    border-color: #ffe7b0; box-shadow: inset 0 0 0 2px rgba(0,0,0,.45), 0 0 0 2px rgba(#ffe7b0, .45);
+  }
+  &:disabled { cursor: $cursor; }
+  &:disabled:not([aria-checked="true"]) { opacity: .35; }
+  &.cc-any {
+    width: auto; padding: 0 10px; border-radius: 16px; font: 600 13px var(--font-body); color: var(--ink);
+    background: #0a0909;
+  }
+}
+body.touch .cc-swatch { width: 40px; height: 40px; }
+body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
+// (a short screen keeps the name tag, Open a room, the code and Join in view: the colours come under them, a scroll
+// down in the box, as its row pushed Open a room under the fold of a phone held sideways asked to rename)
+@media (max-height: 520px) { .coop-colour { order: 1; } .coop-netlog { order: 2; } }
 .coop-wait { color: var(--ink-dim); }
 @media (max-width: 560px) { .coop-choice { flex-direction: column; } }
 @media (max-height: 520px) { .coop-body { gap: 6px; } .coop-intro { font-size: 13px; } #coop .sm-title { font-size: 24px; } .coop-col { padding: 8px; } .coop-code { font-size: 24px; } }

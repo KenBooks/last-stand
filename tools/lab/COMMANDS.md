@@ -965,7 +965,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `live <step>`: a page of the game kept between steps, each on the state the last one left, as a modelling
   tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
   hero (`--class`, the warrior by default), on `--screen`'s screen if it's given (a phone's, `832x384@3.75`: its
-  layout and the touch controls' scale), and sets him up (`--view`, `--gear`, `--weapon`, `--at`, `--facing`);
+  layout and the touch controls' scale), and sets him up (`--view`, `--gear`, `--weapon`, `--wear`, `--at`, `--facing`);
   then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default; `screen`
   the whole page as the player sees it, the HUD and the touch controls over the frame) in any
   `--look` (a close-up from `--distance` m off what it's framed on: 1.7 from a joint, 4.3 from the body by

@@ -122,6 +122,12 @@ export interface CoopState {
   partnerSlots: number[];
   /** joining was refused for its name tag, and it is asked for another */
   renameAsked: boolean;
+  /** its own hero's colour and its partners', by slot (net/heroColour.ts; undefined in an older tree), and the
+   *  colour each one's cloth is drawn in (`Dye.shown`, hex) */
+  colour?: string | null;
+  partnerColours?: (string | null)[];
+  worn?: number | null;
+  partnerWorn?: (number | null)[];
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -607,6 +613,8 @@ interface CoopOpening {
   tag?: string;
   /** one of the party's other heroes (`EXTRA_SPOTS`), joining as a guest */
   extra?: number;
+  /** the hero's colour its player picked (data/heroColours.ts; null: none, the room gives one) */
+  colour?: string | null;
   ping: number;
   jitter: number;
 }
@@ -629,10 +637,25 @@ export async function coopOpen(lab: Lab, open: CoopOpening): Promise<string> {
   }
   watchArrows();
   drawApart();
+  pickColour(open.colour ?? null);
   if (role === 'host') await hostRoom(open.tag ?? 'Host');
   else await joinRoom(code!, open.tag ?? 'Guest');
   return session.code;
 }
+
+/** where the game keeps the colour picked (net/heroColour.ts; an older tree reads nothing there) */
+const COLOUR_KEY = 'last-stand.colour.v1';
+
+/** The colour this page's player picked, kept as the picker keeps it (null: none). */
+function pickColour(colour: string | null): void {
+  if (colour) localStorage.setItem(COLOUR_KEY, colour);
+  else localStorage.removeItem(COLOUR_KEY);
+}
+
+/** A hero's colour and the colour his cloth is drawn in (none in an older tree). */
+type Dyed = { colour?: string | null; model: { dye?: { shown: number } } };
+const colourOf = (player: Player): string | null | undefined => (player as unknown as Dyed).colour;
+const wornOf = (player: Player): number | null => (player as unknown as Dyed).model.dye?.shown ?? null;
 
 /** draws each of the party's other heroes' pages makes before it joins, a share for each */
 const DRAWS_APART = 16;
@@ -645,6 +668,11 @@ const DRAWS_APART = 16;
 function drawApart(): void {
   if (play.extra === null) return;
   for (let draw = 0; draw < DRAWS_APART * (play.extra + 1); draw++) Math.random();
+}
+
+/** The canary: this page's hero dressed in `colour` behind the room's back (its partners never told). */
+export function coopWearColour(_lab: Lab, { colour }: { colour: string }): void {
+  (G.player as unknown as { setColour(colour: string): void }).setColour(colour);
 }
 
 /** Joins the room again as `tag`: asked for another name tag, the player types one. */
@@ -678,6 +706,10 @@ function stateNow(): CoopState {
     partnerTags: partners.map((player) => (player as { tag?: string }).tag ?? ''),
     partnerSlots: partners.map((player) => player.slot),
     renameAsked: Boolean(known.renameAsked),
+    colour: colourOf(G.player),
+    partnerColours: partners.map((player) => colourOf(player) ?? null),
+    worn: wornOf(G.player),
+    partnerWorn: partners.map(wornOf),
   };
 }
 

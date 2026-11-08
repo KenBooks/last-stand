@@ -49,7 +49,7 @@ import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHero
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
-import { closeCoopDialog, COOP_CANARY, coopShown, openCoopDialog, openCoopRename, openCoopTouch } from './uiCoop';
+import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
   SHEET_CANARIES, sheetTouchShown,
@@ -898,7 +898,7 @@ const STEPS: Record<UiState, Steps> = {
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
-  coop: { open: openCoopDialog, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
+  coop: { open: openCoopPicked, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
   coopRename: { open: openCoopRename, close: closeCoopDialog, check: (canary) => coopShown('coopRename', canary) },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },

@@ -38,6 +38,7 @@ import {
   TWO_SPINS, TWO_POWERS, TWO_SMITES,
 } from './warriorEyes';
 import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
+import { Dye } from './dye';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
@@ -483,6 +484,8 @@ export function buildWarrior(): Model {
   const leather = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const leatherDark = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const cloth = kit.rim({ color: 0x323c56, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x3a4a70, 0.35);
+  // (the surcoat's cloth and the shield's paint: his blue)
+  const dye = new Dye('blue').cloth(cloth);
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
@@ -852,7 +855,11 @@ export function buildWarrior(): Model {
   shield.visible = false;
   {
     const w = new Sculpt();
-    const paint = kit.std({ color: 0x2c3a58, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
+    // (the wood's grain in its relief alone, not its brown: under the wood's colour map the paint came out near brown
+    // whatever its own, and the shield carried none of a player's colour)
+    const { map: _woodColour, ...grain } = tex(woodMaps(), 1, 1.5);
+    const paint = kit.std({ color: 0x2c3a58, roughness: 1, ...grain });
+    dye.cloth(paint);
     w.add(scaleUV(new THREE.CylinderGeometry(0.33, 0.33, 0.03, 36), 2, 2), wood, shield, [0, 0, 0], [Math.PI / 2, 0, 0]);
     w.add(scaleUV(new THREE.CylinderGeometry(0.315, 0.315, 0.006, 36), 2, 2), paint, shield, [0, 0, 0.016], [Math.PI / 2, 0, 0]);
     // plank seams
@@ -2487,7 +2494,7 @@ export function buildWarrior(): Model {
   }
 
   return {
-    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear, dye,
     get swing() { return side; },
     swung: struck,
     get swingKeyed() { return keyed; },

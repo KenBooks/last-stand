@@ -18,12 +18,14 @@ import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
+import { colourOf, freeColour, ownColour, savedColour, setRoomColour } from './heroColour';
+import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 20;
+const PROTOCOL = 21;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -40,6 +42,8 @@ interface Peer {
   id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
   /** its player's name tag (net/nameTag) */
   tag: string;
+  /** the colour its hero wears (net/heroColour: the host gave it) */
+  colour: HeroColourId | null;
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
@@ -137,6 +141,7 @@ export async function hostRoom(tag: string): Promise<void> {
   session.renameAsked = false;
   role.current = 'host';
   G.player.slot = 0;
+  wearRoomColour(freeColour([], savedColour()));
   placeSpawns();
   hooks.changed();
   try {
@@ -189,6 +194,8 @@ export function leaveRoom(): void {
   session.hostId = '';
   session.biome = null;
   role.current = 'solo';
+  // (back in the colour picked, or the hero's own)
+  wearRoomColour(null);
   stopSync();
   actions = [];
   G.player.slot = 0;
@@ -242,7 +249,7 @@ function wire(l: Link): void {
 /** Who we are, to a game we meet: our slot is -1 until the host has given us one (another guest would take our 0 as
  *  the host's slot). */
 const hello = () => ({
-  v: PROTOCOL, look: myLook(), tag: session.tag, host: role.current === 'host',
+  v: PROTOCOL, look: myLook(), tag: session.tag, host: role.current === 'host', col: ownColour() ?? '',
   slot: session.status === 'joining' ? -1 : G.player.slot,
 });
 
@@ -271,8 +278,11 @@ function onHello(from: string, m: Record<string, unknown>): void {
     let slot = 1;
     while (used.has(slot)) slot++;
     if (slot >= COOP.maxPlayers) { send('ctl', { t: 'refuse', why: 'full' }, from); return; }
-    addPeer(from, slot, look, tag);
-    send('ctl', { t: 'welcome', slot, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' }, from);
+    // its colour: its pick if no one in the room wears it, else one no one does (the host decides, as for the slots)
+    const colour = freeColour([ownColour(), ...[...session.peers.values()].map((p) => p.colour)], colourOf(m.col));
+    addPeer(from, slot, look, tag, colour);
+    const welcome = { t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' };
+    send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
     hooks.changed();
@@ -283,7 +293,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
   if (m.host) session.hostId = from;
   const known = session.peers.get(from);
   if (!known && slot >= 0) {
-    addPeer(from, slot, look, tag);
+    addPeer(from, slot, look, tag, colourOf(m.col));
     // (greeted back once, as our own hello may have reached it before its link knew us, and been dropped: a guest
     // joining a room of three never knew one of the others)
     if (session.status === 'joined') send('hello', hello(), from);
@@ -292,6 +302,11 @@ function onHello(from: string, m: Record<string, unknown>): void {
     known.slot = slot;
     if (known.player) known.player.slot = slot;
     placeSpawns();
+  }
+  // (the colour the host gave it, said once it's in)
+  if (known && slot >= 0 && colourOf(m.col) !== known.colour) {
+    known.colour = colourOf(m.col);
+    known.player?.setColour(known.colour);
   }
   hooks.changed();
 }
@@ -306,6 +321,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.status = 'joined';
       session.hostId = from;
       G.player.slot = m.slot as number;
+      wearRoomColour(colourOf(m.col));
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
       if (G.mode === 'menu' && BIOME_IDS.includes(session.biome)) G.arena.setBiome(session.biome);
@@ -459,10 +475,10 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 }
 
 // --- players -------------------------------------------------------------------------------
-function addPeer(id: string, slot: number, look: Look, tag: string): void {
+function addPeer(id: string, slot: number, look: Look, tag: string, colour: HeroColourId | null): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, tag, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, tag, colour, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [],
   };
   session.peers.set(id, peer);
@@ -474,6 +490,7 @@ function makePlayer(peer: Peer): void {
   const p = new Player(peer.look.cls, peer.look.eq, false);
   p.slot = peer.slot;
   p.tag = peer.tag;
+  p.setColour(peer.colour);
   peer.player = p;
   G.players.push(p);
   placeSpawns();
@@ -498,6 +515,12 @@ function peerLeft(id: string): void {
   session.peers.delete(id);
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }
   hooks.changed();
+}
+
+/** The local player's hero in the colour the room gave it (null: out of a room, the pick or his own). */
+function wearRoomColour(colour: HeroColourId | null): void {
+  setRoomColour(colour);
+  G.player.setColour(ownColour());
 }
 
 /** how far apart the party's spawn points are (m) */

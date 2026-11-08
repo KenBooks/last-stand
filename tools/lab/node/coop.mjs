@@ -106,6 +106,60 @@ export function judgeRoom(states, tags) {
   return problems;
 }
 
+/**
+ * The heroes' colours as each of a party's pages shows them (page/coop.ts `CoopState`, the host's first), each
+ * player having picked `picked` (null: none): the problems with them, or null for an older tree that has none.
+ * Every player wears a colour, none the same as another's, its pick where no one before it had it; every page
+ * knows each partner's colour as that partner's own game has it, and draws its cloth as that game draws it.
+ */
+export function judgeColours(states, tags, picked) {
+  if (states[0].colour === undefined) return null;
+  const problems = [];
+  const colours = states.map((state) => state.colour);
+  colours.forEach((colour, index) => { if (!colour) problems.push(`${tags[index]} wears no colour`); });
+  if (new Set(colours).size !== colours.length) problems.push(`two players wear one colour (${colours.join(', ')})`);
+  states.forEach((state, index) => {
+    const free = !picked.slice(0, index).includes(picked[index]);
+    if (picked[index] && free && state.colour !== picked[index]) {
+      problems.push(`${tags[index]} picked ${picked[index]}, free, and wears ${state.colour}`);
+    }
+    const others = states.filter((_, other) => other !== index).sort((a, b) => a.slot - b.slot);
+    const want = others.map((other) => other.colour).join(', ');
+    if ((state.partnerColours ?? []).join(', ') !== want) {
+      problems.push(`${tags[index]}'s game has its partners in ${state.partnerColours.join(', ')}, not ${want}`);
+    }
+    const drawn = others.map((other) => other.worn).join(', ');
+    if ((state.partnerWorn ?? []).join(', ') !== drawn) {
+      problems.push(`${tags[index]}'s game draws its partners' cloth otherwise than their own games do`);
+    }
+  });
+  return problems;
+}
+
+/** The colours line and problems of a room (`judgeColours`), pushed onto `lines` and returned. */
+function colourLines(states, picked, lines) {
+  const tags = PARTY_TAGS.slice(0, states.length);
+  const problems = judgeColours(states, tags, picked);
+  if (!problems) {
+    lines.push('colours: none (an older tree)');
+    return [];
+  }
+  const wore = (state, index) => `${tags[index]} ${state.colour} (picked ${picked[index] ?? 'none'})`;
+  lines.push(`colours: ${states.map(wore).join(', ')}`);
+  return problems;
+}
+
+/** The canary's verdict, its line pushed onto `lines`: the guest in the host's colour must have been caught. */
+function canaryLines(problems, lines) {
+  const caught = problems.some((problem) => problem.includes('wear one colour'));
+  lines.push(`canary: the guest dressed in the host's colour ${caught ? 'caught' : 'missed'}`);
+  return caught ? [] : ['canary missed: the guest in the host\'s colour went unseen'];
+}
+
+/** each party page's pick, by place: the host's honoured, the guest's none (one at random, not the host's), the
+ *  third's the host's (taken: one at random), the fourth's none */
+export const PARTY_PICKS = ['red', null, 'red', null];
+
 /** Where each page stood when a wait gave up: its status, slot and the partners it had. */
 function describeStates(states) {
   const described = states.map((state, index) => {
@@ -209,13 +263,23 @@ class Pair {
  * run started on both. Returns the problems of the start: a game whose hero casts freely in the run, as the guest's
  * did, begun in practice.
  */
-async function startTogether(pair, link, lines) {
+async function startTogether(pair, link, lines, canary) {
   await pair.reseed();
-  const code = await callPage(pair.host, 'coopOpen', { role: 'host', tag: PARTY_TAGS[0], ...link });
-  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, tag: PARTY_TAGS[1], ...link });
+  const opening = (index) => ({ tag: PARTY_TAGS[index], colour: PARTY_PICKS[index], ...link });
+  const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...opening(0) });
+  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, ...opening(1) });
   const joined = (host, guest) => guest.status === 'joined' && host.partners > 0 && guest.partners > 0;
-  await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
-  const problems = await fillTheRoom(pair, code, link, lines);
+  let pairStates = await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
+  if (canary && pairStates[0].colour !== undefined) {
+    await callPage(pair.guest, 'coopWearColour', { colour: pairStates[0].colour });
+    pairStates = await pair.until(() => true, 1, 'no frame ran');
+  }
+  let problems;
+  if (pair.pages.length > 2) problems = await fillTheRoom(pair, code, link, lines);
+  else {
+    const colours = colourLines(pairStates, PARTY_PICKS.slice(0, 2), lines);
+    problems = canary ? canaryLines(colours, lines) : colours;
+  }
   await callPage(pair.guest, 'coopPractise');
   const practising = (host, guest) => guest.stowed && !guest.free;
   await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
@@ -237,7 +301,8 @@ async function fillTheRoom(pair, code, link, lines) {
   const problems = [];
   if (pair.pages.length < 3) return problems;
   const third = pair.pages[2];
-  await callPage(third, 'coopOpen', { role: 'guest', code, tag: PARTY_TAGS[1], extra: 0, ...link });
+  const asTheGuest = { role: 'guest', code, tag: PARTY_TAGS[1], colour: PARTY_PICKS[2], extra: 0, ...link };
+  await callPage(third, 'coopOpen', asTheGuest);
   const answered = (host, guest, states) => states[2].status !== 'joining';
   let states = await pair.until(answered, JOIN_FRAMES, 'the third never heard from the host');
   const taken = states[2];
@@ -246,7 +311,8 @@ async function fillTheRoom(pair, code, link, lines) {
   lines.push(`the third joining as the guest's name tag: ${taken.renameAsked ? 'asked to rename' : taken.status}`);
   await callPage(third, 'coopRejoin', { code, tag: PARTY_TAGS[2] });
   for (let index = 3; index < pair.pages.length; index++) {
-    const opening = { role: 'guest', code, tag: PARTY_TAGS[index], extra: index - 2, ...link };
+    const picked = PARTY_PICKS[index];
+    const opening = { role: 'guest', code, tag: PARTY_TAGS[index], colour: picked, extra: index - 2, ...link };
     await callPage(pair.pages[index], 'coopOpen', opening);
   }
   const everyone = pair.pages.length - 1;
@@ -254,6 +320,7 @@ async function fillTheRoom(pair, code, link, lines) {
   states = await pair.until(full, JOIN_FRAMES, `the room never held all ${pair.pages.length}`);
   const tags = PARTY_TAGS.slice(0, pair.pages.length);
   problems.push(...judgeRoom(states, tags));
+  problems.push(...colourLines(states, PARTY_PICKS.slice(0, states.length), lines));
   const seenBy = (state, index) => `${tags[index]} in slot ${state.slot} sees ${state.partnerTags.join(', ')}`;
   const seen = states.map(seenBy);
   lines.push(`a room of ${pair.pages.length}: ${seen.join('; ')}`);
@@ -265,7 +332,8 @@ async function fillTheRoom(pair, code, link, lines) {
  * `jitter` (ms). Returns the report: each scenario judged, and the problems found.
  */
 export async function runCoop(side, options) {
-  const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2 } = options;
+  const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2, canary } = options;
+  if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
   for (let index = 1; index < party; index++) partners.push(await side.openPartner(side.heroClass));
@@ -276,7 +344,7 @@ export async function runCoop(side, options) {
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
     const pair = new Pair({ pages: [side.page, ...partners], ping, jitter, frameMs });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
-    const problems = await startTogether(pair, { ping, jitter }, lines);
+    const problems = await startTogether(pair, { ping, jitter }, lines, canary);
     const casting = problems.length ? 'free casting' : 'a run\'s costs and cooldowns';
     lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);
     for (const name of scenarios ?? Object.keys(about)) {

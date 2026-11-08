@@ -18,6 +18,8 @@ import { isTouch } from './touch';
 import { uiScales } from './scale';
 import { sfx } from '../core/audio';
 import { reportLinks, bindReportLinks } from './netHud';
+import { bindColourPicker, colourPickerHtml } from './colourPicker';
+import { heroColour } from '../data/heroColours';
 import type { Player } from '../entities/player';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -28,6 +30,12 @@ export function nameOf(p: Player): string {
   if (p.local) return isCoop() && session.tag ? session.tag : p.cls.name;
   return p.tag || p.cls.name;
 }
+
+/** a partner's dot in the room's list, in its hero's colour */
+const dotColour = (p: Player): string => {
+  const c = heroColour(p.colour);
+  return c ? ` style="--dot:${c.swatch}"` : '';
+};
 
 const who = (p: Player): string => `${nameOf(p)} · ${p.slot === 0 ? 'host' : 'partner'} · ${p.cls.name}`;
 
@@ -126,6 +134,7 @@ export function renderCoop(): void {
       <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
         <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
       <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
+      ${colourPickerHtml(false)}
       <div class="coop-choice${up ? '' : ' off'}">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
           <button class="btn primary" id="btn-coop-host"${server === 'up' ? '' : ' disabled'}>Open a room</button></div>
@@ -134,6 +143,7 @@ export function renderCoop(): void {
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
+    bindColourPicker(body, false);
     $('#btn-coop-host', body).onclick = () => {
       if (server !== 'up') return;
       const tag = typedTag(body);
@@ -176,12 +186,13 @@ export function renderCoop(): void {
       ${reportLinks()}`;
   } else {
     const list = others.length
-      ? others.map((p) => `<li><span class="coop-dot"></span>${esc(who(p))}</li>`).join('')
+      ? others.map((p) => `<li><span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}</li>`).join('')
       : `<li class="coop-wait">Waiting for a friend to join…</li>`;
     body.innerHTML = `
       <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
       ${s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
       <ul class="coop-list">${list}</ul>
+      ${colourPickerHtml(true)}
       <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
         After each wave everyone decides: bank and leave, or continue together.</p>
       <button class="btn danger" id="btn-coop-leave">Leave room</button>

@@ -25,6 +25,7 @@ import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, RES
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
+import { Dye } from './dye';
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -1129,6 +1130,8 @@ export function buildRanger(): Model {
   }
   return {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, arrowHead, height: 2,
+    // (the coat, its hem and the hat's felt: his green)
+    dye: new Dye('green').cloth(coat, coatHem, felt),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },

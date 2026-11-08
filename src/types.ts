@@ -3,6 +3,7 @@
 import type * as THREE from 'three';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
+import type { Dye } from './entities/models/dye';
 import type { Hand } from './entities/models/hands';
 import type { BiomeId } from './data/biomes';
 
@@ -432,6 +433,8 @@ export interface Model {
   readonly lowerGrip?: LowerGrip | null;
   /** each hand holding a handle, and how it holds it (for the lab) */
   readonly fists?: readonly Fist[];
+  /** a hero's cloth dyed in a player's colour (models/dye.ts, data/heroColours.ts) */
+  readonly dye?: Dye;
   dispose(): void;
 }
 

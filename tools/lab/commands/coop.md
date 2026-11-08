@@ -56,6 +56,13 @@ action (`EXTRA_SPOTS` in `page/coop.ts`) and play nothing; the host and the gues
 random numbers are seeded alike, again each frame, so each of the others draws its share apart just before it joins
 (`drawApart`): two joining on the same frame drew the same link id, and the room took them for one. A wait that gives
 up says where each page stood (its status, slot and partners).
+Every room's heroes' colours are judged as it fills (`judgeColours`, unit-tested; a line `colours: Host red (picked
+red), Guest gold (picked none)...`): each page picks as `PARTY_PICKS` says (the host red, the guest none, the third
+the host's red, taken, the fourth none, kept where the game keeps a pick before it opens or joins), and every
+player must wear a colour no other does, its pick where no one before it had it, every game knowing each partner's
+colour as that partner's own game has it and drawing its cloth as that game draws it (`Dye.shown`, the main cloth's
+colour as drawn). An older tree has none and says so. `--canary` (a pair's alone) dresses the guest's hero in the
+host's colour behind the room's back once it's in (`coopWearColour`): two in one colour must be caught.
 `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
 arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
 the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
