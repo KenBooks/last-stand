@@ -290,9 +290,11 @@ function lanceOut(): void {
 // three bell tones read as "a coin"). Each is what it shows: an orb thrown, crystals falling, ice forming, a fire
 // tornado, a body unmade and made again.
 
-/** A gain shaped as a blow starting `delay` s in, into `to` */
+/** A gain shaped as a blow starting `delay` s in, into `to`. Silent till then: a gain node is 1 until its first
+ *  scheduled value, so a blow scheduled late played its layer at full from the start (Glacial Nova's 22 grains of
+ *  ice all at once, Veilstep's forming before he'd gone). */
 function blowAt(v: ReturnType<typeof voice>, delay: number, peak: number, decay: number, to: AudioNode = v.out, attack = 0.004): GainNode {
-  const g = v.c.createGain(); env(g, v.t + delay, attack, peak, decay); g.connect(to); return g;
+  const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t); env(g, v.t + delay, attack, peak, decay); g.connect(to); return g;
 }
 
 /** Splintering Bolt's orb thrown: a soft driven thump falling away, a flanged whoosh leaving. Every throw a little
@@ -340,23 +342,23 @@ function novaBurst(): void {
   const v = voice(0, 0.55);
   const { c, t } = v;
   const crack = c.createBiquadFilter(); crack.type = 'highpass'; crack.frequency.value = 3000;
-  v.loop(crack); crack.connect(v.hit(0.15, 0.05, v.out, 0.001));
-  const sh = drive(3); sh.connect(v.hit(0.26, 0.45));
+  v.loop(crack); crack.connect(v.hit(0.3, 0.08, v.out, 0.001));
+  const sh = drive(3); sh.connect(v.hit(0.45, 0.55));
   const o = v.osc('sine', 110, sh); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.4);
   // the wind, in both ears, opening wide then thinning
   for (const pan of [-0.6, 0.6]) {
     const f = v.sweep('bandpass', 1200, 6500, 0.7, 0.7);
-    v.loop(f); f.connect(v.flange(v.hit(0.14, 0.8, v.lane(1, pan), 0.03), 3, 2, pan < 0 ? 1.1 : 1.5, 0.5));
+    v.loop(f); f.connect(v.flange(v.hit(0.4, 0.9, v.lane(1, pan), 0.03), 3, 2, pan < 0 ? 1.1 : 1.5, 0.5));
   }
   // the ice forming: grains of crunch spreading out over half a second, thinning
   for (let i = 0; i < 22; i++) {
     const at = 0.04 + Math.pow(Math.random(), 1.6) * 0.55;
     const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1400 + Math.random() * 2600; f.Q.value = 1.2;
-    v.loop(f); f.connect(blowAt(v, at, 0.09 * (1 - at), 0.02 + Math.random() * 0.03, v.lane(1, Math.random() * 1.6 - 0.8), 0.001));
+    v.loop(f); f.connect(blowAt(v, at, 0.45 * (1 - at), 0.04 + Math.random() * 0.05, v.lane(1, Math.random() * 1.6 - 0.8), 0.001));
   }
   // the frost hiss, high and airy
   const hiss = c.createBiquadFilter(); hiss.type = 'highpass'; hiss.frequency.value = 6500;
-  v.loop(hiss); hiss.connect(v.flange(v.hit(0.06, 1.3, v.out, 0.1), 2, 1.5, 0.7, 0.6));
+  v.loop(hiss); hiss.connect(v.flange(v.hit(0.12, 1.4, v.out, 0.1), 2, 1.5, 0.7, 0.6));
   v.start(); v.stopAt(t + 1.6);
 }
 
@@ -408,19 +410,19 @@ function veilstepPass(dur: number): void {
   // the vanishing: a swirl rising and swelling, cut off as he's gone
   for (const [pan, rate] of [[-0.5, 7], [0.5, 9]]) {
     const f = v.sweep('bandpass', 500, 5500, 0.14, 0.8);
-    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    const g = c.createGain(); g.gain.setValueAtTime(0.02, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
     g.connect(v.lane(1, pan)); v.loop(f); f.connect(v.flange(g, 2.5, 2, rate, 0.55));
   }
   // the whump of air closing behind him: dark noise, no pitch
   const whump = v.sweep('lowpass', 900, 160, 0.25, 0.9);
-  v.loop(whump); whump.connect(blowAt(v, 0.11, 0.3, 0.3, v.out, 0.01));
+  v.loop(whump); whump.connect(blowAt(v, 0.1, 0.5, 0.4, v.out, 0.01));
   // the crossing: sparkle fizzing over from left to right, flickering
   const fizz = c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 4500;
   const travel = c.createStereoPanner(); travel.connect(v.out);
   travel.pan.setValueAtTime(-0.7, t + 0.1); travel.pan.linearRampToValueAtTime(0.7, t + land + 0.2);
-  const fg = c.createGain(); fg.connect(travel);
-  fg.gain.setValueAtTime(0.0001, t + 0.08); fg.gain.exponentialRampToValueAtTime(0.07, t + 0.16);
-  fg.gain.setValueAtTime(0.07, t + land); fg.gain.exponentialRampToValueAtTime(0.0001, t + land + 0.5);
+  const fg = c.createGain(); fg.gain.setValueAtTime(0.0001, t); fg.connect(travel);
+  fg.gain.setValueAtTime(0.0001, t + 0.08); fg.gain.exponentialRampToValueAtTime(0.12, t + 0.16);
+  fg.gain.setValueAtTime(0.12, t + land); fg.gain.exponentialRampToValueAtTime(0.0001, t + land + 0.5);
   const flick = c.createGain(); flick.gain.value = 1; flick.connect(fg);
   v.lfo(17, 0.6, flick.gain);
   v.loop(fizz); fizz.connect(v.flange(flick, 1.5, 1, 3, 0.4));
@@ -428,12 +430,12 @@ function veilstepPass(dur: number): void {
   for (const [pan, rate] of [[-0.45, 2.2], [0.45, 2.9]]) {
     const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
     f.frequency.setValueAtTime(6000, t + land); f.frequency.exponentialRampToValueAtTime(700, t + land + 0.5);
-    v.loop(f); f.connect(v.flange(blowAt(v, land, 0.2, 0.6, v.lane(1, pan), 0.03), 3, 2.5, rate, 0.6));
+    v.loop(f); f.connect(v.flange(blowAt(v, land, 0.4, 0.7, v.lane(1, pan), 0.03), 3, 2.5, rate, 0.6));
   }
   // the breath of air where he lands
   const breath = v.sweep('lowpass', 1200, 250, 0.4, 0.8);
   breath.frequency.cancelScheduledValues(t); breath.frequency.setValueAtTime(1200, t + land); breath.frequency.exponentialRampToValueAtTime(250, t + land + 0.35);
-  v.loop(breath); breath.connect(blowAt(v, land, 0.24, 0.35, v.out, 0.01));
+  v.loop(breath); breath.connect(blowAt(v, land, 0.45, 0.45, v.out, 0.01));
   v.start(); v.stopAt(t + land + 1.1);
 }
 
