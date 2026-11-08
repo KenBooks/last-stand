@@ -5,15 +5,22 @@
 // before by an A/B's digest lines agreeing (`--ab`), and its gain by the time lines beside them: his model's `animate`
 // timed each frame by the browser's clock. A clip or range measure's lines agree for changes far past the last bit,
 // and a gait's later strides go elsewhere after one bit (`check`'s offsets), so neither showed a speed-up kept the pose.
-// The canary moves one number of the last frame by its last bit, and the digest must change.
+// The canary moves one number of the last frame by its last bit, and the digest must change. `--lobby` makes the moves
+// in the lobby, the run abandoned for it: in co-op a hero's update cost about 30% more there than in a run (`coop`).
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import { quantile, timeCalls } from './timing';
+import { toLobby } from './hallMoves';
+import { G } from '../../../src/state';
+import { Skirt } from '../../../src/entities/models/armor';
+import { Player } from '../../../src/entities/player';
 
 /** What `lab poses` takes. */
 export interface PosesOptions {
   fixture?: Fixture;
   canary?: boolean;
+  /** the moves made in the lobby, the run abandoned for it */
+  lobby?: boolean;
 }
 
 /** One move he makes: its name, how many frames, and what's held down. */
@@ -82,6 +89,20 @@ function caughtLastBit(root: THREE.Object3D): boolean {
   return before.hex !== after.hex;
 }
 
+/** A part timed beside his `animate`: a method of every instance of a class, by name (the drape is private). */
+interface Part {
+  name: string;
+  owner: Record<string, unknown>;
+  method: string;
+}
+
+/** The parts timed beside his `animate`: what holds it, and what of it costs most. */
+const PARTS: Part[] = [
+  { name: 'his update', owner: Player.prototype as unknown as Part['owner'], method: 'update' },
+  { name: 'his skirts\' update', owner: Skirt.prototype as unknown as Part['owner'], method: 'update' },
+  { name: 'their drape', owner: Skirt.prototype as unknown as Part['owner'], method: 'drape' },
+];
+
 /** a time a frame as a line shows it (ms) */
 const ms = (time: number): string => time.toFixed(2);
 
@@ -96,7 +117,11 @@ function timesOf(times: number[]): string {
 export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
   const nocked = Boolean(lab.player.cls.quiver);
   const setUp = await lab.setup({ nocked, ...options.fixture });
+  if (options.lobby) await toLobby(lab);
+  if (options.lobby && G.mode !== 'menu') throw new Error('lab: poses: the lobby never came');
   const timing = timeCalls(lab.model, 'animate');
+  // (what of it, and round it, by part: the whole hero's update, his skirts' and their drape)
+  const parts = PARTS.map((part) => ({ name: part.name, timing: timeCalls(part.owner, part.method) }));
   const whole = new Digest();
   const digests: string[] = [];
   const timed: string[] = [];
@@ -109,6 +134,7 @@ export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
         addPose(whole, lab.model.root);
         return timing.lap();
       });
+      for (const part of parts) part.timing.lap();
       digests.push(`  ${move.name}, ${move.frames} frames: ${digest.hex}`);
       timed.push(`  ${move.name}: ${timesOf(times)}`);
       all.push(...times);
@@ -116,17 +142,24 @@ export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
   } finally {
     timing.stop();
   }
+  const frames = all.length;
+  const byPart = parts.map(({ name, timing: partTiming }) => {
+    const perFrame = partTiming.stop().total / frames;
+    return `  ${name}: ${ms(perFrame)} ms a frame`;
+  });
   const problems: string[] = [];
   const caught = options.canary ? caughtLastBit(lab.model.root) : null;
   if (caught === false) problems.push('canary missed: a number moved by its last bit left the digest as it was');
   const text = [
-    `set up as ${JSON.stringify(setUp)}`,
+    `set up as ${JSON.stringify(setUp)}${options.lobby ? ', then back to the lobby' : ''}`,
     'the pose, each move\'s frames as a digest (every object\'s world matrix, every moving point of cloth):',
     ...digests,
     `  in all: ${whole.hex}`,
     'his animate a frame, by the browser\'s clock (it differs from run to run):',
     ...timed,
     `  in all: ${timesOf(all)}`,
+    'by part, a frame over every move (his update holds his animate, his skirts\' update their drape):',
+    ...byPart,
     ...(caught ? ['canary: a number moved by its last bit moved the digest'] : []),
   ].join('\n');
   return { text, problems };

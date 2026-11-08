@@ -1456,7 +1456,11 @@ export const COMMANDS = {
 
   poses: {
     each(side, options) {
-      return side.command('poses', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+      return side.command('poses', {
+        fixture: fixtureFrom(options),
+        canary: Boolean(options.canary),
+        lobby: Boolean(options.lobby),
+      });
     },
     textOf: asText,
     problemsOf: problemsIn,

@@ -870,7 +870,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   to cost less poses him exactly as before when `--ab`'s digest lines agree, and its time lines say what it saved:
   a clip or range measure's lines agree for changes far past the last bit, and a gait's later strides go elsewhere
   after one (`check`'s offsets). `--canary` moves a number of the last frame by its last bit, and the digest must
-  change. Run it with each `--gear` a change can touch (a hero's arms are fitted per weapon style).
+  change. Run it with each `--gear` a change can touch (a hero's arms are fitted per weapon style). Beside
+  `animate`, what it all took a frame by part: his whole update (`Player.update`), his skirts' update and their
+  drape. `--lobby` makes the moves in the lobby, the run abandoned for it (Abandon run held, as a player holds it:
+  `toLobby` in `page/hallMoves.ts`) and 300 frames let pass for the lobby to settle in.
 - `labels`: a world label kept out by a full atlas (`page/labels.ts`): the atlas filled with labels the size of a
   partner's name tag until a tag laid after them finds no slot, a twentieth of them given back (too few for the atlas
   to be packed again), and the tag must be drawn in a slot within 3 frames. On main it never was: a label that found
