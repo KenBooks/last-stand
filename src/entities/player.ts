@@ -26,6 +26,8 @@ import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
+import { ownColour } from '../net/heroColour';
+import type { HeroColourId } from '../data/heroColours';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
@@ -160,6 +162,9 @@ export class Player {
   slot = 0;
   /** co-op: a partner's name tag, as its player chose it (net/nameTag; the local player's is `session.tag`) */
   tag = '';
+  /** the colour the hero wears (data/heroColours.ts; null: his own): the player's pick, in co-op the one the host gave
+   *  (net/heroColour.ts) */
+  colour: HeroColourId | null = null;
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
   readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };
@@ -272,6 +277,7 @@ export class Player {
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
     this.drawn = drawAsOne(this.model);
+    if (local) this.setColour(ownColour());
     this.shadow = castAsOne(this.model.root, this.obj);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
 
@@ -282,6 +288,12 @@ export class Player {
     }
     this.recomputeStats(equipped);   // loads the loadout for the gear held
     this.reset();
+  }
+
+  /** Dyes the hero's cloth in `colour` (null: his own). A material's colour alone: nothing compiles. */
+  setColour(colour: HeroColourId | null): void {
+    this.colour = colour;
+    this.model.dye?.apply(this.model.root, colour);
   }
 
   /** Take the character out of the scene (switching class in the lobby). */

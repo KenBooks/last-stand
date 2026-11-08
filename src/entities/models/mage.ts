@@ -23,6 +23,7 @@ import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
+import { Dye } from './dye';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -1174,6 +1175,8 @@ export function buildMage(): Model {
   return {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.0,
     cloths,
+    // (the longcoat, the shirt's red at the throat and the linings: his oxblood)
+    dye: new Dye('red').cloth(coat, coatD, shirt, lining, hoodLining),
     setGear: (gear: Gear) => {
       if (gear.helm && !hat.visible) hood.reset();
       hat.visible = gear.helm;
