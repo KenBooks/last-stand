@@ -69,7 +69,7 @@ spec:
           certificateResolver: letsencrypt
           healthProbePath: /health
       trust:
-        allowForks: false
+        allowForks: true
         requireRepositoryCollaborator: true
       cleanup:
         deleteVolumes: true
