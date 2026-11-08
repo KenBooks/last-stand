@@ -163,6 +163,11 @@ function voice(fadeIn: number, wet: number) {
   const loop = (to: AudioNode): AudioBufferSourceNode => {
     const s = c.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.connect(to); srcs.push(s); return s;
   };
+  /** the crackle looped into `to`, its clicks `rate` times as dense (and as bright) */
+  const crackle = (to: AudioNode, rate = 1): AudioBufferSourceNode => {
+    const s = c.createBufferSource(); s.buffer = crackleBuf; s.loop = true; s.playbackRate.value = rate;
+    s.connect(to); srcs.push(s); return s;
+  };
   /** a gain panned across the stereo field, into `to` (out by default) */
   const lane = (gain: number, pan: number, to: AudioNode = out): GainNode => {
     const g = c.createGain(); g.gain.value = gain;
@@ -200,130 +205,138 @@ function voice(fadeIn: number, wet: number) {
     stopAt(n + fade + 0.05);
     return n;
   };
-  return { c, t, out, osc, lfo, loop, lane, hit, sweep, flange, start, stopAt, end };
+  return { c, t, out, osc, lfo, loop, crackle, lane, hit, sweep, flange, start, stopAt, end };
 }
 
-// Void Lance is a beam of light, so it plays no notes: chimes, a chord, a choir and glittering bells over it played
-// as a second tune in another key over the music (from play, "the background music gets duplicated", "like coins
-// falling"). Its power is noise (a flanged roar, a blast) over a driven rumble, root and octave alone.
+// Void Lance is a beam of raw arcana, so it plays no notes: chimes, a chord, a choir and glittering bells over it
+// played as a second tune in another key over the music (from play, "the background music gets duplicated", "like
+// coins falling"), and so did #413's rumble of saws on A, climbing an octave as the portal opened. Its power is noise
+// alone: a flanged roar, a driven pressure under it, and the arcana crackling (`crackles`), as its sparks show.
 
-/** Void Lance's cast, the portal drawn over `dur` s: power gathering into it. A roar of noise swelling up from a
- *  murmur, its flanger sweeping faster as it fills, a rumble climbing an octave under it through a filter opening as
- *  it climbs. Returns a stop() (let go early, it dies away). */
+/** Void Lance's cast, the portal drawn over `dur` s: a spark traces its rim (in the first 0.7 of it) and power
+ *  gathers into it. The spark's crackle circling the ears once a trace and brightening, a roar of noise swelling up
+ *  from a murmur, flanged, and a pressure of dark noise swelling under it. Returns a stop() (let go early, it dies
+ *  away). */
 function lanceInhale(dur: number): () => void {
   const v = voice(0.04, 0.3);
   const { c, t } = v;
-  const swell = (peak: number, to: AudioNode): GainNode => {
-    const g = c.createGain(); g.gain.setValueAtTime(0.003, t); g.gain.exponentialRampToValueAtTime(peak, t + dur); g.connect(to); return g;
+  const swell = (from: number, peak: number, to: AudioNode): GainNode => {
+    const g = c.createGain(); g.gain.setValueAtTime(from, t); g.gain.exponentialRampToValueAtTime(peak, t + dur); g.connect(to); return g;
   };
   // the gathering roar: noise opening from dark to bright, flanged, each ear its own
-  const roarF: BiquadFilterNode[] = [], rumble: OscillatorNode[] = [];
+  const closing: BiquadFilterNode[] = [];
   for (const [pan, rate] of [[-0.6, 1.3], [0.6, 1.7]]) {
     const f = v.sweep('lowpass', 400, 5000, dur, 0.8);
-    v.loop(f); f.connect(v.flange(swell(0.22, v.lane(1, pan)), 4, 3, rate, 0.6));
-    roarF.push(f);
+    v.loop(f); f.connect(v.flange(swell(0.003, 0.16, v.lane(1, pan)), 4, 3, rate, 0.6));
+    closing.push(f);
   }
-  // the rumble: root and octave climbing an octave, driven, through a filter opening as it climbs
-  const sh = drive(3), lp = v.sweep('lowpass', 200, 1400, dur, 1.5);
-  sh.connect(lp).connect(swell(0.09, v.out));
-  for (const [freq, pan] of [[54.6, -0.5], [55, 0], [55.4, 0.5], [110.2, 0]]) {
-    const o = v.osc('sawtooth', freq, v.lane(0.25, pan, sh));
-    o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * 2, t + dur);
-    rumble.push(o);
-  }
+  // the spark tracing the rim: crackle going round the ears once a trace, brightening as the portal fills
+  const round = c.createStereoPanner(); round.connect(v.out);
+  v.lfo(1 / (dur * 0.7), 0.6, round.pan);
+  const spark = v.sweep('bandpass', 2400, 5500, dur, 0.7);
+  v.crackle(spark, 0.9); spark.connect(swell(0.3, 0.8, round));
+  // the pressure under it: dark noise, driven, swelling (no pitch to climb)
+  const low = v.sweep('lowpass', 160, 700, dur, 1.1), sh = drive(2.5);
+  v.loop(low); low.connect(sh).connect(swell(0.004, 0.2, v.out));
+  closing.push(low);
   v.start();
-  // let go early, it winds down rather than cuts: the rumble sinking, the roar closing
+  // let go early, it winds down rather than cuts: everything closing to dark
   return () => {
-    const n = v.end(0.35);
-    const glide = (p: AudioParam, to: (now: number) => number, tau: number): void => {
-      const now = p.value; p.cancelScheduledValues(n); p.setValueAtTime(now, n); p.setTargetAtTime(to(now), n, tau);
-    };
-    for (const o of rumble) glide(o.frequency, (f) => f * 0.5, 0.12);
-    for (const f of roarF) glide(f.frequency, () => 250, 0.1);
+    const n = v.end(0.3);
+    for (const f of closing) { const now = f.frequency.value; f.frequency.cancelScheduledValues(n); f.frequency.setValueAtTime(now, n); f.frequency.setTargetAtTime(200, n, 0.08); }
   };
 }
 
-/** The lance bursting out of the portal: a driven blow falling to the floor of hearing, a blast of noise through a
- *  driven filter closing from white to dark (an explosion's shape), a flanged whoosh of the beam leaving and a crack. */
+/** The lance bursting out of the portal: a driven blow of dark noise, a blast closing from white to dark (an
+ *  explosion's shape), a crack, the arcana's discharge crackling out, and a flanged whoosh of the beam leaving. */
 function lanceBurst(): void {
   const v = voice(0, 0.6);
-  const { t } = v;
-  // the blow: a sine falling from 140 to 30 Hz, driven, so a laptop hears its harmonics as a thump
-  const boomSh = drive(3.5);
-  boomSh.connect(v.hit(0.45, 0.8));
-  const boom = v.osc('sine', 140, boomSh);
-  boom.frequency.setValueAtTime(140, t); boom.frequency.exponentialRampToValueAtTime(30, t + 0.6);
+  const { c, t } = v;
+  // the blow: dark noise falling to the floor of hearing, driven, so a laptop hears it as a thump
+  const boom = v.sweep('lowpass', 900, 90, 0.5, 1), boomSh = drive(3.5);
+  v.loop(boom); boom.connect(boomSh).connect(v.hit(0.4, 0.7));
   // the blast
-  const blastF = v.sweep('lowpass', 7000, 260, 0.7, 0.9), blastSh = drive(3);
-  v.loop(blastF); blastF.connect(blastSh).connect(v.hit(0.2, 0.7, v.out, 0.003));
-  // the whoosh, flanged, sweeping up as the beam leaves
-  const whooshF = v.sweep('bandpass', 500, 6000, 0.45, 0.9);
-  v.loop(whooshF); whooshF.connect(v.flange(v.hit(0.16, 0.5, v.out, 0.015), 3, 2.5, 3, 0.7));
+  const blastF = v.sweep('lowpass', 7000, 260, 0.6, 0.9), blastSh = drive(3);
+  v.loop(blastF); blastF.connect(blastSh).connect(v.hit(0.16, 0.6, v.out, 0.003));
   // the crack
-  const crackF = v.sweep('highpass', 2500, 2500, 0.1);
-  v.loop(crackF); crackF.connect(v.hit(0.18, 0.06, v.out, 0.001));
-  v.start(); v.stopAt(t + 1.3);
+  const crackF = c.createBiquadFilter(); crackF.type = 'highpass'; crackF.frequency.value = 2500;
+  v.loop(crackF); crackF.connect(v.hit(0.16, 0.06, v.out, 0.001));
+  // the discharge
+  const spit = c.createBiquadFilter(); spit.type = 'bandpass'; spit.frequency.value = 3200; spit.Q.value = 0.6;
+  v.crackle(spit, 1.4); spit.connect(v.hit(1.1, 0.45, v.out, 0.002));
+  // the whoosh, flanged, sweeping up as the beam leaves
+  const whooshF = v.sweep('bandpass', 500, 6000, 0.4, 0.9);
+  v.loop(whooshF); whooshF.connect(v.flange(v.hit(0.12, 0.45, v.out, 0.015), 3, 2.5, 3, 0.7));
+  v.start(); v.stopAt(t + 1.1);
 }
 
-/** Void Lance held, a beam of raw power. The roar: noise through a slowly breathing lowpass and a flanger in each
- *  ear, out of step, the jet of the beam. The rumble: root and octave, five saws detuned into a thick beating
- *  chorus, driven and gently throbbing (a fast wobble read as an electric razor). The heat: a sizzle high over it,
- *  flickering. Returns a stop() that powers it down: its pitch falling, its roar closing to dark. */
+/** Void Lance held, a beam of raw arcana. The roar: noise through a slowly breathing lowpass and a flanger in each
+ *  ear, out of step, the jet of the beam, trembling a little as its width does (about 4.8 times a second). The
+ *  pressure: dark noise, driven, through a filter wandering slowly. The arcana: crackle in each ear, surging and
+ *  ebbing out of step, as its sparks stream along it. The heat: a sizzle high over it. No pitch anywhere, so nothing
+ *  plays against the music, and nothing repeats: each layer drifts at its own slow rate. Returns a stop(). */
 function lanceDrone(): () => void {
-  const v = voice(0.15, 0.2);
+  const v = voice(0.08, 0.2);
   const { c } = v;
-  const pitched: OscillatorNode[] = [];
+  const closing: [BiquadFilterNode, number][] = [];
 
   // the roar
-  const roarF: BiquadFilterNode[] = [];
+  const roar = c.createGain(); roar.connect(v.out);
+  v.lfo(4.77, 0.1, roar.gain);
   for (const [pan, rate, ms] of [[-0.55, 0.23, 3.5], [0.55, 0.31, 5]]) {
     const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3200; f.Q.value = 0.7;
-    v.loop(f); f.connect(v.flange(v.lane(0.14, pan), ms, ms * 0.7, rate, 0.65));
+    v.loop(f); f.connect(v.flange(v.lane(0.13, pan, roar), ms, ms * 0.7, rate, 0.65));
     v.lfo(rate * 1.7, 1100, f.frequency);
-    roarF.push(f);
+    closing.push([f, 260]);
   }
 
-  // the rumble
-  const rumbleSh = drive(3);
-  const rumbleF = c.createBiquadFilter(); rumbleF.type = 'lowpass'; rumbleF.frequency.value = 800; rumbleF.Q.value = 1.2;
-  const rumble = c.createGain(); rumble.gain.value = 0.1;
-  rumbleSh.connect(rumbleF).connect(rumble).connect(v.out);
-  for (const [freq, pan] of [[55, -0.5], [55.35, 0.5], [54.7, 0], [110.4, -0.35], [109.6, 0.35]]) pitched.push(v.osc('sawtooth', freq, v.lane(0.22, pan, rumbleSh)));
-  v.lfo(0.4, 250, rumbleF.frequency);
-  v.lfo(2.6, 0.022, rumble.gain);
-  const sub = c.createGain(); sub.gain.value = 0.05; sub.connect(v.out);
-  pitched.push(v.osc('sine', 55, sub));
+  // the pressure
+  const bodyF = c.createBiquadFilter(); bodyF.type = 'lowpass'; bodyF.frequency.value = 420; bodyF.Q.value = 0.9;
+  const bodySh = drive(3);
+  const body = c.createGain(); body.gain.value = 0.15;
+  v.loop(bodyF); bodyF.connect(bodySh).connect(body).connect(v.out);
+  v.lfo(0.29, 140, bodyF.frequency);
+  closing.push([bodyF, 110]);
 
-  // the heat: noise high up, flickering
-  const heatF = c.createBiquadFilter(); heatF.type = 'highpass'; heatF.frequency.value = 5500;
-  const heat = c.createGain(); heat.gain.value = 0.03;
+  // the arcana
+  const arcana = c.createGain(); arcana.connect(v.out);
+  for (const [pan, rate, surge] of [[-0.5, 1, 0.37], [0.5, 1.17, 0.53]]) {
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3000; f.Q.value = 0.6;
+    const g = v.lane(0.45, pan, arcana);
+    v.lfo(surge, 0.25, g.gain);
+    v.crackle(f, rate); f.connect(g);
+  }
+
+  // the heat
+  const heatF = c.createBiquadFilter(); heatF.type = 'highpass'; heatF.frequency.value = 6000;
+  const heat = c.createGain(); heat.gain.value = 0.02;
   v.loop(heatF); heatF.connect(heat).connect(v.out);
-  v.lfo(13, 0.012, heat.gain);
 
   v.start();
   return () => {
-    // the power-down, a tune down rather than a cut (from play, "not just have the sound abruptly end ... like a tune
-    // down"): the rumble's pitch sinking two octaves, the roar closing to dark, a falling whoosh as the beam goes out
-    const n = v.end(1.4);
-    // (eased out rather than an exponential ramp, which is 20 dB down in a quarter of its time)
+    // the beam is gone at once, so its sound goes with it in a fraction of a second, closing to dark as it goes (a
+    // tune down in its colour, not a pitch gliding down for a second and a half after it, as #413's did)
+    const n = v.end(1);
     v.out.gain.cancelScheduledValues(n); v.out.gain.setValueAtTime(Math.max(v.out.gain.value, 0.0001), n);
-    v.out.gain.setTargetAtTime(0.0001, n, 0.32);
-    for (const o of pitched) o.frequency.setTargetAtTime(o.frequency.value * 0.25, n, 0.35);
-    for (const f of roarF) f.frequency.setTargetAtTime(220, n, 0.25);
-    rumbleF.frequency.setTargetAtTime(160, n, 0.3);
+    v.out.gain.setTargetAtTime(0.0001, n, 0.12);
+    arcana.gain.setTargetAtTime(0.0001, n, 0.04);
+    for (const [f, to] of closing) f.frequency.setTargetAtTime(to, n, 0.1);
     lanceOut();
   };
 }
 
-/** The beam going out: a flanged whoosh falling from bright to dark, and a soft driven thump sinking under it. */
+/** The beam going out: a flanged whoosh falling from bright to dark, the last of its arcana sputtering out, and a soft
+ *  whump of dark noise as the portal closes. */
 function lanceOut(): void {
-  const v = voice(0, 0.45);
-  const { t } = v;
-  const f = v.sweep('bandpass', 2600, 180, 0.9, 1.1);
-  v.loop(f); f.connect(v.flange(v.hit(0.4, 0.9, v.out, 0.03), 4, 3, 1.4, 0.6));
-  const sh = drive(2.5); sh.connect(v.hit(0.24, 0.6, v.out, 0.01));
-  const o = v.osc('sine', 110, sh); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.6);
-  v.start(); v.stopAt(t + 1.2);
+  const v = voice(0, 0.4);
+  const { c, t } = v;
+  const f = v.sweep('bandpass', 2400, 220, 0.45, 1.1);
+  v.loop(f); f.connect(v.flange(v.hit(0.26, 0.5, v.out, 0.01), 4, 3, 1.4, 0.6));
+  const spit = c.createBiquadFilter(); spit.type = 'bandpass'; spit.frequency.value = 2600; spit.Q.value = 0.7;
+  v.crackle(spit, 0.8); spit.connect(v.hit(0.5, 0.4, v.out, 0.004));
+  const low = v.sweep('lowpass', 600, 90, 0.35, 0.9), sh = drive(2.5);
+  v.loop(low); low.connect(sh).connect(v.hit(0.18, 0.4, v.out, 0.006));
+  v.start(); v.stopAt(t + 0.8);
 }
 
 // The rest of the wizard's spells, built as Void Lance is: noise, driven blows and the hall, no notes (Glacial Nova's
@@ -337,18 +350,57 @@ function blowAt(v: ReturnType<typeof voice>, delay: number, peak: number, decay:
   const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t); env(g, v.t + delay, attack, peak, decay); g.connect(to); return g;
 }
 
-/** Splintering Bolt's orb thrown: a soft driven thump falling away, a flanged whoosh leaving. Every throw a little
- *  apart (pitch, pan), so a held button's stream of them doesn't sound like one sample on repeat. */
-function orbThrow(): void {
-  const v = voice(0, 0.18);
-  const { t } = v;
-  const k = 0.9 + Math.random() * 0.2, pan = Math.random() * 0.4 - 0.2;
+/** Splintering Bolt cast: a small seeking orb of arcana thrown fast (24 m/s), a held button casting one every 0.34 s.
+ *  A snap as it's let go, a short push of dark noise (no pitch: #413's thump was a sine falling from 260 Hz, a kick
+ *  drum three times a second over the music), the zip of it leaving, falling as it goes away, and its fizz of
+ *  crackle trailing off into the distance as its trail does. Every cast a little apart (its colour, its pan), so a
+ *  held button's stream doesn't sound like one sample on repeat. */
+function boltCast(): void {
+  const v = voice(0, 0.15);
+  const { c, t } = v;
+  const k = 0.9 + Math.random() * 0.2, pan = Math.random() * 0.3 - 0.15;
   const lane = v.lane(1, pan);
-  const sh = drive(2.2); sh.connect(v.hit(0.4, 0.38, lane));
-  const o = v.osc('sine', 260 * k, sh); o.frequency.setValueAtTime(260 * k, t); o.frequency.exponentialRampToValueAtTime(70 * k, t + 0.22);
-  const f = v.sweep('bandpass', 600 * k, 3400 * k, 0.4, 0.9);
-  v.loop(f); f.connect(v.flange(v.hit(0.55, 0.5, lane, 0.02), 2, 1.5, 6, 0.55));
-  v.start(); v.stopAt(t + 0.6);
+  // the snap
+  const snap = c.createBiquadFilter(); snap.type = 'highpass'; snap.frequency.value = 3000;
+  v.loop(snap); snap.connect(v.hit(0.2, 0.05, lane, 0.001));
+  // the push
+  const push = v.sweep('lowpass', 1400 * k, 280, 0.12, 0.7), sh = drive(2.5);
+  v.loop(push); push.connect(sh).connect(v.hit(0.24, 0.22, lane, 0.002));
+  // the zip, flanged
+  const zip = v.sweep('bandpass', 5200 * k, 1300 * k, 0.2, 2);
+  v.loop(zip); zip.connect(v.flange(v.hit(0.4, 0.28, lane, 0.004), 1.5, 1, 7, 0.5));
+  // the fizz in flight, its highs closing as it goes
+  const fizz = v.sweep('bandpass', 6500 * k, 2600, 0.5, 0.8);
+  v.crackle(fizz, k); fizz.connect(blowAt(v, 0.02, 0.8, 0.5, lane, 0.01));
+  v.start(); v.stopAt(t + 0.75);
+}
+
+/** A Splintering Bolt bursting on a foe (`split`: the bolt itself, shattering into two that seek others; else one of
+ *  those two, smaller): a pop of noise closing from bright to dark and its arcana discharging in a spit of crackle;
+ *  the bolt's own sparks scattering, and its two splits zipping away to either side. */
+function boltBurst(split: boolean): void {
+  const v = voice(0, split ? 0.3 : 0.2);
+  const { c, t } = v;
+  const size = split ? 1 : 0.55, pan = Math.random() * 0.5 - 0.25;
+  const lane = v.lane(1, pan);
+  // the pop
+  const pop = v.sweep('lowpass', 4000, 350, 0.15, 0.8), sh = drive(3);
+  v.loop(pop); pop.connect(sh).connect(v.hit(0.12 * size, 0.26, lane, 0.001));
+  // the discharge
+  const spit = c.createBiquadFilter(); spit.type = 'bandpass'; spit.frequency.value = 3200; spit.Q.value = 0.7;
+  v.crackle(spit, 1.3); spit.connect(v.hit(0.5 * size, 0.22, lane, 0.001));
+  if (split) {
+    // the sparks
+    const sparks = c.createBiquadFilter(); sparks.type = 'highpass'; sparks.frequency.value = 5500;
+    v.loop(sparks); sparks.connect(v.flange(v.hit(0.045, 0.35, lane, 0.008), 1.2, 0.8, 11, 0.5));
+    // the splits leaving
+    for (const [side, at] of [[-0.7, 0.03], [0.7, 0.055]]) {
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2;
+      f.frequency.setValueAtTime(4600, t + at); f.frequency.exponentialRampToValueAtTime(1500, t + at + 0.16);
+      v.loop(f); f.connect(blowAt(v, at, 0.08, 0.2, v.lane(1, side), 0.003));
+    }
+  }
+  v.start(); v.stopAt(t + 0.7);
 }
 
 /** Starfall called: the crystals falling out of the sky, a whistling flanged rush coming down, a low swell under it. */
@@ -499,8 +551,10 @@ export const sfx = {
   refresh: guard(() => { [784, 988, 1175].forEach((f, i) => tone({ freq: f, dur: 0.4, gain: 0.045, type: 'triangle', delay: i * 0.05 })); }),
   /** a straw figure rising out of the ground */
   straw: guard(() => { noise({ dur: 0.45, freq: 1200, sweep: 500, q: 1.2, gain: 0.16 }); tone({ freq: 110, to: 70, dur: 0.18, type: 'triangle', gain: 0.12 }); }),
-  /** Splintering Bolt's orb thrown, at every cast (a held button casts again and again) */
-  bolt: guard(() => { if (throttle('bolt', 60)) return; orbThrow(); }),
+  /** Splintering Bolt cast, at every cast (a held button casts again and again) */
+  bolt: guard(() => { if (throttle('bolt', 60)) return; boltCast(); }),
+  /** a Splintering Bolt bursting on a foe: the bolt itself, splitting (`split`), or one of its splits */
+  boltBurst: guard((split: boolean) => { if (throttle(split ? 'boltBurst' : 'boltSplit', 40)) return; boltBurst(split); }),
   boltHit: guard(() => { if (throttle('boltHit', 45)) return; noise({ dur: 0.12, freq: 3000, q: 1.5, gain: 0.12 }); }),
   starfallCall: guard(() => { starfallFalling(); }),
   starfallImpact: guard(() => { if (throttle('sfi', 50)) return; starfallStrike(); }),
