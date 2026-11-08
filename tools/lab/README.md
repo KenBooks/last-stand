@@ -61,6 +61,7 @@ the server.
 | `gear` | What full sets of gear give each class |
 | `crowd` | A crowd killed at once: what its bodies cost the frame, as on a low-end device |
 | `music` | Which music plays where, and how it fades, as WebAudio plays it |
+| `sound` | A skill's sounds written as WAV files to listen to, and what they're made of |
 | `coop` | Two games playing together over a slow link, each judged against the other |
 
 **Your own**

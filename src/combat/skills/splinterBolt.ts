@@ -27,7 +27,7 @@ function launch(
       const enemy = target as Enemy;   // friendly projectiles only hit enemies
       hitEnemy(enemy, damage, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 1.2, from: proj.pos, blow: { dir: { x: proj.vel.x, z: proj.vel.z }, lift: 0.25, on: { x: proj.pos.x, z: proj.pos.z } } });
       burst(proj.pos, { count: gen ? 8 : 14, color: def.color, speed: 4, life: 0.35, size: 0.28 });
-      sfx.boltHit();
+      sfx.boltBurst(gen === 0);
       if (gen === 0) {
         flash({ color: def.color, intensity: 12, distance: 5, life: 0.15, pos: proj.pos });
         const heading = Math.atan2(proj.vel.x, proj.vel.z);

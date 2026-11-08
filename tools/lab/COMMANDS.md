@@ -64,74 +64,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the stops whose names contain that. Within one run each stop starts at its own moment of the clock, so a stop run
   alone can differ from the same one in the whole run: compare the totals. (The gait's steps back counted only steps
   that left once the body stood, and missed every stop's: the step back began as the body slowed.)
-- `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
-  measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
-  direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`), and with
-  `--skill` a skill cast standing and its end held (`cast`: its key held as long as the player would, `holdFor`, a
-  channel through; pressed for a frame, Steel Tempest stopped at once), the weapons held `--gear`'s way throughout
-  (`--weapon` the base): each angle past its range, on how many frames, its worst and where (for a leg, whether its
-  foot was planted; for a shoulder, its raise, the plane it rises in and its turn against what each allows), each
-  scenario's pose timed frame by frame by the browser's clock (`page/poseCost.ts`: its slowest frame, median and
-  p90; two frames over 20 ms fail, or one over 30 (one frame alone read 21 to 23 by the noise of a check's eight
-  sessions), canary one frame's made 40 ms slower: the lab's frames run on its own clock, and a
-  blow onto a pillar or a log that read the prop's every triangle for each point its stop tried took 571 ms a frame
-  unseen), its fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
-  the hand moved then and the joint whose own turn changed most (`page/tipMoves.ts`, in the hero's own frame: between
-  moves, where a pose eases back to the stance, a jump shows; Thunder Crescent's end was back at rest in a frame,
-  131 cm, and a two-handed swing's end turned the hand over, `handR turned 178°`), a two-hander's lower grip let go
-  of by the other hand (on how many frames, how often, from which frames and moments of a move, and why at the worst:
-  the grip past the arm's reach, its joints past their ranges, the arm into the body; a failure. Its frames on the
-  shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
-  under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
-  the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle; a prop's top counts as floor, and the arena's wall as drawn: how far into it, the less of under its top and
-  past its face, read by rays of the lab's own through `Wall.cast`, so a commit with no `wallTopAt` reads a blow into
-  the wall too; `--biome` and `--at`/`--facing` stand him by it: two-handed Power Strike went 2.6 m into the crypt's
-  wall, `--biome crypt --at 24.9,14.4 --facing 1.047`, and now holds on it; in a cast, the weapon's nearest the floor and its blade off the blow's line, the flat's normal against
-  his side's axis, so a blade lying flat or turned across the blow fails, its canary the grip turned a quarter:
-  "axe needs to strike with blade perpendicular to ground"; a prop's top counts as floor, `propTopAt`, so a blow
-  into a pillar or a stone is read where it stops on it; `--frames` lists each frame's weapon in the body or under
-  the floor), and an arm held at its stops (`page/armStrain.ts`:
-  two or more of one arm's joints within 2° of an end of
-  their ranges on the same frame, a gripping wrist by a gripping wrist's: the arm IK stops the forearm's turn and the
-  wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed
-  Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
-  many frames, the first with the most stops pictured, and each stop's frames tallied: said, not failed, until every
-  hero's are fixed, #307), and the weapon through the body (`page/weaponBody.ts`: every corner of the same surface
-  against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
-  anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
-  failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
-  shaft going through leg"). The arms against the body: each forearm and hand against the trunk and head
-  (`page/armsIn.ts`, as `eyes` reads them) and against the thighs and shins (`page/armsInLegs.ts`, capsules at their
-  drawn radii), the deepest pictured, said, not failed (from play: "power strike ending pose makes hand go through
-  body, its a regression, pls figure out how it went past our guards": range read the joints' angles and the weapon
-  alone, on level ground, and two-handed Power Strike's end put a fist 9 cm into the left thigh and the right forearm
-  16 cm into the belly in the hall of heroes, on a plinth; `--at 0,4.3`, 0.9 m back from the dais's step, shows it, 23
-  frames); their canaries plant the right elbow in the chest and a hand in the left thigh. In a cast, the weapon's tip
-  is traced frame by frame (`page/weaponPath.ts`) and drawn as a line in the pictures (red where it moves fast, a mark
-  every third frame; from the front, the left and above, framed on the path): a heavy weapon swung hard keeps its line
-  ("axe should go down in 1 line, without changing direction/turning", "just draw a line of the same point of the
-  axe"), so its fast frames on the way down (from its highest: the raise crosses the body from a guard held across it)
-  should run straight from above, and the line says how far they stray off it (two-handed Power Strike: 39 to 49 cm
-  with its shoulder turned across him as it's raised, 11 to 12 raised across instead); its canary moves one fast point
-  30 cm aside. The cast scenario runs 4.5 s from the press, through the stand after the end until a two-hander goes
-  onto his shoulder (at 2.5 s a 1.5 s cast's stand went unread).
-  `--at x,z` and `--facing` stand every scenario elsewhere (`--at 0,4.7`: the dais's edge facing off it, the ground ahead a step lower than under
-  his feet, as off a plinth in the hall of heroes, where the left hand let go of a two-hander after Power Strike).
-  `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast scenario (`page/weaponOnFoe.ts`):
-  the weapon's lowest over its body, a share of its height ("power strike should
-  land on the enemy its striking"), its canary moving the foe 3 m aside for a reading, which must find nothing.
-  `--canary` turns the head past the neck's range on one frame and sinks the hero below the floor by the weapon's
-  height over it and 2 m for one measure (the weapon must be found under the floor: sunk 2 m alone, a weapon raised in
-  a cast's charge stayed over it, and the canary was missed on main too), moves the weapon's grip to the left
-  thigh's middle for one
-  (it must be found in it), and reads an arm whose forearm and wrist are at their ends (it must read pinned),
-  `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every frame the weapon was
-  under the floor or in the body and every frame between moves the tip moved 10 cm or more (with every joint that
-  turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
-  frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
-  each frame's joints past their ranges after it. `--tune` sets the game's tunable values first (a pose's numbers
-  compared without editing them, `--sweep` for many).
+- `range`: every joint of the hero against a body's ranges: in full in [`commands/range.md`](commands/range.md).
 - `eyes <skill>`: a skill cast through the eyes: in full in [`commands/eyes.md`](commands/eyes.md).
 - `swing <name>`: a swing through the eyes keyed from a pose: in full in [`commands/swing.md`](commands/swing.md).
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
@@ -755,54 +688,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
   the materials its pieces were made in (`userData.own`).
-- `hood`: the mage's hood against its reference, by numbers (`page/hood.ts`), as tuning it by eye didn't converge (one
-  change to its cut reshaped the whole of it, and four reviews in a row failed it). Its outline: the hero taken into
-  the studio and drawn flat white from the front, his left and the back (what he holds hidden), and the reference's
-  figure cut from its plain backdrop (`--ref <marks.json>`: each view's picture beside the file, with where its eyes
-  and chin are, shares of it, and the sizes below as `"sizes": { "brim": [least, most] }` in cm where the reference
-  was made to others than the first's), both read on one grid in the face's unit `E` (the eye line to the chin; ours
-  from the head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and
-  its width (from the side, its reach ahead and behind) at the crown, the temples, the chin, the nape, the neck and
-  the shoulders, ours beside the reference's, with each view's pictures cut to that window (through a 6° lens: at the
-  studio's 20° the hood's back, 20 cm nearer the camera than the eyes the scale is set at, read 10% wider) and the
-  outlines laid over each other (both white, the reference's alone red, ours alone green); its fullness held to the
-  reference's within 0.1 E at the chin (from his left how far behind the eyes it reaches, and at the nape; from the
-  back how wide: pulled in to the neck, it read as a shell where the reference's cloth hangs loose behind the head and
-  gathers at the nape, "do you see bagginess in the ref? where is ours?", and cut fuller, as a sack; below the nape
-  it's the capelet's, read, not held); and the head under it in the same unit (its scalp's height, its brow ahead of
-  the eyes, its skull's back behind them and its half width at four heights), so the reference's outline reads as how
-  far the hood stands off the head (the mage's snug hood was laid out from it). Its shape on the head, from its cloth
-  (`HoodCloth`'s `userData.grid`) and the face's skin: the rim ahead of the brow and of the cheeks and out from the
-  cheeks, the point above the scalp and the capelet below the nape, each against the sizes the reference was made to
-  (its marks' `sizes`; the first reference's, from its modelling notes: 6-8, 4-6, 4-6, 5-7 and 16-18 cm), outside them
-  a problem; and how far its top half moves from its standing shape over a walk (more than 4 cm, a tip flipping, is a
-  problem). Its opening round the face from the front and his left (`page/hoodOpening.ts`; laid close to those sizes
-  and that outline, the hood still hid the face as a tunnel, and neither read it): where its rim crosses each 0.2 E
-  from 0.6 over the eyes down to the throat (-1.4), ours from its cloth's edge and the reference's from its piping
-  (each row scanned in from the backdrop to the first run of its pale gold, past the seam's on the outline from the
-  side; its reads drawn as dots on the pictures), the rim's stand-off from the face shown, and the face shown (E²,
-  ours drawn flat with the skin white, the reference's by its skin's colour inside the rim). From the front ours more
-  than 0.1 E from the reference's rim from 0.4 down to -1.4 (flared out below the chin, it read as a funnel), from his
-  left the face shown ahead of its rim more than 0.05 E from the reference's from 0.4 to -0.8 (the reference's brow,
-  nose and chin stand further ahead of its eyes than ours: laid where its rim runs from the eyes, ours hung over the
-  brow, "do you see hood overhang in our case?"), or showing less than 85% of its face, is a problem. The seam down
-  the back: how far it strays aside from straight, standing and walking (0.3 cm at most; the Z a review saw at the
-  nape was the gathers' depth seen from above, not the seam). And the capelet's lie read again as he walks, every 15
-  frames (standing it lay clear; walking, the coat's stitched shoulder seam came through it as the arm swung). And how
-  deep his body comes through the hood above the capelet, from below the jaw to the join, standing and walking
-  (`page/hoodLie.ts`; the harness straps' tops came out through its front below the jaw, where the capelet's reading
-  never looked, "cloth should not clip through hood"): looked for within 6 cm out along the cloth's normal, a surface
-  met counting where it faces the way the cloth does (in the gathers' valleys at the nape the normal turns down, and
-  from 15 cm out its ray met his back from below, and a brass fitting); more than 0.1 cm is a problem, as through the
-  capelet (at 0.3, the coat's front of the shoulder stood 2 mm out through it and passed: what's read is the cloth's
-  outside, so anything through it shows). `--canary` makes the hood 0.7x as wide, which the rim's clearance, the front
-  outline's width at the temples, the back's at the neck and the opening at the eyes must read; moves it 2 cm forward,
-  which the rim from his left, the face shown ahead of it and the face shown must read; makes it 0.8x as deep, which
-  its reach behind at the chin from his left must read; sinks its front below the jaw 5 cm into him, which his body
-  through the hood must read; and puts a point of the seam 1 cm aside, which its straightness must read. `--edges`
-  lists each view's outline every 0.2 E down, ours beside the reference's (its edges; from the side, its reach ahead
-  of and behind the eyes): five levels didn't show where the side's parted from the reference's. Writes
-  `out/hood/sheet.png`.
+- `hood`: the mage's hood against its reference, by numbers: in full in [`commands/hood.md`](commands/hood.md).
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
   him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
@@ -969,6 +855,25 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--canary` plays a round again with four faults planted: the biome's battle track played as another's, the
   lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
   started from its top.
+- `sound [scenes]`: a skill's sounds as the player hears them, rendered offline and written as WAV files to listen to
+  (`page/sound.ts`, in `tools/lab/out/sound`; with `--ab` the other side's as `main-<scene>.wav`). The game's
+  effects are played into an `OfflineAudioContext` as it plays them (`playInto` in `src/core/audio.ts`: the same
+  master, compressor and hall, the throttles on the context's clock), each call at its moment of the scene. The
+  scenes (`SCENES`, comma separated, `bolt,boltMiss,lance,lanceEarly` by default): `bolt`, Splintering Bolt held,
+  four casts at its pace each bursting on a foe 0.3 s out and its two splits on two others; `boltMiss`, one cast
+  striking nothing; `lance`, Void Lance's portal drawn, the beam held 4 s and let go; `lanceEarly`, let go as the
+  portal is drawn. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
+  hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
+  peak, its loudest half second (the level to hold against the other heroes' sounds: on #413 a bow's shot was
+  -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its share above 150 Hz and
+  its spectrum's most tonal peak (over a channel's hold for `lance`: the bin standing furthest over the median of
+  the third of an octave round it, Welch's spectrum of 4096-sample windows; noise stands 2 to 8 dB, a flanger's
+  comb about 10), and the nodes it made, by kind (what a cast costs). A sample not a number, a clip, a note
+  standing 15 dB over its noise in a spell's scene (the music hears it as a second tune: #413's "the background
+  music gets duplicated"; the warrior's clang may ring, as metal does) and a sound still playing at its end (over
+  -60 dB in its last quarter second) are problems. `--canary` renders the first scene again under a 440 Hz note
+  never stopped, which must be caught as both. `--ab` runs only against a commit that has `playInto`. The
+  measures are pure functions in `page/soundMeasure.ts`, tested in `test/soundMeasure.test.mjs`.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
   hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:
   awaited, it never settled, and held up every command after it till the server was stopped; the browser's next

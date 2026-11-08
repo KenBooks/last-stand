@@ -29,6 +29,7 @@ import type { CastOptions } from './cast';
 import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
+import type { SoundOptions } from './sound';
 import type { DeathOptions } from './death';
 import type { HitsOptions } from './hits';
 import type { LogOptions } from './log';
@@ -645,6 +646,15 @@ export async function gear(_lab: Lab, command: GearOptions): Promise<Report> {
 export async function music(lab: Lab, command: MusicOptions): Promise<Report> {
   const { music: musicRound } = await import('./music');
   return musicRound(lab, command);
+}
+
+/**
+ * `lab sound`: a skill's sounds rendered offline as the game plays them, measured and sent back as WAV files; a
+ * sample not a number, a clip, a note over the noise, a sound left playing, or a canary unseen, is a problem.
+ */
+export async function sound(_lab: Lab, command: SoundOptions): Promise<Report> {
+  const { sound: soundRound } = await import('./sound');
+  return soundRound(command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

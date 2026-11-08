@@ -253,6 +253,9 @@ export class Player {
   /** whether he may glance round as he stands idle (models/glance.ts): the hall of heroes holds a hero's glances until
    *  his showcase is done */
   glances = true;
+  /** a hero whose held spells make no sound (the hall of heroes' showcases: Void Lance's hum played on the opening
+   *  screen, unasked); his own player's and a partner's sound as they're held */
+  quiet = false;
   /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
    *  key light a metre off put a glare on a shield's boss */
   shine = 0;
