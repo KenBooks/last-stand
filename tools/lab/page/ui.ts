@@ -41,8 +41,8 @@ import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
 import {
-  ABANDON_CANARY, PAUSE_CANARY, closePause, closePauseAbandon, openPause, openPauseAbandon, pauseAbandonChecked,
-  pauseShown,
+  ABANDON_CANARY, PAUSE_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
+  openPauseAbandon, openPauseVolume, pauseAbandonChecked, pauseShown, pauseVolumeChecked,
 } from './uiPause';
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
@@ -62,7 +62,7 @@ export type UiState =
   | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch'
   | 'run' | 'scores' | 'perf'
-  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
+  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseVolume' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
 export interface UiOptions {
@@ -75,8 +75,8 @@ export interface UiOptions {
 
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
-  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log',
-  'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume', 'pauseAbandon', 'summary',
+  'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
@@ -918,6 +918,9 @@ const STEPS: Record<UiState, Steps> = {
   pauseSettings: {
     open: () => openPause('settings', canaryAsked), close: closePause, check: () => pauseShown('settings'),
   },
+  pauseVolume: {
+    open: () => openPauseVolume(canaryAsked), close: closePauseVolume, check: (_canary, lab) => pauseVolumeChecked(lab),
+  },
   // (held through, it abandons the run: the next run state sets one up again)
   pauseAbandon: {
     open: (lab) => openPauseAbandon(lab, canaryAsked),
@@ -979,6 +982,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(ABANDON_CANARY.name));
     lines.push(`  canary: ${ABANDON_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${ABANDON_CANARY.what} went unseen`);
+  }
+  if (state === 'pauseVolume') {
+    const caught = found.problems.some((problem) => problem.includes(VOLUME_CANARY.name));
+    lines.push(`  canary: ${VOLUME_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${VOLUME_CANARY.what} went unseen`);
   }
   if (state === 'pause' || state === 'pauseSettings') {
     const caught = found.problems.some((problem) => problem.includes(PAUSE_CANARY.name));

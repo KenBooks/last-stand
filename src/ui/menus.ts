@@ -19,7 +19,7 @@ import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
-import { sfx } from '../core/audio';
+import { setVolumes, sfx, volumeSettings, type Volumes } from '../core/audio';
 import { isTouch } from './touch';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
@@ -198,6 +198,7 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-hdr-peak').oninput = (e) => { setHdrSettings({ peak: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
   // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
   onHdrChange(renderHdrOptions);
+  initVolumeOptions();
   initRendererOptions();
   $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
   // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
@@ -835,6 +836,30 @@ function renderHdrOptions(): void {
   $<HTMLInputElement>('#opt-hdr-peak').value = String(s.peak);
   $('#opt-hdr-paper-value').textContent = `${Math.round(s.paper * 100)}%`;
   $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
+}
+
+/** The volume sliders: each sets its volume as it moves, and the effects' plays a click as it's let go, to hear its
+ *  level by. */
+function initVolumeOptions(): void {
+  document.querySelectorAll<HTMLInputElement>('#opt-volume input').forEach((input) => {
+    const which = input.dataset.volume as keyof Volumes;
+    input.oninput = () => {
+      setVolumes({ [which]: Number(input.value) });
+      renderVolumeOptions();
+    };
+    if (which === 'effects') input.onchange = () => sfx.click();
+  });
+  renderVolumeOptions();
+}
+
+/** The volume sliders at their settings, each one's share after it. */
+function renderVolumeOptions(): void {
+  const volumes = volumeSettings();
+  document.querySelectorAll<HTMLInputElement>('#opt-volume input').forEach((input) => {
+    const share = volumes[input.dataset.volume as keyof Volumes];
+    input.value = String(share);
+    input.nextElementSibling!.textContent = `${Math.round(share * 100)}%`;
+  });
 }
 
 /** what the renderer's row says */

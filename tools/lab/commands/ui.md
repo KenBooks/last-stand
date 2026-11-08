@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,
-run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
+run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pauseVolume,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
@@ -88,7 +88,10 @@ narrow for them, which must be found; put away at once as it closes: folded back
 timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`, as it
 opens every time) and its Settings tab (`pauseSettings`), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
-`--canary` makes a settings row 600 px tall, which must make it scroll), Abandon run held as a player holds it
+`--canary` makes a settings row 600 px tall, which must make it scroll), the Music slider clicked a quarter of the
+way along with the mouse (`pauseVolume`, #408: the volume landing there, the slider saying it, the setting saved in
+`last-stand-volume` and the music's own gain eased to its square; `--canary` loses the setting before it's read back,
+which must be caught unsaved; every volume put back to full after), Abandon run held as a player holds it
 (`pauseAbandon`, with `lab.mouseDown`/`mouseUp`: clicked, it says to hold and stays; held a second and let go, it
 fills and stays; held 2 s, it leaves the run; `--canary` makes its hold 0 ms, and the click must be caught abandoning),
 the run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
