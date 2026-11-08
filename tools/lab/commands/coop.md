@@ -84,3 +84,10 @@ heard of none. Each screen's risen foes are held to being drawn (none undrawn pa
 gives: out of the scene, hidden, dissolved, out of its crowd), and every foe on the host's screen must come to the
 guest's: on main 6 of them never did, their attacks playing from nowhere ("mobs missing in the first 10 sec... but
 they're firing"). The guest asks the host about them (`src/net/AGENTS.md`).
+
+Last, each game says what every hero's update cost it a frame (`page/coopCost.ts`, `Player.update` timed by the
+browser's clock, lines that differ from run to run): its own hero's and a partner's copy's, in a run, in the lobby
+and in the hall of heroes (the hall's own heroes left out). On this machine a hero took 1.2 to 1.4 ms a frame in a
+run and 1.3 to 1.8 in the lobby, more than half of the mage's his skirt's drape (`poses --profile=drape`); hidden
+under the hall, the host's own hero took 1.60 ms and the guest's copy 1.49 until a hidden hero was no longer posed
+(0.01 each). A co-op trace's player stage read 5.7 ms a frame (KXRQ-WWX3).

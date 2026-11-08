@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
 import { clamp, lerp, smooth } from '../../util';
+import { tunable } from '../../core/tuning';
 
 let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
@@ -527,8 +528,9 @@ export class Skirt {
       }
     };
     // (the lines between points kept out of the legs in the last passes only: the first pull the cloth most of the way)
-    for (let it = 0; it < 4; it++) {
-      offAll(it >= 3);
+    const passes = DRAPE.passes;
+    for (let it = 0; it < passes; it++) {
+      offAll(it >= passes - 1);
       // (down the cloth from the waist, which stays: each point no further from the one above than its length and a little)
       for (let j = C; j < n; j++) pull(P, j, j - C, down[j] * 1.04, 1);
       // (round it: neighbours no further apart than theirs and a little, both moving; across the seam the last column but one
@@ -668,6 +670,9 @@ function pull(P: Float32Array, a: number, b: number, max: number, wa: number): v
   P[b * 3] += dx * e * wb; P[b * 3 + 1] += dy * e * wb; P[b * 3 + 2] += dz * e * wb;
 }
 const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3();
+/** the drape's passes a frame (and one more ending off the limbs): each puts the cloth out of the limbs and holds its
+ *  lengths, the last the lines between points too; most of a hero's update a frame (four, the mage's 0.94 ms) */
+const DRAPE = tunable('drape', { passes: 3 });
 /** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
 const HAND_REACH = 0.035;
 /** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points

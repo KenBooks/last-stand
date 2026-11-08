@@ -416,6 +416,26 @@ async function fillTheRoom(pair, code, link, lines) {
   return problems;
 }
 
+/** ms, to a tenth */
+const tenth = (ms) => ms.toFixed(2);
+
+/**
+ * What every hero's update cost each game a frame (`page/coopCost.ts`), in a run and in the lobby: lines that differ
+ * from run to run, as the browser's clock does.
+ */
+async function heroCostLines(pair) {
+  const costs = await Promise.all(pair.pages.map((page) => callPage(page, 'coopHeroCost')));
+  return costs.map((cost, index) => {
+    const place = (name) => {
+      const { frames, own, perCopy } = cost[name];
+      if (!frames) return `${name} none`;
+      return `${name} its own ${tenth(own)} ms, a partner's ${tenth(perCopy)} (${frames} frames)`;
+    };
+    const places = ['run', 'lobby', 'hall'].map(place).join('; ');
+    return `the heroes' update a frame on ${PARTY_TAGS[index]}'s game: ${places}`;
+  });
+}
+
 /**
  * Runs `scenarios` (names of page/coop.ts's) on a side as host, a partner page as guest, over a link of `ping` and
  * `jitter` (ms). Returns the report: each scenario judged, and the problems found.
@@ -457,6 +477,7 @@ export async function runCoop(side, options) {
       problems.push(...judged.problems);
     }
     problems.push(...await backToLobby(pair, lines));
+    lines.push(...await heroCostLines(pair));
     return { text: lines.join('\n'), problems };
   } finally {
     await side.closePartner();
