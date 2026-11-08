@@ -8,6 +8,8 @@
 // click must be caught abandoning.
 import type { Lab } from './lab';
 import { ABANDON_HOLD_MS, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
+import { audioContext, musicOutput, setVolumes } from '../../../src/core/audio';
+import { readCookie, writeCookie } from '../../../src/core/cookies';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface PauseFound {
@@ -95,6 +97,76 @@ export async function pauseAbandonChecked(lab: Lab): Promise<PauseFound> {
   lines.push(`  held ${ABANDON_HOLD_MS / 1000} s: ${through ? 'abandoned the run' : 'stayed'}`);
   if (!through) problems.push(`pauseAbandon: held ${ABANDON_HOLD_MS / 1000} s, it never abandoned the run`);
   return { lines, problems };
+}
+
+/** the problem the volume canary must raise */
+export const VOLUME_CANARY = { name: 'unsaved', what: 'the music volume set but never saved' };
+/** where along the Music slider the check clicks (a share of its width), and how near the volume must land to it */
+const VOLUME_CLICK = 0.25;
+const VOLUME_NEAR = 0.06;
+/** how long the music's gain is given to ease to the volume, by the audio's own clock (s: its time constant is 0.03),
+ *  and the most real time that may take (ms: a click resumes a suspended context, which takes a while to run; waited
+ *  out in real time, the gain was read 20 to 80 ms into its ease) */
+const VOLUME_EASE_S = 0.3;
+const AUDIO_LIMIT_MS = 5000;
+const AUDIO_POLL_MS = 20;
+/** the volumes' cookie (src/core/audio.ts): master, music, effects */
+const VOLUME_COOKIE = 'last-stand-volume';
+let volumeCanary = false;
+
+/** The pause menu opened on its Settings tab, to set the music's volume as a player does. With the canary, the
+ *  setting is lost before it's read back, as if it were never saved. */
+export function openPauseVolume(canary: boolean): void {
+  openPause('settings', false);
+  volumeCanary = canary;
+}
+
+/** Every volume back to full, the pause menu closed. */
+export function closePauseVolume(): void {
+  setVolumes({ master: 1, music: 1, effects: 1 });
+  closePause();
+}
+
+/**
+ * The Music slider clicked a quarter of the way along it, with the mouse as a player does (`pauseVolume`): its volume
+ * must land there, the slider must say it, the setting must be saved (`last-stand-volume`) and the music's own gain
+ * must ease to it, as its square (#408).
+ */
+export async function pauseVolumeChecked(lab: Lab): Promise<PauseFound> {
+  const problems: string[] = [];
+  const slider = document.querySelector<HTMLInputElement>('#opt-volume [data-volume="music"]');
+  if (!slider?.checkVisibility()) return { lines: [], problems: ['pauseVolume: no Music slider shown'] };
+  const box = slider.getBoundingClientRect();
+  await lab.click({ x: box.left + box.width * VOLUME_CLICK, y: box.top + box.height / 2 });
+  if (volumeCanary) writeCookie(VOLUME_COOKIE, '1,1,1');
+  if (!(await audioRanFor(VOLUME_EASE_S))) problems.push('pauseVolume: the game\'s audio never ran after the click');
+  const share = Number(slider.value);
+  const shown = slider.nextElementSibling?.textContent ?? '';
+  const saved = Number((readCookie(VOLUME_COOKIE) ?? '').split(',')[1]);
+  const heard = (musicOutput() as GainNode | null)?.gain.value ?? Number.NaN;
+  const lines = [
+    `  the Music slider clicked ${VOLUME_CLICK * 100}% along: at ${share.toFixed(2)}, showing ${shown}, `
+      + `saved ${saved}, the music's gain ${heard.toFixed(3)}`,
+  ];
+  if (Math.abs(share - VOLUME_CLICK) > VOLUME_NEAR) problems.push(`pauseVolume: the click set ${share}`);
+  if (shown !== `${Math.round(share * 100)}%`) problems.push(`pauseVolume: the slider at ${share} shows ${shown}`);
+  if (saved !== share) problems.push(`pauseVolume: the volume ${share} ${VOLUME_CANARY.name} (saved: ${saved})`);
+  if (!(Math.abs(heard - share * share) < 0.01)) {
+    problems.push(`pauseVolume: the music's gain is ${heard.toFixed(3)} at a volume of ${share}`);
+  }
+  return { lines, problems };
+}
+
+/** Waits until the game's audio has run `seconds` by its own clock (false: it hadn't within `AUDIO_LIMIT_MS`). */
+async function audioRanFor(seconds: number): Promise<boolean> {
+  const context = audioContext();
+  if (!context) return false;
+  const until = context.currentTime + seconds;
+  for (let waited = 0; waited < AUDIO_LIMIT_MS; waited += AUDIO_POLL_MS) {
+    if (context.currentTime >= until) return true;
+    await realWait(AUDIO_POLL_MS);
+  }
+  return false;
 }
 
 function middleOf(element: Element): { x: number; y: number } {

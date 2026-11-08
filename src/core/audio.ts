@@ -1,4 +1,6 @@
-// Procedural sound effects with WebAudio (no audio files; the music is `music.ts`).
+// Procedural sound effects with WebAudio (no audio files; the music is `music.ts`), and the volumes the settings set.
+import { readCookie, writeCookie } from './cookies';
+
 /** the game's own context, which the music shares */
 let live: AudioContext | null = null;
 /** where the effects are played: the game's context, or one the lab renders them into (`playInto`) */
@@ -7,8 +9,23 @@ let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let crackleBuf: AudioBuffer | null = null;
 let last: Record<string, number> = {};
-/** the effects' level, as the settings' volume starts it */
+/** the effects' level at full volume */
 const LEVEL = 0.45;
+
+/** The volume settings (the pause menu's Settings): each a share of its slider, 0 to 1. */
+export interface Volumes {
+  /** everything */
+  master: number;
+  music: number;
+  effects: number;
+}
+const VOLUME_COOKIE = 'last-stand-volume';
+const FULL: Volumes = { master: 1, music: 1, effects: 1 };
+let volumes: Volumes = { ...FULL };
+/** The game's own mix: everything through `out` (the master volume), the effects' level, the music's own volume. */
+let mix: { out: GainNode; effects: GainNode; music: GainNode } | null = null;
+/** how quickly a moved slider is eased to (s, a time constant: no zipper noise as it's dragged) */
+const VOLUME_EASE = 0.03;
 
 /** Called at boot (the context starts suspended: opening the audio device is slow, so it happens
  *  behind the loading screen) and on every user gesture (which lets it resume). */
@@ -18,16 +35,22 @@ export function initAudio(): void {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     live = new Ctor();
   } catch { return; }
-  wire(live);
+  const out = live.createGain(); out.connect(live.destination);
+  const music = live.createGain(); music.connect(out);
+  wire(live, out);
+  mix = { out, effects: master!, music };
+  volumes = readVolumes();
+  applyVolumes(false);
 }
 
-/** The effects' graph made in `c`: the master and its compressor, the noise they're made of and the hall. */
-function wire(c: BaseAudioContext): void {
+/** The effects' graph made in `c`: the master and its compressor (into `to`), the noise they're made of and the
+ *  hall. */
+function wire(c: BaseAudioContext, to: AudioNode = c.destination): void {
   ctx = c;
   master = c.createGain();
   master.gain.value = LEVEL;
   const comp = c.createDynamicsCompressor();
-  master.connect(comp).connect(c.destination);
+  master.connect(comp).connect(to);
   noiseBuf = c.createBuffer(1, c.sampleRate * 1.5, c.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -52,10 +75,55 @@ function crackles(c: BaseAudioContext): AudioBuffer {
   return buf;
 }
 
-export function setVolume(v: number): void { if (master) master.gain.value = v; }
+/** A slider's share as a gain: its square, so its middle is a quarter (-12 dB), half as loud as heard, and the
+ *  slider's travel spread evenly over what's heard (a linear gain did nearly nothing over its top half). */
+const loudness = (share: number): number => share * share;
+
+/** A volume from its cookie's text: a share from 0 to 1, full where it's missing or broken. */
+function shareFrom(text: string | undefined): number {
+  const share = Number(text);
+  return text && Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 1;
+}
+
+/** The volumes as last saved (`last-stand-volume`: master, music, effects). */
+function readVolumes(): Volumes {
+  const [master, music, effects] = (readCookie(VOLUME_COOKIE) ?? '').split(',');
+  return { master: shareFrom(master), music: shareFrom(music), effects: shareFrom(effects) };
+}
+
+/** The volumes set on the game's mix: eased to as a slider moves, at once as the game starts. */
+function applyVolumes(ease: boolean): void {
+  if (!live || !mix) return;
+  const at = live.currentTime;
+  const set = (gain: AudioParam, to: number): void => {
+    gain.cancelScheduledValues(at);
+    if (ease) gain.setTargetAtTime(to, at, VOLUME_EASE);
+    else gain.value = to;
+  };
+  set(mix.out.gain, loudness(volumes.master));
+  set(mix.music.gain, loudness(volumes.music));
+  set(mix.effects.gain, LEVEL * loudness(volumes.effects));
+}
+
+/** The volume settings now. */
+export const volumeSettings = (): Volumes => ({ ...volumes });
+
+/** Some of the volumes changed, saved and heard at once. */
+export function setVolumes(change: Partial<Volumes>): void {
+  volumes = {
+    master: shareFrom(String(change.master ?? volumes.master)),
+    music: shareFrom(String(change.music ?? volumes.music)),
+    effects: shareFrom(String(change.effects ?? volumes.effects)),
+  };
+  writeCookie(VOLUME_COOKIE, `${volumes.master},${volumes.music},${volumes.effects}`);
+  applyVolumes(true);
+}
 
 /** The shared context (null before boot or where WebAudio is missing), for the music (`core/music.ts`). */
 export const audioContext = (): AudioContext | null => live;
+
+/** Where the music plays into: its own volume, then the master's (null before boot or where WebAudio is missing). */
+export const musicOutput = (): AudioNode | null => mix?.music ?? null;
 
 /** The effects played into `c` until the returned function puts the game's own back: made there as the game makes
  *  them, through a master, a compressor and a hall of their own at the default level. The lab's `sound` renders them

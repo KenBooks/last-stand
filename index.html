@@ -589,9 +589,9 @@
         <!-- HDR output (core/hdr.ts): its levels shown only while it's on -->
         <div class="opt-row quality-row hdr-row"><span>HDR</span>
           <div class="seg" id="opt-hdr"><button data-hdr="auto">Auto<small></small></button><button data-hdr="off">Off</button></div>
-          <div class="hdr-levels">
-            <label class="hdr-level" title="How bright the game's white is, against your screen's white for everything else"><span>Brightness</span><input type="range" id="opt-hdr-paper" min="0.4" max="1.6" step="0.05"><output id="opt-hdr-paper-value"></output></label>
-            <label class="hdr-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
+          <div class="opt-levels hdr-levels">
+            <label class="opt-level" title="How bright the game's white is, against your screen's white for everything else"><span>Brightness</span><input type="range" id="opt-hdr-paper" min="0.4" max="1.6" step="0.05"><output id="opt-hdr-paper-value"></output></label>
+            <label class="opt-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
           </div>
         </div>
         <!-- the renderer (core/rendererChoice.ts): a press loads the game at its address, and nothing is kept -->
@@ -601,6 +601,14 @@
         </div>
         </div>
         <div class="pb-opt-col">
+        <!-- the volumes (core/audio.ts): everything, the music and the effects, saved and heard as they're moved -->
+        <div class="opt-row quality-row volume-row"><span>Volume</span>
+          <div class="opt-levels" id="opt-volume">
+            <label class="opt-level" title="Everything the game plays"><span>Master</span><input type="range" data-volume="master" min="0" max="1" step="0.01"><output></output></label>
+            <label class="opt-level" title="The music"><span>Music</span><input type="range" data-volume="music" min="0" max="1" step="0.01"><output></output></label>
+            <label class="opt-level" title="The sounds of the fight: skills, blows, foes"><span>Effects</span><input type="range" data-volume="effects" min="0" max="1" step="0.01"><output></output></label>
+          </div>
+        </div>
         <!-- a report sent when the game runs slowly (perf/consent.ts): asked first, sent without asking, or never -->
         <div class="opt-row quality-row"><span>Slow-game reports</span>
           <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>

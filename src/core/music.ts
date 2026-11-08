@@ -5,7 +5,7 @@
 // effects' WebAudio context, so it starts with the first user gesture that resumes it. Two cross as the music changes:
 // the one going fades out as the next fades in where it was left (a run's battle track on from wave to wave), from its
 // top once it was let go (a new run's first wave, a biome switched to).
-import { audioContext } from './audio';
+import { audioContext, musicOutput } from './audio';
 import { TRACKS, type Fade, type TrackId } from '../data/music';
 import quietBeginnings from '../audio/music/quiet-beginnings.mp3?url';
 import shadowedDusk from '../audio/music/shadowed-dusk.mp3?url';
@@ -54,7 +54,7 @@ class Track {
       this.buffer = await ctx.decodeAudioData(data);
       this.gain = ctx.createGain();
       this.gain.gain.value = 0;
-      this.gain.connect(ctx.destination);
+      this.gain.connect(musicOutput() ?? ctx.destination);
     } catch {
       // no music, the game plays on without it
     } finally {
