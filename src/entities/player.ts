@@ -994,7 +994,9 @@ export class Player {
       (ch.skill.impl as ChannelSkill).pose?.(this, ch.skill.def, ch.state, action);
     }
     if (dashed && action && action !== dashed && !this.staggered) action.under = dashed;
-    this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
+    // (a hero not shown isn't posed: the lobby's hidden under the hall of heroes, a partner away in a run or banked;
+    // each was posed all the same, his cloth draped, 1.2 to 1.6 ms a frame a hero: `lab coop`'s heroes' update)
+    if (this.obj.visible) this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
     // ambient motes around the offhand (the mage's arcana; none while hidden: as the hero selection screen hides the
     // lobby's mage, his rose among the hall's heroes where he stood)

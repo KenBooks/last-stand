@@ -21,6 +21,8 @@ import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
 import type { ActionState, SkillKey } from '../../../src/types';
 import type { Frame, Lab } from './lab';
+import { watchHeroCost } from './coopCost';
+export { coopHeroCost } from './coopCost';
 
 import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
 export {
@@ -834,6 +836,7 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   const record = (frame: number): void => {
     watchHall();
     watchTags();
+    watchHeroCost();
     if (!scenario) return;
     const sample = sampleNow();
     if (play.frame + frame >= SETTLE_FRAMES) play.samples.push(sample);
