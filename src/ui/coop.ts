@@ -22,6 +22,7 @@ import { reportLinks, bindReportLinks } from './netHud';
 import { bindColourPicker, colourPickerHtml } from './colourPicker';
 import { heroColour } from '../data/heroColours';
 import type { Player } from '../entities/player';
+import { flyingFree, holdTurn, toggleFree, watchedPlayer, watchNext } from '../game/spectate';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -59,7 +60,39 @@ export function initCoop(): void {
   const hold = (on: boolean) => (e: Event) => { e.preventDefault(); touchRevive = on; };
   rv.addEventListener('pointerdown', hold(true));
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) rv.addEventListener(ev, hold(false));
+  bindSpectate();
   renderCoop();
+}
+
+/** The watching bar's buttons (`game/spectate.ts`), each a key's touch path: the next and previous partner, free flight,
+ *  and the turns, held. */
+function bindSpectate(): void {
+  const bar = $('#spectate');
+  $('.sp-prev', bar).onclick = () => watchNext(-1);
+  $('.sp-next', bar).onclick = () => watchNext(1);
+  $('.sp-free', bar).onclick = () => toggleFree();
+  for (const turn of bar.querySelectorAll<HTMLElement>('.sp-turn')) {
+    const way = Number(turn.dataset.way);
+    const press = (on: boolean) => (e: Event) => { e.preventDefault(); holdTurn(on ? way : 0); };
+    turn.addEventListener('pointerdown', press(true));
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) turn.addEventListener(ev, press(false));
+  }
+}
+
+/** what the watching bar last said: its words changed only as they do */
+let barSaid = '';
+/** The watching bar: who is watched (or the free camera), and the keys for each of its buttons. */
+function sayWatching(bar: HTMLElement): void {
+  const free = flyingFree();
+  const p = watchedPlayer();
+  const name = free ? 'Free camera' : p ? `Watching ${nameOf(p)}` : 'Watching';
+  const keys = free ? 'WASD fly · Q / E turn · F follow' : 'LMB next · RMB previous · Q / E turn · F free camera';
+  const said = `${name}|${keys}|${free}`;
+  if (said === barSaid) return;
+  barSaid = said;
+  $('.sp-name', bar).textContent = name;
+  $('.sp-keys', bar).textContent = keys;
+  $('.sp-free', bar).textContent = free ? 'Follow' : 'Free camera';
 }
 
 /** the co-op server as last checked: asked each time the dialog opens with no room */
@@ -537,18 +570,19 @@ export function updateCoopHud(): void {
   // down: how long is left, and that a teammate can help
   const me = G.player;
   const note = $('#down-note');
-  note.classList.toggle('hidden', !me.downed);
-  if (me.downed) {
+  const down = me.downed && !me.out;
+  note.classList.toggle('hidden', !down);
+  if (down) {
     const raiser = others.find((p) => p.reviving && Math.hypot(p.pos.x - me.pos.x, p.pos.z - me.pos.z) < COOP.reviveRange);
     note.innerHTML = `<b>You are down</b><span>${me.revive > 0 ? `${esc(raiser ? nameOf(raiser) : 'A teammate')} is raising you…` : `Bleeding out in ${Math.ceil(me.bleed)}s. A teammate can revive you.`}</span>
       <div class="dn-bar"><div style="width:${(me.revive * 100).toFixed(0)}%"></div></div>`;
   }
 
-  // watching the rest of the run
-  const watching = me.out && G.run && G.run.phase !== 'over' ? others.find((p) => p.inRun) : undefined;
+  // watching the rest of the run: who, and the controls (game/spectate.ts)
+  const watching = !!me.out && !!G.run && G.run.phase !== 'over' && others.some((p) => p.inRun);
   const spec = $('#spectate');
   spec.classList.toggle('hidden', !watching || !$('#summary').classList.contains('hidden'));
-  if (watching) spec.textContent = `Watching ${nameOf(watching)}`;
+  if (watching) sayWatching(spec);
 
   // a downed partner: the marker on the nearest (or at the screen's edge), and on touch the button to hold
   const downed = me.active ? nearestDowned(others) : undefined;

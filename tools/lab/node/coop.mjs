@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
+import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { OUT } from './paths.mjs';
 
 /** where `--pictures` puts each scenario's pictures of the two screens */
@@ -292,33 +293,24 @@ async function startTogether(pair, link, lines, canary) {
   return problems;
 }
 
-/** the frames each step of the way back to the lobby has (a player out heard by the others, the run's end, the
- *  lobby) */
-const LOBBY_FRAMES = 600;
 /** the frames the lobby's practice has to show its bar */
 const SETTLE_LOBBY_FRAMES = 30;
 
 /**
- * Every hero leaves the run as a player does, the guest first (Leave the run held in the pause menu), every game back
- * in the lobby from its summary once the run is over, and practising there (its panels stowed). Returns the problems:
- * a game whose lobby's practice shows no skill bar (after a co-op run, the run's watching look hid it in the lobby,
- * through the hero selection screen too).
+ * The run's end (`firstRunsEnd`: the guest banks, the host leaves, every game back in the lobby by itself), every
+ * game's camera turned there by a middle drag, and practising there (its panels stowed). Returns the problems: a game
+ * whose lobby's practice shows no skill bar (after a co-op run, the run's watching look hid it in the lobby, through
+ * the hero selection screen too), the hall of heroes showing a partner or the lobby's floor, a hero shown without its
+ * name tag; then the second run, watched (`watchedRun`).
  */
-async function backToLobby(pair, lines) {
-  const order = [1, ...pair.pages.map((_, index) => index).filter((index) => index !== 1)];
-  for (const index of order) {
-    await callPage(pair.pages[index], 'coopLeaveRun');
-    await pair.run(pair.turnFrames);
-  }
-  const over = (host, guest, states) => states.every((state) => state.out && state.runOver && state.summary);
-  await pair.until(over, LOBBY_FRAMES, 'the run never ended with every game on its summary');
-  for (const page of pair.pages) await callPage(page, 'coopSummaryDone');
-  const inLobby = (host, guest, states) => states.every((state) => state.mode === 'menu');
-  await pair.until(inLobby, LOBBY_FRAMES, 'not every game went back to the lobby');
+async function backToLobby(pair, lines, canary, pictures) {
+  const tags = PARTY_TAGS.slice(0, pair.pages.length);
+  const problems = await firstRunsEnd(pair, callPage, lines, { canary, tags });
+  problems.push(...await lobbyTurns(pair, callPage, lines, { tags, when: 'its panels shown' }));
   for (const page of pair.pages) await callPage(page, 'coopPractiseAgain');
+  problems.push(...await lobbyTurns(pair, callPage, lines, { tags, when: 'practising' }));
   await pair.run(SETTLE_LOBBY_FRAMES);
   const bars = await Promise.all(pair.pages.map((page) => callPage(page, 'coopLobbyBar')));
-  const problems = [];
   const said = bars.map((bar, index) => {
     const shown = bar.bar && bar.skills > 0;
     if (!bar.practising) problems.push(`${PARTY_TAGS[index]}'s lobby never became practice after the run`);
@@ -330,6 +322,9 @@ async function backToLobby(pair, lines) {
   lines.push(`back in the lobby after leaving the run, practising: ${said.join(', ')}`);
   problems.push(...await hallWithPartners(pair, lines));
   problems.push(...await tagsShown(pair, lines));
+  const picture = pictures ? join(PICTURES, 'watching-guest.png') : null;
+  if (picture) mkdirSync(PICTURES, { recursive: true });
+  problems.push(...await watchedRun(pair, callPage, lines, { tags, picture }));
   return problems;
 }
 
@@ -358,19 +353,28 @@ async function tagsShown(pair, lines) {
 const HALL_FRAMES = 180;
 
 /**
- * The host opens the hall of heroes (Change hero) as every partner casts in its lobby: the hall must show none of
- * them and play none of their casts. Returns the problems.
+ * The host throws an item on the lobby's floor and opens the hall of heroes (Change hero) as every partner casts in
+ * its lobby: the hall must show none of them, play none of their casts and show none of the floor. Returns the
+ * problems.
  */
 async function hallWithPartners(pair, lines) {
   const [host, ...partners] = pair.pages;
-  for (const page of partners) await callPage(page, 'coopCastInLobby', { on: true });
-  await callPage(host, 'coopOpenHall');
-  await pair.run(HALL_FRAMES);
-  const seen = await callPage(host, 'coopHallSeen');
-  await callPage(host, 'coopCloseHall');
-  for (const page of partners) await callPage(page, 'coopCastInLobby', { on: false });
-  await pair.run(SETTLE_LOBBY_FRAMES);
-  const problems = [];
+  let seen = null;
+  const floor = await floorInHall(pair, callPage, lines, async (floorNow) => {
+    for (const page of partners) await callPage(page, 'coopCastInLobby', { on: true });
+    await callPage(host, 'coopOpenHall');
+    await pair.run(HALL_FRAMES);
+    seen = await callPage(host, 'coopHallSeen');
+    const shown = await floorNow();
+    await callPage(host, 'coopCloseHall');
+    for (const page of partners) await callPage(page, 'coopCastInLobby', { on: false });
+    await pair.run(SETTLE_LOBBY_FRAMES);
+    return shown;
+  });
+  const problems = [...floor];
+  // (the host's, which threw it before itself: a press on a drop's name is the floor's, which took every button)
+  const fromName = { tags: PARTY_TAGS, when: 'from a name on the floor', onName: true, pages: [host] };
+  problems.push(...await lobbyTurns(pair, callPage, lines, fromName));
   if (!seen.frames) problems.push('the host\'s hall of heroes never opened');
   if (seen.shown) {
     problems.push(`the host's hall of heroes showed a partner in ${seen.shown} of its ${seen.frames} frames`);
@@ -476,7 +480,7 @@ export async function runCoop(side, options) {
       lines.push(...judged.lines);
       problems.push(...judged.problems);
     }
-    problems.push(...await backToLobby(pair, lines));
+    problems.push(...await backToLobby(pair, lines, canary, pictures));
     lines.push(...await heroCostLines(pair));
     return { text: lines.join('\n'), problems };
   } finally {

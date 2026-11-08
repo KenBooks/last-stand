@@ -8,7 +8,8 @@ import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wa
 import { initAudio } from './core/audio';
 import { updateMusic, type MusicWanted } from './core/music';
 import { FADES } from './data/music';
-import { updateTimers } from './core/timers';
+import { schedule, updateTimers } from './core/timers';
+import { updateSpectate } from './game/spectate';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
@@ -210,7 +211,8 @@ async function boot() {
 }
 
 // --- flow -------------------------------------------------------------------------
-function enterMenu() {
+/** The lobby. `keepSummary`: a co-op run's summary shown as it ended stays over it until closed (`checkRunOver`). */
+function enterMenu(keepSummary = false) {
   G.mode = 'menu';
   G.paused = G.menuOpen = G.player.idle = false;
   releaseInput();
@@ -218,7 +220,7 @@ function enterMenu() {
   showHud(false);
   hideRunBits();
   showPause(false);
-  hideSummary();
+  if (!keepSummary) hideSummary();
   showMenu(true);
   G.arena.setCalm(1);
   syncAway();
@@ -312,9 +314,9 @@ function syncPractice() {
   showHud(now, true);
 }
 
-function toMenu() {
+function toMenu(keepSummary = false) {
   abandonRun();
-  enterMenu();
+  enterMenu(keepSummary);
 }
 
 /** The host's battleground and starting wave, shown in the guests' lobbies. */
@@ -322,8 +324,10 @@ function sendLobbyChoice() {
   if (!isGuest()) sendLobby(G.arena.biome, selectedWave());
 }
 
-/** The summary closed: back to the lobby, or (in co-op, with the run still on) watch the others. */
+/** The summary closed: back to the lobby, or (in co-op, with the run still on) watch the others; over the lobby, a
+ *  co-op run's last summary (`checkRunOver`) just closes. */
 function summaryDone() {
+  if (G.mode === 'menu') { hideSummary(); return; }
   if (G.run && G.run.phase !== 'over' && G.players.some((p) => !p.local && p.inRun)) { hideSummary(); return; }
   toMenu();
 }
@@ -489,23 +493,37 @@ function nextView() {
   if (G.mode === 'menu' && !input.touchMode) toggleMenuStowed(view !== 'top');
 }
 
-/** Who the camera follows: the local player, or once out of a co-op run, a partner still in it. */
-function focusPlayer() {
-  if (G.mode !== 'run' || G.player.inRun) return G.player;
-  return G.players.find((p) => !p.local && p.inRun) ?? G.player;
+/** Where the camera looks: the local player, or once out of a co-op run, the partner watched or the free camera
+ *  (`game/spectate.ts`; its keys while nothing is over the game). */
+function cameraFocus(dt: number): { player: Player | null; pos: THREE.Vector3; height: number } {
+  const keys = !G.menuOpen && $('#summary').classList.contains('hidden');
+  const watch = updateSpectate(dt, keys);
+  return watch ?? { player: G.player, pos: G.player.pos, height: G.player.model.height };
 }
 
-/** The run is over for everyone: once the summary is closed, back to the lobby. */
+/** how long the run's end is said before every game goes back to the lobby (s) */
+const BACK_AFTER = 2.5;
+/**
+ * The run is over for everyone: solo, once the summary is closed, back to the lobby; in co-op every game goes back
+ * together once its summary has been shown (from play: "once the run ends and no one is playing any wave it should
+ * automatically spawn you back with the others"). A summary shown before the run ended, its player watching the
+ * rest, goes with the run ("You Have Fallen" stayed up after it); the one its own end brought (the last out) stays
+ * over the lobby until closed, its spoils still to read.
+ */
 let runOver = false;
 function checkRunOver() {
   const r = G.run;
   if (!r || G.mode !== 'run') return;
   // the host (or solo) ends the run once nobody is left in it
   if (!isGuest() && r.phase !== 'over' && !G.players.some((p) => p.inRun)) endRun();
-  if (r.phase !== 'over' || runOver || !r.summarized || !$('#summary').classList.contains('hidden')) return;
+  if (r.phase !== 'over' || runOver || !r.summarized) return;
+  const shown = !$('#summary').classList.contains('hidden');
+  if (!isCoop() && shown) return;
   runOver = true;
-  banner('The run is over', 'Back to the sanctuary');
-  setTimeout(() => { if (G.mode === 'run' && runOver) toMenu(); }, 2500);
+  if (r.watched) hideSummary();
+  const keep = shown && !r.watched;
+  if (!keep) banner('The run is over', 'Back to the sanctuary');
+  schedule(BACK_AFTER, () => { if (G.mode === 'run' && runOver && G.run === r) toMenu(keep); });
 }
 
 // perfLap() marks the end of each stage for the performance report's breakdown
@@ -545,12 +563,12 @@ function update(dt: number): void {
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
-  const focus = focusPlayer();
-  updateCamera(dt, focus.pos, focus.model.height);
+  const focus = cameraFocus(dt);
+  updateCamera(dt, focus.pos, focus.height);
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
-  const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
+  const eyes = focus.player === G.player && viewMode() === 'first' && viewSettled();
   viewArms(G.player.model, eyes, G.camera);
   // (the weapons' trails in each hero's own space, the arms placed in the view first)
   updateSwingTrails();

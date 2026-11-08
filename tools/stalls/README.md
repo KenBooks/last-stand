@@ -17,6 +17,7 @@ npm run stalls -- --scenario boot --variants base,noParallelCompile  # then WebG
 npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=webgpu,this?renderer=webgpu&x=0"
                                                  # two URLs' heroes in the same gear (every page's dice one seed)
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
+npm run stalls -- --scenario latency --url "this?vsync=1,this?vsync=0" --window 2560x1440 --scale 2  # input lag
 npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
 npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby
 npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hovering with the stash's glow held still

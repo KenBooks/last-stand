@@ -7,6 +7,7 @@
 // plinth).
 import { G } from '../../../src/state';
 import { hallOpen } from '../../../src/game/hall';
+import { isCoop } from '../../../src/net/role';
 import { project } from '../../../src/ui/floaters';
 import * as coopUi from '../../../src/ui/coop';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
@@ -98,7 +99,8 @@ function inView(player: (typeof G.players)[number]): boolean {
 
 /** Notes, a frame, each hero shown and whether its name tag is drawn over it. */
 export function watchTags(): void {
-  if (hallOpen()) return;
+  // (out of a room, as the party's others are until they've joined, a game shows no tags, as solo shows none)
+  if (hallOpen() || !isCoop()) return;
   if (G.mode === 'run') tagsSeen.runFrames++;
   else tagsSeen.lobbyFrames++;
   // (a tree with no tags over every hero has none of the game's to read: every hero counts as untagged)

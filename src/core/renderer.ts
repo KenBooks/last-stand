@@ -18,6 +18,7 @@ import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER } from './layers';
 import { takePorts } from './shaderPorts';
 import type { WebGPURenderer } from 'three/webgpu';
+import { glFence, gpuFence, setFrameFence } from './frameLoop';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -614,6 +615,16 @@ function unpackStateKnown(renderer: THREE.WebGLRenderer): void {
     context.UNPACK_SKIP_ROWS, context.UNPACK_SKIP_IMAGES]) renderer.state.pixelStorei(name, 0);
 }
 
+/** Each uncapped frame's GPU work fenced (`core/frameLoop.ts`), so the frames never queue ahead of the GPU. */
+function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
+  if (!WEBGPU) {
+    setFrameFence(glFence((renderer as THREE.WebGLRenderer).getContext() as WebGL2RenderingContext));
+    return;
+  }
+  const device = (renderer as unknown as { backend: { device?: GPUDevice } }).backend.device;
+  if (device) setFrameFence(gpuFence(device.queue));
+}
+
 export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
@@ -643,6 +654,7 @@ export async function initRenderer(container: HTMLElement) {
   if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
   if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
+  fenceFrames(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
@@ -852,6 +864,11 @@ export function zoomBy(notches: number): void {
 
 /** Middle-drag orbit: dragging right turns the world right (the camera swings left). */
 export function orbitBy(px: number): void { if (rig.view === 'top') rig.targetYaw -= px * CAMERA.orbitSpeed; }
+/** Turns the camera round what it follows by `rad` in any view (watching a co-op run: `game/spectate.ts`). */
+export function turnBy(rad: number): void {
+  rig.targetYaw += rad;
+  if (rig.view !== 'top') rig.yaw = rig.targetYaw;
+}
 /** Mouse look in the close views: right turns right, down looks down. */
 export function lookBy(dx: number, dy: number): void {
   if (rig.view === 'top') return;

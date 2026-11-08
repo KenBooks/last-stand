@@ -25,10 +25,15 @@ import { watchHeroCost } from './coopCost';
 export { coopHeroCost } from './coopCost';
 
 import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
+import { endInput, watchOut } from './coopEnd';
 export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
 } from './coopLobby';
+export {
+  coopClick, coopDrag, coopDragEnd, coopFloor, coopHold, coopHoldTurn, coopLiftTurn, coopOutCanary, coopOutSeen,
+  coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopWatching,
+} from './coopEnd';
 
 /** Which game a page plays. */
 export type Role = 'host' | 'guest';
@@ -143,6 +148,8 @@ export interface CoopState {
   partnerWorn?: (number | null)[];
   /** its own player out of the run (banked or fallen), the run over here, and its summary shown */
   out: boolean;
+  /** the run's phase here ('' out of one) */
+  phase: string;
   runOver: boolean;
   summary: boolean;
 }
@@ -762,9 +769,30 @@ function stateNow(): CoopState {
     worn: wornOf(G.player),
     partnerWorn: partners.map(wornOf),
     out: Boolean(G.player.out),
+    phase: G.run?.phase ?? '',
     runOver: !G.run || G.run.phase === 'over',
     summary: !document.getElementById('summary')?.classList.contains('hidden'),
   };
+}
+
+/** The host's wave cleared, as its foes all fall: the run no longer held in its countdown, so the choice after the
+ *  wave comes (`coopEnd`'s bank). On the guests, nothing to do: they follow the host. */
+export function coopClearWave(lab: Lab): void {
+  const at = lab.beforeFrame.indexOf(holdTheRun);
+  if (at >= 0) lab.beforeFrame.splice(at, 1);
+  const run = G.run;
+  if (play.role !== 'host' || !run) return;
+  clearEnemies();
+  run.queue = [];
+  run.boss = null;
+  run.pending = 0;
+  run.phase = 'fighting';
+}
+
+/** The run held in its countdown again (a run started after the scenarios: no wave comes). */
+export function coopHoldRun(lab: Lab): void {
+  play.scenario = '';
+  if (!lab.beforeFrame.includes(holdTheRun)) lab.beforeFrame.push(holdTheRun);
 }
 
 /** The run's countdown held (no wave comes) and every hero kept from falling. */
@@ -825,6 +853,8 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   wire.inbox.sort((a, b) => a.due - b.due);
   const scenario = turn.scenario ? SCENARIOS[turn.scenario] : null;
   const inputOf = (frame: number): Frame => {
+    const end = endInput();
+    if (end) return end;
     const lobby = lobbyCastInput(play.frame + frame);
     if (lobby) return lobby;
     // (the party's other heroes stand where they were put)
@@ -837,6 +867,7 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     watchHall();
     watchTags();
     watchHeroCost();
+    watchOut();
     if (!scenario) return;
     const sample = sampleNow();
     if (play.frame + frame >= SETTLE_FRAMES) play.samples.push(sample);

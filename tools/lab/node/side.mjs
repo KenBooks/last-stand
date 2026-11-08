@@ -216,20 +216,26 @@ async function touchOf(page, type, points) {
  * `y` (css px). The browser's own handling follows from it, as a player's click: its mouse and pointer events, and the
  * focus it moves.
  */
-async function mouseOf(page, type, x, y, deltaY = 0) {
+async function mouseOf(page, type, x, y, deltaY = 0, button = 'left', buttons = undefined) {
   const devtools = await devtoolsOf(page);
   const wheel = type === 'mouseWheel' ? { deltaX: 0, deltaY } : {};
-  await devtools.send('Input.dispatchMouseEvent', { type, x, y, ...MOUSE_BUTTONS[type], ...wheel });
+  const fields = buttonFields(type, button, buttons);
+  await devtools.send('Input.dispatchMouseEvent', { type, x, y, ...fields, ...wheel });
 }
 
-/** the left button's fields for each of the mouse's events: none moving or turning the wheel, held as it's pressed,
- *  up once released */
-const MOUSE_BUTTONS = {
-  mouseMoved: { button: 'none', buttons: 0 },
-  mousePressed: { button: 'left', buttons: 1, clickCount: 1 },
-  mouseReleased: { button: 'left', buttons: 0, clickCount: 1 },
-  mouseWheel: { button: 'none', buttons: 0 },
-};
+/** the buttons' mask bit of each (the DOM's `buttons`) */
+const BUTTON_BITS = { left: 1, right: 2, middle: 4 };
+
+/**
+ * The button fields of a mouse event: `button` pressed or let go (left by default), `buttons` the mask of those held
+ * after it (as the page counts them; by default the left one's alone as it's pressed, none otherwise).
+ */
+export function buttonFields(type, button = 'left', buttons = undefined) {
+  const pressing = type === 'mousePressed' || type === 'mouseReleased';
+  const held = buttons ?? (type === 'mousePressed' ? BUTTON_BITS[button] : 0);
+  if (!pressing) return { button: 'none', buttons: held };
+  return { button, buttons: held, clickCount: 1 };
+}
 
 /** The page's `prefers-reduced-motion` as the browser emulates it: `reduced`, or no preference. */
 function motionOf(page, reduced) {
@@ -594,7 +600,8 @@ export class Side {
     // (a probe's `lab.touch`: a finger on the touch controls, which no scripted input reaches)
     await page.exposeFunction('__labTouch', (type, points) => touchOf(page, type, points));
     // (a probe's `lab.click` and `lab.press`: the browser's own handling of a click and a key, its focus with them)
-    await page.exposeFunction('__labMouse', (type, x, y, deltaY) => mouseOf(page, type, x, y, deltaY));
+    const mouse = (type, x, y, deltaY, button, buttons) => mouseOf(page, type, x, y, deltaY, button, buttons);
+    await page.exposeFunction('__labMouse', mouse);
     await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
     // (a probe's `lab.reduceMotion`: the motion asked for let back on, to measure a decorative animation)
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));

@@ -19,6 +19,11 @@ import { Label, ORDER, labelAt, type LabelArt } from '../ui/overlay/layer';
 import { drawText, measure, OUTLINE, roundRect, svgImage, type TextStyle } from '../ui/overlay/paint';
 import { uiScales } from '../ui/scale';
 import type { Item } from '../types';
+import { hallOpen } from './hall';
+
+/** The floor is on show: in the lobby, and not while the hall of heroes stands in its place (a Greataxe thrown there
+ *  showed its shaft and name among the heroes). */
+const floorShown = (): boolean => G.mode === 'menu' && !hallOpen();
 
 /** A drop as the games tell each other about it: the item, where it lies and where it was thrown from. */
 export interface GroundDrop { id: string; item: Item; x: number; z: number; fx: number; fz: number }
@@ -252,6 +257,9 @@ function bindPicking(): void {
     } else if (d) moveTooltip(e);
   });
   window.addEventListener('pointerdown', (e) => {
+    // (a pick is the left button's or a finger's: the middle button's drag turns the camera from anywhere, and taken
+    // here, a press on a name the camera's drag began on turned nothing)
+    if (e.button !== 0) return;
     const d = over(e);
     pressed = d;
     if (!d) return;
@@ -268,7 +276,7 @@ function bindPicking(): void {
     pickUp(d);
   }, true);
   window.addEventListener('pointerup', (e) => {
-    if (e.pointerType !== 'mouse' || !pressed) return;
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !pressed) return;
     const d = over(e);
     if (d === pressed) pickUp(d);
     pressed = null;
@@ -348,7 +356,7 @@ function drawDrops(): void {
   for (const part of PARTS) {
     const mesh = m[part];
     mesh.count = drops.size;
-    mesh.visible = G.mode === 'menu' && drops.size > 0;
+    mesh.visible = floorShown() && drops.size > 0;
     mesh.instanceMatrix.needsUpdate = true;
     if (recolour) mesh.instanceColor!.needsUpdate = true;
   }
@@ -360,7 +368,7 @@ function drawDrops(): void {
 function placeLabels(): void {
   const placed: { x: number; y: number; w: number; h: number }[] = [];
   const shown = [...drops.values()].filter((d) => {
-    const on = d.t >= TOSS && G.mode === 'menu';
+    const on = d.t >= TOSS && floorShown();
     if (!on) d.label.shown = false;
     return on;
   }).map((d) => ({ d, s: project(d.x, groundHeight(d.x, d.z) + 0.5, d.z) })).filter(({ d, s }) => {

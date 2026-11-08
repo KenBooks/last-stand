@@ -218,7 +218,19 @@
     <!-- co-op (ui/coop.ts): partners' frames, being down, watching the rest of a run, reviving on touch -->
     <div id="party"></div>
     <div id="down-note" class="hidden"></div>
-    <div id="spectate" class="hidden"></div>
+    <div id="spectate" class="hidden">
+      <div class="sp-row">
+        <button class="sp-btn sp-prev" aria-label="Previous player">&lsaquo;</button>
+        <span class="sp-name"></span>
+        <button class="sp-btn sp-next" aria-label="Next player">&rsaquo;</button>
+      </div>
+      <div class="sp-row">
+        <button class="sp-btn sp-turn" data-way="-1" aria-label="Turn left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M6 3v5h5"/></svg></button>
+        <button class="sp-btn sp-free"></button>
+        <button class="sp-btn sp-turn right" data-way="1" aria-label="Turn right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M6 3v5h5"/></svg></button>
+      </div>
+      <div class="sp-keys"></div>
+    </div>
     <button id="btn-revive" class="hidden">Revive</button>
     <div id="hurt-vignette"></div>
     <button id="btn-pause" class="touch-only" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>

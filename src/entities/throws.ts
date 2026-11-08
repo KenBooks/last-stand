@@ -7,7 +7,9 @@
 // - The Barkhide Hulk's vine creeps out along the floor in a line, through every prop, at about a bolt's speed: a hero
 //   any of it reaches, as it comes or as he steps on it while it lies there, is held to the ground (`Player.root`),
 //   coils erupting from the floor under him; he dodges it by stepping out of its way as it comes and keeping off it,
-//   and a dash or a blink tears him free.
+//   and a dash or a blink tears him free. An arrow that meets it low over the floor cuts it, in one hit: it withers
+//   at once and lets go of whoever it holds (from play: "arrows should kill the Hulk's rooting vine in one hit"; the
+//   ranger has no dash). Every game flies every hero's arrows, so each cuts it as its own screen shows the arrow.
 // Both are played through `fx` (enemyAI.ts), so every co-op game plays them the same from the same numbers, and each
 // judges its own hero alone: hurt where `hurtPlayer` allows, rooted by its own game. A partner's copy is shown held
 // as this game sees the vine reach it.
@@ -33,6 +35,10 @@ const FALL = 22;
 const LAVA = { color: 0xff6a2a, smoke: 0x1a1210, ring: 0xff6a20, size: 0.42 };
 /** the vine's bark and sap, and how long it lies and withers once grown (s) */
 const VINE = { bark: 0x3d4d23, sap: 0x9cff3a, lies: 1.5, withers: 0.5 };
+/** what an arrow must come within of a vine to cut it: across its line (m), and over the floor (m) */
+export const VINE_CUT = { reach: 0.35, high: 0.6 };
+/** how fast a cut vine withers (s) */
+const CUT_WITHERS = 0.25;
 /** how fast the coils wind up a held hero and fall from him (s), and how high they reach (m) */
 const COILS = { wind: 0.4, fall: 0.3, high: 0.95 };
 /** how often a pool burns a hero standing in it (s) */
@@ -60,6 +66,60 @@ const keep = (t: Thrown): Thrown => {
   if (THROWN.length > 16) THROWN.shift();
   return t;
 };
+
+/** A vine on the floor, for an arrow to cut (`cutVineAlong`). */
+interface LyingVine {
+  ox: number;
+  oz: number;
+  dx: number;
+  dz: number;
+  /** how far it has crept (m) */
+  grown(): number;
+  /** cut where an arrow met it */
+  cut(at: THREE.Vector3): void;
+}
+const lying = new Set<LyingVine>();
+
+/** The closest points of segments a→b and c→d on the floor: each one's share along it, and how far apart they are. */
+function closestOnFloor(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, ex: number, ez: number):
+  { s: number; t: number; apart: number } {
+  const ux = bx - ax, uz = bz - az, vx = ex - cx, vz = ez - cz, wx = ax - cx, wz = az - cz;
+  const a = ux * ux + uz * uz, b = ux * vx + uz * vz, c = vx * vx + vz * vz, d = ux * wx + uz * wz, e = vx * wx + vz * wz;
+  const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+  const den = a * c - b * b;
+  let s = a < 1e-9 ? 0 : den > 1e-9 ? clamp01((b * e - c * d) / den) : 0;
+  let t = c < 1e-9 ? 0 : (b * s + e) / c;
+  if (t < 0 || t > 1) {
+    t = clamp01(t);
+    s = a < 1e-9 ? 0 : clamp01((b * t - d) / a);
+  }
+  const apart = Math.hypot(ax + ux * s - (cx + vx * t), az + uz * s - (cz + vz * t));
+  return { s, t, apart };
+}
+
+/**
+ * An arrow's step from `from` to `to` meeting a vine low over the floor: the vine cut there (withering at once and
+ * letting go of whoever it holds). Returns whether it met one.
+ */
+export function cutVineAlong(from: THREE.Vector3, to: THREE.Vector3): boolean {
+  for (const v of lying) {
+    const length = v.grown();
+    if (length <= 0) continue;
+    const ex = v.ox + v.dx * length, ez = v.oz + v.dz * length;
+    const near = closestOnFloor(from.x, from.z, to.x, to.z, v.ox, v.oz, ex, ez);
+    // (where the step comes nearest it across the floor, and where the step ends: shot along the vine, the step lies
+    // over it all the way, and its nearest point may be its high end)
+    const end = closestOnFloor(to.x, to.z, to.x, to.z, v.ox, v.oz, ex, ez);
+    for (const [s, apart] of [[near.s, near.apart], [1, end.apart]]) {
+      if (apart > VINE_CUT.reach) continue;
+      const at = from.clone().lerp(to, s);
+      if (at.y - groundHeight(at.x, at.z) > VINE_CUT.high) continue;
+      v.cut(at);
+      return true;
+    }
+  }
+  return false;
+}
 
 const throwOf = (id: number): { foe: Enemy | null; def: ThrowDef | undefined } => {
   const foe = G.enemies.find((e) => e.id === id) ?? null;
@@ -174,7 +234,21 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
   G.scene.add(vine.mesh);
   const thrown = keep({ what: 'vine', at: G.time, to: { x: ox + dx * length, z: oz + dz * length }, mesh: vine.mesh, struck: [] });
   const caught = new Set<Player>();
-  let t = 0, held = 0, debrisT = 0;
+  let t = 0, held = 0, debrisT = 0, cutAt = -1;
+  const onFloor: LyingVine = {
+    ox, oz, dx, dz,
+    grown: () => (cutAt < 0 ? vine.grow : 0),
+    cut(at) {
+      cutAt = t;
+      lying.delete(onFloor);
+      // (each game lets its own hero go: a partner's copy's coils fall as `cutAt` says)
+      for (const p of caught) if (p.local) p.letGo();
+      burst(at.clone().setY(groundHeight(at.x, at.z) + 0.15), { count: 14, color: VINE.sap, speed: 3, life: 0.45, size: 0.15 });
+      debris(at, { count: 6, speed: 2 });
+      sfx.thud();
+    },
+  };
+  lying.add(onFloor);
   sfx.rush();
   addEffect({
     update(dt) {
@@ -187,7 +261,7 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
         smokePuff(new THREE.Vector3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.4, sizeEnd: 1, speed: 0.6, life: 0.5 });
       }
       for (const p of G.players) {
-        if (caught.has(p) || !p.active || vine.wither > 0) continue;
+        if (caught.has(p) || !p.active || vine.wither > 0 || cutAt >= 0) continue;
         const rx = p.pos.x - ox, rz = p.pos.z - oz;
         const along = rx * dx + rz * dz, off = Math.abs(rx * dz - rz * dx);
         // anywhere along what it has laid, its head reaching a little ahead of it
@@ -196,21 +270,22 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
         caught.add(p);
         held = Math.max(held, t + hold);
         thrown.struck.push({ slot: p.slot, t: G.time });
-        coilRound(p, hold);
+        coilRound(p, hold, () => cutAt >= 0);
       }
-      const grown = length / speed, ends = Math.max(grown + VINE.lies, held);
-      vine.wither = Math.min(1, Math.max(0, (t - ends) / VINE.withers));
+      const grown = length / speed, ends = cutAt >= 0 ? cutAt : Math.max(grown + VINE.lies, held);
+      vine.wither = Math.min(1, Math.max(0, (t - ends) / (cutAt >= 0 ? CUT_WITHERS : VINE.withers)));
       vine.update(G.time);
+      if (vine.wither >= 1) lying.delete(onFloor);
       return vine.wither < 1;
     },
-    dispose() { vine.dispose(); },
+    dispose() { lying.delete(onFloor); vine.dispose(); },
   });
 }
 
 /** The coils round a hero the vine caught: erupting from the floor under him in a burst of earth and winding up his
  *  legs, kept at his feet, and fallen off as he's let go (his own game's hold, which a dash ends; a partner's copy's
- *  by the time it holds). */
-function coilRound(p: Player, hold: number): void {
+ *  by the time it holds), or the vine is `cut`. */
+function coilRound(p: Player, hold: number, cut: () => boolean): void {
   const c: Vine = coils(COILS.high, VINE.bark, VINE.sap);
   G.scene.add(c.mesh);
   const until = G.time + hold;
@@ -224,7 +299,7 @@ function coilRound(p: Player, hold: number): void {
       t += dt;
       c.mesh.position.set(p.pos.x, groundHeight(p.pos.x, p.pos.z), p.pos.z);
       c.grow = c.length * Math.min(1, t / COILS.wind);
-      const holding = p.local ? p.rooted : G.time < until && !p.dash && p.active;
+      const holding = !cut() && (p.local ? p.rooted : G.time < until && !p.dash && p.active);
       if (!holding && off < 0) {
         off = t;
         burst(new THREE.Vector3(p.pos.x, c.mesh.position.y + 0.3, p.pos.z), { count: 10, color: VINE.sap, speed: 3, life: 0.4, size: 0.15 });

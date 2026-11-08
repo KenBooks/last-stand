@@ -41,4 +41,11 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); each direct
   timed out bare, where the page had shown "Something went wrong while loading" with its cause. `--cast key@ms`
   holds a skill's key that long before the picture (`pictureEnd`), so its look is pictured on each renderer: the
   WebGPU port's Maelstrom drew nothing of its walls, seen so.
+- **`--scenario latency` times the input's lag** (`latency.mjs`): a key tapped every quarter second in the lobby,
+  each press timed to the start of the first frame that draws after it and to the GPU done with that frame (a fence
+  put into the game's WebGL 2 context after its draws, polled a message at a time); the display's wait for its
+  refresh comes on top, alike either way. Its lag shows only where the GPU is the slower side: at 1902x984 the GPU
+  kept up and Vsync on and off read alike (11 to 14 ms to the GPU done); at 2560x1440 at 2x (`--window 2560x1440
+  --scale 2`) Vsync on read 34 ms, off 152 (frames queued 4 or 5 deep ahead of the GPU, the screen shown 24 times a
+  second), 22 once uncapped frames waited for the GPU (`src/core/frameLoop.ts`).
 - **Its profiles are left behind from a sandboxed shell** (Chrome's files there can't be deleted: the tool says which), so its Chrome fetches nothing in the background: the models, Safe Browsing's lists and the components were 85 MB of a profile's 120. Delete `out/profiles/profile-*` from an unsandboxed shell now and then (each is a measure's own, never used again).
