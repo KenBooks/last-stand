@@ -91,12 +91,20 @@ summary to watch the others. Its watching bar must show and no "You are down" (m
 the host's word of its fall came after it left), and it must follow the first partner by slot, held to the hero at
 its screen's middle; LMB (a real click on the game) the next by slot, RMB the one before, the bar's next and previous
 buttons tapped by a finger likewise; F a free camera that W flies (at least 3 m in 60 frames), F again following,
-the bar's free camera button tapped twice likewise; E held 30 frames, a middle drag of 200 px and the bar's turn
-button held by a finger 30 frames must each turn the view (0.5 rad, the drag 0.6), still following; then the others
+the bar's free camera button tapped twice likewise; E held 30 frames, a middle drag of 200 px and two fingers
+twisted 0.9 rad clockwise must each turn the view (0.5 rad, the drag 0.6), still following, the twist turning the
+world on the screen the fingers' way (a point east of the hero followed, round the screen's middle: the first twist
+turned it against them). The bar is then fitted on a desktop's, phones' held sideways (751x298 at 3.75 the shortest)
+and tablets' screens each way (`coopBarFit`, `BAR_SCREENS`): within the window, each button 28 px tall at least on
+touch, over no other part of the HUD (on an upright tablet its two stacked rows lay over the partners' frames) and
+no further than 40% down the window, over the hero it follows (on the short phone it reached 48%). Then the others
 leave and the host last, every game back in the lobby by itself. `--party 4` plays the watching over three partners
-(LMB and RMB round them in their slots' order). `--pictures` pictures the guest's screen as it watches
-(`out/coop/watching-guest.png`). `--canary` (a pair's) also begins a cast on the banked guest (its sight drawn with
-it, a ranger's) and shows its summary again over its lobby: each must be caught.
+(LMB and RMB round them in their slots' order: its taps on the bar's next button caught the bar laid out again for
+touch as the first tap went down, its click landing on another button). `--pictures` pictures the guest's screen as
+it watches (`out/coop/watching-guest.png`) and the bar on each screen it's fitted on (`watching-bar-<n>.png`).
+`--canary` (a pair's) also begins a cast on the banked guest (its sight drawn with it, a ranger's), shows its summary
+again over its lobby and pads the watching bar a window tall: each must be caught. Each lobby's middle drag says what
+lies over its canvas there (a middle press there turns nothing): a party of 4's lobby has what a pair's has.
 
 `wave` (`spawnsLost: 360`): the host lets wave 4 come for real, its foes rising at the gates and fighting, and the
 lab's link drops every spawn the host reports to the guest for its first 6 s, as a guest whose run started late

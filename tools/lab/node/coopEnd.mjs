@@ -9,8 +9,14 @@
 //   Fallen" stayed up).
 // - The second run: the guest falls first and watches the others: it follows the first partner by slot, LMB the next,
 //   RMB the one before, the watching bar's buttons tapped likewise, F a free camera that WASD flies, Q/E and a middle
-//   drag turning the view, the bar's turn button held by a finger; then the host leaves, and every game is back in
-//   the lobby again by itself.
+//   drag turning the view, two fingers twisted turning it with them; then the host leaves, and every game is back in
+//   the lobby again by itself; its watching bar fitted on a desktop's, phones' and tablets' screens.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { OUT } from './paths.mjs';
+
+/** where `--pictures` puts the watching bar on each screen it's fitted on */
+const BAR_PICTURES = join(OUT, 'coop');
 
 /** the frames a step waits for what it plays (the run's end takes the fall's 2.6 s and the 2.5 s it's said) */
 const STEP_FRAMES = 600;
@@ -24,6 +30,8 @@ const LEAST_TURN = 0.5;
 /** the middle drag's px, and the least it must turn the view (rad: 0.006 a px) */
 const DRAG_PX = 200;
 const LEAST_DRAG_TURN = 0.6;
+/** how far the fingers twist (rad, clockwise on the screen) */
+const TWIST_RAD = 0.9;
 /** the frames the free camera is flown forward, and the least it must have gone (m: it flies 11 m a second) */
 const FLY_FRAMES = 60;
 const LEAST_FLIGHT = 3;
@@ -178,7 +186,7 @@ async function clickedBack(pair, call, tags) {
  * The second run, watched: every game starts it from the lobby, the guest falls (Leave the run held) and closes its
  * summary to watch the rest, its controls are played, then the host leaves. Returns the problems.
  */
-export async function watchedRun(pair, call, lines, { tags, picture = null }) {
+export async function watchedRun(pair, call, lines, { tags, picture = null, canary = false }) {
   const [host, guest] = pair.pages;
   await call(host, 'coopHoldRun');
   await call(host, 'coopStart');
@@ -192,11 +200,45 @@ export async function watchedRun(pair, call, lines, { tags, picture = null }) {
   if (!watching.met) return ['the guest\'s summary never closed for it to watch the rest'];
   const order = watching.states[1].partnerSlots;
   const problems = await watchControls(pair, call, lines, order);
+  problems.push(...await barFits(guest, call, lines, { canary, pictures: picture !== null }));
   if (picture) await pictureWatching(pair, call, lines, picture);
   problems.push(...await theRestLeave(pair, call, tags));
   await call(host, 'coopLeaveRun');
   problems.push(...await backByItself(pair, call, lines, { tags, canary: false }));
   return problems;
+}
+
+/**
+ * The guest's watching bar fitted on a desktop's, phones' and tablets' screens (page/coopEnd.ts `BAR_SCREENS`), in
+ * touch mode as its bar's buttons were tapped: within the window, its buttons a finger's size, over no other part of
+ * the HUD. With `canary`, a bar a window tall, whose run past the window must be found.
+ */
+async function barFits(guest, call, lines, { canary, pictures }) {
+  const problems = [];
+  const screens = await call(guest, 'coopBarScreens');
+  for (let index = 0; index < screens; index++) {
+    const fit = await call(guest, 'coopBarFit', { index, canary });
+    lines.push(`watching bar on ${fit.line}`);
+    problems.push(...fit.problems);
+    if (pictures) await pictureBar(guest, call, index);
+  }
+  await call(guest, 'coopBarBack');
+  if (!canary) return problems;
+  const caught = problems.some((problem) => problem.includes('runs past the window'));
+  lines.push(`canary: a watching bar a window tall ${caught ? 'caught' : 'missed'}`);
+  return caught ? [] : ['canary: a watching bar a window tall was never found past the window'];
+}
+
+/** The guest's screen as its watching bar is fitted on screen `index` (`--pictures`). */
+async function pictureBar(guest, call, index) {
+  await call(guest, 'coopDrawing', { on: true });
+  await guest.evaluate(() => window.__labClock.realFrame());
+  // (through the DevTools protocol, at the screen's own pixels: Playwright's own put the page back on its screen)
+  const png = await guest.evaluate(() => window.__labScreenshot());
+  mkdirSync(BAR_PICTURES, { recursive: true });
+  const file = join(BAR_PICTURES, `watching-bar-${index}.png`);
+  writeFileSync(file, Buffer.from(png.replace(/^data:image\/png;base64,/, ''), 'base64'));
+  await call(guest, 'coopDrawing', { on: false });
 }
 
 /** The guest's screen as it watches (`--pictures`): its watching bar over the run, drawn as the game draws it. */
@@ -292,7 +334,8 @@ async function flyFree(pair, call, lines, slot) {
   return problems;
 }
 
-/** The view turned by E held, a middle drag and the bar's turn button held by a finger: each must turn it. */
+/** The view turned by E held, a middle drag and two fingers twisted: each must turn it, the twist the world with
+ *  the fingers. */
 async function turnings(pair, call, lines) {
   const guest = pair.pages[1];
   const ways = [];
@@ -308,17 +351,31 @@ async function turnings(pair, call, lines) {
     await pair.run(pair.turnFrames);
     await call(guest, 'coopDragEnd');
   });
-  await turn('the bar\'s turn held', async () => {
-    if (!await call(guest, 'coopHoldTurn')) return;
-    await pair.run(TURN_FRAMES);
-    await call(guest, 'coopLiftTurn');
+  let worldTurned = 0;
+  await turn('two fingers twisted', async () => {
+    const before = await call(guest, 'coopWorldAngle');
+    await call(guest, 'coopTwist', { rad: TWIST_RAD });
+    await pair.run(SETTLE_FRAMES);
+    const after = await call(guest, 'coopWorldAngle');
+    worldTurned = Math.atan2(Math.sin(after - before), Math.cos(after - before));
   });
   lines.push(`turning while watching: ${ways.map((way) => `${way.name} ${way.by.toFixed(2)} rad`).join(', ')}`);
+  const twist = TWIST_RAD.toFixed(2);
+  lines.push(`fingers twisted ${twist} rad clockwise: the world on the screen ${worldTurned.toFixed(2)}`);
   const least = { 'E held': LEAST_TURN, 'a middle drag': LEAST_DRAG_TURN };
   const problems = ways.filter((way) => way.by < (least[way.name] ?? LEAST_TURN))
     .map((way) => `${way.name} turned the watching camera ${way.by.toFixed(2)} rad`);
   for (const way of ways) problems.push(...following(way.after, way.after.watched, `after ${way.name}`));
+  if (worldTurned * TWIST_RAD <= 0) problems.push('two fingers twisted turned the world against them on the screen');
   return problems;
+}
+
+/** What lies over `page`'s canvas in its lobby, where a middle press turns nothing (page/coopEnd.ts
+ *  `coopCanvasCover`), in a line. */
+async function coverLine(page, call, tag) {
+  const cover = await call(page, 'coopCanvasCover');
+  const parts = cover.map((part) => `${part.name} ${(part.share * 100).toFixed(0)}%`);
+  return `${tag}'s lobby: over its canvas ${parts.length ? parts.join(', ') : 'nothing'}`;
 }
 
 /**
@@ -340,6 +397,7 @@ export async function lobbyTurns(pair, call, lines, { tags, when, onName = false
   }
   const said = turns.map((by, index) => `${tags[index]} ${by.toFixed(2)} rad`);
   lines.push(`a middle drag in the lobby (${when}): ${said.join(', ')}`);
+  lines.push(await coverLine(pages[0], call, tags[pair.pages.indexOf(pages[0])]));
   return turns.flatMap((by, index) => (by < LEAST_DRAG_TURN
     ? [`${tags[index]}'s middle drag in the lobby (${when}) turned its camera ${by.toFixed(2)} rad`]
     : []));

@@ -33,7 +33,7 @@ Up to four players can hold the arena together over the internet, each under a n
 
 - Each player brings their own hero, gear and loadout, and keeps their own spoils: loot goes to whoever lands the kill (a boss pays everyone), and each bag stays hidden until its owner banks.
 - The host picks the battleground and starting wave and starts the run. A party faces more foes, each with more life.
-- After every wave everyone chooses: **Bank** leaves the run with your spoils right away; the next wave starts once everyone staying chose **Continue**. Players who left watch the rest of the run: **left click** follows the next player, **right click** the one before, **Q** / **E** (or a middle drag) turn the camera, and **F** flies a free camera with `W A S D`; on touch the bar at the top has a button for each. Once nobody is left in the run, everyone goes back to the lobby together.
+- After every wave everyone chooses: **Bank** leaves the run with your spoils right away; the next wave starts once everyone staying chose **Continue**. Players who left watch the rest of the run: **left click** follows the next player, **right click** the one before, **Q** / **E** (or a middle drag) turn the camera, and **F** flies a free camera with `W A S D`; on touch the bar at the top has a button for each, and two fingers twisted turn the camera. Once nobody is left in the run, everyone goes back to the lobby together.
 - At 0 health you go **down** rather than die. A teammate can raise you by standing next to you and holding **E** (the **Revive** button on touch) for 3 seconds. If you're not raised within 20 seconds, or you're still down when the wave ends, you fall and lose your spoils. With nobody left standing, the run is lost for everyone still in it.
 - The game can't pause for one player: the pause menu only stops your hero. If the host leaves mid-run, the others keep what they found, as if banked.
 
@@ -46,7 +46,7 @@ Last Stand is an installable web app. Use the **Install** link in the lobby (Chr
 Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone sideways):
 - **Move:** a stick anywhere on the left half of the screen.
 - **Skills:** the buttons on the right. Tap to cast at the nearest foe, or drag to aim and let go to cast there; hold the attack button or a channelled skill to keep it going.
-- **Other:** pinch to zoom, and the ❚❚ button pauses.
+- **Other:** pinch to zoom, twist two fingers to turn the camera, and the ❚❚ button pauses.
 - **Lobby:** tap items to equip them or drop them on the floor, and tap a key, then a skill, to rebind it.
 
 Keyboard and mouse:

@@ -110,18 +110,21 @@ body.touch #party { top: touch(104px); left: $touch-beside; scale: var(--touch, 
 #spectate { position: absolute; left: 50%; top: hud(86px); transform: translateX(-50%); display: flex; flex-direction: column;
   align-items: center; gap: hud(5px); padding: hud(6px) hud(10px); border-radius: 4px; font-size: hud(15px);
   background: rgba(8,8,14,.72); color: #cfe6ff; white-space: nowrap; }
-// (the watching bar, game/spectate.ts: each button the touch path of a key; turns held)
+// (the watching bar, game/spectate.ts: each button the touch path of a key; on touch two fingers twisted turn. Its
+// buttons a finger's size whatever the pointer, in one row: sized and laid out for touch alone, the first tap on a
+// screen that has a mouse too put the page in touch mode as it went down, the bar was laid out again under the
+// finger, and its click landed on another button)
 .sp-row { display: flex; align-items: center; gap: hud(6px); }
 .sp-name { min-width: hud(150px); text-align: center; }
-.sp-btn { display: flex; align-items: center; justify-content: center; min-width: hud(30px); height: hud(28px); padding: 0 hud(8px);
+.sp-btn { display: flex; align-items: center; justify-content: center; min-width: max(40px, hud(30px));
+  height: max(40px, hud(28px)); padding: 0 hud(8px);
   font: inherit; color: inherit; background: rgba(255,255,255,.08); border: 1px solid rgba(207,230,255,.25); border-radius: 4px;
   cursor: $cursor-hand; touch-action: none; user-select: none; }
 .sp-btn:hover { background: rgba(255,255,255,.16); }
-.sp-btn svg { width: hud(16px); height: hud(16px); fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
-.sp-turn.right svg { transform: scaleX(-1); }
+.sp-btn svg { width: max(24px, hud(20px)); height: max(24px, hud(20px)); fill: none; stroke: currentColor;
+  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .sp-keys { font-size: hud(12px); color: rgba(207,230,255,.7); }
 body.touch .sp-keys { display: none; }
-body.touch .sp-btn { min-width: max(40px, hud(30px)); height: max(40px, hud(28px)); }
 #btn-revive { position: absolute; right: calc(290px * var(--touch, 1) + env(safe-area-inset-right, 0px)); bottom: touch(24px); width: 84px; height: 84px; border-radius: 50%;
   font-family: var(--font-display); font-size: 16px; color: #ffe6a0; background: radial-gradient(circle at 50% 40%, #5a4a20, #1a140a 75%); border: 2px solid var(--highlight);
   box-shadow: 0 0 16px rgba($highlight, .5); touch-action: none; pointer-events: auto; }

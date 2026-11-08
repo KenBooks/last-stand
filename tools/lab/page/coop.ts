@@ -31,8 +31,9 @@ export {
   coopSummaryDone, coopTagsSeen,
 } from './coopLobby';
 export {
-  coopClick, coopDrag, coopDragEnd, coopFloor, coopHold, coopHoldTurn, coopLiftTurn, coopOutCanary, coopOutSeen,
-  coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopWatching,
+  coopBarBack, coopBarFit, coopBarScreens, coopCanvasCover, coopClick, coopDrag, coopDragEnd, coopFloor, coopHold,
+  coopOutCanary, coopOutSeen, coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopTwist, coopWatching,
+  coopWorldAngle,
 } from './coopEnd';
 
 /** Which game a page plays. */
