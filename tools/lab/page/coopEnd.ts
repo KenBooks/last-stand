@@ -13,7 +13,7 @@ import { groundDrops, throwItem } from '../../../src/game/groundItems';
 import { groundHeight } from '../../../src/world/ground';
 import { labelAt } from '../../../src/ui/overlay/layer';
 import { rollDrop } from '../../../src/loot/items';
-import type { Frame, Lab, MouseButton } from './lab';
+import type { Frame, Lab, MouseButton, Screen } from './lab';
 
 /** the game's spectating, where the tree has it (an older one's watching follows the first partner alone) */
 type Spectate = typeof import('../../../src/game/spectate');
@@ -137,8 +137,10 @@ function barButton(name: string): { x: number; y: number } | null {
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
-/** The finger that holds the bar's turn button (the move stick's is 0) */
-const TURN_FINGER = 1;
+/** the fingers that twist (the move stick's is 0), how far apart they start (css px) and the steps of their twist */
+const TWIST_FINGERS = [1, 2];
+const TWIST_SPREAD = 160;
+const TWIST_STEPS = 12;
 
 /** The watching bar's button `name` (`prev`, `next`, `free`) tapped by a finger, its touch path. Returns whether the
  *  bar had it. */
@@ -148,18 +150,33 @@ export async function coopTapBar(lab: Lab, { name }: { name: string }): Promise<
   return at !== null;
 }
 
-/** The watching bar's turn-left button put down by a finger and held (`coopLiftTurn` lifts it). Returns whether the
- *  bar had it. */
-export async function coopHoldTurn(lab: Lab): Promise<boolean> {
-  const at = barButton('turn');
-  if (at) await lab.touchDown(at, TURN_FINGER);
-  return at !== null;
+/** Two fingers put down either side of the screen's middle, below it, twisted by `rad` (clockwise on the screen
+ *  for more than 0) a step at a time, and lifted, as a player turns the camera on touch. */
+export async function coopTwist(lab: Lab, { rad }: { rad: number }): Promise<void> {
+  const middle = { x: window.innerWidth / 2, y: window.innerHeight * 0.6 };
+  const fingerAt = (finger: number, turn: number) => {
+    const side = finger === TWIST_FINGERS[0] ? Math.PI : 0;
+    const radius = TWIST_SPREAD / 2;
+    return { x: middle.x + Math.cos(side + turn) * radius, y: middle.y + Math.sin(side + turn) * radius };
+  };
+  for (const finger of TWIST_FINGERS) await lab.touchDown(fingerAt(finger, 0), finger);
+  for (let step = 1; step <= TWIST_STEPS; step++) {
+    for (const finger of TWIST_FINGERS) await lab.touchMove(fingerAt(finger, (rad * step) / TWIST_STEPS), finger);
+    await lab.step(1);
+  }
+  for (const finger of TWIST_FINGERS) await lab.touchUp(finger);
 }
 
-/** The finger on the turn button lifted. */
-export async function coopLiftTurn(lab: Lab): Promise<void> {
-  await lab.touchUp(TURN_FINGER);
+/** Where a point of the world east of what the camera follows shows round the screen's middle (rad, clockwise from
+ *  the right): the world's turn on the screen, against the fingers'. */
+export function coopWorldAngle(): number {
+  const followed = spectating?.watchedPlayer()?.pos ?? G.player.pos;
+  const at = project(followed.x + WORLD_MARK_M, followed.y, followed.z);
+  const centre = project(followed.x, followed.y, followed.z);
+  return Math.atan2(at.y - centre.y, at.x - centre.x);
 }
+/** how far east of what the camera follows the world's mark stands (m) */
+const WORLD_MARK_M = 3;
 
 /** What the camera shows as this game watches: the partner its spectating follows (slot; -1 none) and whether it
  *  flies free, the hero nearest the screen's middle (slot; -1 none within a fifth of the screen), where the camera
@@ -236,4 +253,152 @@ export function coopThrowItem(): void {
 /** The canary: this game's summary shown again over its lobby (as a summary left up there). */
 export function coopSummaryCanary(): void {
   document.getElementById('summary')?.classList.remove('hidden');
+}
+
+/** the screens the watching bar is fitted on (css px): a desktop, phones held sideways (the shortest, #381's, at its
+ *  panel's zoom) and tablets each way */
+export const BAR_SCREENS: Screen[] = [
+  { width: 1366, height: 768, ratio: 1 },
+  { width: 844, height: 390, ratio: 3 },
+  { width: 751, height: 298, ratio: 3.75 },
+  { width: 1024, height: 768, ratio: 2 },
+  { width: 768, height: 1024, ratio: 2 },
+];
+/** a finger's button is this tall at the least (css px), as the touch HUD's are held to (`ui --states hudTouch`) */
+const FINGER_PX = 28;
+/** a part of the HUD as large as this share of the window is a layer over all of it (the hurt vignette), not a part */
+const LAYER_SHARE = 0.4;
+/** the watching bar reaches no further down the window than this share: the hero it follows stands at its middle,
+ *  his name tag over him */
+const BAR_LOWEST = 0.4;
+
+/** The watching bar's fit on one screen: the problems with it, and its box in a line. */
+export interface BarFit {
+  line: string;
+  problems: string[];
+}
+
+/** Whether `inner` lies within `outer`, a pixel's rounding allowed. */
+function within(inner: DOMRect, outer: { left: number; top: number; right: number; bottom: number }): boolean {
+  const slack = 1;
+  return inner.left >= outer.left - slack && inner.top >= outer.top - slack
+    && inner.right <= outer.right + slack && inner.bottom <= outer.bottom + slack;
+}
+
+/** Whether two boxes overlap by more than a pixel each way. */
+function overlap(a: DOMRect, b: DOMRect): boolean {
+  const slack = 1;
+  return a.left < b.right - slack && b.left < a.right - slack && a.top < b.bottom - slack && b.top < a.bottom - slack;
+}
+
+/** An element's name in a problem: its id, else its tag and first class. */
+function nameOf(element: Element): string {
+  if (element.id) return `#${element.id}`;
+  const first = element.classList[0];
+  return first ? `${element.tagName.toLowerCase()}.${first}` : element.tagName.toLowerCase();
+}
+
+/** Whether an element shows on the page: laid out with an area, visible and not see-through. */
+function showing(element: Element): boolean {
+  const box = element.getBoundingClientRect();
+  if (box.width < 1 || box.height < 1) return false;
+  const style = getComputedStyle(element);
+  return style.visibility !== 'hidden' && Number(style.opacity) > 0;
+}
+
+/** The parts of the HUD and the touch controls shown under the watching bar (the outermost of each, not a layer over
+ *  the whole window). */
+function partsUnder(bar: HTMLElement): string[] {
+  const barBox = bar.getBoundingClientRect();
+  const window_ = window.innerWidth * window.innerHeight;
+  const found: Element[] = [];
+  for (const element of document.querySelectorAll('#hud *, #touch *')) {
+    if (bar.contains(element) || element.contains(bar)) continue;
+    if (found.some((outer) => outer.contains(element)) || !showing(element)) continue;
+    const box = element.getBoundingClientRect();
+    if (box.width * box.height > window_ * LAYER_SHARE) continue;
+    if (overlap(box, barBox)) found.push(element);
+  }
+  return found.map(nameOf);
+}
+
+/** The watching bar's fit on the screen the page is on now. */
+function barFitHere(): BarFit {
+  const bar = document.getElementById('spectate');
+  const screen = `${window.innerWidth}x${window.innerHeight}`;
+  if (!bar || !showing(bar)) return { line: `${screen}: no watching bar`, problems: [`${screen}: no watching bar`] };
+  const box = bar.getBoundingClientRect();
+  const problems: string[] = [];
+  const edges = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  if (!within(box, edges)) problems.push(`${screen}: the watching bar runs past the window`);
+  const touch = document.body.classList.contains('touch');
+  for (const button of bar.querySelectorAll('.sp-btn')) {
+    const at = button.getBoundingClientRect();
+    if (!within(at, box)) problems.push(`${screen}: the bar's ${nameOf(button)} runs out of it`);
+    if (touch && at.height < FINGER_PX) problems.push(`${screen}: the bar's ${nameOf(button)} is ${at.height} px tall`);
+  }
+  const under = partsUnder(bar);
+  if (under.length) problems.push(`${screen}: the watching bar lies over ${under.join(', ')}`);
+  if (box.bottom > window.innerHeight * BAR_LOWEST) {
+    const down = Math.round((box.bottom / window.innerHeight) * 100);
+    problems.push(`${screen}: the watching bar reaches ${down}% down the window, over the hero it follows`);
+  }
+  const share = (value: number, of: number) => `${Math.round((value / of) * 100)}%`;
+  const place = `${share(box.top, window.innerHeight)} to ${share(box.bottom, window.innerHeight)} down`;
+  const line = `${screen}: ${Math.round(box.width)}x${Math.round(box.height)} px, ${place}${touch ? ', touch' : ''}`;
+  return { line, problems };
+}
+
+/** the screen the page was on before the bar was fitted on others, to put it back on */
+let ownScreen: Screen | null = null;
+
+/** The watching bar fitted on `BAR_SCREENS[index]`, the page put on it (`coopBarBack` puts it back), with `canary` its
+ *  padding made a window tall, which must be found past the window. */
+export async function coopBarFit(lab: Lab, { index, canary = false }: { index: number; canary?: boolean }):
+  Promise<BarFit> {
+  ownScreen ??= { width: window.innerWidth, height: window.innerHeight, ratio: window.devicePixelRatio };
+  const bar = document.getElementById('spectate');
+  if (canary && bar) bar.style.paddingBottom = '100vh';
+  try {
+    await lab.showOn(BAR_SCREENS[index]);
+    await lab.step(2);
+    return barFitHere();
+  } finally {
+    if (bar) bar.style.paddingBottom = '';
+  }
+}
+
+/** The page put back on the screen it was on before the bar was fitted on others. */
+export async function coopBarBack(lab: Lab): Promise<void> {
+  if (ownScreen) await lab.showOn(ownScreen);
+  ownScreen = null;
+}
+
+/** How many screens the watching bar is fitted on. */
+export function coopBarScreens(): number {
+  return BAR_SCREENS.length;
+}
+
+/** the grid of points the canvas's cover is read at, across and down */
+const COVER_GRID = { across: 32, down: 18 };
+
+/** What lies over the game's canvas where a middle press would turn the camera: each element the press would reach
+ *  instead (named by its nearest ancestor with an id), with its share of the window. */
+export function coopCanvasCover(): { name: string; share: number }[] {
+  const canvas = G.renderer.domElement;
+  const counts = new Map<string, number>();
+  const { across, down } = COVER_GRID;
+  for (let row = 0; row < down; row++) {
+    for (let column = 0; column < across; column++) {
+      const x = ((column + 0.5) / across) * window.innerWidth;
+      const y = ((row + 0.5) / down) * window.innerHeight;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || hit === canvas) continue;
+      const named = hit.closest('[id]') ?? hit;
+      const name = nameOf(named);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  const all = across * down;
+  return [...counts].map(([name, count]) => ({ name, share: count / all })).sort((a, b) => b.share - a.share);
 }

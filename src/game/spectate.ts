@@ -1,8 +1,9 @@
 // Watching the rest of a co-op run once out of it (from play: "in spectate mode, need to click LMB to spectate next,
 // RMB previous, and some key for free camera fly, show spectate controls. when spectating on player, should be
 // possible to rotate the camera"). The camera follows a partner still in the run: LMB the next by slot, RMB the one
-// before; Q and E (or a middle drag, in every view) turn it round him; F lets it fly free (WASD, or the move stick)
-// and back. The bar over the HUD (`ui/coop.ts`) shows who is watched and has a button for each, for touch.
+// before; Q and E (or a middle drag, in every view, or two fingers twisted) turn it round him; F lets it fly free
+// (WASD, or the move stick) and back. The bar over the HUD (`ui/coop.ts`) shows who is watched and has a button for
+// each but the turns, for touch.
 import * as THREE from 'three';
 import { G } from '../state';
 import { ARENA, CAMERA } from '../data/balance';
@@ -25,8 +26,6 @@ export interface Watch {
 let watched: Player | null = null;
 let free = false;
 const freeAt = new THREE.Vector3();
-/** the bar's held turn buttons: -1 left, 1 right */
-let held = 0;
 
 /** Out of the run and watching it: the local player out while it goes on. */
 export const spectating = (): boolean => G.mode === 'run' && !!G.run && !G.player.inRun;
@@ -61,16 +60,10 @@ export function toggleFree(): void {
   if (free) freeAt.copy(watchedPlayer()?.pos ?? G.player.pos).setY(0);
 }
 
-/** The bar's turn buttons held (-1 left, 1 right) or let go (0). */
-export function holdTurn(way: number): void {
-  held = way;
-}
-
 /** Back to following the first partner, as a new watch starts. */
 export function endSpectate(): void {
   watched = null;
   free = false;
-  held = 0;
 }
 
 /** The free camera flown a frame by WASD or the move stick, its way as the camera faces, within the arena. */
@@ -101,7 +94,7 @@ function fly(dt: number): void {
  */
 export function updateSpectate(dt: number, keys: boolean): Watch | null {
   if (!spectating()) {
-    if (watched || free || held) endSpectate();
+    if (watched || free) endSpectate();
     return null;
   }
   if (keys && !input.mouse.overUI) {
@@ -109,9 +102,9 @@ export function updateSpectate(dt: number, keys: boolean): Watch | null {
     if (wasPressed('mouse2')) watchNext(-1);
   }
   if (keys && wasPressed('f')) toggleFree();
-  const turn = (keys && isDown('e') ? 1 : 0) - (keys && isDown('q') ? 1 : 0) + held;
+  const turn = (keys && isDown('e') ? 1 : 0) - (keys && isDown('q') ? 1 : 0);
   if (turn) turnBy(-turn * TURN * dt);
-  // (top-down turns by a middle drag already: `orbitBy`)
+  // (top-down turns by a middle drag or a twist already: `orbitBy`)
   if (input.orbit && viewMode() !== 'top') turnBy(-input.orbit * CAMERA.orbitSpeed);
   if (free) {
     if (keys) fly(dt);

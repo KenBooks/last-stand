@@ -22,7 +22,7 @@ import { reportLinks, bindReportLinks } from './netHud';
 import { bindColourPicker, colourPickerHtml } from './colourPicker';
 import { heroColour } from '../data/heroColours';
 import type { Player } from '../entities/player';
-import { flyingFree, holdTurn, toggleFree, watchedPlayer, watchNext } from '../game/spectate';
+import { flyingFree, toggleFree, watchedPlayer, watchNext } from '../game/spectate';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -64,19 +64,13 @@ export function initCoop(): void {
   renderCoop();
 }
 
-/** The watching bar's buttons (`game/spectate.ts`), each a key's touch path: the next and previous partner, free flight,
- *  and the turns, held. */
+/** The watching bar's buttons (`game/spectate.ts`), each a key's touch path: the next and previous partner and free
+ *  flight (the camera turns by two fingers twisted, `ui/touch.ts`, as it does everywhere on touch). */
 function bindSpectate(): void {
   const bar = $('#spectate');
   $('.sp-prev', bar).onclick = () => watchNext(-1);
   $('.sp-next', bar).onclick = () => watchNext(1);
   $('.sp-free', bar).onclick = () => toggleFree();
-  for (const turn of bar.querySelectorAll<HTMLElement>('.sp-turn')) {
-    const way = Number(turn.dataset.way);
-    const press = (on: boolean) => (e: Event) => { e.preventDefault(); holdTurn(on ? way : 0); };
-    turn.addEventListener('pointerdown', press(true));
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) turn.addEventListener(ev, press(false));
-  }
 }
 
 /** what the watching bar last said: its words changed only as they do */

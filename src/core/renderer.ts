@@ -621,8 +621,10 @@ function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
     setFrameFence(glFence((renderer as THREE.WebGLRenderer).getContext() as WebGL2RenderingContext));
     return;
   }
-  const device = (renderer as unknown as { backend: { device?: GPUDevice } }).backend.device;
-  if (device) setFrameFence(gpuFence(device.queue));
+  // (WebGPURenderer's WebGL 2 backend, `?renderer=webgpu-gl`, has a context and no device)
+  const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
+  if (backend.device) setFrameFence(gpuFence(backend.device.queue));
+  else if (backend.gl) setFrameFence(glFence(backend.gl));
 }
 
 export async function initRenderer(container: HTMLElement) {

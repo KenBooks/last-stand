@@ -9,7 +9,10 @@
 // commands): begun as soon as the last one's commands were sent, a GPU-bound game queued 4 or 5 frames ahead of the
 // GPU, and a press waited behind all of them, 152 ms from the key to the GPU done with the frame that read it, where
 // synced it was 34 (from play: "Vsync off raises FPS but makes the game feel laggy"; `npm run stalls -- --scenario
-// latency --url "this?vsync=1,this?vsync=0" --window 2560x1440 --scale 2`).
+// latency --url "this?vsync=1,this?vsync=0" --window 2560x1440 --scale 2`); WebGPU's, 29 ms without the fence, 16
+// with it. Where the CPU is the slower side no frame waits (its CPU slowed 4 times, none of some 600 a round), and
+// the lag and the frames a second are a fence-less loop's (`?ahead=99`). `?ahead=N` lets frames run N ahead, and
+// `?frameWaits` counts the frames that waited, for a harness (`window.__frameWaits`, read by stalls' `latency`).
 import { readCookie, writeCookie } from './cookies';
 
 const COOKIE = 'last-stand-vsync';
@@ -35,7 +38,15 @@ let fenceOf: FrameFence | null = null;
 const inFlight: (() => boolean)[] = [];
 /** how many frames sent an uncapped frame may begin ahead of the GPU's done with (one: the CPU's next frame overlaps
  *  the GPU's last) */
-const AHEAD = 1;
+const AHEAD = Number(new URLSearchParams(location.search).get('ahead') ?? 1);
+/** the uncapped frames run and those that waited for the GPU, and how long they waited (ms), for a harness to read
+ *  (`?frameWaits`: `window.__frameWaits`, `npm run stalls -- --read`) */
+const waits = { frames: 0, waited: 0, ms: 0 };
+if (new URLSearchParams(location.search).has('frameWaits')) {
+  (window as unknown as { __frameWaits: typeof waits }).__frameWaits = waits;
+}
+/** when the frame waiting began (ms), or -1 while none is */
+let waitingSince = -1;
 
 /** Marks each uncapped frame's GPU work with `fence` (the renderer's), so frames never queue ahead of the GPU. */
 export function setFrameFence(fence: FrameFence): void {
@@ -87,8 +98,19 @@ function run(timestamp: number): void {
 // (uncapped: the frame waits, asking again a message later, while the GPU has more than `AHEAD` frames to do)
 channel.port2.onmessage = () => {
   while (inFlight.length && inFlight[0]()) inFlight.shift();
-  if (uncapped && !document.hidden && inFlight.length > AHEAD) channel.port1.postMessage(null);
-  else run(performance.now());
+  const now = performance.now();
+  if (uncapped && !document.hidden && inFlight.length > AHEAD) {
+    if (waitingSince < 0) waitingSince = now;
+    channel.port1.postMessage(null);
+    return;
+  }
+  waits.frames++;
+  if (waitingSince >= 0) {
+    waits.waited++;
+    waits.ms += now - waitingSince;
+    waitingSince = -1;
+  }
+  run(now);
 };
 
 /** Runs `frame` every frame from now on, with the frame's time (ms, on `performance.now`'s clock). */

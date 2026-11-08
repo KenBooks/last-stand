@@ -1,5 +1,6 @@
 // Touch controls for phones and tablets: a floating move stick on the left half of the screen, the
-// skill buttons in an arc at the bottom right, pinch to zoom and a pause button. It drives
+// skill buttons in an arc at the bottom right, pinch to zoom, two fingers twisted to turn the camera (as the middle
+// drag turns it with the mouse) and a pause button. It drives
 // core/input like the keyboard and mouse do.
 //
 // Skill buttons: the basic attack, channelled skills and drawn bows act while held, aimed at the nearest foe (a bow looses as it's let go).
@@ -12,6 +13,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
 import { cameraYaw, zoomBy } from '../core/renderer';
+import { CAMERA } from '../data/balance';
 import { additive } from '../core/materials';
 import { groundHeight } from '../world/ground';
 import { SKILL_KEYS } from '../loot/loadout';
@@ -24,6 +26,8 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
 /** stick travel in px of the stick as drawn (on the screen, that times the touch controls' scale), and how far a skill
  *  drag must go before it aims by hand */
+/** which way the camera turns for a twist: the world turning with the fingers, as a map under them would */
+const TWIST_WAY = -1;
 const STICK_R = 56, DRAG_MIN = 16;
 /** px of skill drag per metre of aim distance, and the aim range */
 const DRAG_PX_PER_M = 9, AIM_MIN = 2, AIM_MAX = 14;
@@ -48,7 +52,11 @@ interface Released { key: SkillKey; aim: THREE.Vector3; t: number; held: boolean
 let stick: Stick | null = null;
 let press: Press | null = null;
 let released: Released | null = null;
-let pinch: { d: number } | null = null;
+/** two fingers down: their spread at the last zoom notch, their angle on the screen at the last frame's turn and the
+ *  twist since they came down, which turns nothing under `TWIST_START` (a pinch's own wobble) */
+let pinch: { d: number; a: number; twist: number } | null = null;
+/** how far two fingers twist before the camera turns with them (rad) */
+const TWIST_START = 0.14;
 let buttons: { key: SkillKey; el: HTMLElement; cd: HTMLElement; cdt: HTMLElement }[] = [];
 let ring: THREE.Mesh;
 const _aim = new THREE.Vector3();
@@ -109,15 +117,32 @@ export function initTouch(): void {
   // the pad hides when the hero falls: the finger's release never reaches it, only the capture is lost
   pad.addEventListener('lostpointercapture', endStick);
 
-  // pinch to zoom, with two fingers anywhere but the buttons
+  // pinch to zoom and twist to turn, with two fingers anywhere but the buttons
   const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-  window.addEventListener('touchstart', (e) => { if (e.touches.length === 2 && !press) pinch = { d: dist(e.touches) }; }, { passive: true });
+  const angle = (t: TouchList) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
+  window.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2 || press) return;
+    pinch = { d: dist(e.touches), a: angle(e.touches), twist: 0 };
+    // (a second finger makes it a gesture: the first, on the stick's pad, walks the hero no further)
+    if (stick) { stick = null; input.stick.x = input.stick.y = 0; base.classList.remove('on'); }
+  }, { passive: true });
   window.addEventListener('touchmove', (e) => {
     if (!pinch || e.touches.length !== 2) return;
     const d = dist(e.touches);
     // one zoom notch per 12% change in finger spread
     const n = Math.log(pinch.d / d) / Math.log(1.12);
     if (Math.abs(n) >= 1) { zoomBy(Math.trunc(n)); pinch.d = d; }
+    // the world turns with the fingers, a radian of theirs a radian of the camera's (`input.orbit` is in the middle
+    // drag's px)
+    const a = angle(e.touches);
+    const by = Math.atan2(Math.sin(a - pinch.a), Math.cos(a - pinch.a));
+    pinch.a = a;
+    const before = pinch.twist;
+    pinch.twist += by;
+    if (Math.abs(pinch.twist) >= TWIST_START) {
+      const past = Math.abs(before) >= TWIST_START ? by : pinch.twist - Math.sign(pinch.twist) * TWIST_START;
+      input.orbit += (TWIST_WAY * past) / CAMERA.orbitSpeed;
+    }
   }, { passive: true });
   window.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 

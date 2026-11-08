@@ -324,7 +324,7 @@ async function backToLobby(pair, lines, canary, pictures) {
   problems.push(...await tagsShown(pair, lines));
   const picture = pictures ? join(PICTURES, 'watching-guest.png') : null;
   if (picture) mkdirSync(PICTURES, { recursive: true });
-  problems.push(...await watchedRun(pair, callPage, lines, { tags, picture }));
+  problems.push(...await watchedRun(pair, callPage, lines, { tags, picture, canary }));
   return problems;
 }
 
