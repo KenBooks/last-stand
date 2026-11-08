@@ -599,6 +599,50 @@ function veilstepPass(dur: number): void {
   v.start(); v.stopAt(t + land + 1.1);
 }
 
+/** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
+ *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
+ *  s, landed by about 2.95). Timed to it: the wind's body and its flanged rush swelling and sweeping from the right
+ *  ear to the left, a fizz of blown snow riding it, then the swirl drawn in rising towards the logo, settling with
+ *  a soft breath of air as it lands. Wind and dust alone, no notes, as the lobby's music may be starting under it. */
+function logoGust(): void {
+  const v = voice(0, 0.4);
+  const { c, t } = v;
+  // the gust's way across: right ear to left
+  const across = c.createStereoPanner(); across.connect(v.out);
+  across.pan.setValueAtTime(0.75, t); across.pan.linearRampToValueAtTime(-0.8, t + 1.4);
+  const swell = (peak: number, at: number, hold: number, fall: number, to: AudioNode): GainNode => {
+    const g = c.createGain(); g.connect(to);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + at);
+    g.gain.setValueAtTime(peak, t + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + fall);
+    return g;
+  };
+  // the wind's body: dark noise, opening as the gust strikes, closing as it passes
+  const body = c.createBiquadFilter(); body.type = 'lowpass'; body.Q.value = 0.7;
+  body.frequency.setValueAtTime(350, t); body.frequency.exponentialRampToValueAtTime(1400, t + 0.45); body.frequency.exponentialRampToValueAtTime(300, t + 2);
+  v.loop(body); body.connect(swell(0.5, 0.35, 0.8, 2.1, across));
+  // its rush, flanged
+  const rush = c.createBiquadFilter(); rush.type = 'bandpass'; rush.Q.value = 0.9;
+  rush.frequency.setValueAtTime(700, t); rush.frequency.exponentialRampToValueAtTime(3200, t + 0.5); rush.frequency.exponentialRampToValueAtTime(900, t + 1.9);
+  v.loop(rush); rush.connect(v.flange(swell(0.4, 0.4, 0.75, 1.9, across), 4, 3, 0.9, 0.55));
+  // the snow and dust it carries: a high fizz, flickering
+  const fizz = c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 5000;
+  const flick = c.createGain(); flick.connect(swell(0.13, 0.3, 1.1, 2, across));
+  v.lfo(11, 0.5, flick.gain);
+  v.loop(fizz); fizz.connect(flick);
+  // the swirl gathering into the lobby's logo, up on the left: drawn in, rising
+  const gather = c.createStereoPanner(); gather.pan.value = -0.5; gather.connect(v.out);
+  const draw = c.createBiquadFilter(); draw.type = 'bandpass'; draw.Q.value = 0.8;
+  draw.frequency.setValueAtTime(600, t + 1.2); draw.frequency.exponentialRampToValueAtTime(4500, t + 2.85);
+  const dg = c.createGain(); dg.connect(gather);
+  dg.gain.setValueAtTime(0.0001, t); dg.gain.setValueAtTime(0.003, t + 1.2); dg.gain.exponentialRampToValueAtTime(0.32, t + 2.8); dg.gain.exponentialRampToValueAtTime(0.0001, t + 2.95);
+  v.loop(draw); draw.connect(v.flange(dg, 2.5, 2, 3.5, 0.55));
+  // the landing: a soft breath of air as the logo forms
+  const land = c.createBiquadFilter(); land.type = 'lowpass'; land.Q.value = 0.8;
+  land.frequency.setValueAtTime(1500, t + 2.85); land.frequency.exponentialRampToValueAtTime(220, t + 3.3);
+  v.loop(land); land.connect(blowAt(v, 2.85, 0.4, 0.5, gather, 0.02));
+  v.start(); v.stopAt(t + 3.7);
+}
+
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
 const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
@@ -636,6 +680,9 @@ export const sfx = {
   zap: guard(() => { if (throttle('zap', 70)) return; noise({ dur: 0.1, freq: 6000, type: 'highpass', gain: 0.12 }); tone({ freq: 180, to: 60, dur: 0.1, type: 'square', gain: 0.05 }); }),
   /** coming apart into light and crossing: a rush of air rising, and a shimmer rising with it */
   blink: guard(() => { noise({ dur: 0.32, freq: 900, sweep: 4200, q: 1.4, gain: 0.14 }); tone({ freq: 520, to: 1560, dur: 0.22, gain: 0.06 }); tone({ freq: 784, to: 2350, dur: 0.18, type: 'triangle', gain: 0.04, delay: 0.03 }); }),
+  /** the loading screen's logo blown away and gathered into the lobby's; only where sound already runs (a context
+   *  still waiting for the page's first click would play it at that click, in the lobby) */
+  logoGust: guard(() => { if (ctx!.state === 'running') logoGust(); }),
   /** Veilstep: gone, and formed again where he lands `dur` s later (the dodge keeps `blink`) */
   veilstep: guard((dur: number) => { veilstepPass(dur); }),
   potion: guard(() => { noise({ dur: 0.35, freq: 800, sweep: 2500, q: 5, gain: 0.15 }); tone({ freq: 440, to: 880, dur: 0.4, gain: 0.08 }); }),
