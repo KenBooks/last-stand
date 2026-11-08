@@ -10,7 +10,7 @@ import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/e
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
-import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { EYE } from './face';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
@@ -617,7 +617,7 @@ export function buildMage(): Model {
   void hang; void panel;
 
   // --- the head: face, a full beard, hair, and a hood (worn with a head item equipped: setGear) in the coat's wool
-  const head = buildHead(j.head, kit, 'mage', { hair: 'short', crop: true });
+  const head = buildHead(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage.hair);
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);

@@ -8,7 +8,10 @@ import { analyzeBoot } from './analyze.mjs';
 import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
-import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, startRun, stopBootRecording } from './page.mjs';
+import {
+  bootRecording, changeHero, chooseIfAsked, fightWarm, heroesShown, heroesShownAt, loaded, startIfCold, startRun,
+  stopBootRecording,
+} from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
 import { VIEWS } from './options.mjs';
@@ -78,6 +81,23 @@ const leftCold = (visit, options) => options.coldReturn && visit === VISITS[0];
  *  its fight waited for a Start that never came, the run's 120 s out. */
 const staysBehind = (visit, options) => options.warmBehind && visit !== VISITS[0];
 
+/** Whether `visit` presses Change hero rather than Start (`--change-hero`): the return alone, as a first visit warms
+ *  every hero for the hall it opens on, and a return's heroes are cold till something needs them. */
+const changesHero = (visit, options) => options.changeHero && visit !== VISITS[0];
+
+/** How long the hall of heroes is watched once it shows (ms): the camera's flight to the hero in focus and his
+ *  showcase begun. */
+const HALL_WATCHED_MS = 4000;
+
+/** Change hero pressed in the lobby, the hall of heroes waited for (its heroes warmed under the loading bar) and
+ *  watched `HALL_WATCHED_MS`. */
+async function hallOpened(page) {
+  await page.evaluate(changeHero);
+  await page.waitForFunction(heroesShown, null, { timeout: WARM_TIMEOUT_MS, polling: 50 });
+  await page.evaluate(heroesShownAt);
+  await page.waitForTimeout(HALL_WATCHED_MS);
+}
+
 /** How long `--warm-behind` waits for the fight to warm behind the lobby (ms): one given up there waits for a Start
  *  that never comes (on a phone's CPU, the lobby's own frames ran past what it may hold, and the run timed out). */
 const BEHIND_MOST_MS = 30_000;
@@ -124,6 +144,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
     if (staysBehind(visit, options)) left = await warmedBehind(page);
+    else if (changesHero(visit, options)) await hallOpened(page);
     else {
       await page.evaluate(startIfCold);
       await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
@@ -175,11 +196,12 @@ function bootNotes(visit, options, left, errors, picture) {
   const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
+  const hero = changesHero(visit, options) ? ['Change hero pressed, not Start'] : [];
   const failed = errors.length ? [`page errors: ${distinctErrors(errors).join(' | ')}`] : [];
   const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
   const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
-    ...failed, ...read, ...builds];
+    ...hero, ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
 }
 

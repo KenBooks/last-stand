@@ -445,8 +445,10 @@ export function bootText(measure, { links = false } = {}) {
     ? 'the lobby never revealed'
     : `the lobby revealed at ${bootSeconds(findings.revealedAt)}`;
   const painted = findings.painted === null ? '' : `, first painted at ${bootSeconds(findings.painted)}`;
-  const pressed = findings.pressedAt ? `Start pressed at ${bootSeconds(findings.pressedAt)}, ` : '';
-  const warm = findings.warmAt ? `, ${pressed}the fight warm at ${bootSeconds(findings.warmAt)}` : '';
+  const what = pressedWhat(findings);
+  const pressed = findings.pressedAt ? `${what} pressed at ${bootSeconds(findings.pressedAt)}, ` : '';
+  const warmed = what === 'Start' ? 'the fight warm' : 'the hall of heroes shown';
+  const warm = findings.warmAt ? `, ${pressed}${warmed} at ${bootSeconds(findings.warmAt)}` : '';
   const took = (file) => (file.ms === null ? '' : ` in ${bootSeconds(file.ms)}`);
   const largest = files.largest.map((file) => `${file.name} ${megabytes(file.bytes)}${took(file)}`).join(', ');
   const lines = [
@@ -476,13 +478,18 @@ function lobbyStallLines({ lobbyStalls, listedMs, revealedAt }) {
   return [head, ...lobbyStalls.flatMap((stall) => stallLines(stall).map((line) => `  ${line}`))];
 }
 
-/** The frames held up from Start (`analyze.mjs` `runStallsOf`): the fight's loading bar's, where it waited for its
- *  programs, and the run's start, each as a stall is listed, its time from Start. */
-function runStallLines({ runStalls, listedMs, startedAt, warmAt }) {
+/** What the boot pressed in its lobby: Start, or Change hero (`--change-hero`); a record from before says nothing. */
+const pressedWhat = (findings) => findings.pressedWhat ?? 'Start';
+
+/** The frames held up from Start, or Change hero (`analyze.mjs` `runStallsOf`): the loading bar's, where it waited for
+ *  its programs, and the run's start or the hall's opening, each as a stall is listed, its time from the press. */
+function runStallLines(findings) {
+  const { runStalls, listedMs, startedAt, warmAt } = findings;
   if (startedAt === null || !runStalls) return [];
+  const what = pressedWhat(findings);
   const bar = warmAt && warmAt > startedAt ? `, the loading bar down ${bootSeconds(warmAt - startedAt)} in` : '';
-  if (!runStalls.length) return [`  from Start held up ${listedMs} ms or more: never${bar}`];
-  const head = `  from Start held up ${listedMs} ms or more: ${runStalls.length} times (times from Start${bar})`;
+  if (!runStalls.length) return [`  from ${what} held up ${listedMs} ms or more: never${bar}`];
+  const head = `  from ${what} held up ${listedMs} ms or more: ${runStalls.length} times (times from ${what}${bar})`;
   return [head, ...runStalls.flatMap((stall) => stallLines(stall).map((line) => `  ${line}`))];
 }
 
@@ -534,10 +541,12 @@ export function bootRoundsText(measures) {
     const warm = boots.map((boot) => boot.findings.warmAt).filter((at) => at);
     const pressed = boots.filter((boot) => boot.findings.pressedAt && boot.findings.warmAt);
     const barShown = pressed.map(({ findings }) => findings.warmAt - findings.pressedAt);
+    const what = pressed.length ? pressedWhat(pressed[0].findings) : 'Start';
     const barText = pressed.length
-      ? ` (${pressed.length} cold: Start pressed, its bar shown ${secondsText(barShown)})`
+      ? ` (${pressed.length} cold: ${what} pressed, its bar shown ${secondsText(barShown)})`
       : '';
-    const warmRow = warm.length ? [`    the fight warm at ${secondsText(warm)}${barText}`] : [];
+    const warmed = what === 'Start' ? 'the fight warm' : 'the hall of heroes shown';
+    const warmRow = warm.length ? [`    ${warmed} at ${secondsText(warm)}${barText}`] : [];
     const exits = boots.map((boot) => boot.findings.exit).filter(Boolean);
     const exitRow = exits.length ? [`    the loading screen left: ${exitsText(exits)}`] : [];
     const gone = boots.map((boot) => goneAfter(boot.findings)).filter((after) => after !== null);

@@ -9,6 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { faceCanvases, faceGrid } from '../../core/textures';
+import { createKit } from '../../core/materials';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
@@ -55,6 +56,27 @@ function once<T extends object>(key: string, make: () => T): T {
     madeOnce.set(key, made);
   }
   return made;
+}
+
+/** How a head's hair is done (`buildHead`'s `o`). */
+export interface HeadHair { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean }
+
+/** each hero's head as his model builds it, by model: whose face and his hair (mage.ts, ranger.ts, warrior.ts) */
+export const HERO_HEADS = {
+  mage: { who: 'mage', hair: { hair: 'short', crop: true } },
+  ranger: { who: 'ranger', hair: { hair: 'swept', crop: true } },
+  warrior: { who: 'warrior', hair: { hair: 'loose' } },
+} as const satisfies Record<string, { who: keyof typeof FACES; hair: HeadHair }>;
+
+/**
+ * The geometry of `model`'s head made ahead (`once`: every head built after shares it), so his first build is left
+ * only his body: a hero's first build in one task was 210 to 350 ms on the owner's PC, his head's hair most of it,
+ * a frozen loading bar as Change hero warmed the other heroes (trace FD2V-NB48, 618 ms). A head built on a joint of
+ * its own and dropped: its materials were never drawn, so nothing of the GPU's is let go.
+ */
+export function makeHeadAhead(model: string): void {
+  const head = HERO_HEADS[model as keyof typeof HERO_HEADS];
+  if (head) buildHead(new THREE.Object3D(), createKit(), head.who, head.hair);
 }
 
 const grids = new Map<string, HeadGrid>();
@@ -202,7 +224,7 @@ export interface Head {
  * `crop`: short tufts over the back and sides below a hat's band (`Head.crop`), for a hat to show under its brim.
  * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean } = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadHair = {}): Head {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
