@@ -12,7 +12,8 @@ import { cameraYaw } from '../../../src/core/renderer';
 import { hostRoom, joinRoom, session } from '../../../src/net/session';
 import * as netlog from '../../../src/net/netlog';
 import { spawnEnemy } from '../../../src/entities/spawner';
-import { clearEnemies, type Enemy } from '../../../src/entities/enemy';
+import { clearEnemies, RISE_TIME, type Enemy } from '../../../src/entities/enemy';
+import * as crowd from '../../../src/entities/models/crowd';
 import { Projectile } from '../../../src/combat/projectiles';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { menuStowed, toggleMenuStowed } from '../../../src/ui/menus';
@@ -20,6 +21,12 @@ import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
 import type { ActionState, SkillKey } from '../../../src/types';
 import type { Frame, Lab } from './lab';
+
+import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
+export {
+  coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
+  coopSummaryDone, coopTagsSeen,
+} from './coopLobby';
 
 /** Which game a page plays. */
 export type Role = 'host' | 'guest';
@@ -75,6 +82,10 @@ export interface FoeSample {
    *  reports to have it where it went (entities/evade.ts) */
   ducked: boolean;
   gone: boolean;
+  /** risen out of the floor (its rise over), and drawn as this game would draw it this frame; if not, why not */
+  risen: boolean;
+  drawn: boolean;
+  hidden: string;
 }
 
 /** What one game shows in one frame of a scenario. */
@@ -128,6 +139,10 @@ export interface CoopState {
   partnerColours?: (string | null)[];
   worn?: number | null;
   partnerWorn?: (number | null)[];
+  /** its own player out of the run (banked or fallen), the run over here, and its summary shown */
+  out: boolean;
+  runOver: boolean;
+  summary: boolean;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -155,6 +170,12 @@ interface Scenario {
   foes: { type: EnemyId; at: XZ; dazed?: boolean }[];
   /** the guest's life as it starts (unhurt by default) */
   guestLife?: number;
+  /** a wave the host lets come for real (its foes thinking and fighting) as the scenario starts, instead of the
+   *  foes standing where it puts them */
+  wave?: number;
+  /** the frames from the scenario's start in which the guest never hears of a foe's spawn, as a guest whose run
+   *  started late (its fight warming as the host's began) heard of none */
+  spawnsLost?: number;
   /** the skill (its `impl`) the guest's hero must know to play it, or one of them: a class's own */
   skill?: string | string[];
   /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
@@ -479,6 +500,18 @@ const SCENARIOS: Record<string, Scenario> = {
     hostInput: () => ({}),
     guestInput: blinkInput,
   },
+  wave: {
+    about: 'the host lets wave 4 come, its foes rising at the gates and fighting, both heroes standing by the dais; '
+      + 'the guest hears of no spawn for its first 6 s, as a guest whose run started late',
+    frames: 900,
+    host: [-1.5, 3],
+    guest: [1.5, 3],
+    foes: [],
+    wave: 4,
+    spawnsLost: 360,
+    hostInput: () => ({}),
+    guestInput: () => ({}),
+  },
   rush: {
     about: 'the guest, a warrior, charges through three dazed foes, the host standing off',
     frames: 240,
@@ -545,11 +578,27 @@ class LabChannel {
   }
 }
 
+/** A packet of the game's local link (`localLink` in src/net/transport.ts) as the lab carries it. */
+interface Packet {
+  ch?: string;
+  data?: { x?: { k: string }[] };
+}
+
+/** The host's report with its spawns taken out, while the scenario has the guest lose them (`spawnsLost`). */
+function loseSpawns(message: Arriving): void {
+  const lost = SCENARIOS[play.scenario]?.spawnsLost ?? 0;
+  if (play.role !== 'guest' || play.frame >= lost) return;
+  const packet = message.data as Packet;
+  if (packet.ch !== 'w' || !packet.data?.x) return;
+  packet.data.x = packet.data.x.filter((event) => event.k !== 'spawn');
+}
+
 /** Hands the game the messages that have arrived by the frame about to run, in the order they arrive. */
 function deliver(): void {
   const by = wireTime() + window.__labClock.frame;
   while (wire.inbox.length && wire.inbox[0].due <= by) {
     const message = wire.inbox.shift()!;
+    loseSpawns(message);
     for (const channel of wire.channels) {
       if (channel.name === message.name) channel.onmessage?.({ data: message.data });
     }
@@ -710,12 +759,17 @@ function stateNow(): CoopState {
     partnerColours: partners.map((player) => colourOf(player) ?? null),
     worn: wornOf(G.player),
     partnerWorn: partners.map(wornOf),
+    out: Boolean(G.player.out),
+    runOver: !G.run || G.run.phase === 'over',
+    summary: !document.getElementById('summary')?.classList.contains('hidden'),
   };
 }
 
 /** The run's countdown held (no wave comes) and every hero kept from falling. */
 function holdTheRun(): void {
   const run = G.run;
+  // (a wave let come runs as the game runs it)
+  if (SCENARIOS[play.scenario]?.wave) return;
   if (run && play.role === 'host') {
     run.queue = [];
     run.phase = 'countdown';
@@ -750,6 +804,11 @@ export function coopScenario(lab: Lab, { name }: { name: string }): void {
   // (on both: the host clears its foes without a word to the guest, whose copies of them would stay where they were)
   clearEnemies();
   if (play.role !== 'host') return;
+  if (scenario.wave && G.run) {
+    G.run.wave = scenario.wave;
+    G.run.phase = 'countdown';
+    G.run.timer = 0;
+  }
   for (const foe of scenario.foes) {
     const enemy = spawnEnemy(foe.type, new lab.THREE.Vector3(foe.at[0], 0, foe.at[1]), { wave: 1 });
     enemy.life = UNKILLED;
@@ -764,6 +823,8 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   wire.inbox.sort((a, b) => a.due - b.due);
   const scenario = turn.scenario ? SCENARIOS[turn.scenario] : null;
   const inputOf = (frame: number): Frame => {
+    const lobby = lobbyCastInput(play.frame + frame);
+    if (lobby) return lobby;
     // (the party's other heroes stand where they were put)
     if (!scenario || play.extra !== null) return {};
     const at = play.frame + frame - SETTLE_FRAMES;
@@ -771,6 +832,8 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     return play.role === 'host' ? scenario.hostInput(at) : scenario.guestInput(at);
   };
   const record = (frame: number): void => {
+    watchHall();
+    watchTags();
     if (!scenario) return;
     const sample = sampleNow();
     if (play.frame + frame >= SETTLE_FRAMES) play.samples.push(sample);
@@ -867,8 +930,40 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   // (an older tree's foes never evade)
   const ducked = ((foe as { ducked?: number }).ducked ?? 0) > 0;
   const gone = ((foe as { gone?: number }).gone ?? 0) > 0;
-  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up, ducked, gone };
+  const risen = !foe.spawning;
+  const hidden = hiddenWhy(foe);
+  return {
+    id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up, ducked, gone,
+    risen, drawn: !hidden, hidden,
+  };
 }
+
+/** a foe dissolved this far is not to be seen */
+const DISSOLVED = 0.99;
+/** a body scaled smaller than this is not to be seen */
+const SHRUNK = 0.01;
+
+/**
+ * Why this game would not draw `foe` this frame ('' if it would): out of the scene, hidden, dissolved, shrunk to
+ * nothing, or (drawn in a crowd, as every creature is) left out of its crowd.
+ */
+function hiddenWhy(foe: Enemy): string {
+  if (foe.obj.parent !== G.scene) return 'out of the scene';
+  if (!foe.obj.visible || !foe.model.root.visible) return 'hidden';
+  const dissolve = foe.model.kit?.u?.uDissolve?.value ?? 0;
+  if (dissolve >= DISSOLVED) return `dissolved (${dissolve.toFixed(2)})`;
+  foe.obj.updateMatrixWorld(true);
+  const scale = foe.model.root.matrixWorld.getMaxScaleOnAxis();
+  if (scale < SHRUNK) return `shrunk (${scale.toFixed(3)})`;
+  // (an older tree draws no crowds)
+  const seated = (crowd as { inCrowd?: (body: Enemy) => boolean }).inCrowd;
+  const crowdKind = foe.model.root.userData.crowdKind as string | undefined;
+  if (seated && crowdKind && crowd.crowdSlots(foe.model).length && !seated(foe)) return 'out of its crowd';
+  return '';
+}
+
+/** how long a foe's rise is, for the judge (s) */
+export const FOE_RISE = RISE_TIME;
 
 /** How this game plays its partner's reports out, where this tree's session has a timeline for it. */
 function playoutNow(): Sample['playout'] {

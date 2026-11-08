@@ -67,3 +67,20 @@ host's colour behind the room's back once it's in (`coopWearColour`): two in one
 arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
 the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
 (half the ping, up to the jitter more), so the scores show a ping and its graph.
+
+After the scenarios every game goes back to the lobby as players do (`page/coopLobby.ts`, `backToLobby` in
+`node/coop.mjs`): the guest leaves the run from the pause menu first (Leave the run held), then the others, each
+returns from the summary once the run is over and practises in the lobby, whose skill bar must show on every game
+(after a co-op run the HUD kept the run's watching look, its bars and skills hidden, through the lobby: main fails).
+Then the host opens the hall of heroes (Change hero) for 180 frames as every partner casts its first skill in its
+lobby: no partner may show there, nor play a cast (main played the guest's in 110 frames: four in a room stood
+among the hall's heroes, a warrior's ward glowing over a plinth). Over the whole command each game counts the heroes
+its camera shows and those without their name tag drawn over them, its own among them (`watchTags`): any is a
+problem.
+
+`wave` (`spawnsLost: 360`): the host lets wave 4 come for real, its foes rising at the gates and fighting, and the
+lab's link drops every spawn the host reports to the guest for its first 6 s, as a guest whose run started late
+heard of none. Each screen's risen foes are held to being drawn (none undrawn past 250 ms, with the reason the game
+gives: out of the scene, hidden, dissolved, out of its crowd), and every foe on the host's screen must come to the
+guest's: on main 6 of them never did, their attacks playing from nowhere ("mobs missing in the first 10 sec... but
+they're firing"). The guest asks the host about them (`src/net/AGENTS.md`).

@@ -84,9 +84,11 @@ export class Label {
       this.slot = null;
     }
     this.slot ??= takeSlot(w, h);
+    // (with no room in the atlas, painted next frame it's shown: marked painted, a co-op partner's tag that found the
+    // atlas full of a fight's numbers wasn't drawn until its art next changed, its bar a step down)
+    if (!this.slot) return;
     this.painted = ratio;
     this.paintedFonts = fontLoads;
-    if (!this.slot) return;
     const c = paintCanvas(this.slot);
     c.setTransform(ratio, 0, 0, ratio, 0, 0);
     art.paint(c, ratio);

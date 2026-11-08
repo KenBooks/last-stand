@@ -62,7 +62,7 @@ import { preloadStump } from './world/stump';
 import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
-import { initCoop, renderCoop, updateCoopHud, touchReviving, joinInvited } from './ui/coop';
+import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits } from './ui/coop';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -216,6 +216,7 @@ function enterMenu() {
   releaseInput();
   runOver = false;
   showHud(false);
+  hideRunBits();
   showPause(false);
   hideSummary();
   showMenu(true);
@@ -532,6 +533,7 @@ function update(dt: number): void {
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
   syncPractice();
+  updateNameTags();
   if (G.mode === 'run') {
     updateHud();
     updateCoopHud();

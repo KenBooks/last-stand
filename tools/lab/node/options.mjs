@@ -284,7 +284,7 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws', 'wave'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
           + 'down, blink (a mage), rush and strike (a warrior), throws',
       },
@@ -1652,6 +1652,15 @@ export const COMMANDS = {
       + 'each frame: a change made to cost less poses him exactly as before when an A/B\'s digests agree',
     options: {
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: a number moved by its last bit' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  labels: {
+    help: 'a world label kept out by a full atlas: the atlas filled with name tags until a tag finds no slot, a few '
+      + 'given back (too few to pack it again), and the tag drawn in one within 3 frames',
+    options: {
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: no slot given back' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

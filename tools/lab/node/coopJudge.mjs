@@ -752,6 +752,57 @@ function drawnAt(samples, who) {
  * A scenario judged: its lines (each copy's following, the arrows, the blows, as the scenario has them) and the
  * problems found. `host` and `guest` are the two games' samples, frame for frame.
  */
+/** how long a risen foe may go undrawn on a screen before it's a problem (s): a frame or two of hand-over */
+const UNDRAWN_SLACK = 0.25;
+
+/**
+ * Each foe a screen shows risen, frame by frame (`FoeSample.risen`, `drawn`, `hidden`): the frames it went undrawn
+ * all the same, the longest run of them and why. Returns, by foe id: its risen frames, undrawn frames, longest
+ * undrawn run (frames) and the reason the game gave first.
+ */
+export function undrawnFoes(samples) {
+  const byId = new Map();
+  for (const sample of samples) {
+    for (const foe of sample.foes) {
+      if (foe.risen === undefined || !foe.risen) continue;
+      const seen = byId.get(foe.id) ?? { risen: 0, undrawn: 0, run: 0, longest: 0, why: '' };
+      seen.risen++;
+      if (foe.drawn) seen.run = 0;
+      else {
+        seen.undrawn++;
+        seen.run++;
+        seen.longest = Math.max(seen.longest, seen.run);
+        seen.why ||= foe.hidden;
+      }
+      byId.set(foe.id, seen);
+    }
+  }
+  return byId;
+}
+
+/** Each screen's risen foes against what it drew: every one undrawn longer than `UNDRAWN_SLACK` is a problem. */
+function describeDrawnFoes(host, guest, frameMs) {
+  const problems = [];
+  const parts = [['the host\'s', host], ['the guest\'s', guest]].map(([whose, samples]) => {
+    const seen = undrawnFoes(samples);
+    const most = Math.round((UNDRAWN_SLACK * 1000) / frameMs);
+    const lost = [...seen].filter(([, foe]) => foe.longest > most);
+    for (const [id, foe] of lost) {
+      const longest = ms(foe.longest, frameMs);
+      problems.push(`foe ${id} risen but undrawn on ${whose} screen for ${longest} at a stretch (${foe.why})`);
+    }
+    return `${whose} screen: ${seen.size} foes risen, ${lost.length} undrawn past ${UNDRAWN_SLACK * 1000} ms`;
+  });
+  const hostIds = new Set(foeIds(host));
+  const guestIds = new Set(foeIds(guest));
+  const missing = [...hostIds].filter((id) => !guestIds.has(id));
+  if (missing.length) {
+    problems.push(`${missing.length} of the host's foes never on the guest's screen (${missing.join(', ')})`);
+  }
+  const line = `foes drawn: ${parts.join('; ')}; ${missing.length} of the host's ${hostIds.size} never on the guest's`;
+  return { line, problems };
+}
+
 export function judgeScenario({ name, about, host, guest, frameMs }) {
   const lines = [`${name} (${about})`];
   const problems = [];
@@ -777,5 +828,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));
   if (name === 'rush' || name === 'strike') add(describeRush(host, guest));
   if (name === 'strike') add(describeStrike(host, guest));
+  if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));
   return { lines, problems };
 }

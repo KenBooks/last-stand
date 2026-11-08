@@ -1462,6 +1462,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  labels: {
+    each(side, options) {
+      return side.command('labels', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   coat: {
     each(side, options) {
       const command = {

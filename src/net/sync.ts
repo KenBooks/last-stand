@@ -28,8 +28,11 @@ import type { Player } from '../entities/player';
 import type { EnemyId } from '../data/enemies';
 import type { Item } from '../types';
 
+/** A foe's coming, as the host reports it: what a guest's copy of it is made from. */
+export type SpawnEvent = { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; n: string; x: number; z: number; f: number; ml: number; w: number };
+
 type WorldEvent =
-  | { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; n: string; x: number; z: number; f: number; ml: number; w: number }
+  | SpawnEvent
   | { k: 'die'; id: number; f?: number[] }
   | { k: 'fx'; n: FxName; a: number[] }
   | { k: 'prop'; i: number; l: number }
@@ -75,10 +78,26 @@ let pending: { seq: number; id: number; amount: number }[] = [];
 let hitSeq = 0;
 let outgoing: HitReport[] = [];
 const _pose: Pose = { x: 0, z: 0, vx: 0, vz: 0, f: 0 };
+/** guest: the host's clock as this game last showed it (ms) */
+let shownAt = NaN;
+/** guest: every foe it has had a copy of (or asked the host about, and when: ms), by id */
+const copied = new Set<number>();
+const asked = new Map<number, number>();
+/** how long a guest waits for the host to answer about a foe before asking again (ms) */
+const ASK_AGAIN_MS = 1000;
+/** guest: where it asks the host about foes it never had word of (set by the session) */
+let askFoes: ((ids: number[]) => void) | null = null;
+export function setFoeAsk(fn: typeof askFoes): void { askFoes = fn; }
+
+/** A foe's spawn report, made from the foe as it stands (the host's: as it spawns, and for a guest that asks). */
+const spawnOf = (e: Enemy): SpawnEvent => ({
+  k: 'spawn', id: e.id, ty: e.type, h: e.hero ? 1 : 0, n: e.name, x: r2(e.pos.x), z: r2(e.pos.z), f: r2(e.facing),
+  ml: Math.round(e.maxLife), w: G.run?.wave ?? 1,
+});
 
 /** Hook the fight's reporting in (it only sends anything on a co-op host in a run, or a guest's hits). */
 export function initSync(): void {
-  setSpawnSink((e) => push({ k: 'spawn', id: e.id, ty: e.type, h: e.hero ? 1 : 0, n: e.name, x: r2(e.pos.x), z: r2(e.pos.z), f: r2(e.facing), ml: Math.round(e.maxLife), w: G.run?.wave ?? 1 }));
+  setSpawnSink((e) => push(spawnOf(e)));
   setFxSink((n, a) => push({ k: 'fx', n, a: a.map(r2) }));
   setPropSink((i, l) => push({ k: 'prop', i, l }));
   setDealtSink(onDealt);
@@ -103,6 +122,47 @@ function forget(): void {
   smoothers.clear();
   pending = [];
   outgoing = [];
+  copied.clear();
+  asked.clear();
+}
+
+/** Host: the spawn reports of the foes a guest asked about, those still standing (`foesAsked`). */
+export function foesAsked(ids: number[]): SpawnEvent[] {
+  if (role.current !== 'host' || G.mode !== 'run') return [];
+  return G.enemies.filter((e) => e.alive && ids.includes(e.id)).map(spawnOf);
+}
+
+/**
+ * Guest: the host's answer about foes it asked of: each copy made where the host has it now (its reports carry it on
+ * from there). A guest whose run started after the host's (its fight warmed meanwhile, as a slow device's does)
+ * missed their spawns, and showed them nowhere while their attacks played.
+ */
+export function foesTold(list: SpawnEvent[]): void {
+  if (role.current !== 'guest' || G.mode !== 'run' || !G.run) return;
+  for (const ev of list) {
+    // (where its reports have it at the moment shown here, which runs behind the host's: made where the host has it
+    // now, a copy jumped back 1.3 m in its first frame)
+    const shown = tracks.get(ev.id)?.at(shownAt, _pose) ? { ...ev, x: _pose.x, z: _pose.z, f: _pose.f } : ev;
+    apply(shown);
+    // (risen long ago on the host's: made rising, the copy stood still in the floor for its rise as the host's foe
+    // walked on, and jumped 1.5 m as it ended)
+    const copy = G.enemies.find((e) => e.id === ev.id);
+    if (copy?.spawning) {
+      copy.spawning = 0;
+      copy.invulnerable = false;
+      copy.obj.position.y = 0;
+    }
+  }
+}
+
+/** Guest: the host's snapshot names foes it has no copy of and never had: ask the host who they are. */
+function askAboutUnknown(rows: (number | string)[][]): void {
+  const now = performance.now();
+  const unknown = rows.map((row) => row[0] as number).filter((id) => !copied.has(id)
+    && now - (asked.get(id) ?? -Infinity) > ASK_AGAIN_MS);
+  if (!unknown.length) return;
+  for (const id of unknown) asked.set(id, now);
+  askFoes?.(unknown);
 }
 
 /** Host, every frame: the events since the last frame, and the snapshot when one is due. */
@@ -198,6 +258,7 @@ export function onWorld(m: WorldMessage): void {
  *  put where its track has it then. */
 export function playWorld(at: number, dt: number): void {
   if (role.current !== 'guest' || G.mode !== 'run' || !G.run || Number.isNaN(at)) return;
+  shownAt = at;
   for (const m of world.due(at)) {
     if (m.x) for (const ev of m.x) apply(ev);
     if (m.s && G.run) applySnapshot(m.s);
@@ -218,6 +279,8 @@ export function playWorld(at: number, dt: number): void {
 function apply(ev: WorldEvent): void {
   switch (ev.k) {
     case 'spawn': {
+      copied.add(ev.id);
+      asked.delete(ev.id);
       if (G.enemies.some((e) => e.id === ev.id)) return;
       const e = spawnEnemy(ev.ty, new THREE.Vector3(ev.x, 0, ev.z), { id: ev.id, name: ev.n, maxLife: ev.ml, hero: !!ev.h, wave: ev.w });
       e.facing = ev.f;
@@ -270,6 +333,7 @@ function applySnapshot(s: Snapshot): void {
   // (each player's life is its own game's: it comes with that player's own reports)
   const acked = s.a?.find(([slot]) => slot === G.player.slot)?.[1] ?? 0;
   pending = pending.filter((h) => h.seq > acked);
+  askAboutUnknown(s.e);
   for (const [id, , , , life, act, t, dur, flags] of s.e as [number, number, number, number, number, string, number, number, number][]) {
     const e = G.enemies.find((q) => q.id === id);
     if (!e || !e.alive) continue;
