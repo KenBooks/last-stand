@@ -63,7 +63,8 @@ declare global {
     /** a finger's touch sent by the browser as a touch screen's (`tools/lab/node/side.mjs`) */
     __labTouch?: (type: TouchType, points: Finger[]) => Promise<void>;
     /** the mouse sent by the browser as a mouse's (`tools/lab/node/side.mjs`), at css px (its wheel `deltaY` px) */
-    __labMouse?: (type: MouseType, x: number, y: number, deltaY?: number) => Promise<void>;
+    __labMouse?: (type: MouseType, x: number, y: number, deltaY?: number, button?: MouseButton, buttons?: number) =>
+      Promise<void>;
     /** the pointer lock the page plays in the lab's browser, while `on` (`tools/lab/node/browser.mjs` `noCapture`) */
     __labLock?: { on: boolean };
     /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
@@ -82,6 +83,11 @@ type TouchType = 'touchStart' | 'touchMove' | 'touchEnd';
 
 /** The mouse as the browser gets it: moved, its left button pressed or let go, or its wheel turned. */
 type MouseType = 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel';
+
+/** A mouse button, as the DevTools protocol names it. */
+export type MouseButton = 'left' | 'middle' | 'right';
+/** each button's bit in the mask of those held (the DOM's `buttons`) */
+const BUTTON_BITS: Record<MouseButton, number> = { left: 1, right: 2, middle: 4 };
 
 /** A key as the browser gets it: pressed or let go. */
 type KeyType = 'keyDown' | 'keyUp';
@@ -418,6 +424,8 @@ export class Lab {
   private readonly fingers = new Map<number, PagePoint>();
   /** where the mouse is on the page (css px), once the lab has moved it */
   private mouseAt: PagePoint | null = null;
+  /** the mouse's buttons held (the DOM's `buttons` mask), as `mouseDown` and `mouseUp` leave them */
+  private buttonsHeld = 0;
 
   get player() {
     return G.player;
@@ -878,17 +886,26 @@ export class Lab {
   }
 
   /**
-   * The mouse's left button pressed at `at` (css px) and held there until `mouseUp`, as a mouse holds it (a button
-   * held to act: the pause menu's Abandon run). No frame runs.
+   * The mouse's `button` (the left by default) pressed at `at` (css px) and held there until `mouseUp`, as a mouse
+   * holds it (a button held to act: the pause menu's Abandon run; the middle one dragged: `mouseTo` moves it held).
+   * No frame runs.
    */
-  async mouseDown(at: PagePoint): Promise<void> {
+  async mouseDown(at: PagePoint, button: MouseButton = 'left'): Promise<void> {
     await this.mouseTo(at);
-    await this.sendMouse('mousePressed', at);
+    this.buttonsHeld |= BUTTON_BITS[button];
+    await this.sendMouse('mousePressed', at, 0, button);
   }
 
-  /** The mouse's left button let go at `at` (css px). No frame runs. */
-  async mouseUp(at: PagePoint): Promise<void> {
-    await this.sendMouse('mouseReleased', at);
+  /** The mouse's `button` (the left by default) let go at `at` (css px). No frame runs. */
+  async mouseUp(at: PagePoint, button: MouseButton = 'left'): Promise<void> {
+    this.buttonsHeld &= ~BUTTON_BITS[button];
+    await this.sendMouse('mouseReleased', at, 0, button);
+  }
+
+  /** A click of the mouse's `button` at `at` (css px), as `click` gives the left one's. No frame runs. */
+  async clickWith(at: PagePoint, button: MouseButton): Promise<void> {
+    await this.mouseDown(at, button);
+    await this.mouseUp(at, button);
   }
 
   /** The mouse moved to `at` (css px) as a mouse moves, its events and all. No frame runs. */
@@ -971,11 +988,11 @@ export class Lab {
     await window.__labClock.realFrame();
   }
 
-  private async sendMouse(type: MouseType, at: PagePoint, deltaY = 0): Promise<void> {
+  private async sendMouse(type: MouseType, at: PagePoint, deltaY = 0, button: MouseButton = 'left'): Promise<void> {
     if (!window.__labMouse) throw new Error('lab: click: this page has no mouse (opened by an older lab)');
     const ours = (event: Event) => event instanceof WheelEvent || (event as PointerEvent).pointerType === 'mouse';
     const handled = inputHandled({ names: MOUSE_EVENTS[type], ours, what: 'click' });
-    await sent(handled, window.__labMouse(type, at.x, at.y, deltaY));
+    await sent(handled, window.__labMouse(type, at.x, at.y, deltaY, button, this.buttonsHeld));
     this.mouseAt = { x: at.x, y: at.y };
   }
 

@@ -309,7 +309,9 @@ function apply(ev: WorldEvent): void {
       if (ev.o === 'banked') bankedAway(p);
       return;
     }
-    case 'down': { const p = bySlot(ev.s); if (p) { if (p.alive) p.die(); p.goDown(); } return; }
+    // (a player who left the run already, the host's word of its fall coming after it, is out, not down: a guest that
+    // left saw "You are down" through the rest of the run)
+    case 'down': { const p = bySlot(ev.s); if (p && !p.out) { if (p.alive) p.die(); p.goDown(); } return; }
     case 'raise': { const p = bySlot(ev.s); if (p) { p.raise(); creditRaise(p); } return; }
     case 'over': endRun(); return;
   }

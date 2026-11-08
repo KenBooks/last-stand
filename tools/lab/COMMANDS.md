@@ -550,6 +550,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   The hurts are counted at `Player.takeDamage`, the hold by `Player.rooted`. `--canary` plants a splash of 6 m (the
   step off is hurt), a vine catching 4 m off its line (the step aside is held) and a dash that leaves the hold on
   (still held after it), each a problem unless caught. `--trace` lists the frames. About 5 s with `lab:serve` up.
+  Held, an arrow of his (`--class ranger`: Nockshot, drawn as the vine is sent and aimed at the floor 2.5 m along it
+  towards the Hulk) must cut it: let go within 15 frames of the loose, its vine gone (from play: "arrows should kill
+  the Hulk's rooting vine in one hit"; main held him 47 frames after it). `--canary` makes arrows cut nothing too.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,

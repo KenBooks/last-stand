@@ -11,6 +11,7 @@ import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
 import { entry, strikesBody } from './strikes';
 import { evades, SEEN_AHEAD, type Threat } from '../entities/evade';
+import { cutVineAlong } from '../entities/throws';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
@@ -193,6 +194,8 @@ export class Projectile {
     this.mesh.visible = k > 0;
     if (this.by) this.foresee(this.by);
     if (this.level && !this.hostile && this.strikeFoes(_from.set(px, py, pz))) return false;
+    // (a hero's arrow low over a vine cuts it: it goes on through it only if it pierces)
+    if (this.level && this.by && cutVineAlong(_from.set(px, py, pz), this.pos) && !this.pierce) return this.kill();
     this.tick?.(this, dt);
     // (its own flight may end it: an arrow into the ground, past a foe it went through first, which takes it: a
     // Lancewood Shot at a ducked foe's feet went through what was left of it into the ground)

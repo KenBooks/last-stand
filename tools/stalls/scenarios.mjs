@@ -4,6 +4,7 @@ import {
   choiceClosed, deciding, heroesShown, inRun, itemBoxes, loaded, markPhase, menuStowed, runOver, scoresShown,
   stowsRecorded,
 } from './page.mjs';
+import { latencyLine, pressInTurn, watchLatency } from './latency.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
 const WALK_KEYS = ['w', 'd', 's', 'a', 'w', 'a', 's', 'd'];
@@ -501,5 +502,14 @@ async function rendererSwitch(page, ms, { picture }) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
+/** Standing in the lobby, a key tapped every quarter second: each press timed to the GPU done with the frame that
+ *  read it (latency.mjs). A/B Vsync with `--url "this?vsync=1,this?vsync=0"`. */
+async function latency(page, ms) {
+  await page.evaluate(markPhase, 'pressing');
+  await page.evaluate(watchLatency);
+  await pressInTurn(page, ms);
+  return [latencyLine(await page.evaluate(() => window.__latency))];
+}
+
 export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
-  renderer: rendererSwitch };
+  renderer: rendererSwitch, latency };

@@ -68,15 +68,35 @@ arena, its marker at the edge of the host's screen, then over it, then raised; `
 the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
 (half the ping, up to the jitter more), so the scores show a ping and its graph.
 
-After the scenarios every game goes back to the lobby as players do (`page/coopLobby.ts`, `backToLobby` in
-`node/coop.mjs`): the guest leaves the run from the pause menu first (Leave the run held), then the others, each
-returns from the summary once the run is over and practises in the lobby, whose skill bar must show on every game
+After the scenarios the run ends as players end it (`page/coopEnd.ts`, `node/coopEnd.mjs` `firstRunsEnd`): the
+host's wave is cleared to its choice, the guest banks (B), then holds his attack 90 frames and key 3 (an aimed skill)
+30 more: out of the run he must cast, draw and aim nothing, and no bow's sight may be drawn (read from the scene by
+its uniforms: main's banked ranger drew on, his sight drawn in 103 frames); the party's others leave the run (Leave
+the run held) and the host last, and with nothing clicked every game must be back in the lobby by itself (from play:
+"once the run ends and no one is playing any wave it should automatically spawn you back with the others"), every
+summary shown before the run ended gone with it (main left them all on their summaries, "You Have Fallen" up). The
+host's own summary, its end's, stays over the lobby and is closed there. Every game turns its camera there by a
+middle drag (its panels shown, then practising), and practises in the lobby, whose skill bar must show on every game
 (after a co-op run the HUD kept the run's watching look, its bars and skills hidden, through the lobby: main fails).
-Then the host opens the hall of heroes (Change hero) for 180 frames as every partner casts its first skill in its
-lobby: no partner may show there, nor play a cast (main played the guest's in 110 frames: four in a room stood
-among the hall's heroes, a warrior's ward glowing over a plinth). Over the whole command each game counts the heroes
-its camera shows and those without their name tag drawn over them, its own among them (`watchTags`): any is a
-problem.
+Then the host throws an item on the floor (shown there: its shard and its name) and opens the hall of heroes (Change
+hero) for 180 frames as every partner casts its first skill in its lobby: no partner may show there, nor play a
+cast (main played the guest's in 110 frames: four in a room stood among the hall's heroes, a warrior's ward glowing
+over a plinth), and none of the floor (main showed the item's shard and name among the heroes); back in the lobby,
+a middle drag begun on the item's name must turn the camera (main's floor took the press: 0 rad). Over the whole
+command each game counts the heroes its camera shows in a room and those without their name tag drawn over them,
+its own among them (`watchTags`): any is a problem.
+
+Then a second run, watched (`watchedRun`): started from the lobby, the guest leaves it at once and closes its
+summary to watch the others. Its watching bar must show and no "You are down" (main told it it was bleeding out:
+the host's word of its fall came after it left), and it must follow the first partner by slot, held to the hero at
+its screen's middle; LMB (a real click on the game) the next by slot, RMB the one before, the bar's next and previous
+buttons tapped by a finger likewise; F a free camera that W flies (at least 3 m in 60 frames), F again following,
+the bar's free camera button tapped twice likewise; E held 30 frames, a middle drag of 200 px and the bar's turn
+button held by a finger 30 frames must each turn the view (0.5 rad, the drag 0.6), still following; then the others
+leave and the host last, every game back in the lobby by itself. `--party 4` plays the watching over three partners
+(LMB and RMB round them in their slots' order). `--pictures` pictures the guest's screen as it watches
+(`out/coop/watching-guest.png`). `--canary` (a pair's) also begins a cast on the banked guest (its sight drawn with
+it, a ranger's) and shows its summary again over its lobby: each must be caught.
 
 `wave` (`spawnsLost: 360`): the host lets wave 4 come for real, its foes rising at the gates and fighting, and the
 lab's link drops every spawn the host reports to the guest for its first 6 s, as a guest whose run started late

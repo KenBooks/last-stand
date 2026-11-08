@@ -754,7 +754,7 @@ function changed(): void {
   renderMenu();
 }
 
-export function showSummary({ outcome, wave, score, kills, bag, lost = [], replaced = [], note }: RunSummary): void {
+export function showSummary({ outcome, wave, score, kills, bag, lost = [], replaced = [], note, watch }: RunSummary): void {
   const box = $('#summary');
   const dead = outcome === 'dead';
   const gone = new Set(lost.map((it) => it.id));
@@ -791,8 +791,7 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = [], repla
   if (!dead) markNew(kept);
   $('.sm-note', box).textContent = note ?? '';
   // in co-op the others may fight on: the button then watches them, and the lobby follows the run's end
-  const watching = G.run && G.run.phase !== 'over' && G.players.some((p) => !p.local && p.inRun);
-  $('#btn-summary').textContent = watching ? 'Watch the rest of the run' : 'Return to the Sanctuary';
+  $('#btn-summary').textContent = watch ? 'Watch the rest of the run' : 'Return to the Sanctuary';
   box.classList.remove('hidden');
 }
 

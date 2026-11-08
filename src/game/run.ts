@@ -68,12 +68,19 @@ export interface RunState {
   votes: Set<number>;
   /** the local player's summary has been shown (the lobby waits for it to be closed) */
   summarized: boolean;
+  /** the local player's summary was shown with the run going on for others: it goes with the run's end
+   *  (main.ts `checkRunOver`) */
+  watched: boolean;
   /** game time at the start, and whether the run's time and kills went into the records yet */
   started: number;
   tallied: boolean;
 }
 
-export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[]; replaced?: Item[]; note?: string }
+export interface RunSummary {
+  outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[]; replaced?: Item[]; note?: string;
+  /** shown with the run still going on for others (co-op): its button watches them */
+  watch?: boolean;
+}
 
 /** UI callbacks the run controller drives. */
 export interface RunUI {
@@ -130,7 +137,7 @@ export function startRun(wave = 1): void {
     wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
     queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
-    pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false,
+    pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
     started: G.time, tallied: false,
   };
   G.profile.records.runs++;
@@ -455,7 +462,7 @@ export function playerOut(p: Player, kind: 'banked' | 'dead'): void {
   if (!r || p.out) return;
   if (p.downed) p.bleedOut();
   p.out = kind;
-  p.stopChannel();
+  p.standDown();
   if (kind === 'banked') bankedAway(p);
   if (p.local) finishLocal(kind);
   runHooks.out(p, kind);
@@ -498,7 +505,11 @@ function finishLocal(kind: 'banked' | 'dead', note?: string): void {
   rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));
   if (!r.tallied) tally(r);
   saveProfile(G.profile);
-  const show = () => { r.summarized = true; ui.showSummary({ outcome: kind, wave: r.wave, score: Math.round(r.score), kills: r.kills, bag: r.bag.slice(), ...extra, note }); };
+  const show = () => {
+    r.summarized = true;
+    r.watched = r.phase !== 'over' && G.players.some((p) => !p.local && p.inRun);
+    ui.showSummary({ outcome: kind, wave: r.wave, score: Math.round(r.score), kills: r.kills, bag: r.bag.slice(), ...extra, note, watch: r.watched });
+  };
 
   // the fall plays out before the summary
   if (kind === 'dead') schedule(2.6, () => { if (G.run === r) show(); });
@@ -522,7 +533,7 @@ export function localOut(kind: 'banked' | 'dead'): void {
   if (!G.run || G.player.out) return;
   if (G.player.downed) G.player.bleedOut();
   G.player.out = kind;
-  G.player.stopChannel();
+  G.player.standDown();
   finishLocal(kind);
 }
 

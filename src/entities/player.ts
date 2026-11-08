@@ -460,8 +460,9 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
-    if (this.idle) {
-      // the co-op pause menu: stand still and let go of any channel
+    if (this.idle || this.out) {
+      // the co-op pause menu, or out of the run (banked, he's still standing, unseen): stand still and let go of
+      // any channel
       this.goal.set(0, 0, 0);
       stepVelocity(this.vel, this.goal, dt);
       this.steered = true;
@@ -1125,6 +1126,18 @@ export class Player {
     this.vel.set(0, 0, 0);
     return true;
   }
+
+  /** Out of the run for good: what he was drawing, casting, channelling or aiming let go, and nothing more taken from
+   *  the keys (`handleInput`). A banked ranger drew and aimed on, his bow's sight drawn, as another played on. */
+  standDown(): void {
+    this.stopChannel();
+    this.endAim();
+    this.casting = null;
+    this.queued = null;
+  }
+
+  /** Let go by a vine (an arrow cut it, `throws.ts`). */
+  letGo(): void { this.rootedUntil = -1; }
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns how it turned out (null: it didn't land,
    *  the hero down or guarded). */
