@@ -202,6 +202,7 @@ function heroIn(id: string, profile: Profile): Player {
     if (hero) halos.delete(hero.player);
     hero?.player.dispose();
     hero = { player: new Player(id, profile.equipped, false), gear, profile, slot: saveSlot(), level: qualityLevel() };
+    hero.player.quiet = true;
     glowingHead(hero.player);
     kept.set(id, hero);
   } else {

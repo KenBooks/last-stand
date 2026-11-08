@@ -61,7 +61,7 @@ const skill: InstantSkill = {
     const pos = player.pos.clone().addScaledVector(dir, 1.8);
     const storm = new Firestorm(def.radius, G.scene);
     const light = flash({ color: FIRE, intensity: 0, distance: 10, life: 1, hold: def.duration, follow: () => new THREE.Vector3(pos.x, storm.group.position.y + LIGHT_Y, pos.z) });
-    sfx.maelstrom();
+    const hush = sfx.maelstrom(def.duration);
     storm.burst(pos.x, pos.z);
 
     let t = 0, tick = 0, lash = LASH_EVERY, strength = 0;
@@ -116,6 +116,7 @@ const skill: InstantSkill = {
         return t < def.duration;
       },
       dispose() {
+        hush?.();
         calm();
         storm.dispose(G.scene);
         release(light);

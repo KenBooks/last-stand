@@ -214,7 +214,7 @@ const skill: InstantSkill = {
       if (Math.hypot(e.pos.x - from.x, e.pos.z - from.z) < def.radius + e.radius) dazeEnemy(e, def.duration, player);
     }
     flash({ color: GREEN, intensity: 9, distance: 6, life: 0.25, pos: { x: from.x, y: player.obj.position.y + 1.1, z: from.z } });
-    sfx.blink();
+    sfx.veilstep(dur);
     let formed = false;
     const pace = crossing(VANISH / dur), at = new THREE.Vector3();
     player.startDash(dir, dist / dur, dur, { hold: FORM, anim: 'cast', through: true, pace, step: () => {

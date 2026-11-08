@@ -246,17 +246,17 @@ const skill: ChannelSkill<LanceState> = {
   hits: (def) => [{ per: 'tick', base: (def.damage ?? 0) * TICK, rate: 1 / TICK, type: 'arcane' }],
   channel: true,
   warm: () => [new THREE.Mesh(beamGeo, beamMaterial(false)), new THREE.Mesh(portalGeo, portalMaterial())],
-  start(_player, rawDef) {
+  start(player, rawDef) {
     const outerMat = beamMaterial(false), coreMat = beamMaterial(true), portalMat = portalMaterial();
     const outer = new THREE.Mesh(beamGeo, outerMat), core = new THREE.Mesh(beamGeo, coreMat), portal = new THREE.Mesh(portalGeo, portalMat);
     outer.frustumCulled = core.frustumCulled = portal.frustumCulled = false;
     outer.visible = core.visible = false;
     G.scene.add(outer, core, portal);
     const opens = rawDef.opening ?? 0;
-    if (opens > 0) sfx.charge(opens);
     const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam, calm: addField(carry(beam)), judged: new Set(),
+      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam,
+      stopHum: opens > 0 && !player.quiet ? sfx.lanceCharge(opens) : undefined, calm: addField(carry(beam)), judged: new Set(),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
       lightA: flash({ color: 0x5dffa8, intensity: 2, distance: 4, life: 1, hold: 999 }),
@@ -313,7 +313,8 @@ const skill: ChannelSkill<LanceState> = {
       // open: the lance bursts out of the portal
       st.firing = true;
       st.outer.visible = st.core.visible = true;
-      st.stopHum = sfx.lance();
+      st.stopHum?.();
+      st.stopHum = player.quiet ? undefined : sfx.lance();
       burst(origin, { count: 18, color: 0x5dffa8, speed: 5, life: 0.35, size: 0.22, gravity: 2 });
       st.lightB.peak = 10;
     }
