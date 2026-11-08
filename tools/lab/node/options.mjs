@@ -1652,6 +1652,7 @@ export const COMMANDS = {
       + 'each frame: a change made to cost less poses him exactly as before when an A/B\'s digests agree',
     options: {
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: a number moved by its last bit' },
+      lobby: { kind: 'switch', help: 'the moves made in the lobby, the run abandoned for it' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

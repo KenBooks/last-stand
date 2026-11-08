@@ -15,7 +15,8 @@ import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
-import type { Lab, Report } from './lab';
+import { realWait, type Lab, type Report } from './lab';
+import { ABANDON_HOLD_MS } from '../../../src/ui/menus';
 import { OpenTones } from './soundsLeft';
 
 /** What `lab hall` takes. */
@@ -91,14 +92,29 @@ function holdInProfile(): void {
 }
 
 /** The run the set-up held in its countdown abandoned from the pause menu, back to the lobby (Change hero is the
- *  lobby's). */
+ *  lobby's): Abandon run held as a player holds it (a click alone only says to hold: `poses --lobby` clicked and never
+ *  left the run), and the summary, if it shows, left by its button. */
 export async function toLobby(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: hall: no pause menu to leave the run by');
-  await lab.clickOn(abandon);
+  await holdDown(lab, abandon, ABANDON_HOLD_MS + HOLD_SLACK_MS);
+  const summary = document.getElementById('summary');
+  if (summary && !summary.classList.contains('hidden')) await lab.clickOn(document.getElementById('btn-summary')!);
   await lab.until(() => G.mode === 'menu', LOBBY_FRAMES, 'hall: the run giving way to the lobby');
   await lab.step(LOBBY_FRAMES);
+}
+
+/** how much longer than its hold a held button is held (ms): its timer runs on the browser's clock */
+const HOLD_SLACK_MS = 300;
+
+/** `element` pressed at its middle with the mouse's left button and held for `ms` of the browser's clock. */
+async function holdDown(lab: Lab, element: Element, ms: number): Promise<void> {
+  const box = element.getBoundingClientRect();
+  const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  await lab.mouseDown(at);
+  await realWait(ms);
+  await lab.mouseUp(at);
 }
 
 /** The hall opened from the lobby (Change hero), waited for until it's up. */

@@ -90,4 +90,8 @@ browser's clock, lines that differ from run to run): its own hero's and a partne
 and in the hall of heroes (the hall's own heroes left out). On this machine a hero took 1.2 to 1.4 ms a frame in a
 run and 1.3 to 1.8 in the lobby, more than half of the mage's his skirt's drape (`poses --profile=drape`); hidden
 under the hall, the host's own hero took 1.60 ms and the guest's copy 1.49 until a hidden hero was no longer posed
-(0.01 each). A co-op trace's player stage read 5.7 ms a frame (KXRQ-WWX3).
+(0.01 each). A co-op trace's player stage read 5.7 ms a frame (KXRQ-WWX3). The lobby's higher time isn't the
+lobby's: its frames here are the first after the run, as the lobby settles in (the next run's props built ahead,
+the garbage collected), and every part of a hero's update runs about 45% slower then; settled, a hero costs the same
+there as in a run (`poses --lobby`: his update 1.05 ms a frame against 1.13, measured 300 frames after the lobby
+came; 1.51 measured as it came).
