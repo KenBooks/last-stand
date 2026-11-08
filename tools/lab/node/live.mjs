@@ -25,7 +25,7 @@ const LOG_FILE = join(LIVE_DIR, 'steps.json');
 const DEFAULT_CLASS = 'warrior';
 /** the options each step takes besides what follows it (the set-up's for `start`) */
 const STEP_OPTIONS = {
-  start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon', 'screen'],
+  start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon', 'wear', 'screen'],
   picture: ['views', 'look', 'focus', 'on', 'distance', 'over', 'strength', 'crop', 'canary'],
   inspect: ['depth'],
   eval: [],

@@ -3,10 +3,14 @@
 // touch, where the field is tapped for the phone's keyboard. The dialog must lie inside the window, and its name tag
 // field, Open a room, the room's code and Join each be found at their middle (nothing over them, none past the
 // window's edge); asked to rename, the taken tag must be marked, said, and focused, the room's code kept; on touch a
-// finger's tap must focus the field. Its canary moves Open a room off the window's foot, which must be found.
+// finger's tap must focus the field. The hero's colour picker's swatches must each be found at their middle too, and
+// a swatch clicked (a finger's tap on touch) picked: marked, kept, and the hero's cloth drawn in it at once.
+// Its canary moves Open a room off the window's foot, which must be found.
 import type { Lab } from './lab';
+import { G } from '../../../src/state';
 import { session } from '../../../src/net/session';
 import { renderCoop } from '../../../src/ui/coop';
+import type { Player } from '../../../src/entities/player';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface CoopFound {
@@ -26,6 +30,18 @@ const TAKEN = { tag: 'Guest', code: 'KQ7RT' };
 /** where a finger taps the world to put the page in touch mode, as shares of the window (clear of every control) */
 const TAP_AT = { x: 0.5, y: 0.4 };
 const TOUCH_FRAMES = 2;
+/** the colour each state picks: clicked in the dialog, tapped on touch */
+const PICKS = { coop: 'gold', coopTouch: 'blue' } as const;
+/** the hero's cloth as drawn before the pick (`Dye.shown`), to see the pick drawn */
+let wornBefore = 0;
+/** where the game keeps the colour picked (net/heroColour.ts: not imported, as an older tree has none) */
+const COLOUR_KEY = 'last-stand.colour.v1';
+
+/** The hero's colour, and his cloth as drawn (none in an older tree). */
+type Dyed = { colour?: string | null; setColour?(colour: string | null): void; model: { dye?: { shown: number } } };
+const dyed = (player: Player): Dyed => player as unknown as Dyed;
+const wornNow = (): number => dyed(G.player).model.dye?.shown ?? 0;
+
 /** the problem the canary must raise */
 export const COOP_CANARY = { name: 'Open a room lies past', what: 'Open a room moved off the window\'s foot' };
 
@@ -36,6 +52,30 @@ export async function openCoopDialog(lab: Lab): Promise<void> {
   // (the server's check is a promise, answered at once for the local link)
   await new Promise((resolve) => setTimeout(resolve, 0));
   await lab.step(1);
+}
+
+/**
+ * The colour `id`'s swatch picked as a player picks it, by a click or a finger's tap: scrolled to in the dialog's box
+ * first (a short screen has the colours under Host and Join), the box scrolled back to its top after. An older tree
+ * has no picker: nothing is picked.
+ */
+async function pickSwatch(lab: Lab, id: string, how: 'click' | 'tap'): Promise<void> {
+  const swatch = document.querySelector(`#coop .cc-swatch[data-colour="${id}"]`);
+  if (!swatch) return;
+  swatch.scrollIntoView({ block: 'nearest' });
+  const box = swatch.getBoundingClientRect();
+  const middle = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  if (how === 'click') await lab.click(middle);
+  else await lab.tap(middle);
+  document.querySelector('#coop .modal-box')?.scrollTo(0, 0);
+  await lab.step(1);
+}
+
+/** The dialog opened and a colour clicked in it, as a player picks one. */
+export async function openCoopPicked(lab: Lab): Promise<void> {
+  await openCoopDialog(lab);
+  wornBefore = wornNow();
+  await pickSwatch(lab, PICKS.coop, 'click');
 }
 
 /** The dialog as a joiner sees it once the host refused its tag: asked for another (`session.renameAsked`). */
@@ -57,6 +97,8 @@ export async function openCoopTouch(lab: Lab): Promise<void> {
     await lab.step(TOUCH_FRAMES);
   }
   await openCoopDialog(lab);
+  wornBefore = wornNow();
+  await pickSwatch(lab, PICKS.coopTouch, 'tap');
   const field = document.getElementById('coop-tag')!;
   const box = field.getBoundingClientRect();
   await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
@@ -69,6 +111,9 @@ export function closeCoopDialog(): void {
   session.error = '';
   session.code = '';
   (document.activeElement as HTMLElement | null)?.blur();
+  // (no colour picked, the hero in his own, for the states after)
+  localStorage.removeItem(COLOUR_KEY);
+  dyed(G.player).setColour?.(null);
   document.getElementById('btn-coop-close')!.click();
   history.replaceState(null, '', location.pathname);
 }
@@ -108,7 +153,34 @@ function dialogFound(state: string): CoopFound {
     lines.push(`  ${name}: ${missed.length ? 'out of reach' : 'in reach'}${disabled}`);
     if (disabled) problems.push(`${state}: ${name} is disabled (the server not found up)`);
   }
+  const swatches = [...document.querySelectorAll<HTMLElement>('#coop .cc-swatch')];
+  if (!swatches.length) problems.push(`${state}: no colour picker`);
+  // (each scrolled to in the dialog's box first, as a player scrolls to it: a short screen has them under Host and
+  // Join)
+  const missed = swatches.flatMap((swatch) => {
+    swatch.scrollIntoView({ block: 'nearest' });
+    return reachable(swatch, `the ${swatch.title} swatch`, state);
+  });
+  document.querySelector('#coop .modal-box')?.scrollTo(0, 0);
+  problems.push(...missed);
+  lines.push(`  the colours: ${swatches.length - missed.length} of ${swatches.length} swatches in reach`);
   return { lines, problems };
+}
+
+/** A pick's own: only `want`'s swatch marked, the pick kept, the hero wearing it and his cloth drawn in it. */
+function pickedFound(state: string, want: string): CoopFound {
+  const marked = [...document.querySelectorAll<HTMLElement>('#coop .cc-swatch[aria-checked="true"]')];
+  const shown = wornNow();
+  const kept = localStorage.getItem(COLOUR_KEY);
+  const problems: string[] = [];
+  const names = marked.map((swatch) => swatch.dataset.colour || 'Any').join(', ');
+  if (names !== want) problems.push(`${state}: ${want} picked, and the marked swatches are ${names || 'none'}`);
+  if (kept !== want) problems.push(`${state}: the pick ${want} wasn't kept (${kept})`);
+  const wears = dyed(G.player).colour;
+  if (wears !== want) problems.push(`${state}: the hero wears ${wears}, not ${want}`);
+  if (shown === wornBefore) problems.push(`${state}: the hero's cloth isn't drawn otherwise once ${want} was picked`);
+  const hex = (value: number): string => `#${value.toString(16).padStart(6, '0')}`;
+  return { lines: [`  ${want} picked: his cloth ${hex(wornBefore)} to ${hex(shown)}`], problems };
 }
 
 /** The rename state's own: the taken tag marked, said and focused, the room's code kept. */
@@ -138,8 +210,9 @@ function touchFound(state: string): CoopFound {
 export function coopShown(state: 'coop' | 'coopRename' | 'coopTouch', canary: boolean): CoopFound {
   const found = dialogFound(state);
   const own = state === 'coopRename' ? renameFound(state) : state === 'coopTouch' ? touchFound(state) : null;
-  const lines = [...found.lines, ...(own?.lines ?? [])];
-  const problems = [...found.problems, ...(own?.problems ?? [])];
+  const picked = state === 'coopRename' ? null : pickedFound(state, PICKS[state]);
+  const lines = [...found.lines, ...(own?.lines ?? []), ...(picked?.lines ?? [])];
+  const problems = [...found.problems, ...(own?.problems ?? []), ...(picked?.problems ?? [])];
   if (!canary) return { lines, problems };
   const host = document.getElementById('btn-coop-host')!;
   // (its transitions off: a button's eases its transform, and the move wasn't there yet when measured)

@@ -2,7 +2,7 @@
 // (node/coopJudge.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Way, judgeRoom, seededRandom } from '../node/coop.mjs';
+import { Way, judgeColours, judgeRoom, seededRandom } from '../node/coop.mjs';
 import { drops, follow, judgeBlows, judgeRush, judgeShots, judgeStrike } from '../node/coopJudge.mjs';
 
 /** A path along x at `speed` m a frame, `frames` long. */
@@ -146,4 +146,37 @@ test('a room where two share a slot, or a game misses or misnames a partner, is 
   const misnamed = everyone.map((self) => roomState(self, everyone));
   misnamed[2] = { ...misnamed[2], partnerTags: ['Host', 'Third'] };
   assert.ok(judgeRoom(misnamed, tags).some((problem) => problem.includes('names its partners')));
+});
+
+/** A party's page state with colours: `everyone` (slot, tag, colour, worn each) as known to `self`. */
+function colourState(self, everyone) {
+  const partners = everyone.filter((other) => other.slot !== self.slot).sort((a, b) => a.slot - b.slot);
+  return {
+    ...roomState(self, everyone), colour: self.colour, worn: self.worn,
+    partnerColours: partners.map((other) => other.colour), partnerWorn: partners.map((other) => other.worn),
+  };
+}
+
+const PARTY = [['Host', 'red', 1], ['Guest', 'gold', 2], ['Third', 'blue', 3]];
+const party = () => PARTY.map(([tag, colour, worn], slot) => ({ slot, tag, colour, worn }));
+
+test('a party in colours of their own, each drawn as its own game draws it, is judged sound', () => {
+  const everyone = party();
+  const states = everyone.map((self) => colourState(self, everyone));
+  const picked = ['red', null, 'red'];
+  assert.deepEqual(judgeColours(states, everyone.map((one) => one.tag), picked), []);
+});
+
+test('two in one colour, a free pick passed over, or a partner shown otherwise, is caught', () => {
+  const tags = PARTY.map(([tag]) => tag);
+  const judged = (everyone, picked, change = (states) => states) =>
+    judgeColours(change(everyone.map((self) => colourState(self, everyone))), tags, picked);
+  const twice = party();
+  twice[2].colour = 'red';
+  assert.ok(judged(twice, [null, null, null]).some((problem) => problem.includes('two players wear one colour')));
+  assert.ok(judged(party(), [null, 'purple', null]).some((problem) => problem.includes('picked purple, free')));
+  const misdrawn = (states) => states.map((state, index) => (index ? state : { ...state, partnerWorn: [9, 9] }));
+  assert.ok(judged(party(), [null, null, null], misdrawn).some((problem) => problem.includes('draws its partners')));
+  const older = party().map((self) => ({ ...roomState(self, party()) }));
+  assert.equal(judgeColours(older, tags, [null, null, null]), null);
 });

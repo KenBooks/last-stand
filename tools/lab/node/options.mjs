@@ -297,6 +297,11 @@ export const COMMANDS = {
         help: 'the heroes in the room, 2 to 4 (2 by default): the others join after the guest, the third first as '
           + 'the guest\'s name tag (refused, asked to rename), and stand off the scenarios\' action',
       },
+      canary: {
+        kind: 'switch',
+        help: 'the guest\'s game dresses its hero in the host\'s colour once in the room: the colours\' judge must '
+          + 'catch it',
+      },
       ...COMMON_OPTIONS,
     },
   },
