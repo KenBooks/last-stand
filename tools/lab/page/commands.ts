@@ -62,6 +62,7 @@ import type { HoodOptions } from './hood';
 import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
+import type { LabelsOptions } from './labels';
 import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
@@ -139,6 +140,13 @@ export async function turnaround(lab: Lab, command: TurnaroundOptions): Promise<
  *  problem. */
 export async function poses(lab: Lab, command: PosesOptions): Promise<Report> {
   const { poses: follow } = await import('./poses');
+  return follow(lab, command);
+}
+
+/** `lab labels`: a world label kept out by a full atlas; one not drawn once there's room, or a canary it missed, is a
+ *  problem. */
+export async function labels(lab: Lab, command: LabelsOptions): Promise<Report> {
+  const { labels: follow } = await import('./labels');
   return follow(lab, command);
 }
 

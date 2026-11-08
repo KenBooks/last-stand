@@ -7,7 +7,7 @@
 #coop-bar:hover { filter: brightness(1.25); }
 #coop-bar .cb-room b { font-family: var(--font-display); letter-spacing: 2px; color: $ally-text; }
 #coop-bar .cb-who { color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-#coop .modal-box { width: 560px; max-width: 94vw; }
+#coop .modal-box { width: 560px; }
 .coop-body { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .coop-intro { margin: 0; color: var(--ink-dim); font-size: 15px; line-height: 1.4; }
 .coop-intro .link { padding: 0; font-size: inherit; color: $ally-text; }

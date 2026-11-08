@@ -292,6 +292,95 @@ async function startTogether(pair, link, lines, canary) {
   return problems;
 }
 
+/** the frames each step of the way back to the lobby has (a player out heard by the others, the run's end, the
+ *  lobby) */
+const LOBBY_FRAMES = 600;
+/** the frames the lobby's practice has to show its bar */
+const SETTLE_LOBBY_FRAMES = 30;
+
+/**
+ * Every hero leaves the run as a player does, the guest first (Leave the run held in the pause menu), every game back
+ * in the lobby from its summary once the run is over, and practising there (its panels stowed). Returns the problems:
+ * a game whose lobby's practice shows no skill bar (after a co-op run, the run's watching look hid it in the lobby,
+ * through the hero selection screen too).
+ */
+async function backToLobby(pair, lines) {
+  const order = [1, ...pair.pages.map((_, index) => index).filter((index) => index !== 1)];
+  for (const index of order) {
+    await callPage(pair.pages[index], 'coopLeaveRun');
+    await pair.run(pair.turnFrames);
+  }
+  const over = (host, guest, states) => states.every((state) => state.out && state.runOver && state.summary);
+  await pair.until(over, LOBBY_FRAMES, 'the run never ended with every game on its summary');
+  for (const page of pair.pages) await callPage(page, 'coopSummaryDone');
+  const inLobby = (host, guest, states) => states.every((state) => state.mode === 'menu');
+  await pair.until(inLobby, LOBBY_FRAMES, 'not every game went back to the lobby');
+  for (const page of pair.pages) await callPage(page, 'coopPractiseAgain');
+  await pair.run(SETTLE_LOBBY_FRAMES);
+  const bars = await Promise.all(pair.pages.map((page) => callPage(page, 'coopLobbyBar')));
+  const problems = [];
+  const said = bars.map((bar, index) => {
+    const shown = bar.bar && bar.skills > 0;
+    if (!bar.practising) problems.push(`${PARTY_TAGS[index]}'s lobby never became practice after the run`);
+    else if (!shown) {
+      problems.push(`${PARTY_TAGS[index]}'s lobby practice after the run shows no skill bar (#hud.${bar.hud})`);
+    }
+    return `${PARTY_TAGS[index]} ${shown ? `${bar.skills} skills` : 'no skill bar'}`;
+  });
+  lines.push(`back in the lobby after leaving the run, practising: ${said.join(', ')}`);
+  problems.push(...await hallWithPartners(pair, lines));
+  problems.push(...await tagsShown(pair, lines));
+  return problems;
+}
+
+/**
+ * Every game's name tags over the whole of it (the scenarios, the lobby after them): each hero it showed in its
+ * camera's view, its own too, must have had its tag drawn over it every frame. Returns the problems.
+ */
+async function tagsShown(pair, lines) {
+  const problems = [];
+  const seen = await Promise.all(pair.pages.map((page) => callPage(page, 'coopTagsSeen')));
+  const said = seen.map((tags, index) => {
+    const who = PARTY_TAGS[index];
+    if (!tags.lobbyFrames || !tags.runFrames) problems.push(`${who}'s game never showed both a lobby and a run`);
+    if (tags.untagged) {
+      problems.push(`${who}'s game showed ${tags.untagged} of ${tags.heroes} heroes without a tag (${tags.first})`);
+    }
+    const own = tags.ownUntagged ? `, ${tags.ownUntagged} of them its own` : '';
+    return `${who} ${tags.untagged} of ${tags.heroes}${own}`;
+  });
+  const frames = `${seen[0].runFrames} frames in a run, ${seen[0].lobbyFrames} in the lobby`;
+  lines.push(`heroes shown without their name tag (${frames}): ${said.join(', ')}`);
+  return problems;
+}
+
+/** how long the host's hall stays open as its partners cast in their lobbies (frames) */
+const HALL_FRAMES = 180;
+
+/**
+ * The host opens the hall of heroes (Change hero) as every partner casts in its lobby: the hall must show none of
+ * them and play none of their casts. Returns the problems.
+ */
+async function hallWithPartners(pair, lines) {
+  const [host, ...partners] = pair.pages;
+  for (const page of partners) await callPage(page, 'coopCastInLobby', { on: true });
+  await callPage(host, 'coopOpenHall');
+  await pair.run(HALL_FRAMES);
+  const seen = await callPage(host, 'coopHallSeen');
+  await callPage(host, 'coopCloseHall');
+  for (const page of partners) await callPage(page, 'coopCastInLobby', { on: false });
+  await pair.run(SETTLE_LOBBY_FRAMES);
+  const problems = [];
+  if (!seen.frames) problems.push('the host\'s hall of heroes never opened');
+  if (seen.shown) {
+    problems.push(`the host's hall of heroes showed a partner in ${seen.shown} of its ${seen.frames} frames`);
+  }
+  if (seen.casting) problems.push(`the host's hall of heroes played a partner's casts in ${seen.casting} frames`);
+  const said = `a partner shown in ${seen.shown}, casting in ${seen.casting}`;
+  lines.push(`the host's hall of heroes open ${seen.frames} frames as the others cast in their lobbies: ${said}`);
+  return problems;
+}
+
 /**
  * In a party of more, the others join the room the host and the guest are in: the third first as the guest's name
  * tag, which the host must refuse and ask it to rename, then as its own, and the fourth. Returns the problems: a tag
@@ -367,6 +456,7 @@ export async function runCoop(side, options) {
       lines.push(...judged.lines);
       problems.push(...judged.problems);
     }
+    problems.push(...await backToLobby(pair, lines));
     return { text: lines.join('\n'), problems };
   } finally {
     await side.closePartner();

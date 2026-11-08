@@ -17,6 +17,7 @@ import { openSaves } from './saves';
 import { isTouch } from './touch';
 import { uiScales } from './scale';
 import { sfx } from '../core/audio';
+import { lookFacing } from '../core/renderer';
 import { reportLinks, bindReportLinks } from './netHud';
 import { bindColourPicker, colourPickerHtml } from './colourPicker';
 import { heroColour } from '../data/heroColours';
@@ -219,9 +220,57 @@ function renderBar(): void {
   $('#btn-coop').textContent = isCoop() ? 'Room' : 'Play together';
 }
 
+// --- name tags over the heroes ----------------------------------------------------------------
+/** A player's name tag over their head (their life under it), and the step of its bar it was last painted at. */
+interface NameTag { label: Label; shown: number }
+const nameTags = new Map<Player, NameTag>();
+
+/**
+ * Whether a player's tag shows: in a room, in the lobby and in a run, every player's, our own too ("name tags should
+ * be visible above other players in lobby, and above me as well"); not over one away in the other place, hidden (the
+ * hall of heroes hides them), fallen, or our own through our eyes.
+ */
+const tagShows = (p: Player): boolean => isCoop() && G.players.includes(p) && !p.away && p.obj.visible && p.alive
+  && !(p.local && lookFacing() !== null);
+
+function nameTagFor(p: Player): NameTag {
+  let t = nameTags.get(p);
+  if (t) return t;
+  const label = anchorLabel(ORDER.tag, () => (tagShows(p)
+    ? { x: p.pos.x, y: p.obj.position.y + p.model.height + 0.45, z: p.pos.z } : null));
+  t = { label, shown: -1 };
+  nameTags.set(p, t);
+  return t;
+}
+
+/** Every frame: each player's name tag in a room, painted again when its name or its bar's step changes. */
+export function updateNameTags(): void {
+  for (const [p, t] of nameTags) {
+    if (isCoop() && G.players.includes(p)) continue;
+    removeLabel(t.label);
+    nameTags.delete(p);
+  }
+  if (!isCoop()) return;
+  for (const p of G.players) {
+    const t = nameTagFor(p);
+    const share = Math.max(0, p.life / p.stats.maxLife);
+    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME };
+    const step = barStep(look, share);
+    if (step !== t.shown) {
+      t.shown = step;
+      t.label.show(barArt(look, share));
+    }
+  }
+}
+
+/** The players' name tags as drawn this frame (`lab coop` holds them to every hero shown). */
+export function nameTagLabels(): { player: Player; label: Label }[] {
+  return [...nameTags].map(([player, t]) => ({ player, label: t.label }));
+}
+
 // --- in a run ------------------------------------------------------------------------------
-/** A partner's nameplate over their head, and their frame in the corner. */
-interface Tag { label: Label; shown: number; frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
+/** A partner's frame in the corner. */
+interface Tag { frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
 const tags = new Map<Player, Tag>();
 /** the marker on a downed partner (over them, or at the screen's edge pointing the way to them), and in reach of
  *  them, the prompt to raise them */
@@ -460,10 +509,7 @@ function tagFor(p: Player): Tag {
   frame.className = 'pf';
   frame.innerHTML = `<div class="pf-name">${esc(who(p))}</div><div class="pf-bar"><div class="pf-fill"></div></div><div class="pf-state"></div>`;
   $('#party').appendChild(frame);
-  // over the head (a downed partner has the revive prompt instead)
-  const label = anchorLabel(ORDER.tag, () => (G.players.includes(p) && !p.away && p.obj.visible && G.mode === 'run' && p.alive
-    ? { x: p.pos.x, y: p.obj.position.y + p.model.height + 0.45, z: p.pos.z } : null));
-  t = { label, shown: -1, frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame) };
+  t = { frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame) };
   tags.set(p, t);
   return t;
 }
@@ -471,7 +517,7 @@ function tagFor(p: Player): Tag {
 /** Every frame of a co-op run: the party frame, nameplates, the downed note and the revive prompt. */
 export function updateCoopHud(): void {
   // partners gone from the room take their nameplate and frame with them
-  for (const [p, t] of tags) if (!G.players.includes(p)) { removeLabel(t.label); t.frame.remove(); tags.delete(p); }
+  for (const [p, t] of tags) if (!G.players.includes(p)) { t.frame.remove(); tags.delete(p); }
   if (!isCoop()) { hideRunBits(); return; }
   // out of the run and watching: our bars, skills and spoils have nothing more to show
   $('#hud').classList.toggle('watching', !!G.player.out);
@@ -480,8 +526,6 @@ export function updateCoopHud(): void {
     const t = tagFor(p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
-    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME }, step = barStep(look, share);
-    if (step !== t.shown) { t.shown = step; t.label.show(barArt(look, share)); }
     const state = p.away ? 'In the lobby' : p.out === 'banked' ? 'Banked' : p.out === 'dead' ? 'Fallen'
       : p.downed ? (p.revive > 0 ? 'Being revived…' : `Down · ${Math.ceil(p.bleed)}s`) : '';
     if (t.state.textContent !== state) t.state.textContent = state;
@@ -523,7 +567,9 @@ function nearestDowned(others: Player[]): Player | undefined {
   return others.filter((p) => p.downed && p.inRun).sort((a, b) => far(a) - far(b))[0];
 }
 
-function hideRunBits(): void {
+/** The run's co-op bits taken off as the lobby is entered: `updateCoopHud` runs in a run alone, and the HUD kept its
+ *  watching look (its bars and skills hidden) through the lobby's practice after a run the player left. */
+export function hideRunBits(): void {
   $('#hud').classList.remove('watching');
 
   $('#down-note').classList.add('hidden');

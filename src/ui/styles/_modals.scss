@@ -67,7 +67,10 @@
 .ms-label.lb .ms-do { display: flex; flex-direction: row-reverse; }
 .help-text { text-align: left; font-size: 15px; line-height: 1.45; }
 .gold { color: var(--highlight); } .red { color: var(--danger); }
-.modal-box { zoom: var(--ui, 1); }
+/* zoomed, a box's own vh and vw are zoomed with it: its limits are the window's over --ui (a phone's 86vh, zoomed by
+   its 0.6, held the Play together dialog to half its screen, scrolled; zoomed over 1, past the window, its top
+   cut off where no scroll reaches) */
+.modal-box { zoom: var(--ui, 1); max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); }
 /* a tapped item's sheet: its cards scroll inside it and its buttons stay in view under them (sized in the window's
    units over --ui, as the box is zoomed: its 86vh was 86% of the window times the UI's scale, and the box scrolled
    the buttons away with the cards) */

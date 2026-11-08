@@ -320,6 +320,9 @@ export function crowdSlots(model: Model): THREE.Object3D[] {
   return kinds.get(model.root.userData.crowdKind as string)?.slots ?? [];
 }
 
+/** Whether `body` is drawn in its kind's crowd (the lab's `coop` asks of every foe). */
+export const inCrowd = (body: CrowdBody): boolean => seats.has(body);
+
 /** `body` out of its crowd (disposed). */
 export function leaveCrowd(body: CrowdBody): void {
   const seat = seats.get(body);

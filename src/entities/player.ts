@@ -649,7 +649,8 @@ export class Player {
     if (a.t === 'hurt') { this.applyHit(a.r); return; }
     if (a.t === 'died') { if (this.alive) this.die(); return; }
     const s = this.known.get(a.s);
-    if (!s || !this.alive) return;
+    // (a hidden partner's casts let go: away, banked or out of the hall of heroes, its spells were drawn all the same)
+    if (!s || !this.alive || !this.obj.visible) return;
     if (a.t === 'cast') {
       const target = new THREE.Vector3(a.x, 0, a.z);
       const nockT = a.n ?? 0;

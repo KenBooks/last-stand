@@ -871,6 +871,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   a clip or range measure's lines agree for changes far past the last bit, and a gait's later strides go elsewhere
   after one (`check`'s offsets). `--canary` moves a number of the last frame by its last bit, and the digest must
   change. Run it with each `--gear` a change can touch (a hero's arms are fitted per weapon style).
+- `labels`: a world label kept out by a full atlas (`page/labels.ts`): the atlas filled with labels the size of a
+  partner's name tag until a tag laid after them finds no slot, a twentieth of them given back (too few for the atlas
+  to be packed again), and the tag must be drawn in a slot within 3 frames. On main it never was: a label that found
+  no slot was marked painted and never asked again, so a co-op tag that met a fight's numbers vanished until its bar
+  stepped ("name tags sometimes appear, then disappear"). `--canary` gives none back, and the tag must stay undrawn.
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own

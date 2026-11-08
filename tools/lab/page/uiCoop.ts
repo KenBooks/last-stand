@@ -141,6 +141,13 @@ function dialogFound(state: string): CoopFound {
   if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) {
     problems.push(`${state}: the dialog reaches past the window`);
   }
+  // (scrolled in its box, a phone's dialog showed half of itself: "panel cut off")
+  const content = document.querySelector<HTMLElement>('#coop .modal-box')!;
+  if (content.scrollHeight > content.clientHeight + 1) {
+    const hidden = content.scrollHeight - content.clientHeight;
+    lines.push(`  the dialog scrolls: ${hidden} px of it out of its box`);
+    problems.push(`${state}: the dialog scrolls (${hidden} px out of its box)`);
+  }
   for (const [selector, name] of CONTROLS) {
     const element = document.querySelector<HTMLElement>(`#coop ${selector}`);
     if (!element) {

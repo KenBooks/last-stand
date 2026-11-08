@@ -97,8 +97,19 @@ let heroes: HallHero[] = [];
 const kept = new Map<string, { player: Player; gear: string; profile: Profile; slot: number; level: string }>();
 let focus = 0;
 let lights: LightSlot[] = [];
-/** the co-op partners' heroes the lobby showed, hidden while the hall is up (they'd stand in its room) */
-let partners: Player[] = [];
+/**
+ * A co-op room's partners kept out of the hall: hidden (they'd stand in its room, among its heroes) and their casts
+ * let go (`Player.replay` plays none for a hidden hero). Every frame, as a partner joining or one whose state resets
+ * is shown again (four in a room stood among the heroes, a warrior's ward glowing over the mage's plinth).
+ */
+function hidePartners(): void {
+  for (const p of G.players) {
+    if (p.local || !p.obj.visible) continue;
+    p.show(false);
+    p.casting = null;
+    if (p.channel) p.stopChannel();
+  }
+}
 let opened = 0;
 /** how much further back than `SHOT.back` the camera stands, so the hero fits the room the screen leaves him
  *  (`frameHall`) */
@@ -131,8 +142,7 @@ export function openHall(focusId: string, cut = false): void {
   clearEnemies(); clearProjectiles(); clearEffects(); particles.clear();
   G.player.idle = true;
   G.player.show(false);
-  partners = G.players.filter((p) => p !== G.player && p.obj.visible);
-  for (const p of partners) p.show(false);
+  hidePartners();
   G.arena.showHall(true);
   heroes = CLASS_IDS.map((id, i) => {
     const profile = profileOf(id);
@@ -223,8 +233,7 @@ export function closeHall(): void {
   clearProjectiles(); clearEffects(); particles.clear();
   G.arena.showHall(false);
   G.player.show(true);
-  for (const p of partners) if (G.players.includes(p)) p.show(true);
-  partners = [];
+  for (const p of G.players) if (!p.local) p.show(!p.away && p.out !== 'banked');
   G.player.idle = false;
   stageCamera(null);
 }
@@ -290,6 +299,7 @@ function place(p: Player, at: THREE.Vector3, facing: number): void {
  *  drift. */
 export function updateHall(dt: number): void {
   if (!hallOpen()) return;
+  hidePartners();
   const t = G.time;
   for (const h of heroes) {
     // (a hero not yet warm left out of the frame, his plinth empty, and his showcase held till he is: drawn, his programs

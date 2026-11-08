@@ -15,7 +15,7 @@ import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
-import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
+import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
 import { colourOf, freeColour, ownColour, savedColour, setRoomColour } from './heroColour';
@@ -25,9 +25,11 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 21;
+const PROTOCOL = 22;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
+/** the most foes a guest may ask about at once (the arena never holds more than this many) */
+const ASKED_MOST = 64;
 /** room codes: no look-alike letters or digits */
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
@@ -87,6 +89,7 @@ let actions: PlayerAction[] = [];
 
 export function initSession(h: SessionHooks): void {
   hooks = h;
+  setFoeAsk((ids) => { if (session.hostId) send('ctl', { t: 'foes?', ids }, session.hostId); });
   setActionSink((a) => { if (link) actions.push(a); });
   window.addEventListener('pagehide', () => leaveRoom());
 }
@@ -341,11 +344,19 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.wave = m.wave as number;
       if (G.mode === 'menu') G.arena.setBiome(session.biome);
       hooks.changed();
+    } else if (m.t === 'foes' && from === session.hostId) {
+      foesTold(m.list as SpawnEvent[]);
     } else if (m.t === 'start' && G.mode === 'menu') {
       const host = session.peers.get(from);
       if (host) host.inRun = true;
       hooks.startRun(m.biome as BiomeId, m.wave as number, m.seed as number);
     }
+    return;
+  }
+  // host: a guest asking about foes it has no copy of (it missed their spawns), answered with them
+  if (m.t === 'foes?') {
+    const list = foesAsked((m.ids as number[]).slice(0, ASKED_MOST));
+    if (list.length) send('ctl', { t: 'foes', list }, from);
     return;
   }
   // host: a guest's choices in the run
