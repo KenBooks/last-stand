@@ -113,7 +113,7 @@ Each command in full (what it measures and what it was measured against, its opt
 the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this file, which every session working on
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command gets its line in Commands at a glance above and its entry there. The largest entries are
-notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `traces`), a line in
+notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `traces`, `range`, `hood`), a line in
 `COMMANDS.md` pointing to each, as `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 
