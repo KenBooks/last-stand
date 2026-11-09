@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  decibels, fft, levelsOf, loudestOf, peakOf, shareAbove, spectrumOf, tonalPeak, wavBytes,
+  centroidOf, decibels, fft, levelsOf, loudestOf, peakOf, shareAbove, spectrumOf, tonalPeak, wavBytes,
 } from '../page/soundMeasure.ts';
 
 const RATE = 44100;
@@ -78,6 +78,13 @@ test('a quiet note under loud noise stands over it, where it is', () => {
 test('a bass note is all under 150 Hz, noise mostly over it', () => {
   assert.ok(shareAbove(spectrumOf(sine(1, 55, 0.5), RATE), 150) < 0.01);
   assert.ok(shareAbove(spectrumOf(noise(1, 0.3), RATE), 150) > 0.95);
+});
+
+test('a sine\'s centroid is its frequency, white noise\'s half the band', () => {
+  const sineCentre = centroidOf(spectrumOf(sine(1, 1000, 0.5), RATE));
+  assert.ok(Math.abs(sineCentre - 1000) < 30, `sine centroid ${sineCentre}`);
+  const noiseCentre = centroidOf(spectrumOf(noise(1, 0.3), RATE));
+  assert.ok(Math.abs(noiseCentre - RATE / 4) < RATE / 40, `noise centroid ${noiseCentre}`);
 });
 
 test('a WAV holds its header and each channel 16-bit, interleaved', () => {
