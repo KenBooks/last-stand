@@ -260,6 +260,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
   slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `touchpad`: where a finger put down starts the touch controls' move stick (`page/touchPad.ts`). In a run, a 16x8 grid of points
+  over the screen, each touched by a finger (`lab.touchDown`) and slid 30 px right, the stick read a frame after:
+  pushed, or not. A point whose topmost element is a control (a button, a skill's slot, a link) is left alone, as
+  a tap there would act. Every point of the move area (the left half, below the top quarter: the old pad's) must
+  start the stick, and a control there may take no more room than a finger's button (72 css px square, measured
+  on the part of it that takes touches: a control that lets touches through but for its head is its head's size).
+  Run twice, the overlays down the left put away and shown (the performance overlay, the battle log, as the pause
+  menu shows them), each pictured with its points marked (`out/touchpad/`: green the stick, blue a button left
+  alone, red the move area's misses, grey nothing elsewhere). On main the performance overlay, a button the whole
+  panel round, took 15 of the move area's 48 points on the owner's phone (`--screen 832x384@3.75`): from play,
+  "they only activate in a small area now". A touch the browser takes as a pan (a page element whose
+  `touch-action` isn't none) is cancelled and heard no more: the lab's touches know it (`lab.touchPanned`).
+  `--canary` lays a clear sheet over the move area's lower left, which must be caught.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.

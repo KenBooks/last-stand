@@ -20,6 +20,11 @@ body.touch #diag { --top: #{touch(180px)}; }
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
   cursor: $cursor-hand; user-select: none; --pf: #7affb0; transition: border-color .3s; }
 #perf:hover { border-color: var(--accent); }
+// (on touch it lets the move stick have what's under it, as the battle log does, and only its head, the frame rate,
+// takes a tap to copy a report: a button the whole panel round, it lay over the stick's pad down the left a third of
+// the move area's width, and the owner's phone, the overlay shown, started the stick "only in a small area")
+body.touch #perf { pointer-events: none; }
+body.touch #perf .pf-head { pointer-events: auto; }
 #perf.warn { --pf: #ffc07a; }
 #perf.bad { --pf: #ff6a5a; }
 #perf b { font-weight: 700; color: #fff; }
