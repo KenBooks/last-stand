@@ -7,8 +7,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { runtimeImports } from './labCode.mjs';
 
-/** the maps' worker, from a tree's root */
-const WORKER = 'src/core/pbr.worker.ts';
+/** the workers whose work is kept (the maps', the fire's simulation), from a tree's root */
+const WORKERS = ['src/core/pbr.worker.ts', 'src/world/fireBake.worker.ts'];
 /** the photos the recipes read, from a tree's root */
 const PHOTOS = 'src/core/photos';
 
@@ -39,7 +39,9 @@ export function moduleClosure(root, entry) {
 export function mapsCodeOf(root) {
   const hash = createHash('sha256');
   const photos = existsSync(join(root, PHOTOS)) ? readdirSync(join(root, PHOTOS)).sort() : [];
-  const files = [...moduleClosure(root, WORKER), ...photos.map((name) => `${PHOTOS}/${name}`)];
+  const workers = WORKERS.filter((worker) => existsSync(join(root, worker)));
+  const code = workers.flatMap((worker) => moduleClosure(root, worker));
+  const files = [...new Set(code), ...photos.map((name) => `${PHOTOS}/${name}`)];
   for (const file of files) {
     hash.update(file);
     hash.update(readFileSync(join(root, file)));

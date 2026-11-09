@@ -884,6 +884,8 @@ export function stillForMeshlets(...roots: THREE.Object3D[]): void {
   if (!RUNNING.meshlets) return;
   for (const root of roots) {
     root.traverse((object) => {
+      // (a ray-march in a box: nothing in it to cull, and its copy in a batch drew its flames as a pale mound)
+      if (object.userData.noMeshlets) return;
       still.add(object);
       const { material } = object as THREE.Mesh;
       if (Array.isArray(material)) material.forEach(givingMaterial);

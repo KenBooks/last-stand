@@ -15,13 +15,14 @@ const CHECK_MS = 2000;
 /** where each running command notes itself (`<pid>.json`), and is asked to stop (`<pid>.stop`) */
 export const RUNNING_DIR = join(OUT, 'running');
 
-/** Whether a process is alive. */
+/** Whether a process is alive: one this account may not signal is (a Loaner job's account may not signal the
+ *  service above it, and every lab command run there stopped at once, "what started it is gone"). */
 export function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return error.code === 'EPERM';
   }
 }
 

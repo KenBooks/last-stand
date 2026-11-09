@@ -162,6 +162,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   times) and the readings were noise; check `nvidia-smi` first. On the owner's idle 4070 Ti the lookups cost under
   a millisecond on both 0.185 and 0.187 (0.3 to 0.9 ms against frames of 3.9 to 6.7), while one scene's whole frame
   read 3.8 to 11.8 ms from run to run: run it twice, and believe only what both runs agree on.
+- `npm run fire-bake -- [key=value ...]` (`node/fireBakeSheet.mjs`, no browser): the fire's simulation
+  (`src/world/fireBake.ts`) run alone, six of its frames drawn from the side as the ray-march draws them, in
+  seconds, with how long it took and how high the flames stand: for trying `FireTuning`'s and `FLAME_LOOK`'s
+  values; its picture isn't the game's light. It says what the loop takes, kept and on the GPU, and fails over
+  its budget (`BUDGET_KB` in `src/world/fireBake.ts`, which `lab:test` holds it to as well) or with any of the flame cut off outside the kept box.
 - `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
   `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
   stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
@@ -182,13 +187,30 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   rim too (`page/fireBelow.ts`, #291): the share of the bowl's pixels (its meshes' in the `parts` look) its flames
   light, its coals and embers hidden. The flames are a box marched in its shader, depth-tested at its faces, whose
   corners stand out past the bowl's wall: main's lit 22.8% of it, as a pale band up the bowl. Over 2% is a problem.
+  A fire with logs its flames know (`uLogs`) is read from above them as the player stands over it
+  (`page/fireLogs.ts`): the share of the logs' pixels (the meshes named `logs`) its flames brighten by over 40
+  levels, against the same with the logs taken from the shader, and the share knowing them changed. Before the
+  shader knew them, the logs inside the box were drawn over by the flames behind them and those reaching out of it
+  hid the flames in front ("half of campfire ignores it"): 64% lit from above, 45% since (the flames in front of
+  the logs and their bloom over dark bark). Over 55% is a problem. The flames read alone (round them, the logs
+  hidden) have the logs taken from the shader too: hidden, they still carved the flames, 0.42 alike their mirror.
+  And with the see-through hole's end across the flames' box (`page/fireFade.ts`; the hole round the line to the
+  hero ends in a plane across the view, short of him): the flames alone with the hole and without, each pixel's
+  light kept, in linear light, and the share of them off the median by over 0.2, over 5% a problem. The flames
+  faded each pixel by its place on the box's faces, and the plane cut the fire in two as the camera came near (the
+  owner: "a plane that cuts the fire in two parts"): 52% of the bonfire's apart, 64% of the brazier's. They fade
+  as one now, by five points along the view through their middle. The hole's end is put between the box's nearest
+  corner (beside it, the box is seen corner-on) and the nearest of those points, so the fire fades not at all: a
+  partial fade, even, reads uneven through the bloom and the grade's curve. Its canary dims half the frame's flames.
   Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second are problems. `--cost`
   (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they cost under the
   timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to run, so they're
   in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz strobe, the front
-  shown from behind, a leaf over the bed, the bowl taken from the flames' shader, and with `--cost` the flames drawn
-  four times over (twice their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its
-  light alone, from above, from below and where the bowl and the flames through it were found), round (the four
+  shown from behind, a leaf over the bed, the bowl and the logs taken from the flames' shader, half its flames
+  dimmed, and with `--cost` the flames drawn four times over (twice their cost at least). Pictured (`out/fire/`):
+  close (beside it at 0, 0.13, 0.27 s, its light alone, from above, from below and where the bowl and the flames
+  through it were found, over the logs, as they were unknown, and where the logs and the flames over them were
+  found), round (the four
   sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
   coals under glow particles): 1.4 to 1.6 m by 0.9, dim orange-red throughout (7 to 25°, at most 0.22 of white), no
   smoke, 19 to 37% moving a moment, six fern clumps over the bonfire. As sheets turned to the camera they turned with

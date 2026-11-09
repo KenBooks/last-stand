@@ -17,7 +17,7 @@ import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
-import { buildFire, emberMat } from './fire';
+import { buildFire, emberMat, type FireLog } from './fire';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
@@ -1050,7 +1050,7 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   // a teepee of logs leaning in over the bed, two more lying across it; where the flames lick them, charred and
   // glowing through their char
   // (each log's bark and char merged: drawn a mesh a part, its charred end apart, a bonfire's logs were 22 draws)
-  const logs: LogParts = { bark: [], char: [] };
+  const logs: LogParts = { bark: [], char: [], ends: [] };
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * TAU + 0.3;
     const foot = new THREE.Vector3(x + Math.cos(a) * 0.48, 0, z + Math.sin(a) * 0.48);
@@ -1075,8 +1075,8 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   staticShadow(light);
   scene.add(light);
   buildFire(scene, {
-    at: new THREE.Vector3(x, 0.03, z), radius: 0.42, height: 1.2, dish: 0, light, intensity: 12,
-    smoke: 6, smokeColour: 0x8a8580, embers: 10,
+    at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: 12,
+    smoke: 6, smokeColour: 0x8a8580, embers: 10, logs: logs.ends,
   }, updaters);
 }
 
@@ -1084,6 +1084,8 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
 interface LogParts {
   bark: THREE.BufferGeometry[];
   char: THREE.BufferGeometry[];
+  /** each log as the flames know it, to hide what's behind it */
+  ends: FireLog[];
 }
 
 /** A log from `from` to `to` (m), `radius` thick, into `logs`: bark with its upper 60% and its end sheathed in char
@@ -1100,6 +1102,9 @@ function leanLog(logs: LogParts, from: THREE.Vector3, to: THREE.Vector3, radius:
     new THREE.CircleGeometry(r, 7, -up * Math.PI / 2).rotateX(-up * Math.PI / 2).applyMatrix4(at(share));
   const foot = end(radius, 0, -1);
   const top = end(radius * 0.85, 1, 1);
+  // (as thin as its top's seven sides are at their middles: thicker, the flames were cut short of its edges there,
+  // the ground showing through)
+  logs.ends.push({ from: from.clone(), to: to.clone(), radius: radius * 0.85 * Math.cos(Math.PI / 7) });
   if (!barked) {
     logs.char.push(side, foot, top);
     return;
