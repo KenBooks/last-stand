@@ -21,6 +21,7 @@ import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
+import { buildLater, finishNow, queued } from './behind';
 import { heroShare } from './warm';
 
 /** the way the heroes face (to the camera) */
@@ -192,19 +193,98 @@ export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
   }
 }
 
+/**
+ * Each class's hero the hall would show, and a spare of each other class as the lobby's hero (`takeSpareHero`), queued
+ * to be built behind the lobby a piece a frame (game/behind.ts) where none is kept or queued: built under the heroes'
+ * loading bar, a hero a frame, each held it 100 to 170 ms, and a hero chosen was built in the click. Each class's
+ * two in one profile: a class never played rolls its starter gear afresh at each `profileOf`, and a spare in other
+ * gear would be built again as he's chosen.
+ */
+export function queueHallBehind(): void {
+  // (a spare takes the profile his class's hall hero is being built in; built, `profileOf` gives the hero's)
+  const profileFor = (id: string): Profile => building.get(id) ?? profileOf(id);
+  for (const id of CLASS_IDS) {
+    if (kept.has(id) || queued(`hall ${id}`)) continue;
+    const profile = profileOf(id);
+    building.set(id, profile);
+    buildLater(`hall ${id}`, Player.inSteps(id, profile.equipped, false), (player) => {
+      building.delete(id);
+      if (kept.has(id)) {
+        player.dispose();
+        return;
+      }
+      keepHero(id, profile, player);
+      G.scene.remove(player.obj);
+    });
+  }
+  for (const id of CLASS_IDS) {
+    if (id === G.profile.classId || spares.has(id) || queued(`spare ${id}`)) continue;
+    const profile = profileFor(id);
+    buildLater(`spare ${id}`, Player.inSteps(id, profile.equipped), (player) => {
+      player.stowed();
+      spares.set(id, { player, gear: gearOf(profile) });
+    });
+  }
+}
+
+/** the profile each class's hall hero building behind the lobby is built in, for his spare */
+const building = new Map<string, Profile>();
+
+/** A hero of each other class as the lobby's own would be, built behind the lobby and kept out of the scene, for
+ *  the first time he's chosen (`takeSpareHero`): built in the click, he held it 100 to 170 ms. */
+const spares = new Map<string, { player: Player; gear: string }>();
+
+/** Class `id`'s spare in the scene if he's built in `profile`'s gear at this detail (dropped if not), else null. */
+export function takeSpareHero(id: string, profile: Profile): Player | null {
+  finishNow(`spare ${id}`);
+  const spare = spares.get(id);
+  if (!spare) return null;
+  spares.delete(id);
+  if (spare.gear !== gearOf(profile)) {
+    spare.player.dispose();
+    return null;
+  }
+  spare.player.unstowed(profile.equipped);
+  return spare.player;
+}
+
+/** Every spare let go, as if none had been built (`lab behind --canary`). */
+export function dropSpareHeroes(): void {
+  for (const spare of spares.values()) spare.player.dispose();
+  spares.clear();
+}
+
+/** Every hero the hall keeps and every spare let go, as if none had been built: they're queued again (`lab behind`). */
+export function dropHeroesBuilt(): void {
+  for (const hero of kept.values()) {
+    halos.delete(hero.player);
+    hero.player.dispose();
+  }
+  kept.clear();
+  dropSpareHeroes();
+}
+
+/** `player` kept as class `id`'s hall hero, in `profile`'s gear. */
+function keepHero(id: string, profile: Profile, player: Player): NonNullable<ReturnType<typeof kept.get>> {
+  const hero = { player, gear: gearOf(profile), profile, slot: saveSlot(), level: qualityLevel() };
+  player.quiet = true;
+  glowingHead(player);
+  kept.set(id, hero);
+  return hero;
+}
+
 /** Class `id`'s hero in the gear `profile` wears, in the scene: the one kept from the hall's last opening if he wore
  *  the same at the same detail (a save slot switched, gear changed or the quality's detail since builds him again),
  *  his shadows as the quality has them now. */
 function heroIn(id: string, profile: Profile): Player {
+  // (one building behind the lobby finished now: he's wanted)
+  finishNow(`hall ${id}`);
   const gear = gearOf(profile);
   let hero = kept.get(id);
   if (hero?.gear !== gear) {
     if (hero) halos.delete(hero.player);
     hero?.player.dispose();
-    hero = { player: new Player(id, profile.equipped, false), gear, profile, slot: saveSlot(), level: qualityLevel() };
-    hero.player.quiet = true;
-    glowingHead(hero.player);
-    kept.set(id, hero);
+    hero = keepHero(id, profile, new Player(id, profile.equipped, false));
   } else {
     G.scene.add(hero.player.obj);
     // (a walk of every mesh: 7 ms of the opening's frame, needed only where the quality changed meanwhile)

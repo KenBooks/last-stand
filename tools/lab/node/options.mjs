@@ -1795,6 +1795,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  behind: {
+    help: 'the heroes built behind the lobby a piece a frame: the hall\'s heroes and the spares let go and built '
+      + 'again, each frame\'s building timed by the browser\'s clock (at most 30 ms, the slowest pieces named), then the hall '
+      + 'opened and another hero chosen, building none',
+    options: {
+      canary: { kind: 'switch', help: 'plant faults the measure must catch: all built in one frame, spares let go' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   labels: {
     help: 'a world label kept out by a full atlas: the atlas filled with name tags until a tag finds no slot, a few '
       + 'given back (too few to pack it again), and the tag drawn in one within 3 frames',

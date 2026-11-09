@@ -13,7 +13,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, grou
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
-import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
@@ -25,6 +25,7 @@ import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, RES
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
+import { built, type ModelSteps } from './steps';
 import { Dye } from './dye';
 import { ItemGlows, drawnIn } from './itemGlow';
 
@@ -363,15 +364,21 @@ function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather
   part(edgeTube(brim, 'v1', 2.6 * mm, N), edge, cap);
 }
 
-export function buildRanger(): Model {
+export const buildRanger = (): Model => built(rangerSteps());
+
+/** buildRanger's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
+export function* rangerSteps(): ModelSteps {
   const kit = createKit(0xc9d993);
+  yield;
   // (the colours his reference sheet's, measured in a studio render against it)
   const coat = kit.rim({ color: 0x5a654c, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) }, 0x71835a, 0.25);
+  yield;
   // (the coat's hem turned up inside it, a shade darker)
   const coatHem = kit.rim({ color: 0x4c5641, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) }, 0x71835a, 0.25);
   const felt = kit.rim({ color: 0x4a5a40, roughness: 1, ...pbrMaterialMaps(feltMaps(), 1) }, 0x71835a, 0.2);
   const wool = kit.std({ color: 0x656151, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) });
   const dark = kit.std({ color: 0x292d24, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) });
+  yield;
   // (the coat's seams sewn in a lighter thread, as the sheet's are)
   const thread = kit.std({ color: 0x9a8a5c, roughness: 0.9 });
   const hide = kit.std({ color: 0x936848, roughness: 1, ...pbrMaterialMaps(leather(), 1) });
@@ -379,6 +386,7 @@ export function buildRanger(): Model {
   const strapLeather = kit.std({ color: 0x6e4a33, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const soleLeather = kit.std({ color: 0x2e2219, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const bowWood = kit.std({ color: 0x956f3d, roughness: 0.85, ...pbrMaterialMaps(wood(), 1) });
+  yield;
   // the bow: lacquered limbs coloured along them (bow.ts), a walnut riser, polished horn tips, a bright brass for its
   // fittings and a gilt vine inlaid down the limbs, a dark linen serving and silencers of the coat's green wool on the string
   // (a little light at its edges: seen from the archer's side the belly is mostly in its own shadow, and the curve was lost)
@@ -392,11 +400,13 @@ export function buildRanger(): Model {
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
   const skin = handSkin(kit, 'ranger');
   const cord = kit.std({ color: 0xe0d6bc, roughness: 0.85 });
+  yield;
   // (double-sided: the feathers are single sheets)
   const fletched = kit.std({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
   const j = buildHumanoid({ skin: coat }, { chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41 });
   stripRig(j.root);
   const S = new Sculpt();
+  yield;
   // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
   // (an armhole cut round each shoulder and the sleeve set into it, `tunicCut`, `setInSleeve`, the cloth round the seam
   // blended from the chest to the arm through joints turned a quarter, half and three quarters as far as it, `delts`: the
@@ -405,11 +415,15 @@ export function buildRanger(): Model {
   // deltoid blended straight from the chest to the arm, the cloth between folded in on the joint in a lip round it)
   const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48)), around = sets.around;
   const chainOf = (s: number) => sets.chainOf(s), withArm = (g: THREE.BufferGeometry, s: number) => sets.withArm(g, s);
+  yield;
   {
     const [L, R] = tunicCut(around, lod(22, 12));
+    yield;
     S.skinChain(withArm(R, -1), coat, j.chest, chainOf(-1));
+    yield;
     S.skinChain(withArm(L, 1), coat, j.chest, chainOf(1));
   }
+  yield;
   // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons;
   // higher behind, up the back of the neck to under the hair: level, it left a long bare neck from behind)
   const collarUp = (x: number, y: number, z: number) => y + COLLAR_RISE * smooth(clamp((-0.1 - z / (Math.hypot(x, z) || 1)) / 0.65, 0, 1)) * clamp((y - 0.289) / 0.039, 0, 1);
@@ -421,6 +435,7 @@ export function buildRanger(): Model {
   }
   for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635 + COLLAR_EASE * 0.935) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
   for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
+  yield;
   // the seams, stitched in a lighter thread: round the collar's top and foot, down both sides of the slit and on down the
   // front, over each shoulder from the neck to the sleeve, and down each side
   const ring = (rx: number, rz: number, y: number) => Array.from({ length: 32 }, (_, i) => { const a = i / 32 * TAU; return V(Math.sin(a) * rx, collarUp(Math.sin(a), y, Math.cos(a)), Math.cos(a) * rz * 0.935 - 0.0125); });
@@ -435,7 +450,9 @@ export function buildRanger(): Model {
     S.skinChain(withArm(stitches([0.294, 0.285, 0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), thread, j.chest, chainOf(sa));
     S.skinChain(withArm(stitches([pit, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), thread, j.chest, chainOf(sa));
     S.skinChain(withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), thread, j.chest, chainOf(sa));
+    yield;
   }
+  yield;
   // (gathered under the belt a little fuller than the mage's tunic)
   {
     // (gathered under the belt in soft folds, and bloused a little over it)
@@ -449,6 +466,7 @@ export function buildRanger(): Model {
     g.computeVertexNormals();
     S.add(g, coat, j.spine, [0, 0, 0], [0, 0, 0], [1.08, 1, 0.9]);
   }
+  yield;
   // (hanging straight from the belt to mid-thigh as the sheet's does: flared like a bell, it stood out half as deep again)
   // (slit at the sides, as the sheet's: the hem rising to the slit's top there; the back a little shorter)
   // (from under the belt, falling straight as the sheet's does: hung from the hips it narrowed to a waist under the belt and
@@ -457,17 +475,20 @@ export function buildRanger(): Model {
     hem: (a) => -0.12 * Math.max(0, -Math.cos(a)) - 0.4 * Math.exp(-(((Math.abs(Math.sin(a)) - 1) / 0.006) ** 2)) });
   const hem = new THREE.Mesh(tunic.geo, [coat, coatHem]); hem.castShadow = hem.receiveShadow = true; j.hips.add(hem); hem.position.y = 0.06 + BELT_Y - 0.025;
   hem.name = 'tunic hem';
+  yield;
   // a broad belt of oiled leather, stitched along both edges, its brass buckle square and its tail through a keeper
   S.add(belt(0.172, 0.146, BELT_Y, 0.05, 0.009, 0, 40), strapLeather, j.spine);
   for (const dy of [-0.021, 0.021]) S.add(stitches(Array.from({ length: 40 }, (_, i) => { const a = i / 40 * TAU; return V(Math.sin(a) * 0.1775, BELT_Y + dy, Math.cos(a) * 0.1515); }), 0.004, 0.003, 0.0009, true), thread, j.spine);
   S.add(buckle(0.05, 0.05, 0.008), brass, j.spine, [0, BELT_Y, 0.16]);
   S.add(new THREE.BoxGeometry(0.012, 0.056, 0.012), strapLeather, j.spine, [0.06, BELT_Y, 0.152], [0, 0.38, 0]);
+  yield;
   // the baldric the quiver hangs from: over the right shoulder, across the chest and the back to the left hip, buckled on
   // the chest
   // (its ends under the belt, as the sheet's runs on past it to the hip)
   const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.155, t), down = (t: number) => lerp(0.24, -0.11, t);
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
+  yield;
   // each wrist's part-turned joints: a quarter, half and three quarters of the hand's turn on the forearm (`bendWrists`)
   /** the middle of each hand's turns on its forearm, about its length (`blendTurn`: the bow hand's -180 to -90 degrees,
    *  past -180 through the eyes, the draw hand's 0 to 185, standing, walking, strafing and shooting, in third person and
@@ -495,6 +516,7 @@ export function buildRanger(): Model {
     if (cp) cuff.setAttribute('skinK', new THREE.BufferAttribute(Float32Array.from({ length: cp.count }, (_, i) => smooth(clamp((-cp.getY(i) - (j.P.foreL - 0.03)) / 0.058, 0, 1))), 1));
     S.skinChain(cuff, hide, el, [el, ...wrists[hand === j.handL ? 0 : 1], hand]);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
+    yield;
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
     // wool trousers, loose (round in section, as deep as wide), into the boots below the knee
@@ -502,10 +524,13 @@ export function buildRanger(): Model {
     S.add(lathe([[0.068, -0.1], [0.076, -0.03], [0.08, 0.02]], 12), wool, kn);
     // tall riding boots to just below the knee (boot.ts)
     buildBoot(S, { leather: boot, sole: soleLeather, strap: strapLeather, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
+    yield;
   }
+  yield;
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
-  const head = buildHead(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger.hair);
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
+  yield;
   // (on the lips, under the moustache: at the others' height he drank at his nose)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
@@ -513,6 +538,7 @@ export function buildRanger(): Model {
   buildHat(head, cap, felt, boot, strapLeather);
   const handL = buildHand(j.handL, 1, hide, skin), handR = buildHand(j.handR, -1, hide, skin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
+  yield;
   // A leather quiver over the right shoulder blade, slung from the right shoulder to the left hip, its arrows' nocks and
   // fletching standing out of its mouth above the shoulder, where the hand reaches up over it. (Leaning in, its mouth was
   // behind the head, and the arm reaching for it went 113 degrees past its range)
@@ -526,8 +552,10 @@ export function buildRanger(): Model {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
     S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 5), bowWood, quiver, [x, 0.19, z]);
     S.add(new THREE.BoxGeometry(0.026, 0.09, 0.004), cord, quiver, [x, 0.385, z]);
+    yield;
   }
   S.build();
+  yield;
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
   bow.group.userData.bow = bow;   // (the lab's handle on it: tools/lab carry)
@@ -542,6 +570,7 @@ export function buildRanger(): Model {
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
   const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
+  yield;
   // what the coat's skirt is draped over, in its own space: the trousers' thighs and the boots' shafts from inside, the hands,
   // the forearms' cuffs and the bow's string and lower limb from outside, with the cloth's gap (swung by the thighs alone, it
   // let the carried bow's string through its front over the stepping thigh at every stride, and the nock into it as the bow
@@ -550,6 +579,7 @@ export function buildRanger(): Model {
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.084 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.085 + GAP, 0.06 + GAP);
+    yield;
   }
   for (const hd of [j.handL, j.handR]) handBodies.add([hd, O()], [hd, new THREE.Vector3(0, -0.09, 0)], 0.045 + HAND_GAP);
   for (const [el, hd] of [[j.elbowL, j.handL], [j.elbowR, j.handR]] as const) handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0.06 + HAND_GAP, 0.05 + HAND_GAP);
@@ -557,19 +587,23 @@ export function buildRanger(): Model {
   bowBodies.add([bow.group, bow.lowerLimb[0]], [bow.group, bow.lowerLimb[1]], 0.02 + HAND_GAP, 0.016 + HAND_GAP);
   bowBodies.add([bow.group, bow.lowerLimb[1]], [bow.group, bow.lowerLimb[2]], 0.016 + HAND_GAP, 0.01 + HAND_GAP);
   const outside = [...handBodies.list, ...bowBodies.list];
+  yield;
   // (and the arrow on the string, pointing down past the hem in the carry: draped behind the string alone, the cloth lay over
   // the arrow's upper half and it went in under the coat on a third of a walk's frames)
   const arrowBodies = new SkirtLimbs();
   arrowBodies.add([bow.arrows[0], new THREE.Vector3(0, 0, -ARROW / 2)], [bow.arrows[0], new THREE.Vector3(0, 0, ARROW / 2)], 0.005 + HAND_GAP);
   const outsideNocked = [...outside, ...arrowBodies.list];
+  yield;
   // (the bow arm swung out at the shoulder just enough to keep the string off the thigh and the coat over it, as an archer
   // holds it off his coat: armOffThigh, by points along the string; the skirt between them was draped in behind the string
   // and out again by the thigh, which has the last word, and the string ran through the coat's side by up to 15 cm on most
   // frames of a walk; the points a few cm apart: 13 cm apart, each lay just clear while the string between them didn't)
   const STRING_PTS = 16, stringPts = Array.from({ length: STRING_PTS * 2 + 1 }, (): [JointPoint, number] => [[bow.group, new THREE.Vector3()], 0.006]);
+  yield;
   // (and the nocked arrow's, pointing down past the hem: kept off the thigh by the string alone, it went through the thigh
   // and into the coat's hem once a stride, the arm swinging against its leg)
   const ARROW_PTS = 8, arrowPts = Array.from({ length: ARROW_PTS + 1 }, (_, i): [JointPoint, number] => [[bow.arrows[0], new THREE.Vector3(0, 0, (i / ARROW_PTS - 0.5) * ARROW)], 0.005]);
+  yield;
   // (and the lower limb's, as it swings past the thigh setting off)
   const LIMB_PTS = 6, limbPts = Array.from({ length: LIMB_PTS * 2 + 1 }, (_, i): [JointPoint, number] => {
     const [a, b] = i <= LIMB_PTS ? [bow.lowerLimb[0], bow.lowerLimb[1]] : [bow.lowerLimb[1], bow.lowerLimb[2]];
@@ -581,6 +615,7 @@ export function buildRanger(): Model {
     armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts);
   };
   j.handL.add(bow.group);
+  yield;
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
   // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips). As many as a
   // fan lacks on the string are taken out together, side by side between the fingers as they'll lie on it
@@ -591,12 +626,14 @@ export function buildRanger(): Model {
     held.add(g);
     return { g, shaft, head };
   });
+  yield;
   // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
   const flask = buildFlask(kit); flask.name = 'flask'; j.handR.add(flask);
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
   root.scale.setScalar(1.08);
+  yield;
   // where the string sits in the hooked fingers (the hand's frame): between the index and the middle finger's last joints
   hook(handR, 1, 0); root.updateMatrixWorld(true);
   const stringAt = j.handR.worldToLocal(handR.f[0].j[2].getWorldPosition(new THREE.Vector3()).add(handR.f[1].j[2].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5));

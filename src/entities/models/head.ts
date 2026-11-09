@@ -12,6 +12,7 @@ import { faceCanvases, faceGrid } from '../../core/textures';
 import { createKit } from '../../core/materials';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
+import { built } from './steps';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
 export const HEAD_MM = 0.2421 / 228;
@@ -225,16 +226,27 @@ export interface Head {
  * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
 export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadHair = {}): Head {
+  return built(headSteps(headJoint, kit, who, o));
+}
+
+/** `buildHead` a piece at a time (models/steps.ts): its first build on a visit makes its geometry (`once`), the
+ *  hair's cards most of it, and in one piece that held the lobby's frame 150 to 240 ms behind it (game/behind.ts). */
+export function* headSteps(
+  headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadHair = {},
+): Generator<void, Head, undefined> {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
   const g = gridFor(who);
+  // (the skin's grid alone is a piece: cast on a first build, 30 ms on the 4080)
+  yield;
   // (what the head's geometry is made from: the face, the hair, and the detail it is built at)
   const key = `${who}:${o.hair ?? 'bare'}${o.crop ? '+crop' : ''}:${heroDetail()}`;
   const M = faceMaps(who);
   const skin = kit.rim({ roughness: 1, map: M.map, normalMap: M.normalMap, roughnessMap: M.roughnessMap, normalScale: new THREE.Vector2(0.5, 0.5) }, 0x6a2a1c, 0.25);
   const face = part(once(`${key}:skin`, () => skinGeometry(g)), skin, head);
   face.name = 'face';
+  yield;
 
   // --- eyes: glossy balls in the sockets behind the lids, and lashes along the upper lids
   // (a deep-set eye's shine softer: a sharp one on a dark iris reads as a marble)
@@ -256,6 +268,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   // --- ears
   const earAo = LOOKS[who].ao ?? 0, earMat = plainSkin(kit, who, earAo > 0);
   for (const s of [1, -1]) part(once(`${key}:ear${s}`, () => earGeometry(s, F, earAo)), earMat, head).name = 'ear';
+  yield;
 
   const surface = (az: number, el: number, lift = 0, out = new THREE.Vector3()) => {
     const d = gridDir(az, el, { x: 0, y: 0, z: 0 }), C = origin(el, { x: 0, y: 0, z: 0 });
@@ -281,6 +294,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     const capMat = kit.std({ color: capCol, roughness: 0.8 });
     const { cap, roots } = once(`${key}:cap`, () => capGeometry(g, who, loose, !!o.crop));
     hair.push(part(cap, capMat, head));
+    yield;
     if (o.crop) {
       const tufts = once(`${key}:crop`, () => {
         const clear = hairTools(surface, F, L.hairDrop ?? 0, L.templeDrop ?? 0).clear;
@@ -289,6 +303,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       crop = part(tufts, cards, head);
       crop.castShadow = true;
       crop.name = 'crop';
+      yield;
     }
     // (the locks draw from `rng` before the beard's tufts do: both are made in the head's first build, in this order)
     const locks = once(`${key}:locks`, () => {
@@ -303,6 +318,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     const m = part(locks, cards, head);
     m.castShadow = true;
     hair.push(m);
+    yield;
   }
   // a full beard's volume over the face (face.ts `beardLift`): the skin's grid points lifted along their rays, leaning down
   // below the mouth (it hangs), painted as the face is (its uvs the grid's), its edges sunk into the skin; and short tufts
@@ -320,6 +336,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     tufts.castShadow = true;
     beards.push(tufts);
     for (const m of beards) m.name = 'beard';
+    yield;
   }
   // (named, so a probe or a tool can find them)
   for (const m of hair) m.name = 'hair';

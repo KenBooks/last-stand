@@ -10,7 +10,7 @@ import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/e
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
-import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { EYE } from './face';
 import { buildHand, poseHand, strainHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
@@ -26,6 +26,7 @@ import { HoodCloth, evenly, spaced } from './hood';
 import { Dye } from './dye';
 import { ItemGlows } from './itemGlow';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
+import { built, type ModelSteps } from './steps';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
 /** a joint's length (its local y) */
@@ -227,21 +228,28 @@ const SL_SPREAD: Keys = [[0, 0], [0.4, 0.3], [0.5, 0.32], [0.65, 0.15], [1, 0.2]
 const SL_DIP: Keys = [[0, 0], [0.4, 0.03], [0.5, 0.03], [0.64, -0.22], [0.72, -0.26], [1, -0.24]];
 const SL_BEND: Keys = [[0, 0], [0.4, -0.18], [0.5, -0.18], [0.64, 0.45], [0.72, 0.52], [1, 0.48]];
 
-export function buildMage(): Model {
+export const buildMage = (): Model => built(mageSteps());
+
+/** buildMage's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
+export function* mageSteps(): ModelSteps {
   const kit = createKit(0x5dffa8);
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
+  yield;
   // the coat's felted wool: oxblood, its weave seen up close as the sheet's
   const coat = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2) }, 0x7a2a2a, 0.3);
   const coatD = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  yield;
   // the waistcoat's and the underskirts' charcoal wool, the shirt's darker red linen, the trousers' charcoal twill
   const charcoal = kit.rim({ color: 0x2b2a2e, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: THREE.DoubleSide }, 0x3a3a44, 0.25);
   const shirt = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x5a2a2a, 0.25);
   const sleeve = kit.rim({ color: 0x2e2d32, roughness: 1, ...tex(clothMaps(), 1, 1.1) }, 0x3a3a44, 0.25);
   const trousers = kit.rim({ color: 0x24232a, roughness: 1, ...tex(clothMaps(), 1, 1.2) }, 0x34343c, 0.2);
+  yield;
   // brass, rubbed bright on its edges (the steel map's roughness: worn smooth where it is handled)
   const brass = kit.std({ color: 0xa47a40, metalness: 1, roughness: 0.6, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
   const gold = brass;
+  yield;
   // the piping round the hood and the collar: a cord of burnished copper-gold a few millimetres thick, as the
   // reference's (half a mirror and twice as thick, it read as a bright yellow tube; as the brass, grey in the hood's
   // shadow, and round the collar a ring glowing as neon under the face in the staff's light; in a pale warm gold, a
@@ -250,6 +258,7 @@ export function buildMage(): Model {
   const E = engravedSteel();
   const goldE = kit.std({ color: 0xc9a058, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  yield;
   // the belts' and the harness's brown leather, worn and creased
   const leather = kit.std({ color: 0x5a3820, roughness: 0.75, ...tex(leatherMaps(), 2, 1.8) });
   const beltLeather = kit.std({ color: 0x5c3418, roughness: 0.6, ...tex(leatherMaps(), 2, 2.2) });
@@ -257,19 +266,24 @@ export function buildMage(): Model {
   // glove show it (#425: the belts' pebbled grain, laid across a hand, read as knit wool through the eyes; at a
   // roughness of 0.84 the studio's light ran down it as on wet bark, an adversarial review)
   const gloveLeather = kit.std({ color: 0x8a5a34, roughness: 0.95, ...tex(oiled(), 1, 1.4) });
+  yield;
   // the grimoire: dark tooled leather over its boards, its pages old paper
   const tome = kit.std({ color: 0x4e2c18, roughness: 0.7, ...tex(leatherMaps(), 3, 2.4) });
   const paper = kit.std({ color: 0xb8a882, roughness: 1, ...tex(clothMaps(), 4, 0.6) });
   const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
+  yield;
   // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
   const boot = kit.std({ color: 0x4a2c1c, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
   const bootStrap = kit.std({ color: 0x3a2214, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const sole = kit.std({ color: 0x1e140c, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const wood = kit.std({ color: 0x7a5236, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
+  yield;
   // the coat's and the hood's dark lining
   const lining = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x5a2a2a, 0.05);
+  yield;
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
+  yield;
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
   // (its facets not mirrors, its coat thin and soft, its highlight weak: polished, as it spun a facet caught a light
   // white for a moment, the whole crystal flaring past the bloom, "staff still flickers at its brightest peak", 3.2
@@ -279,12 +293,15 @@ export function buildMage(): Model {
     color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.55, metalness: 0,
     clearcoat: 0.15, clearcoatRoughness: 0.55, specularIntensity: 0.3, flatShading: true,
   });
+  yield;
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
+  yield;
   // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
   const PW = 256, PH = 1024;
   const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  yield;
   // the runes inked on his forearms (an alpha-tested layer over the skin)
   // (blended, not cut out: cut at half, a line thinner than a texel of the smaller mip levels was dropped whole, and
   // at the game's distance the runes were gone; blended it fades to a grey that still shows. Drawn forward by a constant
@@ -300,17 +317,21 @@ export function buildMage(): Model {
   });
   stripRig(j.root);
   const S = new Sculpt();
+  yield;
   // what comes off (setGear): the chest item's (the longcoat with its collar, shoulders, harness and skirts) and the
   // waistcoat shown without it, the hands item's (bracers over the forearms' runes)
   const A = new Sculpt(), T = new Sculpt(), H = new Sculpt();
   const bareSkin = handSkin(kit, 'mage');
 
+  yield;
   // --- the longcoat's body: fitted, open down the front over the charcoal waistcoat and the shirt's red at the throat; cut
   // as the ranger's coat is, an armhole round each shoulder with the shirt's sleeve set into it (`SetInShoulders`)
   const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48));
+  yield;
   // (stood off the tunic round the neckline, up from over the armholes: his neck widens into the shoulders, `neckFlare`, and
   // at the tunic's own height it came through the cloth behind)
-  const cut = (into: Sculpt, mat: THREE.Material) => {
+  // (a piece at a time: the cut and each side's sleeve set in, 16 ms whole)
+  const cut = function* (into: Sculpt, mat: THREE.Material): Generator<void, void, undefined> {
     const [L, R] = tunicCut(sets.around, lod(22, 12));
     for (const g of [L, R]) {
       const p = g.attributes.position, n = g.attributes.normal;
@@ -321,21 +342,27 @@ export function buildMage(): Model {
         p.setXYZ(i, p.getX(i) + n.getX(i) * lift, p.getY(i) + n.getY(i) * lift, p.getZ(i) + n.getZ(i) * lift);
       }
     }
+    yield;
     into.skinChain(sets.withArm(R, -1), mat, j.chest, sets.chainOf(-1));
+    yield;
     into.skinChain(sets.withArm(L, 1), mat, j.chest, sets.chainOf(1));
   };
-  cut(A, coat);
+  yield* cut(A, coat);
   A.add(scaleUV(lathe(WAIST, 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  yield;
   // (carried on down inside the skirt's top, under the belt: the skirt hung from a step below the waist)
   A.add(scaleUV(lathe([[0.17, -0.1], [0.16, -0.075], [0.148, -0.05]], 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   /** the coat's front edge on each side (half-width from the middle) at height y: close at the collar, opening down to the waist */
   const edgeX = (y: number) => lerp(0.035, 0.085, clamp((0.27 - y) / 0.37, 0, 1));
+  yield;
   // (stood off further down, over the coat's waist, which came through its foot in a jagged edge)
   const low = (y: number) => 0.012 * clamp((0.05 - y) / 0.12, 0, 1);
   const front: SurfaceFn = (u, v, out) => { const y = lerp(0.27, -0.12, v); return onChest((u - 0.5) * 2 * edgeX(y), y, 0.002 + low(y), out); };
   A.add(plate(front, 10, 12, 0.003, undefined, V(0, 0.1, 0)), charcoal, j.chest);
+  yield;
   // (the shirt's red at the throat, between the collar's points)
   A.add(plate((u, v, out) => { const y = lerp(0.285, 0.2, v); return onChest((u - 0.5) * 2 * lerp(0.034, 0.012, v), y, 0.004, out); }, 6, 6, 0.002), shirt, j.chest);
+  yield;
   // the waistcoat's brass buttons down its middle, and brass piping down the coat's front edges
   for (const y of [0.17, 0.1, 0.03, -0.04]) A.add(stud(0.0075), brass, j.chest, onChest(0, y, 0.006).toArray());
   for (const s of [1, -1]) {
@@ -344,8 +371,10 @@ export function buildMage(): Model {
     // (in the engraved, duller gold: in the bright brass, where it lies up the shoulders' slope it faced the sky and glowed
     // in two rods under the collar)
     A.add(taperTube(pts, () => 0.005, 20, 6), goldE, j.chest);
+    yield;
   }
 
+  yield;
   // --- the collar: standing high round the neck, open at the throat, its points turned out as lapels, piped along its
   // edges (as the sheet's, higher behind than at its points in front; pinched in round the neck at its points too, and
   // the shirt's red filling the gap, it read as a ring under the chin), drawn in round the neck at its top as a
@@ -365,6 +394,7 @@ export function buildMage(): Model {
     A.add(edgeTube(collar, 'v1', 0.003, 36), piping, j.chest);
   }
 
+  yield;
   // --- the shoulders: the coat's seams stitched in a dark thread, over each shoulder from the collar to the sleeve and
   // round the armhole (moving with the cloth they're sewn into; in the linen's, the armhole's outlined each sleeve as a plug)
   for (const sa of [1, -1]) {
@@ -374,8 +404,10 @@ export function buildMage(): Model {
     const roll = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(armholeEdge(sa, 48, 0.004), true), lod(64, 32), 0.0055, 6, true);
     A.skinChain(sets.withArm(roll, sa), coat, j.chest, sets.chainOf(sa));
     A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.011), 0.004, 0.0028, 0.0009, true), sa), shirt, j.chest, sets.chainOf(sa));
+    yield;
   }
 
+  yield;
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
   // (its lower half going with the waist, the coat under it there: on the chest alone, the coat's waist turned under it
   // walking and the strap's end stood out of the coat by the hip, a dark shard below the bracer). Each lies flat on the
@@ -394,9 +426,11 @@ export function buildMage(): Model {
     A.add(buckle(0.034, 0.028, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray(), [0, 0, Math.PI / 2]);
     const back = [0.255, 0.17, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
     harness(back);
+    yield;
   }
   A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
 
+  yield;
   // --- arms: the shirt's charcoal sleeves pushed up to the elbow in a thick roll, a strap round each upper arm, the forearms
   // bare and inked with runes; leather bracers buckled over them (the hands item's), fingerless gloves
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
@@ -405,6 +439,7 @@ export function buildMage(): Model {
     // armhole in a ball; its top as wide as the armhole's, the deltoid under it: narrower, it hung out of the coat's
     // shoulder as a thin tube under a shelf)
     S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.076, r1: 0.057, bulge: 0.09, at: 0.12, full: 1, fullIn: 0.9, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
+    yield;
     // (the sleeve turned back on itself round the elbow: a band of the cloth a little proud of the sleeve, its folded
     // edges top and bottom, soft creases running round it; as two thick lumpy rings it read as a dark knot)
     {
@@ -424,12 +459,14 @@ export function buildMage(): Model {
         S.add(new THREE.TorusGeometry(r, 0.004, lod(6, 4), lod(40, 20)).rotateX(Math.PI / 2), sleeve, el, [0, y, 0]);
       }
     }
+    yield;
     S.add(belt(0.064, 0.064, -0.17, 0.022, 0.005, 0, 16), leather, sh);
     S.add(buckle(0.018, 0.022, 0.004), brass, sh, [s * 0.066, -0.17, 0], [0, s * Math.PI / 2, 0]);
     // the forearm, from under the roll to the wrist, and its runes over it
     const fore: [number, number][] = [[0.033, -0.3], [0.035, -0.27], [0.04, -0.2], [0.046, -0.12], [0.048, -0.06], [0.046, -0.02]];
     S.skin(lathe(fore, 18), bareSkin, el, hd, 0.25, 0.29);
     S.skin(lathe(fore.map(([r, y]) => [r + 0.0006, y]), 18), ink, el, hd, 0.25, 0.29);
+    yield;
     // the bracer: leather round the lower forearm, two brass-buckled straps
     const bracer: [number, number][] = [[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]];
     H.add(scaleUV(lathe(bracer, 16), 2, 1), leather, el);
@@ -449,37 +486,45 @@ export function buildMage(): Model {
       H.add(belt(r, r, y, 0.012, 0.004, 0, 14), beltLeather, el);
       H.add(buckle(0.014, 0.016, 0.003), brass, el, [s * (r + 0.003), y, 0], [0, s * Math.PI / 2, 0]);
     }
+    yield;
   }
   const handL = buildHand(j.handL, 1, gloveLeather, bareSkin, 1, bareSkin);
   const handR = buildHand(j.handR, -1, gloveLeather, bareSkin, 1, bareSkin);
+  yield;
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
   const handGlow = new THREE.Color(), handBody = new THREE.Color();
   glowOutline(handL, handGlow, handBody);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
+  yield;
   // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
   // (eased out over the shoulders' top and round the neckline: the neck, a man's girth widening into the shoulders,
   // came through it behind)
-  cut(T, charcoal);
+  yield* cut(T, charcoal);
   T.add(scaleUV(lathe(WAIST, 24), 3, 1), charcoal, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   T.add(neckHem(), shirt, j.chest);
   T.add(plate((u, v, out) => out.copy(tunicFront((u - 0.5) * 2 * lerp(0.04, 0.012, v), lerp(0.29, 0.2, v), 0.003)), 6, 6, 0.002), shirt, j.chest);
   for (const y of [0.17, 0.1, 0.03, -0.04]) T.add(stud(0.0075), brass, j.chest, tunicFront(0, y, 0.005).toArray());
 
+  yield;
   // --- legs: charcoal trousers into tall boots of worn brown leather (models/boot.ts, the ranger's last and sole)
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     S.add(scaleUV(limb(0.46, 0.09, 0.07, 0.1, 0.3, 12), 2, 1.5), trousers, th);
     S.add(scaleUV(limb(0.12, 0.068, 0.064, 0.04, 0.35, 12), 2, 1.5), trousers, kn);
     buildBoot(S, { leather: boot, sole, strap: bootStrap, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
+    yield;
   }
 
+  yield;
   // --- the belts: a broad one at the waist with a square brass buckle, a second slung across the hips, and the grimoire
   // hanging from it at his left hip on a brass chain
   S.add(belt(0.166, 0.143, 0.02, 0.06, 0.012), beltLeather, j.spine);
   for (const y of [-0.006, 0.046]) {
     const ring = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * TAU; return V(Math.sin(a) * 0.174, y, Math.cos(a) * 0.151); });
     S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
+    yield;
   }
+  yield;
   // (its buckle a broad brass frame with a prong; the belt's end through it, held by a leather keeper, with its holes)
   S.add(buckle(0.076, 0.07, 0.01), brass, j.spine, [0, 0.02, 0.158]);
   S.add(new THREE.BoxGeometry(0.042, 0.006, 0.006), brass, j.spine, [-0.012, 0.02, 0.166]);
@@ -487,10 +532,12 @@ export function buildMage(): Model {
   S.add(strap(Array.from({ length: 8 }, (_, k) => onWaist(0.04 + k * 0.08, 0.009)), 0.048, 0.007), beltLeather, j.spine);
   S.add(buckle(0.014, 0.066, 0.008), beltLeather, j.spine, onWaist(0.36, 0.016).toArray(), [0, 0.36, 0]);
   for (const a of [0.46, 0.52]) S.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.003, 8).rotateX(Math.PI / 2), sole, j.spine, onWaist(a, 0.0135).toArray(), [0, a, 0]);
+  yield;
   // (the slung belt and the book on it in a group of their own on the hips: sized round the coat, without it they hung
   // in the air off the waistcoat, and the group draws in to it, `SLUNG_IN`)
   const sling = new THREE.Group();
   j.hips.add(sling);
+  yield;
   // (drawn tight round the coat: a hand's width off it, it stood out from it as a hoop)
   const slung = (a: number, out = 0, dy = 0) =>
     V(Math.sin(a) * (0.185 + out), -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a) + dy, Math.cos(a) * (0.17 + out));
@@ -530,17 +577,20 @@ export function buildMage(): Model {
     }
   }
 
+  yield;
   // --- skirts: the coat to below the knee, its front edges hanging straight down from the belt and parting in a narrow
   // slit from the knee to the hem, rounded at its corners, brass at its hem, the charcoal underskirts showing in the slit
   // (as a long coat hangs: the owner's reference photos, `.tmp/references/coat-split`; cut in a pointed arch up to the
   // waist, it read as a tent's flap over a dark wedge)
   /** an angle round the skirt from its front, either way (its columns run 0 to 2π, the front at both ends) */
   const fromFront = (a: number) => (a > Math.PI ? a - TAU : a);
+  yield;
   // (no underskirts under the closed coat: the breeches show in its slit; cut away at its front, they came through it
   // between the legs and showed their cut edges at its sides)
   // (the coat's slit its front seam parted, a few centimetres at the hem, its corners rounded a little: as the owner's
   // reference has it at rest; cut out of the hem it was a V notch)
   const slit = (a: number, deep: number, wide: number) => -deep * Math.exp(-((fromFront(a) / wide) ** 4));
+  yield;
   // (from the coat's waist under the broad belt, hanging near straight to below the knee, in a few broad folds, as Codex
   // measured it against the reference photos: from 20 cm out, wider than the waist, its top stood proud of the body,
   // flared to 31 cm it read as a bell, and its fifteen folds and brass hem as a pleated skirt)
@@ -550,7 +600,9 @@ export function buildMage(): Model {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
     m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
     j.hips.add(m); skirts.push(m);
+    yield;
   }
+  yield;
   // (without the coat the waistcoat's skirt, short over the hips)
   const short = new Skirt({ r0: 0.19, r1: 0.215, len: 0.14, depth: 0.82, folds: 5, foldAmp: 0.02, rows: 4, hem: (a) => 0.04 * Math.max(0, Math.cos(a)) ** 3 });
   const tunicSkirt = new THREE.Mesh(short.geo, charcoal);
@@ -565,6 +617,7 @@ export function buildMage(): Model {
   let recoil = 0;
   /** no cloth sleeves: the shirt's are rolled up */
   const cloths: BellCloth[] = [];
+  yield;
   // what the skirts keep clear of, in their own space (all of them hang where the tunic's does): the thighs from the hip and
   // the shins over the boots from inside, the hands from outside; the breeches' and the boots' radii (the boot's cuff and its
   // stone stand 10 cm off the shin: sized to the breeches, the shin came through the robe there) and the cloth's gap (with a
@@ -575,17 +628,22 @@ export function buildMage(): Model {
     // under the belt; the seat stands in without the skirt's layer)
     legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.07 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.1 + GAP, 0.085 + GAP);
+    yield;
   }
+  yield;
   // (each hand as capsules from its own joints, with a little over for the cloth's flat triangles between its points)
   const segsL = handCapsules(handL), HAND_GAP = 0.012;
   for (const [a, b, r] of [...segsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
+  yield;
   // (and the free forearm's lower half, as wide as its bracer's cuff or its sleeve's at the wrist: it hangs by the hip)
   const fore = handBodies.add([j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [j.handL, O()], 0), cuffR = () => (gloved ? 0.074 : 0.05);
+  yield;
   // (the legs placed first: the free arm is kept off the thigh before the hands are)
   const placeBodies = () => {
     fore.ra = cuffR() - 0.012 + HAND_GAP; fore.rb = cuffR() + HAND_GAP;
     handBodies.place(tunicSkirt);
   };
+  yield;
   // (the free arm swung out just enough to keep its hand and its cuff off the thigh and the cloth over it: armOffThigh)
   const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new THREE.Vector3()], 0]] as [JointPoint, number][];
   const clearThigh = () => {
@@ -606,6 +664,7 @@ export function buildMage(): Model {
     f.build();
     flaps.push({ g, knee, a, len, w });
   };
+  yield;
   // (each half of a panel swung out at least as far as the robe under it, a little clear of it: the robe lies over a raised
   // knee, and swung by the thighs' angles alone a panel hung behind it; in one piece, laid along the robe over a knee raised at
   // a run it stood straight out. `swing` its own swing, both halves' angles from straight down in its pivot's frame turned to
@@ -629,8 +688,10 @@ export function buildMage(): Model {
   };
   void hang; void panel;
 
+  yield;
   // --- the head: face, a full beard, hair, and a hood (worn with a head item equipped: setGear) in the coat's wool
-  const head = buildHead(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage.hair);
+  yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
@@ -676,6 +737,7 @@ export function buildMage(): Model {
     const between = Math.abs(p.x) < apart ? HOOD_OVER_BETWEEN : HOOD_OVER_BARE;
     return Math.max(straps, between, lerp(HOOD_OVER_CROSSING, HOOD_OVER_BARE, smooth(clamp((crossing - CROSSING_HALF) / STRAP_FOOT, 0, 1))));
   };
+  yield;
   // (lined in its own wool, as the reference's: turned back at the rim a finger wide and lit there, a deep red further
   // in. In the shirt's charcoal, opened wide round the face, it read as a grey hole in the studio and a flat black one
   // in the forest; in a dark brownish red, a grey void)
@@ -844,6 +906,7 @@ export function buildMage(): Model {
     });
   }
 
+  yield;
   // --- staff (right hand): a thick gnarled haft bound in engraved gold, its head two gold prongs curving up round a
   // floating crystal
   // turned in the fist so it stands up out of the forward-reaching forearm, the orb up and ahead.
@@ -894,13 +957,16 @@ export function buildMage(): Model {
   const ringB = part(new THREE.TorusGeometry(0.11, 0.004, 4, 32), glow, tip);
   ringA.castShadow = ringB.castShadow = false;
 
+  yield;
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
   S.build();
   const robeParts = A.build(), tunic = T.build(), bracers = H.build();
+  yield;
   // (robed until setGear says otherwise)
   let robed = true, gloved = true;
   for (const o of [...tunic, tunicSkirt]) o.visible = false;
+  yield;
   // each item's parts glowing in its rarity's colour (itemGlow.ts): the staff, the book at his hip (the off-hand's),
   // the hood, the longcoat, the bracers and gloves (the hands' own copies kept)
   const glows = new ItemGlows(kit.mats)
@@ -934,6 +1000,7 @@ export function buildMage(): Model {
   root.scale.setScalar(1.08);
 
   const shY = j.shoulderL.position.y;
+  yield;
   // the healing draught, in the free fist while it is drunk
   const flask = buildFlask(kit); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0;

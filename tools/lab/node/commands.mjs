@@ -1602,6 +1602,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  behind: {
+    each(side, options) {
+      return side.command('behind', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   coat: {
     each(side, options) {
       const command = {

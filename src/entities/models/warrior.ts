@@ -16,7 +16,7 @@ import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
-import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { NECKLINE_BACK } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
@@ -38,6 +38,7 @@ import {
   TWO_SPINS, TWO_POWERS, TWO_SMITES,
 } from './warriorEyes';
 import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
+import { built, type ModelSteps } from './steps';
 import { Dye } from './dye';
 import { ItemGlows } from './itemGlow';
 
@@ -470,13 +471,17 @@ function onPlate(x: number, y: number, lift = 0.004): THREE.Vector3 {
   return bpPoint(a, y, new THREE.Vector3(), lift);
 }
 
-export function buildWarrior(): Model {
+export const buildWarrior = (): Model => built(warriorSteps());
+
+/** buildWarrior's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
+export function* warriorSteps(): ModelSteps {
   const kit = createKit(0xffa040);
   const rng = mulberry(11);
   const tex = (maps: ReturnType<typeof steelMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
   const E = engravedSteel();
   const engraved = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
   const plateM = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
+  yield;
   // blades: a thin blade turned away from the lights only mirrors its surroundings, and the dark ground
   // and horizon of a night sky turn it black: a cool rim of light on its bevels keeps the steel readable
   const bladeM = kit.rim({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8), roughnessMap: null }, 0x9aa8c0, 0.3);
@@ -485,6 +490,7 @@ export function buildWarrior(): Model {
   const leather = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const leatherDark = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const cloth = kit.rim({ color: 0x323c56, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x3a4a70, 0.35);
+  yield;
   // (the surcoat's cloth and the shield's paint: his blue)
   const dye = new Dye('blue').cloth(cloth);
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
@@ -492,7 +498,9 @@ export function buildWarrior(): Model {
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
   // bare hands and wrists, and the fingertips his gloves leave bare (a paler skin of their own, they were another
   // man's fingers, #425)
+  yield;
   const bareSkin = handSkin(kit, 'warrior');
+  yield;
   // the fuller only glows while a skill charges
   const edge = kit.glow(0xffb070, 0, false);
 
@@ -501,16 +509,20 @@ export function buildWarrior(): Model {
     thighR: 0.1, shinR: 0.078, headR: 0.125, shinL: 0.41,
   });
   stripRig(j.root);
+  yield;
   // fur casts no shadow: hundreds of thin tufts would add much to the shadow pass for little
   const S = new Sculpt().glow(furM);
+  yield;
   // the armour, on meshes of its own so it comes off (setGear): the chest item's (breastplate, pauldrons, mail skirt,
   // tassets, knee cops), the hands item's (bracers, gloves), and what shows without the latter (the forearm's sleeve)
   const A = new Sculpt().glow(furM), H = new Sculpt().glow(furM), B = new Sculpt();
 
+  yield;
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
   S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
   S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), leatherDark, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), leather, j.spine);
+  yield;
   // rivets along each band
   const studs: THREE.BufferGeometry[] = [];
   const studAt = (p: THREE.Vector3, n: THREE.Vector3, r: number) => {
@@ -522,8 +534,10 @@ export function buildWarrior(): Model {
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) for (let k = 0; k < 14; k++) {
     const a = (k / 14 - 0.5) * 2.6;
     studAt(V(Math.sin(a) * (0.165 + g), y - 0.02, Math.cos(a) * (0.142 + g)), V(Math.sin(a), 0, Math.cos(a)), 0.005);
+    yield;
   }
   S.add(merge(studs.splice(0)), brass, j.spine);
+  yield;
   // the breastplate, engraved across the front (projected straight on), and a plain back plate
   const bp = plate(breast, 28, 14, 0.008);
   projectUV(bp, steelRegion('chest'), (x, y) => [(x + 0.22) / 0.44, (y + 0.12) / 0.42]);
@@ -534,10 +548,13 @@ export function buildWarrior(): Model {
   for (let k = 0; k <= 16; k++) {
     const a = (k / 16 - 0.5) * 2 * BP_A * 0.96, p = bpPoint(a, -0.05, new THREE.Vector3(), 0.008);
     studAt(p, V(Math.sin(a), 0, Math.cos(a)), 0.006);
+    yield;
   }
   A.add(merge(studs.splice(0)), plateM, j.chest);
+  yield;
   // side straps joining front and back plates under the arms
   for (const s of [1, -1]) for (const y of [0.02, 0.1]) A.add(strap([V(s * 0.155, y, 0.1), V(s * 0.188, y, 0), V(s * 0.155, y, -0.1)], 0.028, 0.006), leather, j.chest);
+  yield;
   // crossed straps over the chest, each with a buckle; they run on over the shoulders
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [V(s * 0.1, 0.27, -0.1), V(s * 0.115, 0.29, -0.02), V(s * 0.105, 0.25, 0.09)];
@@ -545,18 +562,22 @@ export function buildWarrior(): Model {
     A.add(strap(pts, 0.04, 0.007), leather, j.chest);
     const mid = onPlate(s * -0.01, 0.1, 0.012);
     A.add(buckle(0.05, 0.05), plateM, j.chest, mid.toArray(), [0, 0, s * 0.62]);
+    yield;
   }
 
+  yield;
   // --- fur collar round the neck and over the shoulder tops
   S.add(furTufts(rng, 280, (i, o) => {
     const a = rng() * Math.PI * 2, r = 0.55 + rng() * 0.45, sa = Math.sin(a), ca = Math.cos(a);
     o.p.set(sa * (0.09 + 0.1 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.09 + 0.045 * r));
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
   }, 0.06, 0.011), furM, j.chest);
+  yield;
   // a high collar of the gambeson inside the fur, round the neck as the tunic's neckline is (centred on the chest, his
   // neck came out through it behind), and the neck
   S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
 
+  yield;
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the
   // top one, fur spilling out from under it
   for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
@@ -578,8 +599,10 @@ export function buildWarrior(): Model {
     A.add(furTufts(rng, 44, (i, o) => {
       const a = (rng() - 0.5) * 3; o.p.set(s * (0.1 + Math.cos(a) * 0.04), -0.06, Math.sin(a) * 0.1); o.d.set(s * 0.6, -0.8, Math.sin(a) * 0.5);
     }, 0.045, 0.009), furM, sh);
+    yield;
   }
 
+  yield;
   // --- arms: navy sleeves strapped at the upper arm, fur at the elbow, leather bracers with a steel
   // plate, fingerless gloves (the hands item: without it the sleeves run on to the wrist, the hands bare)
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
@@ -600,10 +623,12 @@ export function buildWarrior(): Model {
     B.add(scaleUV(lathe([[0.05, -0.245], [0.052, -0.2], [0.057, -0.12], [0.061, -0.04], [0.06, 0]], 16), 2, 1), cloth, el);
     B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
+    yield;
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
+  yield;
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
@@ -626,17 +651,21 @@ export function buildWarrior(): Model {
     S.add(scaleUV(taperTube(foot, (t) => 0.05 - 0.02 * t * t, 12, 12), 1, 2), leather, an, [0, 0, 0], [0, 0, 0], [1.12, 0.82, 1]);
     S.add(taperTube(foot.map((p) => V(0, 0, p.z)), (t) => 0.056 - 0.02 * t * t, 12, 12), leatherDark, an, [0, -0.064, 0], [0, 0, 0], [1.15, 0.2, 1.04]);
     S.add(new THREE.SphereGeometry(0.047, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), plateM, an, [0, -0.042, 0.165], [0.5, 0, 0], [1.1, 0.9, 1.3]);
+    yield;
   }
 
+  yield;
   // --- below the belt: a mail skirt with leather tassets over it
   S.add(belt(0.168, 0.145, 0.01, 0.06, 0.012), leather, j.spine);
   const bk = disc(0.046, 0.016);
   projectUV(bk, steelRegion('disc'), (x, y) => [(x / 0.046 + 1) / 2, (y / 0.046 + 1) / 2]);
   S.add(bk, engraved, j.spine, [0, 0.01, 0.152]);
+  yield;
   // a second belt slung lower across the hips, and a pouch on it
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.2, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.17); }), 0.04, 0.01, true), leather, j.hips);
   S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
   S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
+  yield;
   // (its top gathered under the waist belt, against the leather there: hung below the belt and wider than it, the ring between
   // the two was open, and the trousers' tops showed through it at the sides, standing too; the hips' flare is the drape's; seven
   // rows, as the hand on the shield's grip lay between two of six)
@@ -644,6 +673,7 @@ export function buildWarrior(): Model {
   const skirtMesh = new THREE.Mesh(skirt.geo, mail);
   skirtMesh.position.y = 0.07; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
+  yield;
   // what it is draped over, in its own space: the trousers' thighs (they bulge to 11 cm) and the shins over the boots (their
   // fur cuffs stand 11 cm off the shin, over the knee cops) from inside, the hands and the forearms' lower halves (a bracer's
   // plate or the sleeve) from outside, with the cloth's gap. Swung by the thighs alone, the mail was narrower than the
@@ -652,11 +682,13 @@ export function buildWarrior(): Model {
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     legBodies.add([th, O()], [kn, O()], 0.112 + GAP, 0.084 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.115 + GAP, 0.065 + GAP);
+    yield;
   }
   const capsL = handCapsules(handL);
   for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
   const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.058]);
   const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
+  yield;
   // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
   // armOffThigh)
   const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
@@ -680,16 +712,20 @@ export function buildWarrior(): Model {
       ta.build();
       tassets.push({ g, s });
     }
+    yield;
   }
 
+  yield;
   // --- the head, with shoulder-length wavy hair, and an open-faced helmet worn over it when a head item is
   // equipped: a steel skull with a low crest, bands riveted over it and round the brow, a nasal down the nose,
   // cheek guards over the ears and a mail curtain over the nape. It is shaped on the head itself (padded over
   // the scalp); the face stays bare.
-  const head = buildHead(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior.hair);
+  yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'warrior', j.P.neckL, j.head);
+  yield;
   // (worn only with a head item equipped: bareheaded, the hair shows; setGear)
   const helm = new THREE.Group(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
   {
@@ -713,6 +749,7 @@ export function buildWarrior(): Model {
     }
     dome.computeVertexNormals();
     h.add(scaleUV(dome, 4, 1.5), plateM, helm);
+    yield;
     const ring = (el: (a: number) => number, lift: number, n: number) => Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2 - Math.PI; return shell(a, el(a), lift); });
     // a rolled rim, the brow band over it, four bands meeting at the crown and a rivet on top
     const rim = ring(rimEl, 1, 48);
@@ -724,6 +761,7 @@ export function buildWarrior(): Model {
       for (let q = 0; q < 3; q++) { const e = lerp(rimEl(a) + 0.4, 1.35, q / 2); studAt(shell(a, e, 3), out(shell(a, e), V(0, 0, 0)), 0.0038); }
     }
     for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 3.5), out(shell(a, e), V(0, 0, 0)), 0.0036); }
+    yield;
     const top = shell(0, Math.PI / 2, 3);
     h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, helm, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
     // the nasal: a ridged bar from the brow band down the bridge of the nose, clear of it, narrowing to
@@ -753,11 +791,13 @@ export function buildWarrior(): Model {
       const a = Math.PI + (u - 0.5) * 2.7, p = shell(a, rimEl(a) + 0.05, -2, o), r = V(p.x, 0, p.z - C.z).normalize();
       return p.addScaledVector(r, 0.03 * (1 - v)).add(V(0, -0.09 * (1 - v), 0));
     };
+    yield;
     h.add(scaleUV(plate(aventail, lod(28, 12), 4, 0.003, undefined, C), 3, 3), mail, helm);
     h.add(merge(studs.splice(0)), plateM, helm);
     h.build();
   }
 
+  yield;
   // --- weapons in the right hand, built along the grip's +Y (blade up); setGear shows the equipped one.
   // The grip turns +Y to point forward, slightly up, out of the bent arm.
   const grip = joint(j.handR, 0, -0.06, 0.01);
@@ -773,10 +813,12 @@ export function buildWarrior(): Model {
     g.visible = false;
     weapons.set(name, { group: g, len, off, r, edge: strikes, hang });
   };
+  yield;
   // (each made as models/weapons.ts makes it, a sculpt of its own kind: a hero built again replays its pieces)
   const M: WeaponMaterials = {
     steel: plateM, dark: darkSteel, blade: bladeM, engraved, brass, wood, leather, leatherDark, glow: edge,
   };
+  yield;
   // (the striking parts as models/weapons.ts builds them: the sword's blade from 0.12 to 1.06, the greatsword's from
   // 0.13 to 1.47, the axe's bit from its beard's toe at 0.4 to its top at 0.74, the mace's flanges from 0.56 to 0.74,
   // the greataxe's bits from 0.62 to 1.07 with the spike over them, the maul's head round 0.99)
@@ -789,10 +831,12 @@ export function buildWarrior(): Model {
   const tip = joint(grip, 0, 1.12, 0);
   /** each hand's weapon's striking part, as a swing's trail follows it (`swung`; placed by `setGear`) */
   const bladeR = { from: joint(grip, 0, 0, 0), to: joint(grip, 0, 0, 0) };
+  yield;
   // where the left hand holds a two-handed weapon
   const offGrip = joint(grip, 0, -0.24, 0);
   let held: Weapon | null = null;
 
+  yield;
   // dual-wielding: a one-hander in the left fist too, the mirror image of the right grip (the
   // copies share geometry and materials)
   const gripL = joint(j.handL, 0, -0.06, 0.01);
@@ -804,6 +848,7 @@ export function buildWarrior(): Model {
     const g = w.group.clone();
     gripL.add(g);
     offWeapons.set(name, { ...w, group: g });
+    yield;
   }
   let offHeld: Weapon | null = null;
   const tipL = joint(gripL, 0, 1, 0);
@@ -848,6 +893,7 @@ export function buildWarrior(): Model {
    *  where no swing holds it (a swing's keys are reached as keyed: eased, Power Strike's elbow was drawn 6 cm off them) */
   const SOFT_REACH = 0.15;
 
+  yield;
   // --- round shield on the left fist: planks behind a painted navy face, a steel rim with rivets and a
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
   // front of the fist, facing out of the hand. Its face is local +Z.
@@ -881,10 +927,12 @@ export function buildWarrior(): Model {
   }
   const palm = joint(shield, 0, 0, 0.1);
 
+  yield;
   // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
   const legs = new LegIK(j);
   /** smooths every cut between poses: an action starting, restarting or ending */
   const fade = new PoseFade(j);
+  yield;
   // (through the eyes the weapons are placed after the pose's fade, so they fade on their own: each hand's, a
   // two-hander's by its right)
   const eyesR = new ViewFade(), eyesL = new ViewFade();
@@ -892,6 +940,7 @@ export function buildWarrior(): Model {
   const harness: THREE.Object3D[] = [...plates, skirtMesh, ...tassets.map((t) => t.g)];
   const furs = [...clothes, ...plates, ...gloves].filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
+  yield;
   // each item's parts glowing in its rarity's colour (itemGlow.ts): the weapon in each hand, the shield, the helm, the
   // armour, the bracers and gloves (the hands' own copies kept)
   const glows = new ItemGlows(kit.mats)
@@ -907,18 +956,22 @@ export function buildWarrior(): Model {
   const root = j.root;
   root.scale.setScalar(1.1);
 
+  yield;
   // right-arm swings and chops yaw last, so the straight arm sweeps around the vertical axis
   // (with no yaw this order poses exactly like the default)
   j.shoulderR.rotation.order = 'YXZ';
   j.shoulderL.rotation.order = 'YXZ';
 
+  yield;
   // swings in a row alternate forehand / backhand, a row begun again after a pause (`SWING_HOLD`) with the forehand;
   // a new swing starts when the action restarts. With a
   // weapon in each hand they alternate hands instead: the backhand side is the left hand's forehand
   let side = 1, lastK = 1, lastName = '', lastCharged = false;
   let tailName = '', tailT = 0;
+  yield;
   // (whether the fade under way is a two-hander's way back to its guard out of a move, placed by the weapon)
   let backOut = false;
+  yield;
   // (the foe an overhead blow comes down on this frame, `AnimState.strike`)
   let strikeOn: Struck | null = null;
   /** when a swing last ended, and whether this one follows straight on from it (it starts wound, where the last one
@@ -1230,6 +1283,7 @@ export function buildWarrior(): Model {
   }
 
   const shY = j.shoulderL.position.y;
+  yield;
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
@@ -1253,6 +1307,7 @@ export function buildWarrior(): Model {
   let slantR = 0, slantL = 0;
   /** the slant a swing through the eyes holds each fist's handle at (rad, `ViewSwing.slant`), kept while its hold fades */
   let swingSlantR = 0, swingSlantL = 0;
+  yield;
   // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
   // left hip, worn whenever there is a second weapon. A sword sits in it by its guard, the hilt forward and up
   // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
