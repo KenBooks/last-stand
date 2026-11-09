@@ -72,7 +72,7 @@ export class Way {
 }
 
 /** Calls `fn` of page/coop.ts in `page` with the page's lab and `args`. */
-function callPage(page, fn, args = {}) {
+export function callPage(page, fn, args = {}) {
   return page.evaluate(async ([fn, args]) => {
     const coop = await import('/tools/lab/page/coop.ts');
     return coop[fn](window.__lab, args);
@@ -171,7 +171,7 @@ function describeStates(states) {
 }
 
 /** The party's games (the host's, the guest's, any others') and the links between them, stepped together. */
-class Pair {
+export class Pair {
   constructor({ pages, ping, jitter, frameMs }) {
     this.pages = pages;
     const random = seededRandom(LINK_SEED);

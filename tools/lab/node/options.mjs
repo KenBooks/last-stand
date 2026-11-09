@@ -1793,6 +1793,15 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  training: {
+    help: 'training grounds: reached-wave saves and migration, host choices, harmless holograms, no rewards, '
+      + 'repeat and leave; includes a normal-run damage control',
+    options: {
+      coop: { kind: 'switch', help: 'two real peers: host unlocks, immunity, rewards, repeat and leave' },
+      canary: { kind: 'switch', help: 'plant ordinary damage in training and verify it is detected' },
+      ...COMMON_OPTIONS,
+    },
+  },
   practice: {
     help: 'each skill on a key with a cooldown cast, then cast again as soon as the hero is free, in the lobby as it '
       + 'shows, in practice (stowed, as Space and a phone\'s Practice stow it), shown again after it, with every '

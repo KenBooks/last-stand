@@ -221,6 +221,15 @@ export function initMenus(h: MenuHooks): void {
       sfx.click(); pickBiome(b.dataset.b as BiomeSetting);
     };
   });
+  document.querySelectorAll<HTMLButtonElement>('#opt-training button').forEach((b) => {
+    b.onclick = () => {
+      if (isGuest()) return;
+      sfx.click();
+      training = b.dataset.training === 'true';
+      renderLobbyOptions();
+      hooks.lobbyChanged();
+    };
+  });
   const waves = $('#opt-wave');
   waves.querySelectorAll<HTMLElement>('button').forEach((b) => {
     b.onclick = () => { sfx.click(); stepWave(Number(b.dataset.d)); };
@@ -447,6 +456,11 @@ export function renderLobbyOptions(): void { renderBiomeOptions(); renderWaveOpt
 function renderBiomeOptions(): void {
   // a co-op guest sees the host's battleground (Random shows the one rolled at the start)
   const guest = isGuest(), s = guest ? session.biome : biomeSetting();
+  const rehearsal = trainingSelected();
+  document.querySelectorAll<HTMLButtonElement>('#opt-training button').forEach((b) => {
+    b.classList.toggle('active', (b.dataset.training === 'true') === rehearsal);
+    b.disabled = guest;
+  });
   document.querySelectorAll<HTMLButtonElement>('#opt-biome button').forEach((b) => { b.classList.toggle('active', b.dataset.b === s); b.disabled = guest; });
   // a co-op host waits for a partner still finishing a run; a guest, for the host
   const start = $<HTMLButtonElement>('#btn-start');
@@ -454,12 +468,16 @@ function renderBiomeOptions(): void {
   start.disabled = guest || busy;
   $<HTMLButtonElement>('#rail-play').disabled = start.disabled;
   start.textContent = guest ? (partnerInRun() ? 'The host is in a run' : 'The host starts the run')
-    : busy ? 'Your partner is still in a run' : 'Enter the Arena';
+    : busy ? 'Your partner is still in a run' : rehearsal ? 'Enter Training Grounds' : 'Enter the Arena';
+  start.title = rehearsal ? 'Replay any reached wave. No damage, loot, score or progression.' : '';
+  $('#rail-play').textContent = rehearsal ? 'Train' : 'Play';
 }
 
-// Starting wave: any wave up to the best one cleared and banked in the chosen biome (on
+// Starting wave: Arena uses the best banked wave; Training grounds uses the highest attempted wave (on
 // Random, in every biome), defaulting to that best and jumping back to it when the biome or
 // best changes.
+let training = false;
+export const trainingSelected = (): boolean => isGuest() ? session.training : training;
 let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 
@@ -470,9 +488,9 @@ function stepWave(d: number): void {
 }
 
 function renderWaveOptions(): void {
-  const s = biomeSetting(), bests = G.profile.records.bestBanked;
+  const s = biomeSetting(), bests = trainingSelected() ? G.profile.records.bestReached : G.profile.records.bestBanked;
   const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
-  if (`${s}:${best}` !== seen) { seen = `${s}:${best}`; startWave = maxWave = best; }
+  if (`${G.profile.classId}:${trainingSelected()}:${s}:${best}` !== seen) { seen = `${G.profile.classId}:${trainingSelected()}:${s}:${best}`; startWave = maxWave = best; }
   // a co-op guest plays the host's choice
   const guest = isGuest(), wave = guest ? session.wave : startWave;
   const box = $('#opt-wave');
@@ -767,15 +785,15 @@ function changed(): void {
   renderMenu();
 }
 
-export function showSummary({ outcome, wave, score, kills, bag, lost = [], replaced = [], note, watch }: RunSummary): void {
+export function showSummary({ training, outcome, wave, score, kills, bag, lost = [], replaced = [], note, watch }: RunSummary): void {
   const box = $('#summary');
   const dead = outcome === 'dead';
   const gone = new Set(lost.map((it) => it.id));
   const kept = bag.filter((it) => !gone.has(it.id));
   const t = $('.sm-title', box);
-  t.textContent = dead ? 'You Have Fallen' : 'Spoils Secured';
+  t.textContent = training ? 'Training Complete' : dead ? 'You Have Fallen' : 'Spoils Secured';
   t.classList.toggle('dead', dead);
-  $('.sm-sub', box).innerHTML = dead
+  $('.sm-sub', box).innerHTML = training ? 'Holographic foes. No loot, score or records earned.' : dead
     ? (bag.length ? `The arena claims your <b class="red">${bag.length}</b> unbanked item${bag.length === 1 ? '' : 's'}, never seen.` : 'You carried nothing out — and lost nothing.')
     : `${kept.length} item${kept.length === 1 ? '' : 's'} moved to your stash.${
       replaced.length ? ` Stash full: ${replaced.length} weaker stash item${replaced.length === 1 ? '' : 's'} salvaged to make room.` : ''}${

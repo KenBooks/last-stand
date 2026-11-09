@@ -26,7 +26,7 @@ function fresh(classId: string): Profile {
     classId: cls.id,
     equipped,
     stash: [],
-    records: { bestWave: 0, bestBanked: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
+    records: { bestWave: 0, bestBanked: {}, bestReached: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
   };
   seedPr423Gear(p, true); // PR 423's test gear
   return p;
@@ -38,6 +38,7 @@ function read(key: string): Profile | null {
   const p = JSON.parse(raw);
   if (!p || !p.equipped || !Array.isArray(p.stash)) return null;
   p.records.bestBanked ??= {}; // older profiles: bestWave counts deaths too, so start over
+  p.records.bestReached ??= { ...p.records.bestBanked }; // only banked waves have a known biome in old saves
   return p;
 }
 

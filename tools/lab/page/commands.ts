@@ -667,6 +667,12 @@ export async function sound(_lab: Lab, command: SoundOptions): Promise<Report> {
   return soundRound(command);
 }
 
+/** Training grounds: saved reached waves, harmless projections, no rewards, repeat and leave. */
+export async function training(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { training: measure } = await import('./training');
+  return measure(lab, command);
+}
+
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
 export function setup(lab: Lab, fixture: Fixture): Promise<Record<string, unknown>> {
   return lab.setup(fixture);

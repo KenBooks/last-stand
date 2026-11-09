@@ -541,8 +541,13 @@ export class Enemy {
   }
 
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
+    const projection = G.run?.training && this.type !== 'dummy';
     if (this.def.evade) this.model.kit.u.uDissolve.value = this.goneTo ? 1 : this.forming / BLINK_FORM;
-    this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
+    if (projection) {
+      this.model.kit.u.uDissolve.value = Math.max(0.28, this.model.kit.u.uDissolve.value);
+      this.model.kit.u.uEdge.value.set(0x67edff);
+    }
+    this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : projection ? 0.8 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
@@ -664,7 +669,7 @@ export class Enemy {
   }
 
   /** whether its body casts a shadow (models/crowd.ts): not as it dissolves */
-  get castsShadow(): boolean { return !this.corpse?.fading && !this.goneTo; }
+  get castsShadow(): boolean { return !G.run?.training && !this.corpse?.fading && !this.goneTo; }
 
   dispose(): void {
     leaveCrowd(this);

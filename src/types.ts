@@ -238,9 +238,9 @@ export interface Profile {
   classId: string;
   equipped: Partial<Record<Slot, Item>>;
   stash: Item[];
-  /** bestWave: best wave cleared in any biome; bestBanked: per biome, the best wave whose spoils were banked
+  /** bestReached: highest attempted normal wave per biome (including deaths); bestWave: best wave cleared in any biome; bestBanked: per biome, the best wave whose spoils were banked
    *  (the lobby's starting-wave range); kills and time (seconds) over every run, counted since save slots came */
-  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number; kills?: number; time?: number };
+  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; bestReached: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number; kills?: number; time?: number };
   /** when it was last saved (ms since the epoch): shown as "last played" on the save slots screen */
   saved?: number;
 }

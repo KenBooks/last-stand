@@ -145,11 +145,13 @@ export function showDecision(): void {
     // with nothing in the bag there's nothing to lose
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length} unbanked item${r.bag.length === 1 ? '' : 's'}</b> will be lost forever.`;
     $('.dc-risk', box).classList.toggle('hidden', !r.bag.length);
-    const next = r.wave + 1;
+    $('.bank-label', box).textContent = r.training ? 'Leave training' : 'Bank spoils & leave';
+    if (r.training) bag.textContent = 'Training · No loot or score';
+    const next = r.training ? r.wave : r.wave + 1;
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();
     $('.cont-label', box).textContent = waiting ? 'Waiting for the others…'
-      : next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
+      : r.training ? `Repeat wave ${r.wave}` : next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
     $<HTMLButtonElement>('.cont', box).disabled = waiting;
     const party = partyDecision();
     $('.dc-party', box).textContent = party;
@@ -190,6 +192,7 @@ export function resetDecision(): void {
 export function renderSpoils(gained?: Item): void {
   const r = G.run;
   if (!r) return;
+  $('#spoils').classList.toggle('hidden', r.training);
   $('.sp-count').textContent = String(r.bag.length);
   const list = $('.sp-list');
   list.innerHTML = rarityChips(r.bag, 'sp-r');
@@ -249,8 +252,8 @@ export function updateHud(): void {
   const ol = h('.obj-line');
   const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
-    : r.phase === 'cleared' ? (G.player.active ? 'Bank your spoils or continue' : 'The others decide')
-    : G.player.out === 'banked' ? 'Spoils banked' : G.player.out === 'dead' ? 'Fallen' : 'The run is over';
+    : r.phase === 'cleared' ? (G.player.active ? (r.training ? 'Leave training or repeat this wave' : 'Bank your spoils or continue') : 'The others decide')
+    : G.player.out === 'banked' ? (r.training ? 'Training complete' : 'Spoils banked') : G.player.out === 'dead' ? 'Fallen' : 'The run is over';
 
   setText(h('.obj-line .obj-text'), txt);
   ol.classList.toggle('done', r.phase === 'cleared');

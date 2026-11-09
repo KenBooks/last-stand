@@ -41,6 +41,8 @@ interface SpawnUnit { type: EnemyId; hero: boolean }
 export type RunPhase = 'countdown' | 'fighting' | 'cleared' | 'over';
 
 export interface RunState {
+  /** Rehearsal only: harmless foes, no rewards or saved records. */
+  training: boolean;
   wave: number;
   phase: RunPhase;
   /** countdown seconds left (phase 'countdown') */
@@ -77,6 +79,7 @@ export interface RunState {
 }
 
 export interface RunSummary {
+  training?: boolean;
   outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[]; replaced?: Item[]; note?: string;
   /** shown with the run still going on for others (co-op): its button watches them */
   watch?: boolean;
@@ -124,9 +127,9 @@ function cleanupWorld(): void {
   forgetFrustum();
 }
 
-/** Start a run at `wave` (the lobby allows any wave up to the best one banked in the biome).
+/** Start at `wave`: banked waves in the arena, reached waves in Training grounds.
  *  A co-op guest starts its side of the host's run the same way, and then follows it. */
-export function startRun(wave = 1): void {
+export function startRun(wave = 1, training = false): void {
   cleanupWorld();
   resetMine();
   for (const p of G.players) {
@@ -134,24 +137,28 @@ export function startRun(wave = 1): void {
     p.reset();
   }
   G.run = {
-    wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
+    training, wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
     queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
     pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
     started: G.time, tallied: false,
   };
-  G.profile.records.runs++;
-  saveProfile(G.profile);
+  if (!training) {
+    G.profile.records.runs++;
+    rememberReached();
+  }
   G.arena.setCalm(0);
   const biome = BIOMES[G.arena.biome];
-  ui.banner(`Wave ${wave}`, wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
+  ui.banner(`${training ? 'Training · ' : ''}Wave ${wave}`, training
+    ? 'Holographic enemies · No damage, loot or score'
+    : wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
 }
 
 export function abandonRun(): void {
   const r = G.run;
   if (!r) return;
   // abandoned from the pause menu: its time and kills still count
-  if (!r.tallied) { tally(r); saveProfile(G.profile); }
+  if (!r.training && !r.tallied) { tally(r); saveProfile(G.profile); }
   G.run = null;
   for (const p of G.players) p.stopChannel();
   cleanupWorld();
@@ -160,9 +167,19 @@ export function abandonRun(): void {
 /** The run's time and kills go into the records, once, however it ends for the local player. */
 function tally(r: RunState): void {
   r.tallied = true;
+  if (r.training) return;
   const rec = G.profile.records;
   rec.kills = (rec.kills ?? 0) + r.kills;
   rec.time = Math.round((rec.time ?? 0) + G.time - r.started);
+}
+
+/** Save a wave as soon as it is attempted, including a wave the player dies on. Never in training. */
+function rememberReached(): void {
+  const r = G.run!;
+  if (r.training || !G.player.active) return;
+  const reached = G.profile.records.bestReached;
+  reached[G.arena.biome] = Math.max(reached[G.arena.biome] ?? 0, r.wave);
+  saveProfile(G.profile);
 }
 
 /** The players still in the run (standing or downed). */
@@ -367,7 +384,7 @@ function waveCleared(): void {
   // down as the wave ends: no one comes back for you
   for (const p of G.players) if (p.downed && p.inRun) playerOut(p, 'dead');
   // the wave's reward, counted in one by one, for everyone still standing
-  const n = LOOT.waveRewards(r.wave);
+  const n = r.training ? 0 : LOOT.waveRewards(r.wave);
   for (const p of G.players) {
     if (!p.active) continue;
     for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave, LOOT.waveRewardBonus(r.wave))); });
@@ -382,8 +399,10 @@ function waveCleared(): void {
 export function showCleared(): void {
   const r = G.run!;
   const rec = G.profile.records;
-  if (G.player.active) rec.bestWave = Math.max(rec.bestWave, r.wave);
-  saveProfile(G.profile);
+  if (!r.training) {
+    if (G.player.active) rec.bestWave = Math.max(rec.bestWave, r.wave);
+    saveProfile(G.profile);
+  }
   sfx.waveClear();
   // a player still in gets the choice, which grows out of the wave badge and says it all
   if (G.player.active) ui.showDecision();
@@ -409,7 +428,7 @@ function nextWave(): void {
     if (!p.active) continue;
     p.heal(p.stats.maxLife * RUN.healOnContinue);
   }
-  r.wave++;
+  if (!r.training) r.wave++; // training repeats the selected wave; it cannot unlock later ones
   r.phase = 'countdown';
   r.timer = RUN.countdown;
   runHooks.nextWave();
@@ -419,13 +438,16 @@ function nextWave(): void {
 /** The next wave's countdown here (a guest's on the host's word). */
 export function startNextWave(): void {
   const r = G.run!;
+  rememberReached();
   const p = G.player;
   if (p.active) p.energy = Math.min(p.stats.maxEnergy, p.energy + p.stats.maxEnergy * RUN.energyOnContinue);
   r.votes.clear();
   G.arena.setCalm(0);
   ui.hideDecision();
   const boss = r.wave % WAVES.bossEvery === 0;
-  ui.banner(`Wave ${r.wave}`, boss ? BIOMES[G.arena.biome].bossBanner : 'Hold the line');
+  ui.banner(`${r.training ? 'Training · ' : ''}Wave ${r.wave}`, r.training
+    ? 'Holographic enemies · No damage, loot or score'
+    : boss ? BIOMES[G.arena.biome].bossBanner : 'Hold the line');
 }
 
 /** The local player banks: out of the run with the spoils (the others may carry on). */
@@ -496,19 +518,21 @@ function finishLocal(kind: 'banked' | 'dead', note?: string): void {
   const rec = G.profile.records;
   ui.hideDecision();
   let extra: { lost?: Item[]; replaced?: Item[] } = {};
-  if (kind === 'banked') {
+  if (!r.training && kind === 'banked') {
     // banking unlocks this wave as a start; dying does not
     const best = rec.bestBanked;
     best[G.arena.biome] = Math.max(best[G.arena.biome] ?? 0, r.wave);
     extra = bankItems(G.profile, r.bag);
   }
-  rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));
-  if (!r.tallied) tally(r);
-  saveProfile(G.profile);
+  if (!r.training) {
+    rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));
+    if (!r.tallied) tally(r);
+    saveProfile(G.profile);
+  }
   const show = () => {
     r.summarized = true;
     r.watched = r.phase !== 'over' && G.players.some((p) => !p.local && p.inRun);
-    ui.showSummary({ outcome: kind, wave: r.wave, score: Math.round(r.score), kills: r.kills, bag: r.bag.slice(), ...extra, note, watch: r.watched });
+    ui.showSummary({ training: r.training, outcome: kind, wave: r.wave, score: Math.round(r.score), kills: r.kills, bag: r.bag.slice(), ...extra, note, watch: r.watched });
   };
 
   // the fall plays out before the summary
@@ -523,7 +547,7 @@ export function hostLeft(): void {
   r.phase = 'over';
   if (!G.player.out) {
     G.player.out = 'banked';
-    finishLocal('banked', 'The host left the game: your spoils are safe.');
+    finishLocal('banked', r.training ? 'The host left: training ended.' : 'The host left the game: your spoils are safe.');
   }
 }
 
@@ -540,6 +564,7 @@ export function localOut(kind: 'banked' | 'dead'): void {
 function onEnemyKilled(e: Enemy): void {
   const r = G.run;
   if (!r || isGuest()) return;
+  if (r.training) return;
   r.kills++;
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;
@@ -569,7 +594,7 @@ function giveLoot(p: Player, item: Item): void {
  */
 export function gainLoot(item: Item): void {
   const r = G.run;
-  if (!r || G.player.out) return;
+  if (!r || r.training || G.player.out) return;
   r.bag.push(item);
   const info = rarityOf(item.rarity), p = G.player.pos;
   floatText(p.x, 2.7, p.z, `+1 ${info.name}`, 'info', info.color);

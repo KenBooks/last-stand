@@ -20,7 +20,8 @@ import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 const VIEWPORT = { width: 1920, height: 1080 };
 /** the size every page of the lab's is given, in a context of its own or the browser's kept one */
 export const CONTEXT_OPTIONS = { viewport: VIEWPORT, deviceScaleFactor: 1 };
-const BOOT_TIMEOUT_MS = 180_000;
+// A short local budget can diagnose a blocked boot without loading a shared PC for three minutes.
+const BOOT_TIMEOUT_MS = Number(process.env.LAB_BOOT_TIMEOUT_MS) || 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
 /** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
@@ -612,7 +613,7 @@ export class Side {
     const failed = scriptFailure(page);
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
-    await page.goto(this.url, { timeout: BOOT_TIMEOUT_MS });
+    await page.goto(this.url, { timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' });
     // (Chrome raises a page's renderer to normal priority as it shows it: lowered again to the lab's)
     await lowerProcesses(this.browser);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
@@ -625,6 +626,13 @@ export class Side {
         failed.promise,
       ]);
       if (outcome !== BOOTED) throw labError(`${prefix}the game failed to boot: ${outcome}`);
+    } catch (error) {
+      const stage = await page.evaluate(() => {
+        const loading = document.getElementById('loading');
+        return loading?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 600) ?? 'loading screen gone';
+      }).catch(() => 'page not responding');
+      const errors = this.errors.slice(-4).join(' | ');
+      throw labError(`${error.message}; boot stage: ${stage}; page errors: ${errors}`);
     } finally {
       failed.stop();
     }
