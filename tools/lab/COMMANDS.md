@@ -204,13 +204,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (over half: one flat light, the highlight the owner ruled out), its hue against the rarity's (a cosine under
   0.9), and a Magic item's (any: a problem). Then every slot at the rarity over 4 s, the hero held still and the
   glow's clock alone moved on, a sample a tenth of a second: its pixels' mean change between two, a share of its
-  light (over 50%: not slow; under 5%: still); and the glow a whole cycle on against now, which a loop draws the
-  same (over 1% apart: a join). Any program compiled meanwhile is a problem. Pictured close up front and back,
+  light (over 50%: not slow; under 5%: still); and the step as its cycle starts over against the steps just
+  before and after it (over 1.5 times them: a join; a frame a whole cycle on against now can't tell, the shader
+  given only the share of the cycle, and that check passed a join the owner saw). Any program compiled meanwhile is a problem. Pictured close up front and back,
   every item Common and every item at the rarity (`out/glow/`). `--canary` draws the chest's glow ten times as
-  strong and at nothing, and judges its loop half a second past a cycle, each of which must be caught. `--tune
+  strong and at nothing, and skips 2 s as its cycle starts over, each of which must be caught. `--tune
   itemGlow.strength=0.1` compares a strength. As tuned (0.12), in green: the glow lit 0.3% (hands) to 13.8% (the
   mage's robe) of the close-ups, its 99th percentile 0.04 to 0.09 of white, 6 to 35% of it in one light, its hue
-  0.97 to 1.00; its pixels changed 11 to 33% a tenth of a second, 0.00% apart a cycle on.
+  0.97 to 1.00; its pixels changed 11 to 33% a tenth of a second (the mage: 20 to 30%), and as its 16 s cycle starts over
+  no more than the steps beside it (it was 105% against 20% with `turns` 3: a join).
 - `haze`: the hero's held weapons' light through the eyes (`page/haze.ts`), standing in a biome (`--biome`, the
   forest by default) looking each way (`--facings`), held as `--gear` and `--weapon` say. The frame is drawn with the
   weapons and without them, each also with the grade's adaptation held off, and their surface found in the `parts`

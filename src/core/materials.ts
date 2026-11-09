@@ -33,12 +33,15 @@ float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFi
  * a net; none outside those parts left a small item, a blade or a glove, without any);
  * as time goes on it drifts `rise` cells up and moves `turns` cells on through its own time each `cycle` s, and
  * wraps at both: after a cycle it is exactly where it began, so it loops with no join (a crossfade between two cycles
- * was seen as one). Chosen on a flat panel first (`.tmp`'s live page, then `lab glow`); an outline, an even tint
+ * was seen as one; so was an odd `turns`, which its warp's half scale left a cell short: both are rounded even). Chosen on a flat panel first (`.tmp`'s live page, then `lab glow`); an outline, an even tint
  * and blotches were each turned down. A material's own colour (its `kitLooks.aura`, black for none), the same shape
  * for all: `ITEM_GLOW` the shape, `tickItemGlow` its clock, the colour the item's (`models/itemGlow.ts`).
  */
 export const ITEM_GLOW = tunable('itemGlow', {
-  strength: 0.12, face: 0.08, across: 6, up: 3, centre: 0.5, width: 0.05, rise: 2, turns: 3, cycle: 12,
+  strength: 0.12, face: 0.08, across: 6, up: 3, centre: 0.5, width: 0.05, rise: 2, turns: 4, cycle: 16,
+  // the weapon's glow this many times the rest: its brightest strands past the bloom's threshold, a soft light round
+  // them (from play: "a bit of glow on weapon only, in addition to the shader"); read as its gear is set
+  weapon: 6,
 });
 /** the glow's shape (x its cells a metre across, y along, z the level its strands lie on, w how far either side), its loop (x the cells
  *  it rises a cycle, y the cells it moves on through time, z the face's share, w the strength) and its clock (the
@@ -49,12 +52,15 @@ const AURA_CLOCK = { value: 0 };
 /** what WebGPU's kit reads them by (core/shaderPorts.ts `kitNodes`) */
 export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AURA_CLOCK };
 
+/** A loop's cells rounded to an even count: the noise wraps where the cycle does only in whole cells, and the slow
+ *  field that warps it runs at half the scale (`turns` 3 left it 1.5 cells, and it jumped as each cycle began). */
+const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells / 2));
+
 /** The glow's clock moved to the game's (`G.time`, s), and its shape read, once a frame. */
 export function tickItemGlow(time: number): void {
   const { strength, face, across, up, centre, width, rise, turns, cycle } = ITEM_GLOW;
   AURA_SHAPE.value.set(across, up, centre, width);
-  // (whole cells, or the noise wouldn't wrap where the cycle does)
-  AURA_LOOP.value.set(Math.max(1, Math.round(rise)), Math.max(1, Math.round(turns)), face, strength);
+  AURA_LOOP.value.set(wholeAtHalf(rise), wholeAtHalf(turns), face, strength);
   AURA_CLOCK.value = (((time % cycle) + cycle) % cycle) / cycle;
 }
 

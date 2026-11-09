@@ -3,7 +3,7 @@
 // light and no program of its own: each item's parts draw with copies of their kit materials (`kitCopy`), the same
 // program as every kit material's, their glow a uniform's colour of their own.
 import * as THREE from 'three';
-import { kitCopy, ownAura } from '../../core/materials';
+import { ITEM_GLOW, kitCopy, ownAura } from '../../core/materials';
 import { RARITIES } from '../../data/items';
 import type { Gear, GlowSlot, RarityId } from '../../types';
 
@@ -81,7 +81,8 @@ export class ItemGlows {
   set(gear: Gear): void {
     for (const [slot, auras] of this.auras) {
       const rarity = gear.rarity[slot];
-      for (const aura of auras) glowOf(rarity, aura);
+      const scale = slot === 'weapon' ? ITEM_GLOW.weapon : 1;
+      for (const aura of auras) glowOf(rarity, aura).multiplyScalar(scale);
     }
   }
 }

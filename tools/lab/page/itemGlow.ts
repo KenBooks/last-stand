@@ -5,9 +5,10 @@
 // is its glow and nothing else (his gear set again between the two could seat his hands anew). From play: "slight
 // glow, not much, no light source", "should not make it flat", "subtly animated (slowly)", "make sure glow is
 // continuous/looped and not jumping". Then its tendrils over time, the hero held still and the glow's clock alone
-// moved on: how far they move between samples, and the glow a whole cycle on against now (a loop draws the same).
-// Its canary makes the glow ten times as strong (too bright), nothing (unseen), and is a loop judged a little past
-// a cycle (a join).
+// moved on: how far they move between samples, and the step as its cycle starts over against the steps beside it
+// (a loop's is like the rest; a frame a cycle on against now can't tell, its shader given only the share of the
+// cycle: that check passed a join the owner saw). Its canary makes the glow ten times as strong (too bright),
+// nothing (unseen), and skips 2 s as the cycle starts over (a join).
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { ITEM_GLOW, tickItemGlow } from '../../../src/core/materials';
@@ -46,14 +47,14 @@ const EVEN_MOST = 0.5;
 const HUE_LEAST = 0.9;
 
 /** the seconds between the motion's samples and how many; the most its pixels may change between two (their mean
- *  change, a share of its mean light: "slowly") and the least ("animated"); the most a cycle on may differ from now
- *  (a loop: the same pixels but for the GPU's rounding), and where the canary judges it, past a cycle */
+ *  change, a share of its mean light: "slowly") and the least ("animated"); how many times the steps beside it the
+ *  step as the cycle starts over may be (a loop's is one like the rest), and the seconds the canary skips there */
 const SAMPLE_EVERY = 0.1;
 const SAMPLES = 40;
 const STEP_MOST = 0.5;
 const STEP_LEAST = 0.05;
-const LOOP_MOST = 0.01;
-const PAST_CYCLE = 0.5;
+const JOIN_MOST = 1.5;
+const JUMP = 2;
 
 /** Pixels as linear light, each channel a share of white, 4 a pixel. */
 type Light = Float32Array;
@@ -220,25 +221,43 @@ function judgeMotion(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: st
   return `over ${seconds} s: its pixels changed ${pct(least)} to ${pct(most)} each ${SAMPLE_EVERY} s`;
 }
 
-/** The glow a cycle on (and `past` s more) against now, every slot at `rarity`: a loop draws the same. */
-function loopJoin(lab: Lab, slots: GlowSlot[], rarity: RarityId, past = 0): number {
+/** The glow's steps around where its cycle starts over, every slot at `rarity`: the one across it, and the most of
+ *  the one just before and the one just after. `jump` s are skipped across it (the canary's join). */
+interface WrapSteps {
+  across: number;
+  beside: number;
+}
+
+/** The steps around the wrap (its clock's share of the cycle going from near 1 back to 0). A frame a cycle on
+ *  against now can't see a join: the shader is given only the share of the cycle, the same both times. */
+function wrapSteps(lab: Lab, slots: GlowSlot[], rarity: RarityId, jump = 0): WrapSteps {
   const strength = ITEM_GLOW.strength;
   const start = G.time;
+  const wrap = Math.ceil(start / ITEM_GLOW.cycle + 1) * ITEM_GLOW.cycle;
+  const half = SAMPLE_EVERY / 2;
   wearRarities(lab, allAt(slots, rarity));
   try {
-    const now = glowLight(lab, strength, start);
-    return apart(now, glowLight(lab, strength, start + ITEM_GLOW.cycle + past));
+    const before = glowLight(lab, strength, wrap - half - SAMPLE_EVERY);
+    const last = glowLight(lab, strength, wrap - half);
+    const first = glowLight(lab, strength, wrap + half + jump);
+    const after = glowLight(lab, strength, wrap + half + jump + SAMPLE_EVERY);
+    return { across: apart(last, first), beside: Math.max(apart(before, last), apart(first, after)) };
   } finally {
     ITEM_GLOW.strength = strength;
     tickItemGlow(start);
   }
 }
 
-/** The loop: the glow a cycle on against now. */
+/** Whether the step across the wrap stands out from those beside it: a join. */
+const isJoin = (steps: WrapSteps): boolean => steps.across > steps.beside * JOIN_MOST;
+
+/** The loop: the step as the cycle starts over against the steps beside it. */
 function judgeLoop(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: string[]): string {
-  const join = loopJoin(lab, slots, rarity);
-  if (join > LOOP_MOST) problems.push(`a cycle on, its pixels are ${pct(join)} apart: a join`);
-  return `a cycle (${ITEM_GLOW.cycle} s) on: its pixels ${pct(join)} apart`;
+  const steps = wrapSteps(lab, slots, rarity);
+  const line = `as its cycle (${ITEM_GLOW.cycle} s) starts over: its pixels changed ${pct(steps.across)}, `
+    + `${pct(steps.beside)} at most in the steps beside it`;
+  if (isJoin(steps)) problems.push(`${line}: a join`);
+  return line;
 }
 
 /** The hero with no glow and with every item at `rarity`, close up. */
@@ -281,7 +300,7 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
 function canary(lab: Lab, rarity: RarityId): string[] {
   const strength = ITEM_GLOW.strength;
   const missed: string[] = [];
-  if (loopJoin(lab, ['chest'], rarity, PAST_CYCLE) <= LOOP_MOST) missed.push('canary missed: a join');
+  if (!isJoin(wrapSteps(lab, ['chest'], rarity, JUMP))) missed.push('canary missed: a join');
   try {
     for (const [planted, fault] of [[strength * 10, 'too bright'], [0, 'unseen']] as const) {
       const caught: string[] = [];

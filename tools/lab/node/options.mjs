@@ -727,7 +727,8 @@ export const COMMANDS = {
       + 'his class shows: each slot given the rarity alone and drawn close up with its glow and without, at the same '
       + 'moment. A glow unseen, adding more than 0.25 of white, in one light over half of it (flat), leaning off the '
       + 'rarity\'s hue, on a Magic item, its pixels changing over 50% or under 5% in a tenth of a second (not slow, '
-      + 'still), a cycle on not drawing the same (a join), and a program compiled are problems: tools/lab/out/glow '
+      + 'still), the step as its cycle starts over standing out from those beside it (a join), and a program '
+      + 'compiled are problems: tools/lab/out/glow '
       + '(front and back, no glow and the rarity)',
     options: {
       colour: {
