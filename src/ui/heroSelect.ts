@@ -72,7 +72,7 @@ export const heroSelectOpen = (): boolean => !$('#heroes').classList.contains('h
 export function initHeroSelect(h: HeroSelectHooks): void {
   hooks = h;
   $('.hs-cards').replaceChildren(...CLASS_IDS.map((id) => card(CLASSES[id])));
-  // (each name with its number key over it, as the keys pick the heroes too: hidden on touch)
+  // (each name with its number key in the rhombus under it, as the keys pick the heroes too: bare on touch)
   $('.hs-tabs').innerHTML = CLASS_IDS.map((id, i) =>
     `<button data-c="${id}" style="--cc:${CLASSES[id].accent}"><kbd class="hs-key">${i + 1}</kbd>${CLASSES[id].name}</button>`).join('');
   document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => {
