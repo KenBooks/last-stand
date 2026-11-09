@@ -91,7 +91,10 @@ export function traceOf(slow: Slow): Uint8Array {
   }
   // (a slow boot's, the play after it judged beside it: recorder.ts `bootTail`)
   if (slow.scene === 'boot') reason.why = 'boot';
-  else if (!slow.verdict) reason.why = 'readying';
+  else if (slow.profile) {
+    reason.why = 'profile';
+    reason.profile = slow.profile.join('\n');
+  } else if (!slow.verdict) reason.why = 'readying';
   if (slow.tookMs) reason.tookMs = Math.round(slow.tookMs);
   const b = snapshot.boot;
   Object.assign(reason, { bootMs: b.revealMs, bootDownloadMs: b.downloadMs, firstVisit: b.firstVisit });

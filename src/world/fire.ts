@@ -576,6 +576,8 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const drawnWith = WEBGPU ? flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE) : flames;
   const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
   volume.userData.noMeshlets = true;
+  // (found by the profiler, perf/sceneParts.ts, to time the flames alone)
+  volume.userData.fireFlames = true;
   // (its box stands over the bed unturned: the shader reads the ray in the world, from `uCentre`)
   volume.position.copy(at);
   // (drawn after the smoke, before the glows)

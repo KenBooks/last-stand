@@ -21,6 +21,7 @@ import type { LightOptions } from './light';
 import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
 import type { SceneCostOptions } from './sceneCost';
+import type { ProfileCommand } from './profile';
 import type { HazeOptions } from './haze';
 import type { GlowOptions } from './itemGlow';
 import type { SpawnsOptions } from './spawns';
@@ -348,6 +349,12 @@ export async function light(lab: Lab, command: LightOptions): Promise<Report> {
 export async function fire(lab: Lab, command: FireOptions): Promise<Report> {
   const { fire: fireRound } = await import('./fire');
   return fireRound(lab, command);
+}
+
+/** `lab profile`, one place: the game's own profiler, each part of the frame timed in turns by the browser's clock. */
+export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Report> {
+  const { profileHere: profileRound } = await import('./profile');
+  return profileRound(lab, command);
 }
 
 /** `lab scenecost`, one scenario: what each part of the scene pass takes of the GPU, at the screen's pixels. */

@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
+run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pausePerformance,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
@@ -87,7 +87,7 @@ opened with the light; the moment after the stash weapon's is pictured, card and
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
-timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`) and its Settings tab (`pauseSettings`), each fitting the window without scrolling, the box inside
+timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`) and its Settings tab (`pauseSettings`) and its Performance tab with a profile listed and its Send button (`pausePerformance`), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
 `--canary` makes a settings row 600 px tall, which must make it scroll), the Music slider clicked a quarter of the
 way along with the mouse (`pauseVolume`, #408: the volume landing there, the slider saying it, the setting saved in

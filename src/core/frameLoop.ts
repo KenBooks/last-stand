@@ -88,8 +88,17 @@ function next(): void {
   else requestAnimationFrame(run);
 }
 
+/** whether the game's frames are held (the profiler draws its own meanwhile, perf/profiler.ts) */
+let held = false;
+
+/** Holds the game's frames (none updated or drawn) while `on`, as the profiler draws frames of its own. */
+export function holdFrames(on: boolean): void {
+  held = on;
+}
+
 function run(timestamp: number): void {
   next();
+  if (held) return;
   step?.(timestamp);
   if (uncapped && fenceOf) inFlight.push(fenceOf());
   else inFlight.length = 0;

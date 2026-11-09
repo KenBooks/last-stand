@@ -794,6 +794,26 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  profile: {
+    check(options) {
+      if (options.rounds !== undefined && !(options.rounds >= 1)) throw labError('profile --rounds: 1 or more');
+      if (options.device) playAsDevice(options);
+    },
+    each(side, options) {
+      const command = {
+        biome: options.biome ?? 'forest',
+        view: options.view ?? 'top',
+        at: options.at,
+        level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
+        rounds: options.rounds === undefined ? undefined : Math.round(options.rounds),
+        canary: Boolean(options.canary),
+      };
+      return side.command('profileHere', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   scenecost: {
     check(options) {
       if (!(options.rounds >= 1)) throw labError(`scenecost --rounds: ${options.rounds} is not a count of rounds`);

@@ -40,6 +40,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
+import { initProfileTab } from './profileTab';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
@@ -174,6 +175,7 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-start').onclick = () => { sfx.click(); hooks.start(); };
   $('#btn-summary').onclick = () => { sfx.click(); hooks.summaryDone(); };
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
+  initProfileTab();
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   // held 2 s, never a click: a stray click or tap lost the run's spoils
@@ -932,15 +934,18 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
-/** the pause menu's pages: the controls and the settings */
-export type PauseTab = 'controls' | 'settings';
+/** the pause menu's pages: the controls, the settings, and performance (the quality, the reports, the profiler) */
+export type PauseTab = 'controls' | 'settings' | 'performance';
+/** every pause tab, in the menu's order */
+const PAUSE_TABS: PauseTab[] = ['controls', 'settings', 'performance'];
 /** the tab the pause menu opens on: the one chosen last (from play: "default to tab in pause screen that was open
  *  before... not always controls... persists between reloads"), Controls until one is */
 export const PAUSE_TAB_COOKIE = 'last-stand-pause-tab';
 
 /** The tab the pause menu opens on (the cookie's, Controls if none or another). */
 function keptPauseTab(): PauseTab {
-  return readCookie(PAUSE_TAB_COOKIE) === 'settings' ? 'settings' : 'controls';
+  const kept = readCookie(PAUSE_TAB_COOKIE) as PauseTab;
+  return PAUSE_TABS.includes(kept) ? kept : 'controls';
 }
 
 /** A tab chosen by the player: shown, and kept for the next time the menu opens, this visit or the next. */

@@ -27,7 +27,7 @@ export const UI_STATES = [
   'behindProps',
   'logLobby', 'perfAsk', 'coop', 'coopRename',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
-  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pausePerformance', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -665,6 +665,37 @@ export const COMMANDS = {
           + 'Quarry Mark\'s outline drawn round the hero, and a shader compiled mid-game',
       },
       ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  profile: {
+    help: 'the game\'s own profiler (the pause menu\'s Profile this spot) where the hero stands: each part of the '
+      + 'frame taken out and put back in turns (the pixels, the lights, the shadows, what\'s cut out and blended, '
+      + 'the particles, the flames, the hero), each frame waited out on the GPU and timed by the browser\'s clock',
+    options: {
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome (forest by default)',
+      },
+      view: SETUP_OPTIONS.view,
+      at: SETUP_OPTIONS.at,
+      level: {
+        kind: 'choice',
+        usage: 'level',
+        choices: ['high', 'medium', 'low', 'verylow'],
+        help: 'the quality level put to use first (as the page has it by default; a --device\'s own with one)',
+      },
+      device: {
+        kind: 'choice',
+        choices: Object.keys(DEVICES),
+        usage: Object.keys(DEVICES).join('|'),
+        help: 'played as a device players reported a slow game on (lab/node/devices.mjs): its screen and quality, '
+          + 'its GPU played by this one drawing its screen at more pixels',
+      },
+      rounds: { kind: 'number', usage: 'n', help: 'the rounds of turns a part (the game\'s own, 3, by default)' },
+      canary: { kind: 'switch', help: 'a part of its own, the frame drawn twice: it must read 1.6 times once' },
       ...COMMON_OPTIONS,
     },
   },

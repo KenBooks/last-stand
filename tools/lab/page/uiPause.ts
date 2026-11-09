@@ -43,6 +43,34 @@ export function closePause(): void {
   showPause(false);
 }
 
+/** the parts a profile lists under its button (ui/profileTab.ts `PARTS_SHOWN`), as long as a phone's read */
+const PROFILED_PARTS = [
+  'what\'s cut out: leaves, grass: 12.4 ms (35%)',
+  'half the scene\'s pixels: 9.8 ms (28%)',
+  'what\'s blended: smoke, glows, effects: 4.1 ms (12%)',
+  'the point lights where they reach: 2.2 ms (6%)',
+  'the lit shading, against a plain colour: 1.9 ms (5%)',
+];
+
+/** The pause menu on its Performance tab as a profile leaves it, at its fullest: its note, the costliest parts and
+ *  Send shown (what a phone found by a bonfire, written in). */
+export function openPauseProfiled(canary: boolean): void {
+  openPause('performance', canary);
+  document.querySelector('.profile-note')!.textContent = 'The frame here: 35.2 ms (28 fps). Its costliest parts:';
+  const list = document.querySelector<HTMLElement>('.profile-parts')!;
+  const item = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
+  list.replaceChildren(...PROFILED_PARTS.map(item));
+  list.classList.remove('hidden');
+  document.querySelector('#btn-profile-send')!.classList.remove('hidden');
+}
+
+/** The profile's results put away again, and the menu closed. */
+export function closePauseProfiled(): void {
+  document.querySelector('.profile-parts')!.classList.add('hidden');
+  document.querySelector('#btn-profile-send')!.classList.add('hidden');
+  closePause();
+}
+
 /** how long a hold that's let go early is held (ms): half of Abandon's */
 const SHORT_HOLD_MS = 1000;
 /** past Abandon's hold, what a full hold waits on top (ms), for its timer to fire */
