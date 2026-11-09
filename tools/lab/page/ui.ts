@@ -50,7 +50,7 @@ import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHero
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
-import { autoFullChecked, autoFullPictures, FULL_CANARY } from './uiFullScreen';
+import { autoFullChecked, autoFullPictures, ESC_CANARY, FULL_CANARY } from './uiFullScreen';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
@@ -994,9 +994,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     if (!caught) missed.push(`${state}: the canary's ${ABANDON_CANARY.what} went unseen`);
   }
   if (state === 'autoFull') {
-    const caught = found.problems.some((problem) => problem.includes(FULL_CANARY.name));
-    lines.push(`  canary: ${FULL_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
-    if (!caught) missed.push(`${state}: the canary's ${FULL_CANARY.what} went unseen`);
+    for (const planted of [FULL_CANARY, ESC_CANARY]) {
+      const caught = found.problems.some((problem) => problem.includes(planted.name));
+      lines.push(`  canary: ${planted.what} ${caught ? 'caught' : 'went unseen'}`);
+      if (!caught) missed.push(`${state}: the canary's ${planted.what} went unseen`);
+    }
   }
   if (state === 'pauseTabKept') {
     const caught = found.problems.some((problem) => problem.includes(TAB_CANARY.name));

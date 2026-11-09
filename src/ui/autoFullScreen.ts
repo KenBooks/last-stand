@@ -7,8 +7,11 @@
 // `fullScreenChosen`). Not where the page can't go full screen (an iPhone's Safari), not as the installed app (its own
 // window has no browser bars to hide), and not in a harness's browser (`navigator.webdriver`: a lab or stalls run
 // would change its window's size at its first click); `?fullscreen=0` leaves it off for a visit.
+// In the page's full screen (this one, and the Fullscreen buttons') Esc is the game's, as in the browser's own (F11):
+// from play, "first escape removes full screen and second opens the menu" (`keepEsc`).
 import { readCookie, removeCookie, writeCookie } from '../core/cookies';
 import { sfx } from '../core/audio';
+import { input } from '../core/input';
 
 /** the choice kept: 'off' once the player went back to the window from the prompt */
 export const AUTO_FULL_COOKIE = 'last-stand-auto-full-screen';
@@ -76,7 +79,45 @@ function backToWindow(): void {
   sfx.click();
   writeCookie(AUTO_FULL_COOKIE, 'off');
   hidePrompt();
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  leaveFullScreen();
+}
+
+/** Full screen left by the page itself (Back to window, the Fullscreen buttons), not by the player's Esc. */
+export function leaveFullScreen(): void {
+  if (!document.fullscreenElement) return;
+  leaving = true;
+  document.exitFullscreen().catch(() => { leaving = false; });
+}
+
+/** the page asked to leave full screen (`leaveFullScreen`): the change that follows is no Esc */
+let leaving = false;
+/** Esc held for the game while in full screen (`keepEsc`) */
+let escKept = false;
+
+/** The Keyboard Lock API (Chromium on a desktop): a key locked in the page's full screen is the page's. */
+interface KeyboardLock {
+  lock(codes?: string[]): Promise<void>;
+  unlock(): void;
+}
+const keyboard = (): KeyboardLock | undefined => (navigator as Navigator & { keyboard?: KeyboardLock }).keyboard;
+
+/**
+ * Esc kept for the game in the page's full screen. A browser leaves its own full screen (F11) on a key of its own and
+ * gives Esc to the page, but leaves the page's on Esc, the key never reaching it: the pause menu took a second Esc.
+ * Where Esc can be locked (Chromium on a desktop) it is, and the browser then leaves on Esc held (it says so);
+ * elsewhere (Firefox, a phone's back gesture) leaving full screen unasked is taken as the Esc that left it.
+ */
+function keepEsc(): void {
+  if (document.fullscreenElement) {
+    keyboard()?.lock(['Escape']).then(() => { escKept = !!document.fullscreenElement; }, () => {});
+    return;
+  }
+  const asked = leaving;
+  const held = escKept;
+  leaving = escKept = false;
+  keyboard()?.unlock();
+  // (the Esc held to leave was the game's already; one the browser took must still do what Esc does)
+  if (!asked && !held) input.pressed.add('escape');
 }
 
 /** The player went full screen by hand: the page may go on its own again on the next visits. */
@@ -95,7 +136,10 @@ export function armAutoFullScreen(force = false): void {
 
 /** Set up once at boot: the prompt goes with full screen. */
 export function initAutoFullScreen(): void {
-  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) hidePrompt(); });
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) hidePrompt();
+    keepEsc();
+  });
   armAutoFullScreen();
 }
 

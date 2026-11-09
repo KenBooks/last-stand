@@ -40,7 +40,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
-import { fullScreenChosen } from './autoFullScreen';
+import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -246,7 +246,8 @@ export function initMenus(h: MenuHooks): void {
   fs.onclick = () => {
     sfx.click();
     if (!document.fullscreenElement) fullScreenChosen();
-    (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: 'hide' })).catch(() => {});
+    if (document.fullscreenElement) leaveFullScreen();
+    else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   };
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
