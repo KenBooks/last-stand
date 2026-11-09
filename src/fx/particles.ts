@@ -181,6 +181,12 @@ export const col = (hex: THREE.ColorRepresentation, mul = 1): THREE.Color => new
 
 type Vec3Like = { x: number; y: number; z: number };
 
+/** the share of a burst's, a puff's or debris' particles spawned (the quality level's: Very low's half), and how many
+ *  of `count` that is, never none */
+let particleShare = 1;
+export function setParticleShare(share: number): void { particleShare = share; }
+const thinned = (count: number): number => count <= 1 ? count : Math.max(1, Math.round(count * particleShare));
+
 export interface BurstOpts {
   count?: number; color?: THREE.ColorRepresentation; colorEnd?: THREE.ColorRepresentation | null; intensity?: number;
   speed?: number; up?: number; life?: number; size?: number; sizeEnd?: number; gravity?: number; drag?: number; spread?: number;
@@ -188,7 +194,7 @@ export interface BurstOpts {
 
 export function burst(pos: Vec3Like, { count = 20, color = 0xffffff, colorEnd = null, intensity = 3, speed = 5, up = 2, life = 0.6, size = 0.25, sizeEnd = 0.02, gravity = 6, drag = 2, spread = 0.2 }: BurstOpts = {}): void {
   const c = col(color, intensity), ce = colorEnd != null ? col(colorEnd, intensity * 0.5) : c.clone().multiplyScalar(0.3);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0, n = thinned(count); i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
     particles.glow.spawn({
       x: pos.x + (Math.random() - 0.5) * spread, y: pos.y + (Math.random() - 0.5) * spread, z: pos.z + (Math.random() - 0.5) * spread,
@@ -203,7 +209,7 @@ export interface SmokeOpts { count?: number; color?: THREE.ColorRepresentation; 
 
 export function smokePuff(pos: Vec3Like, { count = 8, color = 0x111118, alpha = 0.55, size = 1.4, sizeEnd = 3, life = 1.4, speed = 1.2, rise = 0.8 }: SmokeOpts = {}): void {
   const c = col(color);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0, n = thinned(count); i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = speed * Math.random();
     particles.smoke.spawn({
       x: pos.x + (Math.random() - 0.5) * 0.5, y: pos.y + Math.random() * 0.4, z: pos.z + (Math.random() - 0.5) * 0.5,
@@ -217,7 +223,7 @@ export interface DebrisOpts { count?: number; color?: THREE.ColorRepresentation;
 
 export function debris(pos: Vec3Like, { count = 10, color = 0x2a2a30, speed = 6, size = 0.18, life = 1.1 }: DebrisOpts = {}): void {
   const c = col(color);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0, n = thinned(count); i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
     particles.smoke.spawn({
       x: pos.x, y: pos.y + 0.2, z: pos.z,

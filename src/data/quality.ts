@@ -1,6 +1,6 @@
 // Graphics quality presets. None of these settings change shader variants, so they
 // can be switched live without a compile hitch (see core/shaders.ts).
-export type QualityLevel = 'high' | 'medium' | 'low';
+export type QualityLevel = 'high' | 'medium' | 'low' | 'verylow';
 export type QualitySetting = 'auto' | QualityLevel;
 
 export interface QualityPreset {
@@ -30,15 +30,24 @@ export interface QualityPreset {
   /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
    *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
   bloomShare: number;
+  /** whether the sun's (moon's) shadow is drawn every other frame, whatever the frame rate (`setShadowInTurns` in
+   *  core/renderer.ts): its pass draws every caster again */
+  shadowInTurns: boolean;
+  /** the share of the particles a burst, a puff of smoke or debris spawns (`setParticleShare` in fx/particles.ts):
+   *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
+  particles: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false, bloomShare: 1 },
-  medium: { label: 'Medium', pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false, bloomShare: 1 },
-  low:    { label: 'Low',    pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5 },
+  high:    { label: 'High',     pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false, bloomShare: 1, shadowInTurns: false, particles: 1 },
+  medium:  { label: 'Medium',   pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false, bloomShare: 1, shadowInTurns: false, particles: 1 },
+  low:     { label: 'Low',      pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5, shadowInTurns: false, particles: 1 },
+  // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
+  // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.25, shadowInTurns: true, particles: 0.5 },
 };
 
-export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];
+export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
 
 /**
  * Auto quality: a level down when the average FPS stays below `minFps` for `window` seconds (frames over 250 ms,
