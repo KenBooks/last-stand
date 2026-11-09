@@ -133,13 +133,17 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest) in `--view` (top) at `--level`
   (the player's own otherwise; with `--device`, that device's level and screen). The game's frames are held, the
-  frame drawn again and again with each part of it taken out and put back in turns (`--rounds`, 3, of 5 frames a
-  side), each waited for and timed by the browser's clock (`__labClock.realNow`), and the parts listed by what they
-  take, as the player's device lists them. On this PC it says what this GPU pays, which is not what a phone's tiled
-  GPU pays for cut-out and blended pixels: for that, have the player press the button and read their trace with
-  `lab trace` (its Profile section). `--canary` draws the frame twice, which must read 1.6 times once. The forest at
-  15.4,15.4 read 5.4 ms a frame here, the canary 1.88 times. It keeps no copy of the parts: it runs the game's, so
-  it can't be run `--ab` against a commit from before it (`scenecost` keeps a copy of its own for that).
+  frame drawn again and again with each part of it taken out and put back in turns (`--rounds`, 6, of 3 frames a
+  side), one in each of the browser's frames (`__labClock.realFrame`), each waited for and timed by the browser's
+  clock (`__labClock.realNow`), and the parts listed by what they take, as the player's device lists them, with how
+  long it took and the programs it compiled: over 8 fails (a part changing the scene's programs compiled them all
+  again, 66 s of a 69 s run). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
+  was (the pixel ratio, what's shown, what casts, the lights' reach) and let the game's frames go (the hero walks).
+  On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
+  for that, have the player press the button and read their trace with `lab trace` (its Profile section).
+  `--canary` draws the frame twice, which must read 1.6 times once. The forest at 15.4,15.4: the frame 4.6 to 4.9 ms
+  here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to 1.97 times (2 frames a side read 1.57 once). It
+  keeps no copy of the parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
   settings (`--level`, low) and the screen's own pixels, whatever the level's cap: the resolution is never what's
   cut, what a pixel costs is. The scene pass alone is drawn, each part taken out and put back in turns

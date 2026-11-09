@@ -20,8 +20,10 @@ export interface ProfileTurns {
   settle: number;
 }
 
-/** a phone's: 3 rounds of 5 frames a side, 2 settling; about 15 s at 30 frames a second */
-export const PROFILE_TURNS: ProfileTurns = { rounds: 3, frames: 5, settle: 2 };
+/** a phone's: 6 rounds of 3 frames a side, 1 settling (432 frames, some 14 s at 30 a second): short turns, swapped
+ *  often, so the GPU's clocks drifting fall on both sides alike (5 frames a side read the whole frame 3.5 to 7.8 ms
+ *  from part to part) */
+export const PROFILE_TURNS: ProfileTurns = { rounds: 6, frames: 3, settle: 1 };
 
 /** A part's cost: the frame's median time with it and without (ms). */
 export interface PartCost {
@@ -34,7 +36,18 @@ export interface PartCost {
 export interface Profile {
   /** the frame's median time with everything in it (ms) */
   frame: number;
+  /** how long the profile took, start to end (s) */
+  seconds: number;
+  /** the programs compiled while it ran (its parts must keep the scene's: each compiled is a wait) */
+  compiled: number;
   parts: PartCost[];
+}
+
+/** How far a profile is: the frames drawn, of all it draws, and the part being timed. */
+export interface ProfileProgress {
+  done: number;
+  total: number;
+  part: string;
 }
 
 /** What a profile is asked: its turns, a canary (the frame drawn twice, as a part), and where it says how far it is. */
@@ -42,10 +55,21 @@ export interface ProfileOptions {
   turns?: ProfileTurns;
   /** a part that draws the frame twice: it must read about twice the frame */
   canary?: boolean;
-  /** told each part as its turns start: its place (from 1), the parts' count and its name */
-  onPart?: (at: number, of: number, name: string) => void;
+  /** told after each frame how far the profile is */
+  onProgress?: (progress: ProfileProgress) => void;
+  /** asked before each frame: true stops the profile (it throws `ProfileCancelled`), every part put back */
+  cancelled?: () => boolean;
   /** the clock the frames are timed by (ms): the page's, or a harness's own (the lab's page clock stands still) */
   clock?: () => number;
+  /** the browser's next frame, each timed frame drawn in one (the lab's own: its page queues the game's) */
+  nextFrame?: () => Promise<void>;
+}
+
+/** Thrown by `profile` when it was cancelled. */
+export class ProfileCancelled extends Error {
+  constructor() {
+    super('the profile was cancelled');
+  }
 }
 
 /** the name of the canary's part */
@@ -61,8 +85,9 @@ function waitForGpu(): void {
   G.renderer.readRenderTargetPixels(readTarget, 0, 0, 1, 1, readBack);
 }
 
-/** The browser's next task: the page answers touches and paints the progress between frames. */
-const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+/** The browser's next frame: one timed frame each, so the page paints, answers touches and shows the progress
+ * between them (drawn back to back, a phone's GPU had no time to show the page, and Chrome offered to kill it). */
+const browserFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 /** The median of `values`. */
 function medianOf(values: number[]): number {
@@ -73,15 +98,26 @@ function medianOf(values: number[]): number {
 /** A frame drawn, waited out on the GPU and timed (ms). */
 type TimedDraw = () => Promise<number>;
 
-/** `draw` as a frame drawn, waited out on the GPU, and timed by `clock` (ms). */
-function timing(draw: () => void, clock: () => number): TimedDraw {
+/** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms); stopped
+ * when `cancelled`, and `counted` after each. */
+function timing(draw: () => void, options: ProfileOptions, counted: () => void): TimedDraw {
+  const clock = options.clock ?? (() => performance.now());
+  const nextFrame = options.nextFrame ?? browserFrame;
   return async () => {
-    await nextTask();
+    await nextFrame();
+    if (options.cancelled?.()) throw new ProfileCancelled();
     const start = clock();
     draw();
     waitForGpu();
-    return clock() - start;
+    const took = clock() - start;
+    counted();
+    return took;
   };
+}
+
+/** The frames a profile draws: each part's turns, then the frame alone. */
+function framesOf(parts: number, turns: ProfileTurns): number {
+  return parts * turns.rounds * 2 * (turns.settle + turns.frames) + turns.frames * 2;
 }
 
 /** `part`'s cost in turns: settled after each change, then timed, left on. */
@@ -106,7 +142,7 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
 /** Whether the profiler can time this game's frames: WebGL's (WebGPU's frame isn't waited for by a read). */
 export const canProfile = (): boolean => !WEBGPU;
 
-/** Profiles the frame as it stands, the game's frames held meanwhile. */
+/** Profiles the frame as it stands, the game's frames held meanwhile; throws `ProfileCancelled` if cancelled. */
 export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   const turns = options.turns ?? PROFILE_TURNS;
   let twice = false;
@@ -114,20 +150,30 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     render();
     if (twice) render();
   };
-  const timedFrame = timing(draw, options.clock ?? (() => performance.now()));
   const parts = frameParts();
   if (options.canary) parts.push({ name: CANARY_PART, change: (on) => { twice = on; } });
+  const progress: ProfileProgress = { done: 0, total: framesOf(parts.length, turns), part: '' };
+  const counted = () => {
+    progress.done += 1;
+    options.onProgress?.(progress);
+  };
+  const timedFrame = timing(draw, options, counted);
+  const now = options.clock ?? (() => performance.now());
+  const started = now();
+  const programs = G.renderer.info.programs?.length ?? 0;
   holdFrames(true);
   try {
     const costs: PartCost[] = [];
-    for (const [index, part] of parts.entries()) {
-      options.onPart?.(index + 1, parts.length, part.name);
+    for (const part of parts) {
+      progress.part = part.name;
       costs.push(await costOf(part, timedFrame, turns));
     }
+    progress.part = 'the whole frame';
     const frames: number[] = [];
     for (let frame = 0; frame < turns.frames * 2; frame++) frames.push(await timedFrame());
     costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
-    return { frame: medianOf(frames), parts: costs };
+    const compiled = (G.renderer.info.programs?.length ?? 0) - programs;
+    return { frame: medianOf(frames), seconds: (now() - started) / 1000, compiled, parts: costs };
   } finally {
     holdFrames(false);
   }
@@ -144,6 +190,7 @@ function partLine(part: PartCost, frame: number): string {
 /** A profile as lines: the frame, then each part's cost, the costliest first. */
 export function profileLines(found: Profile): string[] {
   const fps = found.frame > 0 ? Math.round(1000 / found.frame) : 0;
-  const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame drawn and waited for`;
+  const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame drawn and waited for; `
+    + `profiled in ${found.seconds.toFixed(1)} s, ${found.compiled} programs compiled`;
   return [frame, ...found.parts.map((part) => partLine(part, found.frame))];
 }

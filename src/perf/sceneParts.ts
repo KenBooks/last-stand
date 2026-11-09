@@ -1,10 +1,10 @@
-// The parts of a frame's work that can be taken out and put back without a shader changing (the profiler's,
-// `profiler.ts`, timed on the player's own device, and the lab's `scenecost`): the point lights and their lighting
-// where they reach, their shadows, the sun's shadow, the environment, the lit shading against a plain colour, what's
-// cut out (leaves, grass: alpha tested) and what's blended, the particles, the fires' flames, the hero, and the scene drawn at
-// half its pixels. Each is found in the scene as it stands, so the parts are those of the place the player stands in.
-// The lab's `scenecost` (tools/lab/page/sceneCost.ts) keeps its own copy of the scene pass's: an A/B copies the lab's
-// page modules into the other commit's tree, where this module isn't on a commit older than it.
+// The parts of a frame's work the profiler (`profiler.ts`, timed on the player's own device) takes out and puts back,
+// each without a program changing: the point lights' lighting where they reach, the shadow maps' drawing, the lit
+// shading against a plain colour, what's cut out (leaves, grass: alpha tested) and what's blended, the particles, the
+// fires' flames, the hero, and the scene drawn at half its pixels. Each is found in the scene as it stands, so the
+// parts are those of the place the player stands in. The lab's `scenecost` (tools/lab/page/sceneCost.ts) keeps its own
+// parts, some changing programs (a light hidden, a shadow or the environment taken off), compiled before it times: an
+// A/B copies the lab's page modules into the other commit's tree, where this module isn't on a commit older than it.
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY } from '../data/quality';
@@ -36,12 +36,17 @@ export function shownPart(name: string, objects: THREE.Object3D[]): ScenePart {
   };
 }
 
-/** A part that lets `lights` cast their shadows or not. */
-function castingPart(name: string, lights: THREE.Light[]): ScenePart {
+/** A part that draws the shadow maps of `lights` each frame or keeps them as they are (`shadowMap.autoUpdate`): the
+ *  shadow passes' cost, the same programs either way (a light's shadow taken off, `castShadow`, changes every lit
+ *  program's, and each part compiled the scene's programs again: 66 s of a 69 s profile in the lab, minutes on a
+ *  phone, its page unanswering). Their sampling in the scene pass stays. */
+function shadowMapsPart(lights: THREE.Light[]): ScenePart {
+  const shadowMap = G.renderer.shadowMap;
+  const kept = shadowMap.autoUpdate;
   return {
-    name: `${name} (${lights.length})`,
+    name: `drawing the shadow maps (${lights.length})`,
     change: (on) => {
-      for (const light of lights) light.castShadow = on;
+      shadowMap.autoUpdate = on ? kept : false;
     },
   };
 }
@@ -105,42 +110,28 @@ function pixelsPart(): ScenePart {
   };
 }
 
-/** The scene's parts as `scenecost` times them (the scene pass's, on the GPU's timer). */
-export function scenePassParts(): ScenePart[] {
-  const points = shownWhere((object) => (object as THREE.PointLight).isPointLight) as THREE.PointLight[];
-  const sun = shownWhere((object) => (object as THREE.DirectionalLight).isDirectionalLight) as THREE.Light[];
+/**
+ * The parts the profiler times in the whole frame, each changed with the scene's programs kept (a uniform, what's
+ * shown, the shadow maps' drawing, the pixels): a part that changed a program's key (a light hidden, a shadow taken
+ * off, the environment) compiled every program in view again, the whole profile's time. The plain colour's few
+ * programs are compiled once, by its first frame.
+ */
+export function frameParts(): ScenePart[] {
+  const lights = shownWhere((object) => (object as THREE.Light).isLight) as THREE.Light[];
+  const points = lights.filter((light) => (light as THREE.PointLight).isPointLight) as THREE.PointLight[];
   const plain = new THREE.MeshBasicMaterial({ color: 0x808080 });
-  const environment = G.scene.environment;
   return [
-    shownPart('the point lights', points),
+    pixelsPart(),
     reachingPart('the point lights where they reach', points.filter((light) => light.intensity > 0)),
-    castingPart('the point lights\' shadows', points.filter((light) => light.castShadow)),
-    castingPart('the sun\'s shadow', sun.filter((light) => light.castShadow)),
-    {
-      name: 'the environment',
-      change: (on) => {
-        G.scene.environment = on ? environment : null;
-      },
-    },
+    shadowMapsPart(lights.filter((light) => light.castShadow)),
     {
       name: 'the lit shading, against a plain colour',
       change: (on) => {
         G.scene.overrideMaterial = on ? null : plain;
       },
     },
-    shownPart('what\'s see-through or cut out', shownWhere(seeThrough)),
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints)),
     shownPart('the hero', [G.player.obj]),
-  ];
-}
-
-/** The parts the profiler times in the whole frame: the scene pass's, with what's cut out apart from what's blended,
- *  the fires' flames, and the pixels. */
-export function frameParts(): ScenePart[] {
-  const passParts = scenePassParts().filter((part) => !part.name.startsWith('what\'s see-through'));
-  return [
-    pixelsPart(),
-    ...passParts,
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),

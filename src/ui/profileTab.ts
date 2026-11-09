@@ -1,9 +1,13 @@
 // The pause menu's profiler (its Performance tab, `perf/profiler.ts`): Profile this spot times each part of the frame
 // where the hero stands on this device, shows the costliest, and sends the whole of it as a performance report with
-// the player's consent: at once where Slow-game reports is Always, else when they press Send.
+// the player's consent: at once where Slow-game reports is Always, else when they press Send. While it runs every
+// panel is hidden (`body.profiling`: the pause menu's blur over the whole screen cost a phone's GPU each frame), the
+// scene alone shown, with a pane at the top saying how far it is, and Cancel (or Esc) stopping it.
 import { sfx } from '../core/audio';
 import { traceConsent, sendProfile } from '../perf/consent';
-import { canProfile, profile, profileLines, type Profile } from '../perf/profiler';
+import {
+  canProfile, profile, profileLines, ProfileCancelled, type Profile, type ProfileProgress,
+} from '../perf/profiler';
 
 /** the parts listed under the button (the report has them all) */
 const PARTS_SHOWN = 5;
@@ -12,8 +16,10 @@ const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document
 
 /** the last profile's lines, sent by Send */
 let found: string[] = [];
-/** whether a profile is running (its button and the tabs held meanwhile) */
+/** whether a profile is running (its button and the pause menu held meanwhile) */
 let running = false;
+/** whether the running profile was asked to stop */
+let cancelling = false;
 
 /** The note under the button. */
 function note(text: string): void {
@@ -45,30 +51,70 @@ async function send(): Promise<void> {
   button.disabled = false;
 }
 
+/** The pane at the top showing how far the profile is: its share, the part timed and the time left. */
+function paneShower(): (progress: ProfileProgress) => void {
+  const started = performance.now();
+  const fill = $('#profiling .prof-fill');
+  const part = $('#profiling .prof-part');
+  const left = $('#profiling .prof-left');
+  let shownAt = 0;
+  return (progress) => {
+    const now = performance.now();
+    if (now - shownAt < 100 && progress.done < progress.total) return;
+    shownAt = now;
+    const share = progress.done / progress.total;
+    fill.style.transform = `scaleX(${share})`;
+    part.textContent = `Timing ${progress.part.replace(/ \(\d+\)$/, '')}`;
+    const seconds = ((now - started) / progress.done) * (progress.total - progress.done) / 1000;
+    left.textContent = `${Math.round(share * 100)}%, about ${Math.max(1, Math.ceil(seconds))} s left`;
+  };
+}
+
+/** Every panel hidden and the pane shown while it runs, or the pause menu back. */
+function showRunning(on: boolean): void {
+  document.body.classList.toggle('profiling', on);
+  $('#profiling').classList.toggle('hidden', !on);
+  if (!on) return;
+  $('#profiling .prof-fill').style.transform = 'scaleX(0)';
+  $('#profiling .prof-part').textContent = 'Starting...';
+  $('#profiling .prof-left').textContent = '';
+}
+
 /** Profiles the frame as it stands, then shows it and sends it as the player chose. */
 async function run(): Promise<void> {
   if (running) return;
   running = true;
+  cancelling = false;
   const button = $<HTMLButtonElement>('#btn-profile');
   button.disabled = true;
   $('#btn-profile-send').classList.add('hidden');
   $('.profile-parts').classList.add('hidden');
+  showRunning(true);
   try {
-    const result = await profile({ onPart: (at, of) => note(`Profiling... ${at} of ${of}`) });
+    const result = await profile({ onProgress: paneShower(), cancelled: () => cancelling });
     found = profileLines(result);
     const fps = result.frame > 0 ? Math.round(1000 / result.frame) : 0;
     note(`The frame here: ${result.frame.toFixed(1)} ms (${fps} fps). Its costliest parts:`);
     showParts(result);
     if (traceConsent() === 'always') void send();
     else $('#btn-profile-send').classList.remove('hidden');
+  } catch (error) {
+    if (!(error instanceof ProfileCancelled)) throw error;
+    note('Profiling cancelled. Nothing was sent.');
   } finally {
     running = false;
+    showRunning(false);
     button.disabled = false;
   }
 }
 
 /** Whether the profiler is running: the pause menu stays open meanwhile. */
 export const profiling = (): boolean => running;
+
+/** Stops the running profile (Cancel, or Esc), every part put back. */
+export function cancelProfile(): void {
+  if (running) cancelling = true;
+}
 
 /** The Performance tab's profiler wired up. */
 export function initProfileTab(): void {
@@ -84,5 +130,9 @@ export function initProfileTab(): void {
   $('#btn-profile-send').onclick = () => {
     sfx.click();
     void send();
+  };
+  $('#btn-profile-cancel').onclick = () => {
+    sfx.click();
+    cancelProfile();
   };
 }

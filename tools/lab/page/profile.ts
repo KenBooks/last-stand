@@ -2,12 +2,16 @@
 // stands, as a player's device runs it: each part of the frame taken out and put back in turns, each frame waited out
 // on the GPU and timed by the browser's clock (the page's stands still within a lab frame). Its canary is a part of
 // its own, the frame drawn twice, which must read at least `CANARY_LEAST` times the frame once.
+import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { ViewMode } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
-import { CANARY_PART, PROFILE_TURNS, canProfile, profile, profileLines } from '../../../src/perf/profiler';
+import { G } from '../../../src/state';
+import {
+  CANARY_PART, PROFILE_TURNS, ProfileCancelled, canProfile, profile, profileLines,
+} from '../../../src/perf/profiler';
 import { standIn } from './light';
 
 export interface ProfileCommand {
@@ -34,6 +38,47 @@ function canaryProblems(found: Awaited<ReturnType<typeof profile>>): string[] {
   return [];
 }
 
+/** the most programs a profile may compile (the plain colour's: one for each kind of mesh it's drawn over) */
+const COMPILED_MOST = 8;
+
+/** the frames a cancelled profile draws before it's cancelled */
+const CANCEL_AFTER = 20;
+
+/** What the parts change, as text: the pixel ratio, the objects shown, those casting shadows, the lights' reach. */
+function sceneState(): string {
+  let shown = 0;
+  let casting = 0;
+  let reach = 0;
+  G.scene.traverse((object) => {
+    if (object.visible) shown += 1;
+    if (object.castShadow) casting += 1;
+    if (object instanceof THREE.PointLight) reach += object.distance;
+  });
+  return `pixel ratio ${G.renderer.getPixelRatio()}, ${shown} shown, ${casting} casting, reach ${reach.toFixed(3)}`;
+}
+
+/** A profile cancelled after a few frames: it must stop, every part put back and the game's frames let go. */
+async function cancelProblems(lab: Lab): Promise<string[]> {
+  const before = sceneState();
+  const clock = window.__labClock;
+  let frames = 0;
+  const cancelled = () => frames >= CANCEL_AFTER;
+  const counted = () => {
+    frames += 1;
+  };
+  const stopped = await profile({ cancelled, onProgress: counted, clock: clock.realNow, nextFrame: clock.realFrame })
+    .then(() => false, (error: unknown) => error instanceof ProfileCancelled);
+  const problems: string[] = [];
+  if (!stopped) problems.push('cancel: the profile ran on to its end');
+  if (frames !== CANCEL_AFTER) problems.push(`cancel: ${frames} frames drawn, not ${CANCEL_AFTER}`);
+  const after = sceneState();
+  if (after !== before) problems.push(`cancel: the scene was left changed (${before} before, ${after} after)`);
+  const start = lab.player.pos.clone();
+  await lab.step(30, () => ({ keys: ['w'] }));
+  if (lab.player.pos.distanceTo(start) < 0.5) problems.push('cancel: the game\'s frames were left held');
+  return problems;
+}
+
 /** `lab profile`, one place: the frame's parts timed as the pause menu's profiler times them. */
 export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Report> {
   if (!canProfile()) return { text: 'the profiler times WebGL\'s frames alone', problems: [] };
@@ -45,9 +90,14 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
   lab.drawing = true;
   try {
     const turns = command.rounds ? { ...PROFILE_TURNS, rounds: command.rounds } : PROFILE_TURNS;
-    const found = await profile({ turns, canary: command.canary, clock: window.__labClock.realNow });
+    const clock = window.__labClock;
+    const found = await profile({ turns, canary: command.canary, clock: clock.realNow, nextFrame: clock.realFrame });
     const problems = command.canary ? canaryProblems(found) : [];
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
+    if (found.compiled > COMPILED_MOST) {
+      problems.push(`${found.compiled} programs compiled: a part changes the scene's programs (most ${COMPILED_MOST})`);
+    }
+    problems.push(...await cancelProblems(lab));
     const name = `${command.biome} ${command.view}, ${quality.qualityLevel()}`;
     return { text: [name, ...profileLines(found).map((line) => `  ${line}`)].join('\n'), problems };
   } finally {

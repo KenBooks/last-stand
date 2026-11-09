@@ -84,7 +84,8 @@ let step: ((timestamp: number) => void) | null = null;
 
 /** The next frame asked for, as the setting and the tab's visibility have it. */
 function next(): void {
-  if (uncapped && !document.hidden) channel.port1.postMessage(null);
+  // (held, it asks the browser's frames: uncapped, its messages spun a core and the profiler's frames waited behind)
+  if (uncapped && !held && !document.hidden) channel.port1.postMessage(null);
   else requestAnimationFrame(run);
 }
 
