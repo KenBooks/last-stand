@@ -32,3 +32,5 @@ Gear-driven skills and block (`Player.gear`, `tryBlock`) are in `src/combat/skil
 - **The hotbar shows what an action holds up** (`Player.heldUp`, the slot's `busy`, the touch buttons too): while a free-move cast (the healing draught) is under way every other skill, and a consumable while any other action is (a cast, a channel, a dash, a stagger), until the hero has been free for `BUSY_HOLD`: a held attack is free for a frame between its blows and its key, tried before the draught's, takes that frame, so shown free then the draught's slot flashed with every blow. Not every slot while anything is cast: an attack held down would dim the whole bar.
 
 - Training projections keep the screen-door dissolve, with cyan edge light at 0.18 and frost tint at 0.35. Stronger edge emission and a 0.8 frost tint washed out their bodies; keep the glow subtle without changing the arena lighting.
+
+- Apply training projection uniforms immediately after building the model, before joining its crowd. The rising spawn branch returns before updateLooks, so combat-only styling leaves a newly spawned foe looking normal until its rise ends.

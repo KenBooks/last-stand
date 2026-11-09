@@ -87,7 +87,20 @@ export async function training(lab: Lab, options: TrainingOptions): Promise<Repo
 
   // Real enemy spawn/kill events exercise both loot paths and the crowd uniforms.
   const foe = lab.spawnFoe('husk', new lab.THREE.Vector3(4, 0, 4));
-  await lab.step(120);
+  const isProjection = (): boolean => foe.model.kit.u.uDissolve.value >= 0.28
+    && foe.model.kit.u.uFrozen.value > 0.3;
+  check(isProjection(), 'newly spawned enemy appeared normal before its first update');
+  let risingFrames = 0;
+  let normalRisingFrames = 0;
+  await lab.step(1);
+  moments.push(await lab.screen('training-projection-spawning'));
+  await lab.step(119, undefined, () => {
+    if (foe.spawning <= 0) return;
+    risingFrames++;
+    if (!isProjection()) normalRisingFrames++;
+  });
+  check(risingFrames > 0, 'the projection spawn animation was never checked');
+  check(normalRisingFrames === 0, 'enemy appeared normal during its spawn animation');
   check(foe.model.kit.u.uDissolve.value >= 0.28, 'projection has no screen-door dissolve');
   check(foe.model.kit.u.uFrozen.value > 0.3 && !foe.castsShadow, 'projection has an ordinary solid look');
   const edge = foe.model.kit.u.uEdge.value;

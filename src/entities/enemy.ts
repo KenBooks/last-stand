@@ -223,6 +223,11 @@ export class Enemy {
     this.facing = this.targetFacing = Math.atan2(-pos.x, -pos.z);
 
     this.model = buildModel(def.model);
+    // The rising branch skips updateLooks: set the projection before its first crowd row or draw.
+    if (G.run?.training && !def.dummy) {
+      this.applyProjection();
+      this.model.kit.u.uFrozen.value = 0.35;
+    }
     this.height = this.model.height * (hero ? HERO.scale : 1);
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
@@ -540,13 +545,16 @@ export class Enemy {
     return this.updateLooks(dt, t, frozen);
   }
 
+  /** Projection uniforms are shared by the initial spawn and the later combat updates. */
+  private applyProjection(): void {
+    this.model.kit.u.uDissolve.value = Math.max(0.28, this.model.kit.u.uDissolve.value);
+    this.model.kit.u.uEdge.value.set(0x67edff).multiplyScalar(0.18);
+  }
+
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
     const projection = G.run?.training && this.type !== 'dummy';
     if (this.def.evade) this.model.kit.u.uDissolve.value = this.goneTo ? 1 : this.forming / BLINK_FORM;
-    if (projection) {
-      this.model.kit.u.uDissolve.value = Math.max(0.28, this.model.kit.u.uDissolve.value);
-      this.model.kit.u.uEdge.value.set(0x67edff).multiplyScalar(0.18);
-    }
+    if (projection) this.applyProjection();
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : projection ? 0.35 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
