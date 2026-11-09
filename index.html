@@ -45,7 +45,7 @@
     #loading .ld-back { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
       background: radial-gradient(ellipse 80% 60% at 50% 46%, #2a0a06 0%, #120504 45%, #050303 100%); }
     /* exit: ui/logoWind.ts blows the logo away as particles (.blowing), then the backdrop fades to the lobby (.done); with reduced motion it all just fades */
-    #loading.blowing > :is(.ld-rule, .ld-bar, .ld-sub, .ld-tip) { opacity: 0; transition: opacity .4s; }
+    #loading.blowing :is(.ld-rule, .ld-bar, .ld-sub, .ld-tip, .ld-menu) { opacity: 0; transition: opacity .4s; }
     #loading.done { pointer-events: none; }
     #loading.done > .ld-back, #loading.done.plain { opacity: 0; transition: opacity .9s; }
     /* smoke: a turbulence texture rendered once, drifted by the compositor */
@@ -82,6 +82,43 @@
     #loading .ld-ember.s { width: calc(2.5 * var(--u)); height: calc(2.5 * var(--u)); animation-duration: 9.5s; }
     #loading.failed .ld-bar, #loading.failed .ld-tip { display: none; }
     #loading.failed .ld-sub { color: #e08070; text-transform: none; letter-spacing: .04em; font-family: 'Alegreya Sans', system-ui, sans-serif; max-width: calc(560 * var(--u)); }
+    /* the title menu (ui/titleMenu.ts): once loaded, the bar and status give way to it under the logo, which stays put
+       (it lies over the place they leave, not in the column); its first click, tap or key lets the browser play sound */
+    #loading .ld-foot { position: relative; display: flex; flex-direction: column; align-items: center; gap: inherit; }
+    #loading.title > .ld-foot > :is(.ld-bar, .ld-sub) { opacity: 0; transition: opacity .35s; }
+    #loading.title { cursor: var(--cursor-hand); }
+    #loading .ld-menu { position: absolute; top: calc(-4 * var(--u)); left: 50%; translate: -50% 0; display: flex; flex-direction: column; align-items: center;
+      gap: calc(2 * var(--u)); width: max-content; }
+    #loading .ld-menu[hidden] { display: none; }
+    #loading .ld-item { position: relative; display: flex; align-items: center; justify-content: center; gap: calc(14 * var(--u)); padding: calc(7 * var(--u)) calc(18 * var(--u));
+      min-height: calc(40 * var(--u)); border: 0; background: none; cursor: var(--cursor-hand); font: 700 calc(15 * var(--u)) / 1 'Cinzel', Georgia, serif;
+      letter-spacing: .26em; text-transform: uppercase; color: #8f7f72; opacity: 0; translate: 0 calc(8 * var(--u));
+      transition: opacity .5s, translate .5s cubic-bezier(.2,.8,.3,1), color .18s; }
+    #loading .ld-item.start { font-size: calc(21 * var(--u)); min-height: calc(48 * var(--u)); }
+    #loading .ld-item[hidden] { display: none; }
+    #loading .ld-item:focus { outline: none; }
+    /* the marks either side of the choice: diamonds that slide in to it */
+    #loading .ld-item::before, #loading .ld-item::after { content: ''; width: calc(7 * var(--u)); height: calc(7 * var(--u)); rotate: 45deg; border: calc(1 * var(--u)) solid #e06a3a;
+      background: #5a1206; box-shadow: 0 0 calc(10 * var(--u)) rgba(255,110,40,.9); opacity: 0; transition: opacity .18s, translate .18s ease-out; }
+    #loading .ld-item::before { translate: calc(-10 * var(--u)) 0; }
+    #loading .ld-item::after { translate: calc(10 * var(--u)) 0; }
+    /* its glow: a layer of its own, shown by its opacity alone */
+    #loading .ld-item span { position: relative; }
+    #loading .ld-item span::after { content: ''; position: absolute; left: -12%; right: -12%; top: 50%; height: 220%; translate: 0 -50%; z-index: -1; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(220,60,20,.38), transparent 70%); opacity: 0; transition: opacity .2s; will-change: opacity; }
+    #loading .ld-item.on { color: #f6dfb8; text-shadow: 0 0 calc(12 * var(--u)) rgba(255,120,50,.75), 0 calc(1 * var(--u)) 0 #2a0804; }
+    #loading .ld-item.on::before, #loading .ld-item.on::after { opacity: 1; translate: 0 0; }
+    #loading .ld-item.on span::after { opacity: 1; }
+    #loading .ld-hint { margin-top: calc(10 * var(--u)); font-size: calc(15 * var(--u)); font-style: italic; letter-spacing: .08em; color: #a08e80; opacity: 0; transition: opacity .6s; }
+    #loading .ld-menu.shown .ld-item { opacity: 1; translate: 0 0; }
+    #loading .ld-menu.shown .ld-item:nth-child(2) { transition-delay: .08s, .08s, 0s; }
+    #loading .ld-menu.shown .ld-hint { opacity: 1; transition-delay: .35s; }
+    #loading .ld-menu.shown .ld-hint.breathe { animation: ld-hint 2.4s ease-in-out infinite alternate; }
+    /* chosen: the choice flares once, the rest goes, the rule above it opens out */
+    #loading.chosen .ld-rule { scale: 1.5 1; filter: brightness(1.8); transition: scale .45s cubic-bezier(.2,.8,.3,1), filter .45s; }
+    #loading.chosen .ld-item.on { scale: 1.12; color: #fff3dc; transition: scale .3s cubic-bezier(.2,1.4,.4,1), color .1s, opacity .35s .25s; opacity: 0; }
+    #loading.chosen .ld-item:not(.on), #loading.chosen .ld-hint { opacity: 0 !important; transition: opacity .15s; animation: none; }
+    @keyframes ld-hint { from { opacity: .45; } to { opacity: 1; } }
     @keyframes ld-sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
     @keyframes ld-breathe { to { opacity: .6; scale: 1.08; } }
     @keyframes ld-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 55% { opacity: .82; } 100% { opacity: .95; } }
@@ -96,7 +133,7 @@
       #loading .ld-tip { position: relative; left: auto; bottom: auto; translate: none; margin-top: calc(4 * var(--u)); font-size: calc(15 * var(--u)); line-height: 1.3; min-height: 2.6em; }
     }
     @media (prefers-reduced-motion: reduce) {
-      #loading .ld-glow, #loading .logo-glow, #loading .ld-smoke, #loading .ld-bar::after { animation: none; }
+      #loading .ld-glow, #loading .logo-glow, #loading .ld-smoke, #loading .ld-bar::after, #loading .ld-hint.breathe { animation: none; }
       #loading .ld-ember { display: none; }
     }
   </style>
@@ -668,8 +705,15 @@
       <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
     </div>
     <div class="ld-rule"><i></i></div>
-    <div class="ld-bar"><div class="ld-fill"></div></div>
-    <div class="ld-sub">Loading…</div>
+    <div class="ld-foot">
+      <div class="ld-bar"><div class="ld-fill"></div></div>
+      <div class="ld-sub">Loading…</div>
+      <nav class="ld-menu" aria-label="Title menu" hidden>
+        <button class="ld-item start" type="button"><span>Make your stand</span></button>
+        <button class="ld-item full" type="button"><span>Full screen</span></button>
+        <div class="ld-hint">Press any key</div>
+      </nav>
+    </div>
     <div class="ld-tip"></div>
   </div>
 
