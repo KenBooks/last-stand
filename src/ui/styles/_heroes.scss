@@ -179,7 +179,7 @@ body.touch .hs-key { font-size: 0; }
   .hs-name { width: min(100%, ui(420px)); justify-self: center; }
   .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   .hs-arrow { top: calc((100% - var(--ph)) / 2); }
-  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6); }
+  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6 + var(--ks) * .6); }
   .hs-tabs button { font-size: ui(20px); letter-spacing: ui(3px); padding: ui(8px) ui(18px) ui(14px); }
   .hs-back { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   #heroes .hs-shade { --hx: 50%; }
