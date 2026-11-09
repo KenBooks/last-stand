@@ -601,46 +601,67 @@ function veilstepPass(dur: number): void {
 
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
  *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
- *  s, landed by about 2.95). Timed to it: the wind's body and its flanged rush swelling and sweeping from the right
- *  ear to the left, a fizz of blown snow riding it, then the swirl drawn in rising towards the logo, settling with
- *  a soft breath of air as it lands. Wind and dust alone, no notes, as the lobby's music may be starting under it. */
+ *  s, landed by about 2.95). Timed to it, and soft, as the first sound a visit hears (from the owner's review of
+ *  #422, the first take was "lame", "hammering on the brain": a 3.2 kHz rush and a 4.5 kHz swirl, snow flickering 11
+ *  times a second, the swirl cut off in 0.15 s): a breath of wind rising slowly (0.7 s) and passing from the right
+ *  ear to the left, its body dark and its air opening no higher than 1.3 kHz, gently flanged; then the swirl drawn
+ *  in towards the logo, rising only to 1.5 kHz and easing away as it lands, a low sigh under it. Wind alone, no
+ *  notes, no pulses, as the lobby's music may be starting under it. */
 function logoGust(): void {
-  const v = voice(0, 0.4);
+  const v = voice(0, 0.35);
   const { c, t } = v;
-  // the gust's way across: right ear to left
+  // the gust's way across: right ear to left, not hard to either side
   const across = c.createStereoPanner(); across.connect(v.out);
-  across.pan.setValueAtTime(0.75, t); across.pan.linearRampToValueAtTime(-0.8, t + 1.4);
+  across.pan.setValueAtTime(0.55, t); across.pan.linearRampToValueAtTime(-0.6, t + 1.5);
   const swell = (peak: number, at: number, hold: number, fall: number, to: AudioNode): GainNode => {
     const g = c.createGain(); g.connect(to);
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + at);
     g.gain.setValueAtTime(peak, t + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + fall);
     return g;
   };
-  // the wind's body: dark noise, opening as the gust strikes, closing as it passes
-  const body = c.createBiquadFilter(); body.type = 'lowpass'; body.Q.value = 0.7;
-  body.frequency.setValueAtTime(350, t); body.frequency.exponentialRampToValueAtTime(1400, t + 0.45); body.frequency.exponentialRampToValueAtTime(300, t + 2);
-  v.loop(body); body.connect(swell(0.5, 0.35, 0.8, 2.1, across));
-  // its rush, flanged
-  const rush = c.createBiquadFilter(); rush.type = 'bandpass'; rush.Q.value = 0.9;
-  rush.frequency.setValueAtTime(700, t); rush.frequency.exponentialRampToValueAtTime(3200, t + 0.5); rush.frequency.exponentialRampToValueAtTime(900, t + 1.9);
-  v.loop(rush); rush.connect(v.flange(swell(0.4, 0.4, 0.75, 1.9, across), 4, 3, 0.9, 0.55));
-  // the snow and dust it carries: a high fizz, flickering
-  const fizz = c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 5000;
-  const flick = c.createGain(); flick.connect(swell(0.13, 0.3, 1.1, 2, across));
-  v.lfo(11, 0.5, flick.gain);
-  v.loop(fizz); fizz.connect(flick);
-  // the swirl gathering into the lobby's logo, up on the left: drawn in, rising
-  const gather = c.createStereoPanner(); gather.pan.value = -0.5; gather.connect(v.out);
-  const draw = c.createBiquadFilter(); draw.type = 'bandpass'; draw.Q.value = 0.8;
-  draw.frequency.setValueAtTime(600, t + 1.2); draw.frequency.exponentialRampToValueAtTime(4500, t + 2.85);
+  // the wind's body: dark noise, opening a little as the gust comes, closing as it passes
+  const body = v.sweep('lowpass', 220, 850, 0.8, 0.5);
+  body.frequency.exponentialRampToValueAtTime(260, t + 2.3);
+  v.loop(body); body.connect(swell(0.24, 0.7, 1.05, 2.5, across));
+  // its breath of air, slowly flanged (no fast sweep of the comb, little feedback: a hush, not a jet)
+  const air = v.sweep('bandpass', 450, 1300, 0.8, 0.6);
+  air.frequency.exponentialRampToValueAtTime(550, t + 2.1);
+  v.loop(air); air.connect(v.flange(swell(0.1, 0.75, 1, 2.3, across), 5, 1.5, 0.35, 0.25));
+  // the swirl drawn into the lobby's logo, up on the left: rising a little, easing away as it lands
+  const gather = c.createStereoPanner(); gather.pan.value = -0.45; gather.connect(v.out);
+  const draw = c.createBiquadFilter(); draw.type = 'bandpass'; draw.Q.value = 0.6;
+  draw.frequency.setValueAtTime(450, t + 1.3); draw.frequency.exponentialRampToValueAtTime(1500, t + 2.7);
   const dg = c.createGain(); dg.connect(gather);
-  dg.gain.setValueAtTime(0.0001, t); dg.gain.setValueAtTime(0.003, t + 1.2); dg.gain.exponentialRampToValueAtTime(0.32, t + 2.8); dg.gain.exponentialRampToValueAtTime(0.0001, t + 2.95);
-  v.loop(draw); draw.connect(v.flange(dg, 2.5, 2, 3.5, 0.55));
-  // the landing: a soft breath of air as the logo forms
-  const land = c.createBiquadFilter(); land.type = 'lowpass'; land.Q.value = 0.8;
-  land.frequency.setValueAtTime(1500, t + 2.85); land.frequency.exponentialRampToValueAtTime(220, t + 3.3);
-  v.loop(land); land.connect(blowAt(v, 2.85, 0.4, 0.5, gather, 0.02));
-  v.start(); v.stopAt(t + 3.7);
+  dg.gain.setValueAtTime(0.0001, t); dg.gain.setValueAtTime(0.002, t + 1.3);
+  dg.gain.exponentialRampToValueAtTime(0.07, t + 2.5); dg.gain.setTargetAtTime(0.0001, t + 2.6, 0.18);
+  v.loop(draw); draw.connect(dg);
+  // the landing: a low sigh of air as the logo forms
+  const land = c.createBiquadFilter(); land.type = 'lowpass'; land.Q.value = 0.5;
+  land.frequency.setValueAtTime(700, t + 2.7); land.frequency.exponentialRampToValueAtTime(180, t + 3.4);
+  v.loop(land); land.connect(blowAt(v, 2.7, 0.07, 0.7, gather, 0.25));
+  v.start(); v.stopAt(t + 3.9);
+}
+
+/** how late the exit's gust may still start (s): a context that comes to run this soon after the exit began still
+ *  plays it, nearly in time with the letters */
+const GUST_LATE = 0.4;
+
+/** `play` now where the context runs (a lab's offline render always); where it's still suspended, asked to resume
+ *  (a browser that allows autoplay here, a site visited often or the installed app, lets it without a gesture), and
+ *  played if it runs within `late` s, else not at all: a sound asked for in a suspended context is heard only at the
+ *  page's first click or key, out of place. */
+function whenRunning(play: () => void, late: number): void {
+  const c = ctx!;
+  if (c !== live || c.state === 'running') { play(); return; }
+  const asked = performance.now();
+  const onState = (): void => {
+    if (c.state !== 'running') return;
+    c.removeEventListener('statechange', onState);
+    if (performance.now() - asked <= late * 1000) play();
+  };
+  c.addEventListener('statechange', onState);
+  setTimeout(() => c.removeEventListener('statechange', onState), late * 1000 + 50);
+  void live.resume().catch(() => undefined);
 }
 
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
@@ -680,9 +701,9 @@ export const sfx = {
   zap: guard(() => { if (throttle('zap', 70)) return; noise({ dur: 0.1, freq: 6000, type: 'highpass', gain: 0.12 }); tone({ freq: 180, to: 60, dur: 0.1, type: 'square', gain: 0.05 }); }),
   /** coming apart into light and crossing: a rush of air rising, and a shimmer rising with it */
   blink: guard(() => { noise({ dur: 0.32, freq: 900, sweep: 4200, q: 1.4, gain: 0.14 }); tone({ freq: 520, to: 1560, dur: 0.22, gain: 0.06 }); tone({ freq: 784, to: 2350, dur: 0.18, type: 'triangle', gain: 0.04, delay: 0.03 }); }),
-  /** the loading screen's logo blown away and gathered into the lobby's; only where sound already runs (a context
-   *  still waiting for the page's first click would play it at that click, in the lobby) */
-  logoGust: guard(() => { if (ctx!.state === 'running') logoGust(); }),
+  /** the loading screen's logo blown away and gathered into the lobby's, by itself as the exit starts: wherever the
+   *  browser lets sound play by then (`whenRunning`) */
+  logoGust: guard(() => { whenRunning(logoGust, GUST_LATE); }),
   /** Veilstep: gone, and formed again where he lands `dur` s later (the dodge keeps `blink`) */
   veilstep: guard((dur: number) => { veilstepPass(dur); }),
   potion: guard(() => { noise({ dur: 0.35, freq: 800, sweep: 2500, q: 5, gain: 0.15 }); tone({ freq: 440, to: 880, dur: 0.4, gain: 0.08 }); }),
