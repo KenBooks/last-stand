@@ -135,9 +135,10 @@ function readied(): void {
   chooseLabel();
 }
 
-/** The choice's words: what choosing the hero in focus does, or how far he is from ready (it waits till he is). */
+/** The choice's words: what a click on the hero it stands on does (the one in focus chosen, another brought into
+ *  focus), or how far he is from ready (it waits till he is). */
 function chooseLabel(): void {
-  const { id } = hallHeroes()[hallFocus()];
+  const i = labelled(), { id } = hallHeroes()[i];
   const cls = CLASSES[id];
   const share = readiness(id);
   const button = $('.hs-choose');
@@ -146,8 +147,14 @@ function chooseLabel(): void {
     button.textContent = `Readying the ${cls.name} ${Math.round(share * 100)}%`;
     return;
   }
-  button.textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
+  // (another hero under the mouse: a click brings him into focus, as his name does; from play, "missing label for
+  // non current hero")
+  if (i !== hallFocus()) button.textContent = `Select the ${cls.name}`;
+  else button.textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
 }
+
+/** The hero the label stands on: the one under the mouse, else the one in focus. */
+const labelled = (): number => (lit >= 0 ? lit : hallFocus());
 
 /** One class's card: its name in the logo's forged steel, its role, tagline, how it plays, its skills, its records. */
 function card(cls: ClassDef): HTMLElement {
@@ -295,13 +302,13 @@ function onScreen(i: number): { x: number; top: number; bottom: number } | null 
  */
 export function placeChoice(): void {
   if (!heroSelectOpen() || !hallOpen()) return;
-  const at = onScreen(hallFocus());
+  const at = onScreen(labelled());
   if (!at) return;
   const y = at.bottom - (at.bottom - at.top) * CHOICE_UP;
   $('.hs-choose').style.transform = `translate(${at.x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
 }
 
-/** The choice shown on the hero in focus while the mouse is over him (outlined), hidden as it leaves. */
+/** The label shown while the mouse is over a hero (outlined), on him, hidden as it leaves. */
 function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', on); }
 
 function focusOn(i: number): void {
@@ -320,7 +327,7 @@ function shown(): void {
   renderHeroGear(hero.profile, $('.hs-equip'), $('.hs-stash'), $('.hs-stash-count'));
   renderAttributes($('.hs-stats'), hero.player, hero.profile);
   readied();
-  hover(lit >= 0 && lit === hallFocus());
+  hover(lit >= 0);
   placeChoice();
 }
 
@@ -352,10 +359,12 @@ let lit = -1;
 /** Hero `i` outlined in white as the mouse is over him (from play: "outline highlight like we have for ranger's mark
  *  skill... hover outline shows then click to choose"), or none (-1). */
 function lightHero(i: number): void {
-  hover(i >= 0 && i === hallFocus());
+  hover(i >= 0);
   if (i === lit) return;
   lit = i;
   outline(i >= 0 ? hallHeroes()[i].player.obj : null, LIT_COLOR, LIT_STRENGTH);
+  // (the label goes with him: his words, and placed on him from the next frame)
+  chooseLabel();
 }
 
 /** A tap or click on the backdrop: on the hero in focus, he's chosen (from play: "should be able to click whole hero");
