@@ -5,6 +5,7 @@ import { RUN } from '../data/balance';
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { saveKey, saveSlot } from './saveSlots';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
+import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: remove with the file
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
@@ -21,12 +22,14 @@ function fresh(classId: string): Profile {
     for (let i = 0; i < 20 && cls.starterGear.some((s) => s.slot === 'offhand') && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
     equipped[g.slot] = it;
   }
-  return {
+  const p: Profile = {
     classId: cls.id,
     equipped,
     stash: [],
     records: { bestWave: 0, bestBanked: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
   };
+  seedPr423Gear(p, true); // PR 423's test gear
+  return p;
 }
 
 function read(key: string): Profile | null {
@@ -41,7 +44,11 @@ function read(key: string): Profile | null {
 export function loadProfile(classId: string): Profile {
   try {
     const p = read(KEY(classId));
-    if (p) return { ...p, classId };
+    if (p) {
+      const loaded = { ...p, classId };
+      if (seedPr423Gear(loaded, false)) saveProfile(loaded); // PR 423's test gear
+      return loaded;
+    }
     if (classId === 'mage' && saveSlot() === 1) {
       const old = read(LEGACY);
       if (old) {
