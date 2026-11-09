@@ -1365,6 +1365,8 @@ function setSomeOf(path: string, value: number): void {
  */
 export async function mapsCome(): Promise<void> {
   await (textures as { everyMapCome?: () => Promise<void> }).everyMapCome?.();
+  const fire = await import('../../../src/world/fire');
+  await (fire as { flamesCome?: () => Promise<void> }).flamesCome?.();
 }
 
 /** The session's entry: the lab installed on this page. */

@@ -31,6 +31,9 @@ import {
 import { CANARY_PLANT, plantIn, reachingInto, type Column, type Reaching } from './fireClear';
 import { CANARY_COST_LEAST, canaryCost, flameCost, type FlameCost } from './fireCost';
 import { belowFound, readBelow, type BelowReading } from './fireBelow';
+import { knowsLogs, logsFound, logsUnknown, readOverLogs, type LogsReading } from './fireLogs';
+import { fadeFound, readFade, type FadeFrames } from './fireFade';
+import { seeHoleEnd } from '../../../src/core/seeThrough';
 import { drawLookOf, partAt } from './looks';
 
 export interface FireOptions {
@@ -241,6 +244,87 @@ function readFire(lab: Lab, fire: Fire, shot: Shot, none = false): FireFrame {
 /** the fire seen from under its bowl's rim, towards the arena's middle (`fireBelow.ts`) */
 function belowShot(fire: Fire): Shot {
   return { name: 'below', from: towardMiddle(fire).setY(-0.45).normalize(), distance: 2.4, rise: 0.5 };
+}
+
+/** the fire seen from above its logs as the player stands over it (the owner's screenshot: about 50° down, near) */
+function overLogsShot(fire: Fire): Shot {
+  return { name: 'over its logs', from: towardMiddle(fire).setY(1.2).normalize(), distance: 4.5, rise: 0.25 };
+}
+
+/** The meshes of the logs in the fire (the game names them so), near its middle across. */
+function logsIn(group: THREE.Object3D, fire: Fire): THREE.Mesh[] {
+  const logs: THREE.Mesh[] = [];
+  const box = new THREE.Box3();
+  const centre = new THREE.Vector3();
+  group.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh || !object.name.includes('logs')) return;
+    box.setFromObject(object).getCenter(centre);
+    if (Math.hypot(centre.x - fire.at.x, centre.z - fire.at.z) <= FIRE_REACH / 2) logs.push(object as THREE.Mesh);
+  });
+  return logs;
+}
+
+/** `fire` read from above its logs (its light shown, as the player sees it). */
+function readFromAbove(lab: Lab, fire: Fire, flames: THREE.Mesh, logs: THREE.Mesh[], canary: boolean): LogsReading {
+  const restore = aim(fire, overLogsShot(fire));
+  try {
+    const logsDrawn = () => coverOf(lab, logs, closeArea());
+    return readOverLogs({ draw: () => drawnNow(lab, closeArea()), logsDrawn, flames, canary });
+  } finally {
+    restore();
+  }
+}
+
+/** Where the see-through hole's end is put, short of the flames' `middle` along the view (m): across the near faces
+ *  of the box the shader is drawn on, and short of every point the flames' fade is taken at (their middle and a
+ *  half-width `reach` either side along the view), so the fire fades not at all, and before, its near side alone (a
+ *  partial fade, even, read uneven through the bloom and the grade's curve). Halfway between the box's nearest corner
+ *  and the nearest of those points; none if the box stands no nearer than they do from here (seen face-on). */
+function holeEndShort(middle: THREE.Vector3, reach: number): number | null {
+  const camera = G.camera.getWorldPosition(new THREE.Vector3());
+  const way = middle.clone().sub(camera).setY(0).normalize();
+  const nearest = reach * (Math.abs(way.x) + Math.abs(way.z));
+  return nearest > reach * 1.1 ? (nearest + reach) / 2 : null;
+}
+
+/** The point the see-through hole is made round, for the hole's end to stand `short` of the flames' `middle`: on the
+ *  line from the camera through their middle. */
+function focusShort(middle: THREE.Vector3, short: number): THREE.Vector3 {
+  const camera = G.camera.getWorldPosition(new THREE.Vector3());
+  const way = middle.clone().sub(camera).normalize();
+  return middle.clone().addScaledVector(way, seeHoleEnd() - short);
+}
+
+/** The flames' box's half-width across (m), as their shader has it. */
+const reachOf = (flames: THREE.Mesh): number =>
+  ((flames.material as THREE.ShaderMaterial).uniforms.uBox.value as THREE.Vector3).x;
+
+/** `fire`'s flames alone from beside them, with the see-through hole's end across them, without the hole, and none
+ *  of it drawn (the grade's adaptation held off, as `readFlames` holds it). */
+function fadeFrames(lab: Lab, fire: Fire, flames: THREE.Mesh): FadeFrames | null {
+  const restore = aim(fire, shotsOf(fire).beside);
+  const shown = hideAllBut([flames]);
+  renderer.holdAdaptation(true);
+  try {
+    const material = flames.material as THREE.ShaderMaterial;
+    const middle = material.uniforms.uCentre.value.clone().setY(
+      material.uniforms.uCentre.value.y + material.uniforms.uHeight.value / 2);
+    const short = holeEndShort(middle, reachOf(flames));
+    if (short === null) return null;
+    const focus = focusShort(middle, short);
+    updateSeeThrough(focus.x, focus.y, focus.z, 1, 0);
+    const faded = drawnNow(lab, closeArea());
+    updateSeeThrough(focus.x, focus.y, focus.z, 0, 0);
+    const unfaded = drawnNow(lab, closeArea());
+    flames.visible = false;
+    const empty = drawnNow(lab, closeArea());
+    flames.visible = true;
+    return { faded, unfaded, empty };
+  } finally {
+    renderer.holdAdaptation(false);
+    shown();
+    restore();
+  }
 }
 
 /** The fire's flames' volume: the part its shader marches from the bed's middle (`uCentre`), if it has one. */
@@ -505,12 +589,15 @@ function turnShot(fire: Fire, side: number, height: number): Shot {
 
 /** `fire`'s flames from `shot` now, nothing else drawn (its bed and logs, the particles, the world), the grade's
  *  adaptation held off (left on, it set each picture's exposure by itself: what's left of the world, the haze over the
- *  forest, showed in the difference between them, its edges where the flames' box stood). */
+ *  forest, showed in the difference between them, its edges where the flames' box stood), and the logs taken from
+ *  the flames' shader (hidden, they still cut the flames behind them: from behind, the bonfire's flames were 0.42
+ *  alike their front's mirror, carved by logs not drawn). */
 function readFlames(lab: Lab, fire: Fire, shot: Shot): FireFrame {
   const restore = hideAllBut(fire.parts);
+  const flames = flamesOf(fire);
   renderer.holdAdaptation(true);
   try {
-    return readFire(lab, fire, shot);
+    return flames ? logsUnknown(flames, () => readFire(lab, fire, shot)) : readFire(lab, fire, shot);
   } finally {
     renderer.holdAdaptation(false);
     restore();
@@ -703,6 +790,21 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
     lines.push(found.line);
     problems.push(...found.problems.map((problem) => `${biome}: ${problem}`));
   }
+  const faded = flames ? fadeFrames(lab, fire, flames) : null;
+  if (faded) {
+    const found = fadeFound(readFade(faded, canary), canary);
+    lines.push(found.line);
+    problems.push(...found.problems.map((problem) => `${biome}: ${problem}`));
+  } else if (flames) {
+    problems.push(`${biome}: from beside it the flames' box is face-on: no hole's end across its faces alone`);
+  }
+  const logs = logsIn(G.arena.groupOf(G.arena.biome), fire);
+  const overLogs = flames && logs.length && knowsLogs(flames) ? readFromAbove(lab, fire, flames, logs, canary) : null;
+  if (overLogs) {
+    const found = logsFound(overLogs, canary);
+    lines.push(found.line);
+    problems.push(...found.problems.map((problem) => `${biome}: ${problem}`));
+  }
   const moments: Pictured[] = [
     {
       // (each tile says what it shows: the label names the pictures' files)
@@ -712,6 +814,8 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
         tileOf(aloneImage(reading.pictured[0]), 'its own light'),
         tileOf(above.shown, 'above'),
         ...(below ? [tileOf(below.image, 'below'), tileOf(below.found, 'below-found')] : []),
+        ...(overLogs ? [tileOf(overLogs.image, 'over-logs'), tileOf(overLogs.unknownImage, 'over-logs-unknown'),
+          tileOf(overLogs.found, 'over-logs-found')] : []),
       ],
       notes: lines.slice(1),
     },

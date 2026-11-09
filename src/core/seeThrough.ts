@@ -31,15 +31,16 @@ const SEE_FRAGMENT = `varying vec3 vSeeWp;
 uniform vec3 uSeeFocus;
 uniform vec4 uSeeK;
 uniform float uSeeMinY;
-float seeFade() {
-  if (uSeeK.z <= 0.0 || vSeeWp.y <= uSeeMinY) return 0.0;
+float seeFadeAt(vec3 seeWp) {
+  if (uSeeK.z <= 0.0 || seeWp.y <= uSeeMinY) return 0.0;
   vec3 seeCa = uSeeFocus - cameraPosition;
   float seeL = length(seeCa);
-  vec3 seeDir = seeCa / seeL, seeCp = vSeeWp - cameraPosition;
+  vec3 seeDir = seeCa / seeL, seeCp = seeWp - cameraPosition;
   float seeAlong = dot(seeCp, seeDir);
   if (seeAlong <= 0.0 || seeAlong >= seeL - uSeeK.w) return 0.0;
   return (1.0 - smoothstep(uSeeK.x, uSeeK.y, length(seeCp - seeDir * seeAlong))) * uSeeK.z;
-}`;
+}
+float seeFade() { return seeFadeAt(vSeeWp); }`;
 
 function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof typeof kinds): void {
   const u = kinds[kind];
@@ -97,6 +98,9 @@ export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof
   m.fragmentShader = `${SEE_FRAGMENT}\n${m.fragmentShader}`;
   return m;
 }
+
+/** How far short of the followed character a prop's see-through hole ends (m). */
+export const seeHoleEnd = (): number => kinds.prop.k.value.w;
 
 /**
  * Each frame: where the followed character is, how far props dissolve (0..1: none through the eyes) and how far the

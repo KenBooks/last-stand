@@ -1,12 +1,13 @@
 // A fire's flames on WebGPU (core/webgpu.ts): fire.ts's ray march as WGSL functions (`wgslFn`), written line for line
 // from its GLSL, the node material's whole output as `gl_FragColor` was. The noise is read at its first level
 // (`textureSampleLevel`): WGSL samples with gradients only where every pixel takes the same path, and the march stops
-// early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeKept`). The bed's
+// early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeFade`, as one by their middle's). The bed's
 // and the logs' char and embers (`emberMat`) are its look's functions as WGSL, set on the lit material three converts
 // it to (`emberNodes`).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
-import { seeKept, seeUniforms } from '../core/shaderPorts';
+import { seeFade, seeUniforms } from '../core/shaderPorts';
+import type { FLAME_LOOK, KEPT, KEPT_SIZE } from './fireBake';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -14,29 +15,29 @@ type N = any;
 
 /** The flames' uniforms as fire.ts keeps them (each `{ value }`, read as each frame draws). */
 export interface FlameUniforms {
-  uNoise: { value: THREE.Data3DTexture };
+  uFlames: { value: THREE.Data3DTexture };
   uCentre: { value: THREE.Vector3 };
   uBox: { value: THREE.Vector3 };
   uRadius: { value: number };
   uHeight: { value: number };
   uPuff: { value: number };
   uGlow: { value: number };
-  uRise: { value: THREE.Vector2 };
-  uSeed: { value: THREE.Vector3 };
+  uFrame: { value: number };
+  uTurn: { value: THREE.Vector2 };
   uBowl: { value: THREE.Vector2[] };
+  uLogs: { value: THREE.Vector4[] };
 }
 
-/** fire.ts's numbers the GLSL had written into it: the march's steps, the light and soot a metre, the body's
- *  half-width at foot and tip, its bend, and the noise's scales. */
+/** fire.ts's numbers the GLSL had written into it: the march's steps, how thick and bright the gas is, its glow against
+ *  its life, its blackbody's colours, and the loop's tiles. */
 export interface FlameShape {
   steps: number;
-  glowPerMetre: number;
-  sootPerMetre: number;
-  foot: number;
-  tip: number;
-  tongueBend: number;
-  bendFoot: number;
-  noise: { across: number; up: number; fineAcross: number; fineUp: number };
+  look: typeof FLAME_LOOK;
+  tiles: { across: number; down: number };
+  cells: { nx: number; ny: number; nz: number };
+  kept: typeof KEPT;
+  keptSize: typeof KEPT_SIZE;
+  frames: number;
 }
 
 /** An ember material's values as fire.ts keeps them (each `{ value }`): the embers' clock, the bed's middle, how far
@@ -153,50 +154,98 @@ export function emberNodes(node: N): void {
 /** `value` written into WGSL as a float */
 const f = (value: number): string => value.toFixed(4);
 
+/** Where a ray first meets a log (as fire.ts's `logAt`), made once. */
+let log: N = null;
+function logFn(): N {
+  const { wgslFn } = tsl as any;
+  log ??= wgslFn(`fn fireLog(eye: vec3f, dir: vec3f, a: vec4f, b: vec4f) -> f32 {
+    let ba = b.xyz - a.xyz;
+    let baba = dot(ba, ba);
+    if (a.w <= 0.0 || baba < 1e-8) {
+      return 1e9;
+    }
+    let oa = eye - a.xyz;
+    let bard = dot(ba, dir);
+    let baoa = dot(ba, oa);
+    let qa = baba - bard * bard;
+    let qb = baba * dot(dir, oa) - baoa * bard;
+    let qc = baba * dot(oa, oa) - baoa * baoa - a.w * a.w * baba;
+    let h = qb * qb - qa * qc;
+    if (h < 0.0) {
+      return 1e9;
+    }
+    let root = sqrt(h);
+    var t = -1.0;
+    if (qa > 1e-8) {
+      t = (-qb - root) / qa;
+    }
+    let y = baoa + t * bard;
+    if (t > 0.0 && y > 0.0 && y < baba) {
+      return t;
+    }
+    if (abs(bard) < 1e-8) {
+      return 1e9;
+    }
+    var end = baba;
+    if (y <= 0.0) {
+      end = 0.0;
+    }
+    let tc = (end - baoa) / bard;
+    if (tc > 0.0 && abs(qb + qa * tc) < root) {
+      return tc;
+    }
+    return 1e9;
+  }`);
+  return log;
+}
+
 /** The march's functions, made once for `shape` (the same for every fire). */
 let march: N = null;
 function marchFor(shape: FlameShape): N {
   const { wgslFn } = tsl as any;
   if (march) return march;
-  const colour = wgslFn(`fn fireColour(heat: f32) -> vec3f {
-    var c = mix(vec3f(0.5, 0.04, 0.005), vec3f(0.95, 0.22, 0.02), smoothstep(0.05, 0.3, heat));
-    c = mix(c, vec3f(1.0, 0.45, 0.06), smoothstep(0.3, 0.6, heat));
-    c = mix(c, vec3f(1.0, 0.72, 0.22), smoothstep(0.6, 0.85, heat));
-    return mix(c, vec3f(1.0, 0.9, 0.62), smoothstep(0.85, 1.0, heat));
+  const look = shape.look;
+  const stops = look.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
+    const [before, r0, g0, b0, bright0] = look.blackbody[i];
+    return `if (life <= ${f(at)}) { return mix(vec3f(${f(r0)}, ${f(g0)}, ${f(b0)}) * ${f(bright0)}, `
+      + `vec3f(${f(r)}, ${f(g)}, ${f(b)}) * ${f(bright)}, (life - ${f(before)}) / ${f(at - before)}); }`;
+  }).join('\n    ');
+  const colour = wgslFn(`fn fireColour(life: f32) -> vec3f {
+    ${stops}
+    return vec3f(1.0);
   }`);
-  // the flames' heat at p (m from the bed's middle, up from it), 0 outside them; `top` their height now
-  const heat = wgslFn(`fn fireHeat(p: vec3f, noise: texture_3d<f32>, noiseAt: sampler, radius: f32, top: f32,
-    rise: vec2f, seed: vec3f) -> f32 {
-    let h = p.y / top;
-    if (h <= 0.0 || h >= 1.0) {
-      return 0.0;
-    }
-    // as wide as their foot low down, drawn in to a tip
-    let across = p.xz / radius;
-    let halfWidth = mix(${f(shape.foot)}, ${f(shape.tip)}, pow(h, 0.9));
-    let bend = ${f(shape.tongueBend)} * mix(${f(shape.bendFoot)}, 1.0, h * h);
-    if (length(across) > halfWidth + bend * 0.71) {
-      return 0.0;
-    }
-    let coarse = vec3f(across.x * ${f(shape.noise.across)}, h * ${f(shape.noise.up)} - rise.x,
-      across.y * ${f(shape.noise.across)});
-    let a = textureSampleLevel(noise, noiseAt, coarse + seed, 0.0).rg;
-    let bent = across + (a - 0.5) * bend;
-    let outward = length(bent) / halfWidth;
-    if (outward >= 1.0) {
-      return 0.0;
-    }
-    let body = 1.0 - smoothstep(0.7, 1.0, outward);
-    // each tongue's own height, and streaks rising through it
-    let fine = vec3f(bent.x * ${f(shape.noise.fineAcross)}, h * ${f(shape.noise.fineUp)} - rise.y,
-      bent.y * ${f(shape.noise.fineAcross)});
-    let b = textureSampleLevel(noise, noiseAt, fine + seed * 1.7, 0.0).rg;
-    let tip = 0.35 + 1.3 * (b.r - 0.25);
-    let tongue = 1.0 - smoothstep(tip - 0.15, tip, h);
-    var hot = body * tongue * (0.95 - h * 0.6) * (0.35 + 0.9 * smoothstep(0.3, 0.7, b.g));
-    hot *= smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.86, 1.0, h));
-    return clamp(hot, 0.0, 1.0);
+  // the loop at one frame's tile (as fire.ts's `flameTile`)
+  const tile = wgslFn(`fn fireTile(q: vec3f, frame: f32, noise: texture_3d<f32>, noiseAt: sampler) -> f32 {
+    let row = floor(frame / ${f(shape.tiles.across)});
+    let at = vec2f(frame - row * ${f(shape.tiles.across)}, row - floor(row / ${f(shape.tiles.down)}) * ${f(shape.tiles.down)});
+    let size = vec2f(${f(shape.keptSize.x)}, ${f(shape.keptSize.y)});
+    let inBox = q.xy * vec2f(${f(shape.cells.nx)}, ${f(shape.cells.ny)}) - vec2f(${f(shape.kept.x[0])}, ${f(shape.kept.y[0])});
+    let cell = (at * size + clamp(inBox, vec2f(0.5), size - 0.5)) / (size * vec2f(${f(shape.tiles.across)}, ${f(shape.tiles.down)}));
+    let deep = (q.z * ${f(shape.cells.nz)} - ${f(shape.kept.z[0])}) / ${f(shape.keptSize.z)};
+    return textureSampleLevel(noise, noiseAt, vec3f(cell, deep), 0.0).r;
   }`);
+  // a flame's life at p (as fire.ts's `flameLife`)
+  const life = wgslFn(`fn fireLife(p: vec3f, noise: texture_3d<f32>, noiseAt: sampler, top: f32, reach: f32, frame: f32,
+    turn: vec2f) -> f32 {
+    let across = vec2f(p.x * turn.x - p.z * turn.y, p.x * turn.y + p.z * turn.x) / reach;
+    let q = vec3f(across.x * 0.5 + 0.5, p.y / top, across.y * 0.5 + 0.5);
+    if (q.y <= 0.0 || q.y >= 1.0 || dot(across, across) >= 1.0) {
+      return 0.0;
+    }
+    let first = floor(frame);
+    let next = first + 1.0 - floor((first + 1.0) / ${f(shape.frames)}) * ${f(shape.frames)};
+    let life = mix(fireTile(q, first, noise, noiseAt), fireTile(q, next, noise, noiseAt), frame - first);
+    if (life <= 0.004) {
+      return 0.0;
+    }
+    let fine = vec3f(abs(fract(q.x * ${f(look.strandsAcross)}) * 2.0 - 1.0) * 0.3 + 0.35,
+      0.1 + fract(q.y * ${f(look.strandsUp)}) * 0.4,
+      abs(fract(q.z * ${f(look.strandsAcross)}) * 2.0 - 1.0) * 0.3 + 0.35);
+    let strands = fireTile(fine, first, noise, noiseAt);
+    let sideFrom = mix(${f(look.sideFadeFoot)}, ${f(look.sideFade)}, smoothstep(0.0, ${f(look.footNarrows)}, q.y));
+    let side = 1.0 - smoothstep(sideFrom, sideFrom + 0.3, length(across));
+    return life * (1.0 - ${f(look.strandsTake)} * (1.0 - strands)) * side * smoothstep(0.0, ${f(look.footFade)}, q.y);
+  }`, [tile]);
   // where a ray from eye along dir is among the flames: a cylinder `reach` round, `top` high
   const span = wgslFn(`fn fireSpan(eye: vec3f, dir: vec3f, top: f32, reach: f32) -> vec2f {
     var up = dir.y;
@@ -282,33 +331,34 @@ function marchFor(shape: FlameShape): N {
     return min(hit, fireDisc(eye, dir, 0.0, bed));
   }`, [side, disc]);
   march = wgslFn(`fn fireLight(world: vec3f, eyeWorld: vec3f, centre: vec3f, pixel: vec2f, noise: texture_3d<f32>,
-    noiseAt: sampler, radius: f32, top: f32, reach: f32, rise: vec2f, seed: vec3f, glow: f32, foot: vec2f,
-    belly: vec2f, rim: vec2f) -> vec4f {
+    noiseAt: sampler, top: f32, reach: f32, frame: f32, turn: vec2f, glow: f32, foot: vec2f,
+    belly: vec2f, rim: vec2f, logs: f32) -> vec4f {
     let eye = eyeWorld - centre;
     let dir = normalize(world - eyeWorld);
     var span = fireSpan(eye, dir, top, reach);
     span.y = min(span.y, fireBowl(eye, dir, foot, belly, rim));
+    span.y = min(span.y, logs);
     if (span.y <= span.x) {
-      return vec4f(0.0, 0.0, 0.0, 1.0);
+      return vec4f(0.0);
     }
     let stride = max(span.y - span.x, 0.0) / f32(${shape.steps});
     let jitter = fract(sin(dot(pixel, vec2f(12.9898, 78.233))) * 43758.5453);
     var light = vec3f(0.0);
     var through = 1.0;
     for (var i = 0; i < ${shape.steps}; i++) {
-      let hot = fireHeat(eye + dir * (span.x + (f32(i) + jitter) * stride), noise, noiseAt, radius, top, rise, seed);
-      if (hot <= 0.0) {
+      let here = fireLife(eye + dir * (span.x + (f32(i) + jitter) * stride), noise, noiseAt, top, reach, frame, turn);
+      if (here <= 0.004) {
         continue;
       }
-      let flame = smoothstep(0.04, 0.4, hot);
-      light += through * fireColour(hot) * flame * (0.2 + hot * 1.4);
-      through *= exp(-flame * stride * ${f(shape.sootPerMetre)});
+      let thick = 1.0 - exp(-clamp(here / ${f(look.glowFullLife)}, 0.0, 1.0) * stride * ${f(look.thickPerMetre)});
+      light += through * thick * fireColour(here);
+      through *= 1.0 - thick * smoothstep(${f(look.holdsFrom)}, ${f(look.holdsFully)}, here);
       if (through < 0.02) {
         break;
       }
     }
-    return vec4f(light * stride * ${f(shape.glowPerMetre)} * glow, 1.0);
-  }`, [colour, heat, span, bowl]);
+    return vec4f(light * ${f(look.glow)} * glow, 1.0 - through);
+  }`, [colour, life, span, bowl]);
   return march;
 }
 
@@ -318,23 +368,53 @@ function bowlPart(uniforms: FlameUniforms, part: number): N {
   return uniform(new THREE.Vector2()).onRenderUpdate(() => uniforms.uBowl.value[part]);
 }
 
+/** A log's end (`end` of fire.ts's `uLogs`) as a node, read as each frame draws. */
+function logEnd(uniforms: FlameUniforms, end: number): N {
+  const { uniform } = tsl as any;
+  return uniform(new THREE.Vector4()).onRenderUpdate(() => uniforms.uLogs.value[end]);
+}
+
+/** Where a ray from the camera through this pixel first meets a log in the fire (from its bed's middle), far off with
+ *  none. */
+function logsHit(uniforms: FlameUniforms, centre: N): N {
+  const { cameraPosition, positionWorld, min } = tsl as any;
+  const eye = cameraPosition.sub(centre);
+  const dir = positionWorld.sub(cameraPosition).normalize();
+  const hits = Array.from({ length: uniforms.uLogs.value.length / 2 }, (_, i) =>
+    logFn()({ eye, dir, a: logEnd(uniforms, i * 2), b: logEnd(uniforms, i * 2 + 1) }));
+  return hits.reduce((hit, next) => min(hit, next));
+}
+
+/** The share of the flames' light kept as their prop dissolves: one for all of them, the fade at five points along
+ *  the view through their middle averaged (fire.ts's `kept`). */
+function evenFade(see: { focus: N; k: N; minY: N }, read: (name: keyof FlameUniforms, type: string) => N): N {
+  const { cameraPosition, float, vec3 } = tsl as any;
+  const middle = read('uCentre', 'vec3').add(vec3(0, read('uHeight', 'float').mul(0.5), 0));
+  const across = middle.sub(cameraPosition).normalize().mul(read('uBox', 'vec3').x);
+  const fades = [-1, -0.5, 0, 0.5, 1].map((share) => seeFade(middle.add(across.mul(share)), see));
+  return float(1).sub(fades.reduce((sum, fade) => sum.add(fade)).div(5));
+}
+
 /** The flames' material: their light gathered along each ray through their box, added. */
 export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE.Material {
   const { cameraPosition, positionWorld, reference, sampler, screenCoordinate, texture3D } = tsl as any;
   const read = (name: keyof FlameUniforms, type: string): N => reference('value', type, uniforms[name]);
-  const noise = texture3D(uniforms.uNoise.value);
+  const noise = texture3D(uniforms.uFlames.value);
   const material = new gpu.MeshBasicNodeMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   });
   const light = marchFor(shape)({
     world: positionWorld, eyeWorld: cameraPosition, centre: read('uCentre', 'vec3'), pixel: screenCoordinate.xy,
-    noise, noiseAt: sampler(noise), radius: read('uRadius', 'float'),
+    noise, noiseAt: sampler(noise),
     top: read('uHeight', 'float').mul(read('uPuff', 'float')), reach: read('uBox', 'vec3').x,
-    rise: read('uRise', 'vec2'), seed: read('uSeed', 'vec3'), glow: read('uGlow', 'float'),
+    frame: read('uFrame', 'float'), turn: read('uTurn', 'vec2'), glow: read('uGlow', 'float'),
     foot: bowlPart(uniforms, 0), belly: bowlPart(uniforms, 1), rim: bowlPart(uniforms, 2),
+    logs: logsHit(uniforms, read('uCentre', 'vec3')),
   });
-  // (the flames fade with the prop under them, `seeThroughFade`: fire.ts binds its uniforms first)
+  // (the flames fade with the prop under them, `seeThroughFade`: fire.ts binds its uniforms first; as one, by the fade
+  // along the view through their middle, as fire.ts has it)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
-  material.fragmentNode = see.uSeeK ? light.mul(tsl.vec4(tsl.vec3(seeKept(seeUniforms(see))), 1)) : light;
+  material.fragmentNode = see.uSeeK ? light.mul(evenFade(seeUniforms(see), read)) : light;
   return material;
 }
