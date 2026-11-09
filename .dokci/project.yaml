@@ -62,6 +62,9 @@ spec:
         composeFiles:
           - server/game-preview/compose.yaml
       hostTemplate: "pr-{{ pullRequest.number }}.ls.wellscoped.dev"
+      # A commit build (`dokci previews build`, Dokci ADR 0087): one commit, by branch or SHA, without a PR, for 24 h
+      # by default (30 days at most), at the commit's first 12 hex digits.
+      commitHostTemplate: "c-{{ commit.short }}.ls.wellscoped.dev"
       routes:
         - service: game
           port: 8080

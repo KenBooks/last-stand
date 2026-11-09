@@ -106,6 +106,15 @@ test('takes each PR preview\'s host by its pattern, and no other', async () => {
   assert.equal(origins.has('https://prX1.ls.wellscoped.dev'), false);
 });
 
+test('takes a commit build\'s host by default, as it takes a PR preview\'s', async () => {
+  const { settingsFrom } = await import('../traces.mjs');
+  const { origins } = settingsFrom({});
+  assert.equal(origins.has('https://pr-352.ls.wellscoped.dev'), true);
+  assert.equal(origins.has('https://c-3f2a9c1e7b04.ls.wellscoped.dev'), true);
+  assert.equal(origins.has('https://c-.ls.wellscoped.dev'), false);
+  assert.equal(origins.has('https://c-1.evil.ls.wellscoped.dev'), false);
+});
+
 /** A Dokci link to `path` on `host`, signed as Dokci signs it: `v1.<exp>.<sig>`, the HMAC keyed by the token. */
 function dokciLink({ exp = Math.floor(Date.now() / 1000) + 300, host = '127.0.0.1', path = '/traces', key = TOKEN } = {}) {
   const sig = createHmac('sha256', key).update(`dokci-link/v1\n${host}\n${path}\n${exp}`, 'utf8').digest('base64url');
