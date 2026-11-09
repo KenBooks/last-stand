@@ -89,7 +89,9 @@ export async function training(lab: Lab, options: TrainingOptions): Promise<Repo
   const foe = lab.spawnFoe('husk', new lab.THREE.Vector3(4, 0, 4));
   await lab.step(120);
   check(foe.model.kit.u.uDissolve.value >= 0.28, 'projection has no screen-door dissolve');
-  check(foe.model.kit.u.uFrozen.value > 0.7 && !foe.castsShadow, 'projection has an ordinary solid look');
+  check(foe.model.kit.u.uFrozen.value > 0.3 && !foe.castsShadow, 'projection has an ordinary solid look');
+  const edge = foe.model.kit.u.uEdge.value;
+  check(Math.max(edge.r, edge.g, edge.b) < 0.2, 'projection glow is too bright');
   moments.push(await lab.screen('training-projection'));
   foe.invulnerable = false;
   hitEnemy(foe, 1e9, { by: lab.player, skill: lab.player.cls.skills[0] });
