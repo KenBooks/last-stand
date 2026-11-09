@@ -22,7 +22,9 @@
 // the box is zoomed by the UI's scale, so that's taken out)
 // The profiler's pane (ui/profileTab.ts) as the prompt's, at the top, with every other panel hidden meanwhile
 // (`body.profiling`): the scene alone on screen while its frames are timed, the pause menu's blur off the GPU.
-body.profiling > :not(#game, #profiling, script, svg) { visibility: hidden !important; }
+// (the page's parts the profiler times by the frame's interval shown again in turns: the panels, the pause menu)
+body.profiling:not(.profiling-panels) > :not(#game, #profiling, #pause, script, svg) { visibility: hidden !important; }
+body.profiling:not(.profiling-pause) > #pause { visibility: hidden !important; }
 #profiling { position: fixed; top: 12px; left: 50%; translate: -50% 0; z-index: 47; zoom: var(--ui, 1);
   width: min(360px, calc((100vw - 24px) / var(--ui, 1))); box-sizing: border-box; padding: 10px 12px 12px 14px;
   font-size: 13px; line-height: 1.35; color: var(--ink);

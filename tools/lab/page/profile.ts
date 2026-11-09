@@ -10,7 +10,7 @@ import type { ViewMode } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
 import { G } from '../../../src/state';
 import {
-  CANARY_PART, PROFILE_TURNS, ProfileCancelled, canProfile, profile, profileLines,
+  CANARY_PART, PROFILE_TURNS, ProfileCancelled, canProfile, profile, profileLines, type ProfileOptions,
 } from '../../../src/perf/profiler';
 import { standIn } from './light';
 
@@ -40,6 +40,38 @@ function canaryProblems(found: Awaited<ReturnType<typeof profile>>): string[] {
 
 /** the most programs a profile may compile (the plain colour's: one for each kind of mesh it's drawn over) */
 const COMPILED_MOST = 8;
+
+/** the page's part the lab gives the profiler: work done in each frame while it's shown, which the frame's interval
+ *  as the browser shows it must see (`ProfileOptions.pageParts`: the game's are its panels and the pause menu) */
+const PAGE_CANARY = { name: 'canary: 30 ms of work a frame', work: 30, least: 20 };
+
+/** The page's canary part and the work it does each frame it's shown. */
+function pageCanary(clock: () => number): Pick<ProfileOptions, 'pageParts' | 'eachPageFrame'> {
+  let working = false;
+  const part = {
+    name: PAGE_CANARY.name,
+    change: (on: boolean) => {
+      working = on;
+    },
+  };
+  const work = () => {
+    if (!working) return;
+    const end = clock() + PAGE_CANARY.work;
+    while (clock() < end) {
+      // (the frame's own work, as a panel's painting would be)
+    }
+  };
+  return { pageParts: [part], eachPageFrame: work };
+}
+
+/** The page canary's problems: the frame's interval as shown must have read its work. */
+function pageCanaryProblems(found: Awaited<ReturnType<typeof profile>>): string[] {
+  const part = found.shown?.parts.find((cost) => cost.name === PAGE_CANARY.name);
+  if (!part) return ['page canary: the page\'s parts were never timed'];
+  const read = part.on - part.off;
+  if (read >= PAGE_CANARY.least) return [];
+  return [`page canary: ${PAGE_CANARY.work} ms of work a frame read ${read.toFixed(1)} ms`];
+}
 
 /** the frames a cancelled profile draws before it's cancelled */
 const CANCEL_AFTER = 20;
@@ -91,9 +123,12 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
   try {
     const turns = command.rounds ? { ...PROFILE_TURNS, rounds: command.rounds } : PROFILE_TURNS;
     const clock = window.__labClock;
-    const found = await profile({ turns, canary: command.canary, clock: clock.realNow, nextFrame: clock.realFrame });
+    const page = pageCanary(clock.realNow);
+    const options = { turns, canary: command.canary, clock: clock.realNow, nextFrame: clock.realFrame, ...page };
+    const found = await profile(options);
     const problems = command.canary ? canaryProblems(found) : [];
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
+    problems.push(...pageCanaryProblems(found));
     if (found.compiled > COMPILED_MOST) {
       problems.push(`${found.compiled} programs compiled: a part changes the scene's programs (most ${COMPILED_MOST})`);
     }

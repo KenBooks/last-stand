@@ -137,7 +137,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   side), one in each of the browser's frames (`__labClock.realFrame`), each waited for and timed by the browser's
   clock (`__labClock.realNow`), and the parts listed by what they take, as the player's device lists them, with how
   long it took and the programs it compiled: over 8 fails (a part changing the scene's programs compiled them all
-  again, 66 s of a 69 s run). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
+  again, 66 s of a 69 s run). The page's parts are timed by the frame's interval as the browser shows it; the lab gives one of its own, 30 ms of work a frame while shown, which must read at least 20 ms (28.7 here). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
   was (the pixel ratio, what's shown, what casts, the lights' reach) and let the game's frames go (the hero walks).
   On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
   for that, have the player press the button and read their trace with `lab trace` (its Profile section).

@@ -48,15 +48,16 @@ const PROFILED_PARTS = [
   'what\'s cut out: leaves, grass: 12.4 ms (35%)',
   'half the scene\'s pixels: 9.8 ms (28%)',
   'what\'s blended: smoke, glows, effects: 4.1 ms (12%)',
-  'the point lights where they reach: 2.2 ms (6%)',
-  'the lit shading, against a plain colour: 1.9 ms (5%)',
+  'on screen: the panels (HUD, lobby, overlays): 3.8 ms (11%)',
+  'on screen: the pause menu and its blur: 14.6 ms (41%)',
 ];
 
 /** The pause menu on its Performance tab as a profile leaves it, at its fullest: its note, the costliest parts and
  *  Send shown (what a phone found by a bonfire, written in). */
 export function openPauseProfiled(canary: boolean): void {
   openPause('performance', canary);
-  document.querySelector('.profile-note')!.textContent = 'The frame here: 35.2 ms (28 fps). Its costliest parts:';
+  const found = 'The frame here: 35.2 ms drawn (28 fps), 35.6 ms as shown. Its costliest parts:';
+  document.querySelector('.profile-note')!.textContent = found;
   const list = document.querySelector<HTMLElement>('.profile-parts')!;
   const item = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
   list.replaceChildren(...PROFILED_PARTS.map(item));

@@ -6,11 +6,24 @@
 import { sfx } from '../core/audio';
 import { traceConsent, sendProfile } from '../perf/consent';
 import {
-  canProfile, profile, profileLines, ProfileCancelled, type Profile, type ProfileProgress,
+  canProfile, profile, profileLines, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
 } from '../perf/profiler';
 
-/** the parts listed under the button (the report has them all) */
-const PARTS_SHOWN = 5;
+/** the scene's parts listed under the button, the page's after them (the report has them all) */
+const PARTS_SHOWN = 3;
+
+/** What the page puts over the scene, timed by the frame's interval as the browser shows it (`ProfileOptions`
+ *  `pageParts`): its panels (the HUD, the lobby's, the overlays down the left), and the pause menu with the blur over
+ *  the whole screen behind it (a phone's lobby fell from 75 frames a second to 35 under it, trace 05C8-3E1V). */
+const PAGE_PARTS = [
+  { name: 'on screen: the panels (HUD, lobby, overlays)', change: (on: boolean) => showing('profiling-panels', on) },
+  { name: 'on screen: the pause menu and its blur', change: (on: boolean) => showing('profiling-pause', on) },
+];
+
+/** A page's part shown or hidden while the profiler runs (`body.profiling`, `styles/_perfAsk.scss`). */
+function showing(what: string, on: boolean): void {
+  document.body.classList.toggle(what, on);
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -26,16 +39,21 @@ function note(text: string): void {
   $('.profile-note').textContent = text;
 }
 
-/** The costliest parts as list items: what each takes and its share of the frame. */
+/** A part as a list item: what it takes and its share of `frame`. */
+function partItem(part: PartCost, frame: number): HTMLLIElement {
+  const item = document.createElement('li');
+  const takes = part.on - part.off;
+  const share = frame > 0 ? Math.round((100 * takes) / frame) : 0;
+  item.textContent = `${part.name.replace(/ \(\d+\)$/, '')}: ${takes.toFixed(1)} ms (${share}%)`;
+  return item;
+}
+
+/** The costliest of the scene's parts as list items, then the page's. */
 function showParts(result: Profile): void {
   const list = $('.profile-parts');
-  list.replaceChildren(...result.parts.slice(0, PARTS_SHOWN).map((part) => {
-    const item = document.createElement('li');
-    const takes = part.on - part.off;
-    const share = result.frame > 0 ? Math.round((100 * takes) / result.frame) : 0;
-    item.textContent = `${part.name.replace(/ \(\d+\)$/, '')}: ${takes.toFixed(1)} ms (${share}%)`;
-    return item;
-  }));
+  const scene = result.parts.slice(0, PARTS_SHOWN).map((part) => partItem(part, result.frame));
+  const page = result.shown?.parts.map((part) => partItem(part, result.shown!.frame)) ?? [];
+  list.replaceChildren(...scene, ...page);
   list.classList.remove('hidden');
 }
 
@@ -73,6 +91,7 @@ function paneShower(): (progress: ProfileProgress) => void {
 /** Every panel hidden and the pane shown while it runs, or the pause menu back. */
 function showRunning(on: boolean): void {
   document.body.classList.toggle('profiling', on);
+  if (!on) document.body.classList.remove('profiling-panels', 'profiling-pause');
   $('#profiling').classList.toggle('hidden', !on);
   if (!on) return;
   $('#profiling .prof-fill').style.transform = 'scaleX(0)';
@@ -91,10 +110,11 @@ async function run(): Promise<void> {
   $('.profile-parts').classList.add('hidden');
   showRunning(true);
   try {
-    const result = await profile({ onProgress: paneShower(), cancelled: () => cancelling });
+    const result = await profile({ onProgress: paneShower(), cancelled: () => cancelling, pageParts: PAGE_PARTS });
     found = profileLines(result);
     const fps = result.frame > 0 ? Math.round(1000 / result.frame) : 0;
-    note(`The frame here: ${result.frame.toFixed(1)} ms (${fps} fps). Its costliest parts:`);
+    const shown = result.shown ? `, ${result.shown.frame.toFixed(1)} ms as shown` : '';
+    note(`The frame here: ${result.frame.toFixed(1)} ms drawn (${fps} fps)${shown}. Its costliest parts:`);
     showParts(result);
     if (traceConsent() === 'always') void send();
     else $('#btn-profile-send').classList.remove('hidden');

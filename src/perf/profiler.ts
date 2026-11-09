@@ -41,7 +41,14 @@ export interface Profile {
   /** the programs compiled while it ran (its parts must keep the scene's: each compiled is a wait) */
   compiled: number;
   parts: PartCost[];
+  /** the frame as the browser shows it, from one of its frames to the next (ms), with the page's parts in it shown
+   *  and hidden (`ProfileOptions.pageParts`): what putting the page together costs, which a draw waited for leaves
+   *  out */
+  shown?: { frame: number; parts: PartCost[] };
 }
+
+/** the turns of a page's part: its frames' intervals step by the display's refresh, so more of them, and averaged */
+export const PAGE_TURNS: ProfileTurns = { rounds: 3, frames: 8, settle: 2 };
 
 /** How far a profile is: the frames drawn, of all it draws, and the part being timed. */
 export interface ProfileProgress {
@@ -63,6 +70,12 @@ export interface ProfileOptions {
   clock?: () => number;
   /** the browser's next frame, each timed frame drawn in one (the lab's own: its page queues the game's) */
   nextFrame?: () => Promise<void>;
+  /** what the page puts over the scene (its panels, the pause menu's blur), each timed by the frame's interval as the
+   *  browser shows it, with it shown and hidden: the browser's own work putting the page together, which the scene's
+   *  parts (a draw waited for) don't see */
+  pageParts?: ScenePart[];
+  /** run in each frame a page's part is timed in (the lab's canary: work the interval must see) */
+  eachPageFrame?: () => void;
 }
 
 /** Thrown by `profile` when it was cancelled. */
@@ -95,6 +108,12 @@ function medianOf(values: number[]): number {
   return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
 }
 
+/** The mean of `values` (a frame's interval steps by the display's refresh: its median would be one step or the
+ *  next). */
+function meanOf(values: number[]): number {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
 /** A frame drawn, waited out on the GPU and timed (ms). */
 type TimedDraw = () => Promise<number>;
 
@@ -115,13 +134,34 @@ function timing(draw: () => void, options: ProfileOptions, counted: () => void):
   };
 }
 
+/** `draw` as a frame drawn in the browser's next frame, timed by its interval from the frame before, as the browser
+ *  shows it (nothing waited for: the browser puts the page together meanwhile); stopped when `cancelled`. */
+function shownTiming(draw: () => void, options: ProfileOptions, counted: () => void): TimedDraw {
+  const clock = options.clock ?? (() => performance.now());
+  const nextFrame = options.nextFrame ?? browserFrame;
+  let last = clock();
+  return async () => {
+    await nextFrame();
+    if (options.cancelled?.()) throw new ProfileCancelled();
+    const now = clock();
+    const interval = now - last;
+    last = now;
+    draw();
+    options.eachPageFrame?.();
+    counted();
+    return interval;
+  };
+}
+
 /** The frames a profile draws: each part's turns, then the frame alone. */
 function framesOf(parts: number, turns: ProfileTurns): number {
   return parts * turns.rounds * 2 * (turns.settle + turns.frames) + turns.frames * 2;
 }
 
-/** `part`'s cost in turns: settled after each change, then timed, left on. */
-async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurns): Promise<PartCost> {
+/** `part`'s cost in turns: settled after each change, then timed (`average`: the median of a draw waited for, the
+ *  mean of intervals), left on. */
+async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurns,
+  average: (values: number[]) => number = medianOf): Promise<PartCost> {
   const on: number[] = [];
   const off: number[] = [];
   try {
@@ -136,7 +176,7 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
   } finally {
     part.change(true);
   }
-  return { name: part.name, on: medianOf(on), off: medianOf(off) };
+  return { name: part.name, on: average(on), off: average(off) };
 }
 
 /** Whether the profiler can time this game's frames: WebGL's (WebGPU's frame isn't waited for by a read). */
@@ -152,7 +192,9 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   };
   const parts = frameParts();
   if (options.canary) parts.push({ name: CANARY_PART, change: (on) => { twice = on; } });
-  const progress: ProfileProgress = { done: 0, total: framesOf(parts.length, turns), part: '' };
+  const pageParts = options.pageParts ?? [];
+  const pageFrames = pageParts.length ? framesOf(pageParts.length, PAGE_TURNS) : 0;
+  const progress: ProfileProgress = { done: 0, total: framesOf(parts.length, turns) + pageFrames, part: '' };
   const counted = () => {
     progress.done += 1;
     options.onProgress?.(progress);
@@ -172,10 +214,35 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const frames: number[] = [];
     for (let frame = 0; frame < turns.frames * 2; frame++) frames.push(await timedFrame());
     costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
+    const shownFrame = shownTiming(draw, options, counted);
+    const shown = pageParts.length ? await shownCosts(pageParts, shownFrame, progress) : undefined;
     const compiled = (G.renderer.info.programs?.length ?? 0) - programs;
-    return { frame: medianOf(frames), seconds: (now() - started) / 1000, compiled, parts: costs };
+    return { frame: medianOf(frames), seconds: (now() - started) / 1000, compiled, parts: costs, shown };
   } finally {
     holdFrames(false);
+  }
+}
+
+/** The page's parts timed by the frame's interval as the browser shows it, each hidden but the one timed, then the
+ *  frame with all of them hidden. */
+async function shownCosts(parts: ScenePart[], shownFrame: TimedDraw,
+  progress: ProfileProgress): Promise<Profile['shown']> {
+  const costs: PartCost[] = [];
+  for (const part of parts) part.change(false);
+  try {
+    for (const part of parts) {
+      progress.part = part.name;
+      costs.push(await costOf(part, shownFrame, PAGE_TURNS, meanOf));
+      part.change(false);
+    }
+    progress.part = 'the frame as shown';
+    const frames: number[] = [];
+    for (let frame = 0; frame < PAGE_TURNS.settle; frame++) await shownFrame();
+    for (let frame = 0; frame < PAGE_TURNS.frames * 2; frame++) frames.push(await shownFrame());
+    costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
+    return { frame: meanOf(frames), parts: costs };
+  } finally {
+    for (const part of parts) part.change(true);
   }
 }
 
@@ -192,5 +259,11 @@ export function profileLines(found: Profile): string[] {
   const fps = found.frame > 0 ? Math.round(1000 / found.frame) : 0;
   const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame drawn and waited for; `
     + `profiled in ${found.seconds.toFixed(1)} s, ${found.compiled} programs compiled`;
-  return [frame, ...found.parts.map((part) => partLine(part, found.frame))];
+  const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame))];
+  if (!found.shown) return lines;
+  const shownFps = found.shown.frame > 0 ? Math.round(1000 / found.shown.frame) : 0;
+  lines.push(`the frame as the browser shows it, frame to frame: ${found.shown.frame.toFixed(1)} ms (${shownFps} fps), `
+    + 'the page\'s parts hidden');
+  lines.push(...found.shown.parts.map((part) => partLine(part, found.shown!.frame)));
+  return lines;
 }
