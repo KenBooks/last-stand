@@ -3,11 +3,14 @@
 // the weapon's tip (`Model.tip`: the mage's staff's crystal) as wide as `BOX` m there: how much of it is near white,
 // its brightest and its mean light, the brightest frame's against the median's, and the flashes of its mean in any
 // second (page/flashes.ts). From the owner, of the mage's staff in the hall: "the staff's light is too bright when its
-// flickering, pls lower". Its canary lights the crystal's colour as main lit it.
+// flickering, pls lower". Its canary lights the crystal's colour as main lit it. `--lobby`: the hero as he stands in
+// the lobby instead, the run's camera on him ("staff still flickers at its brightest peak", the tip of it), its
+// canary the gem's glow three times over for a second.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
 import type { Lab, Pictured, Report, Tile } from './lab';
+import type { Model } from '../../../src/types';
 import { drawFrame, pixelLight, topLight, canvasSize, type Canvas, type CanvasBox } from './light';
 import { openHall, toLobby } from './hallMoves';
 import { worstFlashing } from './flashes';
@@ -16,6 +19,8 @@ import { worstFlashing } from './flashes';
 export interface HallGlowOptions {
   pictures: boolean;
   canary?: boolean;
+  /** the hero as he stands in the lobby, not in the hall */
+  lobby?: boolean;
 }
 
 /** frames run once the hall is up: the camera's flight in, his showcase (due 0.8 s after) and some 6 s after it */
@@ -126,6 +131,10 @@ function glowingGemsUnder(tip: THREE.Object3D): THREE.MeshPhysicalMaterial[] {
   return [...found];
 }
 
+/** the lobby's canary: the gem's glow this many times over, these frames (a second) */
+const CANARY_GLOW = 3;
+const CANARY_FRAMES = [240, 300];
+
 /** How main's crystal took the light: polished, its coat full and as polished, its highlight full. */
 const MAINS_POLISH = { roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0, specularIntensity: 1 };
 
@@ -176,18 +185,46 @@ interface Pictures {
   least?: Tile;
 }
 
-/** Runs `lab hall --glow`. */
-export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Report> {
-  await lab.setup({ at: [14, 17], facing: 0 });
+/** The hero whose tip is read: the hall's in focus, or the lobby's own. */
+interface Read {
+  id: string;
+  model: Model;
+  tip: THREE.Object3D;
+  /** whether his showcase has begun (the lobby's: from the start) */
+  shown: () => boolean;
+}
+
+/** The lobby's hero as he stands. */
+function lobbyHero(lab: Lab): Read {
+  const tip = lab.model.tip;
+  if (!tip) throw new Error('lab: hall --glow --lobby: the hero has no weapon\'s tip');
+  return { id: lab.player.cls.id, model: lab.model, tip, shown: () => true };
+}
+
+/** The hall's hero in focus, the hall opened (null: no hall in this tree). */
+async function hallHero(lab: Lab): Promise<Read | null> {
   await toLobby(lab);
-  if (!(await openHall(lab))) return { text: 'no hero selection screen in this tree', problems: [] };
+  if (!(await openHall(lab))) return null;
   const hero = hall.hallHeroes()[hall.hallFocus()];
   const tip = hero?.player.model.tip;
   if (!hero || !tip) throw new Error('lab: hall --glow: no hero in focus with a weapon\'s tip');
-  const model = hero.player.model;
+  return { id: hero.id, model: hero.player.model, tip, shown: () => !!hero.cast };
+}
+
+/** Each of `gems` glowing `times` over its own (the lobby's canary), set after the hero's animation set it. */
+function brighten(gems: THREE.MeshPhysicalMaterial[], times: number): void {
+  for (const gem of gems) gem.emissiveIntensity *= times;
+}
+
+/** Runs `lab hall --glow`. */
+export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Report> {
+  await lab.setup({ at: [14, 17], facing: 0 });
+  const hero = options.lobby ? lobbyHero(lab) : await hallHero(lab);
+  if (!hero) return { text: 'no hero selection screen in this tree', problems: [] };
+  const { model, tip } = hero;
   const gems = options.canary ? glowingGemsUnder(tip) : [];
   if (options.canary && !gems.length) throw new Error('lab: hall --glow: no glowing gem at the weapon\'s tip to light');
-  const putBack = lightAsMain(gems);
+  const putBack = options.lobby ? () => {} : lightAsMain(gems);
   let frame = 0;
   const glows: FrameGlow[] = [];
   const pictures: Pictures = {};
@@ -199,7 +236,9 @@ export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Repo
   const pictured = (view: string, at: THREE.Vector3): Tile => tileOf(view, drawFrame(lab, boxRound(at, PICTURED_BOX)));
   try {
     await lab.step(FRAMES, undefined, () => {
-      if (shownAt < 0 && hero.cast) shownAt = frame;
+      if (shownAt < 0 && hero.shown()) shownAt = frame;
+      const planted = options.lobby && options.canary && frame >= CANARY_FRAMES[0] && frame < CANARY_FRAMES[1];
+      if (planted) brighten(gems, CANARY_GLOW);
       model.root.updateMatrixWorld(true);
       tip.getWorldPosition(point);
       const glow = glowOf(drawFrame(lab, boxRound(point, BOX)), frame);
@@ -219,7 +258,7 @@ export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Repo
     putBack();
   }
   if (shownAt < 0) throw new Error('lab: hall --glow: the hero never showed off his skill');
-  return reportOf(hero.id, glows, shownAt, pictures, !!options.canary);
+  return reportOf(hero.id, glows, shownAt, pictures, !!options.canary, !!options.lobby);
 }
 
 /** The middle of `values`. */
@@ -230,7 +269,7 @@ function medianOf(values: number[]): number {
 
 /** The report: the box's light over the run, its brightest against its median, its flashes, and the canary. */
 function reportOf(
-  id: string, glows: FrameGlow[], shownAt: number, pictures: Pictures, canary: boolean,
+  id: string, glows: FrameGlow[], shownAt: number, pictures: Pictures, canary: boolean, lobby: boolean,
 ): Report {
   const runMean = glows.reduce((sum, glow) => sum + glow.mean, 0) / glows.length;
   const median = medianOf(glows.map((glow) => glow.mean));
@@ -238,13 +277,15 @@ function reportOf(
   const brightest = mostOf(glows, 'mean');
   const peak = brightest.mean / median;
   const flashing = worstFlashing(glows.map((glow) => [glow.mean]), 1 / 60);
-  const second = (frame: number): string => `${((frame - shownAt) / 60).toFixed(2)} s from his showcase`;
+  const from = lobby ? 'the start' : 'his showcase';
+  const second = (frame: number): string => `${((frame - shownAt) / 60).toFixed(2)} s from ${from}`;
   const medianGlowing = medianOf(glows.map((glow) => glow.glowing));
   const mostGlowing = mostOf(glows, 'glowing');
   const flare = mostGlowing.glowing / medianGlowing;
   const flaring = glows.filter((glow) => glow.glowing > FLARE_MOST * medianGlowing).length;
   const text = [
-    `the ${id} in focus, the box ${BOX} m across round his weapon's tip, frames ${JUDGED_FROM} to ${FRAMES}`,
+    `the ${id} ${lobby ? 'standing in the lobby' : 'in focus'}, the box ${BOX} m across round his weapon's tip, `
+      + `frames ${JUDGED_FROM} to ${FRAMES}`,
     `  its mean light ${runMean.toFixed(3)} of white over the run, its median frame's ${median.toFixed(3)}`,
     `  near white: ${percent(whitest.nearWhite)} of it at most (frame ${whitest.frame}, ${second(whitest.frame)})`,
     `  brightest: ${brightest.mean.toFixed(3)} mean, ${peak.toFixed(2)}x the median's (frame ${brightest.frame}, `
@@ -260,13 +301,15 @@ function reportOf(
   if (whitest.nearWhite > NEAR_WHITE_MOST) caught.push(`${percent(whitest.nearWhite)} of it near white`);
   if (brightest.mean > MEAN_MOST) caught.push(`its brightest frame ${brightest.mean.toFixed(3)} of white`);
   if (peak > PEAK_MOST) caught.push(`its brightest ${peak.toFixed(2)}x its median`);
-  if (flare > FLARE_MOST) caught.push(`its glow flaring ${flare.toFixed(2)}x its median`);
+  // (in the lobby, seen from above, the crystal's rings turning face-on swell its glow 1.4 times, slowly: not judged)
+  if (flare > FLARE_MOST && !lobby) caught.push(`its glow flaring ${flare.toFixed(2)}x its median`);
   if (medianGlowing < GLOWING_LEAST) caught.push(`its glow ${percent(medianGlowing)} of it the median frame`);
   if (flashing.most > FLASHES_MOST) caught.push(`${flashing.most} flashes in a second`);
   const problems: string[] = [];
   if (canary) {
     const found = caught.length > 0;
-    text.push(`canary, the tip's gem lit as main lit it: ${found ? 'caught' : 'MISSED'}`);
+    const planted = lobby ? `its glow ${CANARY_GLOW} times over for a second` : 'lit as main lit it';
+    text.push(`canary, the tip's gem ${planted}: ${found ? 'caught' : 'MISSED'}`);
     if (!found) problems.push('hall --glow: the canary (the tip\'s lit glow brightened as main had it) was missed');
   } else {
     const bars = `${percent(NEAR_WHITE_MOST)} near white, ${MEAN_MOST} of white `

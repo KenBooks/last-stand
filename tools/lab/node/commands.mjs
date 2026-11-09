@@ -1475,6 +1475,7 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         canary: Boolean(options.canary),
         glow: Boolean(options.glow),
+        lobby: Boolean(options.lobby),
         pictures: options.pictures !== false,
       };
       return side.command('hall', command);

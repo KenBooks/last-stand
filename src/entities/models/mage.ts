@@ -266,8 +266,14 @@ export function buildMage(): Model {
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
+  // (its facets not mirrors, its coat thin and soft, its highlight weak: polished, as it spun a facet caught a light
+  // white for a moment, the whole crystal flaring past the bloom, "staff still flickers at its brightest peak", 3.2
+  // times its light, `lab hall --glow --lobby`; the hall's `HEAD` treats it more still)
   const GEM_GLOW = 0.4;
-  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  const gem = kit.phys({
+    color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.55, metalness: 0,
+    clearcoat: 0.15, clearcoatRoughness: 0.55, specularIntensity: 0.3, flatShading: true,
+  });
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's

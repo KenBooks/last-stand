@@ -1665,6 +1665,11 @@ export const COMMANDS = {
           + 'white share, its peak against its mean and its flashes, pictured at its brightest and dimmest',
       },
       pictures: { kind: 'switch', help: 'with --glow, picture the tip (on by default; --pictures=false for none)' },
+      lobby: {
+        kind: 'switch',
+        help: 'with --glow, the hero as he stands in the lobby, the run\'s camera on him, not in the hall '
+          + '(its canary: the gem\'s glow three times over for a second)',
+      },
       canary: {
         kind: 'switch',
         help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase '

@@ -38,10 +38,11 @@ float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFi
  * for all: `ITEM_GLOW` the shape, `tickItemGlow` its clock, the colour the item's (`models/itemGlow.ts`).
  */
 export const ITEM_GLOW = tunable('itemGlow', {
-  strength: 0.12, face: 0.08, across: 6, up: 3, centre: 0.5, width: 0.05, rise: 2, turns: 4, cycle: 16,
+  strength: 0.07, face: 0.05, across: 6, up: 3, centre: 0.5, width: 0.05, rise: 2, turns: 4, cycle: 16,
   // the weapon's glow this many times the rest: its brightest strands past the bloom's threshold, a soft light round
-  // them (from play: "a bit of glow on weapon only, in addition to the shader"); read as its gear is set
-  weapon: 6,
+  // them (from play: "a bit of glow on weapon only, in addition to the shader"); read as its gear is set. The rest at
+  // 0.07 (0.12 before: "more subtle... 4 player coop might look too distracting"), the weapon kept as it was
+  weapon: 10,
 });
 /** the glow's shape (x its cells a metre across, y along, z the level its strands lie on, w how far either side), its loop (x the cells
  *  it rises a cycle, y the cells it moves on through time, z the face's share, w the strength) and its clock (the

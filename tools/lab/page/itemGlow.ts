@@ -35,11 +35,14 @@ const VIEWS: ViewName[] = ['front', 'back'];
 
 /** a pixel the glow added this much light to (linear, a share of white) is lit by it */
 const LIT = 0.002;
-/** the least of the close-ups a slot's glow must light (its item seen glowing) */
-const SEEN_LEAST = 0.002;
+/** the least of the close-ups a slot's glow must light (its item seen glowing): at the glow made subtler for co-op
+ *  (0.07), the warrior's gauntlets light 0.14% (0.2% was the bar at 0.12) */
+const SEEN_LEAST = 0.001;
 /** the most light the glow may add to its pixels (their 99th percentile: "slight glow, not much"): its brightest are
  *  the thin edges it rims, a blade's or a glove's outline (0.18 to 0.19 as tuned, its median 0.005 to 0.05) */
 const ADDED_MOST = 0.25;
+/** the weapon's, made to bloom ("a bit of glow on weapon only, in addition to the shader": the bow's thin limbs 0.42) */
+const WEAPON_ADDED_MOST = 0.5;
 /** the most of the pixels it lights that it may light evenly (within a fifth of their median): a glow all over its
  *  item in one light is the flat tint ruled out ("it cannot be item highlight") */
 const EVEN_MOST = 0.5;
@@ -187,7 +190,8 @@ function judgeSlot(lab: Lab, slot: GlowSlot, rarity: RarityId, strength: number,
   const magic = glowNow(lab, strength);
   const lean = hueLean(added.colour, rarity);
   if (added.lit < SEEN_LEAST) problems.push(`${slot}: its glow lit ${pct(added.lit)} of the close-ups, unseen`);
-  if (added.p99 > ADDED_MOST) problems.push(`${slot}: its glow added ${added.p99.toFixed(3)} of white, too bright`);
+  const most = slot === 'weapon' ? WEAPON_ADDED_MOST : ADDED_MOST;
+  if (added.p99 > most) problems.push(`${slot}: its glow added ${added.p99.toFixed(3)} of white, too bright`);
   if (added.even > EVEN_MOST) problems.push(`${slot}: ${pct(added.even)} of its glow in one light, flat`);
   if (lean < HUE_LEAST) problems.push(`${slot}: its glow's hue leans ${lean.toFixed(2)} the rarity's way`);
   if (magic.lit > 0) problems.push(`${slot}: a Magic item glowed (${pct(magic.lit)} of the close-ups)`);
