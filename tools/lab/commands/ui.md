@@ -43,7 +43,9 @@ the screen and the hall up, the hero in focus the lobby's own, his card alone sh
 leaves (his middle clear of the panel, the arrows and the heroes' names, his feet clear of the panel, head to feet
 within the window, 40% of its height at the least), the screen's parts within the window and none over another, the choice within reach and its
 words within its padding (on a phone the buttons' own 24 px ran past it), the choice standing on the hero in focus
-and shown as the mouse comes over him, hidden once it leaves him (always shown on a screen with no hover), the hero
+and shown as the mouse comes over him, hidden once it leaves him (always shown on a screen with no hover), the label on him and on the hero beside him
+under the mouse in that hero's colour (his class's accent, as his name below; each pictured,
+`heroes-the-label-on-the-<class>.png`), the hero
 beside him clicked and in focus, the save slot under the title clicked (the save slots over the screen, Esc taking
 them alone away), each hero's name clicked in turn with the card's parts kept in their places in the
 panel (the ranger's tagline on two lines put his traits 30 px lower) and held still by the card's entrance (motion
@@ -55,7 +57,7 @@ a finger dragged across the scene 1.6 heroes' spacing (short of the room), once 
 on the hero, with the camera following it and the hero it carried the row to in focus as it lifts, save slot 2
 played from the screen (the screen still up on slot 2's heroes, the lobby's new hero hidden), Esc back to the lobby
 with its hero; `--canary` lays Back over the heroes' names, pushes a card's traits down, puts the choice in the
-window's corner, puts a glow by the hidden lobby hero's hand, makes one of the focused hero's items draggable and
+window's corner and in the old gold, puts a glow by the hidden lobby hero's hand, makes one of the focused hero's items draggable and
 lets a click through the save slot, which must all be found), the fight's
 loading bar over the lobby as a press waiting for the fight's programs
 shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;

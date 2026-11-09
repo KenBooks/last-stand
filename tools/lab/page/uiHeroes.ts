@@ -13,8 +13,9 @@
 // screen (the screen still up on its heroes). The canary lays Back over the heroes' names and pushes a card's
 // traits down, which must be found.
 import { G } from '../../../src/state';
+import { CLASSES } from '../../../src/data/classes';
 import { col, particles } from '../../../src/fx/particles';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
 import type * as THREE from 'three';
 
 /** frames run after Change hero is clicked: the camera's flight in, the hero's showcase over (s at 60 a second) */
@@ -206,7 +207,8 @@ async function choiceOnHero(lab: Lab, screen: HTMLElement, id: string, canary: b
   const hero = hallHeroes().get(id);
   const choice = screen.querySelector<HTMLElement>('.hs-choose')!;
   if (!hero) return { lines: [], problems: [] };
-  if (canary) Object.assign(choice.style, { left: '60px', top: '60px' });
+  // (it's placed by its transform: `left` and `top` only nudged it from there, 60 px, within reach of a tall hero)
+  if (canary) choice.style.transform = 'translate(60px, 60px)';
   const at = onScreen(hero);
   const box = choice.getBoundingClientRect();
   choice.style.cssText = '';
@@ -220,14 +222,77 @@ async function choiceOnHero(lab: Lab, screen: HTMLElement, id: string, canary: b
   await lab.mouseTo({ x: at.x + tall * 0.1, y: at.y });
   await lab.step(1);
   const overHim = screen.classList.contains('over-hero') || noHover;
-  await lab.mouseTo({ x: Math.max(4, at.x - tall * 0.6), y: at.top + 4 });
+  const coloured = await labelColoured(lab, choice, id, canary);
+  // (off every hero: well above his head, where no hero's box reaches)
+  await lab.mouseTo({ x: at.x, y: Math.max(4, at.top - tall * 0.4) });
   await lab.step(1);
   const away = screen.classList.contains('over-hero') || noHover;
   if (!overHim) problems.push(`heroes: the mouse over the ${id}, and his choice hidden`);
-  if (away && !noHover) problems.push(`heroes: the mouse off the ${id}, and his choice still shown`);
-  const how = noHover ? 'always shown (no hover)' : `shown over him: ${overHim}, off him: ${away}`;
-  const lines = [`  the choice on the ${id}, ${up}% up him; ${how}`];
+  if (away && !noHover) problems.push(`heroes: the mouse off every hero, and the choice still shown`);
+  const how = noHover ? 'always shown (no hover)' : `shown over him: ${overHim}, off every hero: ${away}`;
+  const lines = [`  the choice on the ${id}, ${up}% up him; ${how}`, ...coloured.lines];
+  problems.push(...coloured.problems);
+  if (!noHover) {
+    const beside = await labelOnNeighbour(lab, screen, choice, id);
+    lines.push(...beside.lines);
+    problems.push(...beside.problems);
+  }
   return { lines, problems };
+}
+
+/** The mouse over a hero beside the one in focus: the label shown on him, saying a click selects him (from play:
+ *  "missing label for non current hero"). A hero with none beside him on the screen says so. */
+async function labelOnNeighbour(lab: Lab, screen: HTMLElement, choice: HTMLElement, id: string): Promise<Found> {
+  const heroes = hallHeroes();
+  const other = [...heroes.keys()].find((key) => key !== id && clickable(heroes.get(key)!));
+  if (!other) return { lines: ['  no other hero on the screen to hover'], problems: [] };
+  const at = onScreen(heroes.get(other)!);
+  await lab.mouseTo({ x: at.x, y: at.y });
+  await lab.step(2);
+  const shown = screen.classList.contains('over-hero');
+  const said = choice.textContent?.trim() ?? '';
+  const box = choice.getBoundingClientRect();
+  const offBy = Math.abs((box.left + box.right) / 2 - at.x);
+  const onHim = offBy < (at.bottom - at.top) * 0.15;
+  const problems: string[] = [];
+  if (!shown) problems.push(`heroes: the mouse over the ${other}, and no label shown`);
+  if (!said.startsWith('Select the')) problems.push(`heroes: the label on the ${other} not in focus says "${said}"`);
+  if (!onHim) problems.push(`heroes: the label for the ${other} stands ${offBy.toFixed(0)} px off him`);
+  const coloured = await labelColoured(lab, choice, other, false);
+  problems.push(...coloured.problems);
+  const lines = [`  the mouse over the ${other}: "${said}" shown on him: ${shown && onHim}`, ...coloured.lines];
+  return { lines, problems };
+}
+
+/** the labels on the heroes as the mouse was over each, pictured by the last check (`heroLabelPictures`) */
+let labelPictures: Pictured[] = [];
+
+/** The labels `heroes` pictured on the heroes under the mouse, handed over once. */
+export function heroLabelPictures(): Pictured[] {
+  const pictures = labelPictures;
+  labelPictures = [];
+  return pictures;
+}
+
+/** `#rrggbb` as the browser computes a colour (`rgb(r, g, b)`). */
+function rgbOf(hex: string): string {
+  const value = parseInt(hex.slice(1), 16);
+  const channels = [value >> 16, (value >> 8) & 255, value & 255];
+  return `rgb(${channels.join(', ')})`;
+}
+
+/** The label on the hero `id` in his own colour, the one his name below is lit in as he's chosen (his class's
+ *  accent; from play: "match color of label on hero on hover to the hero color we are using below (mage in cyan
+ *  etc)"), and pictured as the player sees it. `canary`: the label's old gold, which must be caught. */
+async function labelColoured(lab: Lab, choice: HTMLElement, id: string, canary: boolean): Promise<Found> {
+  if (canary) choice.style.color = '#ffe7b0';
+  const colour = getComputedStyle(choice).color;
+  const wanted = rgbOf(CLASSES[id].accent);
+  labelPictures.push(await lab.screen(`heroes: the label on the ${id}`, [`"${choice.textContent}" in ${colour}`]));
+  if (canary) choice.style.color = '';
+  const problems: string[] = [];
+  if (colour !== wanted) problems.push(`heroes: the label on the ${id} in ${colour}, not his colour ${wanted}`);
+  return { lines: [`  the label on the ${id} in ${colour} (his: ${wanted})`], problems };
 }
 
 /** The save slot under the title clicked, as a player clicks it to switch slots (`canary`: made to let the click
@@ -376,12 +441,21 @@ function entranceMoves(screen: HTMLElement): number {
   return Math.max(0, ...from.map((box, i) => Math.max(Math.abs(box.x - to[i].x), Math.abs(box.y - to[i].y))));
 }
 
+/** The heroes' names in the row's order from the one after the hero in focus round to him: each click brings
+ *  another hero into focus. (The name of the hero in focus clicked chooses him and closes the screen: in the row's
+ *  own order, the mage's opening a check that began on him closed it, and every check after it threw.) */
+function namesFromNext(screen: HTMLElement): HTMLElement[] {
+  const names = [...screen.querySelectorAll<HTMLElement>('.hs-tabs [data-c]')];
+  const focused = names.findIndex((name) => name.classList.contains('active'));
+  return [...names.slice(focused + 1), ...names.slice(0, focused + 1)];
+}
+
 /** Each hero's name clicked in turn, as a player goes through them, with the page's motion on: the panel's parts
  *  where his card lays them out, and how far its entrance moves them. One that stands elsewhere for another hero, or
  *  moves as he's shown, is a layout shift (`canary`: the second card's traits pushed down). */
 async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const panel = screen.querySelector<HTMLElement>('.hs-panel')!;
-  const names = [...screen.querySelectorAll<HTMLElement>('.hs-tabs [data-c]')];
+  const names = namesFromNext(screen);
   const planted = canary ? screen.querySelectorAll<HTMLElement>('.hs-card .hs-traits')[1] : undefined;
   if (planted) planted.style.marginTop = '20px';
   const places = new Map<string, Map<string, { x: number; y: number; height: number }>>();
@@ -497,6 +571,7 @@ export const heroesCanaryCaught = (problems: string[]): boolean =>
   problems.some((problem) => problem.includes('Back lies over') || problem.includes('lies over Back'))
   && problems.some((problem) => problem.includes(' moved '))
   && problems.some((problem) => problem.includes('choice stands off'))
+  && problems.some((problem) => problem.includes('not his colour'))
   && problems.some((problem) => problem.includes('glows by the hidden'))
   && problems.some((problem) => problem.includes('can be dragged'))
   && problems.some((problem) => problem.includes('no save slots came'));
