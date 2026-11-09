@@ -628,7 +628,10 @@
         <div class="opt-row quality-row"><span>Slow-game reports</span>
           <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
         </div>
-        <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
+        <!-- the performance overlay (ui/perfHud.ts): hidden, its frame rate and graph alone, or whole -->
+        <div class="opt-row quality-row seg-row"><span>Performance stats</span>
+          <div class="seg" id="opt-perf"><button data-perf="off">Off</button><button data-perf="mini">Mini</button><button data-perf="full">Full</button></div>
+        </div>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-blog"> Show battle log</label>
         <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>

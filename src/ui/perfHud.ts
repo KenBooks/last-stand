@@ -1,6 +1,7 @@
 // Optional performance overlay: FPS history graph, frame / CPU / GPU timings and
-// renderer stats. Off by default; toggled from the pause menu, persisted in a cookie. Its timings run whether it's
-// shown or not, for the always-on recorder (src/perf/recorder.ts), which they hand every frame to.
+// renderer stats. Off by default; the pause menu shows it whole (Full) or as its frame rate and graph alone (Mini),
+// kept in a cookie. Its timings run whether it's shown or not, for the always-on recorder (src/perf/recorder.ts),
+// which they hand every frame to.
 import { framesUncapped } from '../core/frameLoop';
 import * as THREE from 'three';
 import { WEBGPU } from '../core/webgpu';
@@ -15,7 +16,15 @@ import { QUALITY } from '../data/quality';
 import { gpuMarks, viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
-const COOKIE = 'last-stand-perf-hud';
+/** How much of the overlay shows: none of it, its frame rate and graph alone, or all of it. */
+export type PerfHudSize = 'off' | 'mini' | 'full';
+/** the cookie the size is kept in (before Mini it kept '1' for shown and '0' for hidden) */
+export const PERF_HUD_COOKIE = 'last-stand-perf-hud';
+/** The size the cookie keeps (none: off). */
+export const keptPerfHudSize = (): PerfHudSize => {
+  const kept = readCookie(PERF_HUD_COOKIE);
+  return kept === '1' || kept === 'full' ? 'full' : kept === 'mini' ? 'mini' : 'off';
+};
 // the hashed bundle name identifies the build a report came from
 const BUILD = import.meta.url.split('/').pop()?.replace(/\?.*$/, '') ?? 'unknown';
 const WINDOW_MS = 15_000;     // history shown in the graph
@@ -36,6 +45,7 @@ interface Sample { t: number; frame: number; cpu: number; upd: number; rnd: numb
 type Stages = Record<string, number>;
 
 let enabled = false;
+let shownSize: PerfHudSize = 'off';
 let el: HTMLElement;
 let renderer: THREE.WebGLRenderer;
 let gpuName = 'unknown';
@@ -100,7 +110,7 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
     gpuName = flags.length ? `WebGPU (${flags.join(', ')})` : 'WebGPU';
     el.onclick = copyReport;
     watchLongFrames();
-    setPerfHud(readCookie(COOKIE) === '1', false);
+    setPerfHudSize(keptPerfHudSize(), false);
     return;
   }
   gl = renderer.getContext() as WebGL2RenderingContext;
@@ -119,20 +129,29 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   gpuName = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
   el.onclick = copyReport;
   watchLongFrames();
-  setPerfHud(readCookie(COOKIE) === '1', false);
+  setPerfHudSize(keptPerfHudSize(), false);
 }
 
 export const perfHudEnabled = (): boolean => enabled;
 
-export function setPerfHud(on: boolean, persist = true): void {
+export const perfHudSize = (): PerfHudSize => shownSize;
+
+/** The overlay shown whole or put away (a harness's switch: the pause menu sets its size). */
+export function setPerfHud(on: boolean, persist = true): void { setPerfHudSize(on ? 'full' : 'off', persist); }
+
+/** The overlay at `to`. Between Mini and Full its window of frames is kept, so the graph goes on. */
+export function setPerfHudSize(to: PerfHudSize, persist = true): void {
+  const on = to !== 'off', was = enabled;
+  shownSize = to;
   enabled = on;
   el.classList.toggle('hidden', !on);
+  el.classList.toggle('mini', to === 'mini');
+  if (persist) writeCookie(PERF_HUD_COOKIE, to);
+  if (on && was) return;
   samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; longFrames.length = 0; lastFrame = 0;
 
   if (frameParts?.length && gl && timerExt) gl.endQuery(timerExt.TIME_ELAPSED_EXT);
   frameParts = null;
-
-  if (persist) writeCookie(COOKIE, on ? '1' : '0');
 }
 
 /** Call at the very start of a rAF callback. */
@@ -459,8 +478,10 @@ function copyReport(): void {
   // second within 1.6 s would keep "Copied")
   const ask = hint.getAttribute('data-ask') ?? hint.innerHTML;
   hint.setAttribute('data-ask', ask);
+  // (Mini hides the hint: it shows while it has something to say, `.said`)
+  const say = (text: string) => { hint.textContent = text; el.classList.add('said'); };
   navigator.clipboard.writeText(report()).then(
-    () => { hint.textContent = 'Copied to clipboard'; },
-    () => { hint.textContent = 'Copy failed'; },
-  ).finally(() => setTimeout(() => { hint.innerHTML = ask; }, 1600));
+    () => say('Copied to clipboard'),
+    () => say('Copy failed'),
+  ).finally(() => setTimeout(() => { hint.innerHTML = ask; el.classList.remove('said'); }, 1600));
 }

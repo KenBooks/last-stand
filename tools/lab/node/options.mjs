@@ -27,7 +27,7 @@ export const UI_STATES = [
   'behindProps',
   'logLobby', 'perfAsk', 'coop', 'coopRename',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
-  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
+  'run', 'scores', 'perf', 'perfMini', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -389,7 +389,9 @@ export const COMMANDS = {
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
-          + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
+          + 'scores, perf, perfMini (the performance overlay\'s Mini pressed in the pause menu: the frame rate '
+          + 'and its graph alone, then Full and Off), decision, pause, summary, '
+          + 'skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
