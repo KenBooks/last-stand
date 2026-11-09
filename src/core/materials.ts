@@ -3,6 +3,7 @@
 // with a single write each frame.
 import * as THREE from 'three';
 import { tunable } from './tuning';
+import { readCookie, writeCookie } from './cookies';
 
 /**
  * Through the eyes the hero's own gear is held a hand's breadth from them, and a light's highlight on it fills the
@@ -57,11 +58,25 @@ export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AUR
  *  field that warps it runs at half the scale (`turns` 3 left it 1.5 cells, and it jumped as each cycle began). */
 const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells / 2));
 
+/** the setting (Settings' Gear glow, the cookie): on unless turned off ("opt in, enabled by default, but can be
+ *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value: nothing compiles */
+const GLOW_COOKIE = 'last-stand-gear-glow';
+let gearGlowOn = readCookie(GLOW_COOKIE) !== 'off';
+
+/** Whether worn gear glows in its rarity's colour (the setting). */
+export const gearGlow = (): boolean => gearGlowOn;
+
+/** The setting: worn gear glowing or not, kept for the next visit. */
+export function setGearGlow(on: boolean): void {
+  gearGlowOn = on;
+  writeCookie(GLOW_COOKIE, on ? 'on' : 'off');
+}
+
 /** The glow's clock moved to the game's (`G.time`, s), and its shape read, once a frame. */
 export function tickItemGlow(time: number): void {
   const { strength, face, across, up, centre, width, rise, turns, cycle } = ITEM_GLOW;
   AURA_SHAPE.value.set(across, up, centre, width);
-  AURA_LOOP.value.set(wholeAtHalf(rise), wholeAtHalf(turns), face, strength);
+  AURA_LOOP.value.set(wholeAtHalf(rise), wholeAtHalf(turns), face, gearGlowOn ? strength : 0);
   AURA_CLOCK.value = (((time % cycle) + cycle) % cycle) / cycle;
 }
 

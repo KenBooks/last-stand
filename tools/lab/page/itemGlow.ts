@@ -264,6 +264,33 @@ function judgeLoop(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: stri
   return line;
 }
 
+/** Settings' Gear glow button `value` pressed, as a player presses it (the pause menu's own handler). */
+function pressGearGlow(value: 'on' | 'off'): void {
+  const button = document.querySelector<HTMLButtonElement>(`#opt-gear-glow [data-g="${value}"]`);
+  if (!button) throw new Error('lab: glow: no Gear glow setting in the pause menu');
+  button.click();
+}
+
+/** The setting: Off pressed, every slot at `rarity` must glow not at all; On again, as before. `ignored`: the canary's,
+ *  Off never pressed (a setting that does nothing), which must be caught. */
+function judgeSetting(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: string[], ignored = false): string {
+  wearRarities(lab, allAt(slots, rarity));
+  const strength = ITEM_GLOW.strength;
+  if (!ignored) pressGearGlow('off');
+  let off: Added;
+  try {
+    off = glowNow(lab, strength);
+  } finally {
+    pressGearGlow('on');
+    ITEM_GLOW.strength = strength;
+  }
+  const on = glowNow(lab, strength);
+  ITEM_GLOW.strength = strength;
+  if (off.lit > 0) problems.push(`Gear glow off: the gear still glowed (${pct(off.lit)} of the close-ups)`);
+  if (on.lit < SEEN_LEAST) problems.push(`Gear glow on again: the gear glowed ${pct(on.lit)} of the close-ups`);
+  return `Gear glow setting: off ${pct(off.lit)} of the close-ups lit, on again ${pct(on.lit)}`;
+}
+
 /** The hero with no glow and with every item at `rarity`, close up. */
 function pictures(lab: Lab, slots: GlowSlot[], rarity: RarityId): Pictured[] {
   wearRarities(lab, {});
@@ -292,6 +319,7 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
   }
   lines.push(judgeMotion(lab, slots, options.rarity, problems));
   lines.push(judgeLoop(lab, slots, options.rarity, problems));
+  lines.push(judgeSetting(lab, slots, options.rarity, problems));
   const moments = options.pictures ? pictures(lab, slots, options.rarity) : [];
   const compiled = (G.renderer.info.programs ?? []).length - programs;
   if (compiled) problems.push(`${compiled} programs compiled as the items glowed`);
@@ -299,12 +327,15 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
   return { lines, moments };
 }
 
-/** The canary: the chest's glow ten times as strong, then none, then the loop judged past a cycle; each must be
- *  caught. */
+/** The canary: the chest's glow ten times as strong, then none, a join skipped into its loop, and the Gear glow
+ *  setting never pressed off; each must be caught. */
 function canary(lab: Lab, rarity: RarityId): string[] {
   const strength = ITEM_GLOW.strength;
   const missed: string[] = [];
   if (!isJoin(wrapSteps(lab, ['chest'], rarity, JUMP))) missed.push('canary missed: a join');
+  const ignored: string[] = [];
+  judgeSetting(lab, ['chest'], rarity, ignored, true);
+  if (!ignored.some((problem) => problem.includes('still glowed'))) missed.push('canary missed: the setting ignored');
   try {
     for (const [planted, fault] of [[strength * 10, 'too bright'], [0, 'unseen']] as const) {
       const caught: string[] = [];

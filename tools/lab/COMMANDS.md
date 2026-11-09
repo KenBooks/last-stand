@@ -208,7 +208,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   before and after it (over 1.5 times them: a join; a frame a whole cycle on against now can't tell, the shader
   given only the share of the cycle, and that check passed a join the owner saw). Any program compiled meanwhile is a problem. Pictured close up front and back,
   every item Common and every item at the rarity (`out/glow/`). `--canary` draws the chest's glow ten times as
-  strong and at nothing, and skips 2 s as its cycle starts over, each of which must be caught. `--tune
+  strong and at nothing, skips 2 s as its cycle starts over, and leaves the Gear glow setting on where it's
+  pressed off, each of which must be caught. The setting: Settings' Off pressed (its own button), nothing of the
+  gear may glow; On again, it must. `--tune
   itemGlow.strength=0.1` compares a strength. As tuned before (0.12; now 0.07), in green: the glow lit 0.3% (hands) to 13.8% (the
   mage's robe) of the close-ups, its 99th percentile 0.04 to 0.09 of white, 6 to 35% of it in one light, its hue
   0.97 to 1.00; its pixels changed 11 to 33% a tenth of a second (the mage: 20 to 30%), and as its 16 s cycle starts over
