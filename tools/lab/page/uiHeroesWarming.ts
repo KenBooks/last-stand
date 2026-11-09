@@ -17,6 +17,8 @@ export const HEROES_WARMING_CANARY = { name: 'no bar on its tab', what: 'a cold 
 const PART_WARM = 0.4;
 /** frames for the hall to show what's warm */
 const SHOW_FRAMES = 4;
+/** frames for the camera to come to a hero brought into focus (its glide, as `uiHeroes.ts` waits it out) */
+const ARRIVE_FRAMES = 30;
 
 /** what the screen showed with the heroes cold, read as it opened (the check reads it after), and what was found with
  *  the canary planted then */
@@ -75,7 +77,10 @@ export async function openHeroesWarming(lab: Lab): Promise<void> {
   cold.lines.push(`  ${focused} in focus, the choice says "${said}"`);
   if (focused !== others[0]) cold.problems.push(`heroesWarming: his tab put ${focused} in focus, not ${others[0]}`);
   if (!said.includes('Readying')) cold.problems.push(`heroesWarming: a cold hero's choice says "${said}"`);
-  choice.click();
+  // (the choice is a label the pointer goes through, kept on its hero every frame: clicked where it stands once the
+  // camera has come to him, as a player would)
+  await lab.step(ARRIVE_FRAMES);
+  await lab.clickOn(choice);
   await lab.step(1);
   cold.lines.push(`  chosen while cold: the screen ${heroSelectOpen() ? 'stays open' : 'closed'}`);
   if (!heroSelectOpen()) cold.problems.push('heroesWarming: a cold hero was chosen, the screen closed');

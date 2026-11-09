@@ -29,7 +29,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
-import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched } from './ui/heroSelect';
+import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { updateHall } from './game/hall';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -549,6 +549,8 @@ function update(dt: number): void {
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
   updateHall(dt);
+  // (the hero selection screen's choice kept on its hero as the camera moves)
+  placeChoice();
   updateGround(dt);
   perfLap('player');
   updateProjectiles(dt); perfLap('projectiles');

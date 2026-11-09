@@ -39,15 +39,14 @@ let shift = { x: 0, y: 0 };
  *  dragging the scene, and how fast it last moved (css px a ms, eased) and when */
 interface Press { x: number; y: number; along: number; dragging: boolean; v: number; lastX: number; lastT: number }
 let press: Press | null = null;
-/** whether the last press dragged the scene (a drag begun on the choice lets go there, and isn't a click on it) */
-let dragged = false;
-/** where the hero in focus stands on the screen once the camera has come to him (css px: his middle across, his head
- *  and feet), as last laid out */
-let standing = { x: 0, top: 0, bottom: 0 };
 /** where the choice stands on him, a share of his height from his feet (his thighs: his face and his skill clear) */
 const CHOICE_UP = 0.3;
-/** how far beside his middle the mouse is over him, a share of his height */
-const HOVER_SIDE = 0.22;
+/** how far round a hero the mouse is over him, a share of his height: beside his middle (a staff held out, the
+ *  ranger's quiver and bow), above his head and below his feet (from play: "it needs to highlight even if I did not
+ *  exactly hover over the character... arrow quiver... or above his head"; "between mage staff and body" missed) */
+const HOVER_SIDE = 0.4;
+const HOVER_ABOVE = 0.15;
+const HOVER_BELOW = 0.04;
 /** the outline round the hero under the mouse: white, a little softer than Quarry Mark's red */
 const LIT_COLOR = 0xffffff;
 const LIT_STRENGTH = 0.85;
@@ -85,24 +84,22 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   });
   $('.hs-prev').onclick = () => { sfx.click(); step(-1); };
   $('.hs-next').onclick = () => { sfx.click(); step(1); };
-  $('.hs-choose').onclick = () => { if (dragged) return; sfx.click(); choose(); };
   $('.hs-back').onclick = () => { sfx.click(); if (!first) closeHeroSelect(); };
   $('.hs-slot').onclick = () => { sfx.click(); openSaves(true); };
   document.querySelectorAll<HTMLElement>('.hs-pagetabs .tab').forEach((b) => {
     b.onclick = () => { sfx.click(); showPage(b.dataset.page as Page, true); };
   });
-  // (the scene is dragged from the backdrop or from the choice on the hero: a swipe across him starts on it)
-  for (const el of [$('.hs-shade'), $('.hs-choose')]) {
+  // (the scene is dragged from the backdrop; the choice on the hero is a label the pointer goes through, so a press on
+  // it is the backdrop's: a click there chooses him, a swipe drags)
+  for (const el of [$('.hs-shade')]) {
     el.addEventListener('pointerdown', (e) => {
       if (!hallOpen() || press) return;
       el.setPointerCapture(e.pointerId);
       const now = performance.now();
-      dragged = false;
       press = { x: e.clientX, y: e.clientY, along: hallAlong(), dragging: false, v: 0, lastX: e.clientX, lastT: now };
     });
     el.addEventListener('pointermove', (e) => {
       if (press) dragTo(press, e.clientX);
-      hover(!press && e.pointerType === 'mouse' && overHero(e.clientX, e.clientY));
       lightHero(!press?.dragging && e.pointerType === 'mouse' ? heroAt(e.clientX, e.clientY) : -1);
     });
     el.addEventListener('pointerleave', () => lightHero(-1));
@@ -110,9 +107,8 @@ export function initHeroSelect(h: HeroSelectHooks): void {
       if (!press) return;
       const p = press;
       press = null;
-      dragged = p.dragging;
       if (p.dragging) letGo(p, e.clientX);
-      else if (el.classList.contains('hs-shade')) tapAt(e.clientX, e.clientY);
+      else tapAt(e.clientX, e.clientY);
     });
     el.addEventListener('pointercancel', (e) => {
       if (press?.dragging) letGo({ ...press, v: 0 }, e.clientX);
@@ -280,33 +276,30 @@ function letGo(p: Press, x: number): void {
   shown();
 }
 
-/** The hero in focus where the camera comes to rest on him (`standing`), and the choice placed on him: placed as
- *  the focus or the layout changes, never every frame (the camera's drift round him moves him a few px). */
-function placeChoice(): void {
-  const hero = hallHeroes()[hallFocus()].player;
-  const cam = G.camera.clone();
-  const shot = hallShot();
-  cam.position.copy(shot.pos);
-  cam.lookAt(shot.look);
-  cam.fov = shot.fov;
-  cam.aspect = innerWidth / innerHeight;
-  cam.setViewOffset(innerWidth, innerHeight, -shift.x, -shift.y, innerWidth, innerHeight);
-  cam.updateMatrixWorld();
-  const at = (up: number) => hero.obj.position.clone().setY(hero.obj.position.y + up).project(cam);
-  const feet = at(0), head = at(hero.model.height);
-  standing = { x: (feet.x + 1) / 2 * innerWidth, top: (1 - head.y) / 2 * innerHeight, bottom: (1 - feet.y) / 2 * innerHeight };
-  const box = $('#heroes');
-  box.style.setProperty('--hs-cx', `${standing.x}px`);
-  box.style.setProperty('--hs-cy', `${standing.bottom - (standing.bottom - standing.top) * CHOICE_UP}px`);
+/** Where hero `i` stands on the screen as the camera shows him now (css px: his middle across, his head and feet),
+ *  or null behind the camera. */
+function onScreen(i: number): { x: number; top: number; bottom: number } | null {
+  const p = hallHeroes()[i].player, at = (up: number) => p.pos.clone().setY(p.pos.y + up).project(G.camera);
+  const feet = at(0), head = at(p.model.height);
+  if (feet.z >= 1) return null;
+  return { x: (feet.x + 1) / 2 * innerWidth, top: (1 - head.y) / 2 * innerHeight, bottom: (1 - feet.y) / 2 * innerHeight };
 }
 
-/** Whether the pointer at (`x`, `y`) is over the hero in focus. */
-function overHero(x: number, y: number): boolean {
-  const tall = standing.bottom - standing.top;
-  return Math.abs(x - standing.x) < tall * HOVER_SIDE && y > standing.top && y < standing.bottom;
+/**
+ * The choice placed on the hero in focus as the camera shows him, every frame while the screen is open, so it stays
+ * on him as the camera glides, drifts or is dragged along the row (from play: "make the label stick with hero, it
+ * currently moves when I scroll"; placed once at rest, it hung where he would stand as the camera moved). Moved by its
+ * transform alone, on a layer of its own: nothing laid out or painted again (`styles/AGENTS.md`).
+ */
+export function placeChoice(): void {
+  if (!heroSelectOpen() || !hallOpen()) return;
+  const at = onScreen(hallFocus());
+  if (!at) return;
+  const y = at.bottom - (at.bottom - at.top) * CHOICE_UP;
+  $('.hs-choose').style.transform = `translate(${at.x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
 }
 
-/** The choice shown on the hero, as the mouse comes over him, or hidden as it leaves. */
+/** The choice shown on the hero in focus while the mouse is over him (outlined), hidden as it leaves. */
 function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', on); }
 
 function focusOn(i: number): void {
@@ -325,7 +318,7 @@ function shown(): void {
   renderHeroGear(hero.profile, $('.hs-equip'), $('.hs-stash'), $('.hs-stash-count'));
   renderAttributes($('.hs-stats'), hero.player, hero.profile);
   readied();
-  hover(false);
+  hover(lit >= 0 && lit === hallFocus());
   placeChoice();
 }
 
@@ -337,18 +330,18 @@ function choose(): void {
   closeHeroSelect({ id, profile });
 }
 
-/** The hero whose body is at (`x`, `y`) on screen, as the camera shows him now (-1: none, or not warm yet: hidden). */
+/** The hero the mouse at (`x`, `y`) is over, as the camera shows him now: within a box round him and what he holds,
+ *  the nearest by his middle where two boxes meet (-1: none, or not warm yet: hidden). */
 function heroAt(x: number, y: number): number {
-  const w = innerWidth, h = innerHeight;
+  let best = -1, bd = Infinity;
   for (const [i, hero] of hallHeroes().entries()) {
     if (readiness(hero.id) < 1) continue;
-    const p = hero.player, at = (up: number) => p.pos.clone().setY(p.pos.y + up).project(G.camera);
-    const feet = at(0), head = at(p.model.height);
-    if (feet.z >= 1) continue;
-    const sx = (feet.x + 1) / 2 * w, top = (1 - head.y) / 2 * h, bottom = (1 - feet.y) / 2 * h;
-    if (Math.abs(x - sx) < (bottom - top) * HOVER_SIDE && y > top && y < bottom) return i;
+    const at = onScreen(i);
+    if (!at) continue;
+    const tall = at.bottom - at.top, d = Math.abs(x - at.x);
+    if (d < tall * HOVER_SIDE && y > at.top - tall * HOVER_ABOVE && y < at.bottom + tall * HOVER_BELOW && d < bd) { bd = d; best = i; }
   }
-  return -1;
+  return best;
 }
 
 /** the hero outlined under the mouse (-1: none) */
@@ -357,6 +350,7 @@ let lit = -1;
 /** Hero `i` outlined in white as the mouse is over him (from play: "outline highlight like we have for ranger's mark
  *  skill... hover outline shows then click to choose"), or none (-1). */
 function lightHero(i: number): void {
+  hover(i >= 0 && i === hallFocus());
   if (i === lit) return;
   lit = i;
   outline(i >= 0 ? hallHeroes()[i].player.obj : null, LIT_COLOR, LIT_STRENGTH);
@@ -366,7 +360,7 @@ function lightHero(i: number): void {
  *  else the hero nearest it on screen in focus, if it landed near one. */
 function tapAt(x: number, y: number): void {
   const on = heroAt(x, y);
-  if (on >= 0 && on === hallFocus()) { sfx.click(); choose(); return; }
+  if (on >= 0) { sfx.click(); if (on === hallFocus()) choose(); else focusOn(on); return; }
   const w = innerWidth, h = innerHeight;
   let best = -1, bd = TAP_REACH * w;
   for (const [i, hero] of hallHeroes().entries()) {
