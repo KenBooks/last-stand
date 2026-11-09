@@ -20,7 +20,7 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
-import { fullScreenChosen } from './autoFullScreen';
+import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 import type { SkillDef, SkillKey } from '../types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -168,10 +168,8 @@ function initFullScreen(): void {
   const syncFull = (): void => { full.classList.toggle('on', !!document.fullscreenElement); };
   full.addEventListener('click', () => {
     if (!document.fullscreenElement) fullScreenChosen();
-    const asked = document.fullscreenElement
-      ? document.exitFullscreen()
-      : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-    asked.catch(() => {});
+    if (document.fullscreenElement) leaveFullScreen();
+    else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   });
   document.addEventListener('fullscreenchange', syncFull);
   syncFull();

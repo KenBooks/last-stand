@@ -6,12 +6,17 @@
 // the window, and is gone after its time; Back to window clicked keeps the choice in its cookie, and the page doesn't
 // ask on the next visit; the prompt stands over the loading screen (its first click asks too). Its canary loses the
 // cookie before that visit, which must be caught asking again.
+// Esc in full screen (`escKept`): the browser's full screen stood in for too (`FullStateSpy`). Where Esc can be locked
+// it's asked for, and leaving on Esc held opens nothing; where it can't, leaving unasked opens the pause menu, as the
+// Esc that left it; the page leaving on its own opens nothing. Its canary drops that Esc, which must be caught.
 import type { Lab, Pictured } from './lab';
 import { middleOf } from './lab';
 import {
-  AUTO_FULL_COOKIE, PROMPT_MS, armAutoFullScreen, autoFullArmed, hidePrompt,
+  AUTO_FULL_COOKIE, PROMPT_MS, armAutoFullScreen, autoFullArmed, hidePrompt, leaveFullScreen,
 } from '../../../src/ui/autoFullScreen';
 import { readCookie, removeCookie } from '../../../src/core/cookies';
+import { input } from '../../../src/core/input';
+import { G } from '../../../src/state';
 
 /** What the check found: lines for its report, and its problems. */
 export interface FullFound {
@@ -21,6 +26,8 @@ export interface FullFound {
 
 /** the problem the canary must raise */
 export const FULL_CANARY = { name: 'asked again', what: 'the choice to stay in the window lost before the next visit' };
+/** the problem the canary must raise in the Esc part: the Esc the browser took dropped */
+export const ESC_CANARY = { name: 'Esc lost', what: 'the Esc that left full screen dropped' };
 
 /** the prompt as it showed, pictured by the last check (`autoFullPictures`) */
 let promptPictures: Pictured[] = [];
@@ -156,6 +163,90 @@ async function backKept(lab: Lab, spy: FullScreenSpy, canary: boolean, lines: st
   if (asked !== 0) problems.push(`autoFull: after Back to window, the next visit ${FULL_CANARY.name} ${asked} times`);
 }
 
+/** The page's full screen stood in for: what's full screen, how it's left, and the Keyboard Lock API, which a browser
+ *  has (`lockable`) or not. Each change is announced as a browser announces it, after the call. */
+class FullStateSpy {
+  full: Element | null = null;
+  lockable = true;
+  locks: string[][] = [];
+  unlocks = 0;
+  private readonly keyboard = {
+    lock: (codes: string[] = []): Promise<void> => {
+      this.locks.push(codes);
+      return Promise.resolve();
+    },
+    unlock: (): void => {
+      this.unlocks += 1;
+    },
+  };
+
+  constructor() {
+    Object.defineProperty(document, 'fullscreenElement', { get: () => this.full, configurable: true });
+    const exit = (): Promise<void> => {
+      this.change(null);
+      return Promise.resolve();
+    };
+    Object.defineProperty(document, 'exitFullscreen', { value: exit, configurable: true });
+    const keyboard = (): unknown => (this.lockable ? this.keyboard : undefined);
+    Object.defineProperty(navigator, 'keyboard', { get: keyboard, configurable: true });
+  }
+
+  /** Full screen entered or left (`to` null), announced after a turn. */
+  change(to: Element | null): void {
+    window.setTimeout(() => {
+      this.full = to;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    }, 0);
+  }
+
+  /** The browser's own given back. */
+  remove(): void {
+    Reflect.deleteProperty(document, 'fullscreenElement');
+    Reflect.deleteProperty(document, 'exitFullscreen');
+    Reflect.deleteProperty(navigator, 'keyboard');
+  }
+}
+
+/** One way of leaving full screen: in, out as `leave` does, a frame run; whether the pause menu opened. */
+async function leftOpens(lab: Lab, spy: FullStateSpy, leave: () => void, canary: boolean): Promise<boolean> {
+  spy.change(document.documentElement);
+  await waitReal(10);
+  leave();
+  await waitReal(10);
+  if (canary) input.pressed.delete('escape');
+  await lab.step(1);
+  const opened = G.menuOpen;
+  if (opened) {
+    await lab.press('Escape');
+    await lab.step(1);
+  }
+  return opened;
+}
+
+/** Esc in the page's full screen: the game's, whether the browser can lock it or not. */
+async function escKept(lab: Lab, canary: boolean, lines: string[], problems: string[]): Promise<void> {
+  const spy = new FullStateSpy();
+  try {
+    if (G.menuOpen) problems.push('autoFull: the pause menu was open before Esc was tried');
+    const heldOpens = await leftOpens(lab, spy, () => spy.change(null), false);
+    const locked = spy.locks.some((codes) => codes.includes('Escape'));
+    lines.push(`  Esc locked in full screen ${locked}, unlocked as it left ${spy.unlocks > 0}`);
+    lines.push(`  left on Esc held (locked): the pause menu opened ${heldOpens}`);
+    if (!locked) problems.push('autoFull: in full screen, Esc was never locked for the game');
+    if (spy.unlocks === 0) problems.push('autoFull: out of full screen, Esc was never let go');
+    if (heldOpens) problems.push('autoFull: left on Esc held, the pause menu opened as well');
+    spy.lockable = false;
+    const tookOpens = await leftOpens(lab, spy, () => spy.change(null), canary);
+    lines.push(`  left on the browser's Esc (no lock): the pause menu opened ${tookOpens}`);
+    if (!tookOpens) problems.push(`autoFull: ${ESC_CANARY.name}, the browser's Esc left full screen and opened nothing`);
+    const pageOpens = await leftOpens(lab, spy, leaveFullScreen, false);
+    lines.push(`  left by the page (Fullscreen, Back to window): the pause menu opened ${pageOpens}`);
+    if (pageOpens) problems.push('autoFull: left by the page, the pause menu opened');
+  } finally {
+    spy.remove();
+  }
+}
+
 /**
  * The automatic full screen (`autoFull`): a finger's tap, then the mouse's click, then Back to window, as
  * `FullScreenSpy` stands in for the browser. The cookie is taken away and the prompt hidden after, as a first visit
@@ -170,6 +261,7 @@ export async function autoFullChecked(lab: Lab, canary: boolean): Promise<FullFo
     await fingerAsks(lab, spy, lines, problems);
     await mouseShowsPrompt(lab, spy, lines, problems);
     await backKept(lab, spy, canary, lines, problems);
+    await escKept(lab, canary, lines, problems);
   } finally {
     spy.remove();
     hidePrompt();
