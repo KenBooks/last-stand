@@ -72,7 +72,7 @@ spec:
         allowForks: true
         requireRepositoryCollaborator: true
         # Their forks' PRs are previewed as pushed, without approving each run (Dokci ADR 0085).
-        trustedAuthors: [KenBooks]
+        trustedAuthors: [KenBooks, akshvic]
       cleanup:
         deleteVolumes: true
         closedPreviewRetention: 0m
