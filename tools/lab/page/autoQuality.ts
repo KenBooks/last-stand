@@ -35,9 +35,9 @@ const TRIAL_COOKIE = 'last-stand-quality-trial';
 export interface AutoOptions { canary: boolean }
 
 /** The slow device: its frame's time (ms) a million scene pixels at each level (High's MSAA and shadows dearest). */
-const DEVICE: Record<QualityLevel, number> = { high: 45, medium: 36, low: 29 };
-/** the longest Auto may take to bring the device to its target, or to Low where its pixels can't (s): Auto keeps the
- *  screen's own at every level (src/core/quality.ts) */
+const DEVICE: Record<QualityLevel, number> = { high: 45, medium: 36, low: 29, verylow: 24 };
+/** the longest Auto may take to bring the device to its target, or to the last level (Very low) where its pixels
+ *  can't (s): Auto keeps the screen's own at every level (src/core/quality.ts) */
 const MOST_S = 8;
 /** the longest it's run before giving up (s) */
 const GIVE_UP_S = 300;

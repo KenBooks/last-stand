@@ -32,9 +32,9 @@ const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
 // the logo's particle field gathers into the lobby's logo (a first visit's hero selection screen's, ui/heroSelect.ts,
 // where it opens on that). A plain fade instead with reduced motion, on low
-// graphics quality (picked, or where Auto settled last time), and on a device where the particles were too slow
+// graphics quality and under (picked, or where Auto settled last time), and on a device where the particles were too slow
 // before
-const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
+const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || (qualityLevel() === 'low' || qualityLevel() === 'verylow') || logoWindOff();
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {

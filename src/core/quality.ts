@@ -1,4 +1,4 @@
-// Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
+// Graphics quality: the player's setting (auto / high / medium / low / very low, cookie) and the
 // level in effect. Auto steps down the levels while the frame rate stays low, and never
 // steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
 // tries the level above the one it last settled on, kept once it holds its frame rate for a
@@ -10,7 +10,8 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
-import { setBloomShare, setRenderQuality } from './renderer';
+import { setBloomShare, setRenderQuality, setShadowInTurns } from './renderer';
+import { setParticleShare } from '../fx/particles';
 
 import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
@@ -155,6 +156,8 @@ function apply(l: QualityLevel, most = Infinity): void {
   setHdrAllowed(p.hdr);
   setSkullDetail(p.coarseProps);
   setBloomShare(p.bloomShare);
+  setShadowInTurns(p.shadowInTurns);
+  setParticleShare(p.particles);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
@@ -248,8 +251,8 @@ function median(values: number[]): number {
   return values[Math.floor(values.length / 2)];
 }
 
-/** Whether Auto has nothing left to lower: Low. */
-const atBottom = (): boolean => level === 'low';
+/** Whether Auto has nothing left to lower: the last level (Very low). */
+const atBottom = (): boolean => level === QUALITY_ORDER[QUALITY_ORDER.length - 1];
 
 /** Auto's step down: a level, the screen's own pixels kept (from play, "cut something else, not resolution"). */
 function stepDown(): void {

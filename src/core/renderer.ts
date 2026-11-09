@@ -465,20 +465,26 @@ const SHADOW_EVERY_FRAME = typeof location !== 'undefined' && /[?&]shadowEvery=1
 let lastFrameAt = 0;
 let frameMean = SHADOW_IN_TURNS_MS;
 let shadowDrawnLast = false;
+/** whether the quality level draws the sun's shadow every other frame whatever the frame rate (Very low) */
+let shadowInTurns = false;
+/** The sun's shadow drawn every other frame (`on`, a quality level's), or as the frame rate has it. */
+export function setShadowInTurns(on: boolean): void { shadowInTurns = on; }
 
 /**
  * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
  * and at 144 a second its 72 show no lag. Told by the frames' mean: by each frame's own time, a frame that missed the
  * screen's refresh (13.9 ms at 144 Hz) had the next draw the shadow too, which missed it again, and the game stayed at
  * half the screen's rate with the shadow in every frame. A 60 Hz screen's stay whole. (`?shadowEvery=1` draws it every
- * frame, to compare.)
+ * frame, to compare.) On WebGL every frame draws it, but on a level that asks for it in turns (Very low,
+ * `setShadowInTurns`) at any frame rate.
  */
 function sunShadowInTurns(): void {
   const now = performance.now();
   frameMean += (Math.min(now - lastFrameAt, 2 * SHADOW_IN_TURNS_MS) - frameMean) * FRAME_MEAN_SHARE;
   const fast = frameMean < SHADOW_IN_TURNS_MS;
   lastFrameAt = now;
-  const skip = fast && shadowDrawnLast && !SHADOW_EVERY_FRAME;
+  const turns = shadowInTurns || (WEBGPU && fast);
+  const skip = turns && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
   G.arena.moon.shadow.autoUpdate = !skip;
 }
@@ -1071,8 +1077,8 @@ export function render(): void {
   u.uPaper.value = hdr.paper;
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
+  sunShadowInTurns();
   if (WEBGPU) {
-    sunShadowInTurns();
     renderWebGPU();
     overFrame.draw();
     return;
