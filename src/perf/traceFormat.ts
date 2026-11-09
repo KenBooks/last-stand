@@ -22,7 +22,7 @@ export type ColumnKind = 'ms' | 'lg' | 'n16' | 'n32' | 'u8';
 export const NONE = -1;
 
 /** a frame's state, as bits of its `state` column (`menu`: the pause menu open; `settling`: the first seconds after
- *  a wave, a mode, a biome or a hero began; `readying`: the loading bar up, waiting on a warm-up) */
+ *  a wave, a mode, a biome or a hero began, or Auto trying the level above its own (`autoTrying` in core/quality.ts); `readying`: the loading bar up, waiting on a warm-up) */
 export const STATE = { run: 1, fighting: 2, paused: 4, warming: 8, hidden: 16, menu: 32, settling: 64, readying: 128 } as const;
 
 export interface ColumnInfo { name: string; kind: ColumnKind }

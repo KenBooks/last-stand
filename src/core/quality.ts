@@ -2,7 +2,8 @@
 // level in effect. Auto steps down the levels while the frame rate stays low, and never
 // steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
 // tries the level above the one it last settled on, kept once it holds its frame rate for a
-// window, else left for the settled one at once (`bootAuto`). Every level renders the
+// window, else left for the settled one at its first quick window under the target and put off
+// for a few boots (`bootAuto`, `trialMissed`). Every level renders the
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
@@ -26,6 +27,11 @@ const COOKIE = 'last-stand-quality';
 // what Auto settled on, the next session starting there: its level (a budget of pixels after an `@`, which an
 // older Auto wrote, `low@518400`, is let go)
 const AUTO_COOKIE = 'last-stand-quality-auto';
+// the trial of the level above, after one missed: the boots still to skip it and the gap it was given, `skip/gap`
+// (trace 9JA7-BSSS: a phone settled on Medium ran High at 26 to 47 frames a second for 6 s every boot)
+const TRIAL_COOKIE = 'last-stand-quality-trial';
+/** the most boots a missed trial skips before the next (a gap doubled at each miss: 1, 2, 4, 8) */
+const TRIAL_GAP_MOST = 8;
 
 let setting: QualitySetting = 'auto';
 let level: QualityLevel = 'high';
@@ -78,8 +84,28 @@ export function initQuality(): void {
  */
 export function bootAuto(settled: QualityLevel): void {
   trialFrom = null;
-  aboveNext = settled !== QUALITY_ORDER[0];
+  aboveNext = settled !== QUALITY_ORDER[0] && trialDue();
   apply(settled);
+}
+
+/** The boots a missed trial still skips and the gap it was given (none: `0/0`). */
+function readTrial(): { skip: number; gap: number } {
+  const [skip, gap] = (readCookie(TRIAL_COOKIE) ?? '').split('/').map(Number);
+  return { skip: skip > 0 ? skip : 0, gap: gap > 0 ? gap : 0 };
+}
+
+/** Whether this boot tries the level above: not while a missed trial's boots are being skipped, one counted off. */
+function trialDue(): boolean {
+  const { skip, gap } = readTrial();
+  if (skip === 0) return true;
+  writeCookie(TRIAL_COOKIE, `${skip - 1}/${gap}`);
+  return false;
+}
+
+/** A trial missed: the next skips twice the boots the last did (one the first time), up to `TRIAL_GAP_MOST`. */
+function trialMissed(): void {
+  const gap = Math.min(Math.max(readTrial().gap * 2, 1), TRIAL_GAP_MOST);
+  writeCookie(TRIAL_COOKIE, `${gap}/${gap}`);
 }
 
 /** The level above the settled one tried: what it went to, for the trace. */
@@ -103,6 +129,7 @@ export function setQuality(s: QualitySetting): void {
   apply(s === 'auto' ? 'high' : s);
   // choosing Auto again starts over from the top
   if (s === 'auto') writeAuto();
+  writeCookie(TRIAL_COOKIE, '0/0');
 }
 
 /** A level and a budget of pixels put to use for now, the setting and Auto's cookie left as they are: a harness's
@@ -171,6 +198,9 @@ export function sampleQuality(dt: number): string | null {
   // too slow for the 4 s path's frames, over `HITCH` each, stepped never)
   if (quickTime >= AUTO_QUALITY.quickWindow) {
     const fps = 1 / median(quick);
+    // (the level above, tried, is left at the first window under the target: judged by the 4 s path, a phone at 26
+    // to 47 frames a second there stayed 6 s a boot, trace 9JA7-BSSS)
+    if (trialFrom && fps < AUTO_QUALITY.minFps) return step(false);
     if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(true);
     quick.length = 0;
     quickTime = 0;
@@ -189,6 +219,7 @@ export function sampleQuality(dt: number): string | null {
 function keepTrial(): string {
   trialFrom = null;
   writeAuto();
+  writeCookie(TRIAL_COOKIE, '0/0');
   return `${level} kept`;
 }
 
@@ -199,9 +230,10 @@ const HITCH = 0.25;
 function step(far: boolean): string {
   restart();
   if (trialFrom) {
-    // (the level tried above missed: back to the settled one alone, the cookie as it was)
+    // (the level tried above missed: back to the settled one alone, the cookie as it was, the next trial put off)
     apply(trialFrom);
     trialFrom = null;
+    trialMissed();
     return level;
   }
   const steps = far ? QUALITY_ORDER.length : 1;
@@ -223,6 +255,10 @@ const atBottom = (): boolean => level === 'low';
 function stepDown(): void {
   apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1]);
 }
+
+/** Whether Auto is trying the level above the settled one: its frames are Auto's trial, not the device's pace at its
+ *  level, and the performance recorder leaves them out of play (src/perf/recorder.ts). */
+export const autoTrying = (): boolean => trialFrom !== null;
 
 /** Whether Auto has stepped as far down as it goes (a harness's: `lab auto`). */
 export const autoAtBottom = (): boolean => atBottom();

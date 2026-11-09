@@ -7,6 +7,7 @@ import { G } from '../state';
 import { isReadying, isWarming } from '../game/warm';
 import { hallOpen } from '../game/hall';
 import { framesUncapped } from '../core/frameLoop';
+import { autoTrying } from '../core/quality';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -125,7 +126,7 @@ function stateBits(now: number): number {
   wasHidden = document.hidden;
   return (G.mode === 'run' ? STATE.run : 0) | (G.run?.phase === 'fighting' ? STATE.fighting : 0)
     | (G.paused ? STATE.paused : 0) | (isWarming() ? STATE.warming : 0) | (hidden ? STATE.hidden : 0)
-    | (G.menuOpen ? STATE.menu : 0) | (now < settleUntil ? STATE.settling : 0) | (isReadying() ? STATE.readying : 0);
+    | (G.menuOpen ? STATE.menu : 0) | (now < settleUntil || autoTrying() ? STATE.settling : 0) | (isReadying() ? STATE.readying : 0);
 }
 
 /** The ring's frames in order, as the detector reads them. */
