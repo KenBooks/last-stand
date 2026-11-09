@@ -11,12 +11,18 @@ import { encodeTrace } from '../../../src/perf/traceFormat.ts';
 const ROOT = resolve(import.meta.dirname, '../../..');
 const DATA = join(ROOT, '.tmp', `traces-test-${process.pid}`);
 const ORIGIN = 'https://last-stand.cc';
+/** a PR's preview: a site of its own, counted apart */
+const PREVIEW = 'https://pr-1.ls.wellscoped.dev';
+/** an address never held to the day's most */
+const TRUSTED = '10.0.0.77';
 const TOKEN = 'test-token';
 let server, base;
 
 before(async () => {
   mkdirSync(DATA, { recursive: true });
-  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: ORIGIN, PER_DAY: '4', DISK_MAX: '1000' });
+  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: `${ORIGIN},https://pr-*.ls.wellscoped.dev`, PER_DAY: '4',
+    PER_DAY_ALL: '6', DISK_MAX: '1000',
+    TRUSTED_ADDRESSES: ` ${TRUSTED} , 10.0.0.78` });
   const { start } = await import('../traces.mjs');
   server = await start(0);
   base = `http://127.0.0.1:${server.address().port}`;
@@ -70,11 +76,27 @@ test('turns away other pages, what isn\'t a trace and what is too big', async ()
   assert.equal((await send(big, { address: '10.0.0.4' })).status, 413);
 });
 
-test('takes so many a day from one address, and others still', async () => {
+test('takes so many a day from one address on one site, and others still', async () => {
   const statuses = [];
   for (let i = 0; i < 5; i++) statuses.push((await send(trace(), { address: '10.0.0.9' })).status);
   assert.deepEqual(statuses, [201, 201, 201, 201, 429]);
   assert.equal((await send(trace(), { address: '10.0.0.10' })).status, 201);
+  // (the same address from a PR's preview: its own count)
+  assert.equal((await send(trace(), { address: '10.0.0.9', origin: PREVIEW })).status, 201);
+});
+
+test('takes so many a day from one address over every site, however many it names', async () => {
+  const statuses = [];
+  for (let i = 1; i <= 7; i++) {
+    statuses.push((await send(trace(), { address: '10.0.0.11', origin: `https://pr-${i}.ls.wellscoped.dev` })).status);
+  }
+  assert.deepEqual(statuses, [201, 201, 201, 201, 201, 201, 429]);
+});
+
+test('takes any number from a trusted address', async () => {
+  const statuses = [];
+  for (let i = 0; i < 6; i++) statuses.push((await send(trace(), { address: TRUSTED })).status);
+  assert.deepEqual(statuses, [201, 201, 201, 201, 201, 201]);
 });
 
 test('drops the oldest once the disk holds over its cap', async () => {

@@ -12,8 +12,12 @@
 //   GET  /traces/<code>           a trace's gzip (read)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`) or the session cookie a Dokci link set (a
 // browser never sees the token): a report's code alone reads nothing. Kept for KEEP_DAYS, the oldest dropped first
-// past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours (10:
-// what a game holds itself to, src/perf/consent.ts).
+// past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours from
+// each site (10: what a game holds itself to, src/perf/consent.ts, whose count is the site's own too): a PR's preview
+// or a commit build is a site of its own, so trying a new one isn't held up by the reports sent from the last; and
+// PER_DAY_ALL (40) over every site, as the Origin is the sender's to say and pr-* matches any number of them.
+// TRUSTED_ADDRESSES (a comma-separated list, a Dokci setting: never in the repo) are never held to it: the owner's
+// own, testing.
 import { createServer } from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -52,6 +56,10 @@ export function settingsFrom(vars) {
     keepDays: Number(vars.KEEP_DAYS ?? 30),
     diskMax: Number(vars.DISK_MAX ?? 100 << 20),
     perDay: Number(vars.PER_DAY ?? 10),
+    /** the most from one address over every site: the Origin is the sender's to say, and pr-* matches any number */
+    perDayAll: Number(vars.PER_DAY_ALL ?? 40),
+    /** addresses never held to `perDay` (the owner's, testing) */
+    trusted: new Set(String(vars.TRUSTED_ADDRESSES ?? '').split(',').map((a) => a.trim()).filter(Boolean)),
   };
 }
 let settings = settingsFrom(env);
@@ -69,7 +77,7 @@ const log = (...a) => console.log(new Date().toISOString(), ...a);
 /** code -> what's kept of it (`meta`), newest last */
 const index = new Map();
 let diskBytes = 0, uploading = 0;
-/** address -> its uploads' times (ms) in the last day */
+/** `address site` (and `address *`, every site's) -> its uploads' times (ms) in the last day */
 const sent = new Map();
 
 function newCode() {
@@ -110,13 +118,22 @@ function addressOf(req) {
   return hops[hops.length - 1] ?? req.socket.remoteAddress ?? '?';
 }
 
-/** Whether `address` may send one more now (and counts it). */
-function allowed(address, now = Date.now()) {
-  const times = (sent.get(address) ?? []).filter((t) => now - t < 86_400_000);
-  if (times.length >= settings.perDay) { sent.set(address, times); return false; }
-  times.push(now);
-  sent.set(address, times);
+/** Whether `address` may send one more now from the site `origin` (and counts it). */
+function allowed(address, origin, now = Date.now()) {
+  if (settings.trusted.has(address)) return true;
+  const site = recent(`${address} ${origin}`, now);
+  const all = recent(`${address} *`, now);
+  if (site.length >= settings.perDay || all.length >= settings.perDayAll) return false;
+  site.push(now);
+  all.push(now);
   return true;
+}
+
+/** The times `sender` sent in the last day, kept as its count (so pushing to it counts one more). */
+function recent(sender, now) {
+  const times = (sent.get(sender) ?? []).filter((t) => now - t < 86_400_000);
+  sent.set(sender, times);
+  return times;
 }
 
 /** Whether two strings are the same, in constant time (their digests compared, so their lengths don't show). */
@@ -241,7 +258,7 @@ async function upload(req, res) {
   if (!settings.origins.has(req.headers.origin ?? '')) return answer(res, 403, 'not from the game', headers);
   if (Number(req.headers['content-length'] ?? 0) > settings.maxBytes) return answer(res, 413, 'over its most', headers);
   if (uploading >= AT_ONCE) return answer(res, 503, 'busy', { ...headers, 'retry-after': '5' });
-  if (!allowed(addressOf(req))) return answer(res, 429, 'too many', headers);
+  if (!allowed(addressOf(req), req.headers.origin)) return answer(res, 429, 'too many', headers);
   uploading++;
   try {
     const body = await bodyOf(req, settings.maxBytes);
