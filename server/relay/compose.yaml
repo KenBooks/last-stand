@@ -29,6 +29,8 @@ services:
       ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://ls.wellscoped.dev,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev,http://localhost:5173
       # (the secret agents read the traces with: Dokci's configuration, never in the repo; unset, reading is off)
       TRACES_TOKEN: ${LS_TRACES_TOKEN:-}
+      # (addresses never held to the reports a day: the owner's, testing; Dokci's configuration, never in the repo)
+      TRUSTED_ADDRESSES: ${LS_TRACES_TRUSTED:-}
       KEEP_DAYS: "30"
       DISK_MAX: "104857600"
     volumes:
