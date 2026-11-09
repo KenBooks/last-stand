@@ -66,5 +66,7 @@ export default defineConfig({
       },
     },
   },
-  server: { port: 5173, open: false },
+  // the tools' output is never the game's: the lab and stalls keep their browsers' profiles there (`tools/lab/out/tmp`),
+  // and watched, a profile's locked file (its cookies) crashed the dev server with EBUSY as a lab command ran
+  server: { port: 5173, open: false, watch: { ignored: ['**/tools/*/out/**'] } },
 });
