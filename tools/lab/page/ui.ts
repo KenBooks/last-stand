@@ -50,6 +50,7 @@ import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHero
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
+import { autoFullChecked, autoFullPictures, FULL_CANARY } from './uiFullScreen';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
@@ -61,7 +62,7 @@ export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
   | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
-  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch'
+  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseVolume' | 'pauseTabKept'
   | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
@@ -911,6 +912,10 @@ const STEPS: Record<UiState, Steps> = {
     open: openLitTouch, close: closeLitTouch, check: litTouchShown, pictures: async () => litTouchPictures(),
   },
   buttonsTouch: { open: openButtonsTouch, close: () => undefined, check: lobbyButtonsShown },
+  autoFull: {
+    open: () => undefined, close: () => undefined, check: (canary, lab) => autoFullChecked(lab, canary),
+    pictures: async () => autoFullPictures(),
+  },
   coopTouch: { open: openCoopTouch, close: closeCoopDialog, check: (canary) => coopShown('coopTouch', canary) },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
@@ -987,6 +992,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(ABANDON_CANARY.name));
     lines.push(`  canary: ${ABANDON_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${ABANDON_CANARY.what} went unseen`);
+  }
+  if (state === 'autoFull') {
+    const caught = found.problems.some((problem) => problem.includes(FULL_CANARY.name));
+    lines.push(`  canary: ${FULL_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${FULL_CANARY.what} went unseen`);
   }
   if (state === 'pauseTabKept') {
     const caught = found.problems.some((problem) => problem.includes(TAB_CANARY.name));

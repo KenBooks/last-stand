@@ -25,7 +25,7 @@ export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
   'logLobby', 'perfAsk', 'coop', 'coopRename',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch',
+  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',

@@ -36,6 +36,7 @@ import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
+import { initAutoFullScreen } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
@@ -76,6 +77,8 @@ let revealed = false;   // loading screen gone: the game may advance
 const FIGHT_UNDER_LOADING = 6000;
 
 async function boot() {
+  // (full screen at the first gesture, the loading screen's too: armed after the hero, a click as it loaded did nothing)
+  initAutoFullScreen();
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
   // first, and the heroes' hands and the forest's stump sculpted: started before anything waits, as nothing they make
   // waits on the page

@@ -9,7 +9,7 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,
+readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
 run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
@@ -90,7 +90,7 @@ the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPaus
 `--canary` makes a settings row 600 px tall, which must make it scroll), the Music slider clicked a quarter of the
 way along with the mouse (`pauseVolume`, #408: the volume landing there, the slider saying it, the setting saved in
 `last-stand-volume` and the music's own gain eased to its square; `--canary` loses the setting before it's read back,
-which must be caught unsaved; every volume put back to full after), the tab chosen kept (`pauseTabKept`: Settings
+which must be caught unsaved; every volume put back to full after), the page going full screen on its own (`autoFull`, `page/uiFullScreen.ts`: the browser's answer stood in for, as the lab's refuses full screen; a finger's press asking nothing and its lift asking, refused and asking again at the next gesture, a mouse's click taken and the prompt shown within the window, pictured, gone after 10 s, Back to window clicked keeping `last-stand-auto-full-screen` and the next visit not asking; `--canary` loses the cookie first, which must be caught asking again), the tab chosen kept (`pauseTabKept`: Settings
 clicked, the menu closed and opened again on Settings, the cookie `last-stand-pause-tab` saying so, then Controls
 likewise; `--canary` loses the cookie before it opens again, which must be caught; the cookie taken away after),
 Abandon run held as a player holds it
