@@ -48,5 +48,9 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   it settled on before (`bootAuto`, its cookie set as a boot finds it): once its frames are the device's it tries the
   level above, which a fast device settled on Medium or Low must keep (and save), and a device that holds only the
   settled level must leave for it at once, never past it, the cookie as it was, each within 10 s (from play, a
-  4070 Ti on Medium "somehow", trace 0HSJ-60QV). `--canary` runs the old pace too, which must be too slow, and a boot
-  at the settled level as Auto used to, whose fast device must be found never stepped back up.
+  4070 Ti on Medium "somehow", trace 0HSJ-60QV). A phone that runs the level above under the target but not far
+  under it (trace 9JA7-BSSS: Medium held, High at 26 to 47 frames a second for 6 s a boot) must leave it within its
+  settle and a quick window (3.2 s; 6.1 at the old pace), and booted 12 times in a row must try it at boots 1, 3, 6
+  and 11 alone (each miss skips twice the boots the last did, up to 8). `--canary` runs the old pace too, which must
+  be too slow and keep the phone's trial too long, a boot at the settled level as Auto used to, whose fast device
+  must be found never stepped back up, and the phone's boots with the trial's cookie lost, found trying every boot.

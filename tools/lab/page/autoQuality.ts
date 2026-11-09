@@ -9,19 +9,27 @@
 // above, kept on a device that
 // holds it (a fast one settled on Medium, from play: a 4070 Ti on Medium "somehow"), left at once for the settled one
 // on a device that can't, never past it, and the cookie as it was.
-// Canaries: Auto's old pace (a level every 4 s window, frames over 250 ms not counted), which must be found too slow;
-// and a boot that starts at the settled level as Auto used to, whose fast device must be found never stepped back up.
+// A device that runs the level above under the target but not far under it (trace 9JA7-BSSS: a phone settled on
+// Medium, at 26 to 47 frames a second on High) must leave it within a settle and a quick window, and boots in a row
+// on it must skip the trial after each miss, twice as many boots each time (1, 2, 4, 8), its trial's frames marked
+// Auto's (`autoTrying`, which the performance recorder leaves out of play).
+// Canaries: Auto's old pace (a level every 4 s window, frames over 250 ms not counted), which must be found too slow,
+// and must leave the phone's High too late; a boot that starts at the settled level as Auto used to, whose fast device
+// must be found never stepped back up; and the trial's cookie lost between boots, which must be found trying every
+// boot.
 import type { Report } from './lab';
 import { AUTO_QUALITY } from '../../../src/data/quality';
 import type { QualityLevel } from '../../../src/data/quality';
 import {
-  autoAtBottom, autoSettled, bootAuto, qualityLevel, qualitySetting, sampleQuality, setQuality, useQuality,
+  autoAtBottom, autoSettled, autoTrying, bootAuto, qualityLevel, qualitySetting, sampleQuality, setQuality, useQuality,
 } from '../../../src/core/quality';
 import { scenePixels } from '../../../src/core/renderer';
-import { writeCookie } from '../../../src/core/cookies';
+import { removeCookie, writeCookie } from '../../../src/core/cookies';
 
 /** Auto's cookie, the level it settled on (`AUTO_COOKIE` in src/core/quality.ts) */
 const AUTO_COOKIE = 'last-stand-quality-auto';
+/** the missed trial's cookie, the boots it still skips (`TRIAL_COOKIE` in src/core/quality.ts) */
+const TRIAL_COOKIE = 'last-stand-quality-trial';
 
 /** What `lab auto` is given. */
 export interface AutoOptions { canary: boolean }
@@ -106,6 +114,10 @@ interface Boot {
   saved: QualityLevel;
   /** when it last stepped or kept a level (s), and what it said */
   steps: string[];
+  /** whether it tried the level above */
+  tried: boolean;
+  /** how long its frames were marked Auto's trial (s) */
+  tryingS: number;
 }
 
 /** how long a boot is fed frames (s) */
@@ -117,20 +129,28 @@ const BOOT_MOST_S = 10;
 function boot(settled: QualityLevel, deviceS: (level: QualityLevel) => number, old = false): Boot {
   return withPace({}, () => {
     setQuality('auto');
-    // (the cookie as a boot finds it: choosing Auto saved High)
-    writeCookie(AUTO_COOKIE, settled);
-    if (old) useQuality(settled);
-    else bootAuto(settled);
-    const start = qualityLevel();
-    const steps: string[] = [];
-    for (let at = 0; at < BOOT_S;) {
-      const dt = deviceS(qualityLevel());
-      at += dt;
-      const said = sampleQuality(dt);
-      if (said) steps.push(`${at.toFixed(1)} s: ${said}`);
-    }
-    return { start, end: qualityLevel(), saved: autoSettled(), steps };
+    return bootOnce(settled, deviceS, old);
   });
+}
+
+/** One boot of Auto's from `settled` (the trial's cookie as the last boot left it), fed `deviceS`'s frames. */
+function bootOnce(settled: QualityLevel, deviceS: (level: QualityLevel) => number, old = false): Boot {
+  // (the cookie as a boot finds it: choosing Auto saved High)
+  writeCookie(AUTO_COOKIE, settled);
+  if (old) useQuality(settled);
+  else bootAuto(settled);
+  const start = qualityLevel();
+  const steps: string[] = [];
+  let tryingS = 0;
+  for (let at = 0; at < BOOT_S;) {
+    const dt = deviceS(qualityLevel());
+    at += dt;
+    const said = sampleQuality(dt);
+    if (autoTrying()) tryingS += dt;
+    if (said) steps.push(`${at.toFixed(1)} s: ${said}`);
+  }
+  const tried = steps.some((said) => said.includes('trying'));
+  return { start, end: qualityLevel(), saved: autoSettled(), steps, tried, tryingS };
 }
 
 /** when a boot's last step came (s) */
@@ -144,6 +164,12 @@ const bootLine = (label: string, b: Boot): string => `  ${label}: started at ${b
 const fastS = (): number => FAST_FRAME_S;
 /** A device that holds Medium and not High, far below the target there (s) */
 const mediumOnlyS = (level: QualityLevel): number => level === 'high' ? 1 / 20 : FAST_FRAME_S;
+/** The phone of trace 9JA7-BSSS: Medium held, High under the target but not far under it (s) */
+const nearMediumS = (level: QualityLevel): number => level === 'high' ? 1 / 38 : FAST_FRAME_S;
+/** the longest a device may run a level above that it can't hold (s): its settle, a quick window and a frame */
+const TRIAL_MOST_S = AUTO_QUALITY.settle + AUTO_QUALITY.quickWindow + 0.2;
+/** the problem a trial kept too long raises (the old pace's canary must raise it) */
+const TRIED_LONG = "ran the level above it can't hold for";
 /** A device that holds only Low, far below the target above it (s) */
 const lowOnlyS = (level: QualityLevel): number => level === 'low' ? FAST_FRAME_S : 1 / 15;
 
@@ -153,6 +179,10 @@ function bootProblems(label: string, b: Boot, end: QualityLevel, problems: strin
   if (b.saved !== end) problems.push(`${label}: Auto kept ${b.saved} for the next boot, not ${end}`);
   const took = lastStepS(b);
   if (took > BOOT_MOST_S) problems.push(`${label}: Auto took ${took.toFixed(1)} s, over ${BOOT_MOST_S}`);
+  const missed = b.tried && b.end === b.start;
+  if (missed && b.tryingS > TRIAL_MOST_S) {
+    problems.push(`${label}: Auto ${TRIED_LONG} ${b.tryingS.toFixed(1)} s, over ${TRIAL_MOST_S.toFixed(1)}`);
+  }
 }
 
 /** A boot to judge: a device settled on a level, its frame at each level (s), and where Auto must end. */
@@ -170,6 +200,7 @@ function boots(canary: boolean, problems: string[]): string[] {
     { label: 'a fast device settled on Medium', settled: 'medium', device: fastS, end: 'high' },
     { label: 'a fast device settled on Low', settled: 'low', device: fastS, end: 'medium' },
     { label: 'a device holding Medium alone, settled there', settled: 'medium', device: mediumOnlyS, end: 'medium' },
+    { label: 'a phone holding Medium, High at 38 fps', settled: 'medium', device: nearMediumS, end: 'medium' },
     { label: 'a device holding Low alone, settled there', settled: 'low', device: lowOnlyS, end: 'low' },
     { label: 'a fast device settled on High', settled: 'high', device: fastS, end: 'high' },
   ];
@@ -178,13 +209,65 @@ function boots(canary: boolean, problems: string[]): string[] {
     lines.push(bootLine(label, b));
     bootProblems(label, b, end, problems);
   }
+  lines.push(inARow(false, problems));
   if (!canary) return lines;
+  lines.push(...slowTrialCanary(problems));
+  lines.push(...lostCookieCanary(problems));
   const old = boot('medium', fastS, true);
   lines.push(bootLine('canary, a fast device settled on Medium booted as Auto used to', old));
   const caught = old.end !== 'high';
   lines.push(`  canary: Auto never stepping back up ${caught ? 'caught' : 'went unseen'}`);
   if (!caught) problems.push('canary: Auto never stepping back up went unseen');
   return lines;
+}
+
+/** how many boots in a row the phone is booted */
+const BOOTS_IN_A_ROW = 12;
+/** the boots of those that must try the level above (1-based): each miss skips 1, then 2, 4 and 8 boots */
+const TRIED_AT = [1, 3, 6, 11];
+/** the problem boots tried at other boots raise (the lost cookie's canary must raise it) */
+const TRIED_BOOTS = 'tried the level above at boots';
+
+/** The phone booted `BOOTS_IN_A_ROW` times (its trial's cookie lost before each when `lose`): the boots that tried. */
+function inARow(lose: boolean, problems: string[]): string {
+  const tried = withPace({}, () => {
+    setQuality('auto');
+    const at: number[] = [];
+    for (let n = 1; n <= BOOTS_IN_A_ROW; n++) {
+      if (lose) removeCookie(TRIAL_COOKIE);
+      if (bootOnce('medium', nearMediumS).tried) at.push(n);
+    }
+    return at;
+  });
+  const label = lose ? 'canary, the phone booted with its trial cookie lost' : 'the phone booted';
+  const said = `${label} ${BOOTS_IN_A_ROW} times: ${TRIED_BOOTS} ${tried.join(', ')}`;
+  if (tried.join() !== TRIED_AT.join()) problems.push(`${said}, not ${TRIED_AT.join(', ')}`);
+  return `  ${said}`;
+}
+
+/** The phone booted at Auto's old pace: its trial must be found kept too long. */
+function slowTrialCanary(problems: string[]): string[] {
+  const slow = withPace(OLD_PACE, () => {
+    setQuality('auto');
+    return bootOnce('medium', nearMediumS);
+  });
+  const found: string[] = [];
+  bootProblems('canary', slow, 'medium', found);
+  const caught = found.some((problem) => problem.includes(TRIED_LONG));
+  if (!caught) problems.push("canary: the old pace's trial went unseen");
+  return [
+    bootLine('canary, the phone booted at the old pace', slow),
+    `  canary: the old pace's trial ${caught ? 'caught' : 'went unseen'}`,
+  ];
+}
+
+/** The phone booted with its trial's cookie lost each time: it must be found trying every boot. */
+function lostCookieCanary(problems: string[]): string[] {
+  const found: string[] = [];
+  const line = inARow(true, found);
+  const caught = found.some((problem) => problem.includes(TRIED_BOOTS));
+  if (!caught) problems.push("canary: the trial's cookie lost went unseen");
+  return [line, `  canary: the trial's cookie lost ${caught ? 'caught' : 'went unseen'}`];
 }
 
 /** The walk's time to the target, or to the bottom when the device never got there (s). */
