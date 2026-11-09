@@ -39,6 +39,7 @@ import {
 } from './warriorEyes';
 import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
 import { Dye } from './dye';
+import { ItemGlows } from './itemGlow';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
@@ -891,6 +892,15 @@ export function buildWarrior(): Model {
   const harness: THREE.Object3D[] = [...plates, skirtMesh, ...tassets.map((t) => t.g)];
   const furs = [...clothes, ...plates, ...gloves].filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
+  // each item's parts glowing in its rarity's colour (itemGlow.ts): the weapon in each hand, the shield, the helm, the
+  // armour, the bracers and gloves (the hands' own copies kept)
+  const glows = new ItemGlows(kit.mats)
+    .add('weapon', [...weapons.values()].map((w) => w.group))
+    .add('offhand', [...[...offWeapons.values()].map((w) => w.group), shield])
+    .add('head', [helm])
+    .add('chest', harness)
+    .add('hands', gloves)
+    .add('hands', [handL.glove, handR.glove], { inPlace: true });
   /** a hands item worn (the elbows' fur is the bracers') */
   let gloved = true;
 
@@ -995,6 +1005,7 @@ export function buildWarrior(): Model {
     tipOn(false);
     if (held) { bladeR.from.position.y = held.edge[0]; bladeR.to.position.y = held.edge[1]; }
     if (offHeld) { bladeL.from.position.y = offHeld.edge[0]; bladeL.to.position.y = offHeld.edge[1]; }
+    glows.set(gear);
   }
 
   /** Where a blow coming down at (`x`, `z`) lands: the top of the foe it strikes (`AnimState.strike`) within its body,

@@ -50,6 +50,10 @@ export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
     shield: (off?.stats.blockAmount ?? 0) > 0,   // shields are the off-hands that block
     offWeapon: off?.slot === 'weapon' ? off.base : null,
     helm: !!equipped.head, chest: !!equipped.chest, hands: !!equipped.hands,
+    rarity: {
+      weapon: weapon?.rarity, offhand: off?.rarity, head: equipped.head?.rarity,
+      chest: equipped.chest?.rarity, hands: equipped.hands?.rarity,
+    },
   };
 }
 

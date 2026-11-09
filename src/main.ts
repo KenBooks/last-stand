@@ -58,6 +58,7 @@ import { CLASSES } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
+import { tickItemGlow } from './core/materials';
 import { preloadHands } from './entities/models/hands';
 import { preloadStump } from './world/stump';
 import { initSync } from './net/sync';
@@ -642,6 +643,8 @@ function frame(timestamp: number): void {
     G.time += dt;
     update(dt);
   }
+  // (worn items' glow: its wisps' drift and breath, wherever a hero is drawn)
+  tickItemGlow(G.time);
   drawBattleLog();
   clearOverlays();
   const t1 = perfClock.now();

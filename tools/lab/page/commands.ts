@@ -21,6 +21,7 @@ import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
 import type { SceneCostOptions } from './sceneCost';
 import type { HazeOptions } from './haze';
+import type { GlowOptions } from './itemGlow';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
@@ -168,10 +169,12 @@ export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> 
 
 /** `lab hall`: the hero in focus in the hall of heroes through his showcase and after it; a point that jerked, or a
  *  canary it missed, is a problem. */
-export async function hall(lab: Lab, command: HallOptions & { glow?: boolean; pictures?: boolean }): Promise<Report> {
+export async function hall(
+  lab: Lab, command: HallOptions & { glow?: boolean; pictures?: boolean; lobby?: boolean },
+): Promise<Report> {
   if (command.glow) {
     const { hallGlow } = await import('./hallGlow');
-    return hallGlow(lab, { pictures: command.pictures !== false, canary: command.canary });
+    return hallGlow(lab, { pictures: command.pictures !== false, canary: command.canary, lobby: command.lobby });
   }
   const { hallMoves } = await import('./hallMoves');
   return hallMoves(lab, command);
@@ -348,6 +351,13 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
 export async function envCost(lab: Lab, command: EnvCostOptions): Promise<Report> {
   const { envCost: envCostRound } = await import('./envCost');
   return envCostRound(lab, command);
+}
+
+/** `lab glow`: each worn item's glow in its rarity's colour, against the frame without it; a glow unseen, too bright,
+ *  flat, in another hue, on a Magic item, still or quick, a program compiled and a canary missed are problems. */
+export async function glow(lab: Lab, command: GlowOptions): Promise<Report> {
+  const { itemGlow } = await import('./itemGlow');
+  return itemGlow(lab, command);
 }
 
 /** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a

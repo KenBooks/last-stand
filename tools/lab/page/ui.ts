@@ -26,6 +26,7 @@ import { NUMBER_COLORS } from '../../../src/data/balance';
 import { DAMAGE_TYPES, hitEnemy, hurtPlayer } from '../../../src/combat/damage';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { anchoredLabels, floatText } from '../../../src/ui/floaters';
+import { metersBehindHero } from './uiBehindHero';
 import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { showDecision } from '../../../src/ui/hud';
@@ -873,9 +874,10 @@ async function labelsBehindProps(canary: boolean, lab: Lab): Promise<Found> {
   G.arena.obstacles.splice(G.arena.obstacles.length - columns.length, columns.length);
   await lab.step(1);
   const after = dummyLabels();
+  const heroes = await metersBehindHero(lab, canary);
   const lines = [`  the dummies' labels: ${open.shown} of ${open.all} shown in the open, ${behind.shown} behind `
-    + `${columns.length} columns, ${after.shown} with them gone`];
-  const problems: string[] = [];
+    + `${columns.length} columns, ${after.shown} with them gone`, ...heroes.lines];
+  const problems: string[] = [...heroes.problems];
   if (!open.all) problems.push('behindProps: no label over a dummy was found');
   if (open.shown < open.all) problems.push(`behindProps: ${open.all - open.shown} labels hidden in the open`);
   if (behind.shown > 0) problems.push(`behindProps: ${behind.shown} labels shown through a prop`);
@@ -1019,6 +1021,9 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));
     lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
+    const overHero = found.problems.some((problem) => problem.includes('shown over the hero'));
+    lines.push(`  canary: the meters placed seeing no hero ${overHero ? 'caught' : 'went unseen'}`);
+    if (!overHero) missed.push(`${state}: the canary's meters placed seeing no hero went unseen`);
   }
   if (state === 'decision') {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));

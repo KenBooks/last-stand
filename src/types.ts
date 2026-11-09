@@ -210,7 +210,12 @@ export interface ClassDef {
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
-export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null; /** a head item is worn (a model may show a helmet over the hair) */ helm: boolean; /** a chest item is worn (the body armour; without it the clothes under it) */ chest: boolean; /** a hands item is worn (gloves and bracers; without them bare hands) */ hands: boolean }
+export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null; /** a head item is worn (a model may show a helmet over the hair) */ helm: boolean; /** a chest item is worn (the body armour; without it the clothes under it) */ chest: boolean; /** a hands item is worn (gloves and bracers; without them bare hands) */ hands: boolean;
+  /** each worn item's rarity, by the slot it's shown in: Rare and up glow in its colour (models/itemGlow.ts) */
+  rarity: Partial<Record<GlowSlot, RarityId>> }
+
+/** the slots whose items a hero's model shows */
+export type GlowSlot = 'weapon' | 'offhand' | 'head' | 'chest' | 'hands';
 
 // ---------------------------------------------------------------------------
 // Items

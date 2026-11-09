@@ -22,6 +22,7 @@ import { G } from '../../../src/state';
 import * as rendererCode from '../../../src/core/renderer';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
+import type { RarityId } from '../../../src/types';
 import { canvasSize, drawFrame, lookAlong, type Canvas } from './light';
 import { drawLook, meshesOf, partAt } from './looks';
 import { isWeapon } from './strike';
@@ -37,6 +38,8 @@ export interface HazeOptions {
   gear?: WeaponStyle;
   weapon?: string;
   at?: [number, number];
+  /** every item he wears of this rarity (Rare and up glow: #404) */
+  rarity?: RarityId;
   pictures: boolean;
   canary: boolean;
 }
@@ -269,7 +272,8 @@ function hazeOf(shown: Drawn, hidden: Drawn, surface: Uint8Array): { haze: Haze;
 async function standIn(lab: Lab, options: HazeOptions, facing: number): Promise<void> {
   if (G.arena.biome !== options.biome) G.arena.setBiome(options.biome);
   const rad = facing * Math.PI / 180;
-  await lab.setup({ view: options.view ?? 'first', facing: rad, gear: options.gear, weapon: options.weapon, at: options.at });
+  const { gear, weapon, at, rarity } = options;
+  await lab.setup({ view: options.view ?? 'first', facing: rad, gear, weapon, at, rarity });
   await lookAlong(lab, rad);
   await lab.step(SETTLE_FRAMES);
 }

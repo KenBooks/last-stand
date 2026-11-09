@@ -6,12 +6,13 @@ import { Label, ORDER, layoutLabels } from './overlay/layer';
 import { drawText, measure, type Shadow, type TextStyle } from './overlay/paint';
 import { uiScales } from './scale';
 import { groundHeight } from '../world/ground';
+import type { Player } from '../entities/player';
 
 type WorldPos = { x: number; y: number; z: number };
 export type FloatKind = 'dmg' | 'crit' | 'heal' | 'player' | 'info';
 
 interface Floater { label: Label; x: number; y: number; z: number; t: number; life: number; vx: number }
-interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean; hides: boolean }
+interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean; hides: boolean; underHeroes: boolean }
 
 const floats: Floater[] = [];
 /** the most floating texts shown at once: past it, the oldest goes to make room (each takes a slot of the label
@@ -58,10 +59,12 @@ const CLAMP = { side: 40, top: 40, bottom: 110 };
 
 /** A label over a point of the world (`at` gives it each frame; null hides it): `clamp` keeps it on screen, above the
  *  hotbar and below the top (a tall prop seen from close by reaches past the frame); `hides` hides it behind a prop
- *  (`behindProp`: a foe's bar, a dummy's name; a partner's tag shows through, to find them by). */
-export function anchorLabel(order: number, at: () => WorldPos | null, clamp = false, hides = false): Label {
+ *  (`behindProp`: a foe's bar, a dummy's name; a partner's tag shows through, to find them by); `underHeroes` hides
+ *  it where a hero nearer the camera covers it on the screen (`behindHero`: a dummy's meter; not a foe's bar, which a
+ *  foe ahead of him would lose over his head in a fight). */
+export function anchorLabel(order: number, at: () => WorldPos | null, clamp = false, hides = false, underHeroes = false): Label {
   const label = new Label(order);
-  anchored.set(label, { label, at, clamp, hides });
+  anchored.set(label, { label, at, clamp, hides, underHeroes });
   return label;
 }
 
@@ -86,6 +89,69 @@ export function behindProp(to: WorldPos): boolean {
     if (t0 >= t1) continue;
     const top = groundHeight(o.x, o.z) + o.h;
     if (Math.min(from.y + dy * t0, from.y + dy * t1) < top) return true;
+  }
+  return false;
+}
+
+/** a hero's body on the screen as a label hides behind it: his joints' outline (`BODY_JOINTS`), each this far round
+ *  (m: a sleeve, a robe, the flesh round a bone), and the top of his head this far over its joint (a hood, a helm) */
+const BODY_ROUND = 0.15;
+const HEAD_TOP = 0.3;
+/** the joints his outline is taken from */
+const BODY_JOINTS = ['head', 'neck', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'hips', 'kneeL',
+  'kneeR', 'ankleL', 'ankleR'] as const;
+const jointAt = new THREE.Vector3();
+
+/** A box on the screen (css px). */
+interface ScreenBox { left: number; top: number; right: number; bottom: number }
+
+/** A label's box on the screen were it placed at `x`, `y` (css px), as the overlay draws it (`layoutLabels`). */
+function labelBox(label: Label, x: number, y: number): ScreenBox {
+  const k = uiScales[label.sizedBy] * label.scale, { w, h } = label.size, a = label.anchorAt;
+  const left = x - a.x * k, top = y - a.y * k;
+  return { left, top, right: left + w * k, bottom: top + h * k };
+}
+
+/** `hero`'s outline on the screen from his joints, each `BODY_ROUND` round and his head's top over it (null: none
+ *  of it before the camera). What he holds, a staff's crystal over his head, isn't him. */
+function heroOutline(hero: Player, camera: THREE.PerspectiveCamera): ScreenBox | null {
+  const joints = hero.model.joints;
+  if (!joints) return null;
+  const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const add = (point: THREE.Vector3, round: number) => {
+    const distance = point.distanceTo(camera.position);
+    const p = project(point.x, point.y, point.z);
+    if (p.behind || distance < 1e-3) return;
+    const r = round * window.innerHeight / (2 * distance * tan);
+    box.left = Math.min(box.left, p.x - r);
+    box.right = Math.max(box.right, p.x + r);
+    box.top = Math.min(box.top, p.y - r);
+    box.bottom = Math.max(box.bottom, p.y + r);
+  };
+  for (const name of BODY_JOINTS) add(joints[name].getWorldPosition(jointAt), BODY_ROUND);
+  add(joints.head.getWorldPosition(jointAt).setY(jointAt.y + HEAD_TOP), BODY_ROUND);
+  return Number.isFinite(box.top) ? box : null;
+}
+
+/**
+ * Whether a hero nearer the camera than `to` covers `label` on the screen there: its box over his outline (his
+ * joints'). From play: "dummy labels appear on top of the character, they should hide" (a dummy's meter hung down
+ * over the mage's hood). A hero hidden, fallen or round the camera (his own eyes) doesn't.
+ */
+export function behindHero(label: Label, to: WorldPos, x: number, y: number): boolean {
+  const camera = G.camera as THREE.PerspectiveCamera, from = camera.position;
+  const far = Math.hypot(to.x - from.x, to.z - from.z);
+  const box = labelBox(label, x, y);
+  for (const hero of G.players) {
+    if (!hero.alive || !hero.obj.visible) continue;
+    const near = Math.hypot(hero.pos.x - from.x, hero.pos.z - from.z);
+    if (near < BODY_ROUND * 3 || near >= far) continue;
+    const outline = heroOutline(hero, camera);
+    if (!outline) continue;
+    const covered = box.right > outline.left && box.left < outline.right
+      && box.bottom > outline.top && box.top < outline.bottom;
+    if (covered) return true;
   }
   return false;
 }
@@ -127,6 +193,7 @@ export function updateFloaters(dt: number): void {
     if (!a.label.shown || !p) continue;
     a.label.x = a.clamp ? Math.min(window.innerWidth - CLAMP.side * u, Math.max(CLAMP.side * u, p.x)) : p.x;
     a.label.y = a.clamp ? Math.min(window.innerHeight - CLAMP.bottom * u, Math.max(CLAMP.top * u, p.y)) : p.y;
+    if (a.underHeroes && behindHero(a.label, w!, a.label.x, a.label.y)) a.label.shown = false;
   }
   layoutHooks.forEach((hook) => hook());
   layoutLabels();

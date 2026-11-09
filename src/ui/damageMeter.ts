@@ -30,7 +30,7 @@ export class DamageMeter {
   private updated = 0;
 
   constructor(private readonly name: string, getPos: () => WorldPos | null) {
-    this.label = anchorLabel(ORDER.bar, getPos, false, true);
+    this.label = anchorLabel(ORDER.bar, getPos, false, true, true);
     this.paint();
   }
 

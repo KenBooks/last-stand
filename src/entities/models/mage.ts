@@ -24,6 +24,7 @@ import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outO
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
 import { Dye } from './dye';
+import { ItemGlows } from './itemGlow';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -265,8 +266,14 @@ export function buildMage(): Model {
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
+  // (its facets not mirrors, its coat thin and soft, its highlight weak: polished, as it spun a facet caught a light
+  // white for a moment, the whole crystal flaring past the bloom, "staff still flickers at its brightest peak", 3.2
+  // times its light, `lab hall --glow --lobby`; the hall's `HEAD` treats it more still)
   const GEM_GLOW = 0.4;
-  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  const gem = kit.phys({
+    color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.55, metalness: 0,
+    clearcoat: 0.15, clearcoatRoughness: 0.55, specularIntensity: 0.3, flatShading: true,
+  });
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
@@ -888,6 +895,15 @@ export function buildMage(): Model {
   // (robed until setGear says otherwise)
   let robed = true, gloved = true;
   for (const o of [...tunic, tunicSkirt]) o.visible = false;
+  // each item's parts glowing in its rarity's colour (itemGlow.ts): the staff, the book at his hip (the off-hand's),
+  // the hood, the longcoat, the bracers and gloves (the hands' own copies kept)
+  const glows = new ItemGlows(kit.mats)
+    .add('weapon', [staff])
+    .add('offhand', [book])
+    .add('head', [hat])
+    .add('chest', [...robeParts, ...skirts, ...flaps.map((f) => f.g)])
+    .add('hands', bracers)
+    .add('hands', [handL.glove, handR.glove], { inPlace: true });
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
@@ -1197,6 +1213,7 @@ export function buildMage(): Model {
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
+      glows.set(gear);
     },
     reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); hood.reset(); },
     firstPerson: (on) => { fp = on; },

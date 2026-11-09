@@ -195,6 +195,26 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at
   the tips, 0.86 alike its mirror, the bonfire's smoke over 47% above it, 7 to 9% moving, no plant over either, 0.16 ms
   (crypt) and 0.34 (forest) of a frame from beside them on the lab's desktop GPU.
+- `glow`: each worn item's glow in its rarity's colour (`page/itemGlow.ts`, #404, `src/entities/models/AGENTS.md`).
+  The hero (`--class`) wears every item his class shows, the warrior with a shield, dyed in a player's colour
+  (`--colour`, green by default: a Rare item's green on it). Each slot's item alone is given the rarity
+  (`--rarity`, rare by default), and the front and back close-ups drawn with its glow and with `ITEM_GLOW.strength`
+  at 0, at the same moment (his gear set again between the two could seat his hands anew). What it added: the
+  share of the close-ups it lit (under 0.1%: unseen), its 99th percentile (over 0.25 of white, the weapon's 0.5 as it's made to bloom: too bright), how much of it within a fifth of its median
+  (over half: one flat light, the highlight the owner ruled out), its hue against the rarity's (a cosine under
+  0.9), and a Magic item's (any: a problem). Then every slot at the rarity over 4 s, the hero held still and the
+  glow's clock alone moved on, a sample a tenth of a second: its pixels' mean change between two, a share of its
+  light (over 50%: not slow; under 5%: still); and the step as its cycle starts over against the steps just
+  before and after it (over 1.5 times them: a join; a frame a whole cycle on against now can't tell, the shader
+  given only the share of the cycle, and that check passed a join the owner saw). Any program compiled meanwhile is a problem. Pictured close up front and back,
+  every item Common and every item at the rarity (`out/glow/`). `--canary` draws the chest's glow ten times as
+  strong and at nothing, skips 2 s as its cycle starts over, and leaves the Gear glow setting on where it's
+  pressed off, each of which must be caught. The setting: Settings' Off pressed (its own button), nothing of the
+  gear may glow; On again, it must. `--tune
+  itemGlow.strength=0.1` compares a strength. As tuned before (0.12; now 0.07), in green: the glow lit 0.3% (hands) to 13.8% (the
+  mage's robe) of the close-ups, its 99th percentile 0.04 to 0.09 of white, 6 to 35% of it in one light, its hue
+  0.97 to 1.00; its pixels changed 11 to 33% a tenth of a second (the mage: 20 to 30%), and as its 16 s cycle starts over
+  no more than the steps beside it (it was 105% against 20% with `turns` 3: a join).
 - `haze`: the hero's held weapons' light through the eyes (`page/haze.ts`), standing in a biome (`--biome`, the
   forest by default) looking each way (`--facings`), held as `--gear` and `--weapon` say. The frame is drawn with the
   weapons and without them, each also with the grade's adaptation held off, and their surface found in the `parts`
@@ -741,7 +761,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   "it still flickers bright, but most of the time its completely boring" (its glow 25% of the box, flaring 2.1 times
   as a facet turned to the light every 0.7 s). Now it's lit by its own light: its faces under the bloom's threshold,
   and a halo and a hot core of its own (`HEAD`, `HALO`, `CORE` in `src/game/hall.ts`).
-  Its canary lights the crystal as main lit it, its colour its glow's hue.
+  Its canary lights the crystal as main lit it, its colour its glow's hue. `--lobby` reads the hero as he stands in
+  the lobby instead, the run's camera on him (from play: "staff still flickers at its brightest peak"): polished,
+  a facet turned to a light flashed the crystal white, its brightest frame 3.18 times its median, 8.9% of the box
+  near white; its facets rough and its coat thin, 1.3 times and none. There its glowing area isn't judged: the
+  crystal's rings turning face-on to the camera above swell it 1.4 times, slowly. Its canary makes the gem glow
+  three times over for a second.
 - `glance`: the hero's casual look round as he stands idle (`page/glance.ts`, `page/glances.ts`; `models/glance.ts`),
   read from what's drawn: the head's turn from the chest and the eyeballs' in their sockets. He stands `--seconds` (40)
   in the countdown: each glance (past 10°, one carried across joined), their spacing (never a loop, none within 1.5 s
