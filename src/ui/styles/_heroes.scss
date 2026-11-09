@@ -50,6 +50,12 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 .hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(10px); height: ui(10px); translate: -50% 0; rotate: 45deg;
   border: 1px solid rgba($frame, .7); background: #120e0a; }
 .hs-tabs button:hover { color: var(--ink); }
+/* the hero's number key over his name, as the keys pick the heroes too (from play: "add 1,2,3 in UI, so user knows
+   that numbers also work"); placed over the name, so the names lie where they did; the stow hint's look */
+.hs-key { position: absolute; left: 50%; bottom: 100%; translate: -50% 0; font: 400 ui(12px) var(--font-body); letter-spacing: 0;
+  text-shadow: none; color: var(--ink); padding: ui(1px) ui(6px); border: 1px solid rgba($highlight, .5); background: rgba($highlight, .08); }
+.hs-tabs button.active .hs-key { border-color: var(--cc); }
+body.touch .hs-key { display: none; }
 /* a hero still warming after the lobby shows (game/warm.ts): his tab's bar fills as he gets further, gone once he's
    ready ("show some loading bars on those heroes") */
 .hs-tabs button.cold::before { content: ''; position: absolute; left: 18%; right: 18%; bottom: ui(13px); height: ui(3px);
