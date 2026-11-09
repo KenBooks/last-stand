@@ -279,7 +279,9 @@ function letGo(p: Press, x: number): void {
 /** Where hero `i` stands on the screen as the camera shows him now (css px: his middle across, his head and feet),
  *  or null behind the camera. */
 function onScreen(i: number): { x: number; top: number; bottom: number } | null {
-  const p = hallHeroes()[i].player, at = (up: number) => p.pos.clone().setY(p.pos.y + up).project(G.camera);
+  // (his model where it's drawn, up on his plinth: his `pos` is the floor's, and the choice stood at his feet)
+  const p = hallHeroes()[i].player, base = p.obj.position;
+  const at = (up: number) => base.clone().setY(base.y + up).project(G.camera);
   const feet = at(0), head = at(p.model.height);
   if (feet.z >= 1) return null;
   return { x: (feet.x + 1) / 2 * innerWidth, top: (1 - head.y) / 2 * innerHeight, bottom: (1 - feet.y) / 2 * innerHeight };
