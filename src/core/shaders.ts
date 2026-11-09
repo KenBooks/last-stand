@@ -453,6 +453,28 @@ async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, how: L
 /** the most of a task the programs' reads take, each linking its program where the browser links as it's read (ms) */
 const LINK_SLICE_MS = 40;
 
+/** The programs of `materials` compiled and not linked yet. */
+function linking(renderer: THREE.WebGLRenderer, materials: Compiled): number {
+  const programs = new Set<Program>();
+  for (const material of materials) {
+    const program = (renderer.properties.get(material) as { currentProgram?: Program }).currentProgram;
+    if (program && !program.isReady()) programs.add(program);
+  }
+  return programs.size;
+}
+
+/**
+ * Waits, where more than `most` of `materials`' programs are compiled and not linked yet, till no more are (asked
+ * once the GPU's process has their commands, `commandsDone`, every `poll`). A first visit's fight
+ * handed ANGLE four parts' programs at once under its loading bar, every core's thread compiling them for seconds,
+ * and the GPU's process's main thread, which draws every frame, starved among them: its frames held 56 to 347 ms.
+ */
+async function fewLinking(renderer: THREE.WebGLRenderer, materials: Compiled, most: number, poll: Step): Promise<void> {
+  if (linking(renderer, materials) <= most) return;
+  await commandsDone(renderer, poll);
+  while (linking(renderer, materials) > most) await poll();
+}
+
 /** How a warm-up goes (`warmUp`). */
 export interface WarmUp {
   /** added to the scene for the draw alone, and taken away after (compiled with the scene where `compile` is left
@@ -490,6 +512,12 @@ export interface WarmUp {
   /** given up on, nothing drawn (`cold`), where a program isn't linked this long after its commands were done (ms):
    *  one not from the GPU's cache, behind the lobby (compiled cold behind it, a return's lobby drew 3 frames a second) */
   giveUpMs?: number;
+  /** with `step`, the most programs compiled and not linked yet before its compile waits for them (`fewLinking`):
+   *  left out, every program of its roots is handed to the GPU's process at once */
+  linkingMost?: number;
+  /** how a wait for links asks again (left out, `step`, else every 4 ms): under a loading bar a frame, as its `step`
+   *  goes on in the same task for a slice */
+  poll?: Step;
 }
 
 /** What a warm-up shows in place of what (`WarmUp.swap`), and on WebGPU the scene's look it's shown with (`look`:
@@ -614,6 +642,14 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
       const at = performance.now();
       onlyThese(root, lot, () => compileOf(root));
       compileMs += performance.now() - at;
+      if (how.linkingMost !== undefined && linking(renderer, materials) > how.linkingMost) {
+        compileStepMs = Math.max(compileStepMs, performance.now() - slice);
+        renderer.setRenderTarget(prev);
+        await fewLinking(renderer, materials, how.linkingMost, how.poll ?? step);
+        renderer.setRenderTarget(target);
+        slice = performance.now();
+        continue;
+      }
       if (performance.now() - slice < COMPILE_SLICE_BEHIND_MS) continue;
       compileStepMs = Math.max(compileStepMs, performance.now() - slice);
       renderer.setRenderTarget(prev);
@@ -639,7 +675,7 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   progress?.(UPLOADS_DONE);
   at = performance.now();
   const links = (share: number): void => progress?.(UPLOADS_DONE + share * (LINKS_DONE - UPLOADS_DONE));
-  const poll = step ?? ((): Promise<void> => new Promise((r) => setTimeout(r, 4)));
+  const poll = how.poll ?? step ?? ((): Promise<void> => new Promise((r) => setTimeout(r, 4)));
   const ready = await linked(renderer, materials, { done: links, poll, step, giveUpMs: how.giveUpMs });
   const linksMs = performance.now() - at;
   pinPrograms(renderer);
