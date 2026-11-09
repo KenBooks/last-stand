@@ -46,6 +46,7 @@ import {
 import {
   ABANDON_CANARY, PAUSE_CANARY, TAB_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
   openPauseAbandon, openPauseVolume, pauseAbandonChecked, pauseShown, pauseTabKept, pauseVolumeChecked,
+  closePauseProfiled, openPauseProfiled, closeProfiling, openProfiling, profilingShown, PROFILING_CANARY,
 } from './uiPause';
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
@@ -66,7 +67,8 @@ export type UiState =
   | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf'
-  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseVolume' | 'pauseTabKept'
+  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pausePerformance' | 'profiling' | 'pauseVolume'
+  | 'pauseTabKept'
   | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
@@ -80,7 +82,8 @@ export interface UiOptions {
 
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
-  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
+  'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pausePerformance', 'profiling',
+  'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary',
   'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -932,6 +935,12 @@ const STEPS: Record<UiState, Steps> = {
   pauseSettings: {
     open: () => openPause('settings', canaryAsked), close: closePause, check: () => pauseShown('settings'),
   },
+  // (as a profile leaves it, its costliest parts and Send shown: the tab at its fullest)
+  pausePerformance: {
+    open: () => openPauseProfiled(canaryAsked), close: closePauseProfiled, check: () => pauseShown('performance'),
+  },
+  // (the profiler at work: every panel hidden, its pane at the top)
+  profiling: { open: () => openProfiling(canaryAsked), close: closeProfiling, check: profilingShown },
   pauseVolume: {
     open: () => openPauseVolume(canaryAsked), close: closePauseVolume, check: (_canary, lab) => pauseVolumeChecked(lab),
   },
@@ -1015,7 +1024,12 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: ${VOLUME_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${VOLUME_CANARY.what} went unseen`);
   }
-  if (state === 'pause' || state === 'pauseSettings') {
+  if (state === 'profiling') {
+    const caught = found.problems.some((problem) => problem.includes(PROFILING_CANARY.name));
+    lines.push(`  canary: ${PROFILING_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${PROFILING_CANARY.what} went unseen`);
+  }
+  if (state === 'pause' || state === 'pauseSettings' || state === 'pausePerformance') {
     const caught = found.problems.some((problem) => problem.includes(PAUSE_CANARY.name));
     lines.push(`  canary: ${PAUSE_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${PAUSE_CANARY.what} went unseen`);

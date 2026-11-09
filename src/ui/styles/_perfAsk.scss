@@ -20,4 +20,23 @@
 #perf-ask.sending .pa-close { display: none; }
 // (a finger's buttons: tall enough to tap, sized by the touch scale as the touch controls are and 34 px at least;
 // the box is zoomed by the UI's scale, so that's taken out)
+// The profiler's pane (ui/profileTab.ts) as the prompt's, at the top, with every other panel hidden meanwhile
+// (`body.profiling`): the scene alone on screen while its frames are timed, the pause menu's blur off the GPU.
+// (the page's parts the profiler times by the frame's interval shown again in turns: the panels, the pause menu)
+body.profiling:not(.profiling-panels) > :not(#game, #profiling, #pause, script, svg) { visibility: hidden !important; }
+body.profiling:not(.profiling-pause) > #pause { visibility: hidden !important; }
+#profiling { position: fixed; top: 12px; left: 50%; translate: -50% 0; z-index: 47; zoom: var(--ui, 1);
+  width: min(360px, calc((100vw - 24px) / var(--ui, 1))); box-sizing: border-box; padding: 10px 12px 12px 14px;
+  font-size: 13px; line-height: 1.35; color: var(--ink);
+  background: linear-gradient(rgba(20,17,16,.97), rgba(8,7,8,.97)); @include frame(var(--frame), 0 6px 18px rgba(0,0,0,.7)); }
+#profiling.hidden { display: none; }
+#profiling .prof-title { font-family: Cinzel, Georgia, serif; font-weight: 700; font-size: 15px; color: var(--accent); }
+#profiling .prof-part { color: var(--ink-dim); margin: 2px 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#profiling .prof-bar { height: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+// (the fill grows by its transform alone: a layer the compositor moves, no paint a frame)
+#profiling .prof-fill { height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; will-change: transform; }
+#profiling .prof-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--ink-dim);
+  font-variant-numeric: lining-nums tabular-nums; }
+#profiling .btn { margin-left: auto; padding: 4px 12px; font-size: 13px; }
+body.touch #profiling .btn { min-height: calc(max(32px * var(--touch, 1), 34px) / var(--ui, 1)); padding-inline: 14px; }
 body.touch #perf-ask .btn { min-height: calc(max(32px * var(--touch, 1), 34px) / var(--ui, 1)); padding-inline: 14px; }

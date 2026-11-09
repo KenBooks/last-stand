@@ -123,6 +123,10 @@
 /* levels (HDR's, the volumes): a slider each, its name before it and its value after */
 .opt-levels { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .renderer-note { font-size: 12px; color: var(--ink-dim); }
+/* the profiler (ui/profileTab.ts): its button, a note saying how far it is or what it found, the costliest parts */
+.profile-note { font-size: 12px; color: var(--ink-dim); }
+.profile-parts { margin: 0; padding-left: 18px; font-size: 12px; font-variant-numeric: lining-nums tabular-nums; }
+.profile-parts li { margin: 1px 0; }
 .opt-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
 .opt-level > span { width: 76px; }
 .opt-row .opt-level input { flex: 1; width: auto; min-width: 0; height: 16px; }

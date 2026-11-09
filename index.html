@@ -560,6 +560,13 @@
   </div>
 
   <!-- touch: what to do with a tapped item -->
+  <!-- the profiler at work (ui/profileTab.ts): every other panel hidden, the scene alone timed, this at the top -->
+  <div id="profiling" class="hidden" role="status" aria-live="polite">
+    <div class="prof-title">Profiling this spot</div>
+    <div class="prof-part"></div>
+    <div class="prof-bar"><div class="prof-fill"></div></div>
+    <div class="prof-foot"><span class="prof-left"></span><button class="btn" id="btn-profile-cancel">Cancel</button></div>
+  </div>
   <div id="item-sheet" class="modal hidden"><div class="modal-box">
     <div class="is-card"></div>
     <div class="dc-buttons"><button class="btn is-a"></button><button class="btn danger is-salvage">Drop</button><button class="btn is-close">Close</button></div>
@@ -577,10 +584,11 @@
     </div>
     <div class="pb-rule"><i></i></div>
     <div class="pause-note hidden">Playing together, the game goes on: your hero stands still until you resume.</div>
-    <!-- two pages in one cell (ui/menus.ts pauseTab): the box keeps its size on either, Controls first each time -->
+    <!-- three pages in one cell (ui/menus.ts pauseTab): the box keeps its size on each, the last one chosen first -->
     <div class="tabs pb-tabs" role="tablist">
       <button class="tab active" data-pause-tab="controls" role="tab" aria-selected="true">Controls</button>
       <button class="tab" data-pause-tab="settings" role="tab" aria-selected="false">Settings</button>
+      <button class="tab" data-pause-tab="performance" role="tab" aria-selected="false">Performance</button>
     </div>
     <div class="pb-pages">
       <section class="pb-page" data-pause-page="controls" role="tabpanel">
@@ -588,15 +596,6 @@
       </section>
       <section class="pb-page pb-opts off" data-pause-page="settings" role="tabpanel">
         <div class="pb-opt-col">
-        <div class="opt-row quality-row"><span>Graphics</span>
-          <div class="seg" id="opt-quality">
-            <button data-q="auto">Auto<small></small></button><button data-q="high">High</button><button data-q="medium">Medium</button><button data-q="low">Low</button><button data-q="verylow">Very low</button>
-          </div>
-        </div>
-        <!-- frames drawn as the screen asks, or uncapped (core/frameLoop.ts): a frame's real cost -->
-        <div class="opt-row quality-row"><span>Vsync</span>
-          <div class="seg" id="opt-vsync"><button data-v="on">On</button><button data-v="off">Off</button></div>
-        </div>
         <!-- worn gear glowing in its rarity's colour (core/materials.ts `setGearGlow`): on by default -->
         <div class="opt-row quality-row"><span>Gear glow</span>
           <div class="seg" id="opt-gear-glow"><button data-g="on">On</button><button data-g="off">Off</button></div>
@@ -609,11 +608,6 @@
             <label class="opt-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
           </div>
         </div>
-        <!-- the renderer (core/rendererChoice.ts): a press loads the game at its address, and nothing is kept -->
-        <div class="opt-row quality-row renderer-row"><span>Renderer</span>
-          <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
-          <div class="renderer-note"></div>
-        </div>
         </div>
         <div class="pb-opt-col">
         <!-- the volumes (core/audio.ts): everything, the music and the effects, saved and heard as they're moved -->
@@ -624,14 +618,42 @@
             <label class="opt-level" title="The sounds of the fight: skills, blows, foes"><span>Effects</span><input type="range" data-volume="effects" min="0" max="1" step="0.01"><output></output></label>
           </div>
         </div>
+        <label class="opt-row"><input type="checkbox" id="opt-blog"> Show battle log</label>
+        <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>
+        </div>
+      </section>
+      <section class="pb-page pb-opts off" data-pause-page="performance" role="tabpanel">
+        <div class="pb-opt-col">
+        <div class="opt-row quality-row"><span>Graphics</span>
+          <div class="seg" id="opt-quality">
+            <button data-q="auto">Auto<small></small></button><button data-q="high">High</button><button data-q="medium">Medium</button><button data-q="low">Low</button><button data-q="verylow">Very low</button>
+          </div>
+        </div>
+        <!-- frames drawn as the screen asks, or uncapped (core/frameLoop.ts): a frame's real cost -->
+        <div class="opt-row quality-row"><span>Vsync</span>
+          <div class="seg" id="opt-vsync"><button data-v="on">On</button><button data-v="off">Off</button></div>
+        </div>
+        <!-- the renderer (core/rendererChoice.ts): a press loads the game at its address, and nothing is kept -->
+        <div class="opt-row quality-row renderer-row"><span>Renderer</span>
+          <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
+          <div class="renderer-note"></div>
+        </div>
+        <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
+        <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
+        </div>
+        <div class="pb-opt-col">
         <!-- a report sent when the game runs slowly (perf/consent.ts): asked first, sent without asking, or never -->
         <div class="opt-row quality-row"><span>Slow-game reports</span>
           <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
         </div>
-        <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
-        <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
-        <label class="opt-row"><input type="checkbox" id="opt-blog"> Show battle log</label>
-        <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>
+        <!-- the profiler (perf/profiler.ts): each part of the frame taken out in turns where the hero stands, the
+             result sent as a performance report with the player's consent (perf/consent.ts sendProfile) -->
+        <div class="opt-row quality-row profile-row"><span>Profiler</span>
+          <button class="btn" id="btn-profile">Profile this spot</button>
+          <div class="profile-note">What each part of the frame costs here, on this device (about 20 s)</div>
+          <ol class="profile-parts hidden"></ol>
+          <button class="btn hidden" id="btn-profile-send">Send the report</button>
+        </div>
         </div>
       </section>
     </div>

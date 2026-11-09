@@ -43,6 +43,79 @@ export function closePause(): void {
   showPause(false);
 }
 
+/** the parts a profile lists under its button (ui/profileTab.ts `PARTS_SHOWN`), as long as a phone's read */
+const PROFILED_PARTS = [
+  'what\'s cut out: leaves, grass: 12.4 ms (35%)',
+  'half the scene\'s pixels: 9.8 ms (28%)',
+  'what\'s blended: smoke, glows, effects: 4.1 ms (12%)',
+  'on screen: the panels (HUD, lobby, overlays): 3.8 ms (11%)',
+  'on screen: the pause menu and its blur: 14.6 ms (41%)',
+];
+
+/** The pause menu on its Performance tab as a profile leaves it, at its fullest: its note, the costliest parts and
+ *  Send shown (what a phone found by a bonfire, written in). */
+export function openPauseProfiled(canary: boolean): void {
+  openPause('performance', canary);
+  const found = 'The frame here: 35.2 ms drawn (28 fps), 35.6 ms as shown. Its costliest parts:';
+  document.querySelector('.profile-note')!.textContent = found;
+  const list = document.querySelector<HTMLElement>('.profile-parts')!;
+  const item = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
+  list.replaceChildren(...PROFILED_PARTS.map(item));
+  list.classList.remove('hidden');
+  document.querySelector('#btn-profile-send')!.classList.remove('hidden');
+}
+
+/** The profile's results put away again, and the menu closed. */
+export function closePauseProfiled(): void {
+  document.querySelector('.profile-parts')!.classList.add('hidden');
+  document.querySelector('#btn-profile-send')!.classList.add('hidden');
+  closePause();
+}
+
+/** the problem the profiling canary must raise: the pause menu left shown over the scene being timed */
+export const PROFILING_CANARY = { name: 'shown while profiling', what: 'the pause menu left shown' };
+/** the panels that must be hidden while the profiler times the scene */
+const HIDDEN_WHILE_PROFILING = ['#pause', '#hud', '#diag', '#touch', '#menu'];
+
+/** The profiler as it runs (ui/profileTab.ts `showRunning`): every panel hidden, its pane at the top part-way
+ *  through, its longest part named; with the canary the pause menu left shown. */
+export function openProfiling(canary: boolean): void {
+  showPause(true);
+  pauseTab('performance');
+  document.body.classList.add('profiling');
+  document.querySelector('#profiling')!.classList.remove('hidden');
+  document.querySelector<HTMLElement>('#profiling .prof-fill')!.style.transform = 'scaleX(0.4)';
+  document.querySelector('#profiling .prof-part')!.textContent = 'Timing what\'s blended: smoke, glows, effects';
+  document.querySelector('#profiling .prof-left')!.textContent = '40%, about 9 s left';
+  if (canary) document.querySelector<HTMLElement>('#pause')!.style.setProperty('visibility', 'visible', 'important');
+}
+
+export function closeProfiling(): void {
+  document.querySelector<HTMLElement>('#pause')!.style.removeProperty('visibility');
+  document.body.classList.remove('profiling');
+  document.querySelector('#profiling')!.classList.add('hidden');
+  showPause(false);
+}
+
+/** The pane inside the window, its lines on one line each and Cancel in it, every other panel hidden. */
+export function profilingShown(): PauseFound {
+  const pane = document.querySelector<HTMLElement>('#profiling');
+  if (!pane?.checkVisibility()) return { lines: [], problems: ['profiling: no pane shown'] };
+  const problems: string[] = [];
+  const rect = pane.getBoundingClientRect();
+  const outside = rect.top < 0 || rect.left < 0 || rect.bottom > innerHeight || rect.right > innerWidth;
+  if (outside) problems.push('profiling: the pane reaches past the window');
+  const cancel = pane.querySelector<HTMLElement>('#btn-profile-cancel')!.getBoundingClientRect();
+  if (cancel.right > rect.right || cancel.bottom > rect.bottom) problems.push('profiling: Cancel runs past the pane');
+  for (const selector of HIDDEN_WHILE_PROFILING) {
+    const panel = document.querySelector<HTMLElement>(selector);
+    if (!panel?.checkVisibility({ visibilityProperty: true })) continue;
+    problems.push(`profiling: ${selector} ${PROFILING_CANARY.name}`);
+  }
+  const share = (100 * rect.height) / innerHeight;
+  return { lines: [`  the pane: ${share.toFixed(1)}% of the window's height`], problems };
+}
+
 /** how long a hold that's let go early is held (ms): half of Abandon's */
 const SHORT_HOLD_MS = 1000;
 /** past Abandon's hold, what a full hold waits on top (ms), for its timer to fire */

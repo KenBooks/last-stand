@@ -41,7 +41,7 @@ const KINDS: Record<Fixed, Snapshot['kinds'][string]> = {
 };
 
 /** Where the game was when it was slow. */
-export type Scene = 'boot' | 'heroes' | 'lobby' | 'fight' | 'break' | 'readying';
+export type Scene = 'boot' | 'heroes' | 'lobby' | 'fight' | 'break' | 'readying' | 'profile';
 
 /** A slow stretch the detector found, and the frames it was found in. */
 export interface Slow {
@@ -51,6 +51,8 @@ export interface Slow {
   tookMs: number;
   at: number;
   snapshot: Snapshot;
+  /** a profile's lines, where the player profiled the frame (`profiler.ts`) */
+  profile?: string[];
 }
 
 /** The ring's last minute, its times from its first frame (ms). */

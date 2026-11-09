@@ -8,7 +8,7 @@ import { G } from '../state';
 import { sfx } from '../core/audio';
 import { isReadying } from '../game/warm';
 import { recorder, type Slow } from './recorder';
-import { canSend, packTrace, sendTrace } from './upload';
+import { canSend, packTrace, sendTrace, type Sent } from './upload';
 
 /** what the player chose: asked each time, sent without asking, or never */
 export type TraceConsent = 'ask' | 'always' | 'off';
@@ -112,6 +112,7 @@ async function pack(slow: Slow): Promise<void> {
 const WHERE: Record<Slow['scene'], string> = {
   boot: 'took long to load', readying: 'took long to get ready', heroes: 'ran slowly on the hero selection screen',
   lobby: 'ran slowly in the Sanctuary', fight: 'ran slowly in the fight', break: 'ran slowly',
+  profile: 'was profiled',
 };
 
 function ask(slow: Slow, bytes: number): void {
@@ -173,3 +174,19 @@ export async function askNow(): Promise<void> {
 
 /** The prompt put away, as Not now does without counting it. */
 export function putAway(): void { letGo(); }
+
+/**
+ * A profile (`profiler.ts`) sent as a performance report, its lines in it beside the last minute's frames: sent at
+ * once where the player chose Always, else when they press Send under it (the press is their consent). Counted
+ * against the day's sends either way, as every report is.
+ */
+export async function sendProfile(lines: string[]): Promise<Sent> {
+  if (!canSend()) return { error: 'this browser can\'t send reports' };
+  const k = kept();
+  if (k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
+  keep({ ...k, sent: [...k.sent, Date.now()] });
+  const slow: Slow = {
+    scene: 'profile', verdict: null, tookMs: 0, at: performance.now(), snapshot: recorder.snapshot(), profile: lines,
+  };
+  return sendTrace(await packTrace(slow));
+}

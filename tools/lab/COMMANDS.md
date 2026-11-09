@@ -130,6 +130,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
+  in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest) in `--view` (top) at `--level`
+  (the player's own otherwise; with `--device`, that device's level and screen). The game's frames are held, the
+  frame drawn again and again with each part of it taken out and put back in turns (`--rounds`, 6, of 3 frames a
+  side), one in each of the browser's frames (`__labClock.realFrame`), each waited for and timed by the browser's
+  clock (`__labClock.realNow`), and the parts listed by what they take, as the player's device lists them, with how
+  long it took and the programs it compiled: over 8 fails (a part changing the scene's programs compiled them all
+  again, 66 s of a 69 s run). The page's parts are timed by the frame's interval as the browser shows it; the lab gives one of its own, 30 ms of work a frame while shown, which must read at least 20 ms (28.7 here). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
+  was (the pixel ratio, what's shown, what casts, the lights' reach) and let the game's frames go (the hero walks).
+  On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
+  for that, have the player press the button and read their trace with `lab trace` (its Profile section).
+  `--canary` draws the frame twice, which must read 1.6 times once. The forest at 15.4,15.4: the frame 4.6 to 4.9 ms
+  here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to 1.97 times (2 frames a side read 1.57 once). It
+  keeps no copy of the parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
   settings (`--level`, low) and the screen's own pixels, whatever the level's cap: the resolution is never what's
   cut, what a pixel costs is. The scene pass alone is drawn, each part taken out and put back in turns
@@ -167,56 +181,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   seconds, with how long it took and how high the flames stand: for trying `FireTuning`'s and `FLAME_LOOK`'s
   values; its picture isn't the game's light. It says what the loop takes, kept and on the GPU, and fails over
   its budget (`BUDGET_KB` in `src/world/fireBake.ts`, which `lab:test` holds it to as well) or with any of the flame cut off outside the kept box.
-- `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
-  `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
-  stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
-  own light, without (what draws unlit within 1.5 m of its light, and the glow particles) and without its smoke too:
-  the differences are its light alone (graded: the tone curve carries the logs' grain into it) and its smoke (a pale
-  smoke over the daylit forest, read as light, was counted into the tips). Read: its size, its light and hue in four
-  bands from its base up, the share drawn white, the parts its top 40% breaks into (glow particles count as parts),
-  its light's spread, the share above it its smoke changes, how much of it moves a moment, its light's and its point
-  light's swing and strongest frequency, and the top-down view's flashes over a second at least. Then at one moment
-  its flames alone (all else hidden by its materials, as the culled plants show themselves again each render; the
-  adaptation held off, which exposed each picture by itself) from four sides, level from 10 m through 12°: a flame's
-  light passes through it, so from behind it's its own mirror, while sheets turned to the camera show one face from
-  either side (the owner: "fire rotates when camera rotates"). Its detail (light less its local mean) from behind
-  under 0.6 alike its front's mirror, or more alike its front as it is, turns with the camera, unless its front is
-  over 0.9 alike its own mirror, too even to tell (main's disc of coals, edge on). And the plants over it
-  (`page/fireClear.ts`): the instanced meshes' points the top-down view last drew in its column (its half-width and
-  0.3 m round, 2.5 m up). A fire in a bowl (a solid round its bed reaching 0.3 m under it) is read from under the
-  rim too (`page/fireBelow.ts`, #291): the share of the bowl's pixels (its meshes' in the `parts` look) its flames
-  light, its coals and embers hidden. The flames are a box marched in its shader, depth-tested at its faces, whose
-  corners stand out past the bowl's wall: main's lit 22.8% of it, as a pale band up the bowl. Over 2% is a problem.
-  A fire with logs its flames know (`uLogs`) is read from above them as the player stands over it
-  (`page/fireLogs.ts`): the share of the logs' pixels (the meshes named `logs`) its flames brighten by over 40
-  levels, against the same with the logs taken from the shader, and the share knowing them changed. Before the
-  shader knew them, the logs inside the box were drawn over by the flames behind them and those reaching out of it
-  hid the flames in front ("half of campfire ignores it"): 64% lit from above, 45% since (the flames in front of
-  the logs and their bloom over dark bark). Over 55% is a problem. The flames read alone (round them, the logs
-  hidden) have the logs taken from the shader too: hidden, they still carved the flames, 0.42 alike their mirror.
-  And with the see-through hole's end across the flames' box (`page/fireFade.ts`; the hole round the line to the
-  hero ends in a plane across the view, short of him): the flames alone with the hole and without, each pixel's
-  light kept, in linear light, and the share of them off the median by over 0.2, over 5% a problem. The flames
-  faded each pixel by its place on the box's faces, and the plane cut the fire in two as the camera came near (the
-  owner: "a plane that cuts the fire in two parts"): 52% of the bonfire's apart, 64% of the brazier's. They fade
-  as one now, by five points along the view through their middle. The hole's end is put between the box's nearest
-  corner (beside it, the box is seen corner-on) and the nearest of those points, so the fire fades not at all: a
-  partial fade, even, reads uneven through the bloom and the grade's curve. Its canary dims half the frame's flames.
-  Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second are problems. `--cost`
-  (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they cost under the
-  timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to run, so they're
-  in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz strobe, the front
-  shown from behind, a leaf over the bed, the bowl and the logs taken from the flames' shader, half its flames
-  dimmed, and with `--cost` the flames drawn four times over (twice their cost at least). Pictured (`out/fire/`):
-  close (beside it at 0, 0.13, 0.27 s, its light alone, from above, from below and where the bowl and the flames
-  through it were found, over the logs, as they were unknown, and where the logs and the flames over them were
-  found), round (the four
-  sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
-  coals under glow particles): 1.4 to 1.6 m by 0.9, dim orange-red throughout (7 to 25°, at most 0.22 of white), no
-  smoke, 19 to 37% moving a moment, six fern clumps over the bonfire. As sheets turned to the camera they turned with
-  it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at
-  the tips, 0.86 alike its mirror, the bonfire's smoke over 47% above it, 7 to 9% moving, no plant over either, 0.16 ms
-  (crypt) and 0.34 (forest) of a frame from beside them on the lab's desktop GPU.
+- `fire`: each biome's fire as the player meets it: in full in [`commands/fire.md`](commands/fire.md).
 - `glow`: each worn item's glow in its rarity's colour (`page/itemGlow.ts`, #404, `src/entities/models/AGENTS.md`).
   The hero (`--class`) wears every item his class shows, the warrior with a shield, dyed in a player's colour
   (`--colour`, green by default: a Rare item's green on it). Each slot's item alone is given the rarity
@@ -589,47 +554,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   their camera, not the hero's.
 - `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
   costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
-- `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
-  biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
-  (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each
-  press (`--apart` s, 1) to the next, the last to `--after` s (4). Each frame is timed whole by the browser's clock,
-  drawn and waited out on the GPU (a pixel read back: `gl.finish` returned at once under ANGLE's D3D11, and the
-  frame read 7 ms with the GPU's timer at 13 to 29), then a task yielded (the GPU's timer queries come back only then);
-  each phase says the frame, the page's work (the update by stage, the render), the GPU whole and by pass (where the
-  browser times it, `EXT_disjoint_timer_query_webgl2`), the draws (the GL draws, as the overlay counts them) and
-  triangles, and the particles' fill (`page/particleFill.ts`: each live particle's disc as its shader sizes it, in
-  the scene's pixels, every layer: the fill a phone's GPU pays, which a desktop's GPU times don't show; Glacial
-  Nova's was 15 times the scene's pixels on #243's phone while the particles were sized by the canvas, 1.4 times
-  since); `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. Run it on
-  a phone's screen, boot and CPU: `--screen 832x384@3.75 --boot low@518400 --throttle 4` (#243's phone: booted as Auto
-  settled there, the hero built at Low's detail and the warm-ups run at it), or `--quality low@518400` on the lab's
-  own boot (the level and the most pixels Auto lets the scene render, put to use before the set-up, the hero built
-  again at its detail, and at the page's after). Read the GPU at `--throttle 1` alone: a slowed CPU feeds the GPU slowly, and a pass's time runs from its
-  start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
-  the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
-  the pace.
-  `--device phone|phone-hot|laptop` plays a device players reported a slow game on (`node/devices.mjs`), at the frame
-  rate it had: no browser slows its GPU and the shared PC's GPU isn't clocked down, so its GPU is played by this one
-  drawing its screen (in css px, as its reports give it) at more pixels, the factor set so the GPU's time here reads
-  what the device's reports read, on the owner's RTX 4070 Ti (another GPU needs its own); its quality is Auto's there
-  (`--quality` overrides it), its CPU left at full speed (the devices are held up by their GPUs, and a slowed CPU's
-  waits swell the GPU's timer: the phone read 24 ms at 1.5 times slower, 13 at full speed), and each phase says
-  `as the <device>: the frame N ms, M fps`, its GPU's. Set on the forest lobby (`--foes 0`): the phone cool 6 times
-  its pixels, 75 fps (its reports: 65 to 83), hot 23, 24 fps (24 to 26, from its 15th s on Low, a cheaper level
-  slower: the phone heating, not the game), the tester's laptop (AMD 0x15E7 at 1440x731@2) 25, 24 fps (its GPU 35
-  to 47 ms, 24 fps). It's an estimate: a phone's tiled GPU spends its time otherwise than a desktop's, so a scene
-  far from the lobby may read off; set a new device on its own reports (`lab trace`) the same way. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
-  problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
-  the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
-  wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
-  sides then, not one side from the cache and the other now. Then the report as the overlay copies it is read
-  (`page/perfReport.ts`): its histories, 30 buckets each (frames a second, our frame's time, how late it started, the
-  GPU's for our draws), and its long frames (Chrome's Long Animation Frames API: what the main thread did in each),
-  where a task of 120 ms run by a message must be listed with what ran it (`--canary`: one of 30, under the
-  browser's 50, must be found missing). The owner's lobby fell to 28 a second hovering items, frames late by 20 to 46
-  ms where ours took 11 to 18, and the report couldn't say whether the page's thread or something outside it held
-  them up. A click's long frame ends at the page's next rendering, which the lab's held frames put off past the
-  read: the task is a message's.
+- `perf <skills>`: skills cast in turn, every frame timed as the performance report times it, or played as a slow
+  device: in full in [`commands/perf.md`](commands/perf.md).
 - `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
   (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
   watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
@@ -778,46 +704,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the game's cameras look that meet nothing (`neckGaps.ts`). Pictured close from six sides. `--canary`
   (`neckCanaries.ts`) plants a ridge, skin over the collar, a paler wider neck and a neck stopping short in a loose
   collar; each must be caught.
-- `hall`: the hero in focus in the hall of heroes (`page/hallMoves.ts`; `src/game/hall.ts`), the lab's run left
-  for the lobby and Change hero clicked: his showcase and the stand after it, 480 frames, each hand, elbow and the
-  weapon's tip in his own frame, and each jerk: its move a frame changing by over 12 cm from the frame before (a
-  jump, a stop or a start in a frame), 40 cm while the weapon flies (its tip 25 cm a frame or more, this frame or the
-  two before: a blow speeding down and coming to rest), the tip's by its speed (0.7 of its larger move, at least
-  20 cm: its arc turns its way by about its speed squared over its reach). `--gear` and `--weapon` put the weapon in
-  his profile, which the hall dresses him from; `--frames` lists each jerk with its action and its moves; the canary
-  turns his right shoulder for a frame. From play: "warrior arms jerk in various poses after he finishes power
-  strike, in char selection screen". The hall's heroes are remote copies beside the lobby's own hero, hidden but
-  still posed, which `range` never saw: the warriors shared the way back's state (`DRAWN_*`, `BACK_*` at the module's
-  top), and the hall's went back to its guard from where the lobby's hero had drawn his weapon, the axe's tip 2.2 m in
-  a frame. Found with it too: the first frame of the landing's hold turned the arm 65 degrees down onto the stage
-  under the plinth, the hands 84 cm; the left hand onto the haft off the shoulder in a frame, 39 cm; the way back
-  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed. Then the hall
-  is opened again and left by Back 1 s into his showcase, and any oscillator still not told to stop 60 frames on in
-  the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
-  it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
-  closed with his channel open, and its hum (3 tones) played on.
-  `--glow` (`page/hallGlow.ts`) reads the light round the weapon's tip instead, the mage's staff's crystal, frame by
-  frame from his showcase on (540 frames, the camera's flight in left out), read back from the frame drawn as the
-  player sees it: a box 0.5 m across there, its share near white (0.75 of white), its mean light, the median frame's
-  and the brightest against it, the flashes of its mean in any second (`page/flashes.ts`), and its mean every 0.25 s;
-  and how much of it glows (its pixels' brightest channel 0.1 of white or more, the crystal and its halo), the
-  median frame's and the largest against it, every 0.25 s; pictured round the staff's head at its brightest, at its
-  largest glow, at its dimmest and as he stands after his showcase (`--pictures=false` for none). It fails on any
-  frame over 0.25 of white, the brightest over 3 times the median, over 2 flashes a second, a glow over 1.25 times
-  its median frame's (a flare) or under 30% of the box the median frame (a flat stone). By its brightest channel,
-  not its luminance: a saturated pink's luminance is a third of its red, and a facet's flare that doubled the glow
-  moved the box's luminance by a few hundredths. From play: "in hero selection screen, the staff's light is too
-  bright when its flickering, pls lower": raised, the crystal came within 0.86 m of the hall's key light, which lit
-  its glossy facets white (main's brightest frame 0.34, its glow flaring 1.53 times on 84 frames); then, lit less,
-  "it still flickers bright, but most of the time its completely boring" (its glow 25% of the box, flaring 2.1 times
-  as a facet turned to the light every 0.7 s). Now it's lit by its own light: its faces under the bloom's threshold,
-  and a halo and a hot core of its own (`HEAD`, `HALO`, `CORE` in `src/game/hall.ts`).
-  Its canary lights the crystal as main lit it, its colour its glow's hue. `--lobby` reads the hero as he stands in
-  the lobby instead, the run's camera on him (from play: "staff still flickers at its brightest peak"): polished,
-  a facet turned to a light flashed the crystal white, its brightest frame 3.18 times its median, 8.9% of the box
-  near white; its facets rough and its coat thin, 1.3 times and none. There its glowing area isn't judged: the
-  crystal's rings turning face-on to the camera above swell it 1.4 times, slowly. Its canary makes the gem glow
-  three times over for a second.
+- `hall`: the hero in focus in the hall of heroes showing off his skill: in full in [`commands/hall.md`](commands/hall.md).
 - `glance`: the hero's casual look round as he stands idle (`page/glance.ts`, `page/glances.ts`; `models/glance.ts`),
   read from what's drawn: the head's turn from the chest and the eyeballs' in their sockets. He stands `--seconds` (40)
   in the countdown: each glance (past 10°, one carried across joined), their spacing (never a loop, none within 1.5 s

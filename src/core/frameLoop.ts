@@ -84,12 +84,22 @@ let step: ((timestamp: number) => void) | null = null;
 
 /** The next frame asked for, as the setting and the tab's visibility have it. */
 function next(): void {
-  if (uncapped && !document.hidden) channel.port1.postMessage(null);
+  // (held, it asks the browser's frames: uncapped, its messages spun a core and the profiler's frames waited behind)
+  if (uncapped && !held && !document.hidden) channel.port1.postMessage(null);
   else requestAnimationFrame(run);
+}
+
+/** whether the game's frames are held (the profiler draws its own meanwhile, perf/profiler.ts) */
+let held = false;
+
+/** Holds the game's frames (none updated or drawn) while `on`, as the profiler draws frames of its own. */
+export function holdFrames(on: boolean): void {
+  held = on;
 }
 
 function run(timestamp: number): void {
   next();
+  if (held) return;
   step?.(timestamp);
   if (uncapped && fenceOf) inFlight.push(fenceOf());
   else inFlight.length = 0;

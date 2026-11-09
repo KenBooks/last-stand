@@ -27,6 +27,7 @@ import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
+import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
@@ -363,6 +364,12 @@ function chooseContinue() {
 
 /** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */
 function openPause(open: boolean) {
+  // (kept open while the profiler runs, the game's frames held till it's done: closing it, Esc, cancels it,
+  // ui/profileTab.ts)
+  if (!open && profiling()) {
+    cancelProfile();
+    return;
+  }
   G.menuOpen = open;
   G.paused = open && !isCoop();
   G.player.idle = open && isCoop();
