@@ -41,21 +41,35 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 .hs-arrow:hover { color: var(--highlight); }
 .hs-prev { left: calc(var(--gut) + env(safe-area-inset-left, 0px)); }
 .hs-next { right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
-.hs-tabs { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px));
-  bottom: calc(var(--gut) * 1.4 + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(18px); pointer-events: none; }
+// (--ks: the rhombus under each name, which hangs under the row: its foot kept off the window's edge)
+.hs-tabs { --ks: max(#{ui(32px)}, 24px); position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px));
+  bottom: calc(max(var(--gut) * 1.4, var(--ks) * .6 + #{ui(8px)}) + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(18px); pointer-events: none; }
 /* (large enough to read as the screen's own choice: at 16 px they were "too small" on a desktop; held to the window's
    width too, as the room beside the panel narrows, clear of Back) */
 .hs-tabs button { position: relative; pointer-events: auto; cursor: $cursor-hand; padding: ui(10px) min(#{ui(24px)}, 1.1vw) ui(16px);
   background: none; border: 0; font: 700 min(#{ui(26px)}, 1.45vw) var(--font-display); letter-spacing: min(#{ui(4px)}, .2vw); text-transform: uppercase; color: var(--ink-dim); text-shadow: $outline; }
-.hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(10px); height: ui(10px); translate: -50% 0; rotate: 45deg;
-  border: 1px solid rgba($frame, .7); background: #120e0a; }
 .hs-tabs button:hover { color: var(--ink); }
+/* the rhombus under each name, holding the hero's number key, as the keys pick the heroes too (from play: "add 1,2,3
+   in UI, so user knows that numbers also work", "numbers need to be in existing rhombus below label, not new
+   squares... make them bigger to fit"): the box square and upright, its rhombus drawn behind the number (`::before`,
+   a square turned, its corners on the box's sides), centred a little under the name's foot so the names lie where
+   they did. On touch the keys mean nothing: the rhombus bare, at its old size. */
+.hs-key { position: absolute; left: 50%; bottom: calc(var(--ks) * -.6); width: var(--ks); height: var(--ks);
+  translate: -50% 0; display: grid; place-items: center; isolation: isolate;
+  font: 700 calc(var(--ks) * .5) / 1 var(--font-display); font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0;
+  color: var(--ink-dim); text-shadow: none; }
+.hs-key::before { content: ''; position: absolute; inset: 14.6%; z-index: -1; rotate: 45deg;
+  border: 1px solid rgba($frame, .7); background: #120e0a; }
+.hs-tabs button:hover .hs-key { color: var(--ink); }
+.hs-tabs button.active .hs-key { color: #120e0a; }
+.hs-tabs button.active .hs-key::before { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 ui(8px) var(--cc); }
+body.touch .hs-tabs { --ks: #{ui(14px)}; }
+body.touch .hs-key { font-size: 0; }
 /* a hero still warming after the lobby shows (game/warm.ts): his tab's bar fills as he gets further, gone once he's
    ready ("show some loading bars on those heroes") */
 .hs-tabs button.cold::before { content: ''; position: absolute; left: 18%; right: 18%; bottom: ui(13px); height: ui(3px);
   border-radius: ui(2px); background: linear-gradient(to right, var(--cc) calc(var(--ready, 0) * 100%), rgba(255,255,255,.18) 0); }
 .hs-tabs button.active { color: var(--cc); text-shadow: 0 0 ui(12px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; }
-.hs-tabs button.active::after { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 ui(8px) var(--cc); }
 .hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
   font-size: ui(15px); padding: ui(9px) ui(16px); }
 #heroes.first .hs-back { display: none; }
@@ -140,7 +154,7 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   .hs-skills .slot .icon { font-size: ui(16px); }
   .hs-tabs { gap: ui(10px); }
   .hs-tabs button { font-size: ui(17px); letter-spacing: ui(3px); padding: ui(6px) ui(14px) ui(12px); }
-  .hs-tabs button::after { width: ui(8px); height: ui(8px); }
+  body:not(.touch) .hs-tabs { --ks: max(#{ui(26px)}, 24px); }
 }
 
 /* ---------- short and upright screens: Back at the top of the room the panel leaves, the title beside it ---------- */
@@ -165,7 +179,7 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   .hs-name { width: min(100%, ui(420px)); justify-self: center; }
   .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   .hs-arrow { top: calc((100% - var(--ph)) / 2); }
-  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6); }
+  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6 + var(--ks) * .6); }
   .hs-tabs button { font-size: ui(20px); letter-spacing: ui(3px); padding: ui(8px) ui(18px) ui(14px); }
   .hs-back { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   #heroes .hs-shade { --hx: 50%; }

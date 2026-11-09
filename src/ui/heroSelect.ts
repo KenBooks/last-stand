@@ -3,7 +3,7 @@
 // at, and his attributes: the tab last chosen kept), and a choice that leads into the lobby. The save slot under the
 // title opens the save slots, and a slot switched there opens the hall again on its heroes. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
 // The hero under the mouse is outlined, and a click or tap on the hero in focus chooses him. Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
-// Space chooses, Esc goes back); the name of the hero in focus, clicked or tapped again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
+// Space chooses, Esc goes back; 1, 2, 3 pick each hero); the name or number of the hero in focus, again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
@@ -72,15 +72,11 @@ export const heroSelectOpen = (): boolean => !$('#heroes').classList.contains('h
 export function initHeroSelect(h: HeroSelectHooks): void {
   hooks = h;
   $('.hs-cards').replaceChildren(...CLASS_IDS.map((id) => card(CLASSES[id])));
-  $('.hs-tabs').innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}" style="--cc:${CLASSES[id].accent}">${CLASSES[id].name}</button>`).join('');
+  // (each name with its number key in the rhombus under it, as the keys pick the heroes too: bare on touch)
+  $('.hs-tabs').innerHTML = CLASS_IDS.map((id, i) =>
+    `<button data-c="${id}" style="--cc:${CLASSES[id].accent}"><kbd class="hs-key">${i + 1}</kbd>${CLASSES[id].name}</button>`).join('');
   document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => {
-    // (the name of the hero already in focus chooses him, as his choice does: from play, "pressing these titles (only
-    // if selected title), would also play / start the game")
-    b.onclick = () => {
-      sfx.click();
-      const i = CLASS_IDS.indexOf(b.dataset.c!);
-      if (i === hallFocus()) choose(); else focusOn(i);
-    };
+    b.onclick = () => { sfx.click(); pick(CLASS_IDS.indexOf(b.dataset.c!)); };
   });
   $('.hs-prev').onclick = () => { sfx.click(); step(-1); };
   $('.hs-next').onclick = () => { sfx.click(); step(1); };
@@ -332,6 +328,15 @@ function choose(): void {
   closeHeroSelect({ id, profile });
 }
 
+/**
+ * Hero `i` picked by his name or his number key: brought into focus, or chosen if he's in focus already, as his choice
+ * does (from play: "pressing these titles (only if selected title), would also play / start the game", and "123 to
+ * select each, ... same number again to play").
+ */
+function pick(i: number): void {
+  if (i === hallFocus()) choose(); else focusOn(i);
+}
+
 /** The hero the mouse at (`x`, `y`) is over, as the camera shows him now: within a box round him and what he holds,
  *  the nearest by his middle where two boxes meet (-1: none, or not warm yet: hidden). */
 function heroAt(x: number, y: number): number {
@@ -362,7 +367,7 @@ function lightHero(i: number): void {
  *  else the hero nearest it on screen in focus, if it landed near one. */
 function tapAt(x: number, y: number): void {
   const on = heroAt(x, y);
-  if (on >= 0) { sfx.click(); if (on === hallFocus()) choose(); else focusOn(on); return; }
+  if (on >= 0) { sfx.click(); pick(on); return; }
   const w = innerWidth, h = innerHeight;
   let best = -1, bd = TAP_REACH * w;
   for (const [i, hero] of hallHeroes().entries()) {
@@ -378,7 +383,10 @@ function tapAt(x: number, y: number): void {
 export function heroSelectKeys(): void {
   if (wasPressed('arrowleft') || wasPressed('a')) step(-1);
   if (wasPressed('arrowright') || wasPressed('d')) step(1);
-  if (wasPressed('enter') || wasPressed('numpadenter') || wasPressed('space')) choose();
+  // 1, 2, 3...: each hero in the row's order (the number row's or the numpad's)
+  const n = CLASS_IDS.findIndex((_, i) => wasPressed(String(i + 1)) || wasPressed(`numpad${i + 1}`));
+  if (n >= 0) pick(n);
+  else if (wasPressed('enter') || wasPressed('numpadenter') || wasPressed('space')) choose();
   else if (wasPressed('escape') && !first) closeHeroSelect();
 }
 
