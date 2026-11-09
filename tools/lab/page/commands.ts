@@ -13,6 +13,7 @@ import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { WindOptions } from './wind';
 import type { TouchOptions } from './touchStick';
+import type { TouchPadOptions } from './touchPad';
 import type { TapOptions } from './tap';
 import type { PracticeOptions } from './practice';
 import type { TrailOptions } from './trail';
@@ -290,6 +291,15 @@ export async function wind(lab: Lab, command: WindOptions): Promise<Report> {
 export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
   const { touchStick } = await import('./touchStick');
   return touchStick(lab, command);
+}
+
+/**
+ * `lab touchpad`: a grid of fingers put down over the screen in a run: every point of the move area that isn't a
+ * button must start the move stick, and a canary's clear sheet over part of it must be caught.
+ */
+export async function touchpad(lab: Lab, command: TouchPadOptions): Promise<Report> {
+  const { touchPad } = await import('./touchPad');
+  return touchPad(lab, command);
 }
 
 /**

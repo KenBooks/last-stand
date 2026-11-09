@@ -1548,6 +1548,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  touchpad: {
+    each(side, options) {
+      return side.command('touchpad', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('touchpad'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   tap: {
     each(side, options) {
       return side.command('tap', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });

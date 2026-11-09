@@ -1739,6 +1739,18 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  touchpad: {
+    help: 'where a finger put down starts the touch controls\' move stick: a grid of points over the screen '
+      + 'in a run, each touched and slid a little (buttons left alone); every point of the move area (the left '
+      + 'half below the top quarter) that isn\'t a button must start the stick',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: a clear sheet over the move area\'s lower left',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   trail: {
     help: 'the trail a swung weapon leaves, as the player sees it: each strike cast in each view, every frame from '
       + 'the press until the weapons are still drawn with the trail and without, and the pixels it lit told apart; '

@@ -124,7 +124,9 @@ export function middleOf(element: Element): PagePoint {
 /** the pointer events a touch makes, any of which says the page has handled it */
 const TOUCH_POINTER_EVENTS: Record<TouchType, string[]> = {
   touchStart: ['pointerdown'],
-  touchMove: ['pointermove'],
+  // (or cancelled: a touch where the page lets the browser pan, `touch-action` other than none, is taken by the
+  // browser as it moves, and makes no pointer event after)
+  touchMove: ['pointermove', 'pointercancel'],
   touchEnd: ['pointerup', 'pointercancel'],
 };
 /** the events the mouse makes, which say the page has handled it: its pointer events, and the wheel's own */
@@ -150,34 +152,37 @@ interface InputEvents {
   what: string;
 }
 
-/** Waits for `handled` once `sending` has gone (its wait given up quietly if the input never went). */
-async function sent(handled: Promise<void>, sending: Promise<void>): Promise<void> {
+/**
+ * Waits for `handled` once `sending` has gone (its wait given up quietly if the input never went); resolves with the
+ * event that said it was handled.
+ */
+async function sent(handled: Promise<Event>, sending: Promise<void>): Promise<Event> {
   try {
     await sending;
   } catch (error) {
     handled.catch(() => {});
     throw error;
   }
-  await handled;
+  return handled;
 }
 
 /** Resolves once the page has handled one of the pointer events `names` from a touch (`inputHandled`). */
-function touchHandled(names: string[]): Promise<void> {
+function touchHandled(names: string[]): Promise<Event> {
   const ours = (event: Event) => (event as PointerEvent).pointerType === 'touch';
   return inputHandled({ names, ours, what: 'touch' });
 }
 
 /**
- * Resolves once the page has handled one of an input's events: once the whole dispatch is over (heard first, on the
- * window as it captures, and resolved in the task after it, so every listener has run, whatever one stopped).
- * Rejects after `INPUT_WAIT_MS`.
+ * Resolves once the page has handled one of an input's events, with it: once the whole dispatch is over (heard
+ * first, on the window as it captures, and resolved in the task after it, so every listener has run, whatever one
+ * stopped). Rejects after `INPUT_WAIT_MS`.
  */
-function inputHandled({ names, ours, what }: InputEvents): Promise<void> {
+function inputHandled({ names, ours, what }: InputEvents): Promise<Event> {
   return new Promise((resolve, reject) => {
     const heard = (event: Event) => {
       if (!ours(event)) return;
       done();
-      setTimeout(resolve, 0);
+      setTimeout(() => resolve(event), 0);
     };
     const timeout = setTimeout(() => {
       done();
@@ -425,6 +430,13 @@ export class Lab {
   readonly beforeFrame: (() => void)[] = [];
   /** the fingers on the page, by their id, where each is (css px): every touch sent says where all of them are */
   private readonly fingers = new Map<number, PagePoint>();
+  /** each finger's pointer id, as its pointerdown gave it */
+  private readonly pointerOf = new Map<number, number>();
+  /** the touches' pointers the browser cancelled (it took them as a pan, `touchPanned`), by id: heard at any time, as
+   *  a cancel may come after the move that started the pan was handled */
+  private readonly cancelled = new Set<number>();
+  /** whether the pointer cancels are listened for yet */
+  private hearingCancels = false;
   /** where the mouse is on the page (css px), once the lab has moved it */
   private mouseAt: PagePoint | null = null;
   /** the mouse's buttons held (the DOM's `buttons` mask), as `mouseDown` and `mouseUp` leave them */
@@ -1024,7 +1036,38 @@ export class Lab {
     if (!window.__labTouch) throw new Error('lab: touch: this page has no touches (opened by an older lab)');
     const at = this.fingers.get(finger)!;
     const touch: Finger = { x: at.x, y: at.y, id: finger };
-    await sent(touchHandled(TOUCH_POINTER_EVENTS[type]), window.__labTouch(type, [touch]));
+    this.hearCancels();
+    if (type !== 'touchStart' && this.touchPanned(finger)) {
+      // (the browser took it as a pan: the page hears nothing more of it)
+      await window.__labTouch(type, [touch]);
+      if (type === 'touchEnd') this.forgetPointer(finger);
+      return;
+    }
+    const heard = await sent(touchHandled(TOUCH_POINTER_EVENTS[type]), window.__labTouch(type, [touch]));
+    if (type === 'touchStart') this.pointerOf.set(finger, (heard as PointerEvent).pointerId);
+    if (type === 'touchEnd') this.forgetPointer(finger);
+  }
+
+  /** The touches' pointer cancels listened for, from the first touch on. */
+  private hearCancels(): void {
+    if (this.hearingCancels) return;
+    this.hearingCancels = true;
+    window.addEventListener('pointercancel', (event) => {
+      if (event.pointerType === 'touch') this.cancelled.add(event.pointerId);
+    }, true);
+  }
+
+  /** The finger `finger`'s pointer forgotten, as it's lifted. */
+  private forgetPointer(finger: number): void {
+    const pointer = this.pointerOf.get(finger);
+    if (pointer !== undefined) this.cancelled.delete(pointer);
+    this.pointerOf.delete(finger);
+  }
+
+  /** Whether the browser took the finger `finger`'s touch as a pan (its pointer cancelled): the page hears no more. */
+  touchPanned(finger = 0): boolean {
+    const pointer = this.pointerOf.get(finger);
+    return pointer !== undefined && this.cancelled.has(pointer);
   }
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */

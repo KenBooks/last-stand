@@ -455,8 +455,12 @@ export const perfReport = (): string => report();
 
 function copyReport(): void {
   const hint = el.querySelector('[data-p="copy"]')!;
+  // (its words as the page has them, which say how to copy with the mouse and on touch: kept from the first copy, as a
+  // second within 1.6 s would keep "Copied")
+  const ask = hint.getAttribute('data-ask') ?? hint.innerHTML;
+  hint.setAttribute('data-ask', ask);
   navigator.clipboard.writeText(report()).then(
     () => { hint.textContent = 'Copied to clipboard'; },
     () => { hint.textContent = 'Copy failed'; },
-  ).finally(() => setTimeout(() => { hint.textContent = 'Click to copy a report'; }, 1600));
+  ).finally(() => setTimeout(() => { hint.innerHTML = ask; }, 1600));
 }
