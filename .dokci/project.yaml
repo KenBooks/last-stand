@@ -19,6 +19,9 @@ spec:
     LS_TRACES_TOKEN:
       description: The secret agents read the performance traces with (npm run lab -- trace).
       whenMissing: Traces are still taken from the games and kept; nothing can read them.
+    LS_TRACES_TRUSTED:
+      description: Addresses (comma-separated) whose performance reports are never held to 10 a day, for testing.
+      whenMissing: Every address may send 10 reports a day from each site.
   environments:
     production:
       source:
