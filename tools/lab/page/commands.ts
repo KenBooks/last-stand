@@ -677,6 +677,12 @@ export async function sound(_lab: Lab, command: SoundOptions): Promise<Report> {
   return soundRound(command);
 }
 
+/** Held shield interrupted by attacks: input, combat window, restoration, touch and both views. */
+export async function guard(lab: Lab, command: import('./guard').GuardOptions): Promise<Report> {
+  const { guard: measure } = await import('./guard');
+  return measure(lab, command);
+}
+
 /** Training grounds: saved reached waves, harmless projections, no rewards, repeat and leave. */
 export async function training(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { training: measure } = await import('./training');

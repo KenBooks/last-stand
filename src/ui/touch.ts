@@ -51,7 +51,7 @@ interface Press {
 interface Released { key: SkillKey; aim: THREE.Vector3; t: number; held: boolean }
 
 let stick: Stick | null = null;
-let press: Press | null = null;
+const presses = new Map<number, Press>();
 let released: Released | null = null;
 /** two fingers down: their spread at the last zoom notch, their angle on the screen at the last frame's turn and the
  *  twist since they came down, which turns nothing under `TWIST_START` (a pinch's own wobble) */
@@ -122,7 +122,7 @@ export function initTouch(): void {
   const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
   const angle = (t: TouchList) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
   window.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 2 || press) return;
+    if (e.touches.length !== 2 || presses.size) return;
     pinch = { d: dist(e.touches), a: angle(e.touches), twist: 0 };
     // (a second finger makes it a gesture: the first, on the stick's pad, walks the hero no further)
     if (stick) { stick = null; input.stick.x = input.stick.y = 0; base.classList.remove('on'); }
@@ -178,6 +178,10 @@ function initFullScreen(): void {
 /** Rebuild the skill buttons from the player's loadout (and gear, which can change a key's skill). */
 export function buildTouchSkills(): void {
   const box = $('#touch-skills');
+  for (const press of presses.values()) { giveUp(press); input.touch.delete(press.key); }
+  presses.clear();
+  if (released?.held) input.touch.delete(released.key);
+  released = null;
   box.innerHTML = '';
   buttons = SKILL_KEYS.map((key) => {
     // (no tooltip: a tap is a cast, and its click opened the skill's card pinned over the buttons, the next tap there
@@ -187,25 +191,28 @@ export function buildTouchSkills(): void {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (press || !G.player.skillAt(key)) return;
+      const def = G.player.skillAt(key)?.def;
+      if (!def) return;
+      // A shield finger can stay down while another skill is aimed or held; other skill presses stay exclusive.
+      if ([...presses.values()].some((p) => !!G.player.skillAt(p.key)?.def.block === !!def.block)) return;
       el.setPointerCapture(e.pointerId);
-      const def = G.player.skillAt(key)!.def;
       // the basic attack, channels, drawn bows and skills aimed by holding act while held; the rest wait for the release
       const aimed = !!def.aimed && !def.channel, release = key !== 'mouse0' && !def.channel && !def.draw && !aimed;
-      press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, aimed, ring: release || !!def.draw, shown: null };
+      presses.set(e.pointerId, { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, aimed, ring: release || !!def.draw, shown: null });
       // (a press while the hero is busy queues a drawn shot, as a click does)
       if (!release) { input.touch.add(key); input.pressed.add(key); }
       el.classList.add('pressed');
     });
     el.addEventListener('pointermove', (e) => {
-      if (press?.id !== e.pointerId) return;
+      const press = presses.get(e.pointerId);
+      if (!press) return;
       press.dx = e.clientX - press.x0; press.dy = e.clientY - press.y0;
       if (!press.dragged && Math.hypot(press.dx, press.dy) > DRAG_MIN) press.dragged = true;
     });
     const end = (e: PointerEvent) => {
-      if (press?.id !== e.pointerId) return;
-      const p = press, lifted = e.type === 'pointerup';
-      press = null;
+      const p = presses.get(e.pointerId), lifted = e.type === 'pointerup';
+      if (!p) return;
+      presses.delete(e.pointerId);
       el.classList.remove('pressed');
       // (cancelled, a skill aimed by holding is given up: its key going up alone casts it)
       if (!lifted) giveUp(p);
@@ -218,6 +225,7 @@ export function buildTouchSkills(): void {
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
     box.appendChild(el);
     return { key, el, cd: el.querySelector<HTMLElement>('.cd')!, cdt: el.querySelector<HTMLElement>('.cdt')! };
   });
@@ -279,9 +287,11 @@ export function updateTouch(dt: number): void {
     : menu.classList.contains('stowed'));
 
   $('#touch').classList.toggle('hidden', !show);
-  if (!show && (press || stick)) {
-    if (press) giveUp(press);
-    press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();
+  if (!show && (presses.size || stick || released)) {
+    for (const press of presses.values()) giveUp(press);
+    presses.clear();
+    for (const button of buttons) button.el.classList.remove('pressed');
+    released = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();
   }
 
   input.aim = null;
@@ -296,7 +306,10 @@ export function updateTouch(dt: number): void {
       released = null;
     } else input.aim = released.aim;
   }
-  if (press) {
+  // The attacking finger owns the aim; a lone shield finger can still turn or drag its guard.
+  const press = [...presses.values()].find((p) => !G.player.skillAt(p.key)?.def.block)
+    ?? presses.values().next().value;
+  if (press && (!released || !G.player.skillAt(press.key)?.def.block)) {
     input.aim = aimFor(press, _aim);
     (press.shown ??= new THREE.Vector3()).copy(_aim);
     if (press.dragged && press.ring) {

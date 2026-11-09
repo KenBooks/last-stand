@@ -1568,6 +1568,15 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  guard: {
+    each(side, options) {
+      return side.command('guard', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   training: {
     each(side, options) {
       if (options.coop) return runTrainingCoop(side, options);
