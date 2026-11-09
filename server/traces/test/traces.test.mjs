@@ -20,7 +20,8 @@ let server, base;
 
 before(async () => {
   mkdirSync(DATA, { recursive: true });
-  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: `${ORIGIN},${PREVIEW}`, PER_DAY: '4', DISK_MAX: '1000',
+  Object.assign(process.env, { DATA, TRACES_TOKEN: TOKEN, ORIGINS: `${ORIGIN},https://pr-*.ls.wellscoped.dev`, PER_DAY: '4',
+    PER_DAY_ALL: '6', DISK_MAX: '1000',
     TRUSTED_ADDRESSES: ` ${TRUSTED} , 10.0.0.78` });
   const { start } = await import('../traces.mjs');
   server = await start(0);
@@ -82,6 +83,14 @@ test('takes so many a day from one address on one site, and others still', async
   assert.equal((await send(trace(), { address: '10.0.0.10' })).status, 201);
   // (the same address from a PR's preview: its own count)
   assert.equal((await send(trace(), { address: '10.0.0.9', origin: PREVIEW })).status, 201);
+});
+
+test('takes so many a day from one address over every site, however many it names', async () => {
+  const statuses = [];
+  for (let i = 1; i <= 7; i++) {
+    statuses.push((await send(trace(), { address: '10.0.0.11', origin: `https://pr-${i}.ls.wellscoped.dev` })).status);
+  }
+  assert.deepEqual(statuses, [201, 201, 201, 201, 201, 201, 429]);
 });
 
 test('takes any number from a trusted address', async () => {
