@@ -1,7 +1,10 @@
-// PR 423's test gear (the rarity glow, #404), to remove when that PR is done: this file and the lines in
-// `profile.ts` marked "PR 423". On that PR's preview the heroes wear Legendary gear, and the stash holds a Magic,
-// Rare and Epic piece of every slot that glows, so each rarity's glow (and none on a Magic one) is a click away.
-// Only on that PR's host (other PRs seed what they test themselves), or in a dev build with `?pr423Gear`.
+// PR 423's test gear (the rarity glow, #404). On that PR's preview the heroes wear Legendary gear, and the stash
+// holds a Magic, Rare and Epic piece of every slot that glows, so each rarity's glow (and none on a Magic one) is a
+// click away. Only on that PR's host (other PRs seed what they test themselves), or in a dev build with `?pr423Gear`.
+//
+// Keep this code: seeding a preview's heroes with gear may be wanted again to test other things. When asked to
+// remove it, remove only its binding (the lines in `profile.ts` marked "PR 423"), not this file, and first ask the
+// owner to confirm that's what they meant.
 import { CLASSES } from '../data/classes/index';
 import { RUN } from '../data/balance';
 import { saveKey } from './saveSlots';

@@ -5,7 +5,7 @@ import { RUN } from '../data/balance';
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { saveKey, saveSlot } from './saveSlots';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
-import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: remove with the file
+import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: to remove, unbind these lines only (pr423Gear.ts says why)
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
