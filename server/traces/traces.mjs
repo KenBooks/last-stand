@@ -39,14 +39,14 @@ export function originsFrom(list) {
   return { has: (origin) => exact.has(origin) || patterns.some((pattern) => pattern.test(origin)) };
 }
 /** The service's settings, from the environment (`start` may give others: the lab's local one, its tests'). */
-function settingsFrom(vars) {
+export function settingsFrom(vars) {
   return {
     port: Number(vars.PORT ?? 8080),
     data: vars.DATA ?? '/data',
     /** pages allowed to send (the relay's: the game's own domain, the github.io address it moved from, the dev
      *  server) */
     origins: originsFrom(vars.ORIGINS
-      ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://pr-*.ls.wellscoped.dev,http://localhost:5173'),
+      ?? 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev,http://localhost:5173'),
     token: vars.TRACES_TOKEN ?? '',
     maxBytes: Number(vars.MAX_BYTES ?? 1 << 20),
     keepDays: Number(vars.KEEP_DAYS ?? 30),
