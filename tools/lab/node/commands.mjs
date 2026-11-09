@@ -38,6 +38,7 @@ export function fixtureFrom(options) {
   if (options.gear !== undefined) fixture.gear = options.gear;
   if (options.weapon !== undefined) fixture.weapon = options.weapon;
   if (options.wear !== undefined) fixture.wear = options.wear.filter((part) => part !== 'none');
+  if (options.rarity !== undefined) fixture.rarity = options.rarity;
   if (options.tune !== undefined) fixture.tune = tunesFrom(options.tune);
   return fixture;
 }
@@ -816,6 +817,24 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  glow: {
+    each(side, options) {
+      const command = {
+        colour: options.colour ?? 'green',
+        rarity: options.rarity ?? 'rare',
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+        tune: fixtureFrom(options).tune,
+      };
+      return side.command('glow', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('glow'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   haze: {
     check(options) {
       const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));
@@ -830,6 +849,7 @@ export const COMMANDS = {
         gear: options.gear,
         weapon: options.weapon,
         at: options.at,
+        rarity: options.rarity,
         pictures: options.pictures !== false,
         canary: Boolean(options.canary),
       };

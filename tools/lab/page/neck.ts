@@ -60,6 +60,7 @@ function gearFor(dress: Dress): Gear {
     helm: dress === 'hat',
     chest: dress !== 'bare',
     hands: false,
+    rarity: {},
   };
 }
 

@@ -70,6 +70,13 @@ const SETUP_OPTIONS = {
     help: 'the armour he wears, as the player dresses him (hands: gloves and bracers; none: bare; as rolled by '
       + 'default)',
   },
+  rarity: {
+    kind: 'choice',
+    choices: ['common', 'magic', 'rare', 'epic', 'legendary'],
+    usage: 'common|magic|rare|epic|legendary',
+    help: 'every item he wears of this rarity, as its look shows it (Rare and up glow in its colour; as rolled by '
+      + 'default)',
+  },
   tune: {
     kind: 'text',
     joins: ';',
@@ -715,6 +722,39 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  glow: {
+    help: 'each worn item\'s glow in its rarity\'s colour (#404), the hero in a player\'s colour wearing every item '
+      + 'his class shows: each slot given the rarity alone and drawn close up with its glow and without, at the same '
+      + 'moment. A glow unseen, adding more than 0.25 of white, in one light over half of it (flat), leaning off the '
+      + 'rarity\'s hue, on a Magic item, its pixels changing over 50% or under 5% in a tenth of a second (not slow, '
+      + 'still), a cycle on not drawing the same (a join), and a program compiled are problems: tools/lab/out/glow '
+      + '(front and back, no glow and the rarity)',
+    options: {
+      colour: {
+        kind: 'choice',
+        choices: ['green', 'red', 'blue', 'gold', 'purple', 'white'],
+        usage: 'id',
+        help: 'the player\'s colour he\'s dyed in (green by default: green on a Rare item\'s green)',
+      },
+      rarity: {
+        kind: 'choice',
+        choices: ['rare', 'epic', 'legendary'],
+        usage: 'rare|epic|legendary',
+        help: 'the rarity each item is given (rare by default)',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture him close up without the glow and with it (=false: the numbers alone)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the measures must catch: the glow ten times as strong, none, and its loop judged '
+          + 'half a second past a cycle',
+      },
+      tune: SETUP_OPTIONS.tune,
+      ...COMMON_OPTIONS,
+    },
+  },
   haze: {
     help: 'the hero\'s held weapons\' light through the eyes (or his hands\', or over the shoulder: --part, --view): '
       + 'the frame drawn with them and without, each with the '
@@ -756,6 +796,7 @@ export const COMMANDS = {
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
       at: SETUP_OPTIONS.at,
+      rarity: SETUP_OPTIONS.rarity,
       ...COMMON_OPTIONS,
     },
   },

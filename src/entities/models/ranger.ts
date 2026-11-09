@@ -26,6 +26,7 @@ import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
 import { Dye } from './dye';
+import { ItemGlows, drawnIn } from './itemGlow';
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -530,6 +531,14 @@ export function buildRanger(): Model {
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
   bow.group.userData.bow = bow;   // (the lab's handle on it: tools/lab carry)
+  // each item's parts glowing in its rarity's colour (itemGlow.ts): the bow, the cap, the trailcoat (every piece of
+  // the coat's cloth), the bracers and cuffs, and the gloves (the hands' own copies kept)
+  const glows = new ItemGlows(kit.mats)
+    .add('weapon', [bow.group])
+    .add('head', [cap])
+    .add('chest', [j.root], { only: (m) => drawnIn(m, [coat, coatHem]) })
+    .add('hands', [j.elbowL, j.elbowR], { only: (m) => drawnIn(m, [hide]) })
+    .add('hands', [handL.glove, handR.glove], { inPlace: true });
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
   const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
@@ -1133,7 +1142,7 @@ export function buildRanger(): Model {
     // (the coat, its hem and the hat's felt: his green)
     dye: new Dye('green').cloth(coat, coatHem, felt),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
-    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
+    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; glows.set(gear); },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },
   };
 }

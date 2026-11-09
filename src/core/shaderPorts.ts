@@ -5,7 +5,7 @@
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
 import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
-import { NEAR_GLOW, type KitLooks } from './materials';
+import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
 import type { SeeThrough } from './seeThrough';
 import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
 
@@ -215,9 +215,84 @@ function kitNodes(node: N): void {
     .add(vec3(0.25, 0.55, 0.9).mul(frozen).mul(0.35))
     .mul(char.mul(-0.7).add(1))
     .add(vec3(1.0, 0.32, 0.06).mul(char).mul(smoothstep(0.6, 0.78, dn)).mul(1.6).mul(near))
-    .add(vec3(1.0, 0.9, 0.85).mul(read('u.uHit', 'float')).mul(0.45).mul(near));
+    .add(vec3(1.0, 0.9, 0.85).mul(read('u.uHit', 'float')).mul(0.45).mul(near))
+    .add(itemAura(read('aura', 'color'), at));
   hoodShaded(node, read('shade', 'vec4'), at);
   shineCapped(node, read('u.uShine', 'float'));
+}
+
+/** the glow's pattern (`AURA_GLSL` in core/materials.ts) in WGSL, line for line, made once */
+let auraPattern: N | null = null;
+
+/** `AURA_GLSL`'s `auraTendrils` as a WGSL function (GLSL's `mod` floors, as `wrap` does; WGSL's `%` truncates). */
+function auraTendrils(): N {
+  if (auraPattern) return auraPattern;
+  const { wgslFn } = tsl as any;
+  const { hash3 } = wgslNoise();
+  const wrap = wgslFn(`fn auraWrap(x: f32, per: f32) -> f32 { return x - per * floor(x / per); }`);
+  const hash = wgslFn(`fn auraHash(start: vec3f, per: f32) -> f32 {
+    return hash3(vec3f(start.x, auraWrap(start.y, per), start.z));
+  }`, [hash3, wrap]);
+  const noise3 = wgslFn(`fn auraNoise3(x: vec3f, per: f32) -> f32 {
+    let i = floor(x);
+    var f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(auraHash(i, per), auraHash(i + vec3f(1.0, 0.0, 0.0), per), f.x),
+        mix(auraHash(i + vec3f(0.0, 1.0, 0.0), per), auraHash(i + vec3f(1.0, 1.0, 0.0), per), f.x), f.y),
+      mix(mix(auraHash(i + vec3f(0.0, 0.0, 1.0), per), auraHash(i + vec3f(1.0, 0.0, 1.0), per), f.x),
+        mix(auraHash(i + vec3f(0.0, 1.0, 1.0), per), auraHash(i + vec3f(1.0, 1.0, 1.0), per), f.x), f.y), f.z);
+  }`, [hash]);
+  const noise = wgslFn(`fn auraNoise(p: vec3f, w: f32, per: vec2f) -> f32 {
+    let s = floor(w);
+    var f = fract(w);
+    f = f * f * (3.0 - 2.0 * f);
+    let s0 = auraWrap(s, per.y);
+    let s1 = auraWrap(s + 1.0, per.y);
+    let slice = vec3f(17.31, 7.0, 11.13);
+    return mix(auraNoise3(p + slice * s0, per.x), auraNoise3(p + slice * s1, per.x), f);
+  }`, [noise3, wrap]);
+  const fbm = wgslFn(`fn auraFbm(p: vec3f, w: f32, per: vec2f) -> f32 {
+    return auraNoise(p, w, per) * 0.5 + auraNoise(p * 2.0 + 3.7, w * 2.0, per * 2.0) * 0.3
+      + auraNoise(p * 4.0 + 9.1, w * 4.0, per * 4.0) * 0.2;
+  }`, [noise]);
+  const warp = wgslFn(`fn auraWarp(p: vec3f, w: f32, per: vec2f) -> f32 {
+    return auraNoise(p, w, per) * 0.62 + auraNoise(p * 2.0 + 3.7, w * 2.0, per * 2.0) * 0.38;
+  }`, [noise]);
+  auraPattern = wgslFn(`fn auraTendrils(at: vec3f, c: f32, shape: vec4f, looping: vec4f) -> f32 {
+    let p = at * shape.xyx - vec3f(0.0, c * looping.x, 0.0);
+    let w = c * looping.y;
+    let per = looping.xy;
+    let warped = vec2f(auraWarp(p * 0.5, w * 0.5, per * 0.5),
+      auraWarp(p * 0.5 + vec3f(5.0, 1.0, 3.0), w * 0.5 + 1.0, per * 0.5));
+    let tex = auraFbm(p + vec3f(warped.x, warped.y, warped.x) * 2.2, w, per);
+    let strand = smoothstep(0.0, 1.0, 1.0 - abs(tex - shape.z) / shape.w);
+    return looping.z + strand * mix(0.4, 1.0, smoothstep(0.3, 0.5, warped.x));
+  }`, [fbm, warp]);
+  return auraPattern;
+}
+
+/** the glow's shape, loop and clock (`itemGlowUniforms`), uniforms of the render's group every kit shares */
+let auraNodes: { shape: N; loop: N; clock: N } | null = null;
+
+/** The glow's uniforms, made once. */
+function itemAuraNodes(): { shape: N; loop: N; clock: N } {
+  const { uniform, renderGroup } = tsl as any;
+  const read = (value: () => unknown, start: unknown): N =>
+    uniform(start).setGroup(renderGroup).onRenderUpdate(value);
+  auraNodes ??= {
+    shape: read(() => itemGlowUniforms.shape.value, new THREE.Vector4()),
+    loop: read(() => itemGlowUniforms.loop.value, new THREE.Vector4()),
+    clock: read(() => itemGlowUniforms.clock.value, 0),
+  };
+  return auraNodes;
+}
+
+/** A worn item's glow in its rarity's colour, as the WebGL patch draws it (`ITEM_GLOW` in core/materials.ts):
+ *  tendrils of light on its surface, drifting up on a loop. `aura` black: nothing. */
+function itemAura(aura: N, at: N): N {
+  const { shape, loop, clock } = itemAuraNodes();
+  const tendrils = auraTendrils()({ at, c: clock, shape, looping: loop });
+  return aura.mul(loop.w).mul(tendrils);
 }
 
 /** All of `node`'s light (lit, reflected and its own glow) dimmed in a hood's shade, as the WebGL patch dims it after

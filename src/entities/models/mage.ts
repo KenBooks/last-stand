@@ -24,6 +24,7 @@ import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outO
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
 import { Dye } from './dye';
+import { ItemGlows } from './itemGlow';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -888,6 +889,15 @@ export function buildMage(): Model {
   // (robed until setGear says otherwise)
   let robed = true, gloved = true;
   for (const o of [...tunic, tunicSkirt]) o.visible = false;
+  // each item's parts glowing in its rarity's colour (itemGlow.ts): the staff, the book at his hip (the off-hand's),
+  // the hood, the longcoat, the bracers and gloves (the hands' own copies kept)
+  const glows = new ItemGlows(kit.mats)
+    .add('weapon', [staff])
+    .add('offhand', [book])
+    .add('head', [hat])
+    .add('chest', [...robeParts, ...skirts, ...flaps.map((f) => f.g)])
+    .add('hands', bracers)
+    .add('hands', [handL.glove, handR.glove], { inPlace: true });
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
@@ -1197,6 +1207,7 @@ export function buildMage(): Model {
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
+      glows.set(gear);
     },
     reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); hood.reset(); },
     firstPerson: (on) => { fp = on; },

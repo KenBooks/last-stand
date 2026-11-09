@@ -17,7 +17,7 @@ import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
 import type { Joints } from '../../../src/entities/models/rig';
-import type { ClassDef, Gear } from '../../../src/types';
+import type { ClassDef, Gear, GlowSlot, RarityId } from '../../../src/types';
 import { weaponStyle, type WeaponStyle } from '../../../src/loot/loadout';
 import { Player } from '../../../src/entities/player';
 import { clearProjectiles } from '../../../src/combat/projectiles';
@@ -291,6 +291,9 @@ export interface Fixture {
   /** the armour he wears, every piece not named left off (none: bare hands and head, his clothes); as the boot rolled
    *  it by default */
   wear?: Armour[];
+  /** every item he wears of this rarity, as its look shows it (Rare and up glow: models/itemGlow.ts); as the boot
+   *  rolled them by default */
+  rarity?: RarityId;
 }
 
 /** the armour a hero can be seen wearing (`Gear`'s flags) */
@@ -608,6 +611,7 @@ export class Lab {
     const spot = new THREE.Vector3(x, 0, z);
     if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
     if (fixture.wear) this.dress(fixture.wear);
+    if (fixture.rarity) this.glowAs(fixture.rarity);
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
@@ -680,6 +684,14 @@ export class Lab {
   private dress(armour: Armour[]): void {
     const worn = (piece: Armour) => armour.includes(piece);
     const gear = { ...this.player.gear, helm: worn('helm'), chest: worn('chest'), hands: worn('hands') };
+    this.player.gear = gear;
+    this.model.setGear?.(gear);
+  }
+
+  /** Every item the hero wears of `rarity`, as its look shows it (`Gear.rarity`: Rare and up glow in its colour). */
+  glowAs(rarity: RarityId): void {
+    const slots: GlowSlot[] = ['weapon', 'offhand', 'head', 'chest', 'hands'];
+    const gear = { ...this.player.gear, rarity: Object.fromEntries(slots.map((slot) => [slot, rarity])) };
     this.player.gear = gear;
     this.model.setGear?.(gear);
   }

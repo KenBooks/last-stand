@@ -22,7 +22,80 @@ export const NEAR_GLOW = { ref: 20, pow: 0.75, min: 0.25 };
 const NEAR_GLOW_GLSL = /* glsl */`
 float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0); }`;
 
+/**
+ * A worn item's glow in its rarity's colour (#404, from play: "slight glow, not much, no light source", "should not
+ * make it flat", "subtly animated (slowly)", "glow should be on the object, not around it", "tendrils need to animate
+ * too, not just pan", "make sure glow is continuous/looped and not jumping"): tendrils of light on the item's own
+ * surface, `strength` times its rarity's colour, `face` of it over all the item. A noise in the item's own space,
+ * `across` cells a metre across it and `up` along it, warped by itself, its light in thin strands where it crosses
+ * `centre`, `width` either side (light wherever it lay over a level made broad blobs, read on a robe as camouflage),
+ * brighter over part of the item at a time, where the slow field that warps it is high (strands even everywhere made
+ * a net; none outside those parts left a small item, a blade or a glove, without any);
+ * as time goes on it drifts `rise` cells up and moves `turns` cells on through its own time each `cycle` s, and
+ * wraps at both: after a cycle it is exactly where it began, so it loops with no join (a crossfade between two cycles
+ * was seen as one). Chosen on a flat panel first (`.tmp`'s live page, then `lab glow`); an outline, an even tint
+ * and blotches were each turned down. A material's own colour (its `kitLooks.aura`, black for none), the same shape
+ * for all: `ITEM_GLOW` the shape, `tickItemGlow` its clock, the colour the item's (`models/itemGlow.ts`).
+ */
+export const ITEM_GLOW = tunable('itemGlow', {
+  strength: 0.12, face: 0.08, across: 6, up: 3, centre: 0.5, width: 0.05, rise: 2, turns: 3, cycle: 12,
+});
+/** the glow's shape (x its cells a metre across, y along, z the level its strands lie on, w how far either side), its loop (x the cells
+ *  it rises a cycle, y the cells it moves on through time, z the face's share, w the strength) and its clock (the
+ *  share of its cycle, 0 to 1: kept small on the CPU, as a game's time grows past what a float holds finely) */
+const AURA_SHAPE = { value: new THREE.Vector4() };
+const AURA_LOOP = { value: new THREE.Vector4() };
+const AURA_CLOCK = { value: 0 };
+/** what WebGPU's kit reads them by (core/shaderPorts.ts `kitNodes`) */
+export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AURA_CLOCK };
+
+/** The glow's clock moved to the game's (`G.time`, s), and its shape read, once a frame. */
+export function tickItemGlow(time: number): void {
+  const { strength, face, across, up, centre, width, rise, turns, cycle } = ITEM_GLOW;
+  AURA_SHAPE.value.set(across, up, centre, width);
+  // (whole cells, or the noise wouldn't wrap where the cycle does)
+  AURA_LOOP.value.set(Math.max(1, Math.round(rise)), Math.max(1, Math.round(turns)), face, strength);
+  AURA_CLOCK.value = (((time % cycle) + cycle) % cycle) / cycle;
+}
+
+/**
+ * The glow's pattern, GLSL (the kit's patch) and WGSL (WebGPU's kit, core/shaderPorts.ts) alike: a value noise whose
+ * lattice wraps along y at `per.x` cells, and through time, slice by slice, at `per.y` (two of its 3D fields
+ * blended a slice apart, each slice's at an offset of its own), so the pattern drifting up and moving on through
+ * time comes back to itself after a cycle.
+ */
+export const AURA_GLSL = /* glsl */ `
+float auraHash(vec3 c, float per){ c.y = mod(c.y, per); return fxHash(c); }
+float auraNoise3(vec3 x, float per){
+  vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(auraHash(i,per),auraHash(i+vec3(1,0,0),per),f.x), mix(auraHash(i+vec3(0,1,0),per),auraHash(i+vec3(1,1,0),per),f.x),f.y),
+             mix(mix(auraHash(i+vec3(0,0,1),per),auraHash(i+vec3(1,0,1),per),f.x), mix(auraHash(i+vec3(0,1,1),per),auraHash(i+vec3(1,1,1),per),f.x),f.y), f.z);
+}
+float auraNoise(vec3 p, float w, vec2 per){
+  float s = floor(w); float f = fract(w); f = f*f*(3.0-2.0*f);
+  float s0 = mod(s, per.y); float s1 = mod(s + 1.0, per.y);
+  return mix(auraNoise3(p + vec3(17.31, 7.0, 11.13) * s0, per.x), auraNoise3(p + vec3(17.31, 7.0, 11.13) * s1, per.x), f);
+}
+float auraFbm(vec3 p, float w, vec2 per){
+  return auraNoise(p, w, per)*0.5 + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.3 + auraNoise(p*4.0+9.1, w*4.0, per*4.0)*0.2;
+}
+float auraWarp(vec3 p, float w, vec2 per){ return auraNoise(p, w, per)*0.62 + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.38; }
+float auraTendrils(vec3 at, float c, vec4 shape, vec4 loop){
+  vec3 p = at * shape.xyx - vec3(0.0, c * loop.x, 0.0);
+  float w = c * loop.y;
+  vec2 per = loop.xy;
+  vec2 warp = vec2(auraWarp(p * 0.5, w * 0.5, per * 0.5), auraWarp(p * 0.5 + vec3(5.0, 1.0, 3.0), w * 0.5 + 1.0, per * 0.5));
+  float tex = auraFbm(p + vec3(warp.x, warp.y, warp.x) * 2.2, w, per);
+  float strand = smoothstep(0.0, 1.0, 1.0 - abs(tex - shape.z) / shape.w);
+  return loop.z + strand * mix(0.4, 1.0, smoothstep(0.3, 0.5, warp.x));
+}
+`;
+
 const FX_CHUNK_COMMON = /* glsl */ `
+uniform vec3 uAura;
+uniform vec4 uAuraShape;
+uniform vec4 uAuraLoop;
+uniform float uAuraClock;
 uniform float uDissolve;
 uniform float uFrozen;
 uniform float uChar;
@@ -37,7 +110,7 @@ float fxNoise(vec3 x){
   return mix(mix(mix(fxHash(i),fxHash(i+vec3(1,0,0)),f.x), mix(fxHash(i+vec3(0,1,0)),fxHash(i+vec3(1,1,0)),f.x),f.y),
              mix(mix(fxHash(i+vec3(0,0,1)),fxHash(i+vec3(1,0,1)),f.x), mix(fxHash(i+vec3(0,1,1)),fxHash(i+vec3(1,1,1)),f.x),f.y), f.z);
 }
-`;
+${AURA_GLSL}`;
 
 /** A kit material's looks as WebGPU reads them (core/shaderPorts.ts `kitNodes`): the kit's uniforms, and the
  *  material's own near glow and rim. */
@@ -47,6 +120,8 @@ export interface KitLooks {
   rim: { value: THREE.Color };
   /** the hood's shade (`Head.shade`): how deep, where up the mesh it's full, where it's gone, how much more aside */
   shade: { value: THREE.Vector4 };
+  /** a worn item's glow in its rarity's colour (`ITEM_GLOW`), black for none: the material's own, never the kit's */
+  aura: { value: THREE.Color };
 }
 
 export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
@@ -75,10 +150,19 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     m.userData.shade = shade;
     // (what WebGPU reads its looks from, off the material drawn: core/shaderPorts.ts `kitNodes`; a property of its
     // own, not copied to a clone, as its `onBeforeCompile` isn't)
-    const looks: KitLooks = { u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new THREE.Color(0) }, shade };
+    const looks: KitLooks = {
+      u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new THREE.Color(0) }, shade,
+      aura: { value: new THREE.Color(0) },
+    };
     Object.defineProperty(m, 'kitLooks', { value: looks, configurable: true });
-    m.onBeforeCompile = (shader) => {
+    // (a method: three calls it on the material it compiles for, so a copy's own glow (`kitCopy`) is read off the copy;
+    // a wrapper calling it with no material falls back to this one's)
+    m.onBeforeCompile = function (this: THREE.Material | undefined, shader) {
       Object.assign(shader.uniforms, u);
+      shader.uniforms.uAura = ((this as { kitLooks?: KitLooks } | undefined)?.kitLooks ?? looks).aura;
+      shader.uniforms.uAuraShape = AURA_SHAPE;
+      shader.uniforms.uAuraLoop = AURA_LOOP;
+      shader.uniforms.uAuraClock = AURA_CLOCK;
       shader.uniforms.uNear = { value: near ? 1 : 0 };
       shader.uniforms.uRim = { value: rim ?? new THREE.Color(0) };
       shader.uniforms.uShade = shade;
@@ -93,6 +177,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           totalEmissiveRadiance *= mix(1.0, nearGlow(), uNear);
           totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+          if (dot(uAura, uAura) > 0.0) {
+            // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop
+            totalEmissiveRadiance += uAura * uAuraLoop.w * auraTendrils(vFxPos, uAuraClock, uAuraShape, uAuraLoop);
+          }
           float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
           if (uDissolve > 0.0 && dn < uDissolve) discard;
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
@@ -145,6 +233,29 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
 export function sameLooks(copy: THREE.Material, original: THREE.Material): void {
   const { kitLooks } = original as { kitLooks?: KitLooks };
   if (kitLooks) (copy as unknown as { kitLooks: KitLooks }).kitLooks = kitLooks;
+}
+
+/** A kit material's copy of its own, drawn by the same program, its glow (`kitLooks.aura`) its own: an item's parts
+ *  glow in its rarity's colour, the rest of the hero's in that material not (models/itemGlow.ts). Dyed with its
+ *  original (models/dye.ts finds it by the hook they share). */
+export function kitCopy<M extends THREE.Material>(original: M): M {
+  const copy = original.clone() as M;
+  copy.onBeforeCompile = original.onBeforeCompile;
+  copy.customProgramCacheKey = original.customProgramCacheKey;
+  // (its hood's shade its original's, the uniform the hook binds: `clone` copies user data through JSON, and the
+  // head's `shade` set a plain object's value)
+  copy.userData.shade = original.userData.shade;
+  ownAura(copy, original);
+  return copy;
+}
+
+/** `m` given looks of its own, as `from`'s but with a glow of its own (black), which it returns. */
+export function ownAura(m: THREE.Material, from: THREE.Material = m): THREE.Color | null {
+  const looks = (from as { kitLooks?: KitLooks }).kitLooks;
+  if (!looks) return null;
+  const aura = new THREE.Color(0);
+  Object.defineProperty(m, 'kitLooks', { value: { ...looks, aura: { value: aura } }, configurable: true });
+  return aura;
 }
 
 /**

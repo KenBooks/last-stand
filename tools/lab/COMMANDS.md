@@ -195,6 +195,22 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at
   the tips, 0.86 alike its mirror, the bonfire's smoke over 47% above it, 7 to 9% moving, no plant over either, 0.16 ms
   (crypt) and 0.34 (forest) of a frame from beside them on the lab's desktop GPU.
+- `glow`: each worn item's glow in its rarity's colour (`page/itemGlow.ts`, #404, `src/entities/models/AGENTS.md`).
+  The hero (`--class`) wears every item his class shows, the warrior with a shield, dyed in a player's colour
+  (`--colour`, green by default: a Rare item's green on it). Each slot's item alone is given the rarity
+  (`--rarity`, rare by default), and the front and back close-ups drawn with its glow and with `ITEM_GLOW.strength`
+  at 0, at the same moment (his gear set again between the two could seat his hands anew). What it added: the
+  share of the close-ups it lit (under 0.2%: unseen), its 99th percentile (over 0.25 of white: too bright), how much of it within a fifth of its median
+  (over half: one flat light, the highlight the owner ruled out), its hue against the rarity's (a cosine under
+  0.9), and a Magic item's (any: a problem). Then every slot at the rarity over 4 s, the hero held still and the
+  glow's clock alone moved on, a sample a tenth of a second: its pixels' mean change between two, a share of its
+  light (over 50%: not slow; under 5%: still); and the glow a whole cycle on against now, which a loop draws the
+  same (over 1% apart: a join). Any program compiled meanwhile is a problem. Pictured close up front and back,
+  every item Common and every item at the rarity (`out/glow/`). `--canary` draws the chest's glow ten times as
+  strong and at nothing, and judges its loop half a second past a cycle, each of which must be caught. `--tune
+  itemGlow.strength=0.1` compares a strength. As tuned (0.12), in green: the glow lit 0.3% (hands) to 13.8% (the
+  mage's robe) of the close-ups, its 99th percentile 0.04 to 0.09 of white, 6 to 35% of it in one light, its hue
+  0.97 to 1.00; its pixels changed 11 to 33% a tenth of a second, 0.00% apart a cycle on.
 - `haze`: the hero's held weapons' light through the eyes (`page/haze.ts`), standing in a biome (`--biome`, the
   forest by default) looking each way (`--facings`), held as `--gear` and `--weapon` say. The frame is drawn with the
   weapons and without them, each also with the grade's adaptation held off, and their surface found in the `parts`

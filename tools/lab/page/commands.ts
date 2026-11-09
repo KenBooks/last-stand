@@ -21,6 +21,7 @@ import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
 import type { SceneCostOptions } from './sceneCost';
 import type { HazeOptions } from './haze';
+import type { GlowOptions } from './itemGlow';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
@@ -348,6 +349,13 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
 export async function envCost(lab: Lab, command: EnvCostOptions): Promise<Report> {
   const { envCost: envCostRound } = await import('./envCost');
   return envCostRound(lab, command);
+}
+
+/** `lab glow`: each worn item's glow in its rarity's colour, against the frame without it; a glow unseen, too bright,
+ *  flat, in another hue, on a Magic item, still or quick, a program compiled and a canary missed are problems. */
+export async function glow(lab: Lab, command: GlowOptions): Promise<Report> {
+  const { itemGlow } = await import('./itemGlow');
+  return itemGlow(lab, command);
 }
 
 /** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a

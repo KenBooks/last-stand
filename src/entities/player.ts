@@ -208,7 +208,7 @@ export class Player {
 
   stats!: DerivedStats;
   /** what the character holds (from the equipped items) */
-  gear: Gear = { weapon: null, twoHanded: false, shield: false, offWeapon: null, helm: false, chest: false, hands: false };
+  gear: Gear = { weapon: null, twoHanded: false, shield: false, offWeapon: null, helm: false, chest: false, hands: false, rarity: {} };
   /** seconds until the shield can block again, and when it last did */
   blockCd = 0;
   /** game time until which a broken guard keeps the shield down and the character staggered:
