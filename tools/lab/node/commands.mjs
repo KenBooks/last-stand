@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
 import { runTrainingCoop } from './trainingCoop.mjs';
+import { DEVICES, screenPlaying } from './devices.mjs';
 import { labError } from './errors.mjs';
 import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
@@ -69,6 +70,17 @@ function tunesFrom(text) {
     tunes[path] = numbers;
   }
   return tunes;
+}
+
+/**
+ * `--device`'s options filled in (`perf`): the screen its GPU is played on here, and its quality where it isn't
+ * given. Its screen is the device's: it takes no `--screen`.
+ */
+function playAsDevice(options) {
+  if (options.screen || options.screens) throw labError('--device: the screen is the device\'s; no --screen');
+  const device = DEVICES[options.device];
+  options.screen = screenPlaying(device);
+  options.quality ??= device.quality;
 }
 
 /** the quality levels `--quality` names (src/data/quality.ts) */
@@ -696,9 +708,18 @@ export const COMMANDS = {
       if (options.after !== undefined && !(options.after > 0)) throw labError('perf --after: more than 0 s');
       if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
       if (options.quality !== undefined) qualityOf(options.quality);
+      if (options.device) playAsDevice(options);
     },
     each(side, options) {
+      const device = options.device ? DEVICES[options.device] : undefined;
       const command = {
+        device: device && {
+          name: options.device,
+          what: device.what,
+          gpu: device.gpu,
+          screen: device.screen,
+          pageWork: device.pageWork,
+        },
         casts: options._[0].split(','),
         biome: options.biome ?? 'forest',
         view: options.view ?? 'top',
