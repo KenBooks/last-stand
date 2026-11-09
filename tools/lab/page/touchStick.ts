@@ -3,10 +3,14 @@
 // width as a thumb swept across the screen, and what the game made of each push: the stick's push (0 to 1), the
 // knob's place and the hero's speed against his full. A finger past the stick's edge is the stick at its fullest, so
 // a push further out may never be a slower one: held to the edge and then divided by the finger's whole distance,
-// half a screen out walked the hero at a seventh of his speed.
+// half a screen out walked the hero at a seventh of his speed. He's put where the push walks him in towards the
+// arena's middle: from the lab's own spot (12, 22) a push to the right walked him into the wall, which brakes him as
+// he nears it (`Player.slowForWall`), and every push past the stick's edge read 6.55 of his 7 m/s.
 import { middleOf } from './lab';
 import type { Fixture, Lab, PagePoint, Report } from './lab';
 import { input } from '../../../src/core/input';
+import { cameraYaw } from '../../../src/core/renderer';
+import { G } from '../../../src/state';
 
 export interface TouchOptions {
   fixture: Fixture;
@@ -32,6 +36,11 @@ const KNOB_SLACK = 1;
 /** past the stick's edge: the least push and share of his full speed */
 const FULL_PUSH = 0.999;
 const FULL_SPEED = 0.97;
+/** how far from the arena's middle the hero is put, against the push's way (m): a push walks him in towards it, and
+ *  in 60 frames at his full 7 m/s he stops short of the dais's middle */
+const PUSH_FROM = 10;
+/** the least room he may have to the wall as a push's speed is read (m): nearer, the wall's brake slows him */
+const WALL_ROOM = 3;
 /** with --canary: the furthest push's finger slid back to this far out (css px) before it's read, a slower push
  *  further out that the measure must catch */
 const CANARY_BACK = 20;
@@ -48,6 +57,8 @@ interface Push {
   speed: number;
   /** the canary's: its finger slid back */
   planted: boolean;
+  /** his room to the wall as it was read (m) */
+  room: number;
 }
 
 /** An element of the page by its selector, or an error naming it. */
@@ -87,6 +98,17 @@ export async function showTouchControls(lab: Lab): Promise<void> {
   await lab.step(1);
 }
 
+/**
+ * The set-up for every push: the hero put `PUSH_FROM` m from the arena's middle against the way a push to the right
+ * of the screen walks him (the camera's right on the ground, as `Player.handleInput` turns the stick), so he walks in
+ * across open ground, the wall's brake far behind him.
+ */
+function openGround(fixture: Fixture): Fixture {
+  const yaw = cameraYaw();
+  const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+  return { ...fixture, at: [-right.x * PUSH_FROM, -right.z * PUSH_FROM] };
+}
+
 /** Where a push starts: on the move pad, `MARGIN` in from its left edge and halfway down. */
 async function padStart(lab: Lab): Promise<PagePoint> {
   await showTouchControls(lab);
@@ -115,6 +137,7 @@ async function pushOut(lab: Lab, fixture: Fixture, start: PagePoint, out: number
     knob: Math.hypot(knobAt.x - start.x, knobAt.y - start.y),
     speed: Math.hypot(lab.player.vel.x, lab.player.vel.z),
     planted,
+    room: G.arena.wall.roomOut(lab.player.pos.x, lab.player.pos.z, lab.player.radius),
   };
   await lab.touchUp();
   await lab.step(LIFT_FRAMES);
@@ -127,6 +150,9 @@ async function pushOut(lab: Lab, fixture: Fixture, start: PagePoint, out: number
  */
 function faultsOf(push: Push, nearer: Push[], travel: number, full: number): string[] {
   const faults: string[] = [];
+  if (push.room < WALL_ROOM) {
+    faults.push(`${push.out} px out was read ${push.room.toFixed(1)} m from the wall, which brakes him`);
+  }
   if (push.out < travel - KNOB_SLACK && Math.abs(push.knob - push.out) > KNOB_SLACK) {
     faults.push(`${push.out} px out, the knob is ${push.knob.toFixed(1)} px out: not under the finger`);
   }
@@ -147,6 +173,21 @@ function faultsOf(push: Push, nearer: Push[], travel: number, full: number): str
   return faults;
 }
 
+/**
+ * The wall's canary: the furthest push from the set-up's own spot (the lab's 12, 22 by default), where a push to the
+ * right walks him into the wall's brake, which the measure must catch. Its line, its problem added if it went unseen.
+ */
+async function wallCanary(lab: Lab, fixture: Fixture, start: PagePoint, outs: number[], problems: string[]) {
+  const out = outs[outs.length - 1];
+  const push = await pushOut(lab, fixture, start, out, false);
+  if (push.room < WALL_ROOM) {
+    return `canary: caught (${out} px out from the set-up's spot, read ${push.room.toFixed(1)} m from the wall)`;
+  }
+  problems.push(`the wall's canary went unseen: ${out} px out from the set-up's spot, ${push.room.toFixed(1)} m `
+    + 'from the wall');
+  return `canary: unseen (${out} px out from the set-up's spot)`;
+}
+
 /** A push as a line of the report. */
 function pushLine(push: Push, full: number): string {
   const out = `${push.out} px out`.padStart(11);
@@ -162,11 +203,12 @@ function pushLine(push: Push, full: number): string {
 export async function touchStick(lab: Lab, options: TouchOptions): Promise<Report> {
   await lab.setup(options.fixture);
   const start = await padStart(lab);
+  const fixture = openGround(options.fixture);
   const outs = pushesFrom(start);
   const pushes: Push[] = [];
   for (const out of outs) {
     const planted = options.canary === true && out === outs[outs.length - 1];
-    pushes.push(await pushOut(lab, options.fixture, start, out, planted));
+    pushes.push(await pushOut(lab, fixture, start, out, planted));
   }
   const full = lab.player.stats.moveSpeed;
   const measured = pushes.filter((push) => !push.planted);
@@ -174,7 +216,8 @@ export async function touchStick(lab: Lab, options: TouchOptions): Promise<Repor
   const travel = Math.round(Math.max(...measured.map((push) => push.knob)));
   const problems: string[] = [];
   if (measured.every((push) => push.push === 0 && push.knob < 1)) problems.push('the touches never moved the stick');
-  const lines = [`a finger down at ${start.x},${start.y} on the move pad, slid right; the knob's travel ${travel} px`];
+  const lines = [`a finger down at ${start.x},${start.y} on the move pad, slid right; the knob's travel ${travel} px; `
+    + `the hero walked in from ${fixture.at?.map((metres) => metres.toFixed(1)).join(', ')}`];
   for (const push of pushes) {
     lines.push(pushLine(push, full));
     const faults = faultsOf(push, measured.filter((other) => other.out < push.out), travel, full);
@@ -185,5 +228,6 @@ export async function touchStick(lab: Lab, options: TouchOptions): Promise<Repor
     if (faults.length > 0) lines.push(`canary: caught (${faults[0]})`);
     else problems.push(`the canary went unseen: ${push.out} px out slid back to ${CANARY_BACK} px`);
   }
+  if (options.canary) lines.push(await wallCanary(lab, options.fixture, start, outs, problems));
   return { text: lines.join('\n'), problems };
 }

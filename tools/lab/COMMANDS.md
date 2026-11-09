@@ -257,8 +257,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   game made of it: the stick's push (0 to 1), how far out the knob stood and the hero's speed against his full. It is a
   problem when the knob isn't under the finger within the travel, when a push further out gives less than a nearer
   one, or when a push past the edge falls short of full speed. On main, the knob was held to the edge and the push
-  divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
-  slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
+  divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. Each push
+  starts 10 m from the arena's middle against its way, so it walks him in across open ground; a push read within 3 m
+  of the wall is a problem, as the wall brakes him there (`Player.slowForWall`): from the lab's own spot (12, 22) a
+  push to the right walked the ranger into it, and every push past the edge read 6.55 of his 7 m/s. `--canary`
+  slides the furthest push's finger back to 20 px before it's read, and pushes once more from the set-up's own spot,
+  into the wall: both must be caught. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `touchpad`: where a finger put down starts the touch controls' move stick (`page/touchPad.ts`). In a run, a 16x8 grid of points
   over the screen, each touched by a finger (`lab.touchDown`) and slid 30 px right, the stick read a frame after:
