@@ -513,7 +513,7 @@ export class Player {
       if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
       // (a tap up again within the frame still casts: read only while held, a 60 ms tap was lost at 10 fps)
       if (!isDown(key) && busy) continue;
-      if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
+      if (skill.impl.channel) { if ((!this.channel || this.channel.skill.def.block) && !this.casting) this.startChannel(skill, key); }
       else if (skill.def.aimed) { if (this.aiming?.key !== key) this.startAim(skill, key); }
       else this.tryCast(skill, key);
     }
@@ -540,7 +540,7 @@ export class Player {
     // (where its preview was as it was let go, however the aim moves while it waits: the outline round one foe, the
     // mark went on another)
     const impl = a.skill.impl, at = (!impl.channel && impl.settle?.(this, a.skill.def, this.aim)) || this.aim.clone();
-    if (this.casting || this.channel || this.dashShut() || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
+    if (this.casting || (this.channel && !this.channel.skill.def.block) || this.dashShut() || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
     else this.tryCast(a.skill, a.key, at);
   }
 
@@ -567,11 +567,13 @@ export class Player {
     if (this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     // (over a cast or a channel only a skill cast over one, which leaves it going: Bull Rush as Steel Tempest spins; in
     // a dash only as an open one lets, and no charge or blink)
-    if ((this.casting || this.channel) && !s.def.overCast) return false;
+    if ((this.casting || (this.channel && !this.channel.skill.def.block)) && !s.def.overCast) return false;
     if (this.dash && (this.dashShut() || s.impl.dashes)) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
+    // Only a cast that can actually start lowers the shield; failed cooldown/energy/target checks keep it up.
+    if (this.channel?.skill.def.block) this.stopChannel();
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
@@ -758,14 +760,27 @@ export class Player {
   }
 
   startChannel(s: KnownSkill, key: SkillKey): void {
-    if (!s.impl.channel) return;
+    if (!s.impl.channel || this.casting || this.channel?.skill === s || (s.def.block && this.dash)) return;
+    if (this.channel && !this.channel.skill.def.block) return;
     // a broken guard can't be raised again until the shield recovers
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
+    if (this.channel) this.stopChannel();
     if (this.local) recorder.mark(`channel ${s.def.impl}`);
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
     this.queued = null;
     actionSink?.({ t: 'chs', s: s.def.impl, k: key });
+  }
+
+  /** A held block comes back in the same update that a swing finishes, never during it or a dash. */
+  private resumeHeldBlock(): void {
+    if (this.idle || !this.active || this.casting || this.channel || this.dash || this.staggered) return;
+    if (input.mouse.overUI && !input.touchMode) return;
+    for (const key of SKILL_KEYS) {
+      if (!isDown(key)) continue;
+      const skill = this.skillAt(key);
+      if (skill?.def.block) { this.startChannel(skill, key); return; }
+    }
   }
 
   stopChannel(): void {
@@ -871,6 +886,8 @@ export class Player {
       this.facing += Math.max(-TURN_MOST * dt, Math.min(TURN_MOST * dt, eased - this.facing));
       this.facesWay = true;
     }
+
+    this.resumeHeldBlock();
 
     // resources & cooldowns
     if (!this.channel) this.energy = Math.min(this.stats.maxEnergy, this.energy + this.stats.energyRegen * dt);

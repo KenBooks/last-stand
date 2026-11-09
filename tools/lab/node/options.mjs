@@ -1805,6 +1805,15 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  guard: {
+    help: 'attack while holding Raise Shield, exposed swing and immediate guard return, release/failure cases '
+      + 'and two independent touch fingers; pictures in third person and through the eyes',
+    options: {
+      ...COMMON_OPTIONS,
+      class: { ...COMMON_OPTIONS.class, default: 'warrior' },
+      canary: { kind: 'switch', help: 'plant a shield that fails to lower for an attack and detect it' },
+    },
+  },
   training: {
     help: 'training grounds: reached-wave saves and migration, host choices, harmless holograms, no rewards, '
       + 'repeat and leave; includes a normal-run damage control',

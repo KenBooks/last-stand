@@ -92,7 +92,7 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 
 Plate armour and a crested helm; tougher, and fights up close. Fights with a one-handed weapon and a shield, a one-handed weapon in each hand (the swings alternate hands; the off-hand weapon adds 60% of its damage bonus), or a two-handed weapon, and the model shows what is equipped. Each of these styles remembers its own skill bindings, with a button in the lobby to reset them to the defaults.
 
-Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard and staggers you: for 1.5 seconds you can only move, not block, attack or cast.
+Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard and staggers you: for 1.5 seconds you can only move, not block, attack or cast. While holding Raise Shield, attack to lower the guard for the swing; it rises again as soon as the attack ends if block is still held. On touch, hold the shield button with one finger and attack with another.
 
 | Key | Skill |
 | --- | --- |
