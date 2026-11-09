@@ -36,6 +36,7 @@ import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
+import { initAutoFullScreen } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
@@ -122,6 +123,7 @@ async function boot() {
 
   initHud();
   initTouch();
+  initAutoFullScreen();
   initPerfHud(renderer);
   initTraceConsent();
   initNetHud();

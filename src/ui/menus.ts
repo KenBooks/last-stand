@@ -40,6 +40,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
+import { fullScreenChosen } from './autoFullScreen';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -242,7 +243,11 @@ export function initMenus(h: MenuHooks): void {
   const fs = $('#btn-fullscreen');
   const syncFs = () => { fs.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'; };
   fs.classList.toggle('hidden', !document.fullscreenEnabled);
-  fs.onclick = () => { sfx.click(); (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: 'hide' })).catch(() => {}); };
+  fs.onclick = () => {
+    sfx.click();
+    if (!document.fullscreenElement) fullScreenChosen();
+    (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: 'hide' })).catch(() => {});
+  };
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');

@@ -538,6 +538,12 @@
     <button class="btn primary ut-reload">Reload</button><button class="btn ut-later">Later</button>
   </div>
 
+  <!-- gone full screen on its own: back to the window, offered for 10 s (ui/autoFullScreen.ts) -->
+  <div id="full-prompt" class="hidden" role="status">
+    <span>Full screen</span>
+    <button class="btn fp-back">Back to window</button>
+  </div>
+
   <!-- the game ran slowly: may a performance report be sent? (perf/consent.ts) -->
   <div id="perf-ask" class="hidden" role="dialog" aria-live="polite" aria-label="Performance report">
     <div class="pa-ask">
