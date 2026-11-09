@@ -160,3 +160,7 @@ This is an early build — feedback, bug reports and ideas are very welcome in [
 ## License
 
 [MIT](LICENSE).
+
+### Training grounds
+
+Choose **Training grounds** in the lobby, pick a battleground and any wave that hero has reached there (including waves lost). Fight holographic enemies with normal skill costs and cooldowns, but take no damage and earn no loot, score or progression. After clearing a wave, repeat it or leave. In co-op the host chooses the mode, biome and wave for everyone. Older saves initially offer their banked waves because earlier failed attempts were not stored by biome.

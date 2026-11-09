@@ -373,3 +373,7 @@ lists Chrome's layers at each picture, and where the sides' differ.
 - Each measure's canary (`carry --canary`, the example's `--canary`): run it when the measure changes.
 - `npm run lab -- carry --ab=HEAD` and `sheet --ab=HEAD`: a commit against itself must agree, line for line and pixel
   for pixel; anything else is a cause of runs that differ, to be found and removed as above.
+
+- `training`: Training grounds (#405): attempted-wave persistence/migration, mode and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage.
+
+- A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.

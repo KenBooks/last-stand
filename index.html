@@ -211,7 +211,7 @@
         <div class="dc-risk"></div>
       </div></div>
       <div class="dc-buttons">
-        <button class="btn bank"><span class="k">B</span> Bank spoils &amp; leave</button>
+        <button class="btn bank"><span class="k">B</span> <span class="bank-label">Bank spoils &amp; leave</span></button>
         <button class="btn primary cont"><span class="k">C</span> <span class="cont-label">Continue</span></button>
       </div>
     </div>
@@ -275,6 +275,11 @@
           <div class="cc-strip"><button class="cc-arrow cc-prev" aria-label="Previous skills">&lsaquo;</button><div class="cc-skills"></div><button class="cc-arrow cc-next" aria-label="More skills">&rsaquo;</button></div>
         </div>
         <div class="records"></div>
+        <div class="biome-row"><span class="br-label">Mode</span>
+          <div class="seg" id="opt-training" aria-label="Game mode">
+            <button data-training="false" class="active">Arena</button><button data-training="true">Training grounds</button>
+          </div>
+        </div>
         <div class="biome-row"><span class="br-label">Battleground</span>
           <div class="seg" id="opt-biome">
             <button data-b="random" class="dice" title="Random: a new battleground every run" aria-label="Random battleground">

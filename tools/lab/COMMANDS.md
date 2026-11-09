@@ -1046,3 +1046,7 @@ A misspelt option or a bad value stops the command before anything boots (`carry
 canary?)`). The exit status is 1 when the command failed or found a problem: an error in the page, or a problem its
 result reports (a canary the measure missed).
 
+
+- `training`: verifies a failed normal-run wave is saved per biome and survives profile loading; old profiles migrate from banked waves only. Selects Training grounds through the lobby, tests every damage type and a normal-run damage control, kills a projection, rejects a late loot report, clears/repeats/leaves without changing the saved profile. Pictures the lobby, holograms and wave decision. `--canary` temporarily removes training immunity and must detect damage.
+
+  `training --coop` uses two actual game pages over the existing 100 ms delayed lab link: a wave-1 guest follows the host’s wave-4 training selection, both reject damage/loot, repeat and leave, and neither save changes.

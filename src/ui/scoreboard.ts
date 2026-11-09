@@ -70,7 +70,7 @@ function graph(pings: number[], latest: number | null): string {
 
 function stateOf(p: Player): string {
   if (p.away) return 'in the lobby';
-  if (p.out === 'banked') return 'banked';
+  if (p.out === 'banked') return G.run?.training ? 'left training' : 'banked';
   if (p.out === 'dead') return 'fallen';
   if (p.downed) return 'down';
   return '';

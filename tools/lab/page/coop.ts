@@ -1072,3 +1072,9 @@ function loosedArrows(): number {
   }
   return loosed;
 }
+
+/** Focused Training grounds steps, loaded only by the training co-op command. */
+export async function coopTraining(lab: Lab, command: import('./trainingCoop').TrainingStep): Promise<import('./lab').Report> {
+  const { trainingCoop } = await import('./trainingCoop');
+  return trainingCoop(lab, command);
+}

@@ -3,6 +3,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
+import { runTrainingCoop } from './trainingCoop.mjs';
 import { labError } from './errors.mjs';
 import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
@@ -1553,6 +1554,16 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  training: {
+    each(side, options) {
+      if (options.coop) return runTrainingCoop(side, options);
+      return side.command('training', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   practice: {

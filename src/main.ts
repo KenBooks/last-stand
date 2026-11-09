@@ -27,7 +27,7 @@ import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
+import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { updateHall } from './game/hall';
@@ -275,17 +275,17 @@ function start() {
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);
-  sendStart(G.arena.biome, selectedWave(), seed);
-  beginRun(selectedWave(), seed);
+  sendStart(G.arena.biome, selectedWave(), seed, trainingSelected());
+  beginRun(selectedWave(), seed, trainingSelected());
 }
 
 /** A guest: the host started a run. */
-function guestStart(biome: BiomeId, wave: number, seed: number) {
+function guestStart(biome: BiomeId, wave: number, seed: number, training: boolean) {
   G.arena.setBiome(biome);
-  beginRun(wave, seed);
+  beginRun(wave, seed, training);
 }
 
-function beginRun(wave: number, seed: number) {
+function beginRun(wave: number, seed: number, training = false) {
   clearGround();   // what's left on the lobby floor is lost
   G.arena.rollProps(seed);
   G.arena.restoreProps();
@@ -299,7 +299,7 @@ function beginRun(wave: number, seed: number) {
   syncAway();
   setZoom(1);
   G.arena.restoreProps();
-  startRun(wave);
+  startRun(wave, training);
   renderSpoils();
 }
 
@@ -330,7 +330,7 @@ function toMenu(keepSummary = false) {
 
 /** The host's battleground and starting wave, shown in the guests' lobbies. */
 function sendLobbyChoice() {
-  if (!isGuest()) sendLobby(G.arena.biome, selectedWave());
+  if (!isGuest()) sendLobby(G.arena.biome, selectedWave(), trainingSelected());
 }
 
 /** The summary closed: back to the lobby, or (in co-op, with the run still on) watch the others; over the lobby, a

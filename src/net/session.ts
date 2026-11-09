@@ -25,7 +25,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 22;
+const PROTOCOL = 23;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -54,7 +54,7 @@ interface Peer {
 /** What the rest of the game does when the session changes (set by main). */
 export interface SessionHooks {
   /** the host started a run: a guest starts its side of it */
-  startRun(biome: BiomeId, wave: number, seed: number): void;
+  startRun(biome: BiomeId, wave: number, seed: number, training: boolean): void;
   /** the host left, or the room broke up */
   hostGone(): void;
   /** anything the lobby shows changed (status, partner, roster) */
@@ -75,6 +75,7 @@ export const session = {
   /** the host's lobby choice, shown on a guest */
   biome: null as BiomeId | null,
   wave: 1,
+  training: false,
   peers: new Map<string, Peer>(),
 };
 
@@ -284,7 +285,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     // its colour: its pick if no one in the room wears it, else one no one does (the host decides, as for the slots)
     const colour = freeColour([ownColour(), ...[...session.peers.values()].map((p) => p.colour)], colourOf(m.col));
     addPeer(from, slot, look, tag, colour);
-    const welcome = { t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' };
+    const welcome = { t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, training: session.training, inRun: G.mode === 'run' };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
@@ -327,6 +328,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       wearRoomColour(colourOf(m.col));
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
+      session.training = m.training === true;
       if (G.mode === 'menu' && BIOME_IDS.includes(session.biome)) G.arena.setBiome(session.biome);
       placeSpawns();
       // step over to our side of the spawn
@@ -342,6 +344,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
     } else if (m.t === 'lobby') {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
+      session.training = m.training === true;
       if (G.mode === 'menu') G.arena.setBiome(session.biome);
       hooks.changed();
     } else if (m.t === 'foes' && from === session.hostId) {
@@ -349,7 +352,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
     } else if (m.t === 'start' && G.mode === 'menu') {
       const host = session.peers.get(from);
       if (host) host.inRun = true;
-      hooks.startRun(m.biome as BiomeId, m.wave as number, m.seed as number);
+      hooks.startRun(m.biome as BiomeId, m.wave as number, m.seed as number, m.training === true);
     }
     return;
   }
@@ -557,15 +560,16 @@ export function syncAway(): void {
 export function sendLook(): void { send('look', myLook()); }
 
 /** The host's lobby choices (battleground, starting wave), shown to the guests. */
-export function sendLobby(biome: BiomeId, wave: number): void {
+export function sendLobby(biome: BiomeId, wave: number, training = false): void {
   session.wave = wave;
-  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave });
+  session.training = training;
+  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave, training });
 }
 
 /** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */
-export function sendStart(biome: BiomeId, wave: number, seed: number): void {
+export function sendStart(biome: BiomeId, wave: number, seed: number, training = false): void {
   if (role.current !== 'host') return;
-  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave, seed }, peer.id);
+  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave, seed, training }, peer.id);
   // they're in from now on (their reports will say so too)
   for (const peer of session.peers.values()) peer.inRun = true;
   syncAway();
