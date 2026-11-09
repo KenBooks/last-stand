@@ -4,7 +4,8 @@
 // check's own, which counts each ask and takes or refuses it as a browser would. Checked: a finger's press asks
 // nothing and its lift asks, a mouse's press asks; refused, the next gesture asks again; taken, the prompt shows, within
 // the window, and is gone after its time; Back to window clicked keeps the choice in its cookie, and the page doesn't
-// ask on the next visit. Its canary loses the cookie before that visit, which must be caught asking again.
+// ask on the next visit; the prompt stands over the loading screen (its first click asks too). Its canary loses the
+// cookie before that visit, which must be caught asking again.
 import type { Lab, Pictured } from './lab';
 import { middleOf } from './lab';
 import {
@@ -66,6 +67,17 @@ function waitReal(ms: number): Promise<void> {
 /** The promise callbacks a request's answer runs, run. */
 const settle = (): Promise<void> => waitReal(0);
 
+/** The loading screen's z-index, from its rule (`#loading` leaves the page once the game is shown). */
+function loadingZ(): number {
+  const own = [...document.styleSheets].filter((sheet) => !sheet.href || sheet.href.startsWith(location.origin));
+  for (const sheet of own) {
+    for (const rule of sheet.cssRules) {
+      if (rule instanceof CSSStyleRule && rule.selectorText === '#loading') return Number(rule.style.zIndex);
+    }
+  }
+  return Number.NaN;
+}
+
 /** Whether the prompt lies inside the window, with its button at least `least` css px tall. */
 function promptFits(least: number): string[] {
   const box = document.getElementById('full-prompt')!.getBoundingClientRect();
@@ -75,6 +87,9 @@ function promptFits(least: number): string[] {
     problems.push(`autoFull: the prompt lies outside the window, ${box.left},${box.top} to ${box.right},${box.bottom}`);
   }
   if (back.height < least) problems.push(`autoFull: Back to window is ${back.height.toFixed(1)} px tall`);
+  const over = Number(getComputedStyle(document.getElementById('full-prompt')!).zIndex);
+  const loading = loadingZ();
+  if (!(over > loading)) problems.push(`autoFull: the prompt (${over}) lies under the loading screen (${loading})`);
   return problems;
 }
 
