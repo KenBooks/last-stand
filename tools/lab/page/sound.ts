@@ -8,7 +8,7 @@
 import type { Report } from './lab';
 import { playInto, sfx } from '../../../src/core/audio';
 import {
-  decibels, levelsOf, loudestOf, mono, peakOf, shareAbove, spectrumOf, tonalPeak, wavBytes,
+  centroidOf, decibels, levelsOf, loudestOf, mono, peakOf, shareAbove, spectrumOf, tonalPeak, wavBytes,
 } from './soundMeasure';
 
 export interface SoundOptions {
@@ -93,6 +93,8 @@ const RATE = 44100;
 /** the stretch the loudness is the loudest of (s), and the level's step over time (s) */
 const LOUDEST_SPAN = 0.5;
 const LEVEL_STEP = 0.1;
+/** where a sound turns bright, then piercing (Hz): its share over it said beside its centroid */
+const BRIGHT_HZ = 2000;
 /** a tonal peak standing this far over its neighbours (dB) is a note */
 const TONAL_LIMIT = 15;
 /** the last stretch of a render (s), which must be silent: under this level (dB) */
@@ -221,6 +223,8 @@ async function measureScene(name: string, canary: boolean) {
     `  peak ${tenth(decibels(peak))} dB, loudest ${LOUDEST_SPAN} s ${tenth(loudest)} dB`,
     `  above 150 Hz${span}: ${Math.round(shareAbove(spectrum, 150) * 100)}%; most tonal peak: `
       + `${tenth(tonal.over)} dB over its neighbours at ${Math.round(tonal.hz)} Hz`,
+    `  brightness: centroid ${Math.round(centroidOf(spectrum))} Hz, `
+      + `above ${BRIGHT_HZ} Hz ${Math.round(shareAbove(spectrum, BRIGHT_HZ) * 100)}%`,
     `  nodes made: ${nodes} (${kinds})`,
     `  level every ${LEVEL_STEP} s (dB): ${levels.join(' ')}`,
     `  last ${TAIL} s: ${tenth(tail)} dB`,

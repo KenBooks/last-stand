@@ -53,7 +53,7 @@ function freePort() {
  * fetched in the background: the models, Safe Browsing's lists and the components Chrome fetches into a new profile
  * were 85 MB of its 120, each measure's, left behind where a sandboxed shell can't delete Chrome's files.
  */
-function chromeArgs({ headed, profile, port, width, height, scale }) {
+function chromeArgs({ headed, profile, port, width, height, scale, autoplay }) {
   const size = [`--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`];
   const visible = headed ? size : ['--headless', ...size];
   const angle = process.platform === 'win32' ? ['--use-angle=d3d11'] : [];
@@ -64,7 +64,8 @@ function chromeArgs({ headed, profile, port, width, height, scale }) {
     '--ignore-gpu-blocklist',
     '--no-first-run',
     '--no-default-browser-check',
-    '--autoplay-policy=no-user-gesture-required',
+    // (headless, Chrome's own default let a fresh profile play without a gesture: the desktop's is named)
+    `--autoplay-policy=${autoplay === 'browser' ? 'document-user-activation-required' : 'no-user-gesture-required'}`,
     '--mute-audio',
     '--disable-background-networking',
     '--disable-component-update',
@@ -130,14 +131,18 @@ export async function slowCpu(page, rate) {
 
 /**
  * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`, its screen scaled
- * `scale`) and connects to it.
+ * `scale`) and connects to it. Sound may play without a gesture unless `autoplay` is 'browser': then the desktop's
+ * policy holds, a gesture on the page or before its navigation needed (`--scenario autoplay`).
  * Returns the browser, its profile's folder and `close`, which kills its process tree and deletes its profile.
  */
-export async function startChrome({ outDir, headed = false, width = 1536, height = 864, scale = 1 }) {
+export async function startChrome({
+  outDir, headed = false, width = 1536, height = 864, scale = 1, autoplay = 'always',
+}) {
   const profile = join(outDir, `profile-${Date.now()}`);
   mkdirSync(profile, { recursive: true });
   const port = await freePort();
-  const child = spawn(chromePath(), chromeArgs({ headed, profile, port, width, height, scale }), { stdio: 'ignore' });
+  const args = chromeArgs({ headed, profile, port, width, height, scale, autoplay });
+  const child = spawn(chromePath(), args, { stdio: 'ignore' });
   const kill = () => killTree(child);
   process.once('exit', kill);
   try {

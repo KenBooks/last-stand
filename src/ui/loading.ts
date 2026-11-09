@@ -4,6 +4,7 @@ import { TIPS } from '../data/tips';
 import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
 import { qualityLevel } from '../core/quality';
 import { recorder } from '../perf/recorder';
+import { sfx } from '../core/audio';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
 const sub = (): HTMLElement => el().querySelector<HTMLElement>('.ld-sub')!;
@@ -80,6 +81,7 @@ export function loadingDone(onReveal: () => void): void {
     if (blow) {
       // the logo blows away over the loading backdrop first; the lobby shows a moment later
       l.classList.add('blowing');
+      sfx.logoGust();
       blow.start(reveal, leave);
     } else {
       l.classList.add('plain');

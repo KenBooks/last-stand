@@ -14,6 +14,7 @@ import { priorityNow } from '../lab/node/priority.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
 import { measureWebgpuCache, WEBGPU_CACHE } from './webgpuCache.mjs';
+import { AUTOPLAY, measureAutoplay } from './autoplay.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
@@ -333,6 +334,18 @@ async function main() {
   const asked = options.urls.length ? options.urls : [THIS_TREE];
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });
   const urls = asked.map(served.urlOf);
+  if (options.scenario === AUTOPLAY) {
+    const texts = [];
+    try {
+      for (const url of urls) texts.push(await measureAutoplay(url, join(OUT, 'profiles'), options));
+    } finally {
+      await served.close();
+    }
+    const text = texts.join('\n\n');
+    writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
+    console.log(`${text}\n\n(written to ${join(OUT, 'report.txt')})`);
+    return;
+  }
   options.nameOf = served.nameOf;
   // (the page's functions named from a served tree's build; another URL's by its scripts' lines)
   const sources = new Map([...served.builds].map(([url, distDir]) => [url, sourcesOf(distDir)]));

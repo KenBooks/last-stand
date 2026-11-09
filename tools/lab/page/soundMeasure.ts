@@ -128,6 +128,19 @@ export function shareAbove(spectrum: Spectrum, hz: number): number {
   return total > 0 ? above / total : 0;
 }
 
+/** The spectrum's centre of mass (Hz): where its power sits on average, a sound's brightness. A wind's gust that
+ *  rushed up to 3 kHz and fizzed over 5 read as harsh ("hammering on the brain", #422): its centroid fell from 5.6 kHz
+ *  to 1.5 as it was made soft. */
+export function centroidOf(spectrum: Spectrum): number {
+  let weighted = 0;
+  let total = 0;
+  spectrum.power.forEach((value, bin) => {
+    weighted += value * bin * spectrum.binHz;
+    total += value;
+  });
+  return total > 0 ? weighted / total : 0;
+}
+
 /** the band the tonal peak is looked for in (Hz): from the low mids, where a note is heard as one, to the highs */
 const TONAL_FROM = 200;
 const TONAL_TO = 8000;

@@ -87,7 +87,7 @@ screen's edges, and the choice after a wave within a short screen's top 30%; eve
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
-- `sound [scenes]`: a skill's sounds rendered offline as the game plays them and written as WAV files to listen to (Splintering Bolt held and its bursts, Void Lance's portal, beam and release, or any sound of the game's played once: each one's peak, loudest half second, level over time, share above 150 Hz, most tonal peak, the nodes it made, its silence at its end)
+- `sound [scenes]`: a skill's sounds rendered offline as the game plays them and written as WAV files to listen to (Splintering Bolt held and its bursts, Void Lance's portal, beam and release, or any sound of the game's played once: each one's peak, loudest half second, level over time, brightness (centroid, share above 2 kHz), share above 150 Hz, most tonal peak, the nodes it made, its silence at its end)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
 Options every command takes:

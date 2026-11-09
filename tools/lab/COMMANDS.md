@@ -865,7 +865,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   portal is drawn. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
   hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
   peak, its loudest half second (the level to hold against the other heroes' sounds: on #413 a bow's shot was
-  -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its share above 150 Hz and
+  -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its brightness (its
+  spectrum's centroid and its share above 2 kHz: #422's exit gust, "hammering on the brain", 5.6 kHz and 74%; made
+  soft, 1.5 kHz and 22%), its share above 150 Hz and
   its spectrum's most tonal peak (over a channel's hold for `lance`: the bin standing furthest over the median of
   the third of an octave round it, Welch's spectrum of 4096-sample windows; noise stands 2 to 8 dB, a flanger's
   comb about 10), and the nodes it made, by kind (what a cast costs). A sample not a number, a clip, a note
