@@ -47,7 +47,7 @@ import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
-import { initReadying, READYING } from './ui/readying';
+import { initReadying, layOutReadyingAhead, READYING, settleReadying } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { runFrames } from './core/frameLoop';
 import { updateLowLife } from './core/lowLife';
@@ -134,6 +134,8 @@ async function boot() {
   initHeroSelect({ choose: chooseHero, closed: heroSelectClosed });
   initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot) });
   initReadying();
+  // (the fight's loading bar rastered under the loading screen too, hidden as the lobby is entered: ui/readying.ts)
+  layOutReadyingAhead();
   // an item picked up off the lobby floor goes back in the stash, marked new
   initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
@@ -218,6 +220,7 @@ function enterMenu(keepSummary = false) {
   releaseInput();
   runOver = false;
   showHud(false);
+  settleReadying();
   hideRunBits();
   showPause(false);
   if (!keepSummary) hideSummary();

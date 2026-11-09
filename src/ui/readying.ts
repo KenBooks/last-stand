@@ -39,3 +39,17 @@ function paint(): void {
 }
 
 export function initReadying(): void { onReadying(paint); }
+
+/** The bar shown under the loading screen, full, its label set (hidden again as the lobby is entered, `paint`): its
+ *  first raster builds Chrome's own programs for its shadows, gradient and text on the GPU's process, and as a first
+ *  visit's Start showed it they were built with ANGLE's threads busy compiling the fight's, one of them waiting 121 ms
+ *  for a thread, the bar's first frames held 132 ms (`npm run stalls -- --scenario boot --angle`). */
+export function layOutReadyingAhead(): void {
+  const bar = el();
+  bar.classList.add('on');
+  bar.style.setProperty('--p', '1');
+  bar.querySelector('.rd-sub')!.textContent = READYING.fight;
+}
+
+/** The bar as the warm-ups have it: hidden but while something waits for them. */
+export const settleReadying = (): void => paint();

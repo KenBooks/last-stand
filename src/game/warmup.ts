@@ -371,14 +371,15 @@ function inTurn<T>(fn: () => Promise<T>): Promise<T> {
 
 /** How `warmBuilt` goes: behind the lobby a step a frame (`step`), else at once, told how far along (`progress`);
  *  `patient`, stepped but never given up on as cold (a first visit's hall, whose programs no cache holds). */
-interface Warming { step?: () => Promise<void>; progress?: (share: number) => void; patient?: boolean }
+interface Warming { step?: () => Promise<void>; progress?: (share: number) => void; patient?: boolean; linkingMost?: number;
+  poll?: () => Promise<void> }
 
 /**
  * `built` warmed: compiled as the scene lights it, its programs' links waited for, drawn alone, outlined, let go.
  * Behind the lobby (`step`), a step a frame, and given up on, nothing drawn or let go, where a program is cold
  * (`COLD_LINK_MS`).
  */
-async function warmBuilt(built: Built[], { step, progress, patient }: Warming = {}): Promise<WarmedUp> {
+async function warmBuilt(built: Built[], { step, progress, patient, linkingMost, poll }: Warming = {}): Promise<WarmedUp> {
   const swaps = built.filter((b) => b.swap);
   const took = await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     compile: built.flatMap((b) => b.compile),
@@ -392,6 +393,8 @@ async function warmBuilt(built: Built[], { step, progress, patient }: Warming = 
     progress,
     step,
     giveUpMs: step && !patient ? COLD_LINK_MS : undefined,
+    linkingMost,
+    poll,
   });
   if (took.cold) return took;
   // (the other biomes each drawn in place of the lobby's, for their shadows' programs: compiled with the first)
@@ -449,20 +452,28 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
 
 /** when `inSlices` last let the page go */
 let sliceFrom = 0;
-/** how long a task under a loading bar goes on before the page is let go (ms) */
+/** how long a task under a loading bar goes on before the page is let go to its next frame (ms) */
 const BAR_SLICE_MS = 12;
 
 /**
- * Under a loading bar: the page let go once `BAR_SLICE_MS` have passed since it last was. Let go at every step, its
- * uniforms read a program a task and its uploads 2 ms a task, a return's fight held its bar up 1.4 to 1.6 s where in
- * one task it took 0.3 to 0.6 (`npm run stalls -- --scenario boot`, when the loading bar came down); let go through a
- * message (no timeout's 4 ms clamp), its tasks ran back to back and the bar's frames waited behind them, 50 to 160 ms.
+ * Under a loading bar: the page let go to its next frame once `BAR_SLICE_MS` have passed since it last was. Let go at
+ * every step, its uniforms read a program a task and its uploads 2 ms a task, a return's fight held its bar up 1.4 to
+ * 1.6 s where in one task it took 0.3 to 0.6 (`npm run stalls -- --scenario boot`, when the loading bar came down);
+ * let go to the next task (a timeout), Chrome ran the slices back to back ahead of the bar's frames, 257 ms of them in
+ * a 357 ms frame (trace GRBF-8PBJ). A slice is a step, never a wait: a wait for links asks a frame apart (`nextFrame`
+ * as `WarmUp.poll`), as asked every step it spun through each slice, `isReady` and the clock, 89 of a 139 ms frame.
  */
 async function inSlices(): Promise<void> {
   if (performance.now() - sliceFrom < BAR_SLICE_MS) return;
-  await nextTask();
+  await nextFrame();
   sliceFrom = performance.now();
 }
+
+/** How many of a warm-up's programs may be compiled and not linked yet under a loading bar or behind the hall
+ *  (`WarmUp.linkingMost`); `?linking=N` for a visit, 0 for every one at once. A first visit's bar on the owner's PC:
+ *  7.7 s and 3 frames held 50 ms or more at 12, 8.0 s and 7 with them all at once (`npm run stalls -- --scenario boot
+ *  --url "this,this?linking=0"`). */
+const LINKING_MOST = Number(new URLSearchParams(location.search).get('linking') ?? 12) || undefined;
 
 /** The next frame, or under a loading bar a slice's end (nothing of it is seen: `inSlices`). */
 const stepBehind = (): Promise<void> => (isReadying() ? inSlices() : nextFrame());
@@ -486,8 +497,9 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
     const lot = parts.slice(from, from + size);
     const built: Built[] = [];
     for (const part of lot) {
-      await aheadOf(part, nextTask);
-      if (!part.built) await nextTask();
+      // (a frame between each build, a task of up to 200 ms: back to back, a return's Change hero held its bar 618 ms)
+      await aheadOf(part, nextFrame);
+      if (!part.built) await nextFrame();
       built.push(part.built ?? part.build());
       part.built = undefined;
     }
@@ -498,7 +510,8 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
     // (a step a frame where no loading bar covers the page, a first visit's hall of heroes, and a step a task under
     // one: a lot's compile in one task was 30 to 64 ms, a hero chosen in it held the hall's frame up 104 ms, and under
     // the fight's bar each held its frame up as long, a frozen bar)
-    await warmBuilt(built, { progress: share, step: stepBehind, patient: true });
+    await warmBuilt(built, { progress: share, step: stepBehind, patient: true, linkingMost: LINKING_MOST,
+      poll: nextFrame });
     if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
   }
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });
@@ -564,7 +577,7 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   }
   // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
   // frame 290 to 400 ms, trace FD2V-NB48)
-  if (need === 'heroes') await buildHallAhead(nextTask);
+  if (need === 'heroes') await buildHallAhead(nextFrame);
   warming(need, 1);
   markWarm(need);
 }
