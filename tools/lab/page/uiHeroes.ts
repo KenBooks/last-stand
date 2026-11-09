@@ -182,22 +182,46 @@ async function clickBeside(lab: Lab, id: string): Promise<Found> {
 
 /** how near the lobby's hidden hero's hand a glow counts as his (m) */
 const HAND_REACH = 0.6;
+/** where the hidden hero is stood while his hand's glows are counted: open ground, well clear of the hall's heroes
+ *  (the middle of the row stands where he stood, and its hero's own effects were counted as his) */
+const ASIDE = { x: 30, z: 0 };
+/** frames he stands there: longer than a mote lives (0.8 s) */
+const ASIDE_FRAMES = 60;
 
-/** The glows by the lobby's own hero's hand while the screen hides him (`canary`: one put there first): a mage's
- *  motes went on rising from his hand where he stood, among the hall's heroes ("mage's hand glowing near warrior").
- *  A hero with none says so. */
-function hiddenHandGlows(canary: boolean): Found {
-  const hand = G.player.palmPoint;
-  if (canary) particles.glow.spawn({ x: hand.x, y: hand.y, z: hand.z, life: 1, color: col(0xffffff) });
+/** A point's place to the centimetre (m). */
+const xyz = (at: { x: number; y: number; z: number }): string =>
+  [at.x, at.y, at.z].map((value) => value.toFixed(2)).join(',');
+
+/** The live glows within `HAND_REACH` of `hand`. */
+function glowsNear(hand: THREE.Vector3): number {
   const pool = particles.glow;
   let near = 0;
   for (let i = 0; i < pool.count; i++) {
     const apart = Math.hypot(pool.pos[i * 3] - hand.x, pool.pos[i * 3 + 1] - hand.y, pool.pos[i * 3 + 2] - hand.z);
     if (pool.life[i] > 0 && apart < HAND_REACH) near++;
   }
-  const motes = G.player.cls.aura.motes ? 'his motes' : 'no motes of his';
-  const lines = [`  the lobby's ${G.player.cls.id} hidden (${motes}): ${near} glows by his hand`];
-  const problems = near ? [`heroes: ${near} glows by the hidden lobby ${G.player.cls.id}'s hand`] : [];
+  return near;
+}
+
+/** The glows by the lobby's own hero's hand while the screen hides him (`canary`: one put there first): a mage's
+ *  motes went on rising from his hand where he stood, among the hall's heroes ("mage's hand glowing near warrior").
+ *  He's stood aside on open ground for a second and his hand's glows counted there, then put back: where he stood,
+ *  the hall's middle hero stands, and his own effects were counted as the hidden hero's. A hero with none says so. */
+async function hiddenHandGlows(lab: Lab, canary: boolean): Promise<Found> {
+  const player = G.player;
+  const stood = player.pos.clone();
+  const facing = player.facing;
+  player.place(stood.clone().set(ASIDE.x, 0, ASIDE.z), facing);
+  await lab.step(ASIDE_FRAMES);
+  const hand = player.palmPoint;
+  if (canary) particles.glow.spawn({ x: hand.x, y: hand.y, z: hand.z, life: 1, color: col(0xffffff) });
+  const near = glowsNear(hand);
+  player.place(stood, facing);
+  await lab.step(1);
+  const motes = player.cls.aura.motes ? 'his motes' : 'no motes of his';
+  const lines = [`  the lobby's ${player.cls.id} hidden (${motes}), stood aside: ${near} glows by his hand`];
+  if (near) lines.push(`    his hand at ${xyz(hand)}`);
+  const problems = near ? [`heroes: ${near} glows by the hidden lobby ${player.cls.id}'s hand`] : [];
   return { lines, problems };
 }
 
@@ -387,7 +411,7 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   if (!wordsFit(choose)) problems.push("heroes: the choice's words reach its edges");
   const placed = heroPlaced(id, boxes);
   const onHim = await choiceOnHero(lab, screen, id, canary);
-  const hand = hiddenHandGlows(canary);
+  const hand = await hiddenHandGlows(lab, canary);
   const slot = await slotOpens(lab, screen, canary);
   const clicked = await clickBeside(lab, id);
   const steady = await cardsSteady(lab, screen, canary);
