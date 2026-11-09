@@ -51,6 +51,18 @@ export interface PerfOptions {
   frames: boolean;
   /** plant a cost the measure must see */
   canary: boolean;
+  /** the device played (lab/node/devices.mjs): its screen drawn here at `gpu` times its pixels */
+  device?: Device;
+}
+
+/** A device played: its name, what it is, how many times this GPU's work it does a frame, its own screen, and the
+ *  page's work a frame its reports read. */
+interface Device {
+  name: string;
+  what: string;
+  gpu: number;
+  screen: { width: number; height: number; ratio: number };
+  pageWork: string;
 }
 
 /** how far ahead of the hero the aim is (m): Maelstrom roams to it, into the foes coming */
@@ -122,13 +134,29 @@ const timeable = () => ['perfClock', 'lastPerfFrame', 'takeGpuFrames'].every((na
  *  frames run in one task, and the GPU read as untimed). */
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+/** a pixel read back, which the GPU must have drawn first */
+const readBack = new Uint8Array(4);
+
+/**
+ * Waits for the GPU to draw what the page sent it: what it draws runs behind the page, and the page's own time leaves
+ * it out. A pixel is read back, as WebGL's `finish` returned at once under ANGLE's D3D11 (the frame read 7 ms with the
+ * GPU's timer at 13 to 29).
+ */
+function waitForGpu(): void {
+  // (the canvas bound through three, whose state keeps what's bound)
+  const target = G.renderer.getRenderTarget();
+  G.renderer.setRenderTarget(null);
+  const gl = G.renderer.getContext();
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, readBack);
+  G.renderer.setRenderTarget(target);
+}
+
 /** One frame run and timed by the browser's clock, waited out on the GPU, and what the perf overlay timed of it. */
 async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
   const start = now();
   await lab.step(1, input);
-  // (waited out on the GPU: what it draws runs behind the page, and the page's own time leaves it out)
-  G.renderer.getContext().finish();
+  waitForGpu();
   const frame = now() - start;
   await nextTask();
   const timed = perfHud.lastPerfFrame();
@@ -188,7 +216,7 @@ function stagesOf(phase: Phase): [string, Spread][] {
 
 /** A phase as lines: its frame, the page's work and the GPU's, what it drew, the GPU by pass and the update by
  *  stage. */
-function phaseLines(phase: Phase): string[] {
+function phaseLines(phase: Phase, device?: Device): string[] {
   const of = (pick: (frame: Timed) => number) => spreadOf(phase.frames.map(pick));
   const most = (pick: (frame: Timed) => number) => Math.max(...phase.frames.map(pick));
   const gpu = gpuOf(phase);
@@ -199,6 +227,7 @@ function phaseLines(phase: Phase): string[] {
     `  the frame ${spreadWords(of((frame) => frame.frame))} ms, the page's work and the GPU's in turn`,
     `  the page's work ${spreadWords(of((frame) => frame.cpu))}: the update ${ms(of((frame) => frame.update).median)},`
       + ` the render ${ms(of((frame) => frame.render).median)}; ${gpuWords}`,
+    ...(device ? [deviceLine(device, gpu.whole)] : []),
     `  draws ${Math.round(of((frame) => frame.draws).median)} (most ${most((frame) => frame.draws)}), triangles `
       + `${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
   ];
@@ -214,6 +243,25 @@ function phaseLines(phase: Phase): string[] {
   const stages = stagesOf(phase).slice(0, STAGES_LISTED).map(([stage, spread]) => `${stage} ${spreadWords(spread)}`);
   lines.push(`  the update by stage: ${stages.join(', ')}`);
   return lines;
+}
+
+/**
+ * The frame a device would take: the GPU's (`gpuWhole`, its frames timed here at the device's work), as its page's
+ * work runs beside it there and its reports read it shorter (lab/node/devices.mjs).
+ */
+function deviceLine(device: Device, gpuWhole: number[]): string {
+  if (!gpuWhole.length) return `  as the ${device.name}: unknown, the GPU untimed`;
+  const gpu = spreadOf(gpuWhole);
+  const fps = Math.round(1000 / gpu.median);
+  return `  as the ${device.name}: the frame ${ms(gpu.median)} ms (90th ${ms(gpu.p90)}), ${fps} fps, its GPU's (the `
+    + `page's work beside it, ${device.pageWork} in its reports)`;
+}
+
+/** The device a command plays, as a line. */
+function deviceTitle(device: Device): string {
+  const { width, height, ratio } = device.screen;
+  return `played as the ${device.name}, ${device.what}: its screen ${width}x${height} at ${ratio}, drawn here at `
+    + `${device.gpu} times its pixels as its GPU does ${device.gpu} times this one's work a frame`;
 }
 
 /** Every frame of a phase as a line. */
@@ -389,11 +437,14 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   try {
+    if (options.device) lines.push(deviceTitle(options.device));
     lines.push(screenLine());
     const cpu = options.throttle === 1 ? 'the CPU as it is' : `the CPU ${options.throttle} times slower`;
     lines.push(`${options.biome}, the ${options.view} view, ${cpu}`);
     const { phases, uncast } = await castPhases(lab, options, aim);
-    for (const phase of phases) lines.push(...phaseLines(phase), ...(options.frames ? frameLines(phase) : []));
+    for (const phase of phases) {
+      lines.push(...phaseLines(phase, options.device), ...(options.frames ? frameLines(phase) : []));
+    }
     for (const name of uncast) problems.push(`${name} was pressed and never cast`);
     if (phases.every((phase) => phase.frames.every((frame) => frame.cpu === 0))) {
       problems.push('the perf overlay timed nothing: its frames read 0 ms');

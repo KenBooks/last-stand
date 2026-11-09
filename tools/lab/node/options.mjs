@@ -1,5 +1,6 @@
 // The lab's command line (tools/lab): its commands, the options each takes, and the help made from them. An option
 // is checked as it's read, so a misspelt one or a bad value stops the command at once, before anything boots.
+import { DEVICES } from './devices.mjs';
 import { labError } from './errors.mjs';
 
 /**
@@ -588,6 +589,14 @@ export const COMMANDS = {
           + 'set-up, the hero built at its detail',
       },
       throttle: { kind: 'number', usage: 'n', help: 'the CPU this many times slower (1 by default; 4: a phone\'s)' },
+      device: {
+        kind: 'choice',
+        choices: Object.keys(DEVICES),
+        usage: Object.keys(DEVICES).join('|'),
+        help: 'played as a device players reported a slow game on (lab/node/devices.mjs): its screen, CPU and '
+          + 'quality, and its GPU played by this one drawing its screen at more pixels; each phase says the frame '
+          + 'and frames a second it would have there',
+      },
       frames: { kind: 'switch', help: 'list every frame: its time, the page\'s work by stage, what it drew' },
       canary: {
         kind: 'switch',
