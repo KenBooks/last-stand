@@ -12,11 +12,8 @@
 //   GET  /traces/<code>           a trace's gzip (read)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`) or the session cookie a Dokci link set (a
 // browser never sees the token): a report's code alone reads nothing. Kept for KEEP_DAYS, the oldest dropped first
-// past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours from
-// each site (10: what a game holds itself to, src/perf/consent.ts, whose count is the site's own too): a PR's preview
-// or a commit build is a site of its own, so trying a new one isn't held up by the reports sent from the last.
-// TRUSTED_ADDRESSES (a comma-separated list, a Dokci setting: never in the repo) are never held to it: the owner's
-// own, testing.
+// past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours (10:
+// what a game holds itself to, src/perf/consent.ts).
 import { createServer } from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -55,8 +52,6 @@ export function settingsFrom(vars) {
     keepDays: Number(vars.KEEP_DAYS ?? 30),
     diskMax: Number(vars.DISK_MAX ?? 100 << 20),
     perDay: Number(vars.PER_DAY ?? 10),
-    /** addresses never held to `perDay` (the owner's, testing) */
-    trusted: new Set(String(vars.TRUSTED_ADDRESSES ?? '').split(',').map((a) => a.trim()).filter(Boolean)),
   };
 }
 let settings = settingsFrom(env);
@@ -115,14 +110,12 @@ function addressOf(req) {
   return hops[hops.length - 1] ?? req.socket.remoteAddress ?? '?';
 }
 
-/** Whether `address` may send one more now from the site `origin` (and counts it). */
-function allowed(address, origin, now = Date.now()) {
-  if (settings.trusted.has(address)) return true;
-  const sender = `${address} ${origin}`;
-  const times = (sent.get(sender) ?? []).filter((t) => now - t < 86_400_000);
-  if (times.length >= settings.perDay) { sent.set(sender, times); return false; }
+/** Whether `address` may send one more now (and counts it). */
+function allowed(address, now = Date.now()) {
+  const times = (sent.get(address) ?? []).filter((t) => now - t < 86_400_000);
+  if (times.length >= settings.perDay) { sent.set(address, times); return false; }
   times.push(now);
-  sent.set(sender, times);
+  sent.set(address, times);
   return true;
 }
 
@@ -248,7 +241,7 @@ async function upload(req, res) {
   if (!settings.origins.has(req.headers.origin ?? '')) return answer(res, 403, 'not from the game', headers);
   if (Number(req.headers['content-length'] ?? 0) > settings.maxBytes) return answer(res, 413, 'over its most', headers);
   if (uploading >= AT_ONCE) return answer(res, 503, 'busy', { ...headers, 'retry-after': '5' });
-  if (!allowed(addressOf(req), req.headers.origin)) return answer(res, 429, 'too many', headers);
+  if (!allowed(addressOf(req))) return answer(res, 429, 'too many', headers);
   uploading++;
   try {
     const body = await bodyOf(req, settings.maxBytes);
