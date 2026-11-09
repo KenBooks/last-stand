@@ -192,7 +192,8 @@ export async function warmLobby(hall = false): Promise<void> {
   // (the dummies' crowd, shown from the first frame: hidden till then, its programs were made at the lobby's draws)
   for (const dummy of G.enemies) for (const slot of crowdSlots(dummy.model)) slot.visible = true;
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
-    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
+    // (the hero's masks too: the hero selection screen outlines the hero under the mouse)
+    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline([...dummies(), hero.root]),
   });
   // (its compile is made as it's called, the scene walked before the foes are built; a first visit's other heroes
   // after them, for the hall of heroes it opens on)
@@ -344,7 +345,8 @@ function heroModelParts(): Part[] {
       const hero = heroesAhead.get(model) ?? heroAllWorn(model, AWAY);
       heroesAhead.delete(model);
       const parts = [hero.root, ...skillSamples(model)];
-      return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
+      // (outlined too: the hero selection screen outlines the hero under the mouse)
+      return { compile: parts, objects: parts, drawn: [], outlined: [hero.root], done: () => hero.dispose() };
     },
     ahead: heroesAhead.has(model) ? undefined : () => makeHeadAhead(model),
   }));

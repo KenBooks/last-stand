@@ -1,8 +1,8 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
 import {
-  choiceClosed, deciding, heroesShown, inRun, itemBoxes, loaded, markPhase, menuStowed, runOver, scoresShown,
-  stowsRecorded,
+  chooseIfAsked, choiceClosed, deciding, focusHero, heroesShown, inRun, itemBoxes, loaded, markPhase, menuStowed,
+  runOver, scoresShown, stowsRecorded,
 } from './page.mjs';
 import { latencyLine, pressInTurn, watchLatency } from './latency.mjs';
 
@@ -131,7 +131,7 @@ const HEROES_MS = 10_000;
 const heroesGone = () => !document.getElementById('heroes').checkVisibility();
 
 /** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
- *  clicked, then the choice), or by the lobby's class buttons in a tree from before it. */
+ *  clicked, then Enter), or by the lobby's class buttons in a tree from before it. */
 export async function pickHero(page, hero) {
   if (await page.$('#opt-class')) {
     await page.click(`#opt-class button[data-c="${hero}"]`);
@@ -139,8 +139,7 @@ export async function pickHero(page, hero) {
   }
   await page.click('#btn-hero');
   await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
-  await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
-  await page.click('#heroes .hs-choose');
+  await page.evaluate(chooseIfAsked, hero);
   await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
 }
 
@@ -365,11 +364,11 @@ async function switchHero(page, ms) {
   for (const hero of SWITCHES) {
     await page.click('#btn-hero');
     await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
-    await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
+    await page.evaluate(focusHero, hero);
     await page.waitForTimeout(500);
     await page.evaluate(markPhase, `to the ${hero}`);
     const chosen = await page.evaluate(() => performance.now());
-    await page.click('#heroes .hs-choose');
+    await page.evaluate(chooseIfAsked);
     await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS, polling: 'raf' });
     const back = await page.evaluate(() => performance.now());
     notes.push(`the ${hero}'s lobby back ${Math.round(back - chosen)} ms after his choice`);

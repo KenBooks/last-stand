@@ -203,13 +203,25 @@ export function heroesShown() {
   return Boolean(screen?.checkVisibility());
 }
 
+/** `hero` brought into focus on the hero selection screen by his name, unless he's in focus already (his name
+ *  clicked then chooses him). (Run in the page, alone.) */
+export function focusHero(hero) {
+  const name = document.querySelector(`#heroes .hs-tabs [data-c="${hero}"]`);
+  if (!name.classList.contains('active')) name.click();
+}
+
 /** `hero` (or the hero in focus) chosen where the hero selection screen is up, as a first visit's player chooses one
  *  before the lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
 export function chooseIfAsked(hero) {
   const screen = document.getElementById('heroes');
   if (!screen || !screen.checkVisibility()) return false;
-  if (hero) screen.querySelector(`.hs-tabs [data-c="${hero}"]`).click();
-  screen.querySelector('.hs-choose').click();
+  // (his name brings him into focus; clicked while he's in focus already, it chooses him, so only when he isn't)
+  const name = hero ? screen.querySelector(`.hs-tabs [data-c="${hero}"]`) : null;
+  if (name && !name.classList.contains('active')) name.click();
+  // (the choice on him is a label the pointer goes through: Enter chooses the hero in focus, as in every tree)
+  for (const type of ['keydown', 'keyup']) {
+    window.dispatchEvent(new KeyboardEvent(type, { code: 'Enter', key: 'Enter' }));
+  }
   return true;
 }
 
