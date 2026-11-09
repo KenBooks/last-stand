@@ -44,6 +44,14 @@ body.touch #perf .pf-head { pointer-events: auto; }
 #perf dd { margin: 0; text-align: right; white-space: nowrap; }
 .pf-gpu { margin-top: 5px; font-size: 9.5px; color: rgba(230,220,200,.45); overflow-wrap: anywhere; }
 .pf-copy { margin-top: 4px; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: rgba($accent, .5); }
+// (Mini, the pause menu's Performance stats: the frame rate and its graph alone, in a row, a tenth of Full's room; a
+// click or a tap on the frame rate still copies a report, and the hint shows only to say it was copied)
+#perf.mini { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; width: auto; padding: 5px 8px; }
+#perf.mini :is(.pf-ms, .pf-sub, dl, .pf-gpu, .pf-mid) { display: none; }
+#perf.mini .pf-head > b { min-width: 2ch; font-size: 22px; text-align: right; }
+#perf.mini .pf-graph { width: 96px; height: 26px; margin-top: 0; }
+#perf.mini .pf-copy { display: none; flex-basis: 100%; margin-top: 3px; }
+#perf.mini.said .pf-copy { display: block; }
 
 /* ---------- network overlay (optional, pause menu) ---------- */
 #net { width: 212px; max-height: calc(100vh / var(--ui, 1) - 20px); overflow-y: auto; padding: 8px 11px; box-sizing: border-box;

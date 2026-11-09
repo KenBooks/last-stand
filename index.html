@@ -638,7 +638,10 @@
           <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
           <div class="renderer-note"></div>
         </div>
-        <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
+        <!-- the performance overlay (ui/perfHud.ts): hidden, its frame rate and graph alone, or whole -->
+        <div class="opt-row quality-row seg-row"><span>Performance stats</span>
+          <div class="seg" id="opt-perf"><button data-perf="off">Off</button><button data-perf="mini">Mini</button><button data-perf="full">Full</button></div>
+        </div>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
         </div>
         <div class="pb-opt-col">

@@ -21,7 +21,7 @@ import { renderAttributes } from './attributes';
 import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
 import { setVolumes, sfx, volumeSettings, type Volumes } from '../core/audio';
 import { isTouch } from './touch';
-import { perfHudEnabled, setPerfHud } from './perfHud';
+import { perfHudSize, setPerfHudSize, type PerfHudSize } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
@@ -186,7 +186,9 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
     b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
   });
-  $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
+  document.querySelectorAll<HTMLElement>('#opt-perf button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setPerfHudSize(b.dataset.perf as PerfHudSize); renderPerfOptions(); };
+  });
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
@@ -852,6 +854,12 @@ function renderGearGlowOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-gear-glow button').forEach((b) => b.classList.toggle('active', b.dataset.g === on));
 }
 
+/** The performance overlay's sizes, the one shown lit. */
+function renderPerfOptions(): void {
+  const s = perfHudSize();
+  document.querySelectorAll<HTMLElement>('#opt-perf button').forEach((b) => b.classList.toggle('active', b.dataset.perf === s));
+}
+
 function renderQualityOptions(): void {
   const s = qualitySetting();
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));
@@ -974,7 +982,7 @@ export function showPause(v: boolean): void {
   if (v) {
     pauseTab(keptPauseTab());
     renderControlsHelp();
-    $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
+    renderPerfOptions();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
