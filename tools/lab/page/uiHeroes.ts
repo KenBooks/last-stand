@@ -441,12 +441,21 @@ function entranceMoves(screen: HTMLElement): number {
   return Math.max(0, ...from.map((box, i) => Math.max(Math.abs(box.x - to[i].x), Math.abs(box.y - to[i].y))));
 }
 
+/** The heroes' names in the row's order from the one after the hero in focus round to him: each click brings
+ *  another hero into focus. (The name of the hero in focus clicked chooses him and closes the screen: in the row's
+ *  own order, the mage's opening a check that began on him closed it, and every check after it threw.) */
+function namesFromNext(screen: HTMLElement): HTMLElement[] {
+  const names = [...screen.querySelectorAll<HTMLElement>('.hs-tabs [data-c]')];
+  const focused = names.findIndex((name) => name.classList.contains('active'));
+  return [...names.slice(focused + 1), ...names.slice(0, focused + 1)];
+}
+
 /** Each hero's name clicked in turn, as a player goes through them, with the page's motion on: the panel's parts
  *  where his card lays them out, and how far its entrance moves them. One that stands elsewhere for another hero, or
  *  moves as he's shown, is a layout shift (`canary`: the second card's traits pushed down). */
 async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const panel = screen.querySelector<HTMLElement>('.hs-panel')!;
-  const names = [...screen.querySelectorAll<HTMLElement>('.hs-tabs [data-c]')];
+  const names = namesFromNext(screen);
   const planted = canary ? screen.querySelectorAll<HTMLElement>('.hs-card .hs-traits')[1] : undefined;
   if (planted) planted.style.marginTop = '20px';
   const places = new Map<string, Map<string, { x: number; y: number; height: number }>>();

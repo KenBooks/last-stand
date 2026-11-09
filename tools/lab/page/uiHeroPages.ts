@@ -65,11 +65,20 @@ async function cardOver(lab: Lab, slot: HTMLElement, name: string): Promise<bool
   return over;
 }
 
+/** The hall's hero in focus as page `page` opened, or a problem where there is none (the screen closed under the
+ *  check: a click on the name of the hero in focus chooses him). */
+function heroInFocus(page: string, problems: string[]): hall.HallHero | undefined {
+  const hero = hall.hallHeroes()[hall.hallFocus()];
+  if (!hero) problems.push(`heroes: no hero in focus as the ${page} page opened (the hall open: ${hall.hallOpen()})`);
+  return hero;
+}
+
 /** The equipment page: the hero in focus's gear and stash, a card on hover, nothing to be moved. */
 async function gearPage(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const problems: string[] = [];
   if (!(await openPage(lab, screen, 'gear', problems))) return { lines: [], problems };
-  const hero = hall.hallHeroes()[hall.hallFocus()];
+  const hero = heroInFocus('equipment', problems);
+  if (!hero) return { lines: [], problems };
   const page = tabOf(screen, 'gear').body!;
   const slots = [...page.querySelectorAll<HTMLElement>('.eslot')];
   const items = [...page.querySelectorAll<HTMLElement>('.sitem[data-item]')];
@@ -108,7 +117,8 @@ async function gearPage(lab: Lab, screen: HTMLElement, canary: boolean): Promise
 async function attributesPage(lab: Lab, screen: HTMLElement): Promise<Found> {
   const problems: string[] = [];
   if (!(await openPage(lab, screen, 'attrs', problems))) return { lines: [], problems };
-  const hero = hall.hallHeroes()[hall.hallFocus()];
+  const hero = heroInFocus('attributes', problems);
+  if (!hero) return { lines: [], problems };
   const rows = [...tabOf(screen, 'attrs').body!.querySelectorAll<HTMLElement>('.row')];
   const health = rows.find((row) => row.firstElementChild?.textContent === 'Health')?.lastElementChild?.textContent;
   const his = String(Math.round(hero.player.stats.maxLife));
