@@ -7,9 +7,9 @@
 // stays, held a second and let go it stays, held through it leaves the run; its canary makes the hold 0 ms, and the
 // click must be caught abandoning.
 import type { Lab } from './lab';
-import { ABANDON_HOLD_MS, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
+import { ABANDON_HOLD_MS, PAUSE_TAB_COOKIE, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
 import { audioContext, musicOutput, setVolumes } from '../../../src/core/audio';
-import { readCookie, writeCookie } from '../../../src/core/cookies';
+import { readCookie, removeCookie, writeCookie } from '../../../src/core/cookies';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface PauseFound {
@@ -31,7 +31,7 @@ let planted: HTMLElement | null = null;
 /** The pause menu opened on `tab`; with the canary, a settings row made too tall to fit. */
 export function openPause(tab: PauseTab, canary: boolean): void {
   showPause(true);
-  if (tab !== 'controls') pauseTab(tab);
+  pauseTab(tab);
   if (!canary) return;
   planted = document.querySelector<HTMLElement>('#pause .pb-opts .opt-row');
   if (planted) planted.style.minHeight = `${CANARY_PX}px`;
@@ -201,5 +201,39 @@ export function pauseShown(tab: PauseTab): PauseFound {
     `  ${tab} tab: the menu ${share(rect.height, innerHeight)}% of the window's height, `
       + `${share(rect.width, innerWidth)}% of its width, ${scroll > ROUNDING_PX ? 'scrolling' : 'no scrolling'}`,
   ];
+  return { lines, problems };
+}
+
+/** the problem the kept tab's canary must raise */
+export const TAB_CANARY = { name: 'opened on', what: 'the kept tab lost before the menu opened again' };
+
+/**
+ * The tab a player chose kept (`pauseTabKept`): the menu opened, Settings clicked with the mouse as a player does,
+ * the menu closed and opened again; it must open on Settings, the cookie saying so (read again as the menu opens, so
+ * a reload keeps it); then Controls clicked, and kept likewise. With the canary, the cookie is lost before it opens
+ * again, which must be caught. The cookie is taken away after, as a first visit has none.
+ */
+export async function pauseTabKept(lab: Lab, canary: boolean): Promise<PauseFound> {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  try {
+    for (const tab of ['settings', 'controls'] as const) {
+      showPause(true);
+      const button = document.querySelector<HTMLElement>(`[data-pause-tab="${tab}"]`);
+      if (!button?.checkVisibility()) return { lines, problems: [`pauseTabKept: no ${tab} tab shown`] };
+      await lab.click(middleOf(button));
+      showPause(false);
+      if (canary) removeCookie(PAUSE_TAB_COOKIE);
+      showPause(true);
+      const opened = document.querySelector<HTMLElement>('[data-pause-tab].active')?.dataset.pauseTab;
+      const kept = readCookie(PAUSE_TAB_COOKIE);
+      lines.push(`  ${tab} clicked, the menu closed and opened again: ${TAB_CANARY.name} ${opened}, kept ${kept}`);
+      if (opened !== tab) problems.push(`pauseTabKept: ${tab} clicked, the menu ${TAB_CANARY.name} ${opened}`);
+      if (kept !== tab) problems.push(`pauseTabKept: ${tab} clicked, the cookie kept ${kept}`);
+      showPause(false);
+    }
+  } finally {
+    removeCookie(PAUSE_TAB_COOKIE);
+  }
   return { lines, problems };
 }

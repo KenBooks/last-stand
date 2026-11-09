@@ -26,6 +26,7 @@ import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
+import { readCookie, writeCookie } from '../core/cookies';
 import { gearGlow, setGearGlow } from '../core/materials';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
@@ -177,7 +178,7 @@ export function initMenus(h: MenuHooks): void {
   // held 2 s, never a click: a stray click or tap lost the run's spoils
   holdToConfirm($('#btn-abandon'), { ms: ABANDON_HOLD_MS, hint: 'Hold to abandon', done: () => { sfx.click(); hooks.abandon(); } });
   document.querySelectorAll<HTMLElement>('[data-pause-tab]').forEach((b) => {
-    b.onclick = () => { sfx.click(); pauseTab(b.dataset.pauseTab as PauseTab); };
+    b.onclick = () => { sfx.click(); choosePauseTab(b.dataset.pauseTab as PauseTab); };
   });
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
     b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
@@ -907,8 +908,22 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
-/** the pause menu's pages: the controls (shown first each time it opens) and the settings */
+/** the pause menu's pages: the controls and the settings */
 export type PauseTab = 'controls' | 'settings';
+/** the tab the pause menu opens on: the one chosen last (from play: "default to tab in pause screen that was open
+ *  before... not always controls... persists between reloads"), Controls until one is */
+export const PAUSE_TAB_COOKIE = 'last-stand-pause-tab';
+
+/** The tab the pause menu opens on (the cookie's, Controls if none or another). */
+function keptPauseTab(): PauseTab {
+  return readCookie(PAUSE_TAB_COOKIE) === 'settings' ? 'settings' : 'controls';
+}
+
+/** A tab chosen by the player: shown, and kept for the next time the menu opens, this visit or the next. */
+function choosePauseTab(tab: PauseTab): void {
+  pauseTab(tab);
+  writeCookie(PAUSE_TAB_COOKIE, tab);
+}
 
 /** The pause menu's page `tab` shown, the other hidden in the same cell (the box keeps its size). */
 export function pauseTab(tab: PauseTab): void {
@@ -928,7 +943,7 @@ export const ABANDON_HOLD_MS = 2000;
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
-    pauseTab('controls');
+    pauseTab(keptPauseTab());
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
