@@ -133,8 +133,8 @@ body.touch .hs-key { font-size: 0; }
    chooses him. Kept on him every frame by its transform (ui/heroSelect.ts `placeChoice`), on a layer of its own; shown
    as the mouse comes over him (his outline), on touch always (no hover) */
 .hs-choose { position: absolute; left: 0; top: 0; will-change: transform; pointer-events: none;
-  font: 700 ui(22px) var(--font-display); letter-spacing: ui(1px); font-variant: small-caps; white-space: nowrap; color: #ffe7b0;
-  text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 60%, transparent), $outline, 0 0 ui(4px) #000; opacity: 0; transition: opacity .18s ease-out; }
+  font: 700 ui(22px) var(--font-display); letter-spacing: ui(1px); font-variant: small-caps; white-space: nowrap; color: var(--cc);
+  text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 45%, transparent), $outline, 0 0 ui(4px) #000; opacity: 0; transition: opacity .18s ease-out; }
 #heroes.over-hero .hs-choose { opacity: 1; }
 /* (his choice waits till he's warm: it says how far along he is) */
 .hs-choose.cold { opacity: .85; font-variant-numeric: tabular-nums; }

@@ -40,7 +40,9 @@ import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
-import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
+import {
+  closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, heroLabelPictures, openHeroes,
+} from './uiHeroes';
 import {
   ABANDON_CANARY, PAUSE_CANARY, TAB_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
   openPauseAbandon, openPauseVolume, pauseAbandonChecked, pauseShown, pauseTabKept, pauseVolumeChecked,
@@ -895,7 +897,10 @@ const STEPS: Record<UiState, Steps> = {
   glow: { open: openGlow, close: closeGlow, check: glowShown, pictures: glowPictures },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
-  heroes: { open: openHeroes, close: closeHeroes, check: heroesShown, closed: heroesClosed },
+  heroes: {
+    open: openHeroes, close: closeHeroes, check: heroesShown, closed: heroesClosed,
+    pictures: async () => heroLabelPictures(),
+  },
   readying: { open: openReadying, close: closeReadying, check: readyingShown },
   readyingHeroes: { open: openReadyingHeroes, close: closeReadyingHeroes, check: readyingHeroesShown },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },

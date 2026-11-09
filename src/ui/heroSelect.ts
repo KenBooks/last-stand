@@ -139,6 +139,9 @@ function chooseLabel(): void {
   const share = readiness(id);
   const button = $('.hs-choose');
   button.classList.toggle('cold', share < 1);
+  // (in the colour of the hero it stands on, as his name below is: from play, "match color of label on hero on hover
+  // to the hero color we are using below")
+  button.style.setProperty('--cc', cls.accent);
   if (share < 1) {
     button.textContent = `Readying the ${cls.name} ${Math.round(share * 100)}%`;
     return;
