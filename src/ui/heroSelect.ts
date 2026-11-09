@@ -2,7 +2,7 @@
 // how he plays, his skills and his records in this save slot in a panel beside him (its other tabs his gear, to look
 // at, and his attributes: the tab last chosen kept), and a choice that leads into the lobby. The save slot under the
 // title opens the save slots, and a slot switched there opens the hall again on its heroes. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
-// Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
+// The hero under the mouse is outlined, and a click or tap on the hero in focus chooses him. Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
 // Space chooses, Esc goes back); the name of the hero in focus, clicked or tapped again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
@@ -11,6 +11,7 @@ import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { wasPressed } from '../core/input';
 import { sfx } from '../core/audio';
+import { outline } from './overlay/outline';
 import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen, hallShot } from '../game/hall';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
@@ -47,6 +48,9 @@ let standing = { x: 0, top: 0, bottom: 0 };
 const CHOICE_UP = 0.3;
 /** how far beside his middle the mouse is over him, a share of his height */
 const HOVER_SIDE = 0.22;
+/** the outline round the hero under the mouse: white, a little softer than Quarry Mark's red */
+const LIT_COLOR = 0xffffff;
+const LIT_STRENGTH = 0.85;
 /** how far a press moves sideways to drag the scene (css px: short of it, a tap on a hero) */
 const DRAG_START = 8;
 /** how far a drag let go carries on, as the time its speed goes on for (ms): a flick lands a hero further; and how
@@ -99,7 +103,9 @@ export function initHeroSelect(h: HeroSelectHooks): void {
     el.addEventListener('pointermove', (e) => {
       if (press) dragTo(press, e.clientX);
       hover(!press && e.pointerType === 'mouse' && overHero(e.clientX, e.clientY));
+      lightHero(!press?.dragging && e.pointerType === 'mouse' ? heroAt(e.clientX, e.clientY) : -1);
     });
+    el.addEventListener('pointerleave', () => lightHero(-1));
     el.addEventListener('pointerup', (e) => {
       if (!press) return;
       const p = press;
@@ -225,6 +231,7 @@ function showPage(page: Page, keep = false): void {
 export function closeHeroSelect(chosen?: { id: string; profile: Profile }): void {
   if (!heroSelectOpen()) return;
   hideTooltip();
+  lightHero(-1);
   $('#heroes').classList.add('hidden');
   document.body.classList.remove('in-hall');
   closeHall();
@@ -330,8 +337,36 @@ function choose(): void {
   closeHeroSelect({ id, profile });
 }
 
-/** A tap or click on the backdrop: the hero nearest it on screen in focus, if it landed near one. */
+/** The hero whose body is at (`x`, `y`) on screen, as the camera shows him now (-1: none, or not warm yet: hidden). */
+function heroAt(x: number, y: number): number {
+  const w = innerWidth, h = innerHeight;
+  for (const [i, hero] of hallHeroes().entries()) {
+    if (readiness(hero.id) < 1) continue;
+    const p = hero.player, at = (up: number) => p.pos.clone().setY(p.pos.y + up).project(G.camera);
+    const feet = at(0), head = at(p.model.height);
+    if (feet.z >= 1) continue;
+    const sx = (feet.x + 1) / 2 * w, top = (1 - head.y) / 2 * h, bottom = (1 - feet.y) / 2 * h;
+    if (Math.abs(x - sx) < (bottom - top) * HOVER_SIDE && y > top && y < bottom) return i;
+  }
+  return -1;
+}
+
+/** the hero outlined under the mouse (-1: none) */
+let lit = -1;
+
+/** Hero `i` outlined in white as the mouse is over him (from play: "outline highlight like we have for ranger's mark
+ *  skill... hover outline shows then click to choose"), or none (-1). */
+function lightHero(i: number): void {
+  if (i === lit) return;
+  lit = i;
+  outline(i >= 0 ? hallHeroes()[i].player.obj : null, LIT_COLOR, LIT_STRENGTH);
+}
+
+/** A tap or click on the backdrop: on the hero in focus, he's chosen (from play: "should be able to click whole hero");
+ *  else the hero nearest it on screen in focus, if it landed near one. */
 function tapAt(x: number, y: number): void {
+  const on = heroAt(x, y);
+  if (on >= 0 && on === hallFocus()) { sfx.click(); choose(); return; }
   const w = innerWidth, h = innerHeight;
   let best = -1, bd = TAP_REACH * w;
   for (const [i, hero] of hallHeroes().entries()) {
