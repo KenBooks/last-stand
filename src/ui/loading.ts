@@ -5,7 +5,6 @@ import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
 import { qualityLevel } from '../core/quality';
 import { recorder } from '../perf/recorder';
 import { sfx } from '../core/audio';
-import { titleMenu, titleWanted } from './titleMenu';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
 const sub = (): HTMLElement => el().querySelector<HTMLElement>('.ld-sub')!;
@@ -76,14 +75,9 @@ export function loadingDone(onReveal: () => void): void {
     last = now;
     const waiting = smooth < SMOOTH_FRAMES || blow === undefined;
     if (waiting && now - start < MAX_WAIT_MS) { requestAnimationFrame(tick); return; }
+    left = true;
     clearInterval(tipTimer);
     l.querySelector('.ld-tip')!.classList.remove('on');
-    // the title menu waits for the player's first click, tap or key, which lets the browser play the exit's sound
-    // (an exit not ready by then may still be, as they choose)
-    if (titleWanted()) void titleMenu(l).then(leaveNow); else leaveNow();
-  };
-  const leaveNow = (): void => {
-    left = true;
     if (blow) {
       // the logo blows away over the loading backdrop first; the lobby shows a moment later
       l.classList.add('blowing');

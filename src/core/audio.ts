@@ -643,53 +643,6 @@ function logoGust(): void {
   v.start(); v.stopAt(t + 3.7);
 }
 
-/** The title menu's choice moving (`ui/titleMenu.ts`): a tick of steel and a brush of air, no note. */
-function titleMove(): void {
-  const v = voice(0, 0.15);
-  const { c, t } = v;
-  const tick = c.createBiquadFilter(); tick.type = 'bandpass'; tick.frequency.value = 3800; tick.Q.value = 1.6;
-  v.loop(tick); tick.connect(v.hit(0.14, 0.07, v.out, 0.001));
-  const brush = v.sweep('bandpass', 900, 2600, 0.14, 0.9);
-  v.loop(brush); brush.connect(v.hit(0.12, 0.2, v.out, 0.012));
-  v.start(); v.stopAt(t + 0.35);
-}
-
-/** The title menu's Make your stand: a blow struck, the embers flaring and a rush of air rising into the gust that
- *  blows the logo away (`logoGust`, after it). Driven dark noise for its weight, the arcana's crackle for the embers,
- *  a flanged rush: no notes, as the lobby's music starts under it. */
-function titleStart(): void {
-  const v = voice(0, 0.45);
-  const { c, t } = v;
-  // the blow
-  const blow = v.sweep('lowpass', 3000, 180, 0.55, 0.8), sh = drive(3);
-  v.loop(blow); blow.connect(sh).connect(v.hit(0.3, 0.9, v.out, 0.002));
-  // its crack
-  const crack = c.createBiquadFilter(); crack.type = 'highpass'; crack.frequency.value = 2500;
-  v.loop(crack); crack.connect(v.hit(0.22, 0.12, v.out, 0.001));
-  // the embers flaring, either ear its own
-  for (const [pan, rate] of [[-0.5, 1], [0.5, 1.25]]) {
-    const ember = c.createBiquadFilter(); ember.type = 'bandpass'; ember.frequency.value = 2800; ember.Q.value = 0.6;
-    v.crackle(ember, rate); ember.connect(v.hit(0.4, 1.1, v.lane(1, pan), 0.004));
-  }
-  // the rush rising, flanged
-  const rush = v.sweep('bandpass', 450, 4200, 0.5, 1);
-  v.loop(rush); rush.connect(v.flange(blowAt(v, 0.04, 0.3, 0.7, v.out, 0.3), 3, 2, 2.5, 0.55));
-  v.start(); v.stopAt(t + 1.8);
-}
-
-/** Resumes the game's context from within a user gesture; resolves once it runs (false: it wouldn't, or the
- *  browser is slow to say). A sound played while it's still suspended would be heard only when it resumes. */
-export function audioReady(): Promise<boolean> {
-  initAudio();
-  const c = live;
-  if (!c) return Promise.resolve(false);
-  if (c.state === 'running') return Promise.resolve(true);
-  return Promise.race([
-    c.resume().then(() => c.state === 'running', () => false),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500)),
-  ]);
-}
-
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
 const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
@@ -730,9 +683,6 @@ export const sfx = {
   /** the loading screen's logo blown away and gathered into the lobby's; only where sound already runs (a context
    *  still waiting for the page's first click would play it at that click, in the lobby) */
   logoGust: guard(() => { if (ctx!.state === 'running') logoGust(); }),
-  /** the title menu's choice moved, and Make your stand chosen (`ui/titleMenu.ts`); each only where sound runs */
-  titleMove: guard(() => { if (ctx!.state === 'running' && !throttle('title', 40)) titleMove(); }),
-  titleStart: guard(() => { if (ctx!.state === 'running') titleStart(); }),
   /** Veilstep: gone, and formed again where he lands `dur` s later (the dodge keeps `blink`) */
   veilstep: guard((dur: number) => { veilstepPass(dur); }),
   potion: guard(() => { noise({ dur: 0.35, freq: 800, sweep: 2500, q: 5, gain: 0.15 }); tone({ freq: 440, to: 880, dur: 0.4, gain: 0.08 }); }),

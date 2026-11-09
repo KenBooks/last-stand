@@ -72,8 +72,6 @@ let lastFrame = 0, settleUntil = 0, lastJudged = 0, refreshMs = 1000 / 60;
 const marks: { t: number; text: string }[] = [];
 const longFrames: { t: number; row: LongFrameRow }[] = [];
 const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: false };
-/** how long the player stayed on the title menu (ms), out of the boot's time */
-let titleWaitMs = 0;
 let readyingSince = 0, wasHidden = false;
 const listeners: ((slow: Slow) => void)[] = [];
 let pending: Slow | null = null;
@@ -268,18 +266,14 @@ export const recorder = {
   /** A boot step shown (`ui/loading.ts`). */
   bootStep(label: string): void { boot.steps.push([Math.round(performance.now()), label]); },
 
-  /** The player took `ms` to leave the title menu (`ui/titleMenu.ts`): their wait, not the boot's, so it's taken
-   *  out of the boot's time (a minute spent on the menu would be a slow boot otherwise). */
-  waitedOnTitle(ms: number): void { titleWaitMs += ms; boot.steps.push([Math.round(performance.now()), 'the title menu left']); },
-
   /** The game shown: the boot judged by its own work, its download's time taken out (ms). `firstVisit`: no worker
    *  served the page, so its files came from the network. */
   revealed(firstVisit: boolean): void {
     const now = performance.now();
-    boot.revealMs = Math.round(now - titleWaitMs);
+    boot.revealMs = Math.round(now);
     boot.firstVisit = firstVisit;
     boot.downloadMs = Math.round(downloadTime());
-    boot.steps.push([Math.round(now), 'shown']);
+    boot.steps.push([boot.revealMs, 'shown']);
     mark('shown', now);
     if (slowBoot(boot.revealMs, boot.downloadMs)) recorder.slowBootRevealed(now);
   },
