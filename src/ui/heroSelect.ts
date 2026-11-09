@@ -3,7 +3,7 @@
 // at, and his attributes: the tab last chosen kept), and a choice that leads into the lobby. The save slot under the
 // title opens the save slots, and a slot switched there opens the hall again on its heroes. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
 // Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
-// Space chooses, Esc goes back). The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
+// Space chooses, Esc goes back); the name of the hero in focus, clicked or tapped again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
@@ -71,7 +71,13 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   $('.hs-cards').replaceChildren(...CLASS_IDS.map((id) => card(CLASSES[id])));
   $('.hs-tabs').innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}" style="--cc:${CLASSES[id].accent}">${CLASSES[id].name}</button>`).join('');
   document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => {
-    b.onclick = () => { sfx.click(); focusOn(CLASS_IDS.indexOf(b.dataset.c!)); };
+    // (the name of the hero already in focus chooses him, as his choice does: from play, "pressing these titles (only
+    // if selected title), would also play / start the game")
+    b.onclick = () => {
+      sfx.click();
+      const i = CLASS_IDS.indexOf(b.dataset.c!);
+      if (i === hallFocus()) choose(); else focusOn(i);
+    };
   });
   $('.hs-prev').onclick = () => { sfx.click(); step(-1); };
   $('.hs-next').onclick = () => { sfx.click(); step(1); };
