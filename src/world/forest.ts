@@ -180,7 +180,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
   const capMat = new THREE.MeshStandardMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
-  const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 2.0 });
+  const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 1.4 });
   // the props dissolve between the camera and the player in the close views (the camera never pulls in)
   for (const m of [stone, mossStone, ivyMat, mossMat, logMoss, hangMat, heartwood, capMat, stemMat, glyphMat]) seeThrough(m, 'prop');
 
