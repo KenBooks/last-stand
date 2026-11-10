@@ -7,11 +7,11 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import { WEBGPU, setPlainLitOnWebGPU, shadowsUntaken } from './webgpu';
+import { WEBGPU, setPlainLitOnWebGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
-import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns, setSunShadowSeen } from './renderer';
+import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
 import { setParticleShare } from '../fx/particles';
 import { setFlameSteps } from '../world/fire';
 
@@ -270,7 +270,6 @@ function apply(l: QualityLevel, most = Infinity): void {
   setGearGlowByLevel(p.gearGlow);
   setFlameSteps(p.flameSteps, p.flameLite);
   if (WEBGPU) setPlainLitOnWebGPU(p.plainLit);
-  setSunShadowSeen(!(WEBGPU && shadowsUntaken()));
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

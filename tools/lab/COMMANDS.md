@@ -321,6 +321,9 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   1.5 times the first level's: a glow that flickers as the view moves, which a still frame never shows (from play, at
   Very low: "blinding light... it only happens when I'm moving"; by the forest's rune main read 0.18% a frame at
   High, 0.29% at Low and 0.46% at Very low, bloom's bright pass reading a sixteenth of the pixels under it there).
+  With `--renderer webgpu` the canvas is read through a 2D canvas in the same task as the draw (`webGpuPixels` in
+  `page/pixels.ts`, SDR only): with `--levels`, it caught WebGPU's Low and Very low a fifth brighter than High in the
+  forest, their shadows untaken. Run it with `--boot verylow` too, where a level's pipelines are built plain.
 - `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`, `--renderer webgpu`,
   `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
   render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of

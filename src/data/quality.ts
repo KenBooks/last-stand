@@ -70,8 +70,9 @@ const SETTINGS = {
    *  other work ("I want to run the game at full phone res") */
   pixels: { high: Infinity, medium: Infinity, low: Infinity, verylow: Infinity },
   /** the lit shading made plain on WebGPU (`setPlainLitOnWebGPU` in core/webgpu.ts): no surface maps (normal,
-   *  roughness, metalness, occlusion) and no shadows taken, a uniform's branch: half a phone's frame there (trace
-   *  DM4B-R468). WebGL's lit shading cost that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
+   *  roughness, metalness, occlusion), built without that code at the boot's level (each shadow read with one
+   *  lookup there), a uniform's branch once the game shows. A quarter of a phone's frame (trace DM4B-R468). WebGL's
+   *  lit shading cost that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
   plainLit: { high: false, medium: false, low: true, verylow: true },
   /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
    *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
