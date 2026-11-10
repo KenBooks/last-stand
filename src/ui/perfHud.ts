@@ -15,6 +15,7 @@ import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { loadingLeft, loadingSteps } from './loading';
 import { isWarm, isWarming } from '../game/warm';
+import { nameWebGpuPasses, lastFrameParts } from '../perf/webgpuPasses';
 import { gpuMarks, viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
@@ -77,8 +78,9 @@ let frameNo = 0, splitting = false;
 const pendingFrames: { parts: Part[]; split: boolean; ring: number }[] = [];
 const gpuTimes: { t: number; ms: number }[] = [];
 const gpuParts: Record<string, number>[] = [];   // the latest split frames
-/** A frame's GPU time as it came back (ms), and its parts' if it was timed in parts. */
-export interface GpuFrame { ms: number; parts: Record<string, number> | null }
+/** A frame's GPU time as it came back (ms), and its parts' if it was timed in parts; `whole` where timing its parts
+ *  didn't slow it (WebGPU's, from three's timestamps of every pass: WebGL's queries between parts do). */
+export interface GpuFrame { ms: number; parts: Record<string, number> | null; whole?: boolean }
 /** the GPU's frames come back since a harness last took them (`takeGpuFrames`), the last `GPU_KEPT` */
 const gpuTaken: GpuFrame[] = [];
 const GPU_KEPT = 240;
@@ -126,6 +128,7 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer.info.autoReset = false;
   if (WEBGPU) {
     timesGpu = (renderer as unknown as WebGpuTimes).hasFeature('timestamp-query');
+    if (timesGpu) nameWebGpuPasses(renderer);
     // (and its switches: a report's frames hang on them)
     const flags = [RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean);
     gpuName = flags.length ? `WebGPU (${flags.join(', ')})` : 'WebGPU';
@@ -284,7 +287,7 @@ export function holdWebGpuTimes(held: boolean): void {
 }
 
 /** The latest frame's GPU time on WebGPU (all its passes, and the GPU-driven drawing's culling), asked for if none is
- *  on its way. Not split into parts: three sums a frame's passes. */
+ *  on its way, and its split by pass (`perf/webgpuPasses.ts`: every frame's, as three times each pass). */
 function takeWebGpuTime(): void {
   if (!timesGpu || readingGpuTime || webGpuTimesHeld) return;
   readingGpuTime = true;
@@ -294,10 +297,11 @@ function takeWebGpuTime(): void {
     .then(([render, compute]) => {
       const ms = (render ?? 0) + (compute ?? 0);
       if (ms <= 0) return;
-      recorder.gpu(at, ms, null);
+      const parts = lastFrameParts(renderer);
+      recorder.gpu(at, ms, parts);
       noteGpuFrame(ms);
       if (enabled || observed) gpuTimes.push({ t: frameNow, ms });
-      if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
+      if (gpuTaken.push({ ms, parts, whole: true }) > GPU_KEPT) gpuTaken.shift();
     })
     .finally(() => { readingGpuTime = false; });
 }

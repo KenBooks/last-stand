@@ -132,6 +132,12 @@ export function traceReport(trace: Trace, code = ''): string[] {
   lines.push(`Ours history (ms a frame: update + render) ${history((frames) => meanOver(c.cpu, frames))}`);
   lines.push(`Late history (ms a frame started after its time) ${history((frames) => meanOver(c.late, frames))}`);
   lines.push(`GPU history (ms a frame, our draws) ${history((frames) => meanOver(c.gpu, frames))}`);
+  // (each part's own, where they came with every frame's time: WebGPU's, `perf/webgpuPasses.ts`)
+  for (const part of parts) {
+    const column = c[part];
+    const every = known(column).length >= known(c.gpu).length / 2;
+    if (every) lines.push(`  ${part} (ms a frame) ${history((frames) => meanOver(column, frames))}`);
+  }
   lines.push(`State history ${cut.map((frames) => (frames.length ? stateText(c.state?.[frames[0]] ?? 0) : '-')).join(' ')}`);
 
   lines.push(`Worst stretches (1 s, the fewest frames; what happened in the ${BEFORE_MS / 1000} s before each):`);

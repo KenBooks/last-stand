@@ -14,6 +14,8 @@ import { RUNNING } from '../core/rendererChoice';
 import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 import { shadingParts } from './shadingParts';
+import { passesSinceLastRead, timesPasses } from './webgpuPasses';
+import { holdWebGpuTimes } from '../ui/perfHud';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
 export interface ProfileTurns {
@@ -50,6 +52,9 @@ export interface Profile {
   /** WebGPU's: the pipelines a draw made while it ran, each holding its frame up (made by a part's first frame,
    *  which is never timed; the rest are made beside the frames, their objects left out until they are) */
   compiledAtDraw?: number;
+  /** whether its frames were timed by the GPU's own timestamps (WebGPU's, `passesSinceLastRead`), not the page's
+   *  clock round a wait */
+  gpuTimed?: boolean;
   parts: PartCost[];
   /** the parts that can't be timed on this renderer, and why (said in the report in place of their cost) */
   untimed?: { name: string; why: string }[];
@@ -149,9 +154,11 @@ type TimedDraw = () => Promise<number>;
 /** A frame's draw: the game's `render`, or the canary's two (a promise on WebGPU: the GPU waited for between them). */
 type Draw = () => void | Promise<void>;
 
-/** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms); stopped
- * when `cancelled`, and `counted` after each. */
-function timing(draw: Draw, options: ProfileOptions, counted: () => void): TimedDraw {
+/** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms), or by the
+ * GPU's timestamps where `gpuTimed` (its passes summed: the page's clock round a wait for WebGPU's queue read the
+ * phone's frame 74 ms where the browser showed it at 60 a second, trace 4ADF-XJBB); stopped when `cancelled`, and
+ * `counted` after each. */
+function timing(draw: Draw, options: ProfileOptions, counted: () => void, gpuTimed: boolean): TimedDraw {
   const clock = options.clock ?? (() => performance.now());
   const nextFrame = options.nextFrame ?? browserFrame;
   return async () => {
@@ -160,7 +167,7 @@ function timing(draw: Draw, options: ProfileOptions, counted: () => void): Timed
     const start = clock();
     await draw();
     await waitForGpu();
-    const took = clock() - start;
+    const took = gpuTimed ? await passesSinceLastRead(G.renderer) : clock() - start;
     counted();
     return took;
   };
@@ -240,13 +247,19 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     progress.done += 1;
     options.onProgress?.(progress);
   };
-  const timedFrame = timing(draw, options, counted);
+  const gpuTimed = WEBGPU && timesPasses(G.renderer);
+  const timedFrame = timing(draw, options, counted, gpuTimed);
   const now = options.clock ?? (() => performance.now());
   const started = now();
   const programs = compiledSoFar();
   const atDraw = WEBGPU ? pipelinesMade().atDraw : 0;
   holdFrames(true);
   if (WEBGPU) holdPipelines(G.renderer, true);
+  // (the overlay's reads of the timestamps held: a read takes every pass in three's pool; the passes before let go)
+  if (gpuTimed) {
+    holdWebGpuTimes(true);
+    await passesSinceLastRead(G.renderer);
+  }
   try {
     const costs: PartCost[] = [];
     for (const part of parts) {
@@ -267,8 +280,10 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const seconds = (now() - started) / 1000;
     const compiledAtDraw = WEBGPU ? pipelinesMade().atDraw - atDraw : undefined;
     const renderer = rendererName();
-    return { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
+    const found = { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
+    return { ...found, gpuTimed };
   } finally {
+    if (gpuTimed) holdWebGpuTimes(false);
     if (WEBGPU) holdPipelines(G.renderer, false);
     holdFrames(false);
   }
@@ -315,7 +330,8 @@ export function profileLines(found: Profile): string[] {
   const made = onWebGPU
     ? `${found.compiled} pipelines made (${found.compiledAtDraw ?? 0} at a draw), on ${found.renderer}`
     : `${found.compiled} programs compiled`;
-  const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame drawn and waited for; `
+  const timed = found.gpuTimed ? 'timed by the GPU\'s timestamps' : 'drawn and waited for';
+  const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame ${timed}; `
     + `profiled in ${found.seconds.toFixed(1)} s, ${made}`;
   const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame, onWebGPU))];
   lines.push(...(found.untimed ?? []).map((part) => `${part.name}: ${part.why}`));
