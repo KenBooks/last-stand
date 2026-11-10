@@ -105,10 +105,21 @@ function lightScenarios(options) {
   for (const biome of options.biomes) {
     for (const view of options.views) {
       const facings = view === 'top' ? options.facings.slice(0, 1) : options.facings;
-      for (const facing of facings) scenarios.push({ biome, view, facing: Number(facing) });
+      for (const facing of facings) {
+        scenarios.push({ biome, view, facing: Number(facing), at: options.at, zoom: options.zoom });
+      }
     }
   }
   return scenarios;
+}
+
+/** The quality levels and Resolutions `light` draws each frame at again (`--levels`, `--resolutions`): every level at
+ *  every Resolution, the first the one the rest are held to; none where neither is given. */
+function lightSettings(options) {
+  if (!options.levels && !options.resolutions) return [];
+  const levels = options.levels ?? ['high'];
+  const resolutions = (options.resolutions ?? ['1']).map(Number);
+  return levels.flatMap((level) => resolutions.map((resolution) => ({ level, resolution })));
 }
 
 /** the strikes `trail` casts unless `--strikes` says: every one of the warrior's, Rending Cleave each way he holds his
@@ -615,6 +626,8 @@ export const COMMANDS = {
     check(options) {
       const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));
       if (wrong !== undefined) throw labError(`light --facings: ${wrong} is not a number of degrees`);
+      const share = (options.resolutions ?? []).find((value) => !(Number(value) > 0 && Number(value) <= 1));
+      if (share !== undefined) throw labError(`light --resolutions: ${share} is not a share of the screen (0.25 to 1)`);
     },
     async each(side, options) {
       // (a frame at a time, each on its own: its pictures sent back with it)
@@ -622,7 +635,8 @@ export const COMMANDS = {
       for (const scenario of lightScenarios(options)) {
         const canary = Boolean(options.canary) && reports.length === 0;
         const hdr = options.hdr ? { paper: options.paper ?? 1, peak: options.peak ?? 3 } : undefined;
-        const command = { scenario, pictures: options.pictures !== false, canary, hdr };
+        const settings = lightSettings(options);
+        const command = { scenario, pictures: options.pictures !== false, canary, hdr, settings };
         reports.push(await side.command('light', command));
       }
       return {
