@@ -234,6 +234,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   slides the furthest push's finger back to 20 px before it's read, and pushes once more from the set-up's own spot,
   into the wall: both must be caught. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `heropick`: a first visit's hero picked on the hero selection screen (`page/heroPick.ts`, `ui/heroSelect.ts`). It
+  boots as `--first` does (no saved hero, the screen open over the hall, the mage in focus; `--class` another if the
+  first visit's hero changes), taps the hero in focus at his middle with a finger as a touch screen sends it, then
+  opens the screen again as a first visit's and clicks him with the mouse: each pick must land in the lobby, the
+  screen closed and the lobby's panels shown, with no run started and no press waiting for the fight's warm-up, and
+  the browser's click after the press must reach nothing outside the screen (each line says what of the lobby lay
+  under the pick). From play on the owner's phone: "I picked mage, it entered the area, enemies spawned and started
+  attacking me, happens every time": the screen closed as the finger lifted, and the tap's click, which comes after
+  it, pressed the lobby's Enter the Arena, which stands under the mage on a 640x360 screen; a first visit's fight
+  still cold, the Start waited under the fight's loading bar and began the run once it was warm (on WebGPU, whose
+  fight warms under the loading screen, at once). `--canary` lets that click through (`heroSelectEatsClicks(false)`),
+  which must be found. Run it at `--screen 640x360@3` (Start under the hero), a phone's `832x384@2.8125`, a
+  desktop's, and each with `--renderer webgpu`.
 - `touchpad`: where a finger put down starts the touch controls' move stick (`page/touchPad.ts`). In a run, a 16x8 grid of points
   over the screen, each touched by a finger (`lab.touchDown`) and slid 30 px right, the stick read a frame after:
   pushed, or not. A point whose topmost element is a control (a button, a skill's slot, a link) is left alone, as
