@@ -69,13 +69,23 @@ let adaptHeld = NO_ADAPT;
 export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** bloom left out from now on, or no longer (the lab's trail draws where an effect is, not its glow round it) */
 let bloomPass: UnrealBloomPass | null = null;
+let bloomHeld = false;
 export function holdBloom(off: boolean): void {
-  if (!bloomPass) return;
+  bloomHeld = off;
+  leaveBloomOut();
+}
+/** Bloom drawn, or left out: held off, or the level's share none (Very low's). */
+function leaveBloomOut(): void {
+  if (!bloomPass || !grade) return;
+  const off = bloomHeld || bloomShare <= 0;
   bloomPass.enabled = !off;
   // (the grade and the area add bloom's composite themselves: left out, they read none)
   const added = off ? NO_BLOOM : bloomPass.renderTargetsHorizontal[0].texture;
   grade.uniforms.tBloom.value = added;
   areaPass.material.uniforms.tBloom.value = added;
+  // (a level without bloom has no glare from its widest level either: its target would hold its last frame)
+  const glare = bloomPass.renderTargetsVertical[bloomPass.nMips - 1].texture;
+  grade.uniforms.tGlare.value = bloomShare <= 0 ? NO_BLOOM : glare;
 }
 /** what the grade and the area add while bloom is left out */
 const NO_BLOOM = new THREE.DataTexture(new Uint8Array(4), 1, 1);
@@ -91,6 +101,7 @@ const bloomGiven = new THREE.Vector2(1, 1);
 export function setBloomShare(share: number): void {
   bloomShare = share;
   bloomPass?.setSize(bloomGiven.x, bloomGiven.y);
+  leaveBloomOut();
   if (WEBGPU) setBloomShareOnWebGPU(share);
 }
 /** The pixels bloom's passes draw into its own targets a frame (the lab's): its bright pass, each level's blur
@@ -775,6 +786,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   grade.uniforms.tSmall.value = area.small.texture;
   grade.uniforms.tLarge.value = area.large.texture;
   composer.addPass(grade);
+  leaveBloomOut();
   passMaterials = {
     intoTargets: [
       bloom.materialHighPassFilter, ...bloom.separableBlurMaterials, bloom.compositeMaterial, area.material,
