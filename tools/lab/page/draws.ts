@@ -44,9 +44,9 @@ export interface DrawsOptions {
 const SETTLE_FRAMES = 30;
 const ROWS = 16;
 /** the most draws in another material than the one before a hero may make a frame, scene and shadow maps together,
- *  in any gear (in the forest lobby with all their armour the warrior makes 34, the mage and the ranger 37, their
+ *  in any gear (in the forest lobby with all their armour the warrior makes 31, the mage 33, the ranger 34, their
  *  looks drawn from palettes, `models/palette.ts`; each look in its own material, the mage made 58) */
-const HERO_SWITCHES = 40;
+const HERO_SWITCHES = 37;
 /** how many of the hero's meshes the canary gives a material of their own */
 const CANARY_MATERIALS = 10;
 const CANARY_BOXES = 7;
