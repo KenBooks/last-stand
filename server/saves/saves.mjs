@@ -28,8 +28,10 @@ import * as passkeys from './passkeys.mjs';
 import { cleanUp, forgetPrs, isCommitBuild, prOf } from './cleanup.mjs';
 
 const env = process.env;
-const ORIGINS = 'https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,'
-  + 'https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev,http://localhost:5173';
+/** The game's pages: production and the previews and commit builds. Never localhost (any local app is) or the
+ *  github.io address the game moved from (every Pages site of that user is): set ORIGINS to try it locally. */
+const ORIGINS = 'https://last-stand.cc,https://www.last-stand.cc,https://pr-*.ls.wellscoped.dev,'
+  + 'https://c-*.ls.wellscoped.dev';
 
 /** Origins from a comma-separated list, a `*` standing for one DNS label (the relay's and the traces' rule). */
 export function originsFrom(list) {
@@ -63,7 +65,12 @@ export function settingsFrom(vars) {
     saveMax: Number(vars.SAVE_MAX ?? 16 << 10),
     /** a save's parts at most (a hero each, what they share) */
     partsMax: Number(vars.PARTS_MAX ?? 16),
-    writesPerHour: Number(vars.WRITES_PER_HOUR ?? 60),
+    /** writes per account and site, spread evenly: so many an hour, in any 10 minutes, in any minute */
+    writes: [
+      { most: Number(vars.WRITES_PER_HOUR ?? 300), windowMs: 60 * 60_000 },
+      { most: Number(vars.WRITES_PER_10_MIN ?? 50), windowMs: 10 * 60_000 },
+      { most: Number(vars.WRITES_PER_MINUTE ?? 10), windowMs: 60_000 },
+    ],
     /** sites with a save other than production's (previews, commit builds) per account */
     otherSitesMax: Number(vars.OTHER_SITES_MAX ?? 20),
     /** new accounts from one address in any 24 hours */
@@ -85,6 +92,9 @@ const PART = /^[a-z][a-z0-9.-]{0,31}$/;
 const MAX_UNPACKED = 512 << 10;
 /** a session's last use is written down at most this often (not on every request) */
 const USED_EVERY = 24 * 60 * 60_000;
+/** the first cleanup after a start: soon, as a deploy restarts the service more often than once a day */
+const FIRST_CLEAN_MS = 60_000;
+const PRUNE_EVERY = 10 * 60_000;
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -112,16 +122,46 @@ function allowed(key, most, windowMs, now = Date.now()) {
   return true;
 }
 
+/** Whether `key` may happen once more under every one of `limits` ({ most, windowMs }: the longest window first),
+ *  and counts it if so. Nothing is counted when any refuses. */
+function allowedEach(key, limits, now = Date.now()) {
+  const times = (counts.get(key) ?? []).filter((t) => now - t < limits[0].windowMs);
+  counts.set(key, times);
+  const within = (windowMs) => times.filter((t) => now - t < windowMs).length;
+  if (limits.some(({ most, windowMs }) => within(windowMs) >= most)) return false;
+  times.push(now);
+  return true;
+}
+
+/** Drops what nothing counts any more: the counts' empty windows (the longest is a day) and expired codes, so
+ *  neither grows with every address that ever asked. */
+function prune(now = Date.now()) {
+  for (const [key, times] of counts) if (!times.some((t) => now - t < 86_400_000)) counts.delete(key);
+  for (const [code, { until }] of linkCodes) if (until <= now) linkCodes.delete(code);
+}
+
+/** Whether `site` is production's: the one trusted site. A preview or commit build runs unmerged code, so a session
+ *  of theirs may use its own site's save and nothing that reaches past it. */
+const trusted = (site) => site === siteOf(settings.production);
+
+/** `text` %-decoded, or null if it is malformed. */
+function decoded(text) {
+  try { return decodeURIComponent(text); } catch { return null; }
+}
+
 /** The site a page's save is filed under: its host (and port), `www.` left off, so production has one. */
 export function siteOf(origin) {
   const url = new URL(origin);
   return url.host.replace(/^www\./, '').replace(':', '_');
 }
 
-/** The address a request came from: the proxy's last hop says (Traefik sets it), else the socket's. */
+/** The address a request came from, as its limits count it: the proxy's last hop says (Traefik sets it), else the
+ *  socket's. An IPv6 address counts by its /64, which one machine holds whole. */
 function addressOf(req) {
   const hops = String(req.headers['x-forwarded-for'] ?? '').split(',').map((h) => h.trim()).filter(Boolean);
-  return hops[hops.length - 1] ?? req.socket.remoteAddress ?? '?';
+  const address = hops[hops.length - 1] ?? req.socket.remoteAddress ?? '?';
+  if (!address.includes(':') || address.startsWith('::ffff:')) return address;
+  return `${address.split(':').slice(0, 4).join(':')}::/64`;
 }
 
 function cors(req) {
@@ -162,14 +202,20 @@ async function jsonOf(req) {
   try { return body ? JSON.parse(body.toString('utf8')) : null; } catch { return null; }
 }
 
-/** The account a request's session is of, if its token is one made for this page's site. */
-function sessionOf(req, site) {
+/** The account a request's session is of, if its token is one made for this page's site and still in use. */
+function sessionOf(req, site, now = Date.now()) {
   const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const account = store.accountOfSession(token);
   const session = account?.sessions.find((s) => s.hash === store.digest(token));
-  return session && session.site === site ? { account, session, token } : null;
+  if (!session || session.site !== site || now - session.used > settings.sessionDays * 86_400_000) return null;
+  return { account, session, token };
 }
+
+/** Whether this session may add a passkey to its account: on production; on another site only just after a
+ *  sign-in code brought it there (the player adding that site's passkey), never later from a preview's code. */
+const mayAddPasskey = ({ session }, site, now = Date.now()) =>
+  trusted(site) || (session.via === 'code' && now - session.created < LINK_MS);
 
 /** Notes a session's use (written at most once a day): what keeps it from expiring. */
 async function touch({ account, session }, now = Date.now()) {
@@ -205,6 +251,7 @@ async function passkeyOptions(req, res, origin, headers) {
   if (body?.purpose !== 'register') return answer(res, 400, 'purpose: register or login', headers);
   // signed in: another passkey for this account; else a new account's first
   const signedIn = sessionOf(req, site);
+  if (signedIn && !mayAddPasskey(signedIn, site)) return answer(res, 403, 'add a passkey from last-stand.cc', headers);
   const accountId = signedIn?.account.id ?? store.newId();
   const existing = signedIn?.account.passkeys ?? [];
   return answer(res, 200, await passkeys.registrationOptions({ origin, rpId, accountId, existing }), headers);
@@ -237,36 +284,44 @@ async function passkeyVerify(req, res, origin, headers) {
 async function link(req, res, origin, headers) {
   if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
   const code = String((await jsonOf(req))?.code ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-  const now = Date.now();
-  for (const [old, { until }] of linkCodes) if (until <= now) linkCodes.delete(old);
+  prune();
   const entry = linkCodes.get(code);
   if (!entry) return answer(res, 401, 'no such code, or it expired', headers);
   linkCodes.delete(code);
-  const result = await change(entry.accountId, (changed) => ({ token: store.addSession(changed, siteOf(origin)), changed }));
+  const result = await change(entry.accountId, (changed) => ({
+    token: store.addSession(changed, siteOf(origin), 'code'), changed,
+  }));
   if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
   log('signed in by code', entry.accountId.slice(0, 6), siteOf(origin));
   return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
 }
 
+/** Registrations wait their turn across every account: a credential id is checked to be new and kept as one step. */
+const REGISTERING = 'registering';
+
 async function register(req, res, origin, site, response, headers) {
   const made = await passkeys.verifyRegistration(response, origin);
   if (!made) return answer(res, 401, 'not signed', headers);
-  if (store.accountOfCredential(made.passkey.id)) return answer(res, 409, 'that passkey is kept already', headers);
   const signedIn = sessionOf(req, site);
   const existing = store.account(made.accountId);
   // another passkey goes only to the account signed in on this page; a new account needs a new id
   if (existing && existing.id !== signedIn?.account.id) return answer(res, 403, 'not your account', headers);
+  if (existing && !mayAddPasskey(signedIn, site)) return answer(res, 403, 'add a passkey from last-stand.cc', headers);
   if (!existing && !allowed(`account ${addressOf(req)}`, settings.accountsPerDay, 86_400_000)) {
     return answer(res, 429, 'too many new accounts', headers);
   }
-  return store.withAccount(made.accountId, async () => {
-    const changed = structuredClone(store.account(made.accountId)) ?? store.freshAccount(made.accountId);
+  return store.withAccount(REGISTERING, () => store.withAccount(made.accountId, async () => {
+    if (store.accountOfCredential(made.passkey.id)) return answer(res, 409, 'that passkey is kept already', headers);
+    const kept = store.account(made.accountId);
+    // deleted while this passkey was being made: its session is gone with it
+    if (existing && !kept) return answer(res, 401, 'signed out', headers);
+    const changed = structuredClone(kept) ?? store.freshAccount(made.accountId);
     changed.passkeys.push(made.passkey);
     const token = existing ? signedIn.token : store.addSession(changed, site);
     await store.keepAccount(changed);
     log(existing ? 'passkey added' : 'account made', changed.id.slice(0, 6), made.passkey.rpId);
     return answer(res, existing ? 200 : 201, { token, account: accountView(changed) }, headers);
-  });
+  }));
 }
 
 /** Changes the signed-in account (`change(account)` edits a copy; `false` leaves it as it was). */
@@ -327,13 +382,13 @@ async function writePart(req, res, account, site, part, headers) {
     if (!kept && Object.keys(save.parts).length >= settings.partsMax) {
       return answer(res, 413, `${settings.partsMax} parts at most`, headers);
     }
-    if (!allowed(`write ${changed.id} ${site}`, settings.writesPerHour, 60 * 60_000)) {
-      return answer(res, 429, 'too many writes', headers);
-    }
     const now = Date.now();
     save.parts[part] = { version: version + 1, device, updated: now, data: body.toString('base64') };
     if (store.bytesOf(save) > settings.saveMax) {
       return answer(res, 413, `a save takes ${settings.saveMax} bytes at most`, headers);
+    }
+    if (!allowedEach(`write ${changed.id} ${site}`, settings.writes)) {
+      return answer(res, 429, 'too many writes', headers);
     }
     await store.keepSite(changed, site, save, now);
     await store.keepAccount(changed);
@@ -373,7 +428,7 @@ async function copyProduction(res, account, site, headers) {
 async function siteSave(req, res, signedIn, site, headers) {
   const { account } = signedIn;
   const path = new URL(req.url ?? '/', 'http://x').pathname.replace(/\/+$/, '');
-  const part = path.startsWith('/saves/save/') ? decodeURIComponent(path.slice('/saves/save/'.length)) : null;
+  const part = path.startsWith('/saves/save/') ? decoded(path.slice('/saves/save/'.length)) ?? '' : null;
   if (part !== null && !PART.test(part)) return answer(res, 400, 'not a part name', headers);
   if (req.method === 'GET' && part) return readPart(res, account, site, part, headers);
   if (req.method === 'PUT' && part) return writePart(req, res, account, site, part, headers);
@@ -403,7 +458,19 @@ async function signedInRequest(req, res, path, origin, headers) {
   if (path === '/saves/save' || path.startsWith('/saves/save/')) return siteSave(req, res, signedIn, site, headers);
   if (path === '/saves/copy-production' && req.method === 'POST') return copyProduction(res, account, site, headers);
   if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account), headers);
+  if (path === '/saves/signout' && req.method === 'POST') {
+    await change(account.id, (changed) => {
+      changed.sessions = changed.sessions.filter((s) => s.hash !== signedIn.session.hash);
+    });
+    return answer(res, 204, '', headers);
+  }
+  // past here, what reaches beyond this site's own save: production's sessions alone (a preview's code may have
+  // sent its token anywhere)
+  const reachesPast = path === '/saves/link-code' || path === '/saves/account' || path.startsWith('/saves/passkey/');
+  if (reachesPast && !trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
   if (path === '/saves/link-code' && req.method === 'POST') {
+    // one code an account at a time: a new one replaces the last
+    for (const [old, entry] of linkCodes) if (entry.accountId === account.id) linkCodes.delete(old);
     const code = newLinkCode();
     linkCodes.set(code, { accountId: account.id, until: Date.now() + LINK_MS });
     return answer(res, 200, { code, until: Date.now() + LINK_MS }, headers);
@@ -413,14 +480,9 @@ async function signedInRequest(req, res, path, origin, headers) {
     log('account deleted', account.id.slice(0, 6));
     return answer(res, 204, '', headers);
   }
-  if (path === '/saves/signout' && req.method === 'POST') {
-    await change(account.id, (changed) => {
-      changed.sessions = changed.sessions.filter((s) => s.hash !== signedIn.session.hash);
-    });
-    return answer(res, 204, '', headers);
-  }
   if (path.startsWith('/saves/passkey/') && req.method === 'DELETE') {
-    const id = decodeURIComponent(path.slice('/saves/passkey/'.length));
+    const id = decoded(path.slice('/saves/passkey/'.length));
+    if (id === null) return answer(res, 400, 'not a passkey id', headers);
     const result = await change(account.id, (changed) => {
       if (!changed.passkeys.some((p) => p.id === id)) return 404;
       // never the last way in (Google, #503, will count as one)
@@ -480,8 +542,10 @@ export async function start(port, overrides = {}) {
   });
   http.requestTimeout = 30_000;
   const timer = setInterval(() => void runCleanUp(), settings.cleanEvery);
-  timer.unref();
-  http.on('close', () => clearInterval(timer));
+  const first = setTimeout(() => void runCleanUp(), FIRST_CLEAN_MS);
+  const pruner = setInterval(() => prune(), PRUNE_EVERY);
+  for (const t of [timer, first, pruner]) t.unref();
+  http.on('close', () => { clearInterval(timer); clearTimeout(first); clearInterval(pruner); });
   await new Promise((resolve) => http.listen(port ?? settings.port, resolve));
   log(`saves on :${http.address().port}, ${kept} accounts, closed PRs' cleanup ${settings.githubRepo ? 'on' : 'off'}`);
   return http;

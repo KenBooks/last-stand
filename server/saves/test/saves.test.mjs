@@ -21,7 +21,7 @@ const OLD_ADDRESS = 'https://victorzakharov.github.io';
 const SETTINGS = {
   DATA, ORIGINS: `${PRODUCTION},https://www.last-stand.cc,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev,`
     + OLD_ADDRESS,
-  SAVE_MAX: '4096', ACCOUNTS_PER_DAY: '100', OTHER_SITES_MAX: '3', WRITES_PER_HOUR: '40',
+  SAVE_MAX: '4096', ACCOUNTS_PER_DAY: '100', OTHER_SITES_MAX: '3', WRITES_PER_HOUR: '40', WRITES_PER_MINUTE: '30',
 };
 let saves, server, base, github;
 /** PR number -> its state, as the stand-in for GitHub's API answers */
@@ -295,6 +295,73 @@ test('the closed PRs\' cleanup is off when no repository is set', async () => {
   await saves.cleanUp(saves.settingsFrom({ ...SETTINGS, GITHUB_REPO: '' }));
   const sites = (await call('GET', '/saves/account', { token })).body.sites.map((s) => s.site);
   assert.deepEqual(sites, ['pr-8.ls.wellscoped.dev']);
+});
+
+test('a preview\'s token reaches nothing past its own save: no codes, no deleting, no passkeys', async () => {
+  const device = authenticator();
+  const token = await signUp(device);
+  const { body: { code } } = await call('POST', '/saves/link-code', { token });
+  const preview = (await call('POST', '/saves/link', { origin: PREVIEW, json: { code } })).body.token;
+  // a preview's code sends its token out: replayed with any Origin, it is still a preview's session
+  for (const origin of [PRODUCTION, OTHER_PREVIEW]) {
+    assert.equal((await call('GET', '/saves/save', { origin, token: preview })).status, 401, origin);
+  }
+  assert.equal((await call('POST', '/saves/link-code', { origin: PREVIEW, token: preview })).status, 403);
+  assert.equal((await call('DELETE', '/saves/account', { origin: PREVIEW, token: preview })).status, 403);
+  const passkeyId = (await call('GET', '/saves/account', { token })).body.passkeys[0].id;
+  assert.equal((await call('DELETE', `/saves/passkey/${passkeyId}`, { origin: PREVIEW, token: preview })).status, 403);
+  // its own save it may use, and delete
+  assert.equal((await put(preview, 'shared', { a: 1 }, 0, PREVIEW)).status, 200);
+  assert.equal((await call('DELETE', '/saves/save', { origin: PREVIEW, token: preview })).status, 204);
+  // a preview session made by a passkey (not just now by a code) can't add one
+  const previewKey = authenticator();
+  const options = await call('POST', '/saves/passkey/options', { origin: PREVIEW, token: preview, json: { purpose: 'register' } });
+  await call('POST', '/saves/passkey/verify', { origin: PREVIEW, token: preview,
+    json: { purpose: 'register', response: previewKey.create(options.body, PREVIEW) } });
+  const byPasskey = (await signIn(previewKey, OTHER_PREVIEW)).body.token;
+  const asked = await call('POST', '/saves/passkey/options', { origin: OTHER_PREVIEW, token: byPasskey,
+    json: { purpose: 'register' } });
+  assert.equal(asked.status, 403);
+  // production's account and passkey are as they were
+  assert.equal((await signIn(device)).status, 200);
+});
+
+test('a new sign-in code replaces the last; a malformed path is a 400', async () => {
+  const token = await signUp(authenticator());
+  const first = (await call('POST', '/saves/link-code', { token })).body.code;
+  const second = (await call('POST', '/saves/link-code', { token })).body.code;
+  assert.equal((await call('POST', '/saves/link', { origin: PREVIEW, json: { code: first } })).status, 401);
+  assert.equal((await call('POST', '/saves/link', { origin: PREVIEW, json: { code: second } })).status, 200);
+  assert.equal((await call('GET', '/saves/save/%E0%A4%A', { token })).status, 400);
+  assert.equal((await call('DELETE', '/saves/passkey/%E0%A4%A', { token })).status, 400);
+});
+
+test('writes are spread: a minute\'s most refuses the next, and a refused write spends none', async () => {
+  server.close();
+  await boot({ WRITES_PER_MINUTE: '3' });
+  const token = await signUp(authenticator());
+  assert.equal((await put(token, 'shared', { n: 1 }, 0)).status, 200);
+  assert.equal((await put(token, 'shared', { n: 2 }, 0)).status, 409, 'stale: spends nothing');
+  assert.equal((await put(token, 'shared', { n: 2 }, 1)).status, 200);
+  assert.equal((await put(token, 'shared', { n: 3 }, 2)).status, 200);
+  assert.equal((await put(token, 'shared', { n: 4 }, 3)).status, 429);
+  // another site's save counts apart
+  const { body: { code } } = await call('POST', '/saves/link-code', { token });
+  const preview = (await call('POST', '/saves/link', { origin: PREVIEW, json: { code } })).body.token;
+  assert.equal((await put(preview, 'shared', { n: 1 }, 0, PREVIEW)).status, 200);
+  server.close();
+  await boot();
+});
+
+test('a session unused past SESSION_DAYS is refused', async () => {
+  server.close();
+  await boot({ SESSION_DAYS: String(0.5 / 86_400) });
+  const token = await signUp(authenticator());
+  assert.equal((await call('GET', '/saves/save', { token })).status, 200);
+  await new Promise((done) => setTimeout(done, 700));
+  assert.equal((await call('GET', '/saves/save', { token })).status, 401);
+  server.close();
+  await boot();
 });
 
 test('new accounts from one address are capped a day', async () => {

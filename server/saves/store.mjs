@@ -99,10 +99,11 @@ export async function dropAccount(id) {
   await rm(savesDir(id), { recursive: true, force: true });
 }
 
-/** A new session for the account, made from `site`: its token (given once; only its digest is kept). */
-export function addSession(changed, site, now = Date.now()) {
+/** A new session for the account, made from `site` by `via` (a passkey, a sign-in code): its token (given once;
+ *  only its digest is kept). */
+export function addSession(changed, site, via = 'passkey', now = Date.now()) {
   const token = randomBytes(32).toString('base64url');
-  changed.sessions.push({ hash: digest(token), site, created: now, used: now });
+  changed.sessions.push({ hash: digest(token), site, via, created: now, used: now });
   return token;
 }
 

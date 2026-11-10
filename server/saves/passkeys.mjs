@@ -23,8 +23,12 @@ export function rpIdFor(origin, rpIds) {
   return fits.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
+/** the most challenges held at once: past it the oldest goes (each address may ask for 60 an hour) */
+const MOST_CHALLENGES = 10_000;
+
 function remember(challenge, entry, now) {
   for (const [old, { until }] of challenges) if (until <= now) challenges.delete(old);
+  while (challenges.size >= MOST_CHALLENGES) challenges.delete(challenges.keys().next().value);
   challenges.set(challenge, { ...entry, until: now + CHALLENGE_MS });
 }
 

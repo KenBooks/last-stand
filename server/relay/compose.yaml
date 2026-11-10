@@ -53,8 +53,9 @@ services:
     environment:
       PORT: "8080"
       DATA: /data
-      ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,https://ls.wellscoped.dev,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev,http://localhost:5173
-      # (every other setting has its default in saves.mjs: none is a secret, none needs Dokci's configuration)
+      # (the game's pages alone: not localhost or the shared github.io, as the other two take; every other setting
+      # has its default in saves.mjs, none is a secret, none needs Dokci's configuration)
+      ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev
     volumes:
       - saves-data:/data
     expose:

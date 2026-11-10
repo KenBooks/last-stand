@@ -12,8 +12,11 @@ export const isCommitBuild = (site) => /^c-[0-9a-f]{12}\./.test(site);
 const MOST_ASKED = 40;
 /** PR number -> closed (GitHub said so: it never opens again for a preview's purposes) */
 const closedPrs = new Set();
+/** PR number -> when GitHub was last asked about it: the least lately asked go first, so past MOST_ASKED open PRs
+ *  every one is still asked in turn */
+const lastAsked = new Map();
 
-export const forgetPrs = () => closedPrs.clear();
+export const forgetPrs = () => { closedPrs.clear(); lastAsked.clear(); };
 
 /** Whether GitHub says the PR is closed (merged or not): true, false, or null when it couldn't be asked. */
 async function prClosed(settings, number) {
@@ -33,12 +36,13 @@ async function prClosed(settings, number) {
 /** The PRs among `numbers` GitHub says are closed (those it was asked about this run). */
 async function closedAmong(settings, numbers) {
   if (!settings.githubRepo) return closedPrs;
-  let asked = 0;
-  for (const number of numbers) {
-    if (closedPrs.has(number) || asked >= MOST_ASKED) continue;
-    asked++;
+  const open = numbers.filter((number) => !closedPrs.has(number));
+  open.sort((a, b) => (lastAsked.get(a) ?? 0) - (lastAsked.get(b) ?? 0) || a - b);
+  for (const number of open.slice(0, MOST_ASKED)) {
+    lastAsked.set(number, Date.now());
     if (await prClosed(settings, number)) closedPrs.add(number);
   }
+  for (const number of lastAsked.keys()) if (!numbers.includes(number)) lastAsked.delete(number);
   return closedPrs;
 }
 
