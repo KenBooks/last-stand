@@ -310,12 +310,17 @@ function computeStats(now: number): Stats {
   const recent = samples.filter((s) => s.t > now - 1000);
   const span = samples.length ? now - samples[0].t + samples[0].frame : 0;
   const n = WINDOW_MS / BUCKET_MS, t0 = now - WINDOW_MS, first = samples[0]?.t ?? now;
+  // (the first frame counted began a frame before it ended: rated from its end, a bucket whose edge it ended just
+  // before read one frame over a fraction of a millisecond, 2500 fps on a 144 Hz screen; `lab ui --states perfGraph`)
+  const begun = first - (samples[0]?.frame ?? 0);
   const counts = new Array<number>(n).fill(0);
   for (const s of samples) counts[Math.min(n - 1, Math.max(0, Math.floor((s.t - t0) / BUCKET_MS)))]++;
-  // buckets before the first sample have no data; the first partial bucket is rated by its covered time
+  // the first partial bucket is rated by the time its frames took, once that's half a bucket: a few frames' rate
+  // isn't the half second's (one short frame alone read 900 fps), and the scale follows the highest point
   const buckets = counts.map((c, i) => {
     const start = t0 + i * BUCKET_MS, end = start + BUCKET_MS;
-    return end <= first ? null : c * 1000 / (end - Math.max(start, first));
+    const covered = end - Math.max(start, begun);
+    return end <= first || covered < BUCKET_MS / 2 ? null : c * 1000 / covered;
   });
   return {
     fps: recent.length * 1000 / Math.max(1, Math.min(1000, span)),
