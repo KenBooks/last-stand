@@ -13,12 +13,7 @@
 // frame). `--canary` stands seven boxes of one geometry before the hero, which must come out as seven draws of it,
 // seven instanced boxes, four of them far behind the camera, which must come out as four drawn outside the view, an
 // instanced mesh of none, which must come out as a draw of nothing, and through the eyes a box on the arms' layer
-// before them, which must come out as drawn by the arms' camera though it isn't the hero's. And what the hero's own
-// draws cost three: a draw in another material than the one before has all its uniforms sent again, some 20 us on a
-// desktop where a draw in the same material takes 4, so a hero's cost is the materials he draws in (the mage's 77
-// scene draws merged into 46 took as long). The hero's switches in the frame, his materials and programs are listed,
-// over `HERO_SWITCHES` a problem; the canary gives ten of his meshes materials of their own, which must come out
-// over it.
+// before them, which must come out as drawn by the arms' camera though it isn't the hero's.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -43,12 +38,6 @@ export interface DrawsOptions {
 /** the frames run before the one recorded: the camera's glide in and the foes' first frames come to rest */
 const SETTLE_FRAMES = 30;
 const ROWS = 16;
-/** the most draws in another material than the one before a hero may make a frame, scene and shadow maps together,
- *  in any gear (in the forest lobby with all their armour the warrior makes 31, the mage 33, the ranger 34, their
- *  looks drawn from palettes, `models/palette.ts`; each look in its own material, the mage made 58) */
-const HERO_SWITCHES = 37;
-/** how many of the hero's meshes the canary gives a material of their own */
-const CANARY_MATERIALS = 10;
 const CANARY_BOXES = 7;
 /** the canary's instanced boxes put far behind the camera, and how far (m) */
 const CANARY_OFF = 4;
@@ -88,15 +77,6 @@ interface FrameDraws {
   geometries: Map<THREE.BufferGeometry, Drawn>;
   looks: Map<string, Look>;
   arms: Map<THREE.Object3D, number>;
-  /** the hero's draws, in the order drawn: each one's material, and whether it was another than the draw before's */
-  hero: HeroDraw[];
-}
-
-/** One draw of the hero's: its material and program, and whether the draw before it (anyone's) was in another. */
-interface HeroDraw {
-  material: THREE.Material;
-  program: number;
-  switched: boolean;
 }
 
 /** The vertices a draw of `geometry` (by `object`) ran: its range, times its instances. */
@@ -178,7 +158,7 @@ function webgpuPassOf(drawn: RenderObject): Pass {
 /** Records every draw call until `stop()`: what was drawn, and the record. On WebGPU, each draw its backend is given
  *  (`backend.draw`, a `RenderObject` a draw: WebGL's `renderBufferDirect` isn't there). */
 function recordDraws(): { record: FrameDraws; stop(): void } {
-  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map(), hero: [] };
+  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map() };
   if (WEBGPU) {
     const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
     const draw = backend.draw;
@@ -190,15 +170,9 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
   }
   const gl = G.renderer;
   const own = gl.renderBufferDirect.bind(gl);
-  let before: THREE.Material | null = null;
   gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    const pass = passOf(camera, scene);
-    recordDraw(record, pass, camera, geometry, material, object);
+    recordDraw(record, passOf(camera, scene), camera, geometry, material, object);
     own(camera, scene, geometry, material, object, group);
-    if (pass !== 'other' && heros(object)) {
-      record.hero.push({ material, program: programOf(material), switched: material !== before });
-    }
-    before = material;
   };
   return { record, stop: () => { gl.renderBufferDirect = own; } };
 }
@@ -310,54 +284,6 @@ function heros(object: THREE.Object3D): boolean {
     if (up === G.player.model.root) return true;
   }
   return false;
-}
-
-/** The id of the program `material` was last drawn with (-1 before its first draw). */
-function programOf(material: THREE.Material): number {
-  const held = G.renderer.properties.get(material) as { currentProgram?: { id: number } };
-  return held.currentProgram?.id ?? -1;
-}
-
-/** How many of the hero's draws were in another material than the draw before. */
-const switchesOf = (record: FrameDraws): number => record.hero.filter((draw) => draw.switched).length;
-
-/** The hero's draws in the frame's world passes, as three pays for them: his switches of material, his materials and
- *  his programs. */
-function heroRow(record: FrameDraws): string {
-  const materials = new Set(record.hero.map((draw) => draw.material)).size;
-  const programs = new Set(record.hero.map((draw) => draw.program)).size;
-  return `the hero: ${record.hero.length} draws in the scene and its shadow maps, ${switchesOf(record)} of them in `
-    + `another material than the draw before (each has every uniform sent again), in ${materials} materials and `
-    + `${programs} programs`;
-}
-
-/** The problems of the hero's switches: over `most`, or (the canary's, ten meshes in materials of their own) not
- *  over it. */
-function heroProblems(record: FrameDraws, most: number, canary: boolean): string[] {
-  const switches = switchesOf(record);
-  if (canary) {
-    if (switches > most) return [];
-    return [`the canary's hero, ${CANARY_MATERIALS} of his meshes in materials of their own, came out as ${switches} `
-      + `switches of material: not over ${most}`];
-  }
-  if (switches <= most) return [];
-  return [`the hero switches material ${switches} times a frame: over ${most} (a material more on him is a switch `
-    + 'more in each pass that draws it)'];
-}
-
-
-/** Ten of the hero's meshes shown given a copy of their material each (the canary's): as many switches more. */
-function plantMaterials(): void {
-  let left = CANARY_MATERIALS;
-  G.player.model.root.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
-    if (left === 0 || !mesh.isMesh || Array.isArray(mesh.material)) return;
-    const copy = mesh.material.clone();
-    copy.onBeforeCompile = mesh.material.onBeforeCompile;
-    copy.customProgramCacheKey = mesh.material.customProgramCacheKey;
-    mesh.material = copy;
-    left--;
-  });
 }
 
 /** What the arms' own camera drew that isn't the hero's, alike places together: each place's draws and objects. */
@@ -562,8 +488,6 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   await lab.setup({ ...options.fixture, at: options.fixture.at ?? CROWD_SPOT, facing });
   if (count > 0) await foesAt(lab, crowdPlaces(count, G.player.pos, G.player.facing), Array(count).fill(1));
   const unplant = options.canary ? plantBoxes() : () => {};
-  // (on a fresh boot, as every command's is: nothing is put back)
-  if (options.canary) plantMaterials();
   let record: FrameDraws;
   try {
     record = await recordedFrame(lab);
@@ -573,10 +497,6 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const foes = `${count} ${count === 1 ? 'foe' : 'foes'}`;
   const view = options.fixture.view ?? 'top';
   const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
-  const problems = [
-    ...strangerProblems(record),
-    ...heroProblems(record, HERO_SWITCHES, options.canary),
-    ...(options.canary ? canaryProblems(record) : []),
-  ];
-  return { text: [head, heroRow(record), ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
+  const problems = [...strangerProblems(record), ...(options.canary ? canaryProblems(record) : [])];
+  return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }

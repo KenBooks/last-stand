@@ -1,11 +1,10 @@
 // The parts of a frame's work the profiler (`profiler.ts`, timed on the player's own device) takes out and puts back,
 // each without a program changing: the point lights' lighting where they reach, the shadow maps' drawing, the lit
 // shading against a plain colour, what's cut out (leaves, grass: alpha tested) and what's blended, the particles, the
-// fires' flames, the hero, his hands alone, and the scene drawn at half its pixels. Each is found in the scene as it
-// stands, so the parts are those of the place the player stands in. The lab's `scenecost`
-// (tools/lab/page/sceneCost.ts) keeps its own parts, some changing programs (a light hidden, a shadow or the
-// environment taken off), compiled before it times: an A/B copies the lab's page modules into the other commit's
-// tree, where this module isn't on a commit older than it.
+// fires' flames, the hero, and the scene drawn at half its pixels. Each is found in the scene as it stands, so the
+// parts are those of the place the player stands in. The lab's `scenecost` (tools/lab/page/sceneCost.ts) keeps its own
+// parts, some changing programs (a light hidden, a shadow or the environment taken off), compiled before it times: an
+// A/B copies the lab's page modules into the other commit's tree, where this module isn't on a commit older than it.
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY } from '../data/quality';
@@ -88,15 +87,6 @@ function reachingPart(name: string, shown: THREE.PointLight[]): ScenePart {
   };
 }
 
-/** The hands drawn under `hero` (each marked `drawnHand` by `models/hands.ts`). */
-function handsOf(hero: THREE.Object3D): THREE.Object3D[] {
-  const hands: THREE.Object3D[] = [];
-  hero.traverseVisible((object) => {
-    if (object.userData.drawnHand) hands.push(object);
-  });
-  return hands;
-}
-
 /** The materials of a mesh, as a list. */
 export function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -167,8 +157,6 @@ export function frameParts(): ScenePart[] {
     // (a particle pool: WebGL's points, WebGPU's quads, `fx/particles.ts`)
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints || object.userData.particles)),
     shownPart('the hero', [G.player.obj]),
-    // (his hands alone: sculpted, each two skinned meshes of thousands of triangles, drawn and cast on their own)
-    shownPart('the hero\'s hands', handsOf(G.player.obj)),
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),

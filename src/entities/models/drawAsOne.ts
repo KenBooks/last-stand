@@ -18,8 +18,7 @@
 // on its own. Merged again only once that has held for `SETTLED` views (gear changed), or at once as a part changes
 // its layers, its shadows or its positions (the first person's body, the quality). A shadow drawn inside a view's render is cast from the joints too, by one mesh for
 // every part; a hero's other parts (a cloth's) cast on their own. WebGL keeps its draws: there a draw costs little.
-// `?drawAsOne=0` draws each part on its own, for A/B. A part whose material changes (an item's as it glows or not,
-// `itemGlow.ts`) is merged again at once too.
+// `?drawAsOne=0` draws each part on its own, for A/B.
 import * as THREE from 'three';
 import { G } from '../../state';
 import { gpu, standInBases, stillNodes, tsl, uploadTexture, WEBGPU } from '../../core/webgpu';
@@ -428,8 +427,6 @@ export function drawAsOne(model: Model): OneDraw {
   const candidates = candidatesOf(root);
   /** each candidate's state as last merged: its layers, shadows and positions' version in a number */
   const states = candidates.map(() => NaN);
-  /** each candidate's material as last merged (an item's parts change theirs as it glows or not: `itemGlow.ts`) */
-  const materials = candidates.map((): THREE.Material | null => null);
   let meshes: THREE.Mesh[] = [];
   /** the parts the merged meshes draw, those shown hidden while a render draws */
   let merged: THREE.SkinnedMesh[] = [];
@@ -531,10 +528,8 @@ export function drawAsOne(model: Model): OneDraw {
     let any = false;
     for (let i = 0; i < candidates.length; i++) {
       const state = stateOf(candidates[i]);
-      const material = candidates[i].material as THREE.Material;
-      if (state !== states[i] || material !== materials[i]) any = true;
+      if (state !== states[i]) any = true;
       states[i] = state;
-      materials[i] = material;
     }
     return any;
   };

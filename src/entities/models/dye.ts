@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import { heroColour, type HeroColourId } from '../../data/heroColours';
 import type { KitLooks } from '../../core/materials';
-import { looksOn } from './palette';
 
 interface Dyed {
   material: THREE.Material & { color: THREE.Color };
@@ -64,7 +63,7 @@ export class Dye {
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      for (const material of looksOn(mesh)) {
+      for (const material of [mesh.material].flat()) {
         const patch = material.onBeforeCompile;
         const d = this.dyed.find((x) => x.material !== material && x.material.onBeforeCompile === patch);
         if (d) copies.set(d, [...(copies.get(d) ?? []), material as Dyed['material']]);

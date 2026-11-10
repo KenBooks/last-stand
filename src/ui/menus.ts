@@ -205,13 +205,7 @@ export function initMenus(h: MenuHooks): void {
   });
   renderVsyncOptions();
   document.querySelectorAll<HTMLElement>('#opt-gear-glow button').forEach((b) => {
-    b.onclick = () => {
-      sfx.click();
-      setGearGlow(b.dataset.g === 'on');
-      // (each hero's items drawn in their glow's materials or the kit's own: `models/itemGlow.ts`)
-      for (const player of G.players) player.model.setGear?.(player.gear);
-      renderGearGlowOptions();
-    };
+    b.onclick = () => { sfx.click(); setGearGlow(b.dataset.g === 'on'); renderGearGlowOptions(); };
   });
   renderGearGlowOptions();
   document.querySelectorAll<HTMLElement>('#opt-eyes-portal button').forEach((b) => {
