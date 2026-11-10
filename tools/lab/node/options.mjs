@@ -1412,22 +1412,24 @@ export const COMMANDS = {
     },
   },
   hands: {
-    help: 'the hero\'s right hand alone in a plain, lit studio, laid flat, open, relaxed, in a fist and closed '
+    help: 'the hero\'s right hand alone in a plain, lit studio, laid flat, open, relaxed, strained, in a fist and closed '
       + 'round a handle, from the back, the palm, each side, the fingertips and three-quarters, with its size against '
       + 'a man\'s and its triangles: tools/lab/out/hands/sheet.png',
     options: {
       poses: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['flat', 'open', 'relaxed', 'fist', 'handle'],
+        choices: ['flat', 'open', 'relaxed', 'strained', 'fist', 'handle'],
         help: 'the poses pictured (all by default)',
       },
       views: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['back', 'palm', 'thumb', 'little', 'tips', 'quarter', 'cuffs', 'web'],
+        choices: ['back', 'palm', 'thumb', 'little', 'tips', 'quarter', 'caster', 'cuffs', 'web', 'joints',
+          'fingers', 'pads', 'thumbtip'],
         help: 'the views (all but the close-ups by default: cuffs, the glove\'s cuffs over the fingers; web, the '
-          + 'thumb\'s web)',
+          + 'thumb\'s web; joints, the fingers\' knuckles from the little finger\'s side; fingers and pads, the '
+          + 'fingers as their owner sees them and from the palm\'s side; thumbtip, the thumb)',
       },
       look: LOOK_OPTION,
       glove: { kind: 'switch', help: 'the hand in its glove (=false: bare; as the hero\'s is by default)' },

@@ -1,5 +1,5 @@
-// tools/lab hands: the hero's right hand alone in the studio, as it's sculpted: laid flat, open, relaxed, in a fist and
-// closed round a handle, each from the back, the palm, the thumb's side, the little finger's, the fingertips and
+// tools/lab hands: the hero's right hand alone in the studio, as it's sculpted: laid flat, open, relaxed, strained (a
+// caster's, `strainHand`), in a fist and closed round a handle, each from the back, the palm, the thumb's side, the little finger's, the fingertips and
 // three-quarters, with its size against a man's and how many triangles it's drawn with. A hand is judged here as it's
 // made, before it's seen holding anything: through the eyes the fist fills a corner of the frame, and close up its
 // fingers were tubes with rounded ends round the grip.
@@ -8,7 +8,7 @@ import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
 import { meshesOf, wearLook, type Look } from './looks';
 import * as handsCode from '../../../src/entities/models/hands';
-import { hold, poseHand, seat, type Hand } from '../../../src/entities/models/hands';
+import { hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
@@ -44,13 +44,18 @@ const VIEWS: HandView[] = [
   { name: 'little', from: (thumb) => [-thumb, 0, 0] },
   { name: 'tips', from: () => [0, -1, 0.25], up: [0, 0, 1] },
   { name: 'quarter', from: (thumb) => [thumb * 0.7, -0.2, 1] },
+  // (as its owner sees it held out before him, the palm away: from behind the wrist, the fingers up the picture)
+  { name: 'caster', from: (thumb) => [thumb * 0.15, 0.6, 1], up: [0, -1, 0] },
 ];
 
-/** how far round the joints a close-up frames (m, on a hand of the game's size) */
+/** how far round the joints a close-up frames (m, on a hand of the game's size), and round a digit's outer joints
+ *  to take its tip in too */
 const CLOSE_MARGIN = 0.012;
+const TIP_MARGIN = 0.03;
 
-/** Close-ups, pictured only when asked for: the glove's cuffs over the fingers from the back, and the web between the
- *  thumb and the index from the thumb's side (where a bent thumb pressed the glove into the skin). */
+/** Close-ups, pictured only when asked for: the glove's cuffs over the fingers from the back, the web between the
+ *  thumb and the index from the thumb's side (where a bent thumb pressed the glove into the skin), and the fingers'
+ *  joints from the little finger's side, a little behind (their knuckles and the bones between them, #425). */
 const CLOSE_UPS: HandView[] = [
   {
     name: 'cuffs',
@@ -62,13 +67,38 @@ const CLOSE_UPS: HandView[] = [
     from: (thumb) => [thumb, 0, 0.4],
     framed: (hand) => roundJoints(hand, [...hand.thumb.j, hand.f[0].j[0], hand.f[0].j[1]]),
   },
+  {
+    name: 'joints',
+    from: (thumb) => [-thumb, -0.2, 0.7],
+    framed: (hand) => roundJoints(hand, hand.f.flatMap((d) => d.j.slice(1))),
+  },
+  // (the fingers out of the glove, as their owner sees them and from the palm's side: from play, their joints
+  // swollen, "a hand of 90 year old, with bones problems", unseen in pictures of the whole hand)
+  {
+    name: 'fingers',
+    from: (thumb) => [thumb * 0.15, 0.6, 1],
+    up: [0, -1, 0],
+    framed: (hand) => roundJoints(hand, hand.f.flatMap((d) => d.j.slice(1)), TIP_MARGIN),
+  },
+  {
+    name: 'pads',
+    from: (thumb) => [thumb * 0.15, 0.3, -1],
+    up: [0, -1, 0],
+    framed: (hand) => roundJoints(hand, hand.f.flatMap((d) => d.j.slice(1)), TIP_MARGIN),
+  },
+  {
+    name: 'thumbtip',
+    from: (thumb) => [thumb * 0.5, 0.3, 1],
+    up: [0, -1, 0],
+    framed: (hand) => roundJoints(hand, hand.thumb.j.slice(1), TIP_MARGIN),
+  },
 ];
 
-/** A box round `joints`' places, `CLOSE_MARGIN` wider each way at the hand's scale. */
-function roundJoints(hand: Hand, joints: THREE.Object3D[]): THREE.Box3 {
+/** A box round `joints`' places, `margin` wider each way at the hand's scale. */
+function roundJoints(hand: Hand, joints: THREE.Object3D[], margin = CLOSE_MARGIN): THREE.Box3 {
   const box = new THREE.Box3();
   for (const at of joints) box.expandByPoint(at.getWorldPosition(new THREE.Vector3()));
-  return box.expandByScalar(CLOSE_MARGIN * hand.vis.getWorldScale(new THREE.Vector3()).x);
+  return box.expandByScalar(margin * hand.vis.getWorldScale(new THREE.Vector3()).x);
 }
 
 /** A pose: what it does to the hand on its wrist joint, and what it adds to the picture (a handle). */
@@ -78,6 +108,8 @@ const POSES: Record<string, Pose> = {
   flat: (hand) => poseHand(hand, 0, 0),
   open: (hand) => poseHand(hand, 0.3, 0.45),
   relaxed: (hand) => poseHand(hand, 0.75, 0.12),
+  // (the mage's free hand held into Void Lance's portal, half way into its kick)
+  strained: (hand) => strainHand(hand, 0.75, 0.65),
   fist: (hand) => poseHand(hand, 1.45, 0),
   handle: closedRound,
 };
@@ -177,6 +209,53 @@ function sizeOf(hand: Hand, wrist: THREE.Object3D): Size {
     thickness: spread(near(middle / 2), 'z'),
     fingers,
   };
+}
+
+/** a finger's middle joint against the shafts either side of it: how much broader a man's is (about a tenth, by
+ *  his finger's look: no table of it was found), and the least and most that pass. Under the least the finger is an
+ *  even tube (from play: "fingers same thickness is lame"), over the most its joints are swollen ("a hand of 90
+ *  year old, with bones problems") */
+const KNOB = { man: 1.1, least: 1.04, most: 1.16 };
+/** how far along a finger's first segment its shaft is read (clear of the glove's sleeve over its near half), and its second */
+const SHAFT_AT = [0.8, 0.5];
+/** how far along a finger from a station its points count as at it (m, the hand's own) */
+const STATION = 0.002;
+
+/** How broad `points` are across a finger at `along` down the frame of its joint `from` (m, the hand's own). */
+function breadthAt(points: Point[], from: THREE.Object3D, along: number): number {
+  const across: number[] = [];
+  for (const point of points) {
+    const local = from.worldToLocal(point.at.clone());
+    if (Math.abs(local.y + along) < STATION) across.push(local.x);
+  }
+  return across.length ? Math.max(...across) - Math.min(...across) : 0;
+}
+
+/** Each finger's breadth at its middle joint over its shafts' either side of it (index to little), on a flat hand. */
+function knobsOf(hand: Hand, wrist: THREE.Object3D): number[] {
+  const points = pointsOf(wrist);
+  return hand.f.map((finger) => {
+    const own = new Set<THREE.Object3D>(finger.j);
+    const its = points.filter((point) => own.has(point.on));
+    const lengths = [finger.j[1].position.length(), finger.j[2].position.length()];
+    const joint = breadthAt(its, finger.j[1], 0);
+    const before = breadthAt(its, finger.j[0], lengths[0] * SHAFT_AT[0]);
+    const after = breadthAt(its, finger.j[1], lengths[1] * SHAFT_AT[1]);
+    return joint / ((before + after) / 2);
+  });
+}
+
+/** The fingers' joints against their shafts, said, and those that read as tubes or as swollen. */
+function knobNotes(knobs: number[]): { lines: string[]; problems: string[] } {
+  const names = ['index', 'middle', 'ring', 'little'];
+  const said = knobs.map((knob, i) => `${names[i]} ${knob.toFixed(2)}`).join(', ');
+  const line = `its fingers' middle joints against their shafts: ${said} as broad (a man's about ${KNOB.man})`;
+  const problems: string[] = [];
+  knobs.forEach((knob, i) => {
+    if (knob < KNOB.least) problems.push(`hands: the ${names[i]} finger is an even tube (${knob.toFixed(2)})`);
+    if (knob > KNOB.most) problems.push(`hands: the ${names[i]} finger's joint is swollen (${knob.toFixed(2)})`);
+  });
+  return { lines: [line], problems };
 }
 
 const mm = (metres: number) => `${(metres * 1000).toFixed(0)} mm`;
@@ -337,11 +416,12 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const scale = lab.joints.handR.getWorldScale(new THREE.Vector3()).x;
   const flat = posedCopy(copier, POSES.flat);
   const size = sizeOf(flat.hand, flat.wrist);
+  const knobs = sculpting.handLike ? knobNotes(knobsOf(flat.hand, flat.wrist)) : { lines: [], problems: [] };
   freed(flat.wrist);
   const moments: Pictured[] = [];
   const sculpted = sculptNotes(copier);
-  const problems = [...sculpted.problems];
-  const lines = [...sizeNotes(size, scale, lab.model.height), ...sculpted.lines];
+  const problems = [...knobs.problems, ...sculpted.problems];
+  const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
     const { hand, wrist } = posedCopy(copier, pose);
     const { tiles, least } = pictureOf(lab, hand, wrist, views, look);

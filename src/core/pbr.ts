@@ -807,6 +807,36 @@ function leather(): PBRData {
   }, 3);
 }
 
+/** the lines a bare skin's map has across v in a tile, and how far each may wander along (in lines: at 8 they ran
+ *  every way, down a finger's length as often as across it) */
+const SKIN_LINES = 40;
+const SKIN_WANDER = 2.5;
+
+/**
+ * Bare skin (the fingers a glove leaves bare): fine wrinkles across v, gathered in patches and fading out between them,
+ * a faint web of finer creases and pores under them, a little mottle; near white, tinted by the material's colour (or
+ * the vertices'). On the hands' sculpt a finger's length runs along v in its side views (models/triplanar.ts), so the
+ * lines cross it as a finger's wrinkles do. Smooth and even, the fingers read as plastic (#425). 256 px: seen on a
+ * hand's few pixels, a larger map was memory a low-end device spent for nothing.
+ */
+function skin(): PBRData {
+  const wander = makeFbm(301, 4, 3), patch = makeFbm(303, 3, 3), fade = makeFbm(307, 8, 2);
+  const web = makeFbm(311, 16, 2), pore = makeFbm(317, 64, 1), mottle = makeFbm(319, 4, 3);
+  return buildPBR(256, (u, v, o) => {
+    const along = v * SKIN_LINES + (wander(u, v) - 0.5) * SKIN_WANDER;
+    const off = along - Math.floor(along);
+    const groove = clamp(1 - Math.min(off, 1 - off) / 0.1, 0, 1) ** 2;
+    const wrinkle = groove * smooth(clamp((patch(u, v) - 0.38) / 0.3, 0, 1)) * (0.3 + 0.7 * fade(u, v));
+    const crease = clamp(1 - Math.abs(web(u, v) - 0.5) * 16, 0, 1);
+    const hole = clamp((pore(u, v) - 0.62) / 0.18, 0, 1);
+    const m = mottle(u, v) - 0.5;
+    o.h = 0.5 - wrinkle * 0.5 - crease * 0.12 - hole * 0.08;
+    o.r = o.g = o.b = clamp(0.96 - wrinkle * 0.18 - crease * 0.03 - hole * 0.03 + m * 0.08, 0, 1);
+    // (a share of the material's roughness: duller in the lines and pores)
+    o.rough = clamp(0.86 + wrinkle * 0.14 + hole * 0.1 + m * 0.08, 0.6, 1);
+  }, 2);
+}
+
 /** Oiled leather (the ranger's boots, belt and straps): smooth under a faint grain, long soft creases and finer wrinkles
  *  running across v (round a boot's shaft, along u), darker and duller in them, lighter scuffs where it rubs, and a sheen
  *  elsewhere. (The pebbled hide read as snakeskin at a hero's size.) */
@@ -938,7 +968,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, soil, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, soil, bark, leather, oiled, skin, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -972,5 +1002,5 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []], ['soil', []],
   ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['limestone', [11]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
-  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
+  ['leather', []], ['oiled', []], ['skin', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

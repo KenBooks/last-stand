@@ -490,8 +490,8 @@ export function buildWarrior(): Model {
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
-  const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
-  // bare hands and wrists
+  // bare hands and wrists, and the fingertips his gloves leave bare (a paler skin of their own, they were another
+  // man's fingers, #425)
   const bareSkin = handSkin(kit, 'warrior');
   // the fuller only glows while a skill charges
   const edge = kit.glow(0xffb070, 0, false);
@@ -601,7 +601,7 @@ export function buildWarrior(): Model {
     B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
-  const handL = buildHand(j.handL, 1, leather, skinTip, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, HAND_K, bareSkin);
+  const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
