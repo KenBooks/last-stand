@@ -21,8 +21,8 @@ import { standIn } from './light';
 import { cellName, FrameReader, type FrameCells } from './screenCells';
 import { blinksIn, describeBlinks } from './blinks';
 import { whatIsAt } from './whatIsAt';
-import { worstFlashing, type FlashCount } from './flashes';
-import { changeLine, changeSpans, litNow, mostOf, type Lit } from './flashSources';
+import { changeSpans, worstFlashing, type FlashCount } from './flashes';
+import { changeLine, litNow, mostOf, type Lit } from './flashSources';
 
 export interface CastOptions {
   /** the skill: its key (`3`), its behaviour (`maelstrom`) or its name */

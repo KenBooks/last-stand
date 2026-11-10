@@ -10,7 +10,7 @@ import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import { frameCells } from './screenCells';
-import type { FlashChange } from './flashes';
+import type { ChangeSpan } from './flashes';
 
 /** A thing of the scene that can be taken out of a frame: its name, and taking it out (the result puts it back). */
 export interface Source {
@@ -24,16 +24,6 @@ export interface Lit {
   bySource: Map<string, number>;
 }
 
-/** A change of a flash: the frame it was reached at, and the frame it came from (the cell's darkest or brightest
- *  since the change before it). */
-export interface ChangeSpan {
-  from: number;
-  to: number;
-  rising: boolean;
-}
-
-/** how far back a flash's first change is looked for its start (frames) */
-const FIRST_BACK = 30;
 /** a source is listed for a change it lit this much of (a share of white) */
 const LISTED_FROM = 0.005;
 /** the sources listed for a change, at most */
@@ -135,20 +125,6 @@ export function litNow(lab: Lab, cell: number): Lit {
     }
   }
   return { whole, bySource };
-}
-
-/** Each counted change of a flash with the frame it came from: the cell's darkest frame before a rise, its brightest
- *  before a fall, since the change before it (`lights`: the cell's light frame by frame). */
-export function changeSpans(changes: FlashChange[], lights: number[]): ChangeSpan[] {
-  return changes.map(({ frame, rising }, index) => {
-    const since = index ? changes[index - 1].frame : Math.max(0, frame - FIRST_BACK);
-    let from = since;
-    for (let f = since; f < frame; f++) {
-      const further = rising ? lights[f] < lights[from] : lights[f] > lights[from];
-      if (further) from = f;
-    }
-    return { from, to: frame, rising };
-  });
 }
 
 const signed = (light: number): string => `${light >= 0 ? '+' : '-'}${Math.abs(light).toFixed(3)}`;
