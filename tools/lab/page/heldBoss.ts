@@ -87,7 +87,9 @@ function hardestOver(onBoss: Over[], foes: Enemy[]): Over[] {
 /**
  * The aim turned onto the hardest of the points over the boss where it's still drawn as the aim comes onto it (the
  * close views' eye moves as the crosshair turns: from there a point laid at the round's start lay behind a small
- * foe, which the aim then marked, as it should). Null if none of the first `LET_GO_TRIES` is.
+ * foe, which the aim then marked, as it should). `onBoss` are the points the sweep found it drawn at from the turned
+ * eye: of every point laid over it at the round's start, the hardest eight in third person all lay behind a small
+ * foe from there, and the let-go was never measured (#486). Null if none of the first `LET_GO_TRIES` is.
  */
 async function overBossForLetGo(lab: Lab, key: SkillKey, onBoss: Over[], foes: Enemy[]): Promise<THREE.Vector3 | null> {
   const [boss] = foes;
@@ -221,11 +223,14 @@ async function overBossIn(lab: Lab, skill: HeldSkill, view: ViewMode, options: H
   if (!points.some((over) => over.foe === boss)) say('no point of the screen over the boss');
   await lab.step(HOLD_FRAMES, () => holdingKey(skill.key, points[0].point));
   const aims: Aimed[] = [];
+  // (the points the boss was still drawn at once the aim was turned onto them: the let-go's)
+  const stillBoss: Over[] = [];
   let unreached = 0;
   for (const over of points) {
     const aimed = await aimedAt(lab, skill.key, over.point, foes);
     if (!aimed) unreached++;
     else aims.push(aimed);
+    if (aimed?.drawn === boss) stillBoss.push(over);
     if (planted && aimed?.drawn === boss && aims.filter((aim) => aim.drawn === boss).length === 1) {
       const canary = outlineCanary(aims, foes);
       lines.push(canary.line);
@@ -238,7 +243,7 @@ async function overBossIn(lab: Lab, skill: HeldSkill, view: ViewMode, options: H
     lines.push(`  ${view}: ${tally}`);
     if (aims.some((aim) => aim.drawn?.boss === ofBoss && aim.outlined !== aim.drawn.obj)) say(tally);
   }
-  const target = await overBossForLetGo(lab, skill.key, points.filter((over) => over.foe === boss), foes);
+  const target = await overBossForLetGo(lab, skill.key, stillBoss, foes);
   if (!target) {
     say('the boss was never drawn where the aim was turned for the let-go');
     return { lines, problems, moments: [] };
