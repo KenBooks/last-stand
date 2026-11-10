@@ -2,9 +2,10 @@
 // must fit the window without scrolling, the box inside the window and no page of it taller than its cell (the menu
 // had the controls and the settings side by side, and grew past a short screen's height as settings were added). Both
 // pages share one cell, so the box is the same size on either tab. Resume and Abandon stand either side of the title,
-// each inside the box (on a tablet held upright Abandon ran past its edge). Its canary makes a settings row 600 px tall,
-// which must make the box scroll. Abandon run acts only once held 2 s (`pauseAbandon`): clicked it says to hold and
-// stays, held a second and let go it stays, held through it leaves the run; its canary makes the hold 0 ms, and the
+// each inside the box (on a tablet held upright Abandon ran past its edge). Its canary makes a row of the tab shown
+// twice the window's height, which must make the box scroll (600 css px, as it was, fitted the box zoomed by `--ui`
+// at 1024x700 and on a tablet, and went unseen there, #468). Abandon run acts only once held 2 s (`pauseAbandon`):
+// clicked it says to hold and stays, held a second and let go it stays, held through it leaves the run; its canary makes the hold 0 ms, and the
 // click must be caught abandoning.
 import type { Lab } from './lab';
 import { ABANDON_HOLD_MS, PAUSE_TAB_COOKIE, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
@@ -17,10 +18,10 @@ export interface PauseFound {
   problems: string[];
 }
 
-/** what the canary makes one settings row's height (css px) */
-const CANARY_PX = 600;
+/** what the canary makes one row's height, in the window's heights: more than any box holds, at any zoom */
+const CANARY_WINDOWS = 2;
 /** the problem the canary must raise */
-export const PAUSE_CANARY = { name: 'scrolls', what: 'a settings row 600 px tall' };
+export const PAUSE_CANARY = { name: 'scrolls', what: 'a row twice the window\'s height' };
 /** what must lie inside the box (shown ones: Abandon is hidden in the lobby) */
 const INSIDE = ['#btn-resume', '#btn-abandon', '.pb-title', '.pb-tabs'];
 /** a scroll this small (css px) is the box's rounding, not a scroll */
@@ -28,13 +29,22 @@ const ROUNDING_PX = 1;
 
 let planted: HTMLElement | null = null;
 
-/** The pause menu opened on `tab`; with the canary, a settings row made too tall to fit. */
+/** How much the pause box is scaled on the screen (its zoom, `--ui`): a css px of it is this many of the window's. */
+function boxScale(): number {
+  const box = document.querySelector<HTMLElement>('#pause .pause-box');
+  if (!box?.offsetHeight) return 1;
+  return box.getBoundingClientRect().height / box.offsetHeight;
+}
+
+/** The pause menu opened on `tab`; with the canary, a row of its page (or, as Controls has none, of the pages'
+ *  shared cell) made twice the window's height, too tall to fit at any zoom. */
 export function openPause(tab: PauseTab, canary: boolean): void {
   showPause(true);
   pauseTab(tab);
   if (!canary) return;
-  planted = document.querySelector<HTMLElement>('#pause .pb-opts .opt-row');
-  if (planted) planted.style.minHeight = `${CANARY_PX}px`;
+  const ownRow = document.querySelector<HTMLElement>(`#pause [data-pause-page="${tab}"] .opt-row`);
+  planted = ownRow ?? document.querySelector<HTMLElement>('#pause .pb-opts .opt-row');
+  if (planted) planted.style.minHeight = `${(CANARY_WINDOWS * innerHeight) / boxScale()}px`;
 }
 
 export function closePause(): void {
