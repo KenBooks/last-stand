@@ -13,6 +13,7 @@ import { render } from '../core/renderer';
 import { RUNNING } from '../core/rendererChoice';
 import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
+import { shadingParts } from './shadingParts';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
 export interface ProfileTurns {
@@ -225,7 +226,8 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     }
     return waitForGpu().then(once);
   };
-  const all = frameParts();
+  // (the lit shading's own parts after the frame's: each changes the lit pipelines, made once, `shadingParts.ts`)
+  const all = [...frameParts(), ...shadingParts()];
   const parts = all.filter((part) => !part.untimed);
   const untimed = all.filter((part) => part.untimed).map((part) => ({ name: part.name, why: part.untimed! }));
   if (options.canary) parts.push({ name: CANARY_PART, change: (on) => { twice = on; } });

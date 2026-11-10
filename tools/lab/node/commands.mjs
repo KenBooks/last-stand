@@ -84,7 +84,7 @@ function playAsDevice(options) {
 }
 
 /** the quality levels `--quality` names (src/data/quality.ts) */
-const QUALITY_LEVELS = ['high', 'medium', 'low'];
+const QUALITY_LEVELS = ['high', 'medium', 'low', 'verylow'];
 
 /** `--quality`'s text as a level and the most pixels the scene renders: `low@518400`, or `low` (no budget: none). */
 export function qualityOf(text, option = '--quality') {
@@ -824,6 +824,31 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  passes: {
+    check(options) {
+      if (options.frames !== undefined && !(options.frames >= 1)) throw labError('passes --frames: 1 or more');
+      if (options.device) playAsDevice(options);
+    },
+    async each(side, options) {
+      const command = {
+        biome: options.biome ?? 'forest',
+        view: options.view ?? 'top',
+        at: options.at,
+        level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
+        frames: options.frames === undefined ? undefined : Math.round(options.frames),
+        features: Boolean(options.features),
+        canary: Boolean(options.canary),
+      };
+      return side.command('passesHere', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('passes'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   scenecost: {

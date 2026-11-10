@@ -130,6 +130,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`, `--renderer webgpu`,
+  `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
+  render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of
+  the post chain's passes, the canvas's), the mean over `--frames` (30). The perf overlay's reads of the same
+  timestamps are held meanwhile (`holdWebGpuTimes` in `ui/perfHud.ts`): three keeps one pool and a read takes every
+  query in it, and the overlay's read each frame took the measure's, the scene's pass reading 1.9, 7.7 and 87 ms on
+  three runs. `--features` times the lit shading's features in the scene's pass drawn alone (`page/sceneFeatures.ts`:
+  against a plain colour, the environment, the shadows taken, the point lights, the fog), each taken off and put back
+  in turns within the page, each side's renders' median (a light's `castShadow` taken off let go of its map on
+  WebGPU, and put back drew with it destroyed: the shadows are taken off as received). It pictures the frame it
+  timed, as the browser shows it, on WebGL too (its renders aren't timed there), so `--ab` compares the look of a
+  cost cut. `--canary` draws the scene once more into a target of its own (the frame's size and samples), which must
+  be found once a frame and read some time. The scene's row may hold more than one timestamp a frame (1.5 on Very
+  low, its pass drawn once a frame by its calls, which a line counts): read it as the frame's scene work.
+  At a phone's pixels (`--device phone --level verylow`) the forest's point lights took 13.8 ms of the scene's 18.2
+  before they passed over the lights out of reach, 5.0 after (the pictures the same); bloom's bright pass and first
+  blur drew at the scene's 7646x3528 before taking the quality's share.
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest) in `--view` (top) at `--level`
   (the player's own otherwise; with `--device`, that device's level and screen). The game's frames are held, the
@@ -146,7 +163,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   1.97 times (2 frames a side read 1.57 once). Its result is sent as the tab's Send sends it, to a traces service of
   the lab's own, and read back as `lab trace` reports it: its Profile section must hold the lines as sent. With
   `--renderer webgpu` or `meshlets` it profiles WebGPU, which must name itself in the first line; there the pipelines
-  made count (over 24 fails: the plain colour's 12 to 16), and the forest's frame read 6.8 to 9 ms, the canary 1.99
+  made count (over 24 fails: the plain colour's 12 to 16; the lit shading's own parts, timed on WebGPU alone, make
+  theirs and are left out of it: 94 in the crypt at the phone's pixels, the profile 24 s), and the forest's frame
+  read 6.8 to 9 ms, the canary 1.99
   to 2.1 times; on `meshlets` half the scene's pixels isn't timed, a line saying why. It keeps no copy of the
   parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
@@ -259,6 +278,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   panel round, took 15 of the move area's 48 points on the owner's phone (`--screen 832x384@3.75`): from play,
   "they only activate in a small area now". A touch the browser takes as a pan (a page element whose
   `touch-action` isn't none) is cancelled and heard no more: the lab's touches know it (`lab.touchPanned`).
+  Then the performance overlay's frame rate and its graph are each tapped, a finger put down and lifted, with the
+  touch controls shown and hidden (a menu open), and each must copy a report (the overlay says so): on the owner's phone the panel let touches through to the stick, its
+  frame rate alone a button, and a tap on the panel copied nothing (the frame rate's own click came one tap in two).
   `--canary` lays a clear sheet over the move area's lower left, which must be caught.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick

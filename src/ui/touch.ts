@@ -21,6 +21,7 @@ import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
+import { copyPerfReportAt } from './perfHud';
 import type { SkillDef, SkillKey } from '../types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -37,7 +38,11 @@ const AUTO_RANGE = 22, AHEAD = 6;
 /** a released cast keeps its key down this long, in case the character is still busy */
 const RELEASE_HOLD = 0.35;
 
-interface Stick { id: number; x0: number; y0: number }
+interface Stick { id: number; x0: number; y0: number; t0: number; far: boolean }
+/** a touch on the stick's pad that stayed this near (css px) and was let go this soon (ms) is a tap: over the
+ *  performance overlay, which lets touches through to the pad, it copies a report */
+const TAP_NEAR = 12;
+const TAP_MS = 350;
 interface Press {
   id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean;
   /** held as its key is, the hero showing its own preview (`SkillDef.aimed`) */
@@ -86,7 +91,7 @@ export function initTouch(): void {
     e.preventDefault();
     if (stick) return;
     pad.setPointerCapture(e.pointerId);
-    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY };
+    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), far: false };
     base.style.left = `${e.clientX}px`; base.style.top = `${e.clientY}px`;
     base.classList.add('on');
     knob.style.transform = '';
@@ -95,6 +100,7 @@ export function initTouch(): void {
     if (stick?.id !== e.pointerId) return;
     const dx = e.clientX - stick.x0, dy = e.clientY - stick.y0;
     const d = Math.hypot(dx, dy);
+    if (d > TAP_NEAR) stick.far = true;
     // (the way the finger points, before the knob is held to the stick's travel: divided by the finger's distance once
     // held, a finger far past the edge pushed less the further it went, half a screen out a slow walk)
     const ux = d ? dx / d : 0, uy = d ? dy / d : 0;
@@ -113,7 +119,13 @@ export function initTouch(): void {
     input.stick.x = input.stick.y = 0;
     base.classList.remove('on');
   };
-  pad.addEventListener('pointerup', endStick);
+  pad.addEventListener('pointerup', (e) => {
+    // (a tap over the performance overlay copies its report: the panel lets touches through to the stick, its frame
+    // rate alone a button, and the owner tapped the panel as before and copied nothing)
+    const tapped = stick?.id === e.pointerId && !stick.far && performance.now() - stick.t0 < TAP_MS;
+    if (tapped) copyPerfReportAt(stick!.x0, stick!.y0);
+    endStick(e);
+  });
   pad.addEventListener('pointercancel', endStick);
   // the pad hides when the hero falls: the finger's release never reaches it, only the capture is lost
   pad.addEventListener('lostpointercapture', endStick);

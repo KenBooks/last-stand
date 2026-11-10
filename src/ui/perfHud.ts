@@ -56,6 +56,9 @@ let ringAt = 0;
 /** the latest frame's timestamp */
 let frameNow = 0;
 let frameCalls = 0, frameTris = 0;
+/** the frame before's draws and triangles: the overlay shows the larger of the two frames' (on Very low the sun's
+ *  shadow is drawn every other frame, and a phone's overlay read 392k triangles, then 132k, in turn) */
+let callsBefore = 0, trisBefore = 0;
 
 // GPU time via EXT_disjoint_timer_query_webgl2 (Chrome/Edge/Firefox; not Safari). Only one query
 // can run at a time, so every few frames one is timed in back-to-back parts (shadow map, scene,
@@ -201,6 +204,8 @@ const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${parti
 /** Call after the frame has been rendered. */
 export function perfEndFrame(): void {
   const end = perfClock.now();
+  callsBefore = frameCalls;
+  trisBefore = frameTris;
   frameCalls = frameDraws();
   frameTris = renderer.info.render.triangles;
   recorder.end(end - cpuStart, split.upd, split.rnd, frameCalls, frameTris, renderer.info.programs?.length ?? 0,
@@ -239,11 +244,19 @@ interface WebGpuTimes {
 let timesGpu = false;
 /** whether a read of them is under way: one at a time, each its latest frame's */
 let readingGpuTime = false;
+/** whether a harness reads them itself (`holdWebGpuTimes`) */
+let webGpuTimesHeld = false;
+
+/** WebGPU's timestamps left to a harness that reads them itself (tools/lab `passes`): three keeps one pool, and a
+ *  read takes every query in it, so the overlay's read each frame took the harness's renders before it could. */
+export function holdWebGpuTimes(held: boolean): void {
+  webGpuTimesHeld = held;
+}
 
 /** The latest frame's GPU time on WebGPU (all its passes, and the GPU-driven drawing's culling), asked for if none is
  *  on its way. Not split into parts: three sums a frame's passes. */
 function takeWebGpuTime(): void {
-  if (!timesGpu || readingGpuTime) return;
+  if (!timesGpu || readingGpuTime || webGpuTimesHeld) return;
   readingGpuTime = true;
   const at = ringAt;
   const gpuTimer = renderer as unknown as WebGpuTimes;
@@ -361,8 +374,8 @@ function draw(now: number): void {
   set('gpu', timerExt || timesGpu ? fmt(s.gpu, 2) : 'n/a');
   set('top', String(top));
   set('mid', String(top / 2));
-  set('calls', kilo(frameCalls));
-  set('tris', kilo(frameTris));
+  set('calls', kilo(Math.max(frameCalls, callsBefore)));
+  set('tris', kilo(Math.max(frameTris, trisBefore)));
   set('progs', `${info.programs?.length ?? 0} (+${programsCompiledInGame()})`);
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
@@ -476,6 +489,14 @@ export const perfBundle = BUILD;
 
 /** The report as the overlay copies it (for a harness: tools/lab `perf`). */
 export const perfReport = (): string => report();
+
+/** A report copied if the overlay is shown at this point of the page (css px), as a tap on it copies one where its
+ *  touches go through to the move stick (`ui/touch.ts`). */
+export function copyPerfReportAt(x: number, y: number): void {
+  if (!enabled || !el) return;
+  const box = el.getBoundingClientRect();
+  if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) copyReport();
+}
 
 function copyReport(): void {
   const hint = el.querySelector('[data-p="copy"]')!;

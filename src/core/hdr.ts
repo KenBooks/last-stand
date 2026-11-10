@@ -176,8 +176,12 @@ export function initHdr(canvas: HTMLCanvasElement, context: WebGL2RenderingConte
 }
 
 /** Reads the settings and the display for the WebGPU renderer, about to be made: whether its canvas is to be made in
- *  extended range (a browser that can't take it shows it as SDR). Watches the display for the settings' note. */
-export function initHdrForWebGPU(): boolean {
+ *  extended range (a browser that can't take it shows it as SDR). Watches the display for the settings' note.
+ *  `qualityAllows`: whether the level the boot starts at lets HDR show (`setHdrAllowed`), as the renderer is made
+ *  before the level is put to use: made in HDR whatever the level, a phone's Very low drew a float16 canvas at its
+ *  screen's 3120x1440, where WebGL's drew none (trace GSB0-GKVW). */
+export function initHdrForWebGPU(qualityAllows: boolean): boolean {
+  allowed = qualityAllows;
   settings = readSettings();
   const query = matchMedia(HDR_DISPLAY);
   displayHdr = query.matches;

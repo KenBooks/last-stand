@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
+import { WEBGPU } from '../../../src/core/webgpu';
 import { crowdPlaces, CROWD_FACING, CROWD_SPOT } from './crowd';
 import { foesAt } from './death';
 import * as swingTrail from '../../../src/fx/swingTrail';
@@ -132,37 +133,74 @@ function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
   return camera === G.camera ? 'scene' : 'arms';
 }
 
-/** Records every draw call until `stop()`: what was drawn, and the record. */
+/** A draw as WebGPU's backend is given it (three's `RenderObject`, as far as this reads it). */
+interface RenderObject {
+  object: THREE.Object3D;
+  material: THREE.Material;
+  geometry: THREE.BufferGeometry;
+  camera: THREE.Camera;
+  scene: THREE.Scene;
+}
+
+/** WebGPU's backend, its draw as this hooks it. */
+interface DrawingBackend {
+  draw(renderObject: RenderObject, info: unknown): void;
+}
+
+/** The pass a WebGPU draw is in: its shadow maps are drawn from the scene by the light's camera (WebGL's are drawn
+ *  with no scene). */
+function webgpuPassOf(drawn: RenderObject): Pass {
+  const shadowed = drawn.scene === G.scene && drawn.camera !== G.camera
+    && (drawn.camera as THREE.OrthographicCamera).isOrthographicCamera;
+  return passOf(drawn.camera, shadowed ? null : drawn.scene);
+}
+
+/** Records every draw call until `stop()`: what was drawn, and the record. On WebGPU, each draw its backend is given
+ *  (`backend.draw`, a `RenderObject` a draw: WebGL's `renderBufferDirect` isn't there). */
 function recordDraws(): { record: FrameDraws; stop(): void } {
+  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map() };
+  if (WEBGPU) {
+    const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
+    const draw = backend.draw;
+    backend.draw = function (drawn, info) {
+      recordDraw(record, webgpuPassOf(drawn), drawn.camera, drawn.geometry, drawn.material, drawn.object);
+      draw.call(this, drawn, info);
+    };
+    return { record, stop: () => { backend.draw = draw; } };
+  }
   const gl = G.renderer;
   const own = gl.renderBufferDirect.bind(gl);
-  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map() };
   gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    const pass = passOf(camera, scene);
-    let drawn = record.geometries.get(geometry);
-    if (!drawn) {
-      drawn = { geometry, draws: noDraws(), vertices: 0, triangles: 0, off: noDraws(), objects: new Set(), material,
-        object };
-      record.geometries.set(geometry, drawn);
-    }
-    drawn.draws[pass]++;
-    if (pass === 'arms') record.arms.set(object, (record.arms.get(object) ?? 0) + 1);
-    drawn.vertices = verticesOf(geometry, object);
-    drawn.triangles = trianglesOf(geometry, object);
-    const instances = (object as THREE.InstancedMesh).count;
-    if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * drawn.triangles) / instances;
-    drawn.objects.add(object);
-    if (pass === 'scene') {
-      drawn.material = material;
-      const key = lookOf(material);
-      const look = record.looks.get(key) ?? { draws: 0, geometries: new Set() };
-      look.draws++;
-      look.geometries.add(geometry);
-      record.looks.set(key, look);
-    }
+    recordDraw(record, passOf(camera, scene), camera, geometry, material, object);
     own(camera, scene, geometry, material, object, group);
   };
   return { record, stop: () => { gl.renderBufferDirect = own; } };
+}
+
+/** One draw call into the record: by its geometry, by its look in the scene's pass, by its object in the arms'. */
+function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geometry: THREE.BufferGeometry,
+  material: THREE.Material, object: THREE.Object3D): void {
+  let drawn = record.geometries.get(geometry);
+  if (!drawn) {
+    drawn = { geometry, draws: noDraws(), vertices: 0, triangles: 0, off: noDraws(), objects: new Set(), material,
+      object };
+    record.geometries.set(geometry, drawn);
+  }
+  drawn.draws[pass]++;
+  if (pass === 'arms') record.arms.set(object, (record.arms.get(object) ?? 0) + 1);
+  drawn.vertices = verticesOf(geometry, object);
+  drawn.triangles = trianglesOf(geometry, object);
+  const instances = (object as THREE.InstancedMesh).count;
+  if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * drawn.triangles) / instances;
+  drawn.objects.add(object);
+  if (pass === 'scene') {
+    drawn.material = material;
+    const key = lookOf(material);
+    const look = record.looks.get(key) ?? { draws: 0, geometries: new Set() };
+    look.draws++;
+    look.geometries.add(geometry);
+    record.looks.set(key, look);
+  }
 }
 
 /** An object's place in the scene as names (or types), from the scene down: `crowd mossback`, `forest > Group`. */

@@ -11,7 +11,7 @@ import type { ViewMode } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
 import { G } from '../../../src/state';
 import {
-  CANARY_PART, PROFILE_TURNS, ProfileCancelled, profile, profileLines, type ProfileOptions,
+  CANARY_PART, PROFILE_TURNS, ProfileCancelled, profile, profileLines, type Profile, type ProfileOptions,
 } from '../../../src/perf/profiler';
 import { standIn } from './light';
 import { WEBGPU } from '../../../src/core/webgpu';
@@ -50,6 +50,17 @@ const COMPILED_MOST = 8;
  *  vertex layout it's drawn over (12 to 16 in the forest), each once (`holdPipelines`: three made them again at
  *  every turn, letting them go as the part was put back) */
 const PIPELINES_MOST = 24;
+
+/** the start of the lit shading's own parts' names (`src/perf/shadingParts.ts`): each changes the lit pipelines, made
+ *  once by its first frame */
+const SHADING_PART = 'the lit shading\'s ';
+
+/** The programs (WebGPU's pipelines) a profile made, less those the lit shading's own parts made, as they're meant
+ *  to: the frame's parts must keep the scene's. */
+function compiledByFrameParts(found: Profile): number {
+  const shading = found.parts.filter((part) => part.name.startsWith(SHADING_PART));
+  return found.compiled - shading.reduce((sum, part) => sum + (part.compiled ?? 0), 0);
+}
 
 /** the page's part the lab gives the profiler: work done in each frame while it's shown, which the frame's interval
  *  as the browser shows it must see (`ProfileOptions.pageParts`: the game's are its panels and the pause menu) */
@@ -117,8 +128,11 @@ async function cancelProblems(lab: Lab): Promise<string[]> {
   if (after !== before) problems.push(`cancel: the scene was left changed (${before} before, ${after} after)`);
   const start = lab.player.pos.clone();
   const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['w'] })));
+  const share = `${Math.round(redrawn * 100)}% of the screen's middle changed`;
   if (lab.player.pos.distanceTo(start) < 0.5) problems.push('cancel: the game\'s frames were left held');
-  if (!redrawn) problems.push('the scene\'s picture stuck as the hero walked, three\'s own loop held (WebGPU)');
+  if (redrawn < WALK_CHANGES) {
+    problems.push(`the scene's picture stuck as the hero walked, three's own loop held (WebGPU): ${share}`);
+  }
   return problems;
 }
 
@@ -170,14 +184,15 @@ const NEVER = { requestAnimationFrame: () => 0, cancelAnimationFrame: () => unde
 /**
  * Whether the game's own frames draw the scene afresh on WebGPU with three's own animation loop held, which begins a
  * node frame at each of the browser's frames (a pass draws its scene once a node frame): `walk` run with it held, the
- * share of the screen's middle that changed. A phone's game went on with the scene's picture stuck (from play:
- * "everything stuck, but not frozen", the view moving once the profiler started), as main's does here (9% changed);
- * now each game frame begins a node frame of its own (`renderWebGPU`). True on WebGL, which has no node frames.
+ * share of the screen's middle that changed (1 on WebGL, which has no node frames). A phone's game went on with the
+ * scene's picture stuck (from play: "everything stuck, but not frozen", the view moving once the profiler started),
+ * as main's does here (9% changed); now each game frame begins a node frame of its own (`renderWebGPU`). After a
+ * level's change the sun's shadow map resized left it stuck too, 0% changed (`apply` in core/quality.ts).
  */
-async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, canary = false): Promise<boolean> {
+async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, canary = false): Promise<number> {
   if (!WEBGPU) {
     await walk();
-    return true;
+    return 1;
   }
   const renderer = G.renderer as unknown as { _animation: ThreesLoop; _nodes: { nodeFrame: NodeFrame } };
   const loop = renderer._animation;
@@ -191,7 +206,7 @@ async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, 
     await lab.step(2);
     const before = await middleShown();
     await walk();
-    return changedShare(before, await middleShown()) >= WALK_CHANGES;
+    return changedShare(before, await middleShown());
   } finally {
     delete (nodeFrame as Partial<NodeFrame>).update;
     loop.stop();
@@ -209,7 +224,9 @@ interface NodeFrame {
 async function redrawCanaryProblems(lab: Lab): Promise<string[]> {
   if (!WEBGPU) return [];
   const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['s'] })), true);
-  return redrawn ? ['canary: the scene\'s picture held with no node frame begun went unseen'] : [];
+  const share = Math.round(redrawn * 100);
+  if (redrawn < WALK_CHANGES) return [];
+  return [`canary: the scene's picture held with no node frame begun went unseen (${share}%)`];
 }
 
 /** `lines` sent to the traces service at `base` as the Performance tab's Send sends a profile (`sendProfile` in
@@ -244,9 +261,10 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     // (a commit from before WebGPU was profiled names no renderer: an A/B runs this module there too)
     const onWebGPU = (found.renderer ?? 'WebGL').startsWith('WebGPU');
     const most = onWebGPU ? PIPELINES_MOST : COMPILED_MOST;
-    if (found.compiled > most) {
+    const compiled = compiledByFrameParts(found);
+    if (compiled > most) {
       const what = onWebGPU ? 'pipelines made' : 'programs compiled';
-      problems.push(`${found.compiled} ${what}: a part changes the scene's programs (most ${most})`);
+      problems.push(`${compiled} ${what}: a part changes the scene's programs (most ${most})`);
     }
     problems.push(...await cancelProblems(lab));
     if (command.canary) problems.push(...await redrawCanaryProblems(lab));
