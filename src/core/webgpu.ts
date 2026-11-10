@@ -124,7 +124,7 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   lights.setupLights = function (builder, nodes) {
     setupLights.call(this, builder, nodes);
     for (const after of builtAfterLights) after.build(builder);
-    if (!builder.object.receiveShadow) return;
+    if (!builder.object.receiveShadow || plainAtBoot) return;
     const sun = nodes.find((node) => node.light?.isDirectionalLight && node.light.castShadow)?.shadowNode;
     if (!sun) return;
     const ambient = mix(inShadow.ambient, 1, sun.x);
@@ -134,12 +134,27 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   };
 }
 
-/** the lit shading made plain (`plainLitNodes`): 1 at a level that asks for it, a uniform's value */
+/** the lit shading made plain now (`plainLitNodes`'s branches): 1 at a level that asks for it, a uniform's value */
 const plainLit = { value: 0 };
-/** Low's and Very low's lit shading made plain (`QualityPreset.plainLit`), or whole again: a uniform, nothing compiled. */
+/** whether the boot's level made the lit shading plain: its pipelines are built without the maps' and shadows' code */
+let plainAtBoot = false;
+/** whether any frame has been drawn: till then the level is the boot's */
+let drawnYet = false;
+
+/**
+ * Low's and Very low's lit shading made plain (`QualityPreset.plainLit`), or whole again. At the boot's level the
+ * lit pipelines are built plain, none of the maps' or shadows' code in them; a level chosen once the game is shown
+ * switches a branch on a uniform, nothing compiled, its pipelines built plain from the next boot (as WebGPU's canvas
+ * takes HDR or not once, as it's made: `initHdrForWebGPU`). Built plain, a level that's whole later keeps the plain
+ * look till a reload.
+ */
 export function setPlainLitOnWebGPU(on: boolean): void {
   plainLit.value = on ? 1 : 0;
+  if (!drawnYet) plainAtBoot = on;
 }
+
+/** Whether no surface takes the sun's shadow: the lit shading plain now, or built plain at the boot. */
+export const shadowsUntaken = (): boolean => plainAtBoot || plainLit.value === 1;
 
 /** the surface maps' scopes a material's node reads, each with what it is without its map */
 const PLAIN_SCOPES = ['normal', 'roughness', 'metalness', 'ao'] as const;
@@ -153,13 +168,17 @@ const MAPS_OF: Record<PlainScope, string[]> = {
 };
 
 /**
- * The lit shading made plain where `plainLit` is 1 (Low and Very low): no surface maps (normal, bump, roughness,
- * metalness, occlusion: each surface its material's own roughness and metalness, its normal the geometry's) and no
- * shadows taken (the sun's and the point lights', each surface lit as if out of them). Each is a branch on a uniform
- * (three's `select` writes an `if` whose block holds the lookups), so a level switches it live, nothing compiled, and
- * Auto's steps down a level compile nothing. From the owner's phone (trace DM4B-R468, the crypt at Low): the maps were
- * 26% of its frame and the shadows taken 25%, and its GPU slows 2.35 times after a few seconds of play: held at 60
- * frames a second slowed, its frame must cost 7 ms at full speed where it cost 11.
+ * The lit shading made plain at Low and Very low: no surface maps (normal, bump, roughness, metalness, occlusion: each
+ * surface its material's own roughness and metalness, its normal the geometry's) and no shadows taken (the sun's and
+ * the point lights': each surface lit as if out of them, and the sun's map not drawn, `setSunShadowSeen`). Booted at
+ * such a level, the lit pipelines are built without that code (`plainAtBoot`): `MaterialNode` reads no map, and a
+ * light is set up for each object as for one that takes no shadow. Otherwise each is a branch on a uniform (three's
+ * `select` writes an `if` around the lookups), switched live. On the owner's phone the branches saved about half of
+ * it (trace NR72-ZXSK, Very low: the surface maps' part 19% of its frame against 26% whole, the shadows taken 8%
+ * against 25%): its compiler may flatten an `if`, and the code's registers weigh on every pixel. Its GPU slows 2.35
+ * times after a few seconds of play (DM4B-R468), so held at 60 frames a second its frame must cost 7 ms at full speed,
+ * where it cost 11 with the maps and the shadows taken. A switch built as pipelines of its own, compiled beside the
+ * frames, still made 12 at a draw and held a frame 710 ms in the lab.
  */
 function plainLitNodes(): void {
   const { uniform, renderGroup, select, float, normalView } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -170,12 +189,11 @@ function plainLitNodes(): void {
   const material = gpu.MaterialNode.prototype as unknown as Scoped;
   const setup = material.setup;
   material.setup = function (this: Scoped, builder: Built) {
-    const node = setup.call(this, builder);
     const scope = this.scope as PlainScope;
     const maps = MAPS_OF[scope];
-    if (!maps || !maps.some((map) => builder.context.material[map])) return node;
+    if (!maps || !maps.some((map) => builder.context.material[map])) return setup.call(this, builder);
     const without = scope === 'normal' ? normalView : scope === 'ao' ? float(1) : this.getFloat(scope);
-    return select(whole, node, without);
+    return plainAtBoot ? without : select(whole, setup.call(this, builder), without);
   };
   type Shadowing = { setup(builder: unknown): unknown };
   const shadowNode = gpu.ShadowNode.prototype as unknown as Shadowing;
@@ -183,6 +201,20 @@ function plainLitNodes(): void {
   shadowNode.setup = function (this: Shadowing, builder: unknown) {
     const node = shadowSetup.call(this, builder);
     return node === undefined ? node : select(whole, node, float(1));
+  };
+  // (booted plain: each object's lights set up as for one that takes no shadow, as three sets them up)
+  type Lit = { setup(builder: { object: THREE.Object3D }): unknown };
+  const light = gpu.AnalyticLightNode.prototype as unknown as Lit;
+  const lightSetup = light.setup;
+  light.setup = function (this: Lit, builder: { object: THREE.Object3D }) {
+    const object = builder.object;
+    if (!plainAtBoot || !object.receiveShadow) return lightSetup.call(this, builder);
+    object.receiveShadow = false;
+    try {
+      return lightSetup.call(this, builder);
+    } finally {
+      object.receiveShadow = true;
+    }
   };
 }
 
@@ -1771,5 +1803,6 @@ export function renderWebGPU(): void {
   // (each frame a node frame of its own: three's passes draw their scene once a node frame, `newNodeFrame`)
   newNodeFrame(renderer as unknown as THREE.WebGLRenderer);
   renderer.setRenderTarget(null);
+  drawnYet = true;
   pipeline.render();
 }
