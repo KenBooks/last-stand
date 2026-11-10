@@ -10,8 +10,10 @@ import { triplanar } from './triplanar';
 import { handNodes } from './handNodes';
 import { sameLooks, type KitLooks } from '../../core/materials';
 import type { OwnLooks } from '../../core/shaderPorts';
-import { sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
+import { slimOf, sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
 import { clamp } from '../../util';
+import { tunable } from '../../core/tuning';
+import { pbrMaterialMaps, skin as skinMaps } from '../../core/textures';
 import type { JointPoint } from './armor';
 
 export interface Digit { j: THREE.Group[]; len: number[]; /** its radius (half its depth, which a grip wraps) */ r: number }
@@ -43,15 +45,21 @@ interface DigitSpec {
 }
 
 /** the fingers, index (next to the thumb) to little: their knuckles a little apart across the hand (as close as their
- *  roots' widths, the hand was a third narrower than a man's for its length), the middle's furthest down */
+ *  roots' widths, the hand was a third narrower than a man's for its length), the middle's furthest down; the index
+ *  as stout as the middle finger, as a man's is (from play: "index finger should be thicker"), the ring finger and
+ *  the little one each thinner, by a man's joint breadths (about 21.6, 21.9, 20.3 and 17.9 mm at the middle joint) */
+// (the knuckles in an arch, the little finger's 14 mm nearer the wrist than the middle's: within 10 mm of a line,
+// the hand ended in a straight edge, #425)
 const FINGERS: DigitSpec[] = [
-  { u: 0.033, y: -0.1, z: 0.001, len: [0.043, 0.026, 0.021], width: 0.0102 },
-  { u: 0.011, y: -0.103, z: 0.001, len: [0.047, 0.029, 0.022], width: 0.0105 },
-  { u: -0.011, y: -0.1, z: 0.001, len: [0.044, 0.027, 0.021], width: 0.0099 },
-  { u: -0.0315, y: -0.093, z: 0.001, len: [0.035, 0.021, 0.019], width: 0.0089 },
+  { u: 0.0345, y: -0.1, z: 0.001, len: [0.043, 0.026, 0.021], width: 0.0118 },
+  { u: 0.0115, y: -0.103, z: 0.001, len: [0.047, 0.029, 0.022], width: 0.0119 },
+  { u: -0.0115, y: -0.099, z: 0.001, len: [0.044, 0.027, 0.021], width: 0.0108 },
+  { u: -0.033, y: -0.089, z: 0.001, len: [0.035, 0.021, 0.019], width: 0.0092 },
 ];
-/** the thumb: rooted low on the inner side of the palm, its first segment its bone in the palm's mound */
-const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0126 };
+/** the thumb: rooted low on the inner side of the palm, its first segment its bone in the palm's mound; its bones a
+ *  man's by X-ray (about 44, 30 and 20 mm, the last under 5 mm of fingertip), to the scale of the fingers here (at
+ *  38, 30 and 25 mm, from play: "thumb too short") */
+const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.046, 0.033, 0.027], width: 0.0136 };
 /** a digit's depth over its width at its root (a grip wraps its half-depth) */
 const DEPTH = 0.86;
 /** how far apart the fingers are fanned in the pose the hand is sculpted in (`poseHand`'s spread): apart, so the
@@ -59,8 +67,15 @@ const DEPTH = 0.86;
 const SCULPT_SPREAD = 0.6;
 /** the hand's skin, glove and nails, sculpted once for each side (a hero built again shares them) */
 const SCULPTED = new Map<number, HandGeometries>();
-/** the nails: the skin a little lighter and glossier */
-const NAIL_TINT = new THREE.Color(0xe6bfb2);
+/** the nails: the fingertip's own skin (its colour times `NAIL_SKIN`, the warmth the sculpt shades a fingertip
+ *  with), a little towards the pink of the bed under a nail (`NAIL_PINK` of the way to `NAIL_TINT`), and a little
+ *  smoother, and as dark as the skin's map draws it (a nail has none). Nearly half way to a light pink and glossy,
+ *  they read as
+ *  painted: from play, "he should not have painted nails" (#425) */
+const NAIL_TINT = new THREE.Color(0xd8a39c);
+const NAIL_SKIN = new THREE.Color(0.72, 0.6, 0.57);
+const NAIL_PINK = 0.14;
+const NAIL_ROUGH = 0.5;
 
 /** A digit's joints on the hand (`s` its side), as `spec` places and sizes them. */
 function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec): Digit {
@@ -73,7 +88,7 @@ function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec): Digit {
       j.push(at);
     }
   });
-  return { j, len: [...spec.len], r: spec.width * DEPTH };
+  return { j, len: [...spec.len], r: spec.width * slimOf(spec === THUMB) * DEPTH };
 }
 
 /** A copy of `material` of its own, for a skinned mesh (one shared with rigid meshes makes three rebuild its
@@ -109,6 +124,19 @@ export function glowOutline(h: Hand, rim: THREE.Color, body?: THREE.Color): void
       shader.uniforms.uRim = { value: rim };
     };
   }
+}
+
+/** how deep the bare skin's wrinkles read (its normal map's scale) */
+const SKIN_RELIEF = 0.6;
+
+/** `material` (a hand's own copy of its skin) in the bare skin's wrinkles and pores (core/pbr.ts `skin`, made once,
+ *  shared by every hand), read across it as the glove's grain is: smooth and even, the fingers read as plastic (#425) */
+function wrinkled(material: THREE.MeshStandardMaterial): void {
+  const maps = pbrMaterialMaps(skinMaps(), 1, SKIN_RELIEF);
+  material.map = maps.map;
+  material.normalMap = maps.normalMap;
+  material.roughnessMap = maps.roughnessMap;
+  material.normalScale.copy(maps.normalScale);
 }
 
 /** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
@@ -225,10 +253,11 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   // (the skin shaded by the colours its sculpt gave it, `shadeSkin`: each mesh's own copy of the material, which other
   // skin without them shares)
   for (const m of [h.skin, h.bareSkin]) if (m) (m.material as THREE.MeshStandardMaterial).vertexColors = true;
+  for (const m of [h.skin, h.bareSkin]) if (m) wrinkled(m.material as THREE.MeshStandardMaterial);
   h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
   const nail = h.nails.material as THREE.MeshStandardMaterial;
-  nail.color.lerp(NAIL_TINT, 0.25);
-  nail.roughness = 0.45;
+  nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
+  nail.roughness = NAIL_ROUGH;
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)
   for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
@@ -271,6 +300,11 @@ export function handCapsules(h: Hand): [JointPoint, JointPoint, number][] {
  * `spread` fans them, `point` straightens the index and middle fingers (the other two stay curled),
  * `twitch` a tremor. Also lets go of anything held.
  */
+/** how far the open hand's thumb is turned about its own length from the fingers' way (rad): a thumb lies about a
+ *  quarter turn round from the fingers, its pad towards the palm and the index finger, its nail up and out from
+ *  the hand. Unturned, its nail faced the fingers and it bent away from the palm (from play, of the nail: "should
+ *  be positioned differently", #425) */
+const THUMB_ROLL = -1.3;
 export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0, twitch = 0): void {
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
@@ -281,10 +315,58 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
     f.j[2].rotation.set(c * 0.75, 0, 0);
   });
   const tc = curl * 0.6 + point * 0.5;
-  // the thumb swings across the palm as the hand closes
-  h.thumb.j[0].rotation.set(0.25 + tc * 0.45, s * (0.3 + tc * 0.5), -s * (0.75 - spread * 0.45));
+  // the thumb swings across the palm as the hand closes, and in from the side (held out at the open hand's 43
+  // degrees, a fist's thumb stood off the fingers, a loop in the air)
+  h.thumb.j[0].rotation.set(0.25 + tc * 0.45, s * (0.3 + tc * 0.5), -s * (0.75 - spread * 0.45 - tc * 0.4));
+  h.thumb.j[0].rotateY(s * THUMB_ROLL);
   h.thumb.j[1].rotation.set(tc * 0.5, 0, 0);
   h.thumb.j[2].rotation.set(tc * 0.6, 0, 0);
+}
+
+/** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:
+ *  a claw, as reference photographs of a hand straining against a force hold it (#425), the knuckle nearly straight
+ *  and the middle joint bent hard, graded from the index, nearly straight, to the little finger, most; bent gently
+ *  at every joint, the fingers read as hoses, and curled alike, through the eyes every tip pointed at the camera and
+ *  the fingers read as stubs (an adversarial review); so every finger is held back at its knuckle, the index most,
+ *  as a hand pushed open against a force is, and they fan out long across the view) */
+const STRAIN = [[-0.3, 0.45, 0.3], [-0.24, 0.9, 0.55], [-0.14, 1.18, 0.72], [-0.04, 1.38, 0.86]];
+/** how far each finger leans out from the middle of the hand as it spreads (the index furthest, the ring and the
+ *  little finger close together: an adversarial review read an even fan as fake) */
+const STRAIN_FAN = [-1.5, -0.4, 0.6, 1.6];
+/** the thumb's turn at its root in a strained hand (rad about x, y and z, z less the spread's share), and its bends at
+ *  its two outer joints, back the other way (below 0: a tense thumb's tip curls back, away from the palm), further
+ *  back as the hand hooks, within what a thumb's joints allow: its last joint bends back 10 to 25 degrees, its middle
+ *  one hardly at all (52 degrees, taken from a generated "photograph", was a bend no thumb makes: from play, "this is
+ *  NOT a real hand"; lab `--tune strainThumb.root=...`) */
+const STRAIN_THUMB = tunable('strainThumb', { root: [0.2, -0.9, 1.2], spreadShare: 0.65, bends: [-0.05, -0.3],
+  hooked: [0, -0.1] });
+
+/**
+ * A hand strained open against a force, as a caster's holding a spell back (#425; from play, through the eyes, an open
+ * palm with its fingers straight and parallel "looks lame"): the fingers splayed (`spread`, as `poseHand`'s), each
+ * bent at its own joints, the little finger most, and hooked further at the tips by `hook` (0 to 1); the thumb out and
+ * a little bent. `t` and `twitch` tremble the fingers as `poseHand`'s do.
+ */
+export function strainHand(h: Hand, spread: number, hook: number, t = 0, twitch = 0): void {
+  h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
+  const s = h.s;
+  h.f.forEach((f, i) => {
+    const [knuckle, middle, last] = STRAIN[i];
+    const shake = Math.sin(t * 23 + i * 1.7) * twitch;
+    // (fanned a little wider than `poseHand` spreads them, the outer fingers furthest)
+    f.j[0].rotation.set(knuckle + shake, 0, s * STRAIN_FAN[i] * spread * 0.42);
+    f.j[1].rotation.set(middle * (1 + 0.15 * hook) + shake, 0, 0);
+    f.j[2].rotation.set(last * (1 + 0.25 * hook), 0, 0);
+  });
+  // (the thumb out from the side and pointing down along the fingers, as reference photographs of a braced hand hold
+  // it, and tense as the fingers are, its tip bent back: straight out sideways and curled in, it read as a peg, and
+  // curled in at all, as a limp thumb on a tense hand, the owner's "it should be bent the other way")
+  const [rootX, rootY, rootZ] = STRAIN_THUMB.root;
+  const [middle, last] = STRAIN_THUMB.bends;
+  const [middleHooked, lastHooked] = STRAIN_THUMB.hooked;
+  h.thumb.j[0].rotation.set(rootX, s * rootY, -s * (rootZ - spread * STRAIN_THUMB.spreadShare));
+  h.thumb.j[1].rotation.set(middle + middleHooked * hook, 0, 0);
+  h.thumb.j[2].rotation.set(last + lastHooked * hook, 0, 0);
 }
 
 const _d = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();

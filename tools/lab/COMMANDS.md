@@ -679,17 +679,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   weapon in it is a problem, and `--canary` pictures an empty studio, which must read as nothing drawn. Compare a
   change to a model with `--ab`. The studio, its camera and its pictures are `page/studio.ts`, which `hands` shares.
 - `hands`: the hero's right hand alone (`page/hands.ts`): a copy of it on a wrist of its own (`handLike` in
-  `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed, in
-  a fist and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
+  `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed,
+  strained as a caster's (`strainHand`), in a fist and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
   little finger's, the fingertips and three-quarters (`--views`), and close up when asked for: `cuffs`, the glove's
-  cuffs over the fingers, and `web`, the thumb's web (where a bent thumb once pressed the glove into the skin). Said
+  cuffs over the fingers, `web`, the thumb's web (where a bent thumb once pressed the glove into the skin), and `joints`, the fingers'
+  knuckles and the bones between them from the little finger's side. Said
   beside it: its length, breadth and thickness against a man's (anatomy's tables: 10.9% of his height, 46% of the
   length, 38% of the breadth) and each finger's length against the middle's, the triangles and meshes it's drawn
   with, how long a side takes to sculpt on the page, and whether both sides were sculpted by workers as the game
   loaded (one sculpted on the page is a problem: it held the boot up). `--look` draws it in a look (wire, faces,
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
-  the materials its pieces were made in (`userData.own`).
+  the materials its pieces were made in (`userData.own`). `--views` also takes `caster` (the hand as its owner sees
+  it held out, the fingers up the picture) and the close-ups `fingers`, `pads` (the fingers out of the glove from
+  the back and from the palm's side) and `thumbtip`; `--wear hands` pictures it gloved. Each finger's middle joint is
+  measured against the shafts either side of it on the flat hand (`knobsOf`): under 1.04 as broad the finger is an
+  even tube, over 1.16 its joint is swollen (from play: "a hand of 90 year old, with bones problems", read 1.25),
+  each a problem. It has no canary yet.
 - `hood`: the mage's hood against its reference, by numbers: in full in [`commands/hood.md`](commands/hood.md).
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows

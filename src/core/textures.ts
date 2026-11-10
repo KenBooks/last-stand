@@ -132,6 +132,8 @@ export const bark = (): PBRCanvases => pbrCanvases('bark');
 /** the heroes' materials: neutral albedo, tinted by the material's colour */
 export const leather = (): PBRCanvases => pbrCanvases('leather');
 export const oiled = (): PBRCanvases => pbrCanvases('oiled');
+/** bare skin: fine wrinkles and pores (the fingers a glove leaves bare) */
+export const skin = (): PBRCanvases => pbrCanvases('skin');
 export const wool = (): PBRCanvases => pbrCanvases('wool');
 export const felt = (): PBRCanvases => pbrCanvases('felt');
 export const mail = (): PBRCanvases => pbrCanvases('mail');

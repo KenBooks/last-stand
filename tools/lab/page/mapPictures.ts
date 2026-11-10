@@ -44,6 +44,7 @@ const GROUPS: Record<RecipeName, string> = {
   burlap: 'cloth',
   leather: 'cloth',
   oiled: 'cloth',
+  skin: 'cloth',
   wool: 'cloth',
   felt: 'cloth',
   cloth: 'cloth',

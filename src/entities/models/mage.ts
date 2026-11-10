@@ -12,7 +12,7 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { EYE } from './face';
-import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
+import { buildHand, poseHand, strainHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
 import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
@@ -28,6 +28,8 @@ import { ItemGlows } from './itemGlow';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
+/** a joint's length (its local y) */
+const ALONG = new THREE.Vector3(0, 1, 0);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** the coat's and the waistcoat's share of the arm round each armhole (`ArmBlend`: as the ranger's coat, with nothing over
@@ -189,7 +191,7 @@ function forearmRunes(): THREE.CanvasTexture {
 const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']);
 /** his free hand's outline: its green, how far it breathes either way and how fast (rad/s: well under the
  *  1.5 flashes a second a large glow may pulse at), and the share of it glowing over the whole hand */
-const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.8), breathe: 0.3, rate: 2.2, body: 0.1 };
+const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.8), breathe: 0.3, rate: 2.2, body: 0.1, eyes: 0.35 };
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
@@ -251,6 +253,10 @@ export function buildMage(): Model {
   // the belts' and the harness's brown leather, worn and creased
   const leather = kit.std({ color: 0x5a3820, roughness: 0.75, ...tex(leatherMaps(), 2, 1.8) });
   const beltLeather = kit.std({ color: 0x5c3418, roughness: 0.6, ...tex(leatherMaps(), 2, 2.2) });
+  // the fingerless gloves: smooth oiled leather with long soft creases and a low sheen, as reference photographs of a
+  // glove show it (#425: the belts' pebbled grain, laid across a hand, read as knit wool through the eyes; at a
+  // roughness of 0.84 the studio's light ran down it as on wet bark, an adversarial review)
+  const gloveLeather = kit.std({ color: 0x8a5a34, roughness: 0.95, ...tex(oiled(), 1, 1.4) });
   // the grimoire: dark tooled leather over its boards, its pages old paper
   const tome = kit.std({ color: 0x4e2c18, roughness: 0.7, ...tex(leatherMaps(), 3, 2.4) });
   const paper = kit.std({ color: 0xb8a882, roughness: 1, ...tex(clothMaps(), 4, 0.6) });
@@ -260,7 +266,6 @@ export function buildMage(): Model {
   const bootStrap = kit.std({ color: 0x3a2214, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const sole = kit.std({ color: 0x1e140c, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const wood = kit.std({ color: 0x7a5236, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
-  const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
   // the coat's and the hood's dark lining
   const lining = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x5a2a2a, 0.05);
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
@@ -445,7 +450,8 @@ export function buildMage(): Model {
       H.add(buckle(0.014, 0.016, 0.003), brass, el, [s * (r + 0.003), y, 0], [0, s * Math.PI / 2, 0]);
     }
   }
-  const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
+  const handL = buildHand(j.handL, 1, gloveLeather, bareSkin, 1, bareSkin);
+  const handR = buildHand(j.handR, -1, gloveLeather, bareSkin, 1, bareSkin);
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
   const handGlow = new THREE.Color(), handBody = new THREE.Color();
   glowOutline(handL, handGlow, handBody);
@@ -917,6 +923,8 @@ export function buildMage(): Model {
   /** the staff arm through the eyes: added to its shoulder (pitch, roll, yaw), and pitch undone while casting */
   const FP_STAFF = [0.1, -0.3, -0.2, 0.6];
   const FP_POSE: Record<string, number[]> = { cast: [-0.2, 0.35, 0.12], summon: [-0.2, 0.35, 0.12], channel: [0.5, 0.12, -0.1], buff: [-0.25, 0.05, 0.15] };
+  /** through the eyes, the free hand turned about its forearm as it holds Void Lance (rad: thumb up) */
+  const FP_HAND_TURN = 0.9;
   /** where the free arm's elbow points when it reaches (out to the left, down and back) */
   const POLE_L = V(1, -0.7, -0.6);
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
@@ -968,8 +976,11 @@ export function buildMage(): Model {
 
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
-    handGlow.copy(HAND_GLOW.color).multiplyScalar(1 + HAND_GLOW.breathe * Math.sin(t * HAND_GLOW.rate));
-    handBody.copy(handGlow).multiplyScalar(HAND_GLOW.body);
+    // (through the eyes a share of it: at its full strength the fingertips, seen edge on, lit up as lamps)
+    handGlow.copy(HAND_GLOW.color).multiplyScalar((fp ? HAND_GLOW.eyes : 1) * (1 + HAND_GLOW.breathe * Math.sin(t * HAND_GLOW.rate)));
+    // (through the eyes the hand fills the view's corner, and its glow over all of it washed the glove's leather to one
+    // flat mint, #425: there the outline alone)
+    handBody.copy(handGlow).multiplyScalar(fp ? 0 : HAND_GLOW.body);
     const raw = st.action;
     feet = null;
     let flaskWant = 0, drinkLift = 0;
@@ -1057,9 +1068,14 @@ export function buildMage(): Model {
           const ft = time - openedAt, kick = Math.exp(-ft * 9) * ramp(ft, 0, 0.04), tr = Math.sin(t * 40) * 0.02;
           const sway = Math.sin(t * 2.3) * 0.04;
           j.shoulderL.rotation.x += -1.45 + tr + kick * 0.3 + sway * 0.5; j.shoulderL.rotation.z += -0.4 + sway * 0.4; j.elbowL.rotation.x += 0.05 - kick * 0.4;
-          // the wrist bent back so the palm faces the portal, fingers spread and straining
+          // the wrist bent back so the palm faces the portal, fingers splayed and straining against it, hooked as
+          // it kicks (#425: spread straight and parallel, "this looks lame")
           j.handL.rotation.x += -1.25 + kick * 0.3;
-          poseHand(handL, 0.1 + kick * 0.3, 0.6, 0, t, 0.04);
+          // (through the eyes the forearm turned thumb up a little, so the fingers' bend shows: seen square from behind,
+          // they bend away from the eyes and read straight; turned about the forearm's length, as a forearm turns, the
+          // wrist's bends kept: a turn of the hand after them bent the wrist 40 degrees sideways)
+          if (fp) j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
+          strainHand(handL, 0.75, 0.3 + kick * 0.7, t, 0.04);
           j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2;
           j.chest.rotation.y += -0.25; j.spine.rotation.x += 0.15 - kick * 0.12;
           j.body.position.z += -kick * 0.05;
