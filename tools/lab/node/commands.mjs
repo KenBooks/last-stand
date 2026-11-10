@@ -636,7 +636,8 @@ export const COMMANDS = {
         const canary = Boolean(options.canary) && reports.length === 0;
         const hdr = options.hdr ? { paper: options.paper ?? 1, peak: options.peak ?? 3 } : undefined;
         const settings = lightSettings(options);
-        const command = { scenario, pictures: options.pictures !== false, canary, hdr, settings };
+        const walk = options.walk ?? 0;
+        const command = { scenario, pictures: options.pictures !== false, canary, hdr, settings, walk };
         reports.push(await side.command('light', command));
       }
       return {

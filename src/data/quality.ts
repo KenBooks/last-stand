@@ -29,7 +29,7 @@ export interface QualityPreset {
   coarseProps: boolean;
   /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
    *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
-  bloomShare: number;
+  bloomShare: number;   // (0: no bloom at all, Very low's)
   /** whether the sun's (moon's) shadow is drawn every other frame, whatever the frame rate (`setShadowInTurns` in
    *  core/renderer.ts): its pass draws every caster again */
   shadowInTurns: boolean;
@@ -50,7 +50,7 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
   low:     { label: 'Low',      pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5, shadowInTurns: false, particles: 1, stillSunShadow: false, clutter: 1 },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.25, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];

@@ -49,9 +49,15 @@ function sizeBloom(): void {
 
 /** Bloom drawn at `share` of its pixels each way, as WebGL's is (`setBloomShare` in core/renderer.ts: Low's half). */
 export function setBloomShareOnWebGPU(share: number): void {
+  // (none: its glow added at no strength, its passes at the size they had; WebGL leaves its pass out)
+  if (bloomStrength) bloomStrength.value = share > 0 ? BLOOM_STRENGTH : 0;
+  if (share <= 0) return;
   bloomShareNow = share;
   sizeBloom();
 }
+/** bloom's strength as the game has it, and its node's uniform */
+const BLOOM_STRENGTH = 0.85;
+let bloomStrength: { value: number } | null = null;
 /** the scene's samples, chosen once (`setSceneSamples`); null until they are */
 let samplesChosen: number | null = null;
 /** the scene's pass as far as its samples go */
@@ -1453,8 +1459,9 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   pipeline = new RenderPipeline(gpu);
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;
-  const glow = bloom(color, 0.85, 0, 0.9);
+  const glow = bloom(color, BLOOM_STRENGTH, 0, 0.9);
   bloomNode = glow as unknown as Scaled;
+  bloomStrength = glow.strength as unknown as { value: number };
   sizeBloom();
   looks.bloom.forEach((weight, i) => glow.bloomTintColors[i].setScalar(weight / THREE_BLOOM_LEVELS[i]));
   // (untyped in three's types: its output as a texture node)
