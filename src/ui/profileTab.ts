@@ -6,7 +6,7 @@
 import { sfx } from '../core/audio';
 import { traceConsent, sendProfile } from '../perf/consent';
 import {
-  canProfile, profile, profileLines, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
+  profile, profileLines, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
 } from '../perf/profiler';
 
 /** the scene's parts listed under the button, the page's after them (the report has them all) */
@@ -114,7 +114,9 @@ async function run(): Promise<void> {
     found = profileLines(result);
     const fps = result.frame > 0 ? Math.round(1000 / result.frame) : 0;
     const shown = result.shown ? `, ${result.shown.frame.toFixed(1)} ms as shown` : '';
-    note(`The frame here: ${result.frame.toFixed(1)} ms drawn (${fps} fps)${shown}. Its costliest parts:`);
+    const untimedNames = result.untimed?.map((part) => part.name).join(', ');
+    const untimed = untimedNames ? ` (not timed here: ${untimedNames})` : '';
+    note(`The frame here: ${result.frame.toFixed(1)} ms drawn (${fps} fps)${shown}. Its costliest parts${untimed}:`);
     showParts(result);
     if (traceConsent() === 'always') void send();
     else $('#btn-profile-send').classList.remove('hidden');
@@ -139,10 +141,6 @@ export function cancelProfile(): void {
 /** The Performance tab's profiler wired up. */
 export function initProfileTab(): void {
   const button = $<HTMLButtonElement>('#btn-profile');
-  if (!canProfile()) {
-    button.disabled = true;
-    note('The profiler times WebGL\'s frames: switch the renderer to WebGL');
-  }
   button.onclick = () => {
     sfx.click();
     void run();

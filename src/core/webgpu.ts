@@ -810,9 +810,54 @@ export function pipelinesAtOnce<T>(draw: () => T): T {
 function pipelinesBeside(renderer: WebGPURenderer): void {
   const pipelines = (renderer as unknown as { _pipelines: MakingPipelines })._pipelines;
   const make = pipelines._getRenderPipeline.bind(pipelines);
-  pipelines._getRenderPipeline = (built, vertex, fragment, key, promises) =>
-    make(built, vertex, fragment, key, promises ?? (atOnce > 0 ? null : []));
+  pipelines._getRenderPipeline = (built, vertex, fragment, key, promises) => {
+    pipelineCount.made += 1;
+    if (!promises) pipelineCount.atDraw += 1;
+    return make(built, vertex, fragment, key, promises ?? (atOnce > 0 ? null : []));
+  };
 }
+
+/** The render pipelines three has made since the renderer was: all of them, and those a draw made (not a compile:
+ *  each held its frame up, or left its object out of it). */
+const pipelineCount = { made: 0, atDraw: 0 };
+
+/** The render pipelines made so far, and those a draw made (`pipelineCount`): the profiler's count of what its parts
+ *  made, WebGPU's programs. */
+export const pipelinesMade = (): { made: number; atDraw: number } => ({ ...pipelineCount });
+
+/** what of three's pipelines `holdPipelines` holds: their releases, as three makes them */
+interface ReleasingPipelines {
+  _releasePipeline(pipeline: { usedTimes: number }): void;
+  _releaseProgram(program: { usedTimes: number }): void;
+}
+
+/**
+ * Every pipeline and shader three lets go of as nothing draws with it now kept while `held` (the profiler's turns, a
+ * part taken out and put back again and again), and those still unused let go once it's over. three makes a
+ * pipeline again for its next use once it's let go: the plain colour's, and the scene's under it, were made again at
+ * every turn.
+ */
+export function holdPipelines(renderer: THREE.WebGLRenderer, held: boolean): void {
+  const pipelines = (renderer as unknown as { _pipelines: ReleasingPipelines })._pipelines;
+  if (held && !heldReleases) {
+    heldReleases = { pipelines: new Set(), programs: new Set() };
+    const kept = heldReleases;
+    pipelines._releasePipeline = (pipeline) => kept.pipelines.add(pipeline);
+    pipelines._releaseProgram = (program) => kept.programs.add(program);
+    return;
+  }
+  if (held || !heldReleases) return;
+  const { pipelines: keptPipelines, programs } = heldReleases;
+  heldReleases = null;
+  // (the class's own again: the instance's stand-ins removed)
+  delete (pipelines as Partial<ReleasingPipelines>)._releasePipeline;
+  delete (pipelines as Partial<ReleasingPipelines>)._releaseProgram;
+  for (const pipeline of keptPipelines) if (pipeline.usedTimes === 0) pipelines._releasePipeline(pipeline);
+  for (const program of programs) if (program.usedTimes === 0) pipelines._releaseProgram(program);
+}
+
+/** the pipelines and programs three let go of while they're held (`holdPipelines`), null while they aren't */
+let heldReleases: { pipelines: Set<{ usedTimes: number }>; programs: Set<{ usedTimes: number }> } | null = null;
 
 /** A pipeline three made: when, by a compile or at a draw, for what, and its key (its two shaders' ids, then the
  *  backend's: blending, depth, side, the target's samples and formats, the vertex layout...). */
@@ -1416,6 +1461,12 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   });
   for (const lights of lightsOf.values()) for (const light of lights) light.visible = false;
   scene.add(...rig);
+  rig.forEach((rigged, i) => {
+    rigSources.set(rigged, () => {
+      const shown = groups.find((group) => group.visible);
+      return shown ? lightsOf.get(shown)![i] : undefined;
+    });
+  });
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     const shown = groups.find((group) => group.visible);
@@ -1426,6 +1477,36 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
     });
     before.apply(scene, args);
   };
+}
+
+/** each rig light's source now: the shown biome's point light it's copied from before each render (`mirror`) */
+const rigSources = new WeakMap<THREE.PointLight, () => THREE.PointLight | undefined>();
+
+/** The light whose place, colour and reach `light` draws with: a rig light's source (`rigPointLights`: a reach set
+ *  on the rig light is copied over before the next render), else itself (the profiler's lights' reach). */
+export function drawnFrom(light: THREE.PointLight): THREE.PointLight {
+  return rigSources.get(light)?.() ?? light;
+}
+
+/** Waits for the GPU to be done with every command sent so far: the device's queue, or on WebGPURenderer's WebGL 2
+ *  backend (`?renderer=webgpu-gl`) its context's `finish` (the profiler's frames, `src/perf/profiler.ts`). */
+export async function gpuDone(renderer: THREE.WebGLRenderer): Promise<void> {
+  const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
+  if (backend.device) await backend.device.queue.onSubmittedWorkDone();
+  else backend.gl?.finish();
+}
+
+/**
+ * A new frame of three's nodes begun, by each of the game's frames (`renderWebGPU`): three's own animation loop begins
+ * one at each of the browser's frames, and a pass draws its scene once a node frame. A frame drawn within the same
+ * one drew the post chain over the scene as it was: a phone's game went on with the scene's picture stuck (from play:
+ * "everything stuck, but not frozen", the view moving at once as the profiler, which began its own, started), and the
+ * profiler's canary, the frame drawn twice, drew the scene once.
+ */
+export function newNodeFrame(renderer: THREE.WebGLRenderer): void {
+  const nodes = (renderer as unknown as { _nodes: { nodeFrame: { update(): void; frameId: number } } })._nodes;
+  nodes.nodeFrame.update();
+  (renderer.info as unknown as { frame: number }).frame = nodes.nodeFrame.frameId;
 }
 
 /** the adaptation's grids of the frame's light, made again in turn (`renderWebGPU`) */
@@ -1443,6 +1524,8 @@ export function renderWebGPU(): void {
   // (one of the adaptation's three grids a frame: the eye's adapting is slow, and each was a render of its own)
   if (lightGrids.length > 0) lightGrids[(nextGrid++) % lightGrids.length].textureNeedsUpdate = true;
   const renderer = (pipeline as unknown as { renderer: WebGPURenderer }).renderer;
+  // (each frame a node frame of its own: three's passes draw their scene once a node frame, `newNodeFrame`)
+  newNodeFrame(renderer as unknown as THREE.WebGLRenderer);
   renderer.setRenderTarget(null);
   pipeline.render();
 }

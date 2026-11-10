@@ -470,6 +470,11 @@ let shadowInTurns = false;
 /** The sun's shadow drawn every other frame (`on`, a quality level's), or as the frame rate has it. */
 export function setShadowInTurns(on: boolean): void { shadowInTurns = on; }
 
+let sunShadowHeld = false;
+/** The sun's shadow kept as it is (`held`) or drawn as `sunShadowInTurns` has it: the profiler's shadow maps' part
+ *  on WebGPU, which draws a light's shadow by its own `autoUpdate` alone (`src/perf/sceneParts.ts`). */
+export function holdSunShadow(held: boolean): void { sunShadowHeld = held; }
+
 /**
  * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
  * and at 144 a second its 72 show no lag. Told by the frames' mean: by each frame's own time, a frame that missed the
@@ -486,7 +491,7 @@ function sunShadowInTurns(): void {
   const turns = shadowInTurns || (WEBGPU && fast);
   const skip = turns && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
-  G.arena.moon.shadow.autoUpdate = !skip;
+  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld;
 }
 
 /** top-down (the default), over the shoulder, or through the character's eyes */

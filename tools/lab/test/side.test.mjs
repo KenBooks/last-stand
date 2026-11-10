@@ -2,7 +2,7 @@
 // mouse's button fields as the page sends them (`buttonFields`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buttonFields, unwatched } from '../node/side.mjs';
+import { bootAddress, bootOf, bootText, buttonFields, unwatched } from '../node/side.mjs';
 
 const MAIN = 'G:\\Git\\gd-clone';
 const WORKTREE = 'G:\\Git\\gd-clone\\.claude\\worktrees\\hall-staff-glow';
@@ -39,4 +39,18 @@ test('another button pressed, and moved while held', () => {
   assert.deepEqual(buttonFields('mousePressed', 'middle', 4), { button: 'middle', buttons: 4, clickCount: 1 });
   assert.deepEqual(buttonFields('mouseMoved', 'left', 4), { button: 'none', buttons: 4 });
   assert.deepEqual(buttonFields('mouseReleased', 'right', 0), { button: 'right', buttons: 0, clickCount: 1 });
+});
+
+test('a boot on WebGL by default, its address the plain one', () => {
+  const boot = bootOf({});
+  assert.equal(boot.renderer, 'webgl');
+  assert.equal(bootAddress('http://localhost:5173/', boot), 'http://localhost:5173/');
+  assert.equal(bootText(boot), '');
+});
+
+test('--renderer opens the address the pause menu would, and says so after the hero', () => {
+  const url = 'http://localhost:5173/';
+  assert.equal(bootAddress(url, bootOf({ renderer: 'webgpu' })), `${url}?renderer=webgpu`);
+  assert.equal(bootAddress(url, bootOf({ renderer: 'meshlets' })), `${url}?renderer=webgpu&meshlets=1`);
+  assert.equal(bootText(bootOf({ renderer: 'meshlets', cold: true })), ', cold on meshlets');
 });

@@ -1,12 +1,13 @@
-// A traces service of the lab's own (server/traces), for `lab recorder`: started on a free port for the page's
-// origin alone, with a token made for it, its traces kept in tools/lab/out/traces-service. The page sends the trace it
-// packed there as the game sends one (src/perf/upload.ts: a plain cross-origin POST), and the lab reads it back with
-// the token: the whole way a report goes, without the production service.
+// A traces service of the lab's own (server/traces), for `lab recorder` and `lab profile`: started on a free port for
+// the page's origin alone, with a token made for it, its traces kept in tools/lab/out/traces-service. The page sends
+// the trace it packed there as the game sends one (src/perf/upload.ts: a plain cross-origin POST), and the lab reads
+// it back with the token: the whole way a report goes, without the production service.
 import { randomBytes } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { decodeTrace } from '../../../src/perf/traceFormat.ts';
+import { traceReport } from '../../../src/perf/traceReport.ts';
 import { OUT } from './paths.mjs';
 
 /** where the service keeps what it's sent (emptied as it starts: it holds nothing but the lab's own traces) */
@@ -53,4 +54,29 @@ export async function checkSent(result, service) {
     + `${Object.keys(trace.columns).length} columns, ${whole ? 'as sent' : `not the ${sentFrames} sent`}`;
   const text = `${result.text.replace(CODE_LINE, 'sent to the traces service: a code')}\n${line}`;
   return { ...result, text, problems: whole ? result.problems : [...result.problems, 'the trace came back changed'] };
+}
+
+/** the profile's lines in the page's report: indented under its place's name, before the line saying it was sent */
+const PROFILE_LINES = /^ {2}(the frame [^\n]*(?:\n {2}(?!sent to)[^\n]*)*)/m;
+
+/**
+ * The page's profile with the trace it sent read back as `lab trace` reports it: its Profile section must hold the
+ * profile's lines as the page had them, and its settings the renderer that drew it. A line on what came back (its code
+ * taken out, as it differs from run to run), and a problem where it didn't.
+ */
+export async function checkProfileSent(result, service) {
+  const code = CODE_LINE.exec(result.text)?.[1];
+  if (!code) return { ...result, problems: [...result.problems, 'the profile was never sent to the traces service'] };
+  const report = traceReport(await service.readBack(code));
+  const at = report.indexOf('Profile:');
+  const sent = PROFILE_LINES.exec(result.text)?.[1].split('\n').map((line) => line.trim()) ?? [];
+  const read = at < 0 ? [] : report.slice(at + 1, at + 1 + sent.length).map((line) => line.trim());
+  const whole = sent.length > 0 && read.join('\n') === sent.join('\n');
+  const settings = report.find((line) => line.startsWith('Quality ')) ?? '';
+  const renderer = /renderer ([^ |]+)/.exec(settings)?.[1] ?? '?';
+  const asSent = whole ? 'as sent' : 'not as sent';
+  const line = `  read back as lab trace reports it: Profile, ${read.length} lines ${asSent}; renderer ${renderer}`;
+  const text = `${result.text.replace(CODE_LINE, 'sent to the traces service: a code')}\n${line}`;
+  const problems = whole ? result.problems : [...result.problems, 'the profile came back changed'];
+  return { ...result, text, problems };
 }

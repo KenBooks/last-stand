@@ -123,6 +123,13 @@ const COMMON_OPTIONS = {
       + 'it) and opens on the hero selection screen, cold as --cold leaves it (programs --first: what its first '
       + 'frames compile at a draw)',
   },
+  renderer: {
+    kind: 'choice',
+    choices: ['webgl', 'webgpu', 'meshlets'],
+    usage: 'webgl|webgpu|meshlets',
+    help: 'the page booted on this renderer, as the pause menu\'s switch opens it: WebGL (the default), WebGPU '
+      + '(?renderer=webgpu), or WebGPU with its GPU-driven drawing (?renderer=webgpu&meshlets=1)',
+  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',

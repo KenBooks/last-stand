@@ -9,12 +9,16 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY } from '../data/quality';
 import { qualityBudget, qualityLevel } from '../core/quality';
-import { scenePixels, setRenderQuality } from '../core/renderer';
+import { holdSunShadow, scenePixels, setRenderQuality } from '../core/renderer';
+import { WEBGPU, drawnFrom } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
 
 /** A part of a frame's work, put in (`on`) or taken out; `change` may resize a target, settled by frames drawn. */
 export interface ScenePart {
   name: string;
   change: (on: boolean) => void;
+  /** why it can't be timed here, where it can't (the report says so in its place) */
+  untimed?: string;
 }
 
 /** Every object under the scene that `wanted` picks, shown now. */
@@ -43,10 +47,20 @@ export function shownPart(name: string, objects: THREE.Object3D[]): ScenePart {
 function shadowMapsPart(lights: THREE.Light[]): ScenePart {
   const shadowMap = G.renderer.shadowMap;
   const kept = shadowMap.autoUpdate;
+  // (WebGPU draws each light's shadow by its own `autoUpdate`, never the renderer's: each kept as it is, the sun's
+  // held, as each frame sets it)
+  const shadows = lights.map((light) => (light as THREE.DirectionalLight).shadow);
+  const keptEach = shadows.map((shadow) => shadow.autoUpdate);
   return {
     name: `drawing the shadow maps (${lights.length})`,
     change: (on) => {
       shadowMap.autoUpdate = on ? kept : false;
+      if (!WEBGPU) return;
+      holdSunShadow(!on);
+      shadows.forEach((shadow, index) => {
+        shadow.autoUpdate = on && keptEach[index];
+        if (!on) shadow.needsUpdate = false;
+      });
     },
   };
 }
@@ -59,7 +73,9 @@ const OUT_OF_REACH = 0.001;
  * (hidden, the lights' count and so the programs change), so it's what their lighting costs where they reach, apart
  * from the loop's own cost over them; the most a shorter reach can save.
  */
-function reachingPart(name: string, lights: THREE.PointLight[]): ScenePart {
+function reachingPart(name: string, shown: THREE.PointLight[]): ScenePart {
+  // (WebGPU draws a biome's lights by a rig copied from them each render: their reach is set on them)
+  const lights = shown.map(drawnFrom);
   const reaches = lights.map((light) => light.distance);
   return {
     name: `${name} (${lights.length})`,
@@ -90,18 +106,26 @@ function cutOut(object: THREE.Object3D): boolean {
   return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.alphaTest > 0);
 }
 
-/** Whether a mesh is blended over what's behind it (and not cut out), apart from the fires' flames. */
+/** Whether a mesh is blended over what's behind it (and not cut out), apart from the fires' flames and the
+ *  particles. */
 function blended(object: THREE.Object3D): boolean {
   const mesh = object as THREE.Mesh;
-  if (!mesh.isMesh || cutOut(object) || mesh.userData.fireFlames) return false;
+  if (!mesh.isMesh || cutOut(object) || mesh.userData.fireFlames || mesh.userData.particles) return false;
   return materialsOf(mesh).some((material) => material.transparent);
 }
+
+/** why the pixels aren't timed on WebGPU's GPU-driven drawing (`pixelsPart`) */
+const RESIZE_REBUILDS = 'not timed with meshlets: each resize builds every GPU-driven batch again, 0.4 to 0.7 s';
 
 /** A part that draws the scene at half its pixels or at all of them (the level's own, and its budget): what the
  *  pixels cost, and what a lower resolution would save. */
 function pixelsPart(): ScenePart {
   return {
     name: 'half the scene\'s pixels',
+    // (`?meshlets=1`: each resize sent every batch through three's node builder again, 420 to 670 ms of the main
+    // thread a time here and its frames slower after, 12 times a profile: some 6 s of a phone's held, and both sides
+    // read high)
+    untimed: RUNNING.meshlets ? RESIZE_REBUILDS : undefined,
     change: (on) => {
       const preset = QUALITY[qualityLevel()];
       if (on) setRenderQuality(preset, qualityBudget());
@@ -130,7 +154,8 @@ export function frameParts(): ScenePart[] {
         G.scene.overrideMaterial = on ? null : plain;
       },
     },
-    shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints)),
+    // (a particle pool: WebGL's points, WebGPU's quads, `fx/particles.ts`)
+    shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints || object.userData.particles)),
     shownPart('the hero', [G.player.obj]),
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
