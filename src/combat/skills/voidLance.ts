@@ -80,7 +80,7 @@ const PORTAL_Y = 1.7;
  *  ray cast circle size in 3rd and 1st person", "see relative size to hand on both pics", "those dashes on the
  *  circle effect are same size as finger, in 3 person". It was drawn at 0.45 of its size there, and at its full
  *  size 1 m past the hand was under half as large against the hand as third person's */
-const PORTAL_GAP = 0.35;
+const PORTAL_GAP = 0.6;
 /** and how much of its light it keeps there (its `uFade`, a uniform's value): at its full size its rings lie over
  *  the middle of the view, where the player aims, so through the eyes it is fainter and seen through (from play:
  *  "make it more transparent in 1st person") */
@@ -98,7 +98,7 @@ const REACH_BACK = 40;
  *  widens and comes to a point, never wider than the width it strikes (from play: "make the beam more
  *  interesting, not just straight cylinder") */
 const LANCE: [number, number][] = [
-  [0, 0.22], [0.1, 1], [0.85, 0.78], [1, 0.04],
+  [0, 0.45], [0.03, 1], [0.9, 0.85], [1, 0.04],
 ];
 const beamGeo = lanceGeometry();
 /** a strand of arcana from a fingertip to the portal's middle, 1 long up y: thin at the finger, thicker where
@@ -444,7 +444,9 @@ const skill: ChannelSkill<LanceState> = {
     const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
     // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
     // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
-    const glow = player.local && viewMode() !== 'top' ? 1 : 0.5;
+    // (0.62 up close: at the whole width its shell stood round the view as a horn, swelling out of the portal and
+    // shrinking away with the distance, and the lance read as bent: from play, "this doesn't look straight")
+    const glow = player.local && viewMode() !== 'top' ? 0.62 : 0.5;
     st.reach = st.reach < len ? Math.min(len, st.reach + REACH_OUT * dt) : Math.max(len, st.reach - REACH_BACK * dt);
     _end.copy(from).addScaledVector(_dir, st.reach);
     const drawn = Math.max(0.01, _end.distanceTo(origin));
