@@ -1613,6 +1613,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  heropick: {
+    check(options) {
+      // (a first visit's boot alone opens on the hero selection screen, its hero the mage)
+      options.first = true;
+      options.class ??= 'mage';
+    },
+    each(side, options) {
+      return side.command('heropick', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   tap: {
     each(side, options) {
       return side.command('tap', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });

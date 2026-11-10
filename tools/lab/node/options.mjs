@@ -1793,6 +1793,18 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  heropick: {
+    help: 'a first visit\'s hero picked on the hero selection screen (booted as --first, the mage in focus): a '
+      + 'finger\'s tap on him, then the screen opened again as a first visit\'s and the mouse\'s click; each must '
+      + 'land in the lobby with no run started, the browser\'s click after the press reaching nothing of the lobby',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the click after a choosing tap let through to the lobby',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   touchpad: {
     help: 'where a finger put down starts the touch controls\' move stick: a grid of points over the screen '
       + 'in a run, each touched and slid a little (buttons left alone); every point of the move area (the left '

@@ -105,6 +105,10 @@ export function initHeroSelect(h: HeroSelectHooks): void {
       press = null;
       if (p.dragging) letGo(p, e.clientX);
       else tapAt(e.clientX, e.clientY);
+      // (a hero chosen as the finger lifted: the screen is gone before the browser's click after the tap, which would
+      // land on the lobby under the finger: on a 640x360 phone its Enter the Arena, and a first visit's pick started
+      // a run once the fight was warm)
+      if (!heroSelectOpen()) eatClickAfter();
     });
     el.addEventListener('pointercancel', (e) => {
       if (press?.dragging) letGo({ ...press, v: 0 }, e.clientX);
@@ -115,6 +119,29 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   window.addEventListener('resize', layOut);
   // (the heroes warmed after the lobby shows, a hero at a time: each tab's bar, and the choice, as they get further)
   onReadying(readied);
+}
+
+/** how long after a press's lift its click may come (ms): a tap's comes in a task after the lift, and a finger's
+ *  click may never come (a later click is the player's own) */
+const CLICK_AFTER_MS = 600;
+/** the lab's: false lets the click after a choosing tap through, as it went before (`lab heropick --canary`) */
+let eatsClicks = true;
+export function heroSelectEatsClicks(on: boolean): void { eatsClicks = on; }
+
+/** The click the browser makes of the press that just closed the screen kept from whatever now lies under it. */
+function eatClickAfter(): void {
+  if (!eatsClicks) return;
+  const eat = (e: MouseEvent): void => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    done();
+  };
+  const done = (): void => {
+    window.removeEventListener('click', eat, true);
+    clearTimeout(timer);
+  };
+  window.addEventListener('click', eat, true);
+  const timer = setTimeout(done, CLICK_AFTER_MS);
 }
 
 /** How far the hero of class `id` is warmed (0 to 1). */

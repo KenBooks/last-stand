@@ -14,6 +14,7 @@ import type { UiOptions } from './ui';
 import type { WindOptions } from './wind';
 import type { TouchOptions } from './touchStick';
 import type { TouchPadOptions } from './touchPad';
+import type { HeroPickOptions } from './heroPick';
 import type { TapOptions } from './tap';
 import type { PracticeOptions } from './practice';
 import type { TrailOptions } from './trail';
@@ -301,6 +302,15 @@ export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
 export async function touchpad(lab: Lab, command: TouchPadOptions): Promise<Report> {
   const { touchPad } = await import('./touchPad');
   return touchPad(lab, command);
+}
+
+/**
+ * `lab heropick`: a first visit's hero picked on the hero selection screen by a tap and by the mouse: each must land
+ * in the lobby with no run started, the click after it reaching nothing of the lobby.
+ */
+export async function heropick(lab: Lab, command: HeroPickOptions): Promise<Report> {
+  const { heroPick } = await import('./heroPick');
+  return heroPick(lab, command);
 }
 
 /**
