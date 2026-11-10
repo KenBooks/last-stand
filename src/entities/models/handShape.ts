@@ -87,6 +87,15 @@ function onVerticesOf(of: THREE.BufferGeometry, index: Uint32Array | Uint16Array
 
 /** the grid the surface is meshed on (m, the hand's own units: at 2.6 mm a hand was 19,000 triangles) */
 const CELL = 0.0032;
+/** the grid of a coarse hand (`setHandsCoarse`): a third of the triangles, 12,500 a hand to about 4,000 */
+const COARSE_CELL = 0.0056;
+let cell = CELL;
+/**
+ * The hands sculpted from now on meshed coarse, or not (Very low's: a hand was 12,500 triangles at any level, the
+ * two a quarter of the hero's and an eighth of the crypt's lobby there, `lab draws --boot verylow`). A side's hand
+ * is sculpted once and kept, so it's set before the first is (`preloadHands`), as the hero's detail is.
+ */
+export function setHandsCoarse(coarse: boolean): void { cell = coarse ? COARSE_CELL : CELL; }
 /** how far a vertex's joints' say in it falls off with its distance from their parts (m), and how far a part may be
  *  and still have any */
 const FALLOFF = 0.0022;
@@ -479,7 +488,7 @@ function weightsAt(parts: Part[], x: number, y: number, z: number, out: { bones:
 
 /** A mesh of `field` within `box` as a geometry, its vertices skinned to the joints `parts` say. */
 function skinnedNet(field: Field, box: THREE.Box3, parts: Part[]): THREE.BufferGeometry {
-  const net = surfaceNets(field, box, CELL);
+  const net = surfaceNets(field, box, cell);
   const count = net.positions.length / 3;
   // (the bones' indices as floats, as models/shapes.ts's: Uint16 ones made ANGLE compile a vertex shader at the
   // first draw, on the GPU process's main thread)
