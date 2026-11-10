@@ -8,7 +8,7 @@ import { LISTED_LEAST, LISTED_MS, LOBBY_LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return',
+  'headed', 'touch', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'film-boot', 'cold-return',
   'warm-behind', 'change-hero', 'stale-wind',
   'help',
 ]);
@@ -63,6 +63,10 @@ const HELP = {
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
+  touch: ['', 'boot: the page a touch screen\'s, as a phone\'s (its pointer coarse, no hover: the hero selection '
+    + 'screen\'s choice always shown)'],
+  'gpu-memory': ['mb', 'the compositor\'s memory for the page\'s tiles, as a phone\'s (Android Chrome caps it at '
+    + '256): past it, tiles are dropped and drawn again, a flicker (Chrome\'s own budget by default)'],
   'cpu-slowdown': ['n', 'the page\'s CPU slowed this many times, as a phone\'s (CDP\'s throttling: 1 by default)'],
   'stall-blow': ['ms', 'boot: the page held up this long once in the logo blow\'s first frames, as a fast machine '
     + 'stalled by the GPU busy elsewhere (0 by default)'],
@@ -78,6 +82,7 @@ const HELP = {
     + 'unlike those either side of it found (a flicker)'],
   'film-logo': ['', 'boot: --film at the window\'s full size, and its frames from the reveal on cut to the lobby\'s '
     + 'logo (`out/logo-N.png`): the particles landing and the logo taking over from them'],
+  'film-boot': ['', 'boot: --film from the page\'s first frame, the whole loading screen, not its exit alone'],
   'blink-exit': ['n', 'boot: the loading screen hidden for a frame this many times as it leaves, the canary of the '
     + 'film\'s flickers (0 by default)'],
   resize: ['WxH', 'boot: the window taken to this size and back as the loading screen shows (`--trips` times, the '
@@ -179,6 +184,8 @@ export function readOptions(argv) {
     pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
     scale: Number(written.scale ?? 1),
     cpuSlowdown: Number(written['cpu-slowdown'] ?? 1),
+    touch: written.touch === true,
+    gpuMemory: written['gpu-memory'] === undefined ? null : Number(written['gpu-memory']),
     stallBlow: Number(written['stall-blow'] ?? 0),
     stallLobby: Number(written['stall-lobby'] ?? 0),
     blinkExit: Number(written['blink-exit'] ?? 0),
@@ -202,7 +209,8 @@ export function readOptions(argv) {
     coldReturn: written['cold-return'] === true,
     warmBehind: written['warm-behind'] === true,
     changeHero: written['change-hero'] === true,
-    film: written.film === true || written['film-logo'] === true,
+    film: written.film === true || written['film-logo'] === true || written['film-boot'] === true,
+    filmBoot: written['film-boot'] === true,
     filmLogo: written['film-logo'] === true,
     help: written.help === true,
   };
@@ -226,6 +234,9 @@ export function readOptions(argv) {
     throw new Error(`stalls: --press-ms must be a number of ms, over ${TAP_LEAST} (a key's tap)`);
   }
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
+  if (options.gpuMemory !== null && !(options.gpuMemory > 0)) {
+    throw new Error('stalls: --gpu-memory must be a number of MB over 0');
+  }
   if (!(options.cpuSlowdown >= 1)) throw new Error('stalls: --cpu-slowdown must be a number, 1 or more');
   if (!(options.stallBlow >= 0)) throw new Error('stalls: --stall-blow must be a number of ms, 0 or more');
   if (!(options.stallLobby >= 0)) throw new Error('stalls: --stall-lobby must be a number of ms, 0 or more');

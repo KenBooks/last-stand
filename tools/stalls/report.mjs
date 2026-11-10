@@ -399,6 +399,27 @@ function filmLines(film) {
   return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}${logo}`];
 }
 
+/** how many of the page's changes under the loading screen a boot lists, the most first */
+const UNDER_LISTED = 8;
+
+/** A kind of change under the loading screen (`analyze.mjs` `underOf`): the element, what changed, how often, over
+ *  what span from its first and in which step. */
+function underKindText({ where, what, count, times, from, to, step }) {
+  const span = times > 1 ? ` over ${bootSeconds(to - from)}` : '';
+  return `${where} ${what} ${times} times (${count} changes)${span} from ${step}`;
+}
+
+/** The page's changes under the loading screen while it covered it: how many, those REDRAWN there again and again
+ *  (a phone's loading screen flickers over them), and the most frequent. */
+function underLines(under) {
+  if (!under.count) return ['  under the loading screen: the page never changed'];
+  const redrawn = under.redrawn.length
+    ? `REDRAWN under it again and again: ${under.redrawn.map((kind) => `${kind.where} ${kind.what}`).join(', ')}`
+    : 'none redrawn again and again';
+  const listed = under.kinds.slice(0, UNDER_LISTED).map(underKindText).join('; ');
+  return [`  under the loading screen: ${under.count} changes to the page, ${redrawn}`, `    ${listed}`];
+}
+
 /** Where the lobby logo rests after the exit, against where the exit left it (`moved`, css px): a logo that moves
  *  once the particles have handed over to it is a jump the player sees. */
 function restLine(moved) {
@@ -459,6 +480,7 @@ export function bootText(measure, { links = false } = {}) {
     ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
     ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}${goneText(findings)}`] : []),
     ...(findings.film ? filmLines(findings.film) : []),
+    ...(findings.under ? underLines(findings.under) : []),
     ...(findings.windFit ? windFitLines(findings.windFit) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...lobbyStallLines(findings),
@@ -554,13 +576,16 @@ export function bootRoundsText(measures) {
     const films = boots.map((boot) => boot.findings.film).filter(Boolean);
     const flickers = films.map((film) => film.flickers.length).join(', ');
     const filmRow = films.length ? [`    the exit's flickers, boot by boot: ${flickers}`] : [];
+    const unders = boots.map((boot) => boot.findings.under).filter(Boolean);
+    const redrawn = unders.map((under) => under.redrawn.length).join(', ');
+    const underRow = unders.length ? [`    redrawn under the loading screen, boot by boot: ${redrawn}`] : [];
     const fits = boots.map((boot) => boot.findings.windFit).filter((fit) => fit && fit.made !== null);
     const offs = fits.map((fit) => (fit.worst?.px ?? 0).toFixed(fit.worst?.px > FIT_MOST_PX ? 1 : 3)).join(', ');
     const fitRow = fits.length ? [`    the exit's places off at most (px), boot by boot: ${offs}`] : [];
     const lobbies = boots.map((boot) => boot.findings.lobby).filter(Boolean);
     const lobbyRow = lobbies.length ? [lobbyRoundsLine(lobbies)] : [];
     const title = `  ${group}: ${boots.length} boots; ${head}`;
-    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...fitRow, ...lobbyRow, ...stepRows];
+    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...underRow, ...fitRow, ...lobbyRow, ...stepRows];
   });
   return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }

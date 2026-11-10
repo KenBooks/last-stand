@@ -834,6 +834,40 @@ function bootStep(name, from, to, record, traced) {
   };
 }
 
+/** the separate moments an element may change in under the loading screen before it counts as redrawn there, again
+ *  and again: one laid out ahead of the lobby (its panels, the HUD) is shown and hidden in two or three */
+export const UNDER_REDRAWN_MOST = 4;
+
+/** the boot's steps before the game's own: the page's parsing adds its elements, which nothing has drawn yet */
+const PARSED_STEPS = ['the document fetched', 'Loading…'];
+
+/**
+ * The page's changes under the loading screen while it covered it (`page.mjs` `bootRecording`'s `under`), from the
+ * game's first step on, by element and kind, the most first: the separate moments it changed in (`times`: the
+ * changes one task made come in one record), how many changes in all, the first's and last's times (ms on the page's
+ * clock) and the boot's step the first fell in. Those changed in over `UNDER_REDRAWN_MOST` moments are `redrawn`: on
+ * the owner's phone the page changed under the loading screen again and again flickered it (the performance
+ * overlay's redraws, then the hall's), where desktop Chrome, filmed, showed nothing.
+ */
+export function underOf(under, phases) {
+  const stepAt = (at) => phases.filter((phase) => phase.at <= at).pop()?.name ?? phases[0]?.name ?? '?';
+  const byKind = new Map();
+  const counted = under.filter((change) => !PARSED_STEPS.includes(stepAt(change.at)));
+  for (const change of counted) {
+    const key = `${change.where} ${change.what}`;
+    const fresh = { where: change.where, what: change.what, count: 0, times: 0, from: change.at, to: null };
+    const kind = byKind.get(key) ?? fresh;
+    kind.count++;
+    if (kind.to !== change.at) kind.times++;
+    kind.to = change.at;
+    byKind.set(key, kind);
+  }
+  const kinds = [...byKind.values()]
+    .map((kind) => ({ ...kind, step: stepAt(kind.from) }))
+    .sort((a, b) => b.times - a.times || b.count - a.count);
+  return { count: counted.length, kinds, redrawn: kinds.filter((kind) => kind.times > UNDER_REDRAWN_MOST) };
+}
+
 /**
  * The findings of a boot: `record` is the page's (`page.mjs` `stopBootRecording`), `events` the trace's and `mark`
  * the page's mark in them. Each step (a phase of the record) from its start to the next's, the last's to the
@@ -867,6 +901,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
     maps: mapsOf(record.maps ?? []),
     exit: exitOf(record.exit),
     goneAt: record.goneAt ?? null,
+    under: record.under ? underOf(record.under, record.phases) : null,
     warmAt: record.warm ?? null,
     pressedAt: record.pressed ?? null,
     pressedWhat: record.pressedWhat ?? 'Start',

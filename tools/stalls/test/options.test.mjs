@@ -21,6 +21,8 @@ test('fills in the defaults', () => {
     stash: 0,
     scale: 1,
     cpuSlowdown: 1,
+    touch: false,
+    gpuMemory: null,
     stallBlow: 0,
     stallLobby: 0,
     blinkExit: 0,
@@ -45,6 +47,7 @@ test('fills in the defaults', () => {
     warmBehind: false,
     changeHero: false,
     film: false,
+    filmBoot: false,
     filmLogo: false,
     help: false,
   });

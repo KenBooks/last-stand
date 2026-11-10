@@ -33,6 +33,7 @@ npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree 
 npm run stalls -- --url "this,this?castAsOne=0" --rounds 4 --js  # a switch of the game's, in turns, one build
 npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --auto low@518400  # a phone's exit
 npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
+npm run stalls -- --scenario boot --film-boot --touch --window 799x384 --scale 3.75 --gpu-memory 64  # a phone's tiles
 npm run stalls -- --scenario boot --resize 1920x1080       # full screen and back 5 times: the exit follows the window
 npm run stalls -- --scenario boot --resize 1920x1080 --stale-wind  # its canary: an exit placed once is caught
 npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"  # a page's own record
@@ -147,6 +148,16 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     lobby logo (`out/logo-N.png`): the particles landing and the logo taking over from them, as the player sees it
     (the variants `noLobbyLogo` and `noWind` film each half alone). How the particles' picture at rest stands against
     the logo is measured, pixel by pixel, by the lab's `wind` (`tools/lab/COMMANDS.md`).
+    `--film-boot` films the whole boot, from the page's first frame. `--gpu-memory MB` gives the compositor that much
+    memory for the page's tiles (Chrome's `--force-gpu-mem-available-mb`; a phone's Chrome has at most 256): past it,
+    tiles are dropped and drawn again, and the owner's phone blinked its whole loading screen black on a first visit.
+    With a quarter of the phone's (64), main's loading screen, its smoke two SVG filters at the screen's pixels,
+    blacked out and let the hall show through a frame at a time, and drew a third of the frames; drawn into small
+    canvases, none (`--variants noSmoke`: the smoke taken out). At 32 every build blinks: the film's canary there.
+    `--touch` boots it as a touch screen (CDP's touch emulation: the pointer coarse, no hover), as a phone's. Every
+    boot lists what the page changed under the loading screen while it covered it, from the game's first step
+    (`under the loading screen`, `analyze.mjs` `underOf`): each element by the moments it changed in, those in more
+    than four `REDRAWN` (the performance overlay's redraws there flickered the owner's phone).
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.
