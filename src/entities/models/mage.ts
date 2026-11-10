@@ -28,7 +28,7 @@ import { ItemGlows } from './itemGlow';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 import { built, type ModelSteps } from './steps';
 
-const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
+const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _fw = new THREE.Vector3(), _vr = new THREE.Quaternion();
 /** a joint's length (its local y) */
 const ALONG = new THREE.Vector3(0, 1, 0);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -1148,6 +1148,16 @@ export function* mageSteps(): ModelSteps {
           j.body.position.z += -kick * 0.05;
           // (braced: the left foot forward, low, the weight leaning into the portal)
           if (!fp) { j.body.position.z += 0.05; j.body.position.y += -0.06; j.hips.rotation.y += -0.15; j.spine.rotation.x += 0.06; feet = LANCE_FEET; }
+          // (the arm straight out from its shoulder along the way he casts, square to the portal his fingers feed,
+          // drawn back a little by the kick: swung in across the chest, to a portal that stood before his middle,
+          // it met the dial at a slant; from play: "arm not perpendicular to dial, it should be, otherwise makes no
+          // sense")
+          if (!fp) {
+            root.updateMatrixWorld(true);
+            const reach = (j.P.upperL + j.P.foreL) * (0.93 - kick * 0.12);
+            j.shoulderL.getWorldPosition(_hp).addScaledVector(root.getWorldDirection(_fw), reach);
+            reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), POLE_L);
+          }
         }
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: taken from the belt and drunk (models/flask.ts)

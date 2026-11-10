@@ -393,6 +393,14 @@ export function seenFromArms(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector
   return armsCam.localToWorld(local);
 }
 
+/** How many times larger what the arms' own camera draws is seen than the world's camera would show it at the same
+ *  depth (1 while the world's camera draws the arms): what is sized against the hand in view takes it. */
+export function armsScale(): number {
+  if (armsFov === null) return 1;
+  const cam = G.camera as THREE.PerspectiveCamera;
+  return Math.tan((cam.fov * Math.PI) / 360) / Math.tan((armsFov * Math.PI) / 360);
+}
+
 /** The arms camera where the world's is, looking as it looks, its own view. */
 function placeArmsCamera(): void {
   const cam = G.camera as THREE.PerspectiveCamera;

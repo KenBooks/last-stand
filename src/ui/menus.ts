@@ -28,6 +28,7 @@ import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
 import { readCookie, writeCookie } from '../core/cookies';
 import { gearGlow, setGearGlow } from '../core/materials';
+import { eyesPortal, setEyesPortal } from '../core/eyesEffects';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
@@ -202,6 +203,10 @@ export function initMenus(h: MenuHooks): void {
     b.onclick = () => { sfx.click(); setGearGlow(b.dataset.g === 'on'); renderGearGlowOptions(); };
   });
   renderGearGlowOptions();
+  document.querySelectorAll<HTMLElement>('#opt-eyes-portal button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setEyesPortal(b.dataset.g === 'on'); renderEyesPortalOptions(); };
+  });
+  renderEyesPortalOptions();
   document.querySelectorAll<HTMLElement>('#opt-hdr button').forEach((b) => {
     b.onclick = () => { sfx.click(); setHdrSettings({ mode: b.dataset.hdr as HdrMode }); renderHdrOptions(); };
   });
@@ -846,6 +851,12 @@ function renderVsyncOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-vsync button').forEach((b) => {
     b.classList.toggle('active', b.dataset.v === on);
   });
+}
+
+/** The Spell circle setting's buttons, the one in effect lit. */
+function renderEyesPortalOptions(): void {
+  const on = eyesPortal() ? 'on' : 'off';
+  document.querySelectorAll<HTMLElement>('#opt-eyes-portal button').forEach((b) => b.classList.toggle('active', b.dataset.g === on));
 }
 
 /** The Gear glow setting's buttons, the one in effect lit. */

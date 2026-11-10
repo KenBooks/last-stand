@@ -10,7 +10,8 @@ import type { Enemy } from '../../entities/enemy';
 import { particles, col, burst } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
-import { viewMode } from '../../core/renderer';
+import { armsScale, seenFromArms, viewMode } from '../../core/renderer';
+import { eyesPortal } from '../../core/eyesEffects';
 import { rand } from '../../util';
 import { hurtProp, PROP_DAMAGE } from '../../world/destructible';
 import type { Obstacle } from '../../types';
@@ -25,10 +26,14 @@ type Def = Needs<'damage' | 'length' | 'width'>;
 interface LanceState {
   outer: THREE.Mesh; core: THREE.Mesh; portal: THREE.Mesh;
   outerMat: THREE.ShaderMaterial; coreMat: THREE.ShaderMaterial; portalMat: THREE.ShaderMaterial;
+  /** a strand of arcana from each fingertip of the free hand to the portal's middle, and their material */
+  strands: THREE.Mesh[]; strandMat: THREE.ShaderMaterial;
   lightA: LightSlot; lightB: LightSlot;
   tick: number; t: number;
   /** the beam is out (the portal finished opening) */
   firing: boolean;
+  /** how far the lance is drawn out (m): it follows the length it's judged to at a pace */
+  reach: number;
   stopHum?: () => void;
   /** where the beam runs this frame, and what takes its pull on the fallen away */
   beam: Beam;
@@ -65,10 +70,50 @@ const COLOR = new THREE.Color(0x5dffa8);
 const TICK = 0.12;
 /** the portal's radius once open (m); it opens from a spark to this, and shrinks a little while the beam pours out */
 const PORTAL_R = 0.72;
-/** seen through the eyes, a hand's length from the camera: its share of the full size */
-const EYES_R = 0.45;
+/** where the lance is judged from in every view, this far ahead of the caster and this high (m): what it reaches,
+ *  what stops it, whom it strikes. Its look leaves the hand as each view shows it, and ends where this ends */
+const PORTAL_AHEAD = 0.85;
+const PORTAL_Y = 1.7;
+/** how far past the palm the portal stands (m): the lance leaves the hand and passes through it, as the skill's
+ *  icon draws it (from play: "project ray from the hand through the portal, not from portal"). Through the eyes it
+ *  is at its full size against the hand as it's drawn there (`armsScale`): from play, "fix the difference between
+ *  ray cast circle size in 3rd and 1st person", "see relative size to hand on both pics", "those dashes on the
+ *  circle effect are same size as finger, in 3 person". It was drawn at 0.45 of its size there, and at its full
+ *  size 1 m past the hand was under half as large against the hand as third person's */
+const PORTAL_GAP = 0.5;
+/** and how much of its light it keeps there (its `uFade`, a uniform's value): at its full size its rings lie over
+ *  the middle of the view, where the player aims, so through the eyes it is fainter and seen through (from play:
+ *  "make it more transparent in 1st person") */
+const EYES_LIGHT = 0.45;
+/** how fast the drawn lance reaches out and draws back (m/s). What it strikes is judged at once; drawn at once
+ *  too, a tree at the edge of its way stopped it one frame and not the next, its whole length there and gone: 3
+ *  flashes in a second over a sixteenth of the screen in the forest's third person, on main too (`lab cast`
+ *  names what lit each flash: the beam and its core) */
+const REACH_OUT = 45;
+const REACH_BACK = 40;
 
-const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0);
+/** the lance's outline along its length ([share of its length, share of its width]), as the skill's icon draws a
+ *  lance: thin from the palm through the portal, widening over its first third (swelling at once out of the
+ *  portal, its shell stood round the view through the eyes as a dome), narrowing down its shaft to a head that
+ *  widens and comes to a point, never wider than the width it strikes (from play: "make the beam more
+ *  interesting, not just straight cylinder") */
+const LANCE: [number, number][] = [
+  [0, 0.45], [0.03, 1], [0.9, 0.85], [1, 0.04],
+];
+const beamGeo = lanceGeometry();
+/** a strand of arcana from a fingertip to the portal's middle, 1 long up y: thin at the finger, thicker where
+ *  the five meet (from play: "it should channel from fingers maybe, or smth, to give it volume") */
+const strandGeo = new THREE.CylinderGeometry(1, 0.3, 1, 8, 1, true).translate(0, 0.5, 0);
+/** a strand's radius where the five meet (m) */
+const STRAND_R = 0.022;
+
+/** The lance's shell, 1 long up y and 1 in radius at its widest, its uv's v its share of the length. */
+function lanceGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.LatheGeometry(LANCE.map(([along, radius]) => new THREE.Vector2(radius, along)), 20);
+  const uv = geometry.attributes.uv, position = geometry.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, position.getY(i));
+  return geometry;
+}
 /** the portal's quad spans -1..1; its rim sits at RIM of that */
 const portalGeo = new THREE.PlaneGeometry(2, 2);
 const RIM = 0.85;
@@ -90,7 +135,11 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         vec3 v = normalize(-mv.xyz);
         vec3 across = v - axis * dot(v, axis);
         float l = length(across);
-        vFres = l > 1e-3 ? abs(dot(n, across / l)) : 1.0;
+        // (the normal round the lance alone: where its outline widens or narrows the normal leans along it, and
+        // the widening shell lit up face on, a funnel of green glass before the eyes)
+        vec3 round = n - axis * dot(n, axis);
+        float lr = length(round);
+        vFres = l > 1e-3 && lr > 1e-3 ? abs(dot(round / lr, across / l)) : 1.0;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
@@ -102,12 +151,29 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
       void main(){
         float along = vUv.y * uLen;
         float flow = n(vec2(vUv.x * 10.0, along * 1.4 - uTime * 14.0)) * 0.6 + n(vec2(vUv.x * 22.0, along * 3.0 - uTime * 22.0)) * 0.4;
-        float ends = smoothstep(0.0, 0.03, vUv.y) * (1.0 - smoothstep(0.9, 1.0, vUv.y));
+        // (the glow round the core comes in along the lance's first fifth: at the hand it's the core alone)
+        float ends = smoothstep(0.0, uCore > 0.5 ? 0.03 : 0.06, vUv.y) * (1.0 - smoothstep(0.97, 1.0, vUv.y));
         float body = pow(vFres, uCore > 0.5 ? 2.5 : 1.2);
+        // two ribbons of brighter light winding slowly round it (a strand passes a point about once a second:
+        // faster, a pattern crossing the view flashes)
+        float wind = fract(vUv.x * 2.0 + along * 0.4 - uTime * 0.5);
+        float ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
+        // three finer threads winding the other way, crossing the ribbons, and rings of light racing away down
+        // it (a ring passes a point 1.4 times a second, a thread about once): seen along its length, as through
+        // the eyes, what winds round it and runs down it is what shows (from play: "beam is still a little
+        // boring in 1st person")
+        float wind2 = fract(-vUv.x * 3.0 + along * 0.55 - uTime * 0.35);
+        float thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
+        float rings = pow(0.5 + 0.5 * sin(along * 1.6 - uTime * 9.0), 10.0);
         // not far over bloom's threshold: seen low along its length (the lobby) the beam covers much of the
-        // screen, and a hotter one blooms into a green haze over the ground round it
-        vec3 c = uCore > 0.5 ? mix(uColor, vec3(1.0), 0.7) * 1.6 : uColor * (0.35 + flow * 1.1);
-        float a = body * ends * (uCore > 0.5 ? 1.0 : (0.35 + flow * 0.65)) * uFade;
+        // screen, and a hotter one blooms into a green haze over the ground round it. Its core keeps its colour:
+        // 0.7 of the way to white at 1.6, it was a white bar (from play: "make it less bright, not washed color")
+        // (the core white at its very middle alone, green round it; the shell mostly its ribbons, not a fog)
+        vec3 hot = mix(uColor, vec3(1.0), 0.75 * pow(vFres, 6.0)) * 1.5;
+        vec3 c = uCore > 0.5 ? hot * (1.0 + rings * 0.35)
+          : uColor * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4);
+        float shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
+        float a = body * ends * (uCore > 0.5 ? 1.0 : shell) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
   })), ({ wgslFn, uv, varying, normalView, positionViewDirection, modelViewMatrix, vec4 }, u) => {
@@ -115,7 +181,10 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
     const fres = wgslFn(`fn lanceFres(n: vec3f, v: vec3f, axis: vec3f) -> f32 {
       let across = v - axis * dot(v, axis);
       let l = length(across);
-      if (l > 1e-3) { return abs(dot(normalize(n), across / l)); }
+      let nn = normalize(n);
+      let around = nn - axis * dot(nn, axis);
+      let lr = length(around);
+      if (l > 1e-3 && lr > 1e-3) { return abs(dot(around / lr, across / l)); }
       return 1.0;
     }`);
     const axis = modelViewMatrix.mul(vec4(0, 1, 0, 0)).xyz.normalize();
@@ -125,10 +194,18 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         let along = uv.y * len;
         let flow = noise2(vec2f(uv.x * 10.0, along * 1.4 - time * 14.0)) * 0.6
           + noise2(vec2f(uv.x * 22.0, along * 3.0 - time * 22.0)) * 0.4;
-        let ends = smoothstep(0.0, 0.03, uv.y) * (1.0 - smoothstep(0.9, 1.0, uv.y));
+        let ends = smoothstep(0.0, select(0.06, 0.03, core > 0.5), uv.y) * (1.0 - smoothstep(0.97, 1.0, uv.y));
         let body = pow(fres, select(1.2, 2.5, core > 0.5));
-        let c = select(color * (0.35 + flow * 1.1), mix(color, vec3f(1.0), 0.7) * 1.6, core > 0.5);
-        let a = body * ends * select(0.35 + flow * 0.65, 1.0, core > 0.5) * fade;
+        let wind = fract(uv.x * 2.0 + along * 0.4 - time * 0.5);
+        let ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
+        let wind2 = fract(-uv.x * 3.0 + along * 0.55 - time * 0.35);
+        let thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
+        let rings = pow(0.5 + 0.5 * sin(along * 1.6 - time * 9.0), 10.0);
+        let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.5;
+        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4),
+          hot * (1.0 + rings * 0.35), core > 0.5);
+        let shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
+        let a = body * ends * select(shell, 1.0, core > 0.5) * fade;
         return vec4f(c * a, a);
       }`, [noise2])({
         uv: uv(), fres: varying(fres({ n: normalView, v: positionViewDirection, axis })), time: u.uTime,
@@ -186,8 +263,9 @@ function portalMaterial(): THREE.ShaderMaterial {
         float sw = n(vec2(u * 6.0 + r * 5.0 - uTime * 1.5, r * 7.0 - uTime * 2.0));
         // (faint: over the shoulder the view looks through it)
         float inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * smoothstep(R, 0.3, r);
-        vec3 spark = mix(uColor, vec3(1.0, 0.98, 0.85), 0.55);
-        vec3 c = spark * rim * 2.2 + uColor * runes * 2.6 + uColor * inner * 1.4;
+        // (its rim in its colour: over half way to white at 2.2, it bloomed into a white hoop)
+        vec3 spark = mix(uColor, vec3(1.0, 0.98, 0.85), 0.25);
+        vec3 c = spark * rim * 1.4 + uColor * runes * 1.8 + uColor * inner * 1.0;
         gl_FragColor = vec4(c * uFade, 1.0);
       }`,
   })), ({ wgslFn, positionGeometry, varying }, u) => {
@@ -227,8 +305,8 @@ function portalMaterial(): THREE.ShaderMaterial {
         let runes = (ring1 * ticks1 + ring2 * ticks2 * 0.8 + lines * 0.6 + spokes * 0.5) * k2;
         let sw = noise2(vec2f(u * 6.0 + r * 5.0 - time * 1.5, r * 7.0 - time * 2.0));
         let inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * (1.0 - smoothstep(0.3, R, r));
-        let spark = mix(color, vec3f(1.0, 0.98, 0.85), 0.55);
-        let c = spark * rim * 2.2 + color * runes * 2.6 + color * inner * 1.4;
+        let spark = mix(color, vec3f(1.0, 0.98, 0.85), 0.25);
+        let c = spark * rim * 1.4 + color * runes * 1.8 + color * inner * 1.0;
         return vec4f(c * fade, 1.0);
       }`, [hash2, noise2])({
         p: varying(positionGeometry.xy), time: u.uTime, open: u.uOpen, fade: u.uFade, color: u.uColor,
@@ -237,7 +315,8 @@ function portalMaterial(): THREE.ShaderMaterial {
   });
 }
 
-const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3();
+const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _toFocus = new THREE.Vector3();
+const _tips = Array.from({ length: 5 }, () => new THREE.Vector3());
 const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
@@ -250,12 +329,24 @@ const skill: ChannelSkill<LanceState> = {
     const outerMat = beamMaterial(false), coreMat = beamMaterial(true), portalMat = portalMaterial();
     const outer = new THREE.Mesh(beamGeo, outerMat), core = new THREE.Mesh(beamGeo, coreMat), portal = new THREE.Mesh(portalGeo, portalMat);
     outer.frustumCulled = core.frustumCulled = portal.frustumCulled = false;
+    // (named for what reads the scene: the lab's `cast` says which of them lit a flash)
+    outer.name = 'Void Lance: beam';
+    core.name = 'Void Lance: core';
+    portal.name = 'Void Lance: portal';
     outer.visible = core.visible = false;
     G.scene.add(outer, core, portal);
+    const strandMat = beamMaterial(true);
+    const strands = Array.from({ length: 5 }, () => new THREE.Mesh(strandGeo, strandMat));
+    for (const strand of strands) {
+      strand.frustumCulled = false;
+      strand.name = 'Void Lance: strands';
+      strand.visible = false;
+      G.scene.add(strand);
+    }
     const opens = rawDef.opening ?? 0;
     const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam,
+      outer, core, portal, outerMat, coreMat, portalMat, strands, strandMat, tick: 0, t: 0, firing: false, reach: 0, beam,
       stopHum: opens > 0 && !player.quiet ? sfx.lanceCharge(opens) : undefined, calm: addField(carry(beam)), judged: new Set(),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
@@ -274,30 +365,69 @@ const skill: ChannelSkill<LanceState> = {
     _dir.set(player.aim.x - player.pos.x, 0, player.aim.z - player.pos.z);
     if (_dir.lengthSq() < 1e-4) _dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     _dir.normalize();
-    // the portal hangs in front of the chest, where the free hand pushes into it; seen through the
-    // eyes, a smaller one just ahead of the hand in view (full size, it would fill the view)
+    // the lance is judged from before the chest (`from`); it is drawn from the palm as the view shows it, towards
+    // where the judged one ends, through the portal a little past the hand (`origin`)
+    const from = _from.set(player.pos.x + _dir.x * PORTAL_AHEAD, PORTAL_Y, player.pos.z + _dir.z * PORTAL_AHEAD);
     const eyes = player.eyes;
-    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.45);
-    else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
-    const origin = _c;
+    // (the fingertips of the free hand, thumb first, as the view shows them, and their middle: the strands from
+    // them form a cone, and the lance runs on along that cone's own line, so hand, portal and lance are one line.
+    // Lined up on the palm's point, by the wrist, the cone leant: from play, "this line should be continue with a
+    // beam")
+    const digits = player.model.hands ? [player.model.hands.L.thumb, ...player.model.hands.L.f] : [];
+    const palm = eyes ? seenFromArms(hand, _palm) : _palm.copy(hand);
+    digits.forEach((digit, i) => {
+      const tip = digit.j[2].localToWorld(_tips[i].set(0, -digit.len[2], 0));
+      if (eyes) seenFromArms(tip, tip);
+    });
+    if (digits.length) {
+      palm.set(0, 0, 0);
+      for (let i = 0; i < digits.length; i++) palm.addScaledVector(_tips[i], 1 / digits.length);
+    }
+    const way = _way.copy(from).addScaledVector(_dir, def.length).sub(palm).normalize();
+    const origin = _c.copy(palm).addScaledVector(way, PORTAL_GAP);
 
-    // the portal stands upright across the beam
-    _u.set(-_dir.z, 0, _dir.x);
-    _n.copy(_dir).negate();
+    // the portal stands upright across the lance
+    _u.set(-way.z, 0, way.x).normalize();
+    _n.copy(way).negate();
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
-    const radius = PORTAL_R * (eyes ? EYES_R : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
+    const radius = PORTAL_R * (eyes ? armsScale() : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
     st.portal.scale.setScalar(radius / RIM);
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
+    st.portalMat.uniforms.uFade.value = eyes ? EYES_LIGHT : 1;
+    // (through the eyes the player may leave the portal out, the lance alone drawn: Settings' Spell circle)
+    const shown = !eyes || eyesPortal();
+    st.portal.visible = shown;
     st.lightA.light.position.copy(origin);
+    // a strand from each fingertip of the free hand into the portal's middle, one after another at the pace the
+    // portal is traced, the thumb's first and the little finger's as the ring closes; the lance then pours out of
+    // where they meet (from play: "channel one beam from each finger, as the dial summons (same pace)", "one beam
+    // into the center of the dial")
+    const traced = Math.min(1, open / 0.7);
+    st.strandMat.uniforms.uTime.value = G.time;
+    st.strandMat.uniforms.uFade.value = 1;
+    st.strands.forEach((strand, i) => {
+      const digit = digits[i];
+      // (how far this finger's strand has reached: each takes a fifth of the tracing)
+      const out = Math.min(1, Math.max(0, traced * digits.length - i));
+      strand.visible = Boolean(digit) && out > 0;
+      if (!digit || out <= 0) return;
+      const tip = _tips[i];
+      const long = tip.distanceTo(origin) * out;
+      const wide = STRAND_R * (eyes ? armsScale() : 1);
+      strand.position.copy(tip);
+      strand.quaternion.setFromUnitVectors(_up, _toFocus.copy(origin).sub(tip).normalize());
+      strand.scale.set(wide, Math.max(0.001, long), wide);
+      st.strandMat.uniforms.uLen.value = long;
+    });
     st.lightA.peak = 2 + 5 * open;
 
     if (!st.firing) {
       // sparks thrown off the tracing head, falling away
       const trace = Math.min(1, open / 0.7);
-      const n = trace < 1 ? 5 : 2;
+      const n = !shown ? 0 : trace < 1 ? 5 : 2;
       for (let i = 0; i < n; i++) {
         const ang = (trace < 1 ? trace : Math.random()) * Math.PI * 2 + rand(-0.08, 0.02);
         const s = Math.sin(ang), c = Math.cos(ang), r = radius;
@@ -323,8 +453,8 @@ const skill: ChannelSkill<LanceState> = {
     // beam stops at obstacles that reach up to it (not enemies: it pierces)
     let len = def.length, blocker: Obstacle | null = null;
     for (const o of G.arena.obstacles) {
-      if (o.h <= origin.y) continue;
-      const ox = o.x - origin.x, oz = o.z - origin.z;
+      if (o.h <= from.y) continue;
+      const ox = o.x - from.x, oz = o.z - from.z;
       const proj = ox * _dir.x + oz * _dir.z;
       if (proj <= 0 || proj > len) continue;
       const perp = Math.abs(ox * _dir.z - oz * _dir.x);
@@ -333,34 +463,39 @@ const skill: ChannelSkill<LanceState> = {
     // focused fire wears down what stops it
     if (blocker && st.firing) hurtProp(blocker, PROP_DAMAGE.beam * dt);
     const edge = G.arena.radius + 1;
-    for (let k = 0; k < 20 && Math.hypot(origin.x + _dir.x * len, origin.z + _dir.z * len) > edge; k++) len *= 0.95;
+    for (let k = 0; k < 20 && Math.hypot(from.x + _dir.x * len, from.z + _dir.z * len) > edge; k++) len *= 0.95;
 
     const fadeIn = Math.min(1, ft / 0.12);
     // it bursts out wide and settles
     const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
     // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
     // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
-    const glow = player.local && viewMode() !== 'top' ? 1 : 0.5;
+    // (0.62 up close: at the whole width its shell stood round the view as a horn, swelling out of the portal and
+    // shrinking away with the distance, and the lance read as bent: from play, "this doesn't look straight")
+    const glow = player.local && viewMode() !== 'top' ? 0.62 : 0.5;
+    st.reach = st.reach < len ? Math.min(len, st.reach + REACH_OUT * dt) : Math.max(len, st.reach - REACH_BACK * dt);
+    _end.copy(from).addScaledVector(_dir, st.reach);
+    const drawn = Math.max(0.01, _end.distanceTo(origin));
     for (const [m, mat, scale] of [[st.outer, st.outerMat, w * glow], [st.core, st.coreMat, w * 0.36 * glow]] as const) {
       m.position.copy(origin);
-      m.quaternion.setFromUnitVectors(_up, _dir);
-      m.scale.set(scale, len, scale);
+      m.quaternion.setFromUnitVectors(_up, way);
+      m.scale.set(scale, drawn, scale);
       mat.uniforms.uTime.value = G.time;
-      mat.uniforms.uLen.value = len;
+      mat.uniforms.uLen.value = drawn;
       mat.uniforms.uFade.value = fadeIn;
     }
-    _end.copy(origin).addScaledVector(_dir, len);
-    Object.assign(st.beam, { on: true, x: origin.x, y: origin.y, z: origin.z, dx: _dir.x, dz: _dir.z, len, w });
+    Object.assign(st.beam, { on: true, x: from.x, y: from.y, z: from.z, dx: _dir.x, dz: _dir.z, len, w });
     st.lightB.light.position.copy(_end);
 
     // sparks streaming along the beam: few and small, since a dense stream of soft particles smears
     // into a haze round it
     for (let i = 0; i < 2; i++) {
-      const d = Math.random() * len;
+      const d = Math.random() * drawn;
       const a = Math.random() * Math.PI * 2;
       particles.glow.spawn({
-        // offset on the ring around the beam axis (perpendicular = (-dir.z, dir.x))
-        x: origin.x + _dir.x * d - _dir.z * Math.cos(a) * w * 0.5, y: origin.y + Math.sin(a) * w * 0.5, z: origin.z + _dir.z * d + _dir.x * Math.cos(a) * w * 0.5,
+        // offset on the ring around the beam's axis (across it, `_u`, and up)
+        x: origin.x + way.x * d + _u.x * Math.cos(a) * w * 0.5, y: origin.y + way.y * d + Math.sin(a) * w * 0.5,
+        z: origin.z + way.z * d + _u.z * Math.cos(a) * w * 0.5,
         vx: _dir.x * 6 + rand(-1, 1), vy: rand(-0.5, 1), vz: _dir.z * 6 + rand(-1, 1),
         life: 0.3, size: rand(0.04, 0.09), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
       });
@@ -373,18 +508,18 @@ const skill: ChannelSkill<LanceState> = {
       st.tick -= TICK;
       for (const e of G.enemies) {
         if (!e.alive) continue;
-        const ex = e.pos.x - origin.x, ez = e.pos.z - origin.z;
+        const ex = e.pos.x - from.x, ez = e.pos.z - from.z;
         const proj = ex * _dir.x + ez * _dir.z;
         if (proj < 0 || proj > len + e.radius) continue;
         if (Math.abs(ex * _dir.z - ez * _dir.x) < w * 0.5 + e.radius) {
           // (over a ducked foe; and one that sees it coming may blink out of its way)
-          if (origin.y > (e.duckedTop ?? Infinity)) continue;
-          const threat = { kind: 'beam', x: origin.x, z: origin.z, way: _dir, half: w * 0.5 } as const;
+          if (from.y > (e.duckedTop ?? Infinity)) continue;
+          const threat = { kind: 'beam', x: from.x, z: from.z, way: _dir, half: w * 0.5 } as const;
           if (!st.judged.has(e) && st.judged.add(e) && evades(e, player, threat)) continue;
           // (the beam through it where it passes: off its middle, the body turns off the beam)
-          const on = { x: origin.x + _dir.x * proj, z: origin.z + _dir.z * proj };
+          const on = { x: from.x + _dir.x * proj, z: from.z + _dir.z * proj };
           const blow = { dir: { x: _dir.x, z: _dir.z }, lift: 0.15, on };
-          hitEnemy(e, def.damage * TICK, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 0.6, from: origin, blow });
+          hitEnemy(e, def.damage * TICK, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 0.6, from, blow });
           burst(new THREE.Vector3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
         }
       }
@@ -393,8 +528,8 @@ const skill: ChannelSkill<LanceState> = {
 
   stop(_player, _def, st) {
     st.calm();
-    G.scene.remove(st.outer, st.core, st.portal);
-    st.outerMat.dispose(); st.coreMat.dispose(); st.portalMat.dispose();
+    G.scene.remove(st.outer, st.core, st.portal, ...st.strands);
+    st.outerMat.dispose(); st.coreMat.dispose(); st.portalMat.dispose(); st.strandMat.dispose();
     release(st.lightA); release(st.lightB);
     st.stopHum?.();
   },
