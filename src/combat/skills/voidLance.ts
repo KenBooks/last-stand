@@ -10,7 +10,7 @@ import type { Enemy } from '../../entities/enemy';
 import { particles, col, burst } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
-import { viewMode } from '../../core/renderer';
+import { armsScale, seenFromArms, viewMode } from '../../core/renderer';
 import { rand } from '../../util';
 import { hurtProp, PROP_DAMAGE } from '../../world/destructible';
 import type { Obstacle } from '../../types';
@@ -65,15 +65,21 @@ const COLOR = new THREE.Color(0x5dffa8);
 const TICK = 0.12;
 /** the portal's radius once open (m); it opens from a spark to this, and shrinks a little while the beam pours out */
 const PORTAL_R = 0.72;
-/** where the portal hangs: this far ahead of the caster and this high (m). The lance is judged from here in every
- *  view: what it reaches, what stops it, whom it strikes */
+/** where the lance is judged from in every view, this far ahead of the caster and this high (m): what it reaches,
+ *  what stops it, whom it strikes. Its look leaves the hand as each view shows it, and ends where this ends */
 const PORTAL_AHEAD = 0.85;
 const PORTAL_Y = 1.7;
-/** seen through the eyes, how far past the hand the portal is drawn (m): the same size as every other view's (from
- *  play: "fix the difference between ray cast circle size in 3rd and 1st person"; it was drawn at 0.45 of its size
- *  0.45 m past the hand), so far enough off to be seen whole, and along the hand's line, not the eyes': on theirs,
- *  the view would look down the lance's length */
-const EYES_PAST = 1;
+/** how far past the palm the portal stands (m): the lance leaves the hand and passes through it, as the skill's
+ *  icon draws it (from play: "project ray from the hand through the portal, not from portal"). Through the eyes it
+ *  is at its full size against the hand as it's drawn there (`armsScale`): from play, "fix the difference between
+ *  ray cast circle size in 3rd and 1st person", "see relative size to hand on both pics", "those dashes on the
+ *  circle effect are same size as finger, in 3 person". It was drawn at 0.45 of its size there, and at its full
+ *  size 1 m past the hand was under half as large against the hand as third person's */
+const PORTAL_GAP = 0.35;
+/** and how much of its light it keeps there (its `uFade`, a uniform's value): at its full size its rings lie over
+ *  the middle of the view, where the player aims, so through the eyes it is fainter and seen through (from play:
+ *  "make it more transparent in 1st person") */
+const EYES_LIGHT = 0.4;
 
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0);
 /** the portal's quad spans -1..1; its rim sits at RIM of that */
@@ -244,7 +250,7 @@ function portalMaterial(): THREE.ShaderMaterial {
   });
 }
 
-const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3();
+const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3();
 const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
@@ -281,23 +287,25 @@ const skill: ChannelSkill<LanceState> = {
     _dir.set(player.aim.x - player.pos.x, 0, player.aim.z - player.pos.z);
     if (_dir.lengthSq() < 1e-4) _dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     _dir.normalize();
-    // the portal hangs in front of the chest, where the free hand pushes into it, and the lance is judged from
-    // there (`from`); seen through the eyes it is drawn further off, past the hand in view (`origin`)
+    // the lance is judged from before the chest (`from`); it is drawn from the palm as the view shows it, towards
+    // where the judged one ends, through the portal a little past the hand (`origin`)
     const from = _from.set(player.pos.x + _dir.x * PORTAL_AHEAD, PORTAL_Y, player.pos.z + _dir.z * PORTAL_AHEAD);
-    const origin = player.eyes ? _c.copy(hand).addScaledVector(_dir, EYES_PAST) : _c.copy(from);
-    // (how far along the lance its drawn start is from where it is judged)
-    const drawnFrom = (origin.x - from.x) * _dir.x + (origin.z - from.z) * _dir.z;
+    const eyes = player.eyes;
+    const palm = eyes ? seenFromArms(hand, _palm) : _palm.copy(hand);
+    const way = _way.copy(from).addScaledVector(_dir, def.length).sub(palm).normalize();
+    const origin = _c.copy(palm).addScaledVector(way, PORTAL_GAP);
 
-    // the portal stands upright across the beam
-    _u.set(-_dir.z, 0, _dir.x);
-    _n.copy(_dir).negate();
+    // the portal stands upright across the lance
+    _u.set(-way.z, 0, way.x).normalize();
+    _n.copy(way).negate();
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
-    const radius = PORTAL_R * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
+    const radius = PORTAL_R * (eyes ? armsScale() : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
     st.portal.scale.setScalar(radius / RIM);
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
+    st.portalMat.uniforms.uFade.value = eyes ? EYES_LIGHT : 1;
     st.lightA.light.position.copy(origin);
     st.lightA.peak = 2 + 5 * open;
 
@@ -348,16 +356,16 @@ const skill: ChannelSkill<LanceState> = {
     // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
     // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
     const glow = player.local && viewMode() !== 'top' ? 1 : 0.5;
-    const drawn = Math.max(0.01, len - drawnFrom);
+    _end.copy(from).addScaledVector(_dir, len);
+    const drawn = Math.max(0.01, _end.distanceTo(palm));
     for (const [m, mat, scale] of [[st.outer, st.outerMat, w * glow], [st.core, st.coreMat, w * 0.36 * glow]] as const) {
-      m.position.copy(origin);
-      m.quaternion.setFromUnitVectors(_up, _dir);
+      m.position.copy(palm);
+      m.quaternion.setFromUnitVectors(_up, way);
       m.scale.set(scale, drawn, scale);
       mat.uniforms.uTime.value = G.time;
       mat.uniforms.uLen.value = drawn;
       mat.uniforms.uFade.value = fadeIn;
     }
-    _end.copy(origin).addScaledVector(_dir, drawn);
     Object.assign(st.beam, { on: true, x: from.x, y: from.y, z: from.z, dx: _dir.x, dz: _dir.z, len, w });
     st.lightB.light.position.copy(_end);
 
@@ -367,8 +375,9 @@ const skill: ChannelSkill<LanceState> = {
       const d = Math.random() * drawn;
       const a = Math.random() * Math.PI * 2;
       particles.glow.spawn({
-        // offset on the ring around the beam axis (perpendicular = (-dir.z, dir.x))
-        x: origin.x + _dir.x * d - _dir.z * Math.cos(a) * w * 0.5, y: origin.y + Math.sin(a) * w * 0.5, z: origin.z + _dir.z * d + _dir.x * Math.cos(a) * w * 0.5,
+        // offset on the ring around the beam's axis (across it, `_u`, and up)
+        x: palm.x + way.x * d + _u.x * Math.cos(a) * w * 0.5, y: palm.y + way.y * d + Math.sin(a) * w * 0.5,
+        z: palm.z + way.z * d + _u.z * Math.cos(a) * w * 0.5,
         vx: _dir.x * 6 + rand(-1, 1), vy: rand(-0.5, 1), vz: _dir.z * 6 + rand(-1, 1),
         life: 0.3, size: rand(0.04, 0.09), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
       });
