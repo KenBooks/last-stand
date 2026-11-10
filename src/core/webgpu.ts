@@ -29,8 +29,29 @@ export function compileSlice(ms: number): void {
 
 let pipeline: RenderPipeline | null = null;
 let sceneTarget: THREE.RenderTarget | null = null;
+/** a pass three sizes as a share of the frame's pixels each way */
+type Scaled = { setResolutionScale(share: number): unknown };
 /** the passes the scene's share of the screen's pixels sizes (`setSceneShare`) */
-const sizedByShare: { setResolutionScale(share: number): unknown }[] = [];
+const sizedByShare: Scaled[] = [];
+/** bloom's node, sized by the scene's share, its first level's half and the quality's share (`sizeBloom`) */
+let bloomNode: Scaled | null = null;
+/** the scene's share of the screen's pixels and the quality's of bloom's, as last set */
+let sceneShareNow = 1;
+let bloomShareNow = 1;
+/** bloom's bright pass and first level at half the scene's pixels each way, as WebGL's `UnrealBloomPass` draws them:
+ *  at the scene's own, a phone's Very low drew them at 3120x1440, each level half as wide on the screen as WebGL's */
+const BLOOM_FIRST_LEVEL = 0.5;
+
+/** Bloom sized by the scene's share and the quality's (`setBloomShareOnWebGPU`), its first level at half of them. */
+function sizeBloom(): void {
+  bloomNode?.setResolutionScale(sceneShareNow * BLOOM_FIRST_LEVEL * bloomShareNow);
+}
+
+/** Bloom drawn at `share` of its pixels each way, as WebGL's is (`setBloomShare` in core/renderer.ts: Low's half). */
+export function setBloomShareOnWebGPU(share: number): void {
+  bloomShareNow = share;
+  sizeBloom();
+}
 /** the scene's samples, chosen once (`setSceneSamples`); null until they are */
 let samplesChosen: number | null = null;
 /** the scene's pass as far as its samples go */
@@ -88,7 +109,9 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
 /** The scene and bloom drawn at `share` of the screen's pixels each way (the quality's and Auto's, `sceneShare` in
  *  core/renderer.ts), the last pass scaling it up to the canvas. */
 export function setSceneShare(share: number): void {
+  sceneShareNow = share;
   for (const pass of sizedByShare) pass.setResolutionScale(share);
+  sizeBloom();
 }
 
 /**
@@ -117,17 +140,68 @@ export function uploadTexture(texture: THREE.Texture): void {
 export let gpu: typeof import('three/webgpu');
 export let tsl: typeof import('three/tsl');
 
+/** What of three's point lights' data node `loopPassesUnreached` takes (its own fields, untyped in three's types). */
+interface PointLightData {
+  countNode: unknown;
+  positionsAndCutoffNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colorsNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+  decaysNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+/**
+ * The point lights' loop (three's `PointLightDataNode`, which `DynamicLighting` builds) with a light put out, or a
+ * point past its reach, passed over before its lighting, as WebGL's loop passes it (`POINT_LIGHTS_LOOPED` in
+ * core/renderer.ts): three lit every point by every light, the physical model's whole direct term each time, its
+ * attenuation 0 past the reach. A phone's lit shading was 61.5 of its 78.7 ms frame (trace V08X-13SR), and here the
+ * forest's 20 point lights took 13.8 of the scene's 18.2 ms at a phone's pixels (`lab passes --features`). The
+ * same lighting, light for light: what's passed over added nothing.
+ */
+async function loopPassesUnreached(): Promise<void> {
+  const { default: PointLightDataNode } = await import('three/addons/tsl/lighting/data/PointLightDataNode.js');
+  const { Loop, If, getDistanceAttenuation, positionView, vec3 } = tsl;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setup = function (this: PointLightData, builder: any): void {
+    const surfacePosition = builder.context.positionView || positionView;
+    const { lightingModel, reflectedLight } = builder.context;
+    const dynDiffuse = vec3(0).toVar('dynPointDiffuse');
+    const dynSpecular = vec3(0).toVar('dynPointSpecular');
+    Loop(this.countNode as never, ({ i }: { i: unknown }) => {
+      const positionAndCutoff = this.positionsAndCutoffNode.element(i);
+      const cutoffDistance = positionAndCutoff.w;
+      const color = this.colorsNode.element(i);
+      const lightVector = positionAndCutoff.xyz.sub(surfacePosition).toVar();
+      const reached = lightVector.dot(lightVector).lessThan(cutoffDistance.mul(cutoffDistance));
+      const inReach = cutoffDistance.equal(0).or(reached);
+      If(inReach.and(color.dot(color).greaterThan(0)), () => {
+        const lightDistance = lightVector.length();
+        const attenuation = getDistanceAttenuation({
+          lightDistance, cutoffDistance, decayExponent: this.decaysNode.element(i).x,
+        } as never);
+        lightingModel.direct({
+          lightDirection: lightVector.normalize(),
+          lightColor: color.mul(attenuation),
+          lightNode: { light: {}, shadowNode: null },
+          reflectedLight: { directDiffuse: dynDiffuse, directSpecular: dynSpecular },
+        }, builder);
+      });
+    });
+    reflectedLight.directDiffuse.addAssign(dynDiffuse);
+    reflectedLight.directSpecular.addAssign(dynSpecular);
+  };
+  (PointLightDataNode.prototype as unknown as { setup: typeof setup }).setup = setup;
+}
+
 /**
  * A WebGPURenderer, initialised, typed as the WebGLRenderer the rest of the game takes. What it lacks of one is
  * stood in for: `compile` (nothing listed as made), its programs (none
  * are WebGL's) and the anisotropy asked at boot. (Its own `debug` stays: its node builder reads hooks off it.)
  */
-export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
+export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.WebGLRenderer> {
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
   // (the canvas in extended range for HDR, as the WebGL renderer's presenter is: core/hdr.ts)
-  const outputType = initHdrForWebGPU() ? THREE.HalfFloatType : undefined;
+  const outputType = initHdrForWebGPU(hdrAllowed) ? THREE.HalfFloatType : undefined;
   const renderer = new WebGPURenderer({
     antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true, outputType,
   });
@@ -150,6 +224,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // WGSL each, 3.5 MB of the 4.6 the game made, and Chrome's DXC compiled them again on every visit (its cache
   // never served them). `?lights=each` for three's own, to compare.
   if (!RUNNING.lightsEach) {
+    await loopPassesUnreached();
     const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
@@ -1379,7 +1454,8 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;
   const glow = bloom(color, 0.85, 0, 0.9);
-  sizedByShare.push(glow as unknown as (typeof sizedByShare)[number]);
+  bloomNode = glow as unknown as Scaled;
+  sizeBloom();
   looks.bloom.forEach((weight, i) => glow.bloomTintColors[i].setScalar(weight / THREE_BLOOM_LEVELS[i]));
   // (untyped in three's types: its output as a texture node)
   const glowTexture = (glow as unknown as { getTextureNode(): any }).getTextureNode(); // eslint-disable-line @typescript-eslint/no-explicit-any

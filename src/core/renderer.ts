@@ -7,7 +7,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setSceneSamples, setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget } from './webgpu';
+import {
+  WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU, setSceneSamples,
+  setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
+} from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -86,6 +89,7 @@ const bloomGiven = new THREE.Vector2(1, 1);
 export function setBloomShare(share: number): void {
   bloomShare = share;
   bloomPass?.setSize(bloomGiven.x, bloomGiven.y);
+  if (WEBGPU) setBloomShareOnWebGPU(share);
 }
 /** The pixels bloom's passes draw into its own targets a frame (the lab's): its bright pass, each level's blur
  *  across and down, its composite. (Its blend over the frame is the scene's size at any share.) */
@@ -638,11 +642,13 @@ function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
   else if (backend.gl) setFrameFence(glFence(backend.gl));
 }
 
-export async function initRenderer(container: HTMLElement) {
+/** The renderer made in `container`; `hdrAllowed`, whether the quality level the boot starts at lets HDR show
+ *  (WebGPU makes its canvas in HDR or not once, `initHdrForWebGPU`). */
+export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) {
   loopPointLights();
   shadeEnvironment();
   if (WEBGPU) drawOverScene(drawArmsOverPass);
-  const renderer = gl = WEBGPU ? await makeWebGPURenderer()
+  const renderer = gl = WEBGPU ? await makeWebGPURenderer(hdrAllowed)
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   if (WEBGPU) {
     takePorts(renderer as unknown as WebGPURenderer);

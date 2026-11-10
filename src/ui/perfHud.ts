@@ -239,11 +239,19 @@ interface WebGpuTimes {
 let timesGpu = false;
 /** whether a read of them is under way: one at a time, each its latest frame's */
 let readingGpuTime = false;
+/** whether a harness reads them itself (`holdWebGpuTimes`) */
+let webGpuTimesHeld = false;
+
+/** WebGPU's timestamps left to a harness that reads them itself (tools/lab `passes`): three keeps one pool, and a
+ *  read takes every query in it, so the overlay's read each frame took the harness's renders before it could. */
+export function holdWebGpuTimes(held: boolean): void {
+  webGpuTimesHeld = held;
+}
 
 /** The latest frame's GPU time on WebGPU (all its passes, and the GPU-driven drawing's culling), asked for if none is
  *  on its way. Not split into parts: three sums a frame's passes. */
 function takeWebGpuTime(): void {
-  if (!timesGpu || readingGpuTime) return;
+  if (!timesGpu || readingGpuTime || webGpuTimesHeld) return;
   readingGpuTime = true;
   const at = ringAt;
   const gpuTimer = renderer as unknown as WebGpuTimes;

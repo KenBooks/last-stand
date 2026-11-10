@@ -22,6 +22,7 @@ import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
 import type { SceneCostOptions } from './sceneCost';
 import type { ProfileCommand } from './profile';
+import type { PassesCommand } from './gpuPasses';
 import type { HazeOptions } from './haze';
 import type { GlowOptions } from './itemGlow';
 import type { SpawnsOptions } from './spawns';
@@ -349,6 +350,12 @@ export async function light(lab: Lab, command: LightOptions): Promise<Report> {
 export async function fire(lab: Lab, command: FireOptions): Promise<Report> {
   const { fire: fireRound } = await import('./fire');
   return fireRound(lab, command);
+}
+
+/** `lab passes`, one place: what each of the frame's renders takes of the GPU, by WebGPU's timestamps. */
+export async function passesHere(lab: Lab, command: PassesCommand): Promise<Report> {
+  const { gpuPasses } = await import('./gpuPasses');
+  return gpuPasses(lab, command);
 }
 
 /** `lab profile`, one place: the game's own profiler, each part of the frame timed in turns by the browser's clock. */

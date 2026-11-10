@@ -117,8 +117,11 @@ async function cancelProblems(lab: Lab): Promise<string[]> {
   if (after !== before) problems.push(`cancel: the scene was left changed (${before} before, ${after} after)`);
   const start = lab.player.pos.clone();
   const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['w'] })));
+  const share = `${Math.round(redrawn * 100)}% of the screen's middle changed`;
   if (lab.player.pos.distanceTo(start) < 0.5) problems.push('cancel: the game\'s frames were left held');
-  if (!redrawn) problems.push('the scene\'s picture stuck as the hero walked, three\'s own loop held (WebGPU)');
+  if (redrawn < WALK_CHANGES) {
+    problems.push(`the scene's picture stuck as the hero walked, three's own loop held (WebGPU): ${share}`);
+  }
   return problems;
 }
 
@@ -170,14 +173,15 @@ const NEVER = { requestAnimationFrame: () => 0, cancelAnimationFrame: () => unde
 /**
  * Whether the game's own frames draw the scene afresh on WebGPU with three's own animation loop held, which begins a
  * node frame at each of the browser's frames (a pass draws its scene once a node frame): `walk` run with it held, the
- * share of the screen's middle that changed. A phone's game went on with the scene's picture stuck (from play:
- * "everything stuck, but not frozen", the view moving once the profiler started), as main's does here (9% changed);
- * now each game frame begins a node frame of its own (`renderWebGPU`). True on WebGL, which has no node frames.
+ * share of the screen's middle that changed (1 on WebGL, which has no node frames). A phone's game went on with the
+ * scene's picture stuck (from play: "everything stuck, but not frozen", the view moving once the profiler started),
+ * as main's does here (9% changed); now each game frame begins a node frame of its own (`renderWebGPU`). After a
+ * level's change the sun's shadow map resized left it stuck too, 0% changed (`apply` in core/quality.ts).
  */
-async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, canary = false): Promise<boolean> {
+async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, canary = false): Promise<number> {
   if (!WEBGPU) {
     await walk();
-    return true;
+    return 1;
   }
   const renderer = G.renderer as unknown as { _animation: ThreesLoop; _nodes: { nodeFrame: NodeFrame } };
   const loop = renderer._animation;
@@ -191,7 +195,7 @@ async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, 
     await lab.step(2);
     const before = await middleShown();
     await walk();
-    return changedShare(before, await middleShown()) >= WALK_CHANGES;
+    return changedShare(before, await middleShown());
   } finally {
     delete (nodeFrame as Partial<NodeFrame>).update;
     loop.stop();
@@ -209,7 +213,9 @@ interface NodeFrame {
 async function redrawCanaryProblems(lab: Lab): Promise<string[]> {
   if (!WEBGPU) return [];
   const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['s'] })), true);
-  return redrawn ? ['canary: the scene\'s picture held with no node frame begun went unseen'] : [];
+  const share = Math.round(redrawn * 100);
+  if (redrawn < WALK_CHANGES) return [];
+  return [`canary: the scene's picture held with no node frame begun went unseen (${share}%)`];
 }
 
 /** `lines` sent to the traces service at `base` as the Performance tab's Send sends a profile (`sendProfile` in

@@ -50,7 +50,7 @@ import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, layOutReadyingAhead, READYING, settleReadying } from './ui/readying';
-import { holdQuality, initQuality, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
 import { runFrames } from './core/frameLoop';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
@@ -93,7 +93,7 @@ async function boot() {
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
-  const { scene, renderer } = await initRenderer($('#game'));
+  const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
   if (!WEBGPU) {
     steadyShadowPrograms(renderer);

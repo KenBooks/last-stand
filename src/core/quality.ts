@@ -18,6 +18,7 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setHdrAllowed } from './hdr';
+import { WEBGPU } from './webgpu';
 import { setSkullDetail } from '../world/skull';
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
@@ -65,6 +66,15 @@ function readAuto(): QualityLevel {
 function writeAuto(): void {
   writeCookie(AUTO_COOKIE, level);
 }
+
+/** The level a boot starts at, read from the cookies alone: the player's setting, else the level Auto settled on. */
+function bootLevel(): QualityLevel {
+  const saved = readCookie(COOKIE);
+  return isLevel(saved) ? saved : readAuto();
+}
+
+/** Whether the level the boot starts at lets HDR show, for a renderer made before `initQuality` (WebGPU's). */
+export const hdrAllowedAtBoot = (): boolean => QUALITY[bootLevel()].hdr;
 
 export function initQuality(): void {
   const saved = readCookie(COOKIE);
@@ -144,13 +154,18 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRenderQuality(p, most);
   setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
-  if (shadow.mapSize.x !== p.shadowMap) {
+  // (WebGL's map is made again at the new size on the next render. WebGPU's is sized once, as it's first made: three
+  // resizes it from `mapSize` as it draws it, but the lit materials kept the old map's binding, and every frame's
+  // submit was refused for drawing with it destroyed, 543 times a lab profile, the scene's picture standing still as
+  // the game went on: a phone's hero stuck mid pose once Auto stepped down a level, trace 4CP9-45EC)
+  const resizable = !WEBGPU || shadow.map === null;
+  if (shadow.mapSize.x !== p.shadowMap && resizable) {
     shadow.mapSize.set(p.shadowMap, p.shadowMap);
     shadow.map?.dispose();
-    shadow.map = null;   // recreated at the new size on the next render
+    shadow.map = null;
   }
   // (a uniform: as wide on the floor at every map's size)
-  shadow.radius = PENUMBRA * p.shadowMap / (shadow.camera.right - shadow.camera.left);
+  shadow.radius = PENUMBRA * shadow.mapSize.x / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
   setHdrAllowed(p.hdr);
