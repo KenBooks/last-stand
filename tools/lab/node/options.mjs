@@ -470,6 +470,20 @@ export const COMMANDS = {
         help: 'the ways the hero faces in the close views, degrees (0 is +z; the top view is measured at the first)',
       },
       pictures: { kind: 'switch', help: 'picture each frame too (=false: the numbers alone)' },
+      at: { kind: 'pair', usage: 'x,z', help: 'where the hero stands (-6.5,3.5: by a standing stone\'s rune)' },
+      zoom: { kind: 'number', usage: 'n', help: 'the top-down view\'s zoom (0.4: zoomed in; the game\'s own if none)' },
+      levels: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['high', 'medium', 'low', 'verylow'],
+        help: 'each frame drawn again at these quality levels, set as the pause menu sets them, and held to the '
+          + 'first\'s light: one brighter is a problem (high,medium,low,verylow)',
+      },
+      resolutions: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'and at these Resolutions, shares of the screen each way, at every level (1,0.5,0.25)',
+      },
       hdr: {
         kind: 'switch',
         help: 'each frame drawn again in HDR (on any display) and checked against the SDR one: under the knee as an '

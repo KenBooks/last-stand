@@ -9,11 +9,16 @@
 // knee every pixel as the SDR screen shows it at the paper white, nothing past the peak, and the canvas shown (the
 // WebGPU one, read back) the frame drawn. A frame needs pixels to judge, so this draws, where the lab's other
 // measures never do.
+//
+// At every quality level and Resolution (`--levels`, `--resolutions`), the same moment is drawn again at each, set as
+// the pause menu sets them, and held to the first's light: a level is there to cost less, never to look brighter.
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import { CAMERA } from '../../../src/data/balance';
 import { hdrOutput } from './hdrOutput';
+import { useQuality } from '../../../src/core/quality';
+import type { QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 
@@ -30,6 +35,8 @@ export interface LightScenario {
   at?: [number, number];
   /** the hero built afresh for it (a quality's detail is the hero's from his build) */
   fresh?: boolean;
+  /** the top-down view's zoom (the game's: under 1 is nearer); the game's own where none */
+  zoom?: number;
   /** tunable values set for it, by their paths (`Fixture.tune`) */
   tune?: Record<string, number[]>;
 }
@@ -40,8 +47,16 @@ export interface HdrLevels {
   peak: number;
 }
 
+/** A quality level and a Resolution (the share of the screen's pixels each way) a frame is drawn at. */
+export interface LevelSetting {
+  level: QualityLevel;
+  resolution: number;
+}
+
 export interface LightOptions {
   scenario: LightScenario;
+  /** the settings the frame is drawn at again, each held to the first's light (none: the boot's alone) */
+  settings?: LevelSetting[];
   /** the frame pictured too */
   pictures: boolean;
   /** plant faults the measures must catch: the frame at twice the exposure, and in HDR at another paper white */
@@ -59,6 +74,11 @@ const SETTLE_FRAMES = 30;
 /** with --canary: the exposure's planted factor, and how much brighter its frame's mean must come out */
 const CANARY_EXPOSURE = 2;
 const CANARY_BRIGHTER = 1.25;
+/** a setting's frame may be this many times the first's mean, and its brightest hundredth, plus a little (dark frames) */
+const LEVEL_BRIGHTER = 1.12;
+const LEVEL_SLACK = 0.004;
+/** and this much more of the frame near white */
+const LEVEL_NEAR_WHITE = 0.002;
 /** with --canary and --hdr: the paper white's planted factor, which the check under the knee must catch */
 const CANARY_PAPER = 1.2;
 /** how far an HDR pixel under the knee may be off the SDR one at the paper white: a share of it, and outright (an
@@ -327,7 +347,62 @@ export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> 
   const { view, gear, weapon, at, fresh, tune } = scenario;
   await lab.setup({ view, facing, gear, weapon, at, fresh, tune });
   if (scenario.view !== 'top') await lookAlong(lab, facing);
+  if (scenario.zoom !== undefined) renderer.setZoom(scenario.zoom);
   await lab.step(SETTLE_FRAMES);
+}
+
+/** A setting as a line names it. */
+const settingName = (setting: LevelSetting): string => `${setting.level} at ${Math.round(setting.resolution * 100)}%`;
+
+/** `setting` put to use as the pause menu puts it, the frame settled under it. */
+async function settle(lab: Lab, setting: LevelSetting): Promise<void> {
+  useQuality(setting.level);
+  renderer.setResolutionShare(setting.resolution);
+  await lab.step(SETTLE_FRAMES);
+}
+
+/** What makes `frame` brighter than `first` allows, in words; none where it's within it. */
+function brighterThan(first: FrameLight, frame: FrameLight): string[] {
+  const over: string[] = [];
+  const most = (light: number): number => light * LEVEL_BRIGHTER + LEVEL_SLACK;
+  if (frame.mean > most(first.mean)) over.push(`mean ${frame.mean.toFixed(3)} against ${first.mean.toFixed(3)}`);
+  if (frame.p99 > most(first.p99)) over.push(`its brightest hundredth ${frame.p99.toFixed(3)} against ${first.p99.toFixed(3)}`);
+  if (frame.nearWhite > first.nearWhite + LEVEL_NEAR_WHITE) {
+    over.push(`near white ${percent(frame.nearWhite)} against ${percent(first.nearWhite)}`);
+  }
+  return over;
+}
+
+/**
+ * The same moment at each of `settings`, each frame's light held to the first's: a problem where one is brighter. With
+ * a canary, the last drawn again at twice the exposure, which must be found brighter. The first is put back after.
+ */
+async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pictures: boolean, canary: boolean): Promise<Report> {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const moments: Pictured[] = [];
+  let first: FrameLight | undefined;
+  for (const setting of settings) {
+    await settle(lab, setting);
+    const frame = lightOf(drawFrame(lab));
+    first ??= frame;
+    const over = brighterThan(first, frame);
+    lines.push(`  ${settingName(setting)}: ${lightLine(frame)}${over.length ? ' (BRIGHTER)' : ''}`);
+    if (over.length) {
+      problems.push(`${name}: ${settingName(setting)} is brighter than ${settingName(settings[0])}: ${over.join(', ')}`);
+    }
+    if (pictures) moments.push(await lab.screen(`${name} ${settingName(setting)}`, [lightLine(frame)]));
+  }
+  if (canary && first) {
+    const exposure = G.renderer.toneMappingExposure;
+    G.renderer.toneMappingExposure = exposure * CANARY_EXPOSURE;
+    const planted = brighterThan(first, lightOf(drawFrame(lab)));
+    G.renderer.toneMappingExposure = exposure;
+    lines.push(`  canary, the last at ${CANARY_EXPOSURE} times the exposure: ${planted.join(', ') || 'not found brighter'}`);
+    if (!planted.length) problems.push(`${name}: the canary's brighter setting went unseen`);
+  }
+  await settle(lab, settings[0]);
+  return { text: lines.join('\n'), problems, moments };
 }
 
 /** The exposure canary: the frame drawn again at twice the exposure, a problem unless it's found brighter. */
@@ -412,6 +487,12 @@ export async function light(lab: Lab, options: LightOptions): Promise<Report> {
     const round = await hdrRound(lab, name, sdr, options.hdr, options.canary);
     if (round.text) lines.push(round.text);
     problems.push(...round.problems);
+  }
+  if (options.settings?.length) {
+    const round = await levelsRound(lab, name, options.settings, options.pictures, options.canary);
+    lines.push(round.text);
+    problems.push(...round.problems);
+    moments.push(...round.moments ?? []);
   }
   return { text: lines.join('\n'), problems, moments };
 }
