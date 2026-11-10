@@ -484,6 +484,12 @@ export const COMMANDS = {
         usage: 'a,b',
         help: 'and at these Resolutions, shares of the screen each way, at every level (1,0.5,0.25)',
       },
+      walk: {
+        kind: 'number',
+        usage: 'frames',
+        help: 'at each level, the hero walked this many frames too, each drawn: how much the light of the frame '
+          + 'changes from a frame to the next, held to the first level (90: a glow that flickers as the view moves)',
+      },
       hdr: {
         kind: 'switch',
         help: 'each frame drawn again in HDR (on any display) and checked against the SDR one: under the knee as an '

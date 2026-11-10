@@ -57,6 +57,8 @@ export interface LightOptions {
   scenario: LightScenario;
   /** the settings the frame is drawn at again, each held to the first's light (none: the boot's alone) */
   settings?: LevelSetting[];
+  /** at each setting, the hero walked this many frames too, each drawn: how its light flickers as the view moves */
+  walk?: number;
   /** the frame pictured too */
   pictures: boolean;
   /** plant faults the measures must catch: the frame at twice the exposure, and in HDR at another paper white */
@@ -351,6 +353,35 @@ export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> 
   await lab.step(SETTLE_FRAMES);
 }
 
+/** a walk's flicker may be this many times the first setting's, plus this much of the frame's mean */
+const FLICKER_MOST = 1.5;
+const FLICKER_SLACK = 0.002;
+
+/** How a walk's frames flickered: the mean change of the frame's light from a frame to the next, as a share of its
+ *  mean, and the largest. */
+interface Flicker {
+  mean: number;
+  most: number;
+}
+
+/**
+ * The hero walked `frames` frames, each drawn: how the frame's light changes from one to the next. A glow gathered
+ * from too few of the scene's pixels is caught by one frame and missed by the next as the view moves (from play, at
+ * Very low: "blinding light... it only happens when I'm moving").
+ */
+async function walkFlicker(lab: Lab, frames: number): Promise<Flicker> {
+  const means: number[] = [];
+  await lab.step(frames, () => ({ keys: ['d'] }), () => {
+    means.push(lightOf(drawFrame(lab)).mean);
+  });
+  const whole = means.reduce((sum, mean) => sum + mean, 0) / means.length;
+  const changes = means.slice(1).map((mean, at) => Math.abs(mean - means[at]) / whole);
+  return { mean: changes.reduce((sum, change) => sum + change, 0) / changes.length, most: Math.max(...changes) };
+}
+
+/** A small share as a line says it. */
+const share = (of: number): string => `${(of * 100).toFixed(2)}%`;
+
 /** A setting as a line names it. */
 const settingName = (setting: LevelSetting): string => `${setting.level} at ${Math.round(setting.resolution * 100)}%`;
 
@@ -377,11 +408,13 @@ function brighterThan(first: FrameLight, frame: FrameLight): string[] {
  * The same moment at each of `settings`, each frame's light held to the first's: a problem where one is brighter. With
  * a canary, the last drawn again at twice the exposure, which must be found brighter. The first is put back after.
  */
-async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pictures: boolean, canary: boolean): Promise<Report> {
+async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pictures: boolean, canary: boolean,
+  walk = 0, scenario?: LightScenario): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
   let first: FrameLight | undefined;
+  let firstFlicker: Flicker | undefined;
   for (const setting of settings) {
     await settle(lab, setting);
     const frame = lightOf(drawFrame(lab));
@@ -392,6 +425,18 @@ async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pic
       problems.push(`${name}: ${settingName(setting)} is brighter than ${settingName(settings[0])}: ${over.join(', ')}`);
     }
     if (pictures) moments.push(await lab.screen(`${name} ${settingName(setting)}`, [lightLine(frame)]));
+    if (walk > 0) {
+      const flicker = await walkFlicker(lab, walk);
+      firstFlicker ??= flicker;
+      const over = flicker.mean > firstFlicker.mean * FLICKER_MOST + FLICKER_SLACK;
+      lines.push(`    walking: its light changes ${share(flicker.mean)} a frame, at most ${share(flicker.most)}`
+        + `${over ? ' (FLICKERS)' : ''}`);
+      if (over) {
+        problems.push(`${name}: ${settingName(setting)} flickers as the hero walks: ${share(flicker.mean)} a frame `
+          + `against ${settingName(settings[0])}'s ${share(firstFlicker.mean)}`);
+      }
+      if (scenario) await standIn(lab, scenario);
+    }
   }
   if (canary && first) {
     const exposure = G.renderer.toneMappingExposure;
@@ -489,7 +534,8 @@ export async function light(lab: Lab, options: LightOptions): Promise<Report> {
     problems.push(...round.problems);
   }
   if (options.settings?.length) {
-    const round = await levelsRound(lab, name, options.settings, options.pictures, options.canary);
+    const round = await levelsRound(lab, name, options.settings, options.pictures, options.canary, options.walk,
+      options.scenario);
     lines.push(round.text);
     problems.push(...round.problems);
     moments.push(...round.moments ?? []);

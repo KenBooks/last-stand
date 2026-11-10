@@ -130,6 +130,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+  **At every quality level, on demand** (`--levels high,medium,low,verylow`, `--resolutions 1,0.5,0.25`): the same
+  moment drawn again at each level and Resolution, set live as the pause menu sets them, each frame's light held to
+  the first's: a mean or a brightest hundredth over 1.12 times it, or 0.2% more of the frame near white, is a problem
+  (a level is there to cost less, never to look brighter), and each is pictured. `--at x,z` stands the hero by what
+  can be too bright (`--at=-6.5,3.5 --zoom 0.4`: a standing stone's rune in the forest), `--zoom` zooms the top-down
+  view in. `--canary` draws the last at twice the exposure, which must be found brighter. Run it for a change to what
+  a level draws (its shadows, bloom, lights, the Resolution): the forest's stone read within 10% at all twelve. From
+  play, a preview whose Low and Very low took no shadows on WebGPU had its fires "blinding" and "other objects also
+  too bright", which no check had been asked: the lab's light was measured at the boot's level alone.
+  `--walk 90` walks the hero that many frames at each level too, every frame drawn, and says how much the frame's
+  light changes from a frame to the next (its mean change and its most, shares of the frame's mean), a problem over
+  1.5 times the first level's: a glow that flickers as the view moves, which a still frame never shows (from play, at
+  Very low: "blinding light... it only happens when I'm moving"; by the forest's rune main read 0.18% a frame at
+  High, 0.29% at Low and 0.46% at Very low, bloom's bright pass reading a sixteenth of the pixels under it there).
 - `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`, `--renderer webgpu`,
   `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
   render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of

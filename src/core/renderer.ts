@@ -260,19 +260,54 @@ class AreaPass extends Pass {
   }
 }
 
-/** Bloom's bright pass reading the scene's target as `SCENE_READ` reads it (three's `LuminosityHighPassShader`). */
+/** the most taps a side bloom's bright pass takes of the scene (`brightTaps`) */
+const BRIGHT_TAPS_MOST = 4;
+/**
+ * Bloom's bright pass reading the scene's target as `SCENE_READ` reads it (three's `LuminosityHighPassShader`), every
+ * pixel of it under each of its own. Its target is half bloom's size each way, and one tap reads 2x2 of the scene's
+ * pixels: all of them at High, a quarter at Low (bloom at half the scene's pixels each way) and a sixteenth at Very
+ * low (a quarter), so a small bright thing (a dummy's mark, a rune, a flame's tongue) was caught by one frame and
+ * missed by the next as the view moved, and its whole glow went with it (from play, at Very low: "blinding light...
+ * it only happens when I'm moving"; `lab light --levels --walk`). It takes `uTaps` taps a side (1, 2, 4), each its
+ * own 2x2 and thresholded alone, as High's one is: uniforms, so a level switched compiles nothing.
+ */
 const BRIGHT_FROM_SCENE = /* glsl */`
   uniform sampler2D tDiffuse; uniform vec3 defaultColor; uniform float defaultOpacity;
   uniform float luminosityThreshold; uniform float smoothWidth;
+  uniform vec2 uTexel; uniform float uTaps;
   varying vec2 vUv;
   ${SCENE_READ}
   void main() {
-    vec4 texel = sceneAt(tDiffuse, vUv);
-    float v = luminance(texel.xyz);
     vec4 outputColor = vec4(defaultColor.rgb, defaultOpacity);
-    float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, v);
-    gl_FragColor = mix(outputColor, texel, alpha);
+    vec4 sum = vec4(0.0);
+    for (int y = 0; y < ${BRIGHT_TAPS_MOST}; y++) {
+      if (float(y) >= uTaps) break;
+      for (int x = 0; x < ${BRIGHT_TAPS_MOST}; x++) {
+        if (float(x) >= uTaps) break;
+        // (each tap at the corner four of the scene's pixels share, the taps two pixels apart)
+        vec2 off = (vec2(float(x), float(y)) - 0.5 * (uTaps - 1.0)) * 2.0 * uTexel;
+        vec4 texel = sceneAt(tDiffuse, vUv + off);
+        float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, luminance(texel.xyz));
+        sum += mix(outputColor, texel, alpha);
+      }
+    }
+    gl_FragColor = sum / (uTaps * uTaps);
   }`;
+
+/**
+ * Bloom's levels' weights at `share` of the scene's pixels each way: each level is then as wide on the screen as the
+ * one that many halvings up was, so each takes that one's weight, the tightest the weights of those it stands in
+ * for, and the widest none. Weighed as at full size, Low's glow was twice as wide for the same weights, and its
+ * brightest hundredth of the frame 1.22 times High's by a rune (`lab light --levels`).
+ */
+function bloomLevelsAt(share: number): number[] {
+  const up = Math.max(0, Math.round(Math.log2(1 / share)));
+  const tightest = BLOOM_LEVELS.slice(0, up + 1).reduce((sum, weight) => sum + weight, 0);
+  return BLOOM_LEVELS.map((_, level) => (level === 0 ? tightest : BLOOM_LEVELS[level + up] ?? 0));
+}
+
+/** The taps a side bloom's bright pass takes at `share` of the scene's pixels each way: every pixel under it read. */
+const brightTaps = (share: number): number => Math.min(BRIGHT_TAPS_MOST, Math.max(1, Math.round(1 / share)));
 
 let areaPass: AreaPass;
 let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
@@ -704,6 +739,8 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
   bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM_LEVELS;
   bloom.materialHighPassFilter.fragmentShader = BRIGHT_FROM_SCENE;
+  bloom.materialHighPassFilter.uniforms.uTexel = { value: new THREE.Vector2(1 / size.x, 1 / size.y) };
+  bloom.materialHighPassFilter.uniforms.uTaps = { value: brightTaps(bloomShare) };
   // (its composite is added by the grade and the area, not blended over a copy of the frame: three draws no
   // material that isn't visible)
   bloom.blendMaterial.visible = false;
@@ -717,6 +754,10 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   bloom.setSize = (width, height) => {
     bloomGiven.set(width, height);
     sizeBloom(Math.max(4, Math.round(width * bloomShare)), Math.max(4, Math.round(height * bloomShare)));
+    // (the scene's own pixel, and the taps that read every one under the bright pass's)
+    bloom.materialHighPassFilter.uniforms.uTexel.value.set(1 / width, 1 / height);
+    bloom.materialHighPassFilter.uniforms.uTaps.value = brightTaps(bloomShare);
+    bloom.compositeMaterial.uniforms.bloomFactors.value = bloomLevelsAt(bloomShare);
   };
   // after bloom: the eye adapts to all the light that reaches it, halos included
   const area = new AreaPass();
