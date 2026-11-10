@@ -91,6 +91,62 @@
 #sd-input:focus { outline: none; border-color: var(--danger); box-shadow: 0 0 12px rgba($danger, .35); }
 .sd-ok:disabled { cursor: $cursor; filter: grayscale(.8) brightness(.7); }
 
+/* ---------- cloud saves (ui/cloudSaves.ts): the bar under the title, slot 1's mark, the dialogs ---------- */
+.sv-cloud { width: 100%; max-width: 1100px; margin-top: 6px; }
+.sc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; }
+.sc-row .btn { padding: 7px 14px; font-size: 14px; }
+.sc-icon { flex: none; width: 26px; height: 26px; color: var(--ink-dim); }
+.sc-icon.on { color: var(--highlight); }
+.sc-icon svg, .sv-cloud-mark svg { width: 100%; height: 100%; display: block; }
+.sc-state { font-size: 15px; color: var(--ink-dim); }
+.sc-state b { font-weight: 600; color: var(--ink); }
+.sc-privacy { font-size: 13px; }
+.sc-note { margin: 6px 0 0; text-align: center; font-size: 14px; color: $ally-text; }
+.sc-more { position: relative; }
+.sc-more > summary { list-style: none; cursor: $cursor-hand; }
+.sc-more > summary::-webkit-details-marker { display: none; }
+/* a dropdown: a chevron down, turned up while open */
+.sc-more > summary { display: inline-flex; align-items: center; gap: 8px; }
+.sc-chevron { width: 7px; height: 7px; margin-top: -4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .15s ease, margin .15s ease; }
+.sc-more[open] .sc-chevron { margin-top: 3px; transform: rotate(-135deg); }
+@media (prefers-reduced-motion: reduce) { .sc-chevron { transition: none; } }
+.sc-menu { position: absolute; z-index: 2; top: calc(100% + 6px); right: 0; display: flex; flex-direction: column; gap: 6px; min-width: 230px; padding: 10px;
+  background: var(--panel); @include frame(rgba($frame, .7), 0 10px 30px rgba(0,0,0,.8)); }
+.sc-menu .btn { width: 100%; }
+
+/* slot 1, the cloud save: its mark in the header */
+.sv-cloud-mark { margin-left: auto; display: flex; align-items: center; gap: 5px; font: 600 13px var(--font-body); letter-spacing: 1px; text-transform: uppercase; color: var(--highlight); }
+.sv-cloud-mark svg { flex: none; width: 24px; height: 24px; }
+.sv-pane.cloud { @include frame(var(--highlight), 0 0 22px rgba($accent-glow, .2), 0 10px 40px rgba(0,0,0,.8)); }
+.sv-pane { will-change: transform; }
+
+#cloud-dialog .modal-box { width: 560px; display: flex; flex-direction: column; gap: 12px; }
+/* a field typed into on a touch screen: the dialog at the top of what the keyboard leaves (cloudSaves.ts aboveKeyboard) */
+#cloud-dialog.typing { align-items: flex-start; top: var(--seen-top, 0px); bottom: auto; height: var(--seen, 50vh); padding-top: 6px; }
+#cloud-dialog.typing .modal-box { max-height: calc((var(--seen, 50vh) - 12px) / var(--ui, 1)); padding-top: 12px; gap: 6px; }
+#cloud-dialog.typing .cd-code { margin-top: 0; }
+.cd-body p { margin: 0 0 8px; }
+.cd-warn { color: var(--danger); }
+.cd-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.cd-slot { display: flex; flex-direction: column; gap: 3px; padding: 10px 8px; }
+.cd-slot span { font-size: 13px; color: var(--ink-dim); }
+.cd-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 10px; }
+.cd-side { padding: 10px 12px; background: var(--panel-raised); border: 1px solid rgba($frame, .4); }
+.cd-side h3 { margin: 0 0 4px; font: 700 18px var(--font-display); color: var(--ink); }
+.cd-side .cd-dev { font-size: 13px; color: var(--ink-dim); }
+.cd-side dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 14px; }
+.cd-side dt { color: var(--ink-dim); }
+.cd-side dd { margin: 0; }
+.cd-code { display: block; width: 11em; margin: 8px auto 0; padding: 8px 10px; text-align: center; font: 700 22px var(--font-display); letter-spacing: 3px;
+  color: var(--ink); background: #0a0909; border: 1px solid rgba($frame, .6); border-radius: 3px; user-select: text; }
+.cd-code:focus { outline: none; border-color: var(--accent); }
+.cd-shown { margin: 6px 0 12px !important; text-align: center; font: 900 34px var(--font-display); letter-spacing: 5px; color: var(--highlight); user-select: text; }
+@media (max-width: 560px), (max-height: 520px) {
+  .cd-slots, .cd-sides { gap: 6px; }
+  .cd-side { padding: 8px; }
+  .cd-side dl { font-size: 13px; }
+}
+
 /* short screens (phones held sideways): tighter, and the intro makes way for the panes */
 @media (max-height: 520px) {
   .sv-box { gap: 8px; padding: 8px 14px 10px; }
@@ -104,6 +160,11 @@
   .sv-body { padding: 8px 10px; }
   .sv-foot { padding: 8px 10px; }
   .sv-foot .btn { padding: 7px 12px; }
+  .sv-cloud { margin-top: 0; }
+  .sc-row { gap: 6px; }
+  .sc-row .btn { padding: 5px 10px; font-size: 13px; }
+  .sc-state { font-size: 13px; }
+  .sc-icon { width: 20px; height: 20px; }
 }
 /* narrow panes (phones held sideways, upright tablets): the records two by two, one attribute a line,
    the delete button just its can */

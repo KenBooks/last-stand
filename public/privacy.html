@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Last Stand privacy</title>
+<meta name="description" content="What Last Stand keeps about you, and how to delete it.">
+<style>
+  :root { color-scheme: dark; --ink: #ece2cc; --dim: #b5a98f; --accent: #e9b85a; --bg: #0c0a0b; --panel: #17130f; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 Georgia, 'Times New Roman', serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 32px; letter-spacing: 1px; color: var(--accent); }
+  h2 { margin: 28px 0 6px; font-size: 21px; color: var(--accent); }
+  p, li { color: var(--ink); }
+  .dim { color: var(--dim); font-size: 15px; }
+  ul { padding-left: 22px; }
+  a { color: var(--accent); }
+  section { padding: 2px 18px 8px; margin-top: 18px; background: var(--panel); border-left: 3px solid var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p class="dim">Last Stand, an open-source browser game. Updated 10 November 2026.</p>
+
+  <section>
+    <h2>Playing without an account</h2>
+    <p>Your heroes, settings and save slots stay in this browser (its local storage and cookies). Nothing about them is sent anywhere. Clearing the site's data deletes them.</p>
+  </section>
+
+  <section>
+    <h2>Cloud saves (optional)</h2>
+    <p>If you sign in, the server keeps:</p>
+    <ul>
+      <li>an account id the server makes up at random;</li>
+      <li>your passkeys' public keys (a passkey's private part never leaves your device);</li>
+      <li>the save of each site you sync (the game, and any test build you sign in on): your heroes, their gear, stash and records, skill loadouts, stash filters, your co-op name tag and colour, your volumes and portraits, which device last wrote each part, and when;</li>
+      <li>the sessions you're signed in with (only a fingerprint of each, never the session itself).</li>
+    </ul>
+    <p>It keeps no name, email address, picture or password. Signing in with Google, when it comes, keeps only Google's id for your account, never your name or email.</p>
+    <p>The server is the game's own, run by the game's maintainer. Nothing is sold or shared, and nothing is used for advertising.</p>
+  </section>
+
+  <section>
+    <h2>How long, and deleting it</h2>
+    <ul>
+      <li><b>Delete cloud save</b> (Save slots, Account) deletes the current site's save. Your heroes stay on your device.</li>
+      <li><b>Delete account</b> (on last-stand.cc) deletes your account, every save of it and its passkeys at once.</li>
+      <li>A test build's saves are deleted when the test build closes, or 30 days after their last sync.</li>
+      <li>Sessions you don't use for 180 days end.</li>
+      <li>Nightly backups of the server keep what was deleted for at most 14 more days.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Logs and reports</h2>
+    <p>The server's logs name an account by the first letters of its id and never hold a save's contents. Performance reports are sent only when you agree to it in the game, and hold no account.</p>
+  </section>
+
+  <section>
+    <h2>Questions</h2>
+    <p>Ask on the game's <a href="https://github.com/VictorZakharov/last-stand/issues">issue tracker</a>. You can ask for what the server keeps about you, or for it to be deleted.</p>
+  </section>
+  <p class="dim"><a href="./">Back to the game</a></p>
+</main>
+</body>
+</html>

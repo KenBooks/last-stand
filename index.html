@@ -515,6 +515,8 @@
       </div>
       <div class="pb-rule"><i></i></div>
       <p class="sv-intro">Each slot is a save of its own: its heroes with their gear, stash, records and skills. An empty slot is a fresh start.</p>
+      <!-- cloud saves (ui/cloudSaves.ts): signing in, and slot 1 as the cloud save -->
+      <div class="sv-cloud"></div>
     </header>
     <div class="sv-panes"></div>
   </div></div>
@@ -528,6 +530,13 @@
       <input id="sd-input" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12">
       <div class="dc-buttons"><button class="btn danger sd-ok" type="submit" disabled></button><button class="btn sd-cancel" type="button">Cancel</button></div>
     </form>
+  </div></div>
+
+  <!-- cloud saves' dialogs (ui/cloudSaves.ts): the cloud save chosen, a hero changed in two places, a code -->
+  <div id="cloud-dialog" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-box">
+    <div class="sm-title"></div>
+    <div class="cd-body help-text"></div>
+    <div class="dc-buttons"></div>
   </div></div>
 
   <div id="summary" class="modal hidden"><div class="modal-box">

@@ -4,6 +4,7 @@ import { CLASSES, CLASS_IDS, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { saveKey, saveSlot } from './saveSlots';
+import { cloudTouched } from './cloud';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
 import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: to remove, unbind these lines only (pr423Gear.ts says why)
 import { seedPr499Gear } from './pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
@@ -69,6 +70,7 @@ export function loadProfile(classId: string): Profile {
 export function saveProfile(p: Profile): void {
   p.saved = Date.now();
   try { localStorage.setItem(KEY(p.classId), JSON.stringify(p)); } catch { /* ignore */ }
+  if (saveSlot() === 1) cloudTouched();
 }
 
 /** A class's profile in a save slot as stored, without touching it (null: never played there). */

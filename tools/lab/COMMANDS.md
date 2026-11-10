@@ -603,6 +603,34 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
   of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
   their camera, not the hero's.
+- `cloud`: cloud saves end to end (#504; `node/cloud.mjs`, `node/cloudDevice.mjs`, `node/savesService.mjs`,
+  `page/cloud.ts`). Two devices: the side's page (A) and a partner's in a context of its own (B), each with a passkey
+  on a virtual authenticator of the browser's (the DevTools protocol's `WebAuthn` domain: ctap2, internal, resident
+  key, the user verified, presence given), so `navigator.credentials` answers with no system prompt. A saves service
+  of the lab's own (`server/saves` `start`, its files in `out/saves-service`, emptied as it starts) takes the page's
+  origin alone, as `ORIGINS`, `PRODUCTION` (so its sessions may make sign-in codes) and `RP_IDS` `localhost`;
+  each page is pointed at it by `?server=` (set on the page's address after the boot: the game reads it on every
+  call). The slots are seeded as the game keeps them (`slotData.ts` `writeSlot`), each hero told apart by the ids of
+  his stash's items (tags: `A2-mage`), and a hero's stash added to as play saves it (`saveProfile`, which touches the
+  sync). The real screen is driven: the lobby's `#btn-saves`, the bar's New account, Use a sign-in code, Sync now,
+  and the dialog's buttons. Scenarios, in order, each building on the one before: `link` (A, slots 1 and 2 filled,
+  makes an account and chooses slot 2: slots 1 and 2 swap, and the service's save, read back with A's token, holds
+  slot 2's heroes; then the bar's Account dropdown opened, pictured, and closed by a click on the screen's title);
+  `download` (B, all three slots full, signs in by A's code, first typed on a phone held sideways: the field tapped,
+  then a keyboard over the page's lower 215 css px, its layout unchanged as the owner's in full screen, and one that
+  shrinks the viewport to the 175 it leaves, each pictured as `code-typing-keyboard-over` / `-shrinks`: the field
+  whole above it and still focused, "cannot see code while typing"; the typing layout switched off, `-over` fails; the dialog names slot 3 as lost while
+  B's slots are still as they were; confirmed, slot 1 holds the cloud's heroes, the others shifted, slot 3's gone);
+  `conflict` (the mage changed on A and on B while B's link to the service was cut, `context.route` aborting: B,
+  back online, is asked, the dialog saying its copy will be lost, keeps the cloud's; then the warrior so on A, whose
+  dialog says its copy goes to slot 3, where it then is); `merge` (the warrior changed on A, the mage on B: each
+  syncs with no question and both devices and the service end with both changes). A's code is made by the game's
+  own call. Each moment (signed out, choosing, signed in, the Account menu, the code, the download, both conflicts) is
+  pictured at 1024x700, 1920x1080, 820x1180 and a phone's 844x390@2 in touch mode (a finger's tap on a title) into
+  `out/cloud/<moment>-<screen>.png`, the bar's parts and the dialog's held within the window and over no other
+  (`cloudFit`). The browser's logged failures of calls made offline are the scenario's own, taken out of the
+  page's errors. `--canary` drops the mage's stash items from every copy of him B downloads: `download` must fail.
+  `--pictures=false`: the checks alone. About 2 minutes without `lab:serve` (a boot of 50 s), 1 with it.
 - `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
   costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
 - `perf <skills>`: skills cast in turn, every frame timed as the performance report times it, or played as a slow

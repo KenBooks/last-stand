@@ -29,7 +29,9 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
-import { initSaves, savesOpen, savesBack } from './ui/saves';
+import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
+import { askConflicts, renderCloudBar } from './ui/cloudSaves';
+import { initCloud } from './loot/cloud';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { hallOpen, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
@@ -148,7 +150,16 @@ async function boot() {
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice });
   initHeroSelect({ choose: chooseHero, closed: heroSelectClosed });
-  initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot) });
+  const useSlot = whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot);
+  initSaves({ use: useSlot });
+  // cloud saves (loot/cloud.ts): slot 1 kept for every device; a download rebuilds slot 1's hero in the lobby
+  initCloud({
+    reloaded: () => { if (G.mode === 'menu' && saveSlot() === 1) useSlot(1); refreshSaves(); },
+    canApply: () => G.mode === 'menu',
+    conflicted: () => { if (G.mode === 'menu') { if (savesOpen()) askConflicts(); else openSaves(true); } },
+    // (the bar alone: the panes drawn again would lose their scroll)
+    changed: () => { if (savesOpen()) renderCloudBar(); },
+  });
   initReadying();
   // (the fight's loading bar rastered under the loading screen too, hidden as the lobby is entered: ui/readying.ts)
   layOutReadyingAhead();

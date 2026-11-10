@@ -756,6 +756,15 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  cloud: {
+    async each(side, options) {
+      const { runCloud } = await import('./cloud.mjs');
+      return runCloud(side, { canary: Boolean(options.canary), pictures: options.pictures !== false });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   recorder: {
     check(options) {
       if (options.frames !== undefined && !(options.frames >= 60)) throw labError('recorder --frames: 60 or more');
