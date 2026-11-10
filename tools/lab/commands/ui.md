@@ -110,7 +110,10 @@ likewise; `--canary` loses the cookie before it opens again, which must be caugh
 Abandon run held as a player holds it
 (`pauseAbandon`, with `lab.mouseDown`/`mouseUp`: clicked, it says to hold and stays; held a second and let go, it
 fills and stays; held 2 s, it leaves the run; `--canary` makes its hold 0 ms, and the click must be caught abandoning),
-the run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
+the run's summary as a bank shows it (`page/uiSummary.ts`, #403: a bag of every rarity revealed best first, the
+rarest tier, Ascendant, leading, each chip in its rarity's colour within the window, the best item's card opened by its
+chip within the window; pictured beside it, the choice after a wave with that bag, its counts by rarity;
+`--canary` puts the chips in the order the bag was gained, which must be found out of order), each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
 tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
 listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as

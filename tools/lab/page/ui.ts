@@ -31,7 +31,7 @@ import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { showDecision } from '../../../src/ui/hud';
 import { closeDecision, DECISION_CANARY, decisionShown } from './uiDecision';
-import { hideSummary, showSummary } from '../../../src/ui/menus';
+import { closeSummary, openSummary, SUMMARY_CANARY, summaryPictures, summaryShown } from './uiSummary';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
 import { openBook } from '../../../src/ui/loadoutEditor';
@@ -348,11 +348,6 @@ function readyingHeroesShown(canary: boolean): Found {
   if (!shown) problems.push('readyingHeroes: Change hero clicked with the heroes cold showed no loading bar');
   if (!text.includes('heroes')) problems.push(`readyingHeroes: Change hero clicked, the loading bar says "${text}"`);
   return { lines, problems };
-}
-
-/** The run's summary: banked, nothing in the bag. */
-function openSummary(): void {
-  showSummary({ outcome: 'banked', wave: 3, score: 12_480, kills: 42, bag: [] });
 }
 
 /** A hurt foe ahead of the hero, risen and standing, and damage numbers over it, a few frames on. */
@@ -961,7 +956,7 @@ const STEPS: Record<UiState, Steps> = {
     close: () => { closePauseAbandon(); runReady = false; },
     check: (_canary, lab) => pauseAbandonChecked(lab),
   },
-  summary: { open: openSummary, close: hideSummary },
+  summary: { open: openSummary, close: closeSummary, check: summaryShown, pictures: summaryPictures },
   skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
   log: { open: openLog, close: closeLog, check: logShown },
   // (the page is left in touch mode from here on)
@@ -1088,6 +1083,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const overHero = found.problems.some((problem) => problem.includes('shown over the hero'));
     lines.push(`  canary: the meters placed seeing no hero ${overHero ? 'caught' : 'went unseen'}`);
     if (!overHero) missed.push(`${state}: the canary's meters placed seeing no hero went unseen`);
+  }
+  if (state === 'summary') {
+    const caught = found.problems.some((problem) => problem.includes(SUMMARY_CANARY.name));
+    lines.push(`  canary: ${SUMMARY_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${SUMMARY_CANARY.what} went unseen`);
   }
   if (state === 'decision') {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));

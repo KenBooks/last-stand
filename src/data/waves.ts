@@ -14,15 +14,20 @@ export const WAVES = {
   heroChance: (w: number) => (w < 3 ? 0 : Math.min(0.45, 0.12 + w * 0.03)),
 };
 
+/** the first wave an Ascendant item (#403) can drop in */
+const ASCENDANT_FROM = 8;
+
 // Loot rules per wave.
 export const LOOT = {
-  // rarity weights by wave: [common, magic, rare, epic, legendary]
+  // rarity weights by wave: [common, magic, rare, epic, legendary, ascendant]
   rarityWeights: (w: number, bonus = 0): number[] => [
     Math.max(4, 55 - w * 5 - bonus * 20),
     30,
     8 + w * 2.2 + bonus * 10,
     1 + w * 1.1 + bonus * 6,
     Math.max(0, (w - 3) * 0.55) + bonus * 3,
+    // from wave ASCENDANT_FROM on, whatever the bonus: a wave's reward 1 in 160 there, 1 in 70 by wave 15
+    w < ASCENDANT_FROM ? 0 : (w - ASCENDANT_FROM + 1) * 0.12 + bonus * 0.8,
   ],
   killDropChance: 0.05,
   heroDropChance: 0.65,

@@ -24,6 +24,8 @@
 @keyframes reveal-lost { from { opacity: 0; transform: scale(.4); } }
 @media (prefers-reduced-motion: reduce) { .sm-items .chip.reveal { animation: none; } }
 .dc-bag .chip.sealed { color: var(--ink-dim); }
+/* the rarest tier's count and name framed in its orange, told from the rest at a glance (#403) */
+.sm-items .chip[data-r="ascendant"], .dc-bag .chip[data-r="ascendant"] { border-color: rgba(255, 116, 23, .6); }
 .controls-help { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; text-align: left; font-size: 14px; }
 .controls-help .k { font-family: var(--font-display); color: var(--accent); text-align: right; }
 .controls-help.diagrams { display: flex; flex-direction: column; align-items: center; gap: 14px; }
