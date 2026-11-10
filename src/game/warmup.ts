@@ -24,7 +24,6 @@ import { built } from '../entities/models/steps';
 import { buildLater, finishNow } from './behind';
 import { makeHeadAhead } from '../entities/models/head';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
-import { drawFromPalettes } from '../entities/models/palette';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
 import { crowdSlots, joinCrowd, leaveCrowd } from '../entities/models/crowd';
@@ -106,8 +105,6 @@ function heroAllWorn(model: string, at?: THREE.Vector3): Model {
 /** `heroAllWorn` a piece at a time (models/steps.ts). */
 function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, Model, undefined> {
   const m = yield* modelSteps(model);
-  // (his looks from their palettes, as a hero draws them: each palette's program)
-  drawFromPalettes(m);
   m.root.traverse((o) => { o.visible = true; });
   m.root.name = `warm-up: ${model}, all worn`;   // names show up in the perf report
   if (at) m.root.position.copy(at);

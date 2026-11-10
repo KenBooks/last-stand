@@ -13,7 +13,6 @@ import { createKit } from '../../core/materials';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 import { built } from './steps';
-import { looksOn } from './palette';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
 export const HEAD_MM = 0.2421 / 228;
@@ -510,10 +509,8 @@ export function* headSteps(
   // (the face, the hair and the beard: not what hangs from the head, as a hood, its wool shaded above the eye line)
   const shade = (depth: number) => head.traverse((o) => {
     if (o.userData.hoodPart) return;
-    if (!(o as THREE.Mesh).isMesh) return;
-    for (const m of looksOn(o as THREE.Mesh)) {
-      (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 6);
-    }
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 6);
   });
   return { group: head, face, eyes, surface, midZ, hair, crop, beards, shade };
 }

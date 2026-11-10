@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
-import { wrappedFrom } from './palette';
 
 export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
@@ -19,8 +18,7 @@ export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THR
 export function disposeGeometries(root: THREE.Object3D, keep?: THREE.BufferGeometry): void {
   root.traverse((o) => {
     const geo = (o as THREE.Mesh).geometry;
-    // (a palette's wrap of `keep` holds its attributes: `palette.ts`)
-    if (geo && wrappedFrom(geo) !== keep && !geo.userData.shared) geo.dispose();
+    if (geo && geo !== keep && !geo.userData.shared) geo.dispose();
   });
 }
 
