@@ -26,6 +26,7 @@ export { coopHeroCost } from './coopCost';
 
 import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
 import { endInput, watchOut } from './coopEnd';
+import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
 export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
@@ -122,6 +123,12 @@ export interface Sample {
    *  that came down this frame landed, the vines sent this frame, its own hero held by one and its partner's copy
    *  shown in a vine's coils */
   thrown: { landed: XZ[]; vines: number; held: boolean; coiled: boolean };
+  /** in `ping`: its own party slot, every ping it shows (page/coopPing.ts) and what its finger went down on over
+   *  the minimap; the first sample also carries the pings the scenario means */
+  slot?: number;
+  pings?: PingSample[];
+  pressedOn?: string;
+  planned?: typeof PINGS;
 }
 
 /** Where a page's co-op stands, for the lab to wait on. */
@@ -537,6 +544,17 @@ const SCENARIOS: Record<string, Scenario> = {
     hostInput: () => ({}),
     guestInput: rushInput,
   },
+  ping: {
+    about: 'the guest pings a foe, a spot and an area with Ctrl, then a spot by a finger held on the minimap, and the '
+      + 'host a spot: each shown on the other game\'s screen, in the world and on its minimap',
+    frames: 480,
+    host: [9, 19],
+    guest: [15, 23],
+    foes: [{ type: 'mossback', at: PING_FOE, dazed: true }],
+    pictures: [40, 175, 290],
+    hostInput: (frame) => pingInput('host', frame),
+    guestInput: (frame) => pingInput('guest', frame),
+  },
   strike: {
     about: 'the guest, a warrior, charges a Power Strike and casts Bull Rush over it through three dazed foes, the '
       + 'strike landing in the charge, the host standing off',
@@ -822,6 +840,7 @@ export function coopScenario(lab: Lab, { name }: { name: string }): void {
   play.samples = [];
   play.attacks.clear();
   dodger = new Dodger();
+  resetPings();
   stickToward(0, 0);
   if (!lab.beforeFrame.includes(holdTheRun)) lab.beforeFrame.push(holdTheRun);
   const extraSpot = play.extra === null ? null : EXTRA_SPOTS[play.extra];
@@ -918,6 +937,10 @@ function sampleNow(): Sample {
     acts: { self: actOf(self), partner: partner ? actOf(partner) : null },
     thrown: thrownNow(self, partner),
   };
+  if (play.scenario === 'ping') {
+    Object.assign(sample, { slot: self.slot, ...pingsNow() });
+    if (!play.samples.length) sample.planned = PINGS;
+  }
   play.ended = [];
   return sample;
 }

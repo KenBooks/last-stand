@@ -81,6 +81,15 @@ function aimedQuarry(player: Player, target: THREE.Vector3, range: number): Enem
   return on && markable(player, on, range) ? on : quarry(player, target, range);
 }
 
+/**
+ * The foe a co-op ping at the aim points out (game/ping.ts): the one this skill's aim would mark, anywhere on the
+ * field, if the aim is on its body or within `near` of it (else none: the ping marks the spot).
+ */
+export function aimedFoe(player: Player, target: THREE.Vector3, near: number): Enemy | null {
+  const e = aimedQuarry(player, target, Infinity);
+  return e && (e === player.aimFoe || offBody(e, target) <= near) ? e : null;
+}
+
 /** The cooldowns back (the draught's stays): the local hero's own, as only its game keeps them. */
 function refund(player: Player): void {
   if (!player.local) return;

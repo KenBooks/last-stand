@@ -62,6 +62,7 @@ Keyboard and mouse:
 | `Alt` (hold) | In the close views: a cursor for the HUD (the battle log's buttons, the skills' tooltips), the view held still |
 | `B` / `C` | Bank / Continue after a wave |
 | `E` (hold) | Revive a downed partner (co-op) |
+| `Ctrl` (hold, let go) | Ping the party (co-op): the foe under the cursor, else the spot; drag with `Ctrl` held to mark an area; over the minimap, its spot. On touch, a long press on the minimap |
 | Left / right click, `Q` / `E`, `F` | Watching a co-op run: next / previous player, turn the camera, free camera |
 | `Esc` | Pause |
 

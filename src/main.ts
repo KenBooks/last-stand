@@ -71,6 +71,7 @@ import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits } from './ui/coop';
+import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -581,6 +582,8 @@ function update(dt: number): void {
   updateEnemies(dt);
   separateEnemies(!simulates());
   G.player.showAim(dt);
+  // co-op pings: Ctrl held and let go, a long press on the minimap (in a run, or the lobby's practice)
+  updatePingInput(dt, G.mode === 'run' ? !G.menuOpen : menuStowed() && !savesOpen() && !hallOpen() && !G.menuOpen);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
   syncPractice();

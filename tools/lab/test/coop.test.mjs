@@ -180,3 +180,18 @@ test('two in one colour, a free pick passed over, or a partner shown otherwise, 
   const older = party().map((self) => ({ ...roomState(self, party()) }));
   assert.equal(judgeColours(older, tags, [null, null, null]), null);
 });
+
+test('a ping made as meant and shown on both screens passes, and one lost or drawn off the minimap is caught', async () => {
+  const { judgePings } = await import('../node/coopPings.mjs');
+  const planned = [{ by: 'guest', kind: 'spot', at: [4, 2], how: 'Ctrl let go on the floor', frame: 0, near: 0.3 }];
+  const ping = (age, map = [4, 2]) => ({ slot: 1, kind: 'spot', x: 4, z: 2, r: 0.9, foe: null, age, pin: true, ring: true, map });
+  const frames = 60;
+  const guest = Array.from({ length: frames }, (_, f) => ({ slot: 1, pings: [ping(f / 60)], ...(f ? {} : { planned }) }));
+  const shown = (from, map) => Array.from({ length: frames }, (_, f) => ({ slot: 0, pings: f >= from ? [ping((f - from) / 60, map)] : [] }));
+  const good = judgePings({ host: shown(20), guest, frameMs: 1000 / 60 });
+  assert.deepEqual(good.problems, []);
+  const lost = judgePings({ host: shown(frames), guest, frameMs: 1000 / 60 });
+  assert.ok(lost.problems.some((p) => p.includes("never on the host's screen")));
+  const off = judgePings({ host: shown(20, [6, 2]), guest, frameMs: 1000 / 60 });
+  assert.ok(off.problems.some((p) => p.includes("the host's minimap drew it")));
+});

@@ -27,8 +27,9 @@ export interface LabelArt {
   paint(c: CanvasRenderingContext2D, scale: number): void;
 }
 
-/** Which labels are drawn over which: the floor's names lowest, a downed partner's marker on top. */
-export const ORDER = { floor: 0, bar: 1, tag: 2, float: 3, marker: 4 } as const;
+/** Which labels are drawn over which: the floor's names lowest, a co-op ping's pin over the numbers, a downed partner's
+ *  marker on top. */
+export const ORDER = { floor: 0, bar: 1, tag: 2, float: 3, ping: 3.5, marker: 4 } as const;
 
 /** A label over the world: placed each frame (`at`), painted when its art changes (`show`). */
 export class Label {

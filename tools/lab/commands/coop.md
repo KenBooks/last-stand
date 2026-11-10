@@ -113,6 +113,16 @@ gives: out of the scene, hidden, dissolved, out of its crowd), and every foe on 
 guest's: on main 6 of them never did, their attacks playing from nowhere ("mobs missing in the first 10 sec... but
 they're firing"). The guest asks the host about them (`src/net/AGENTS.md`).
 
+`ping` (`page/coopPing.ts`, judged by `node/coopPings.mjs`, unit-tested): the guest pings a dazed foe, a spot and an
+area (Ctrl dragged 4 m) with Ctrl held and let go, then a spot by a finger held on the minimap (a tap first puts its
+page in touch mode, as a phone's first touch does; the finger goes down on whatever the page has there, so a minimap
+that lets the finger through pings nothing), and the host pings a spot (`PINGS`). Each must be made on its sender's
+game as meant (its kind, within 0.3 m of the spot, 0.7 m on the minimap, an area's radius within 0.3 m) and shown on
+both screens: its pin over it and its ring on the floor in the world, and on the minimap within 0.7 m of where it
+points (read back from the minimap's pixels by the module's own sums), on the partner's screen within a second, the
+two screens within 0.3 m of each other (a foe's ping on the same foe). `--pictures` pictures both screens at the
+foe's ping, the area's and the minimap's.
+
 Last, each game says what every hero's update cost it a frame (`page/coopCost.ts`, `Player.update` timed by the
 browser's clock, lines that differ from run to run): its own hero's and a partner's copy's, in a run, in the lobby
 and in the hall of heroes (the hall's own heroes left out). On this machine a hero took 1.2 to 1.4 ms a frame in a

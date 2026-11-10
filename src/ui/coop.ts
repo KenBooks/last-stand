@@ -8,14 +8,13 @@ import { READYING } from './readying';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
 import { cleanTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
-import { anchorLabel, removeLabel, project, onLayout } from './floaters';
+import { anchorLabel, removeLabel, onLayout, onScreenOrEdge } from './floaters';
 import { Label, ORDER } from './overlay/layer';
 import { ALLY_BAR, ALLY_NAME, barArt, barStep } from './overlay/bars';
 import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
-import { uiScales } from './scale';
 import { sfx } from '../core/audio';
 import { lookFacing } from '../core/renderer';
 import { reportLinks, bindReportLinks } from './netHud';
@@ -404,23 +403,7 @@ function placeMark(): void {
   if (!marked) return;
   const { downed, near } = marked;
   const me = G.player;
-  // (its edges' margins are px of the UI's reference layout, at the HUD's scale)
-  const ui = uiScales.hud;
-  const w = window.innerWidth, h = window.innerHeight;
-  const p = project(downed.pos.x, downed.obj.position.y + MARK_HEIGHT, downed.pos.z);
-  const left = EDGE.side * ui, right = w - EDGE.side * ui, top = EDGE.top * ui, bottom = h - EDGE.bottom * ui;
-  const inView = !p.behind && p.x >= left && p.x <= right && p.y >= top && p.y <= bottom;
-  let x = p.x, y = p.y, turn = 0;
-  if (!inView) {
-    // along the way from the middle of the screen to them (behind the camera, the projection points the other way)
-    const cx = w / 2, cy = (top + bottom) / 2;
-    let dx = (p.x - cx) * (p.behind ? -1 : 1), dy = (p.y - cy) * (p.behind ? -1 : 1);
-    if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) dy = 1;
-    const reach = Math.min(Math.abs(dx) > 1e-3 ? (right - cx) / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? (bottom - cy) / Math.abs(dy) : Infinity);
-    x = cx + dx * reach;
-    y = cy + dy * reach;
-    turn = Math.atan2(dy, dx);
-  }
+  const { x, y, inView, turn, bottom } = onScreenOrEdge(downed.pos.x, downed.obj.position.y + MARK_HEIGHT, downed.pos.z, EDGE);
   // (pointing down, its words go above the ring, out of the arrow's way)
   const above = !inView && Math.abs(y - bottom) < 1;
   const bleedLeft = Math.max(0, downed.bleed);
