@@ -188,6 +188,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn twice must read 1.6 times once. At a 4K laptop's screen (`--screen 1280x720@3`) HDR's output was 7.1 to
   9.0 ms of a 12 ms frame on the owner's 4070 Ti, as on the laptop (26 ms of 38, trace BN6P-FN12), and MSAA 0.5 to
   0.6 ms.
+  **Each row says how far it may be off** (`page/gpuTurns.ts`): what a part takes is the median over the rounds of
+  each round's own difference, its two turns sent back to back and in the other order each round, with that
+  median's standard error after it (`1.86 ms ±0.03`), and "within the noise" where it's under twice its error: such
+  a row says nothing, neither a cost nor a saving. Every turn is sent before any is read (read turn by turn, the GPU
+  idled while each was waited for and its clock fell).
+  **Time it with the GPU loaded.** A strong GPU drawing a phone's or a laptop's pixels is nearly idle, its clock at
+  a fraction of its top, and what it reads is the clock's wander: at 4.5 and 5.2 Mpx on a 4080 laptop the rows
+  were off by ±0.2 to ±0.5 ms and the hero read 1.4 to 2.8 ms, "half the crypt's scene pass"; at 20.7 Mpx
+  (`--screen 2880x1800@2`: four times the laptop's pixels) every row is within ±0.04 and the hero is 0.35 ms, 6%.
+  A device that is slow is loaded at its own pixels, so the loaded shares are the ones it has: there the crypt's
+  lit shading is 86% of the scene pass and its 20 point lights 51%. Two changes judged at the idle sizes were
+  called no gain and a loss; one of them, measured loaded, saves 13%. So run it at a size that gives errors of a
+  few hundredths, alone on the machine (Loaner's `--exclusive`), and believe nothing a row with a wide error says.
+  `--hero` times the hero's parts too, over 24 rounds: his head, his hands, his cloth, the rest of him and that rest
+  a material at a time, the shadows he casts (his pieces' casting switched with his one shadow let go, `castingAsOne`:
+  switched alone, the one shadow was merged again at every turn, and the merge was what read, 1.9 ms), and a change
+  of nothing, which must read nothing: told from nothing and over 0.15 ms is a problem.
 - `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
   and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
   without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's

@@ -13,7 +13,9 @@ import { useQuality } from '../../../src/core/quality';
 import { QUALITY, type QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
 import { standIn } from './light';
-import { costInTurns, type TurnsCost } from './gpuTurns';
+import { costInTurns, sure, type TurnsCost } from './gpuTurns';
+import { castingAsOne } from '../../../src/entities/models/castAsOne';
+import { lightBounds } from '../../../src/core/lightBounds';
 import { frameCostInTurns, type FrameCost } from './frameTurns';
 import { hdrOutput } from './hdrOutput';
 
@@ -27,6 +29,8 @@ export interface SceneCostOptions {
   canary: boolean;
   /** each see-through or cut-out mesh timed alone too, the costliest listed */
   each: boolean;
+  /** the hero's parts timed alone too: his head, hands, cloth, the rest of him and the shadows he casts */
+  hero: boolean;
   /** the whole frame timed by the browser's clock too, with HDR's output and the level's MSAA and without */
   frame: boolean;
 }
@@ -65,6 +69,18 @@ function shownPart(name: string, objects: THREE.Object3D[]): Part {
     name: `${name} (${objects.length})`,
     change: (on) => {
       for (const object of objects) object.visible = on;
+    },
+  };
+}
+
+/** A part that passes a point light out of reach over on its packed bounds, or on three's own values as before
+ *  (`core/lightBounds.ts`): what the bounds save, so its time reads below nothing where they do. */
+function boundsPart(): Part {
+  const kept = lightBounds.packed;
+  return {
+    name: 'the point lights passed over on their packed bounds',
+    change: (on) => {
+      lightBounds.packed = on ? kept : false;
     },
   };
 }
@@ -137,6 +153,7 @@ function partsOfScene(): Part[] {
     shownPart('what\'s see-through or cut out', shownWhere(seeThrough)),
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints)),
     shownPart('the hero', [G.player.obj]),
+    boundsPart(),
   ];
 }
 
@@ -152,10 +169,11 @@ function drawScene(times: () => number): () => void {
 
 /** A part's line: the scene with it and without, what it takes and its share. */
 function partLine(part: Part, cost: TurnsCost): string {
-  const takes = cost.on - cost.off;
-  const share = cost.on > 0 ? (100 * takes) / cost.on : 0;
-  return `  ${part.name}: ${takes.toFixed(2)} ms, ${share.toFixed(0)}% (the scene ${cost.on.toFixed(2)} with it, `
-    + `${cost.off.toFixed(2)} without)`;
+  const share = cost.on > 0 ? (100 * cost.takes) / cost.on : 0;
+  // (a cost no larger than twice its own error says nothing: said, so it isn't read as a saving or a cost)
+  const told = sure(cost) ? '' : ', within the noise';
+  return `  ${part.name}: ${cost.takes.toFixed(2)} ms \u00b1${cost.error.toFixed(2)}, ${share.toFixed(0)}%${told} `
+    + `(the scene ${cost.on.toFixed(2)} with it, ${cost.off.toFixed(2)} without)`;
 }
 
 /** What a mesh is, for a line: its name and its parents', its material, its instances and triangles. */
@@ -183,6 +201,136 @@ async function eachSeeThrough(draw: () => void, renders: number): Promise<string
   costs.sort((a, b) => b.takes - a.takes);
   const costliest = costs.slice(0, EACH_LISTED).map((cost) => `  ${cost.line}`);
   return ['  the costliest see-through or cut-out meshes, each alone:', ...costliest];
+}
+
+/** `--hero`'s rounds a part: more than the scene's parts', as a part of the hero is a small share of the frame */
+const HERO_ROUNDS = 24;
+/** the most a change of nothing may read (ms), told from nothing or not: over it the clock is seeing things */
+const NOTHING_MOST = 0.15;
+
+/** A mesh's triangles. */
+function trianglesOf(mesh: THREE.Mesh): number {
+  const index = mesh.geometry.index;
+  return (index ? index.count : mesh.geometry.attributes.position.count) / 3;
+}
+
+/** The hero's meshes shown now. */
+function heroMeshes(): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  G.player.model.root.traverseVisible((object) => {
+    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+  });
+  return meshes;
+}
+
+/** Whether `mesh` hangs under an object `wanted` picks. */
+function under(mesh: THREE.Object3D, wanted: (object: THREE.Object3D) => boolean): boolean {
+  for (let at: THREE.Object3D | null = mesh; at; at = at.parent) if (wanted(at)) return true;
+  return false;
+}
+
+/** A part of the hero's meshes, named with its meshes and triangles. */
+function heroPart(name: string, meshes: THREE.Mesh[]): Part {
+  const triangles = Math.round(meshes.reduce((sum, mesh) => sum + trianglesOf(mesh), 0));
+  return { ...shownPart('', meshes), name: `${name} (${meshes.length} meshes, ${triangles} triangles)` };
+}
+
+/**
+ * A part that lets the hero cast his shadows or not. His pieces' casting is switched with his shadow cast as one
+ * let go for the turn (`castingAsOne`): switched alone, the one shadow was merged again at every turn (a piece that
+ * casts no more is one hidden), and the merge was what the clock read, 1.9 ms for shadows that take a tenth of it.
+ */
+function heroShadowsPart(meshes: THREE.Mesh[]): Part {
+  const cast = meshes.map((mesh) => mesh.castShadow);
+  const asOne = castingAsOne.on;
+  return {
+    name: `the shadows he casts (${cast.filter(Boolean).length} meshes)`,
+    change: (on) => {
+      castingAsOne.on = on ? asOne : false;
+      meshes.forEach((mesh, index) => {
+        mesh.castShadow = on ? cast[index] : false;
+      });
+    },
+  };
+}
+
+/** the most of the rest of the hero's materials `--hero` times alone, those drawing the most triangles first: all of
+ *  them (his cost was in none of the eight drawing the most) */
+const HERO_MATERIALS = 40;
+
+/** What a material is, for a line: its kind, colour, side, and what it's drawn with. */
+function looksLike(material: THREE.Material): string {
+  const standard = material as THREE.MeshStandardMaterial;
+  const colour = standard.color ? `#${standard.color.getHexString()}` : '';
+  const maps = standard.map ? ' mapped' : '';
+  const side = ['', ' inside out', ' both sides'][material.side] ?? '';
+  const seen = material.transparent ? ' see-through' : '';
+  return `${material.name || material.type} ${colour}${maps}${side}${seen}`.trim();
+}
+
+/** `meshes` by the material each draws in, as parts, those of the most triangles first (`HERO_MATERIALS` of them). */
+function byMaterial(meshes: THREE.Mesh[]): Part[] {
+  const alike = new Map<THREE.Material, THREE.Mesh[]>();
+  for (const mesh of meshes) {
+    const material = materialsOf(mesh)[0];
+    alike.set(material, [...(alike.get(material) ?? []), mesh]);
+  }
+  const trianglesIn = (group: THREE.Mesh[]): number => group.reduce((sum, mesh) => sum + trianglesOf(mesh), 0);
+  return [...alike]
+    .sort((a, b) => trianglesIn(b[1]) - trianglesIn(a[1]))
+    .slice(0, HERO_MATERIALS)
+    .map(([material, group]) => heroPart(`  in ${looksLike(material)}`, group));
+}
+
+/** The hero's parts: his head, his hands, his cloth (what moves as cloth: its shape changes), the rest of him, that
+ *  rest by its materials, and the shadows he casts. */
+function heroParts(): Part[] {
+  const meshes = heroMeshes();
+  const head = G.player.model.joints?.head;
+  const isHand = (mesh: THREE.Mesh): boolean => under(mesh, (object) => Boolean(object.userData.drawnHand));
+  const isHead = (mesh: THREE.Mesh): boolean => under(mesh, (object) => object === head);
+  const isCloth = (mesh: THREE.Mesh): boolean => {
+    const position = mesh.geometry.attributes.position as THREE.BufferAttribute;
+    return position.usage !== THREE.StaticDrawUsage;
+  };
+  const hands = meshes.filter(isHand);
+  const heads = meshes.filter((mesh) => !isHand(mesh) && isHead(mesh));
+  const cloth = meshes.filter((mesh) => !isHand(mesh) && !isHead(mesh) && isCloth(mesh));
+  const rest = meshes.filter((mesh) => !hands.includes(mesh) && !heads.includes(mesh) && !cloth.includes(mesh));
+  return [
+    heroPart('his head', heads),
+    heroPart('his hands', hands),
+    heroPart('his cloth', cloth),
+    heroPart('the rest of him', rest),
+    ...byMaterial(rest),
+    heroShadowsPart(meshes),
+  ];
+}
+
+/**
+ * The hero's parts, each timed alone over `HERO_ROUNDS` rounds, and a change of nothing timed the same way: what it
+ * reads is the measure's own noise, and over `NOTHING_MOST` it's a problem. A hero is a small share of the screen
+ * and a large one of the scene's triangles, most of them smaller than a pixel from the top view.
+ */
+async function eachOfHero(draw: () => void, renders: number): Promise<{ lines: string[]; problems: string[] }> {
+  const turns = { rounds: HERO_ROUNDS, renders };
+  const lines = ['  the hero\'s parts, each alone:'];
+  for (const part of heroParts()) {
+    const cost = await costInTurns(G.renderer, part.change, draw, turns);
+    if (cost) lines.push(`  ${partLine(part, cost)}`);
+  }
+  const nothing = await costInTurns(G.renderer, () => {}, draw, turns);
+  const problems: string[] = [];
+  if (nothing) {
+    const unchanged: Part = { name: 'nothing changed (the measure\'s own noise)', change: () => {} };
+    lines.push(`  ${partLine(unchanged, nothing)}`);
+    // (told from nothing, and more than a hair: a wide error alone says the run was rough, as each row does)
+    if (sure(nothing) && Math.abs(nothing.takes) > NOTHING_MOST) {
+      problems.push(`a change of nothing read ${nothing.takes.toFixed(2)} ms: over ${NOTHING_MOST}, so the parts' `
+        + 'times are not to be believed (another program on the GPU, or its clock unsteady)');
+    }
+  }
+  return { lines, problems };
 }
 
 /** A whole frame part's line: the frame with it and without (by the browser's clock), what it takes and its share. */
@@ -272,6 +420,11 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
       lines.push(partLine(part, cost));
     }
     if (command.each) lines.push(...await eachSeeThrough(draw, TURN_RENDERS));
+    if (command.hero) {
+      const hero = await eachOfHero(draw, TURN_RENDERS);
+      lines.push(...hero.lines);
+      problems.push(...hero.problems);
+    }
     if (command.frame) lines.push(...await frameParts(level));
     if (command.frame && command.canary) await frameCanary(name, lines, problems);
     if (command.canary) {

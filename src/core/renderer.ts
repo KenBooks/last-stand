@@ -20,6 +20,7 @@ import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER } from './layers';
 import { takePorts } from './shaderPorts';
+import { BOUNDS_TEST, declarePointBounds } from './lightBounds';
 import type { WebGPURenderer } from 'three/webgpu';
 import { glFence, gpuFence, setFrameFence } from './frameLoop';
 
@@ -544,6 +545,8 @@ const POINT_LIGHTS_LOOPED = [
   '\t#endif',
   '\tvec3 toLight;',
   '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
+  // (a light out of reach, or unlit, passed over on its packed bounds before it's read: `lightBounds.ts`)
+  ...BOUNDS_TEST,
   '\t\tpointLight = pointLights[ i ];',
   // (an idle light, or a point past a light's reach, where three's attenuation comes out 0, passed over on a test of
   // the distance's square alone)
@@ -571,7 +574,8 @@ function loopPointLights(): void {
     console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
     return;
   }
-  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED
+  const looped = declarePointBounds() ? POINT_LIGHTS_LOOPED : POINT_LIGHTS_LOOPED.replace(BOUNDS_TEST.join('\n'), '');
+  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + looped
     + chunk.slice(end + POINT_LIGHTS_END.length);
 }
 
