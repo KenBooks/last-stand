@@ -134,6 +134,58 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   };
 }
 
+/** the lit shading made plain (`plainLitNodes`): 1 at a level that asks for it, a uniform's value */
+const plainLit = { value: 0 };
+/** Low's and Very low's lit shading made plain (`QualityPreset.plainLit`), or whole again: a uniform, nothing compiled. */
+export function setPlainLitOnWebGPU(on: boolean): void {
+  plainLit.value = on ? 1 : 0;
+}
+
+/** the surface maps' scopes a material's node reads, each with what it is without its map */
+const PLAIN_SCOPES = ['normal', 'roughness', 'metalness', 'ao'] as const;
+type PlainScope = (typeof PLAIN_SCOPES)[number];
+/** the material's maps each scope reads (the normal's bump map too) */
+const MAPS_OF: Record<PlainScope, string[]> = {
+  normal: ['normalMap', 'bumpMap'],
+  roughness: ['roughnessMap'],
+  metalness: ['metalnessMap'],
+  ao: ['aoMap'],
+};
+
+/**
+ * The lit shading made plain where `plainLit` is 1 (Low and Very low): no surface maps (normal, bump, roughness,
+ * metalness, occlusion: each surface its material's own roughness and metalness, its normal the geometry's) and no
+ * shadows taken (the sun's and the point lights', each surface lit as if out of them). Each is a branch on a uniform
+ * (three's `select` writes an `if` whose block holds the lookups), so a level switches it live, nothing compiled, and
+ * Auto's steps down a level compile nothing. From the owner's phone (trace DM4B-R468, the crypt at Low): the maps were
+ * 26% of its frame and the shadows taken 25%, and its GPU slows 2.35 times after a few seconds of play: held at 60
+ * frames a second slowed, its frame must cost 7 ms at full speed where it cost 11.
+ */
+function plainLitNodes(): void {
+  const { uniform, renderGroup, select, float, normalView } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const plain = uniform(0).setGroup(renderGroup).onRenderUpdate(() => plainLit.value);
+  const whole = plain.lessThan(0.5);
+  type Built = { context: { material: Record<string, unknown> } };
+  type Scoped = { scope: string; getFloat(scope: string): unknown; setup(builder: Built): unknown };
+  const material = gpu.MaterialNode.prototype as unknown as Scoped;
+  const setup = material.setup;
+  material.setup = function (this: Scoped, builder: Built) {
+    const node = setup.call(this, builder);
+    const scope = this.scope as PlainScope;
+    const maps = MAPS_OF[scope];
+    if (!maps || !maps.some((map) => builder.context.material[map])) return node;
+    const without = scope === 'normal' ? normalView : scope === 'ao' ? float(1) : this.getFloat(scope);
+    return select(whole, node, without);
+  };
+  type Shadowing = { setup(builder: unknown): unknown };
+  const shadowNode = gpu.ShadowNode.prototype as unknown as Shadowing;
+  const shadowSetup = shadowNode.setup;
+  shadowNode.setup = function (this: Shadowing, builder: unknown) {
+    const node = shadowSetup.call(this, builder);
+    return node === undefined ? node : select(whole, node, float(1));
+  };
+}
+
 /** The scene and bloom drawn at `share` of the screen's pixels each way (the quality's and Auto's, `sceneShare` in
  *  core/renderer.ts), the last pass scaling it up to the canvas. */
 export function setSceneShare(share: number): void {
@@ -256,6 +308,7 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
     const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
+  plainLitNodes();
   compileShadowsToo(renderer);
   compilesTakeTurns(renderer);
   walkedAtOnce(renderer);

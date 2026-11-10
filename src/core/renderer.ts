@@ -646,6 +646,11 @@ let shadowInTurns = false;
 export function setShadowInTurns(on: boolean): void { shadowInTurns = on; }
 
 let sunShadowHeld = false;
+/** whether anything looks into the sun's shadow: not where the lit shading is plain (`setPlainLitOnWebGPU`) */
+let sunShadowSeen = true;
+/** The sun's shadow drawn (`seen`) or left as it is, where no surface takes it: its pass draws every caster in the
+ *  arena, some 270k triangles on a phone at Very low. */
+export function setSunShadowSeen(seen: boolean): void { sunShadowSeen = seen; }
 /** The sun's shadow kept as it is (`held`) or drawn as `sunShadowInTurns` has it: the profiler's shadow maps' part
  *  on WebGPU, which draws a light's shadow by its own `autoUpdate` alone (`src/perf/sceneParts.ts`). */
 export function holdSunShadow(held: boolean): void { sunShadowHeld = held; }
@@ -669,7 +674,7 @@ function sunShadowInTurns(): void {
   // (where the sun's shadow is the still world's alone, it's drawn with the still shadows, by no frame of its own)
   // (nor where its map is kept, the village's: set to draw here every frame, the whole map was drawn again, every
   // tree, the palisade and the hero, 430k triangles of a frame's 1.3M on High, and the kept copy then laid over it)
-  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill() && !moonShadowKept();
+  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill() && !moonShadowKept() && sunShadowSeen;
 }
 
 /** top-down (the default), over the shoulder, or through the character's eyes */
