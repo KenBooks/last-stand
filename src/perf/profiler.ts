@@ -3,14 +3,15 @@
 // bonfire at 79 fps where the owner's phone drew 35 (a phone's GPU throws away its fast path on cut-out leaves and
 // blending, a desktop's doesn't). So the game times itself: its frames are held (`holdFrames`), and the frame as it
 // stands is drawn again and again with each part taken out and put back in turns (`sceneParts.ts`), each frame waited
-// out on the GPU (a pixel read back) and timed by the page's clock. In turns, the device's heat and clocks fall on
-// both sides alike. The result is shown, and sent with the player's consent as a performance report (`consent.ts`
-// `sendProfile`), where `lab trace` reads it.
+// out on the GPU (WebGL: a pixel read back; WebGPU: its queue's work done) and timed by the page's clock. In turns, the
+// device's heat and clocks fall on both sides alike. The result is shown, and sent with the player's consent as a
+// performance report (`consent.ts` `sendProfile`), where `lab trace` reads it.
 import * as THREE from 'three';
 import { G } from '../state';
 import { holdFrames } from '../core/frameLoop';
 import { render } from '../core/renderer';
-import { WEBGPU } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
+import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
@@ -30,6 +31,8 @@ export interface PartCost {
   name: string;
   on: number;
   off: number;
+  /** the programs (WebGPU's pipelines) made while it was timed: each was a wait in its first frame */
+  compiled?: number;
 }
 
 /** What the profiler found: the frame as it stands, and each part's cost, the costliest first. */
@@ -38,9 +41,17 @@ export interface Profile {
   frame: number;
   /** how long the profile took, start to end (s) */
   seconds: number;
-  /** the programs compiled while it ran (its parts must keep the scene's: each compiled is a wait) */
+  /** the programs compiled while it ran, WebGPU's pipelines made (its parts must keep the scene's: each compiled
+   *  is a wait) */
   compiled: number;
+  /** what drew it: WebGL, WebGPU, or WebGPU with its GPU-driven drawing (`?meshlets=1`) */
+  renderer: string;
+  /** WebGPU's: the pipelines a draw made while it ran, each holding its frame up (made by a part's first frame,
+   *  which is never timed; the rest are made beside the frames, their objects left out until they are) */
+  compiledAtDraw?: number;
   parts: PartCost[];
+  /** the parts that can't be timed on this renderer, and why (said in the report in place of their cost) */
+  untimed?: { name: string; why: string }[];
   /** the frame as the browser shows it, from one of its frames to the next (ms), with the page's parts in it shown
    *  and hidden (`ProfileOptions.pageParts`): what putting the page together costs, which a draw waited for leaves
    *  out */
@@ -92,11 +103,26 @@ export const CANARY_PART = 'canary: the frame drawn twice';
 let readTarget: THREE.WebGLRenderTarget | null = null;
 const readBack = new Uint8Array(4);
 
-/** Waits for the GPU to finish the frame: a pixel of a target of its own read back (the canvas may be float16). */
-function waitForGpu(): void {
+/** Waits for the GPU to finish the frame: on WebGL a pixel of a target of its own read back (the canvas may be
+ *  float16); on WebGPU its queue's work done, as a frame there is never waited for by a read (`gpuDone`). */
+async function waitForGpu(): Promise<void> {
+  if (WEBGPU) {
+    await gpuDone(G.renderer);
+    return;
+  }
   readTarget ??= new THREE.WebGLRenderTarget(1, 1);
   G.renderer.readRenderTargetPixels(readTarget, 0, 0, 1, 1, readBack);
 }
+
+/** The renderer drawing the game, as a profile names it. */
+function rendererName(): string {
+  if (!WEBGPU) return 'WebGL';
+  if (RUNNING.webgpuOnGl) return 'WebGPU (its WebGL 2 backend)';
+  return RUNNING.meshlets ? 'WebGPU (meshlets)' : 'WebGPU';
+}
+
+/** The programs this renderer has compiled so far: WebGL's programs, WebGPU's pipelines. */
+const compiledSoFar = (): number => (WEBGPU ? pipelinesMade().made : G.renderer.info.programs?.length ?? 0);
 
 /** The browser's next frame: one timed frame each, so the page paints, answers touches and shows the progress
  * between them (drawn back to back, a phone's GPU had no time to show the page, and Chrome offered to kill it). */
@@ -117,17 +143,20 @@ function meanOf(values: number[]): number {
 /** A frame drawn, waited out on the GPU and timed (ms). */
 type TimedDraw = () => Promise<number>;
 
+/** A frame's draw: the game's `render`, or the canary's two (a promise on WebGPU: the GPU waited for between them). */
+type Draw = () => void | Promise<void>;
+
 /** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms); stopped
  * when `cancelled`, and `counted` after each. */
-function timing(draw: () => void, options: ProfileOptions, counted: () => void): TimedDraw {
+function timing(draw: Draw, options: ProfileOptions, counted: () => void): TimedDraw {
   const clock = options.clock ?? (() => performance.now());
   const nextFrame = options.nextFrame ?? browserFrame;
   return async () => {
     await nextFrame();
     if (options.cancelled?.()) throw new ProfileCancelled();
     const start = clock();
-    draw();
-    waitForGpu();
+    await draw();
+    await waitForGpu();
     const took = clock() - start;
     counted();
     return took;
@@ -136,7 +165,7 @@ function timing(draw: () => void, options: ProfileOptions, counted: () => void):
 
 /** `draw` as a frame drawn in the browser's next frame, timed by its interval from the frame before, as the browser
  *  shows it (nothing waited for: the browser puts the page together meanwhile); stopped when `cancelled`. */
-function shownTiming(draw: () => void, options: ProfileOptions, counted: () => void): TimedDraw {
+function shownTiming(draw: Draw, options: ProfileOptions, counted: () => void): TimedDraw {
   const clock = options.clock ?? (() => performance.now());
   const nextFrame = options.nextFrame ?? browserFrame;
   let last = clock();
@@ -146,7 +175,7 @@ function shownTiming(draw: () => void, options: ProfileOptions, counted: () => v
     const now = clock();
     const interval = now - last;
     last = now;
-    draw();
+    void draw();
     options.eachPageFrame?.();
     counted();
     return interval;
@@ -179,18 +208,26 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
   return { name: part.name, on: average(on), off: average(off) };
 }
 
-/** Whether the profiler can time this game's frames: WebGL's (WebGPU's frame isn't waited for by a read). */
-export const canProfile = (): boolean => !WEBGPU;
-
 /** Profiles the frame as it stands, the game's frames held meanwhile; throws `ProfileCancelled` if cancelled. */
 export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   const turns = options.turns ?? PROFILE_TURNS;
   let twice = false;
-  const draw = () => {
-    render();
-    if (twice) render();
+  // (on WebGPU each draw is a node frame of its own, `renderWebGPU`: three's passes draw their scene once a node frame)
+  const once = render;
+  // (the canary's second frame drawn once the GPU is done with the first: WebGPU's queue takes it as it's sent, and
+  // the second's CPU work ran beside the first's GPU work, read 1.3 times one)
+  const draw: Draw = () => {
+    once();
+    if (!twice) return undefined;
+    if (!WEBGPU) {
+      once();
+      return undefined;
+    }
+    return waitForGpu().then(once);
   };
-  const parts = frameParts();
+  const all = frameParts();
+  const parts = all.filter((part) => !part.untimed);
+  const untimed = all.filter((part) => part.untimed).map((part) => ({ name: part.name, why: part.untimed! }));
   if (options.canary) parts.push({ name: CANARY_PART, change: (on) => { twice = on; } });
   const pageParts = options.pageParts ?? [];
   const pageFrames = pageParts.length ? framesOf(pageParts.length, PAGE_TURNS) : 0;
@@ -202,23 +239,33 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   const timedFrame = timing(draw, options, counted);
   const now = options.clock ?? (() => performance.now());
   const started = now();
-  const programs = G.renderer.info.programs?.length ?? 0;
+  const programs = compiledSoFar();
+  const atDraw = WEBGPU ? pipelinesMade().atDraw : 0;
   holdFrames(true);
+  if (WEBGPU) holdPipelines(G.renderer, true);
   try {
     const costs: PartCost[] = [];
     for (const part of parts) {
       progress.part = part.name;
-      costs.push(await costOf(part, timedFrame, turns));
+      const before = compiledSoFar();
+      const cost = await costOf(part, timedFrame, turns);
+      costs.push({ ...cost, compiled: compiledSoFar() - before });
     }
+    // (each part is left in, the canary's too: the whole frame read drawn twice)
+    twice = false;
     progress.part = 'the whole frame';
     const frames: number[] = [];
     for (let frame = 0; frame < turns.frames * 2; frame++) frames.push(await timedFrame());
     costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
     const shownFrame = shownTiming(draw, options, counted);
     const shown = pageParts.length ? await shownCosts(pageParts, shownFrame, progress) : undefined;
-    const compiled = (G.renderer.info.programs?.length ?? 0) - programs;
-    return { frame: medianOf(frames), seconds: (now() - started) / 1000, compiled, parts: costs, shown };
+    const compiled = compiledSoFar() - programs;
+    const seconds = (now() - started) / 1000;
+    const compiledAtDraw = WEBGPU ? pipelinesMade().atDraw - atDraw : undefined;
+    const renderer = rendererName();
+    return { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
   } finally {
+    if (WEBGPU) holdPipelines(G.renderer, false);
     holdFrames(false);
   }
 }
@@ -246,20 +293,28 @@ async function shownCosts(parts: ScenePart[], shownFrame: TimedDraw,
   }
 }
 
-/** A part's cost as a line: what it takes, its share of the frame, the frame with it and without. */
-function partLine(part: PartCost, frame: number): string {
+/** A part's cost as a line: what it takes, its share of the frame, the frame with it and without; on WebGPU, the
+ *  pipelines made while it was timed (WebGL's line as it was). */
+function partLine(part: PartCost, frame: number, onWebGPU = false): string {
   const takes = part.on - part.off;
   const share = frame > 0 ? (100 * takes) / frame : 0;
+  const made = onWebGPU && part.compiled ? `, ${part.compiled} pipelines made` : '';
   return `${part.name}: ${takes.toFixed(1)} ms, ${share.toFixed(0)}% (${part.on.toFixed(1)} with it, `
-    + `${part.off.toFixed(1)} without)`;
+    + `${part.off.toFixed(1)} without${made})`;
 }
 
 /** A profile as lines: the frame, then each part's cost, the costliest first. */
 export function profileLines(found: Profile): string[] {
   const fps = found.frame > 0 ? Math.round(1000 / found.frame) : 0;
+  // (WebGL's lines as they were, the traces before WebGPU's read alike; WebGPU's says so, and counts its pipelines)
+  const onWebGPU = found.renderer.startsWith('WebGPU');
+  const made = onWebGPU
+    ? `${found.compiled} pipelines made (${found.compiledAtDraw ?? 0} at a draw), on ${found.renderer}`
+    : `${found.compiled} programs compiled`;
   const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame drawn and waited for; `
-    + `profiled in ${found.seconds.toFixed(1)} s, ${found.compiled} programs compiled`;
-  const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame))];
+    + `profiled in ${found.seconds.toFixed(1)} s, ${made}`;
+  const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame, onWebGPU))];
+  lines.push(...(found.untimed ?? []).map((part) => `${part.name}: ${part.why}`));
   if (!found.shown) return lines;
   const shownFps = found.shown.frame > 0 ? Math.round(1000 / found.shown.frame) : 0;
   lines.push(`the frame as the browser shows it, frame to frame: ${found.shown.frame.toFixed(1)} ms (${shownFps} fps), `

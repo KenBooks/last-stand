@@ -23,13 +23,12 @@ export const RUNNING = {
   lightsEach: params.get('lights') === 'each',
 };
 
-/** This page's address on `kind`, its other parameters kept: WebGPU's with its meshlets, the fastest way it has run. */
+/** This page's address on `kind`, its other parameters kept. WebGPU's without its meshlets, which only the address
+ *  asks for: on a phone the hero stood stuck mid pose under them, the stick moving nothing, and each resize builds
+ *  every batch again (0.4 to 0.7 s; a tap to full screen as it loaded showed black). */
 export function addressOn(kind: RendererKind): string {
   const url = new URL(location.href);
   for (const name of ADDRESS_PARAMS) url.searchParams.delete(name);
-  if (kind === 'webgpu') {
-    url.searchParams.set('renderer', 'webgpu');
-    url.searchParams.set('meshlets', '1');
-  }
+  if (kind === 'webgpu') url.searchParams.set('renderer', 'webgpu');
   return url.href;
 }

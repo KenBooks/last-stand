@@ -52,14 +52,27 @@ function bootOutcome(cold) {
  * How a page boots: at `quality` (`low@518400`, the pixels let go; null: the lab's own, High), `cold` or
  * not (`bootOutcome`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
- * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too.
+ * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too. It
+ * draws with `renderer`: WebGL, WebGPU or WebGPU with its GPU-driven drawing (`RENDERER_QUERIES`).
  */
-export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false });
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, renderer: 'webgl' });
 
-/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`). */
+/** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
+const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1' };
+
+/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`). */
 export function bootOf(options) {
   const first = Boolean(options.first);
-  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first };
+  const renderer = options.renderer ?? 'webgl';
+  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, renderer };
+}
+
+/** The renderer `boot` draws with (a boot from before `--renderer`: WebGL). */
+const rendererOf = (boot) => boot.renderer ?? 'webgl';
+
+/** The game's address at `url` for `boot`: with its renderer's query, as the pause menu's switch opens it. */
+export function bootAddress(url, boot) {
+  return url + RENDERER_QUERIES[rendererOf(boot)];
 }
 
 /** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, `, a first visit`, or nothing for the
@@ -67,12 +80,14 @@ export function bootOf(options) {
 export function bootText(boot) {
   const at = boot.quality ? ` at ${boot.quality}` : '';
   const kind = boot.first ? ', a first visit' : boot.cold ? ', cold' : '';
-  return `${at}${kind}`;
+  const on = rendererOf(boot) === 'webgl' ? '' : ` on ${rendererOf(boot)}`;
+  return `${at}${kind}${on}`;
 }
 
 /** Whether two boots are the same. */
 function sameBoot(a, b) {
-  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first);
+  const sameRenderer = rendererOf(a) === rendererOf(b);
+  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameRenderer;
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -613,7 +628,7 @@ export class Side {
     const failed = scriptFailure(page);
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
-    await page.goto(this.url, { timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' });
+    await page.goto(bootAddress(this.url, how),{ timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' });
     // (Chrome raises a page's renderer to normal priority as it shows it: lowered again to the lab's)
     await lowerProcesses(this.browser);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)

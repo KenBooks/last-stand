@@ -141,9 +141,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   was (the pixel ratio, what's shown, what casts, the lights' reach) and let the game's frames go (the hero walks).
   On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
   for that, have the player press the button and read their trace with `lab trace` (its Profile section).
-  `--canary` draws the frame twice, which must read 1.6 times once. The forest at 15.4,15.4: the frame 4.6 to 4.9 ms
-  here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to 1.97 times (2 frames a side read 1.57 once). It
-  keeps no copy of the parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
+  `--canary` draws the frame twice, which must read 1.6 times once (on WebGPU the GPU waited out between the two).
+  The forest at 15.4,15.4: the frame 4.6 to 4.9 ms here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to
+  1.97 times (2 frames a side read 1.57 once). Its result is sent as the tab's Send sends it, to a traces service of
+  the lab's own, and read back as `lab trace` reports it: its Profile section must hold the lines as sent. With
+  `--renderer webgpu` or `meshlets` it profiles WebGPU, which must name itself in the first line; there the pipelines
+  made count (over 24 fails: the plain colour's 12 to 16), and the forest's frame read 6.8 to 9 ms, the canary 1.99
+  to 2.1 times; on `meshlets` half the scene's pixels isn't timed, a line saying why. It keeps no copy of the
+  parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
   settings (`--level`, low) and the screen's own pixels, whatever the level's cap: the resolution is never what's
   cut, what a pixel costs is. The scene pass alone is drawn, each part taken out and put back in turns

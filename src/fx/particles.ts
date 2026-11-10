@@ -100,6 +100,8 @@ class Pool {
       this.quads = particleQuads(attrs[0], attrs[1], attrs[2], blending, soft);
     }
     this.points = this.quads?.mesh ?? new THREE.Points(geo, this.mat);
+    // (the profiler's particles: WebGPU's are quads, a mesh, src/perf/sceneParts.ts)
+    this.points.userData.particles = true;
     this.points.frustumCulled = false;
     this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;
   }

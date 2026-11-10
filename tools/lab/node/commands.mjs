@@ -799,16 +799,28 @@ export const COMMANDS = {
       if (options.rounds !== undefined && !(options.rounds >= 1)) throw labError('profile --rounds: 1 or more');
       if (options.device) playAsDevice(options);
     },
-    each(side, options) {
-      const command = {
-        biome: options.biome ?? 'forest',
-        view: options.view ?? 'top',
-        at: options.at,
-        level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
-        rounds: options.rounds === undefined ? undefined : Math.round(options.rounds),
-        canary: Boolean(options.canary),
-      };
-      return side.command('profileHere', command);
+    async each(side, options) {
+      // (its result sent as the Performance tab's Send sends it, to a traces service of the lab's own, and read back)
+      const { checkProfileSent, startTracesService } = await import('./tracesService.mjs');
+      const service = await startTracesService(new URL(side.url).origin);
+      try {
+        const command = {
+          biome: options.biome ?? 'forest',
+          view: options.view ?? 'top',
+          at: options.at,
+          level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
+          rounds: options.rounds === undefined ? undefined : Math.round(options.rounds),
+          canary: Boolean(options.canary),
+          send: service.url,
+        };
+        const result = await checkProfileSent(await side.command('profileHere', command), service);
+        // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)
+        const onWebGPU = (options.renderer ?? 'webgl') !== 'webgl';
+        if (!onWebGPU || /, on WebGPU/.test(result.text)) return result;
+        return { ...result, problems: [...result.problems, `booted on ${options.renderer}, profiled on WebGL`] };
+      } finally {
+        await service.close();
+      }
     },
     textOf: asText,
     problemsOf: problemsIn,
