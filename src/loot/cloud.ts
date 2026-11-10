@@ -40,6 +40,8 @@ interface Kept {
   lastSync: number;
   /** when this device signed in by a sign-in code: a preview may add its passkey only just after */
   byCodeAt?: number;
+  /** Google is linked to the account, as the service last said */
+  google?: boolean;
 }
 
 /** One hero changed both here and in the cloud since they last agreed: the player keeps one. */
@@ -148,7 +150,8 @@ const partNames = (): string[] => [...CLASS_IDS.map(partOf), SHARED];
 // --- signing in and out ----------------------------------------------------------------------------------
 function signedInAs(result: api.SignedIn): void {
   api.setToken(result.token);
-  kept = { token: result.token, accountId: result.account.id, linked: false, base: {}, lastSync: 0 };
+  kept = { token: result.token, accountId: result.account.id, linked: false, base: {}, lastSync: 0,
+    google: result.account.google };
   keep();
   setStatus('unlinked');
 }
@@ -159,6 +162,73 @@ export async function signInWithCode(code: string): Promise<void> {
   signedInAs(await api.signInWithCode(code));
   if (kept) { kept.byCodeAt = Date.now(); keep(); }
 }
+
+// --- Google (#503): the page goes to Google and comes home with a code in its address's fragment ----------------
+/** How a return from Google went: signed in, Google linked, or why not (the service's reason). */
+export type GoogleLanding = { kind: 'signedIn' } | { kind: 'linked' } | { kind: 'error'; reason: string };
+
+/** Whether the service signs in with Google (its health says; asked once a visit). */
+export const googleOn = async (): Promise<boolean> => (await api.serviceHealth()).google;
+/** Whether Google is linked to the signed-in account. */
+export const hasGoogle = (): boolean => Boolean(kept?.google);
+
+/** Sends this page to Google to sign in, or (`link`, production's alone) to link Google to the account. The game
+ *  reloads as it comes home: its saves are written as they change, so nothing is lost. */
+export async function goToGoogle(purpose: 'signin' | 'link'): Promise<void> {
+  const nonce = randomNonce();
+  const { url } = await api.googleAddress(purpose, nonce);
+  try { sessionStorage.setItem(GOOGLE_NONCE, nonce); } catch { /* no storage: the return is refused, and says so */ }
+  location.assign(url);
+}
+
+export async function unlinkGoogle(): Promise<void> {
+  await api.unlinkGoogle();
+  if (kept) { kept.google = false; keep(); }
+}
+
+/** where this tab keeps the nonce its Google sign-in is bound to, until it comes home */
+const GOOGLE_NONCE = 'last-stand.cloud.google-nonce';
+const randomNonce = (): string => [...crypto.getRandomValues(new Uint8Array(24))]
+  .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+
+/** This tab's nonce, taken (good once). */
+function takeNonce(): string {
+  try {
+    const nonce = sessionStorage.getItem(GOOGLE_NONCE) ?? '';
+    sessionStorage.removeItem(GOOGLE_NONCE);
+    return nonce;
+  } catch {
+    return '';
+  }
+}
+
+/** The page's return from Google, if this load is one: the fragment the service sent it home with taken off the
+ *  address (a reload or a shared link never repeats it), its code traded for a session. */
+async function landFromGoogle(): Promise<GoogleLanding | null> {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const code = fragment.get('cloud-google');
+  const error = fragment.get('cloud-google-error');
+  const linkedNow = fragment.has('cloud-google-linked');
+  if (!code && !error && !linkedNow) return null;
+  history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+  const nonce = takeNonce();
+  if (error) return { kind: 'error', reason: error };
+  if (linkedNow) {
+    if (kept) { kept.google = true; keep(); }
+    return { kind: 'linked' };
+  }
+  try {
+    // (a code this tab never asked for, a link someone sent, has no nonce here: refused, as expired)
+    signedInAs(await api.googleFinish(code!, nonce));
+    return { kind: 'signedIn' };
+  } catch (e) {
+    return { kind: 'error', reason: e instanceof api.CloudError && e.status === 0 ? 'offline' : 'expired' };
+  }
+}
+
+/** This load's return from Google, if it was one (traded as the game boots, shown once the lobby is). */
+let landing: Promise<GoogleLanding | null> = Promise.resolve(null);
+export const googleLanding = (): Promise<GoogleLanding | null> => landing;
 
 /** Whether the server lets this session add a passkey off production: in its first 10 minutes, made by a code. */
 export const passkeyWindow = (): boolean => Boolean(kept?.byCodeAt && Date.now() - kept.byCodeAt < 10 * 60_000);
@@ -363,6 +433,14 @@ export async function resolve(conflict: Conflict, keepWhich: 'here' | 'cloud'): 
 /** Starts the device's side: syncs at boot, after saves, now and then while in view, and when back online. */
 export function initCloud(h: CloudHooks): void {
   hooks = h;
+  landing = landFromGoogle();
+  // whether Google is linked, as the service says now (linked or unlinked on another device)
+  if (kept) void api.account().then((account) => {
+    if (!kept || kept.google === account.google) return;
+    kept.google = account.google;
+    keep();
+    hooks?.changed();
+  }).catch(() => { /* offline, or signed out: the sync says */ });
   // (each returns at once while signed out or slot 1 isn't the cloud save here)
   window.setTimeout(() => void syncNow(), 2_000);
   window.setInterval(() => { if (document.visibilityState === 'visible') void syncNow(); }, CHECK_MS);

@@ -4,7 +4,7 @@
 // sets, so a preview's page can never write production's heroes. A save is parts (a hero each, what they share),
 // each gzipped JSON with a version: a write names the version it builds on, and a stale one is refused (409) with
 // the version kept, so the game can ask its player which copy to keep (#382).
-//   GET    /saves/health               { ok, passkeys, google, cleanup }: what is on
+//   GET    /saves/health               { ok, passkeys, google, cleanup, backups }: what is on
 //   POST   /saves/passkey/options      { purpose: 'register' | 'login' } -> the options for navigator.credentials
 //   POST   /saves/passkey/verify       { purpose, response } -> { token, account } (a new passkey or a sign-in)
 //   GET    /saves/account              the account: its passkeys, its sites' saves (sizes, times)
@@ -19,7 +19,11 @@
 //   PUT    /saves/save/<part>          a part's gzip, x-save-base: the version it builds on (0: new) -> { version }
 //   DELETE /saves/save                 this site's save, gone (the device keeps its copy)
 //   POST   /saves/copy-production      production's save copied over this site's (a preview's, a commit build's)
-// Everything but the health takes a page of the game's (ORIGINS) and, but the passkey's, a session: `Authorization:
+//   POST   /saves/auth/google          { purpose: 'signin' | 'link', returnPath, nonce } -> { url }: off to Google
+//   GET    /saves/auth/google/callback Google back: the page sent home with #cloud-google=<code> (or -linked, -error)
+//   POST   /saves/auth/google/finish   { code, nonce } -> { token, account }: traded from that page and tab alone
+//   DELETE /saves/google               Google unlinked from the account (never the last way in)
+// Everything but the health and Google's callback takes a page of the game's (ORIGINS) and, but the passkey's, a session: `Authorization:
 // Bearer <token>`, a token made at sign-in for that one site (only its digest is kept).
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
@@ -27,6 +31,8 @@ import { gunzipSync } from 'node:zlib';
 import * as store from './store.mjs';
 import * as passkeys from './passkeys.mjs';
 import { cleanUp, forgetPrs, isCommitBuild, prOf } from './cleanup.mjs';
+import * as google from './google.mjs';
+import { backupHealth, backupSettingsFrom, resetBackups, runBackup } from './backups.mjs';
 
 const env = process.env;
 /** The game's pages: production and the previews and commit builds. Never localhost (any local app is) or the
@@ -84,6 +90,10 @@ export function settingsFrom(vars) {
     githubRepo: vars.GITHUB_REPO ?? 'VictorZakharov/last-stand',
     githubApi: vars.GITHUB_API ?? 'https://api.github.com',
     cleanEvery: Number(vars.CLEAN_EVERY_MS ?? 24 * 60 * 60_000),
+    /** signing in with Google (google.mjs): off while its client's id or secret is unset */
+    google: google.googleSettingsFrom(vars),
+    /** the nightly backups to Drive (backups.mjs): off while the client or the owner's refresh token is unset */
+    backups: backupSettingsFrom(vars),
   };
 }
 let settings = settingsFrom(env);
@@ -140,6 +150,7 @@ function allowedEach(key, limits, now = Date.now()) {
 function prune(now = Date.now()) {
   for (const [key, times] of counts) if (!times.some((t) => now - t < 86_400_000)) counts.delete(key);
   for (const [code, { until }] of linkCodes) if (until <= now) linkCodes.delete(code);
+  google.pruneGoogle(now);
 }
 
 /** Whether `site` is production's: the one trusted site. A preview or commit build runs unmerged code, so a session
@@ -236,7 +247,7 @@ function accountView(account) {
   return {
     id: account.id, created: account.created,
     passkeys: account.passkeys.map(({ id, rpId, created, used }) => ({ id, rpId, created, used })),
-    google: false,
+    google: Boolean(account.google),
     sites: Object.entries(account.sites).map(([site, { updated, bytes }]) => ({ site, updated, bytes })),
   };
 }
@@ -298,6 +309,91 @@ async function link(req, res, origin, headers) {
   }));
   if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
   log('signed in by code', entry.accountId.slice(0, 6), siteOf(origin));
+  return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
+}
+
+/** `POST /saves/auth/google { purpose, returnPath }`: the address to send the page to Google at. A sign-in works on
+ *  any of the game's pages (Google's id is the same everywhere: the one way into one account from every site);
+ *  linking Google to the signed-in account is production's alone, as a preview's token may be anyone's. */
+async function googleBegin(req, res, origin, headers) {
+  if (!settings.google.on) return answer(res, 404, 'Google sign-in is off', headers);
+  if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
+  const body = await jsonOf(req);
+  const purpose = body?.purpose;
+  if (purpose !== 'signin' && purpose !== 'link') return answer(res, 400, 'purpose: signin or link', headers);
+  const returnPath = body?.returnPath ?? '/';
+  if (!google.isReturnPath(returnPath)) return answer(res, 400, 'returnPath: a path of this page\'s', headers);
+  if (!google.isNonce(body?.nonce)) return answer(res, 400, 'nonce: this tab\'s, 16 to 128 letters', headers);
+  const site = siteOf(origin);
+  let accountId = null;
+  if (purpose === 'link') {
+    const signedIn = sessionOf(req, site);
+    if (!signedIn) return answer(res, 401, 'sign in', headers);
+    if (!trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
+    accountId = signedIn.account.id;
+  }
+  const url = google.begin(settings.google, { origin, returnPath, purpose, nonce: body.nonce, accountId });
+  return answer(res, 200, { url }, headers);
+}
+
+/** Google's answer (`GET /saves/auth/google/callback?code&state`): the page that asked sent home, to the origin and
+ *  path its `state` was made with (never one the request names), with a one-time code to trade, or why not. */
+async function googleCallback(req, res) {
+  const query = new URL(req.url ?? '/', 'http://x').searchParams;
+  const entry = google.takePending(query.get('state'));
+  if (!entry) return answer(res, 400, 'This sign-in expired or was used already: go back to the game and try again.');
+  const home = (fragment) => {
+    res.writeHead(303, { location: `${entry.origin}${entry.returnPath}#${fragment}`, 'cache-control': 'no-store' });
+    res.end();
+  };
+  if (query.has('error') || !query.get('code')) return home('cloud-google-error=cancelled');
+  const sub = await google.subOf(settings.google, query.get('code'), entry.verifier);
+  if (!sub) return home('cloud-google-error=refused');
+  // one Google account's changes wait their turn: two sign-ins at once make one account
+  return store.withAccount(`google ${sub}`, async () => {
+    if (entry.purpose === 'link') return home(await linkGoogle(entry.accountId, sub));
+    let account = store.accountOfGoogle(sub);
+    if (!account) {
+      if (!allowed(`account ${addressOf(req)}`, settings.accountsPerDay, 86_400_000)) {
+        return home('cloud-google-error=too-many');
+      }
+      account = store.freshAccount();
+      account.google = { sub, linked: Date.now() };
+      await store.keepAccount(account);
+      log('account made by google', account.id.slice(0, 6));
+    }
+    return home(`cloud-google=${google.landingCode(account.id, entry.origin, entry.nonce)}`);
+  });
+}
+
+/** Links Google's account `sub` to the account `accountId` (its session asked, on production): the fragment the page
+ *  is sent home with. */
+async function linkGoogle(accountId, sub) {
+  const holder = store.accountOfGoogle(sub);
+  if (holder && holder.id !== accountId) return 'cloud-google-error=taken';
+  const result = await change(accountId, (changed) => {
+    if (changed.google && changed.google.sub !== sub) return 'other';
+    changed.google = { sub, linked: changed.google?.linked ?? Date.now() };
+    return 'linked';
+  });
+  if (result.gone) return 'cloud-google-error=signed-out';
+  if (result === 'other') return 'cloud-google-error=other';
+  log('google linked', accountId.slice(0, 6));
+  return 'cloud-google-linked';
+}
+
+/** `POST /saves/auth/google/finish { code }`: the code Google's sign-in sent the page home with, traded for a
+ *  session there (from that page's origin alone). */
+async function googleFinish(req, res, origin, headers) {
+  if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
+  const body = await jsonOf(req);
+  const entry = google.takeLanding(body?.code, origin, body?.nonce);
+  if (!entry) return answer(res, 401, 'no such code, or it expired', headers);
+  const result = await change(entry.accountId, (changed) => ({
+    token: store.addSession(changed, siteOf(origin), 'google'), changed,
+  }));
+  if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
+  log('signed in by google', entry.accountId.slice(0, 6), siteOf(origin));
   return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
 }
 
@@ -479,7 +575,7 @@ async function signedInRequest(req, res, path, origin, headers) {
   }
   // past here, what reaches beyond this site's own save: production's sessions alone (a preview's code may have
   // sent its token anywhere)
-  const reachesPast = path === '/saves/account' || path.startsWith('/saves/passkey/');
+  const reachesPast = path === '/saves/account' || path.startsWith('/saves/passkey/') || path === '/saves/google';
   if (reachesPast && !trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
   if (path === '/saves/account' && req.method === 'DELETE') {
     await store.withAccount(account.id, () => store.dropAccount(account.id));
@@ -491,8 +587,8 @@ async function signedInRequest(req, res, path, origin, headers) {
     if (id === null) return answer(res, 400, 'not a passkey id', headers);
     const result = await change(account.id, (changed) => {
       if (!changed.passkeys.some((p) => p.id === id)) return 404;
-      // never the last way in (Google, #503, will count as one)
-      if (changed.passkeys.length <= 1) return 409;
+      // never the last way in: Google counts as one
+      if (waysIn(changed) <= 1) return 409;
       changed.passkeys = changed.passkeys.filter((p) => p.id !== id);
       return 204;
     });
@@ -500,15 +596,34 @@ async function signedInRequest(req, res, path, origin, headers) {
     const [status, body] = statuses[result] ?? [204, ''];
     return answer(res, status, body, headers);
   }
+  if (path === '/saves/google' && req.method === 'DELETE') {
+    const result = await change(account.id, (changed) => {
+      if (!changed.google) return 404;
+      if (waysIn(changed) <= 1) return 409;
+      delete changed.google;
+      return 204;
+    });
+    const statuses = { 404: [404, 'no Google linked'], 409: [409, 'the last way in: add a passkey first'] };
+    const [status, body] = statuses[result] ?? [204, ''];
+    if (status === 204) log('google unlinked', account.id.slice(0, 6));
+    return answer(res, status, body, headers);
+  }
   return answer(res, 404, 'not here', headers);
 }
+
+/** The ways into an account: its passkeys, and Google if linked. */
+const waysIn = (account) => account.passkeys.length + (account.google ? 1 : 0);
 
 async function handle(req, res) {
   const path = new URL(req.url ?? '/', 'http://x').pathname.replace(/\/+$/, '');
   const headers = cors(req);
   if (path === '/saves/health') {
-    return answer(res, 200, { ok: true, passkeys: true, google: false, cleanup: Boolean(settings.githubRepo) }, headers);
+    return answer(res, 200, {
+      ok: true, passkeys: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
+      backups: backupHealth(),
+    }, headers);
   }
+  if (path === '/saves/auth/google/callback' && req.method === 'GET') return googleCallback(req, res);
   if (!path.startsWith('/saves')) return answer(res, 404, 'not here');
   const origin = req.headers.origin ?? '';
   if (!settings.origins.has(origin)) return answer(res, 403, 'not from the game');
@@ -522,6 +637,8 @@ async function handle(req, res) {
   if (path === '/saves/passkey/options' && req.method === 'POST') return passkeyOptions(req, res, origin, headers);
   if (path === '/saves/passkey/verify' && req.method === 'POST') return passkeyVerify(req, res, origin, headers);
   if (path === '/saves/link' && req.method === 'POST') return link(req, res, origin, headers);
+  if (path === '/saves/auth/google' && req.method === 'POST') return googleBegin(req, res, origin, headers);
+  if (path === '/saves/auth/google/finish' && req.method === 'POST') return googleFinish(req, res, origin, headers);
   return signedInRequest(req, res, path, origin, headers);
 }
 
@@ -534,6 +651,11 @@ async function runCleanUp() {
   }
 }
 
+async function backUp() {
+  const result = await runBackup(settings.backups, store.dataRoot());
+  if (!result.skipped) log('backup', result);
+}
+
 /** The service on `port` (0: any; its PORT by default), `overrides` over the environment's settings (`DATA`,
  *  `ORIGINS`... as named there); resolves to its server once it listens. */
 export async function start(port, overrides = {}) {
@@ -541,6 +663,8 @@ export async function start(port, overrides = {}) {
   counts.clear();
   linkCodes.clear();
   passkeys.clearChallenges();
+  google.pruneGoogle(Date.now(), true);
+  resetBackups(settings.backups);
   forgetPrs();
   const kept = await store.load(settings.data);
   const http = createServer((req, res) => {
@@ -550,10 +674,19 @@ export async function start(port, overrides = {}) {
   const timer = setInterval(() => void runCleanUp(), settings.cleanEvery);
   const first = setTimeout(() => void runCleanUp(), FIRST_CLEAN_MS);
   const pruner = setInterval(() => prune(), PRUNE_EVERY);
-  for (const t of [timer, first, pruner]) t.unref();
-  http.on('close', () => { clearInterval(timer); clearTimeout(first); clearInterval(pruner); });
+  const backups = settings.backups.on ? setInterval(() => void backUp(), settings.backups.every) : null;
+  const firstBackup = settings.backups.on ? setTimeout(() => void backUp(), settings.backups.first) : null;
+  for (const t of [timer, first, pruner, backups, firstBackup]) t?.unref();
+  http.on('close', () => {
+    clearInterval(timer);
+    clearTimeout(first);
+    clearInterval(pruner);
+    clearInterval(backups);
+    clearTimeout(firstBackup);
+  });
   await new Promise((resolve) => http.listen(port ?? settings.port, resolve));
-  log(`saves on :${http.address().port}, ${kept} accounts, closed PRs' cleanup ${settings.githubRepo ? 'on' : 'off'}`);
+  log(`saves on :${http.address().port}, ${kept} accounts, closed PRs' cleanup ${settings.githubRepo ? 'on' : 'off'}, `
+    + `Google sign-in ${settings.google.on ? 'on' : 'off'}, Drive backups ${settings.backups.on ? 'on' : 'off'}`);
   return http;
 }
 

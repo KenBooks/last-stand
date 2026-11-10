@@ -93,7 +93,9 @@ const put = (token, name, value, baseVersion, origin = PRODUCTION, device = 'PC'
 test('health says what is on, from anywhere; everything else only from the game\'s pages', async () => {
   const health = await call('GET', '/saves/health', { origin: null });
   assert.equal(health.status, 200);
-  assert.deepEqual(health.body, { ok: true, passkeys: true, google: false, cleanup: true });
+  // (Google's sign-in and the backups are off: their settings are unset here, google.test.mjs sets them)
+  const off = { state: 'off', last: 0 };
+  assert.deepEqual(health.body, { ok: true, passkeys: true, google: false, cleanup: true, backups: off });
   assert.equal((await call('GET', '/saves/save', { origin: 'https://evil.example' })).status, 403);
   assert.equal((await call('GET', '/saves/save', { origin: null })).status, 403);
   assert.equal((await call('GET', '/saves/save')).status, 401);

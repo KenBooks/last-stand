@@ -71,6 +71,7 @@ export function renderCloudBar(): void {
       : '<span class="sc-state">This browser can\'t use passkeys.</span>';
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Keep slot 1 on every device: sign in.</span>${passkeys}`
+      + '<button class="btn sc-google" hidden>Sign in with Google</button>'
       + `<button class="btn sc-code">Use a sign-in code</button>${privacy}</div>${note}`;
   } else if (status === 'unlinked') {
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
@@ -84,6 +85,9 @@ export function renderCloudBar(): void {
       onProduction() ? '' : '<button class="btn sc-copy">Copy my production heroes here</button>',
       // off production the server takes a passkey only just after a code signed this device in
       onProduction() || cloud.passkeyWindow() ? '<button class="btn sc-key">Add a passkey</button>' : '',
+      // (Google is linked and unlinked from production alone: a preview's session may be anyone's token)
+      onProduction() && !cloud.hasGoogle() ? '<button class="btn sc-glink" hidden>Link Google</button>' : '',
+      onProduction() && cloud.hasGoogle() ? '<button class="btn sc-gunlink">Unlink Google</button>' : '',
       '<button class="btn sc-out">Sign out</button>',
       '<button class="btn danger sc-del">Delete cloud save</button>',
       onProduction() ? '<button class="btn danger sc-gone">Delete account</button>' : '',
@@ -104,6 +108,17 @@ export function renderCloudBar(): void {
   bind(bar, '.sc-key', () => act(() => cloud.addPasskey(), () => say('Passkey added: this device can sign in with it.')));
   bind(bar, '.sc-del', confirmDeleteSave);
   bind(bar, '.sc-gone', confirmDeleteAccount);
+  bind(bar, '.sc-google', () => act(() => cloud.goToGoogle('signin')));
+  bind(bar, '.sc-glink', confirmLinkGoogle);
+  bind(bar, '.sc-gunlink', () => act(() => cloud.unlinkGoogle(), () => say('Google is unlinked: sign in with a passkey or a code.')));
+  showIfGoogle(bar);
+}
+
+/** Google's buttons shown once the service says its sign-in is on (its health, asked once a visit). */
+function showIfGoogle(bar: Element): void {
+  const hidden = [...bar.querySelectorAll<HTMLElement>('.sc-google, .sc-glink')];
+  if (!hidden.length) return;
+  void cloud.googleOn().then((on) => { for (const button of hidden) button.hidden = !on; });
 }
 
 function bind(root: ParentNode, selector: string, run: () => void): void {
@@ -132,6 +147,10 @@ function failure(e: unknown): string {
     if (e.status === 0) return 'The cloud saves server could not be reached. Try again in a while.';
     if (e.status === 401) return 'Not signed in: that passkey or code isn\'t one this server knows, or it expired.';
     if (e.status === 429) return 'Too many tries: wait a while and try again.';
+    if (e.message.startsWith('Google sign-in is off')) return 'Signing in with Google is off on this server for now.';
+    if (e.message.startsWith('the last way in')) {
+      return 'Google is the only way into this account: add a passkey first, then unlink Google.';
+    }
     if (e.message.startsWith('add a passkey')) {
       return 'On a preview, a passkey can be added only in the 10 minutes after signing in with a code. Sign in elsewhere on a device already signed in, type its code here, then add the passkey.';
     }
@@ -172,6 +191,37 @@ function dialog(title: string, html: string, buttons: Button[]): void {
 }
 
 const say = (text: string): void => dialog('Cloud save', `<p>${escape(text)}</p>`, [{ label: 'OK', kind: 'primary' }]);
+
+/** What each reason a return from Google failed says (the service's, `cloud-google-error`). */
+const GOOGLE_ERRORS: Record<string, string> = {
+  cancelled: 'The Google sign-in was cancelled.',
+  refused: 'Google didn\'t confirm the sign-in. Try again.',
+  'too-many': 'Too many new accounts from this network today: try again tomorrow, or use a passkey.',
+  taken: 'That Google account is linked to another Last Stand account already. Sign in with Google to use that one.',
+  other: 'Another Google account is linked to this account already: unlink it first.',
+  'signed-out': 'This device was signed out before Google answered. Sign in and try again.',
+  expired: 'The Google sign-in took too long, or was used already. Try again.',
+  offline: 'The cloud saves server could not be reached. Try again in a while.',
+};
+
+/** The game's return from Google, shown on the save slots screen: on to choosing the cloud save, or what went on. */
+export function showGoogleLanding(landing: cloud.GoogleLanding): void {
+  if (landing.kind === 'signedIn') { afterSignIn(); return; }
+  if (landing.kind === 'linked') {
+    say('Google is linked: sign in with it on any device, as well as with your passkeys.');
+    return;
+  }
+  say(GOOGLE_ERRORS[landing.reason] ?? 'The Google sign-in failed. Try again.');
+}
+
+function confirmLinkGoogle(): void {
+  dialog('Link Google', '<p>Google becomes a second way into this account, on any device and any preview. Google tells the '
+    + 'server only an id for your Google account: no name, email or picture.</p><p>The game reloads on its way back from Google; '
+    + 'your heroes are saved as you play, so nothing is lost.</p>', [
+    { label: 'Go to Google', kind: 'primary', run: () => { closeDialog(); return act(() => cloud.goToGoogle('link')); } },
+    { label: 'Cancel' },
+  ]);
+}
 
 function askCode(): void {
   // the field first: a phone's keyboard covers the screen's lower half, and the dialog moves above it as one opens

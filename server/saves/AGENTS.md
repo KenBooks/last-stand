@@ -4,13 +4,13 @@ The saves service (`saves.mjs`; `serve.mjs` starts it): cloud saves (#382, miles
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
-- `saves.mjs`: the HTTP side, every route in its header comment, and the settings (`settingsFrom`). `store.mjs`: the files it keeps. `passkeys.mjs`: WebAuthn through `@simplewebauthn/server`. `cleanup.mjs`: the daily cleanup.
-- Tests: `npm run saves:test` (once: `npm ci --prefix server/saves --ignore-scripts`; the PR build runs both). They go through the library's real checks: `test/authenticator.mjs` answers as a browser's passkey does (an ES256 key, "none" attestation, CBOR by hand).
+- `saves.mjs`: the HTTP side, every route in its header comment, and the settings (`settingsFrom`). `store.mjs`: the files it keeps. `passkeys.mjs`: WebAuthn through `@simplewebauthn/server`. `cleanup.mjs`: the daily cleanup. `google.mjs`: signing in with Google by redirect. `backups.mjs`: the nightly backups to Drive; `restore.mjs` writes one back; `driveToken.mjs` makes the owner's Drive refresh token, on the owner's PC.
+- Tests: `npm run saves:test` (once: `npm ci --prefix server/saves --ignore-scripts`; the PR build runs both). They go through the library's real checks: `test/authenticator.mjs` answers as a browser's passkey does (an ES256 key, "none" attestation, CBOR by hand). `test/google.test.mjs` runs Google's sign-in and the backups against `test/fakeGoogle.mjs`, a stand-in for Google's token endpoint and Drive; each of its checks was shown to fail with what it guards switched off (the landing code's origin, linking from a preview, the upload's MD5, the return path).
 - Run it locally: `DATA=.tmp/saves PORT=8789 ORIGINS=http://localhost:5173 node server/saves/serve.mjs` (`localhost` is a relying party by default).
 
 ## How it works
 
-- **Accounts are ours:** a random id, with ways in attached. Passkeys now, and Google (#503) as a second way into the same account. No name, email or picture is kept; a passkey's user name is `Last Stand <first 6 letters of the id>`.
+- **Accounts are ours:** a random id, with ways in attached: passkeys, and Google as another way into the same account. No name, email or picture is kept; a passkey's user name is `Last Stand <first 6 letters of the id>`. An account always keeps one way in: the last passkey can't be deleted, nor Google unlinked, while it's the only one (`waysIn`).
 - **Sessions** are random tokens, given to the page once (it sends `Authorization: Bearer`, not a cookie: the game's pages are another site, and their browsers block third-party cookies). Only their SHA-256 is kept. A session belongs to the site it was made on and is refused from any other. It lasts `SESSION_DAYS` (180) since it was last used (checked on every request, and dropped by the cleanup), and its use is written down at most once a day.
 - **Production is the one trusted site.** A PR preview or commit build runs unmerged code, which can send its token anywhere and replay it with any `Origin`. So a session of theirs reaches its own site's save and nothing past it: deleting the account and deleting passkeys answer 403 unless the session is production's, and a sign-in code it makes signs in on previews and commit builds alone (`previewsOnly`: the owner's choice, so a second device can join a preview before production has the game's side; at worst a stolen preview token reaches the account's preview saves, never production's, as a passkey made on a preview has `ls.wellscoped.dev`'s relying party, which production's login refuses). It may add a passkey only in its first 10 minutes, and only if a sign-in code made it (the player adding that site's passkey). The security review of #506 found each of these open; the test "a preview's token reaches nothing past its own save" checks them.
 - **A site is a page's origin:** its host, `www.` left off, `:` as `_` (`last-stand.cc`, `pr-512.ls.wellscoped.dev`, `c-<sha12>.ls.wellscoped.dev`). A save is filed under the site the browser's `Origin` names, never one the page asks for. So a preview's code can never write production's heroes, and can read them only through `copy-production`, the player's own choice.
@@ -19,6 +19,28 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - **A save is parts** (`hero.mage`, `shared`...: the game names them, `^[a-z][a-z0-9.-]{0,31}$`, `PARTS_MAX` 16), each gzipped JSON of an object. Each part has a version, the device that wrote it and when. A write sends `x-save-base`, the version it builds on (0: new). A stale one is refused with a 409 and the version, device and time kept, so the game can ask its player which copy to keep (per hero: #382). The service never merges and never picks.
 - **What it checks of a save:** its size and shape alone (gzip of a JSON object, unpacking to 512 KB at most). Saves stay the player's own and client-authoritative: cheating is out of scope (#382).
 - **Copying production into a preview** gives each copied part a version past the preview's own. A device holding the preview's older copy is then told it changed (409), and never writes over the copy unseen. Production is never written from another site.
+
+## Google
+
+- **Sign-in by redirect** (`google.mjs`): the page asks `POST /saves/auth/google { purpose, returnPath }` and is sent to Google with the OAuth code flow: the `openid` scope alone, PKCE (S256), `prompt=select_account`, and a `state` remembered here (10 minutes, good once) with the page's origin (one of `ORIGINS`) and the path to return to (the page's own path and query, never `//host`). Google sends the player to `/saves/auth/google/callback`, the one route that takes no `Origin` (a navigation carries none); it trades the code at Google's token endpoint with the verifier and the client's secret, checks the id token's issuer, audience and expiry (straight from Google over TLS, so its signature needn't be checked: OpenID Connect Core 3.1.3.7), and sends the page home to that origin and path alone with `#cloud-google=<code>` (a one-time code, 2 minutes, traded at `POST /saves/auth/google/finish` from that origin alone, with the nonce the tab that began it sent and kept in its session storage: a code someone finished themselves and sent in a link would sign the receiver's game in to the sender's account, and is refused), `#cloud-google-linked`, or `#cloud-google-error=<why>`. An unknown or used `state` gets a 400 and no redirect: there is nowhere safe to send it.
+- **Only Google's `sub` is kept** (`account.google = { sub, linked }`), indexed in `store.mjs`. A sign-in whose `sub` no account has makes one (counted against `ACCOUNTS_PER_DAY`); the same Google account signs in to the same account on every site, so it is also a way onto a preview without a code.
+- **Linking** (`purpose: 'link'`) needs a session, and production's: a preview's token may be anyone's, and Google linked from one would let its holder into production. A `sub` another account has is refused (`taken`). Unlinking (`DELETE /saves/google`) is production's alone too. A Google sign-in's session is `via: 'google'`; it may not add a passkey off production (only a code's may, in its first 10 minutes).
+- One Google account's sign-ins wait their turn (`withAccount('google <sub>')`), so two at once make one account.
+
+## Backups
+
+- **Nightly to the owner's Google Drive** (`backups.mjs`), as TimeInvoices keeps its own (`G:\Git\TimeInvoices\BACKUP.md`): every account and save as one gzipped JSON snapshot (`{ version, made, files: { 'accounts/<id>.json': text, 'saves/<id>/<site>.json': text } }`), uploaded into `Last Stand backups/` (`DRIVE_FOLDER`) under the `drive.file` scope (Drive shows the app only what it made), its MD5 as Drive reports it checked against ours, and those older than `BACKUP_KEEP_DAYS` (14) deleted. A run 5 minutes after a start (`BACKUP_FIRST_MS`) and every 24 hours (`BACKUP_EVERY_MS`); one finding a backup in Drive younger than 20 hours (`BACKUP_MIN_AGE_MS`) skips, so a deploy's restart doesn't upload another.
+- `/saves/health`'s `backups` says `off`, `pending` (none since the start), `ok` with when the last one was made, or `failing`. The error itself is in the service's log (`backup`), not the health, which anyone can read. The likeliest failure is Google's `invalid_grant`: the OAuth app left in Testing, whose Drive refresh tokens last 7 days (TimeInvoices' BACKUP.md, "Google Drive disconnects every week").
+- **Restoring:** download the snapshot from Drive, stop the service, and `npm run saves:restore -- <snapshot.json.gz> <data folder>` (the `saves-data` volume's folder). It refuses a folder holding accounts unless `--replace`, which empties `accounts/` and `saves/` first, and writes only paths of those two shapes. Start the service again: it reads the accounts at its start.
+
+## Setting up Google (the owner, once)
+
+1. **Google Cloud console**, a project for Last Stand: Google Auth Platform, **Clients**, a Web application client. Its authorized redirect URIs: `https://ls.wellscoped.dev/saves/auth/google/callback` (the sign-in) and `http://localhost:8791/` (the Drive token, step 5). No JavaScript origins are needed: no Google script runs in the game.
+2. **Branding:** the app's name, `https://last-stand.cc` as its home page, `https://last-stand.cc/privacy.html` as its privacy policy, `last-stand.cc` and `wellscoped.dev` as authorized domains.
+3. **Data access:** the scopes `openid` and `https://www.googleapis.com/auth/drive.file`. **Enable the Google Drive API** in the project's APIs.
+4. **Audience:** External, publishing status **In production** (in Testing the Drive refresh token expires after 7 days and the backups stop).
+5. **The Drive token:** on the owner's PC, with the client's id and secret in the environment, `npm run saves:drive-token`, open the address it prints signed in as the Google account the backups go to, and agree: it prints the refresh token.
+6. **Dokci** (the relay's environment, `.dokci/AGENTS.md`): `LS_GOOGLE_CLIENT_ID`, `LS_GOOGLE_CLIENT_SECRET`, `LS_DRIVE_REFRESH_TOKEN`, then a deploy (a push to `main`). `https://ls.wellscoped.dev/saves/health` says `google: true` and `backups: { state: 'pending' }`, `ok` 5 minutes later; the backup is in `Last Stand backups/` in Drive.
 
 ## Limits
 
@@ -34,7 +56,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 ## Settings
 
-None is required and none is a secret: each has its default in `settingsFrom`, so the service needs nothing from Dokci's `configuration`. A new setting must keep it so. If it is optional (unset), the part it serves is off, and `/saves/health` says so; that is how #503's Google settings must work (the owner, 2026-11-10: "new env variables should be optional, if not set, the new func should be disabled").
+None is required: each has its default in `settingsFrom`, or, unset, turns its part off, and `/saves/health` says so (the owner, 2026-11-10: "new env variables should be optional, if not set, the new func should be disabled"). A new setting must keep it so. The secrets are Google's: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the sign-in and the backups) and `DRIVE_REFRESH_TOKEN` (the backups), from Dokci's configuration (`LS_GOOGLE_CLIENT_ID`, `LS_GOOGLE_CLIENT_SECRET`, `LS_DRIVE_REFRESH_TOKEN`), never in the repo. Unset, there is no Sign in with Google (the game hides its buttons: the health's `google`) and no backups. `GOOGLE_REDIRECT_URI`, `GOOGLE_AUTH_URL`, `GOOGLE_TOKEN_URL` and `DRIVE_API` default to Google's own, and are set otherwise only by the tests.
 
 ## Storage
 
@@ -42,7 +64,7 @@ None is required and none is a secret: each has its default in `settingsFrom`, s
 - Every file is written whole to a temporary name and renamed over the old, and each account's changes wait their turn (`withAccount`): a version's check and the write it allows are never split.
 - Accounts are read into memory at a start; saves are read when asked for.
 - Logs name an account by the first 6 letters of its id, and never hold a save's contents.
-- Deleting an account removes its file and every save. #503's nightly backups keep it until they age out.
+- Deleting an account removes its file and every save. The nightly backups keep it until they age out (14 days).
 
 ## Gotchas
 

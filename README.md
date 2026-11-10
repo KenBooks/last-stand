@@ -74,7 +74,7 @@ Pick a class in the lobby. Every class keeps its **own profile**: equipment, sta
 
 There are **three save slots** (the lobby's *Save slot* link), each a separate save with its own heroes, skill loadouts and stash filters. The save slots screen shows what each one holds: every hero's best wave and starting waves per battleground, gear with its item levels, skills, attributes, stash, records and time played. From there you play a slot or delete one (typing DELETE to confirm). An empty slot is a fresh start, for instance to play from the beginning with a friend. Progress from before save slots is in slot 1.
 
-**Cloud saves** (optional): sign in on the save slots screen with a passkey (or a sign-in code from a device already signed in), choose which save goes to the cloud, and slot 1 keeps the same heroes on every device you sign in on. It keeps playing offline and syncs when back online; a hero played on two devices while out of sync asks which copy to keep. No account is needed to play. What is kept, and how to delete it: [privacy](public/privacy.html).
+**Cloud saves** (optional): sign in on the save slots screen with a passkey, with Google, or with a sign-in code from a device already signed in, choose which save goes to the cloud, and slot 1 keeps the same heroes on every device you sign in on. It keeps playing offline and syncs when back online; a hero played on two devices while out of sync asks which copy to keep. No account is needed to play. What is kept, and how to delete it: [privacy](public/privacy.html).
 
 
 ### The Mage

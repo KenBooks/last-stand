@@ -23,6 +23,15 @@ spec:
     LS_TRACES_TRUSTED:
       description: Addresses (comma-separated) whose performance reports are never held to 10 a day, for testing.
       whenMissing: Every address may send 10 reports a day from each site.
+    LS_GOOGLE_CLIENT_ID:
+      description: The Google Cloud OAuth client's id the cloud saves sign in and back up with (server/saves/AGENTS.md).
+      whenMissing: No Sign in with Google and no Drive backups; passkeys and sign-in codes work as ever.
+    LS_GOOGLE_CLIENT_SECRET:
+      description: That OAuth client's secret.
+      whenMissing: No Sign in with Google and no Drive backups; passkeys and sign-in codes work as ever.
+    LS_DRIVE_REFRESH_TOKEN:
+      description: The owner's Drive refresh token for the saves' nightly backups (npm run saves:drive-token).
+      whenMissing: No nightly backups of the saves; /saves/health says backups off.
   environments:
     production:
       source:
