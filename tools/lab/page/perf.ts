@@ -26,6 +26,7 @@ import { standIn } from './light';
 import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { reportRead } from './perfReport';
+import { WEBGPU, gpuDone } from '../../../src/core/webgpu';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -140,9 +141,13 @@ const readBack = new Uint8Array(4);
 /**
  * Waits for the GPU to draw what the page sent it: what it draws runs behind the page, and the page's own time leaves
  * it out. A pixel is read back, as WebGL's `finish` returned at once under ANGLE's D3D11 (the frame read 7 ms with the
- * GPU's timer at 13 to 29).
+ * GPU's timer at 13 to 29). On WebGPU, its queue's work done (`gpuDone`): it has no pixel to read back that way.
  */
-function waitForGpu(): void {
+async function waitForGpu(): Promise<void> {
+  if (WEBGPU) {
+    await gpuDone(G.renderer);
+    return;
+  }
   // (the canvas bound through three, whose state keeps what's bound)
   const target = G.renderer.getRenderTarget();
   G.renderer.setRenderTarget(null);
@@ -156,7 +161,7 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
   const start = now();
   await lab.step(1, input);
-  waitForGpu();
+  await waitForGpu();
   const frame = now() - start;
   await nextTask();
   const timed = perfHud.lastPerfFrame();

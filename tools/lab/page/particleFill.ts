@@ -7,14 +7,16 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { particles } from '../../../src/fx/particles';
 import * as renderer from '../../../src/core/renderer';
+import { WEBGPU } from '../../../src/core/webgpu';
 
 type Pool = typeof particles.glow;
 
 const _at = new THREE.Vector3();
 const _onScreen = new THREE.Vector3();
 
-/** The GPU's largest point, px. */
+/** The GPU's largest point, px: none on WebGPU, whose particles are quads of the same size (`fx/particleNodes.ts`). */
 function largestPoint(): number {
+  if (WEBGPU) return Infinity;
   const gl = G.renderer.getContext();
   const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as Float32Array;
   return range[1];
