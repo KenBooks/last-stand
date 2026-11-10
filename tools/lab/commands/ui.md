@@ -89,7 +89,7 @@ narrowed on a short screen, the mouse's labels, their keys beside them, wrapped 
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
 timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`) and its Settings tab (`pauseSettings`) and its Performance tab with a profile listed and its Send button (`pausePerformance`), the profiler at work (`profiling`: every panel hidden, its pane at the top inside the window with Cancel in it; its canary leaves the pause menu shown), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
-`--canary` makes a settings row 600 px tall, which must make it scroll), the performance overlay's sizes
+`--canary` makes a row of the tab shown twice the window's height, which must make it scroll at any zoom: 600 css px went unseen at 1024x700 and on a tablet, #468), the performance overlay's sizes
 (`perfMini`, `page/uiPerfSize.ts`: the overlay shown whole, then Mini pressed in the pause menu's Performance stats
 with the mouse: the frame rate and its graph alone showing, drawn, within the window, in a third of Full's room at
 the most, the press kept in `last-stand-perf-hud` and its button lit; then Full and Off pressed likewise, and the
