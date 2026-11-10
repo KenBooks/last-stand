@@ -12,6 +12,7 @@ import { SAVE_SLOTS } from '../loot/saveSlots';
 import { slotHeroes } from '../loot/cloud';
 import { readHero, type Entries } from '../loot/slotData';
 import { sfx } from '../core/audio';
+import { isTouch } from './touch';
 import type { Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -33,7 +34,11 @@ const onProduction = (): boolean => /^(www\.)?last-stand\.cc$/.test(location.hos
 export function initCloudSaves(h: CloudUiHooks): void {
   hooks = h;
   const box = $('#cloud-dialog');
-  box.onclick = (e) => { if (e.target === box && !busy) closeDialog(); };
+  // the backdrop closes the dialog only when pressed and let go there: a tap on the code's field moves the dialog as
+  // it takes the focus (`aboveKeyboard`), and its click then landed on the backdrop and closed it
+  let pressedBackdrop = false;
+  box.onpointerdown = (e) => { pressedBackdrop = e.target === box; };
+  box.onclick = (e) => { if (pressedBackdrop && e.target === box && !busy) closeDialog(); };
   // the Account menu closes on a press anywhere outside it, as a dropdown does (Esc: `closeAccountMenu`)
   document.addEventListener('pointerdown', (e) => {
     const open = openMenu();
@@ -51,7 +56,7 @@ export function closeAccountMenu(): boolean {
 }
 
 export const cloudDialogOpen = (): boolean => !$('#cloud-dialog').classList.contains('hidden');
-export function closeDialog(): void { $('#cloud-dialog').classList.add('hidden'); }
+export function closeDialog(): void { $('#cloud-dialog').classList.add('hidden'); $('#cloud-dialog').classList.remove('typing'); }
 
 // --- the bar ----------------------------------------------------------------------------------------------
 /** The bar under the screen's title, drawn afresh with the screen. */
@@ -162,15 +167,16 @@ function dialog(title: string, html: string, buttons: Button[]): void {
     };
     return el;
   }));
-  box.classList.remove('hidden');
+  box.classList.remove('hidden', 'typing');
   (row.firstElementChild as HTMLElement | null)?.focus();
 }
 
 const say = (text: string): void => dialog('Cloud save', `<p>${escape(text)}</p>`, [{ label: 'OK', kind: 'primary' }]);
 
 function askCode(): void {
-  dialog('Sign in with a code', '<p>On a device already signed in, open Save slots, then Account, then <b>Sign in elsewhere</b>, and type its 8 letters here.</p>'
-    + '<input class="cd-code" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="ABCD-EFGH">', [
+  // the field first: a phone's keyboard covers the screen's lower half, and the dialog moves above it as one opens
+  dialog('Sign in with a code', '<input class="cd-code" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="ABCD-EFGH">'
+    + '<p>On a device already signed in, open Save slots, then Account, then <b>Sign in elsewhere</b>, and type its 8 letters above.</p>', [
     { label: 'Sign in', kind: 'primary', run: () => {
       const code = $<HTMLInputElement>('#cloud-dialog .cd-code').value;
       closeDialog();
@@ -179,11 +185,41 @@ function askCode(): void {
     { label: 'Cancel' },
   ]);
   const field = $<HTMLInputElement>('#cloud-dialog .cd-code');
+  aboveKeyboard(field);
   field.focus();
   field.onkeydown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
     if (e.key === 'Enter') { e.preventDefault(); ($('#cloud-dialog .dc-buttons .primary') as HTMLElement).click(); }
   };
+}
+
+/** Once `field` has the focus on a touch screen, the dialog keeps to the part of the screen a keyboard leaves until it
+ *  closes: at its top (in full screen a phone's keyboard lies over the page and may shrink nothing), and no taller
+ *  than the visual viewport, which the keyboard shrinks otherwise. It stays there when the field loses the focus: a
+ *  tap on Sign in takes the focus first, and the dialog moving back under the finger made the tap miss. A mouse's
+ *  dialog stays centred. */
+function aboveKeyboard(field: HTMLInputElement): void {
+  const box = $('#cloud-dialog');
+  const seen = window.visualViewport;
+  const fit = (): void => {
+    if (box.classList.contains('hidden') || !box.contains(field)) { stop(); return; }
+    box.style.setProperty('--seen-top', `${seen?.offsetTop ?? 0}px`);
+    box.style.setProperty('--seen', `${seen?.height ?? innerHeight}px`);
+    if (document.activeElement === field) field.scrollIntoView({ block: 'nearest' });
+  };
+  const start = (): void => {
+    if (!isTouch()) return;
+    box.classList.add('typing');
+    seen?.addEventListener('resize', fit);
+    seen?.addEventListener('scroll', fit);
+    fit();
+  };
+  const stop = (): void => {
+    box.classList.remove('typing');
+    seen?.removeEventListener('resize', fit);
+    seen?.removeEventListener('scroll', fit);
+  };
+  field.addEventListener('focus', start);
 }
 
 async function showCode(): Promise<void> {

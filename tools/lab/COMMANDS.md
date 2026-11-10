@@ -616,7 +616,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   and the dialog's buttons. Scenarios, in order, each building on the one before: `link` (A, slots 1 and 2 filled,
   makes an account and chooses slot 2: slots 1 and 2 swap, and the service's save, read back with A's token, holds
   slot 2's heroes; then the bar's Account dropdown opened, pictured, and closed by a click on the screen's title);
-  `download` (B, all three slots full, signs in by A's code: the dialog names slot 3 as lost while
+  `download` (B, all three slots full, signs in by A's code, first typed on a phone held sideways: the field tapped,
+  then a keyboard over the page's lower 215 css px, its layout unchanged as the owner's in full screen, and one that
+  shrinks the viewport to the 175 it leaves, each pictured as `code-typing-keyboard-over` / `-shrinks`: the field
+  whole above it and still focused, "cannot see code while typing"; the typing layout switched off, `-over` fails; the dialog names slot 3 as lost while
   B's slots are still as they were; confirmed, slot 1 holds the cloud's heroes, the others shifted, slot 3's gone);
   `conflict` (the mage changed on A and on B while B's link to the service was cut, `context.route` aborting: B,
   back online, is asked, the dialog saying its copy will be lost, keeps the cloud's; then the warrior so on A, whose

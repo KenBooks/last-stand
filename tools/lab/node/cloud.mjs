@@ -178,13 +178,16 @@ async function download(run) {
   const seeded = { 1: { ranger: ['B1-ranger'] }, 2: { warrior: ['B2-warrior'] }, 3: { mage: ['B3-mage'] } };
   await b.call('cloudSeed', seeded);
   const before = slotsText(await b.slots());
-  // (Sign in elsewhere shows on production alone, src/ui/cloudSaves.ts `onProduction`: A's code made as it makes it)
+  // (A's code made by the game's own call, as Sign in elsewhere makes it)
   const code = await a.call('cloudMakeCode');
   if (run.canary) await b.context.route(`${run.service.url}/saves/save/hero.mage`, dropMageItems);
   await openSaves(b);
   await b.click('#saves .sv-cloud .sc-code');
   await b.until((state) => state.dialog.open, 'asked for a sign-in code');
   await shoot(run, b, 'code');
+  // the code typed on a phone: the field in view over its keyboard (the owner: "cannot see code while typing")
+  const typing = await b.typingPicture(PICTURES, 'code-typing', '#cloud-dialog .cd-code');
+  run.shots.push({ lines: ['  code-typing (B):', ...typing.lines], problems: typing.problems });
   await b.page.locator('#cloud-dialog .cd-code').fill(code);
   await b.click('#cloud-dialog .dc-buttons .primary');
   const asked = await b.until((state) => state.dialog.open && state.dialog.title.includes('cloud save comes'),
@@ -201,7 +204,7 @@ async function download(run) {
   expect(problems, 'B\'s slots', slotsText(slots), wanted);
   if (run.canary) await b.context.unroute(`${run.service.url}/saves/save/hero.mage`);
   const lines = [`code dialog said: ${oneLine(asked.dialog.text)}`, `B's slots: ${slotsText(slots)}`,
-    'A\'s code made by the game\'s call (Sign in elsewhere shows on production alone)'];
+    'A\'s code made by the game\'s call'];
   return { lines, problems };
 }
 

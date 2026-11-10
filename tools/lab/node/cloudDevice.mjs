@@ -32,6 +32,26 @@ export const SCREENS = [
   { name: '844x390', width: 844, height: 390, ratio: 2, touch: true },
 ];
 
+/** What a keyboard leaves of a phone held sideways (844x390): its top 175 css px (the owner's phone left 46% of its
+ *  height over the keyboard: "cannot see code while typing"). A keyboard either lies over the page, its layout
+ *  unchanged (theirs, in full screen), or shrinks the viewport to this: each is played. */
+export const KEYBOARD_SCREEN = { name: '844x175-keyboard', width: 844, height: 175, ratio: 2, touch: true };
+
+/**
+ * Whether the field `selector` names lies whole above `keyboardTop` (css px from the window's top; the visual
+ * viewport's bottom when none is given), and has the focus. Run in the page: it uses nothing of this module's.
+ */
+function fieldInView([selector, keyboardTop]) {
+  const field = document.querySelector(selector);
+  const box = field.getBoundingClientRect();
+  const seen = window.visualViewport;
+  const top = seen ? seen.offsetTop : 0;
+  const bottom = keyboardTop ?? top + (seen ? seen.height : innerHeight);
+  const whole = box.top >= top - 0.5 && box.bottom <= bottom + 0.5 && box.height > 0;
+  const where = `${Math.round(box.top)}-${Math.round(box.bottom)} px, the keyboard from ${Math.round(bottom)}`;
+  return { whole, focused: document.activeElement === field, box: where };
+}
+
 /** The promise's value, resolved after `ms`. */
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -139,6 +159,53 @@ export class Device {
     await this.devtools.send('Emulation.clearDeviceMetricsOverride');
     await pause(SETTLE_MS);
     return { lines, problems };
+  }
+
+  /**
+   * The field `selector` names tapped on a phone held sideways, then a keyboard's coming played both ways
+   * (`KEYBOARD_SCREEN`): lying over the page, its layout unchanged, and shrinking the viewport to what it leaves.
+   * Each is pictured into `folder` (`<label>-<way>.png`); the field must lie whole above the keyboard and keep the
+   * focus. Returns the lines and problems found.
+   */
+  async typingPicture(folder, label, selector) {
+    mkdirSync(folder, { recursive: true });
+    const phone = SCREENS.find((screen) => screen.touch);
+    await this.showOn(phone);
+    await this.tapOn(selector);
+    await pause(SETTLE_MS);
+    const over = await this.typingSeen(folder, `${label}-keyboard-over`, selector, KEYBOARD_SCREEN.height);
+    const { width, height, ratio } = KEYBOARD_SCREEN;
+    const metrics = { width, height, deviceScaleFactor: ratio, mobile: false };
+    await this.devtools.send('Emulation.setDeviceMetricsOverride', metrics);
+    await pause(SETTLE_MS);
+    const shrunk = await this.typingSeen(folder, `${label}-keyboard-shrinks`, selector, null);
+    await this.leaveTouch();
+    await this.devtools.send('Emulation.clearDeviceMetricsOverride');
+    await pause(SETTLE_MS);
+    return { lines: [...over.lines, ...shrunk.lines], problems: [...over.problems, ...shrunk.problems] };
+  }
+
+  /** A finger's tap at the middle of the element `selector` names. */
+  async tapOn(selector) {
+    const middle = await this.page.evaluate((selector) => {
+      const box = document.querySelector(selector).getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }, selector);
+    const point = { x: middle.x, y: middle.y, id: 0 };
+    await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+
+  /** The screen pictured as `<name>.png` in `folder`, and the field held above the keyboard's top (null: the visual
+   *  viewport's bottom). */
+  async typingSeen(folder, name, selector, keyboardTop) {
+    const { data } = await this.devtools.send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(join(folder, `${name}.png`), Buffer.from(data, 'base64'));
+    const seen = await this.page.evaluate(fieldInView, [selector, keyboardTop]);
+    const problems = [];
+    if (!seen.focused) problems.push(`${name}: the field lost the focus`);
+    if (!seen.whole) problems.push(`${name}: the field lies under the keyboard (${seen.box})`);
+    return { lines: [`    ${name}: field ${seen.box}, focused ${seen.focused}`], problems };
   }
 
   /** The page put on `screen` (and in touch mode by a finger's tap on a title, which does nothing). */

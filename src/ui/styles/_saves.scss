@@ -121,6 +121,10 @@
 .sv-pane { will-change: transform; }
 
 #cloud-dialog .modal-box { width: 560px; display: flex; flex-direction: column; gap: 12px; }
+/* a field typed into on a touch screen: the dialog at the top of what the keyboard leaves (cloudSaves.ts aboveKeyboard) */
+#cloud-dialog.typing { align-items: flex-start; top: var(--seen-top, 0px); bottom: auto; height: var(--seen, 50vh); padding-top: 6px; }
+#cloud-dialog.typing .modal-box { max-height: calc((var(--seen, 50vh) - 12px) / var(--ui, 1)); padding-top: 12px; gap: 6px; }
+#cloud-dialog.typing .cd-code { margin-top: 0; }
 .cd-body p { margin: 0 0 8px; }
 .cd-warn { color: var(--danger); }
 .cd-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
