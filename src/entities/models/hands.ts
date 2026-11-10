@@ -126,8 +126,9 @@ export function glowOutline(h: Hand, rim: THREE.Color, body?: THREE.Color): void
   }
 }
 
-/** how deep the bare skin's wrinkles read (its normal map's scale) */
-const SKIN_RELIEF = 0.6;
+/** how deep the bare skin's wrinkles read (its normal map's scale: at 0.6, beside the smooth forearm it's on, from
+ *  play "hand has too many wrinkles compared to his forearm", #425) */
+const SKIN_RELIEF = 0.25;
 
 /** `material` (a hand's own copy of its skin) in the bare skin's wrinkles and pores (core/pbr.ts `skin`, made once,
  *  shared by every hand), read across it as the glove's grain is: smooth and even, the fingers read as plastic (#425) */
