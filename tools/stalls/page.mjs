@@ -373,7 +373,7 @@ export function seedStash(count) {
   if (!key) return 0;
   const profile = JSON.parse(localStorage.getItem(key));
   const own = [...profile.stash, ...Object.values(profile.equipped)];
-  const rarities = ['common', 'magic', 'rare', 'epic', 'legendary'];
+  const rarities = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'];
   profile.stash = Array.from({ length: count }, (_, index) => ({
     ...own[index % own.length],
     id: `stalls-${index}`,

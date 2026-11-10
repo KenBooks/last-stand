@@ -717,7 +717,7 @@ export const sfx = {
   /** a prop breaking: rock and timber giving way */
   crumble: guard(() => { noise({ dur: 0.55, freq: 700, sweep: 140, type: 'lowpass', q: 1.2, gain: 0.5 }); noise({ dur: 0.2, freq: 2400, q: 2, gain: 0.12 }); tone({ freq: 90, to: 40, dur: 0.4, gain: 0.3 }); }),
   witchCast: guard(() => { if (throttle('wc', 90)) return; tone({ freq: 300, to: 700, dur: 0.3, type: 'sawtooth', gain: 0.03 }); }),
-  loot: guard((r: number) => { const base = [520, 620, 740, 880, 1040][r] || 520; tone({ freq: base, dur: 0.35, gain: 0.08 }); if (r >= 3) tone({ freq: base * 1.5, dur: 0.6, gain: 0.07, delay: 0.08 }); if (r >= 4) tone({ freq: base * 2, dur: 0.9, gain: 0.06, delay: 0.16 }); }),
+  loot: guard((r: number) => { const base = [520, 620, 740, 880, 1040, 1170][r] || 520; tone({ freq: base, dur: 0.35, gain: 0.08 }); if (r >= 3) tone({ freq: base * 1.5, dur: 0.6, gain: 0.07, delay: 0.08 }); if (r >= 4) tone({ freq: base * 2, dur: 0.9, gain: 0.06, delay: 0.16 }); if (r >= 5) tone({ freq: base / 2, dur: 1.4, type: 'triangle', gain: 0.07, delay: 0.24, attack: 0.15 }); }),
   pickup: guard(() => { if (throttle('pickup', 60)) return; tone({ freq: 1200, to: 1600, dur: 0.08, gain: 0.05 }); }),
   waveStart: guard(() => { tone({ freq: 110, dur: 1.4, type: 'sawtooth', gain: 0.08, attack: 0.2 }); tone({ freq: 165, dur: 1.4, type: 'sawtooth', gain: 0.05, attack: 0.25 }); noise({ dur: 1.0, freq: 200, type: 'lowpass', gain: 0.3, attack: 0.1 }); }),
   waveClear: guard(() => { [392, 494, 587, 784].forEach((f, i) => tone({ freq: f, dur: 1.0, gain: 0.07, type: 'triangle', delay: i * 0.1 })); }),

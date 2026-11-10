@@ -27,7 +27,7 @@ import { setPingNet, pingHeard, clearPings } from '../game/ping';
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 25;
+const PROTOCOL = 26;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */

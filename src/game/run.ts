@@ -21,6 +21,7 @@ import { clearLights } from '../fx/lights';
 import { particles, col } from '../fx/particles';
 
 import { rollDrop, rarityOf, rarityIndex } from '../loot/items';
+import { pr499WaveReward } from '../loot/pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
 import { bankItems, saveProfile } from '../loot/profile';
 import { clearFloaters, floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
@@ -387,7 +388,11 @@ function waveCleared(): void {
   const n = r.training ? 0 : LOOT.waveRewards(r.wave);
   for (const p of G.players) {
     if (!p.active) continue;
-    for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave, LOOT.waveRewardBonus(r.wave))); });
+    for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => {
+      if (!(G.run === r && p.active)) return;
+      const pr499 = pr499WaveReward(i, p.cls, r.wave); // PR 499's test gear
+      giveLoot(p, pr499 ?? rollDrop(p.cls, r.wave, LOOT.waveRewardBonus(r.wave)));
+    });
   }
   G.arena.setCalm(1);
   runHooks.cleared();

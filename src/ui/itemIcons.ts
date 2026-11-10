@@ -1,11 +1,11 @@
 // Hand-authored SVG item icons (64x64), one per item base type. Icons share a
 // single hidden <defs> block of gradients and filters (injected once), so each
 // icon is a small string of shapes. Gems and glows take the item's rarity color.
-import { SLOT_INFO } from '../data/items';
+import { RARITIES, SLOT_INFO } from '../data/items';
 import { rarityOf, basesFor } from '../loot/items';
 import type { ClassDef, Item, RarityId, Slot } from '../types';
 
-const RARITY_IDS: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary'];
+const RARITY_IDS: RarityId[] = RARITIES.map((r) => r.id);
 
 /** Cloth palettes, picked per item (stable via its id) for variety. */
 const CLOTHS = ['clothIndigo', 'clothCrimson', 'clothTeal', 'clothUmber'] as const;

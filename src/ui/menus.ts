@@ -858,6 +858,7 @@ export function showSummary({ training, outcome, wave, score, kills, bag, lost =
       const c = document.createElement('span');
       c.className = 'chip reveal' + (gone.has(it.id) ? ' lost' : '');
       c.style.color = rarityOf(it.rarity).color;
+      c.dataset.r = it.rarity;
       c.style.animationDelay = `${0.3 + i * REVEAL_STEP}s`;
       c.textContent = it.name;
       bindTooltip(c, itemTooltip(it));

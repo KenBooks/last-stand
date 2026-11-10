@@ -1,5 +1,5 @@
 // Item generation and stat aggregation.
-import { SLOTS, SLOT_INFO, RARITIES, STATS, AFFIX_NAMES, LEGENDARY_NAMES, type RarityInfo } from '../data/items';
+import { SLOTS, SLOT_INFO, RARITIES, STATS, AFFIX_NAMES, LEGENDARY_NAMES, ASCENDANT_NAMES, type RarityInfo } from '../data/items';
 import { LOOT } from '../data/waves';
 import { pick, rand, randInt, weighted } from '../util';
 import type { BaseStats, ClassDef, DerivedStats, Gear, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
@@ -83,7 +83,8 @@ export function makeItem({ slot, rarity = 'common', ilvl = 1, cls }: { slot?: Sl
   }
 
   let name = base;
-  if (rarity === 'legendary') name = pick(LEGENDARY_NAMES);
+  if (rarity === 'ascendant') name = `${pick(ASCENDANT_NAMES)} ${base}`;
+  else if (rarity === 'legendary') name = pick(LEGENDARY_NAMES);
   else if (affixes.length) {
     const pre = AFFIX_NAMES[affixes[0]][0];
     const suf = affixes[1] ? AFFIX_NAMES[affixes[1]][1] : '';

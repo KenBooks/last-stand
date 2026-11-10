@@ -24,6 +24,9 @@ export const RARITIES: RarityInfo[] = [
   { id: 'rare',      name: 'Rare',      color: '#46de5c', affixes: [2, 3], power: 1.45 },
   { id: 'epic',      name: 'Epic',      color: '#3f9fff', affixes: [3, 4], power: 1.75 },
   { id: 'legendary', name: 'Legendary', color: '#b35cff', affixes: [4, 5], power: 2.1 },
+  // (#403, from play: "orange rarity, more rare than purple": a deep orange, well off Magic's yellow and the Gold a
+  // co-op hero can be dyed)
+  { id: 'ascendant', name: 'Ascendant', color: '#ff7417', affixes: [5, 6], power: 2.5 },
 ];
 
 // base: value at item level 1 (before rarity), grow: fractional growth per ilvl,
@@ -81,4 +84,10 @@ export const AFFIX_NAMES: Record<StatKey, [prefix: string, suffix: string]> = {
 export const LEGENDARY_NAMES = [
   'Starfall Covenant', 'Whisper of the Rift', 'Emberheart', 'The Last Candle', 'Oathbreaker',
   'Veil of Nine Moons', 'Stormcaller\'s Due', 'Hollow Crown', 'Ashen Requiem', 'The Unbound Eye',
+];
+
+/** an Ascendant item's name: one of these, its base after it ("Dawnbearer's Staff") */
+export const ASCENDANT_NAMES = [
+  'Dawnbearer\'s', 'Sunwrought', 'Pyrelight', 'Kindled Sovereign\'s', 'Emberthrone',
+  'Solstice-Forged', 'Phoenix-Sworn', 'Heliarch\'s', 'Cinderborn', 'Lastlight',
 ];
