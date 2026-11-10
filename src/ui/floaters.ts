@@ -32,21 +32,21 @@ export interface ScreenEdge { side: number; top: number; bottom: number }
 /**
  * Where a marker for a point of the world goes (css px): over the point where the view shows it within `edge` of the
  * screen's sides, else on that margin on the way from the screen's middle to it, `turn` the way there (rad, as
- * `atan2` of the screen's down and right); `bottom` is the margin's bottom line. (A downed partner's marker, a ping.)
+ * `atan2` of the screen's down and right); `top` and `bottom` are the margin's lines. (A downed partner's marker, a ping.)
  */
-export function onScreenOrEdge(x: number, y: number, z: number, edge: ScreenEdge): { x: number; y: number; inView: boolean; turn: number; bottom: number } {
+export function onScreenOrEdge(x: number, y: number, z: number, edge: ScreenEdge): { x: number; y: number; inView: boolean; turn: number; top: number; bottom: number } {
   const ui = uiScales.hud, w = window.innerWidth, h = window.innerHeight;
   const p = project(x, y, z);
   const left = edge.side * ui, right = w - edge.side * ui, top = edge.top * ui, bottom = h - edge.bottom * ui;
   const inView = !p.behind && p.x >= left && p.x <= right && p.y >= top && p.y <= bottom;
-  if (inView) return { x: p.x, y: p.y, inView, turn: 0, bottom };
+  if (inView) return { x: p.x, y: p.y, inView, turn: 0, top, bottom };
   // (behind the camera, the projection points the other way)
   const cx = w / 2, cy = (top + bottom) / 2;
   const dx = (p.x - cx) * (p.behind ? -1 : 1);
   let dy = (p.y - cy) * (p.behind ? -1 : 1);
   if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) dy = 1;
   const reach = Math.min(Math.abs(dx) > 1e-3 ? (right - cx) / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? (bottom - cy) / Math.abs(dy) : Infinity);
-  return { x: cx + dx * reach, y: cy + dy * reach, inView, turn: Math.atan2(dy, dx), bottom };
+  return { x: cx + dx * reach, y: cy + dy * reach, inView, turn: Math.atan2(dy, dx), top, bottom };
 }
 
 /** a damage number's shadows: a dark rim and a soft glow round it */

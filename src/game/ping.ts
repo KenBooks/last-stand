@@ -1,4 +1,4 @@
-// Co-op pings: a player shows the party a foe, a spot or an area (Ctrl held and let go, or a long press on the
+// Co-op pings: a player shows the party a foe, a spot or an area (Left Shift held and let go, or a long press on the
 // minimap: ui/ping.ts), and every game shows it for a few seconds, in the world where it points and on the minimap.
 // A ping has no gameplay effect, so every game sends its own straight to every other (`ctl` `ping`, net/session.ts)
 // and shows the others' as they come. One ping a player at a time: a new one replaces the last.

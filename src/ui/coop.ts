@@ -16,7 +16,7 @@ import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
 import { sfx } from '../core/audio';
-import { lookFacing } from '../core/renderer';
+import { lookFacing, viewSettled } from '../core/renderer';
 import { reportLinks, bindReportLinks } from './netHud';
 import { bindColourPicker, colourPickerHtml } from './colourPicker';
 import { portraitPickerHtml, bindPortraitPicker, portraitHtml, syncPortrait } from './portraitPicker';
@@ -259,10 +259,11 @@ const nameTags = new Map<Player, NameTag>();
 /**
  * Whether a player's tag shows: in a room, in the lobby and in a run, every player's, our own too ("name tags should
  * be visible above other players in lobby, and above me as well"); not over one away in the other place, hidden (the
- * hall of heroes hides them), fallen, or our own through our eyes.
+ * hall of heroes hides them), fallen, or our own through our eyes once the camera is there (as it glides in, the
+ * hero is still in sight: hidden from the glide's start, its tag was gone over him for 16 frames, `lab coop`'s `ping`).
  */
 const tagShows = (p: Player): boolean => isCoop() && G.players.includes(p) && !p.away && p.obj.visible && p.alive
-  && !(p.local && lookFacing() !== null);
+  && !(p.local && lookFacing() !== null && viewSettled());
 
 function nameTagFor(p: Player): NameTag {
   let t = nameTags.get(p);

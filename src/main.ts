@@ -582,7 +582,7 @@ function update(dt: number): void {
   updateEnemies(dt);
   separateEnemies(!simulates());
   G.player.showAim(dt);
-  // co-op pings: Ctrl held and let go, a long press on the minimap (in a run, or the lobby's practice)
+  // co-op pings: Left Shift held and let go, a long press on the minimap (in a run, or the lobby's practice)
   updatePingInput(dt, G.mode === 'run' ? !G.menuOpen : menuStowed() && !savesOpen() && !hallOpen() && !G.menuOpen);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);

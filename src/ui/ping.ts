@@ -1,5 +1,5 @@
-// Co-op pings on screen (game/ping.ts holds them): Ctrl held, a hint says the party will be pinged, and let go pings
-// what the aim is on (the foe Quarry Mark's aim would take, else the spot; dragged with Ctrl held, the area from where
+// Co-op pings on screen (game/ping.ts holds them): Left Shift held, a hint says the party will be pinged, and let go pings
+// what the aim is on (the foe Quarry Mark's aim would take, else the spot; dragged with Left Shift held, the area from where
 // it was pressed), or the minimap's spot under the pointer; on touch a long press on the minimap. Each ping shows in
 // the world (a ring laid on the floor round its spot, its foe or its area, and a pin over it with who pinged and how
 // far, held at the screen's edge pointing the way when it's off screen: a label of the overlay, ui/overlay) and on the
@@ -21,6 +21,7 @@ import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { onLayout, onScreenOrEdge } from './floaters';
 import { MINIMAP_METRES, onMinimap } from './hud';
 import { nameOf } from './coop';
+import { uiScales } from './scale';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 
@@ -59,12 +60,12 @@ export function mapToWorld(x: number, y: number): { x: number; z: number } | nul
   return { x: (px * cos - py * sin) / S, z: (px * sin + py * cos) / S };
 }
 
-// --- input: Ctrl held and let go, a long press on the minimap
+// --- input: Left Shift held and let go, a long press on the minimap
 
 /** where a ping would go: the arena's point, whether it was found on the minimap, and the foe it would point out */
 interface Aim { x: number; z: number; map: boolean; foe: Enemy | null }
 
-/** what the aim was on as Ctrl went down (an area is dragged from there) */
+/** what the aim was on as Left Shift went down (an area is dragged from there) */
 let held: Aim | null = null;
 /** a finger on the minimap: where it went down and is now (css px), how long it has been there (s), and whether it
  *  has pinged already (it waits to be lifted) */
@@ -79,7 +80,7 @@ function aimNow(): Aim {
   return { x: input.ground.x, z: input.ground.z, map: false, foe: foeAimed(input.ground) };
 }
 
-/** The ping Ctrl let go makes, pressed with the aim on `from`, let go on `to`: an area if dragged far enough on the
+/** The ping Left Shift let go makes, pressed with the aim on `from`, let go on `to`: an area if dragged far enough on the
  *  same view of the arena (the world's or the minimap's), else the foe it's on, else the spot. */
 function pingFor(from: Aim, to: Aim): { k: PingKind; x: number; z: number; r?: number; foe?: Enemy } {
   const far = Math.hypot(to.x - from.x, to.z - from.z);
@@ -121,13 +122,13 @@ function pressed(dt: number, can: boolean): void {
   ping(foe ? { k: 'foe', x: foe.pos.x, z: foe.pos.z } : { k: 'spot', x: m.x, z: m.z }, foe);
 }
 
-/** the foe this game outlines as the one Ctrl let go would ping (held by us: anything else's outline is its own) */
+/** the foe this game outlines as the one Left Shift let go would ping (held by us: anything else's outline is its own) */
 let outlined = false;
 /** the outline's colour on the foe a ping would take */
 const PING_OUTLINE = 0xffd04a;
 
 /**
- * Every frame (after the heroes moved, their aim with them): the pings age, and the local player's input: Ctrl held
+ * Every frame (after the heroes moved, their aim with them): the pings age, and the local player's input: Left Shift held
  * shows the hint, the foe or the area it would ping, and let go pings; a finger held on the minimap pings there.
  * `allowed`: the player is playing (a run, or the lobby's practice), not in a menu.
  */
@@ -136,9 +137,9 @@ export function updatePingInput(dt: number, allowed: boolean): void {
   bindMinimap();
   const can = allowed && isCoop();
   pressed(dt, can);
-  const ctrl = can && !input.touchMode && (isDown('controlleft') || isDown('controlright'));
+  const key = can && !input.touchMode && isDown('shiftleft');
   let would: ReturnType<typeof pingFor> | null = null;
-  if (ctrl) {
+  if (key) {
     const now = aimNow();
     held ??= now;
     would = pingFor(held, now);
@@ -153,11 +154,14 @@ export function updatePingInput(dt: number, allowed: boolean): void {
   const foe = would?.foe ?? null;
   if (foe && !G.player.aiming) { outline(foe.obj, PING_OUTLINE); outlined = true; }
   else if (outlined) { if (!G.player.aiming) outline(null); outlined = false; }
-  areaPreview(would?.k === 'area' ? would : null);
+  previewing = would;
   hint(would?.k ?? null);
 }
 
-// --- the hint while Ctrl is held
+/** what the held key would ping now, shown as a preview while it's held (placed with the labels) */
+let previewing: ReturnType<typeof pingFor> | null = null;
+
+// --- the hint while Left Shift is held
 
 let hintEl: HTMLElement | null = null;
 let hinted: PingKind | null = null;
@@ -172,7 +176,7 @@ function hint(kind: PingKind | null): void {
   if (!hintEl) {
     hintEl = document.createElement('div');
     hintEl.className = 'pinghint hidden';
-    hintEl.innerHTML = '<kbd>Ctrl</kbd><span></span>';
+    hintEl.innerHTML = '<kbd>Shift</kbd><span></span>';
     document.querySelector('#hud')?.appendChild(hintEl);
   }
   hintEl.classList.toggle('hidden', !kind);
@@ -230,12 +234,35 @@ class FloorRing {
   }
 }
 
-/** the area Ctrl dragged would ping, shown faintly as it's dragged */
-let preview: FloorRing | null = null;
-function areaPreview(area: { x: number; z: number; r?: number } | null): void {
-  if (!area) { preview?.place(0, 0, 1, 0); return; }
-  preview ??= new FloorRing(pingColour(G.player), PING.areaMost);
-  preview.place(area.x, area.z, area.r ?? PING.areaFrom, 0.35);
+// --- the preview while the key is held: the ping letting go would make, its ring and pin shown faint and still
+
+/** how strongly the preview shows, of a ping's */
+const PREVIEW = 0.45;
+/** the preview's ring (made again when the radius it was made for is far from the one shown: its band is made for
+ *  its radius), its area's fill, and its pin */
+let previewRing: { ring: FloorRing; fill: FloorRing | null; r: number; area: boolean } | null = null;
+/** a pin: its label, what it last showed (painted again only when it changes), and whether it's held at the edge */
+interface Pin { label: Label; look: string; edge?: boolean }
+let previewPin: Pin | null = null;
+
+function placePreview(): void {
+  const p = previewing;
+  const r = !p ? 0 : p.k === 'area' ? p.r ?? PING.areaFrom : p.foe ? p.foe.radius + PING.foeRing : PING.spotRadius;
+  const area = p?.k === 'area';
+  if (previewRing && (!p || previewRing.area !== area || Math.abs(r / previewRing.r - 1) > 0.25)) {
+    previewRing.ring.dispose(); previewRing.fill?.dispose();
+    previewRing = null;
+  }
+  if (!p) {
+    if (previewPin) previewPin.label.shown = false;
+    return;
+  }
+  const colour = pingColour(G.player);
+  previewRing ??= { ring: new FloorRing(colour, r), fill: area ? new FloorRing(colour, r, true) : null, r, area };
+  previewRing.ring.place(p.x, p.z, r, 0.85 * PREVIEW);
+  previewRing.fill?.place(p.x, p.z, r, 0.12 * PREVIEW);
+  previewPin ??= { label: new Label(ORDER.ping), look: '' };
+  placePin(previewPin, p.k, nameOf(G.player), colour, p.x, p.z, p.foe ?? null, PREVIEW, 1);
 }
 
 // --- each ping shown: its rings, its pin over it, where the minimap last drew it
@@ -244,9 +271,8 @@ interface Shown {
   ring: FloorRing;
   ripple: FloorRing;
   fill: FloorRing | null;
-  pin: Label;
-  /** what the pin last showed (painted again only when it changes) */
-  look: string;
+  /** its pin, and what it last showed (painted again only when it changes) */
+  pin: Pin;
   /** where the minimap last drew it (its canvas's px) and when (G.time) */
   map: { x: number; y: number; t: number } | null;
 }
@@ -260,30 +286,84 @@ function shownOf(p: Ping): Shown {
     ring: new FloorRing(colour, p.r),
     ripple: new FloorRing(colour, p.r),
     fill: p.kind === 'area' ? new FloorRing(colour, p.r, true) : null,
-    pin: new Label(ORDER.ping),
-    look: '',
+    pin: { label: new Label(ORDER.ping), look: '' },
     map: null,
   };
-  s.pin.shown = false;
+  s.pin.label.shown = false;
   shown.set(p, s);
   return s;
 }
 
 function drop(p: Ping, s: Shown): void {
   s.ring.dispose(); s.ripple.dispose(); s.fill?.dispose();
-  s.pin.remove();
+  s.pin.label.remove();
   shown.delete(p);
 }
 
-/** how far in from the screen's sides a pin stays (px, at the HUD's scale): clear of the hotbar and the minimap */
-const EDGE = { side: 90, top: 130, bottom: 190 };
+/** how far in from the screen's sides a pin's head stays (px, at the HUD's scale): off screen it's held near the
+ *  edge (in first person most pings are off screen, and its arrow there is the way to turn: from play, "near the edge
+ *  of screen is better"), clear of the hotbar; the minimap it's kept off by `offMinimap` */
+const EDGE = { side: 44, top: 46, bottom: 150 };
+/** how far a pin's head keeps from the minimap's box (px, at the HUD's scale) */
+const MINIMAP_ROOM = 48;
+
+/** the minimap's box on the page (css px), read again twice a second or as the window's size changes (reading it
+ *  each frame would lay the page out each frame, the HUD's text changed) */
+let mapBox: { box: DOMRect | null; t: number; w: number; h: number } = { box: null, t: -Infinity, w: 0, h: 0 };
+function minimapBox(): DOMRect | null {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (G.time - mapBox.t > 0.5 || w !== mapBox.w || h !== mapBox.h) {
+    const c = mapCanvas(), box = c?.getBoundingClientRect() ?? null;
+    mapBox = { box: box && box.width > 0 ? box : null, t: G.time, w, h };
+  }
+  return mapBox.box;
+}
+
+/** A pin held at the screen's edge moved off the minimap: along the top edge to its left, down the right edge below it. */
+function offMinimap(at: { x: number; y: number; top: number }): void {
+  const box = minimapBox();
+  if (!box) return;
+  const room = MINIMAP_ROOM * uiScales.hud;
+  if (at.x < box.left - room || at.y > box.bottom + room) return;
+  if (at.y <= at.top + 1) at.x = box.left - room;
+  else at.y = box.bottom + room;
+}
 /** how high a pin's point floats over a foe's head (m) */
 const OVER_FOE = 0.35;
 
-/** Every ping's rings and pin where they show now (after the camera moved, with the rest of the labels). */
+/**
+ * A pin (its label, and the look it last painted) placed over (x, z), or over `foe`'s head: where the view shows it,
+ * else at the screen's edge with an arrow the way to it; `alpha` strong and `scale` large.
+ */
+function placePin(pin: Pin, kind: PingKind, name: string, colour: string, x: number, z: number, foe: Enemy | null, alpha: number, scale: number): void {
+  const y = foe ? foe.obj.position.y + foe.overHead + OVER_FOE : groundHeight(x, z);
+  const at = onScreenOrEdge(x, y, z, EDGE);
+  if (!at.inView) offMinimap(at);
+  // (held at the top edge, its words go under it, on the screen)
+  const below = !at.inView && at.y <= at.top + 1;
+  const far = `${Math.round(Math.hypot(x - G.player.pos.x, z - G.player.pos.z))} m`;
+  // (the way to it in steps of 4 degrees: painted again a few times as the view turns, not every frame)
+  const turn = at.inView ? 0 : Math.round(at.turn / (Math.PI / 45)) * (Math.PI / 45);
+  const look = `${kind}|${name}|${far}|${colour}|${at.inView ? '' : turn}|${below}`;
+  if (look !== pin.look) {
+    pin.look = look;
+    pin.label.show(pinArt({ kind, name, far, colour, edge: !at.inView, turn, below }));
+  }
+  pin.edge = !at.inView;
+  const l = pin.label, art = l.size;
+  l.shown = alpha > 0.002;
+  l.alpha = alpha;
+  l.x = at.x;
+  l.y = at.y;
+  l.ax = 0.5;
+  l.ay = (at.inView ? art.h : below ? PIN_BOX / 2 : art.h - PIN_BOX / 2) / art.h;
+  l.scale = scale;
+}
+
+/** Every ping's rings and pin where they show now, and the held key's preview (after the camera moved, with the
+ *  rest of the labels). */
 function placePings(): void {
   for (const [p, s] of shown) if (!pings.includes(p)) drop(p, s);
-  const me = G.player;
   for (const p of pings) {
     const s = shownOf(p), k = pingShown(p);
     const ripple = (p.age % PING.ripple) / PING.ripple;
@@ -291,27 +371,11 @@ function placePings(): void {
     s.fill?.place(p.x, p.z, p.r, 0.12 * k);
     // (a ripple running out from the middle to the ring, fading as it goes; with reduced motion, none)
     s.ripple.place(p.x, p.z, p.r * (0.15 + 0.85 * ripple), still() ? 0 : 0.6 * (1 - ripple) * k);
-    const y = p.foe ? p.foe.obj.position.y + p.foe.overHead + OVER_FOE : groundHeight(p.x, p.z);
-    const at = onScreenOrEdge(p.x, y, p.z, EDGE);
-    const colour = pingColour(p.by);
-    const far = `${Math.round(Math.hypot(p.x - me.pos.x, p.z - me.pos.z))} m`;
-    // (the way to it in steps of 4 degrees: painted again a few times as the view turns, not every frame)
-    const turn = at.inView ? 0 : Math.round(at.turn / (Math.PI / 45)) * (Math.PI / 45);
-    const look = `${p.kind}|${nameOf(p.by)}|${far}|${colour}|${at.inView ? '' : turn}`;
-    if (look !== s.look) {
-      s.look = look;
-      s.pin.show(pinArt({ kind: p.kind, name: nameOf(p.by), far, colour, edge: !at.inView, turn }));
-    }
-    const art = s.pin.size;
-    s.pin.shown = k > 0.002;
-    s.pin.alpha = k;
-    s.pin.x = at.x;
-    s.pin.y = at.y;
-    s.pin.ax = 0.5;
-    s.pin.ay = (at.inView ? art.h : art.h - PIN_BOX / 2) / art.h;
     // (it drops into place as it comes; with reduced motion, it fades in alone)
-    s.pin.scale = !still() && p.age < 0.25 ? 1 + (0.25 - p.age) * 1.6 : 1;
+    const scale = !still() && p.age < 0.25 ? 1 + (0.25 - p.age) * 1.6 : 1;
+    placePin(s.pin, p.kind, nameOf(p.by), pingColour(p.by), p.x, p.z, p.foe, k, scale);
   }
+  placePreview();
 }
 onLayout(placePings);
 
@@ -323,7 +387,7 @@ const FAR: TextStyle = { face: 'body', size: 13, color: '#e8e0d0', shadows: OUTL
 const PIN_BOX = 84;
 const HEAD = 13;
 
-interface PinLook { kind: PingKind; name: string; far: string; colour: string; edge: boolean; turn: number }
+interface PinLook { kind: PingKind; name: string; far: string; colour: string; edge: boolean; turn: number; below?: boolean }
 
 function pinArt(m: PinLook): { w: number; h: number; paint(c: CanvasRenderingContext2D, s: number): void } {
   const name = measure(m.name, NAME), far = measure(m.far, FAR);
@@ -332,19 +396,19 @@ function pinArt(m: PinLook): { w: number; h: number; paint(c: CanvasRenderingCon
   return {
     w, h,
     paint(c, s) {
-      const cx = w / 2, cy = words + PIN_BOX / 2;
-      drawText(c, name, cx - name.w / 2, 0, NAME, s);
-      drawText(c, far, cx - far.w / 2, name.h, FAR, s);
+      const cx = w / 2, cy = m.below ? PIN_BOX / 2 : words + PIN_BOX / 2, top = m.below ? PIN_BOX : 0;
+      drawText(c, name, cx - name.w / 2, top, NAME, s);
+      drawText(c, far, cx - far.w / 2, top + name.h, FAR, s);
       c.save();
       c.shadowColor = 'rgba(0,0,0,.85)';
       c.shadowBlur = 5 * s;
       c.fillStyle = m.colour;
       if (m.edge) {
-        // the arrow out past the head, the way to it
+        // the arrow out past the head, the way to it (to turn, in first person)
         c.save();
         c.translate(cx, cy);
         c.rotate(m.turn);
-        c.beginPath(); c.moveTo(HEAD + 8, -10); c.lineTo(HEAD + 24, 0); c.lineTo(HEAD + 8, 10); c.closePath(); c.fill();
+        c.beginPath(); c.moveTo(HEAD + 5, -13); c.lineTo(HEAD + 28, 0); c.lineTo(HEAD + 5, 13); c.closePath(); c.fill();
         c.restore();
       } else {
         // the pin's point, down to the foot of its box (on the spot, or over the foe's head)
@@ -405,18 +469,27 @@ function drawOnMap(c: CanvasRenderingContext2D, S: number): void {
 }
 onMinimap(drawOnMap);
 
+/** The held key's preview as it shows now (tools/lab's co-op judges it): what letting go would ping and where, and
+ *  whether its pin and ring show; none while the key isn't held. */
+export function pingPreview(): { kind: PingKind; x: number; z: number; pin: boolean; ring: boolean } | null {
+  const p = previewing;
+  if (!p) return null;
+  return { kind: p.k, x: p.x, z: p.z, pin: !!previewPin?.label.shown, ring: !!previewRing?.ring.mesh.visible };
+}
+
 /** What every ping shown here looks like now (tools/lab's co-op judges it against the game that sent it): who sent
  *  it, what and where, and whether its pin and ring show in the world and where the minimap drew it lately. */
 export function pingsOnScreen(): {
   slot: number; kind: PingKind; x: number; z: number; r: number; foe: number | null; age: number;
-  pin: boolean; ring: boolean; map: [number, number] | null;
+  pin: boolean; ring: boolean; map: [number, number] | null; edge: boolean; head: [number, number];
 }[] {
   return pings.map((p) => {
     const s = shown.get(p);
     const map = s?.map && G.time - s.map.t < 0.1 ? [s.map.x, s.map.y] as [number, number] : null;
     return {
       slot: p.by.slot, kind: p.kind, x: p.x, z: p.z, r: p.r, foe: p.foe?.id ?? null, age: p.age,
-      pin: !!s?.pin.shown, ring: !!s?.ring.mesh.visible, map,
+      pin: !!s?.pin.label.shown, ring: !!s?.ring.mesh.visible, map,
+      edge: !!s?.pin.edge, head: [s?.pin.label.x ?? 0, s?.pin.label.y ?? 0],
     };
   });
 }

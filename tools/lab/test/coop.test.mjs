@@ -181,17 +181,37 @@ test('two in one colour, a free pick passed over, or a partner shown otherwise, 
   assert.equal(judgeColours(older, tags, [null, null, null]), null);
 });
 
-test('a ping made as meant and shown on both screens passes, and one lost or drawn off the minimap is caught', async () => {
+test('a ping previewed while held, made as meant and shown on both screens passes; one unpreviewed, lost or drawn off the minimap is caught', async () => {
   const { judgePings } = await import('../node/coopPings.mjs');
-  const planned = [{ by: 'guest', kind: 'spot', at: [4, 2], how: 'Ctrl let go on the floor', frame: 0, near: 0.3 }];
+  const planned = [{ by: 'guest', kind: 'spot', at: [4, 2], how: 'Left Shift let go on the floor', frame: 0, near: 0.3 }];
   const ping = (age, map = [4, 2]) => ({ slot: 1, kind: 'spot', x: 4, z: 2, r: 0.9, foe: null, age, pin: true, ring: true, map });
-  const frames = 60;
-  const guest = Array.from({ length: frames }, (_, f) => ({ slot: 1, pings: [ping(f / 60)], ...(f ? {} : { planned }) }));
+  const frames = 90, let_go = 20;
+  const preview = { kind: 'spot', x: 4, z: 2, pin: true, ring: true };
+  const guestOf = (previewed) => Array.from({ length: frames }, (_, f) => ({
+    slot: 1, pings: f >= let_go ? [ping((f - let_go) / 60)] : [], preview: f < let_go && previewed ? preview : null, ...(f ? {} : { planned }),
+  }));
+  const guest = guestOf(true);
   const shown = (from, map) => Array.from({ length: frames }, (_, f) => ({ slot: 0, pings: f >= from ? [ping((f - from) / 60, map)] : [] }));
-  const good = judgePings({ host: shown(20), guest, frameMs: 1000 / 60 });
+  const good = judgePings({ host: shown(40), guest, frameMs: 1000 / 60 });
   assert.deepEqual(good.problems, []);
+  const unpreviewed = judgePings({ host: shown(40), guest: guestOf(false), frameMs: 1000 / 60 });
+  assert.ok(unpreviewed.problems.some((p) => p.includes('previewed in 0')));
+  const early = judgePings({ host: shown(10), guest, frameMs: 1000 / 60 });
+  assert.ok(early.problems.some((p) => p.includes('before it was let go')));
   const lost = judgePings({ host: shown(frames), guest, frameMs: 1000 / 60 });
   assert.ok(lost.problems.some((p) => p.includes("never on the host's screen")));
-  const off = judgePings({ host: shown(20, [6, 2]), guest, frameMs: 1000 / 60 });
+  const off = judgePings({ host: shown(40, [6, 2]), guest, frameMs: 1000 / 60 });
   assert.ok(off.problems.some((p) => p.includes("the host's minimap drew it")));
+});
+
+test('a partner\'s ping held at the screen\'s edge in first person is found there, one in the middle or over the minimap is not', async () => {
+  const { firstPersonEdge } = await import('../node/coopPings.mjs');
+  const view = { mode: 'first', settled: true, screen: [1920, 1080], minimap: [1640, 40, 1900, 300] };
+  const frames = (head) => Array.from({ length: 40 }, () => ({ view, pings: [{ slot: 0, pin: true, edge: true, head }] }));
+  const atEdge = firstPersonEdge(frames([60, 540]), 1);
+  assert.equal(atEdge.frames, 40);
+  assert.ok(atEdge.farthest < 0.16);
+  assert.ok(firstPersonEdge(frames([960, 540]), 1).farthest > 0.16);
+  assert.equal(firstPersonEdge(frames([1800, 200]), 1).overMap, 40);
+  assert.equal(firstPersonEdge(frames([60, 540]), 0).frames, 0, 'its own pings are not its partner\'s');
 });

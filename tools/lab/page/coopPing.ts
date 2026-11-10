@@ -1,11 +1,11 @@
 // `lab coop`'s `ping` scenario (page/coop.ts plays it, node/coopPings.mjs judges it): the guest pings a foe, a spot and
-// an area with Ctrl held and let go (the area dragged from where Ctrl went down), then a spot by a finger held on the
+// an area with Left Shift held and let go (the area dragged from where Left Shift went down), then a spot by a finger held on the
 // minimap, and the host a spot; each game records every ping it shows, its own and its partner's, with whether its pin
 // and its ring show in the world and where on the arena the minimap drew it (read back from the minimap's pixels by
 // this module's own sums, not the game's).
 import * as THREE from 'three';
 import { G } from '../../../src/state';
-import { cameraYaw } from '../../../src/core/renderer';
+import { cameraYaw, viewMode, viewSettled } from '../../../src/core/renderer';
 import type { Frame } from './lab';
 
 /** A point on the ground, x and z. */
@@ -24,7 +24,7 @@ export interface PlannedPing { by: 'host' | 'guest'; kind: 'spot' | 'foe' | 'are
 /** the dazed foe the guest pings, and where the minimap is held (its arena point) */
 export const PING_FOE: XZ = [12, 15];
 
-/** the frames Ctrl is held before it's let go, and of them the drag of an area's */
+/** the frames Left Shift is held before it's let go, and of them the drag of an area's */
 const HELD = 20;
 const DRAG = 14;
 /** the frames a finger is held on the minimap (its long press is 0.5 s), and the tap before it that puts the page in
@@ -33,12 +33,16 @@ const PRESSED = 40;
 const TAP_BEFORE = 10;
 
 export const PINGS: PlannedPing[] = [
-  { by: 'guest', kind: 'foe', at: PING_FOE, how: 'Ctrl let go on a foe', frame: 30, near: 0.5 },
-  { by: 'guest', kind: 'spot', at: [18, 21], how: 'Ctrl let go on the floor', frame: 90, near: 0.3 },
-  { by: 'guest', kind: 'area', at: [11, 25], r: 4, how: 'Ctrl dragged 4 m', frame: 160, near: 0.3 },
+  { by: 'guest', kind: 'foe', at: PING_FOE, how: 'Left Shift let go on a foe', frame: 30, near: 0.5 },
+  { by: 'guest', kind: 'spot', at: [18, 21], how: 'Left Shift let go on the floor', frame: 90, near: 0.3 },
+  { by: 'guest', kind: 'area', at: [11, 25], r: 4, how: 'Left Shift dragged 4 m', frame: 160, near: 0.3 },
   { by: 'guest', kind: 'spot', at: [-8, 6], how: 'a finger held on the minimap', frame: 280, near: 0.7 },
-  { by: 'host', kind: 'spot', at: [5, 23], how: 'Ctrl let go on the floor', frame: 340, near: 0.3 },
+  { by: 'host', kind: 'spot', at: [5, 23], how: 'Left Shift let go on the floor', frame: 340, near: 0.3 },
 ];
+
+/** the frames the guest presses V on: twice into first person after the host's ping (which then lies off to its
+ *  side, out of the view), and once back to the top-down view */
+export const VIEW_PRESSES = [360, 366, 480];
 
 /** what the page's finger was over as it went down on the minimap (`elementFromPoint`: its id or tag) */
 let pressedOn = '';
@@ -55,7 +59,7 @@ function foeAt(at: XZ): THREE.Vector3 | null {
   return best;
 }
 
-/** A Ctrl ping's input: held `HELD` frames up to its frame with the aim on it (an area's dragged out `r` along x from
+/** A G ping's input: held `HELD` frames up to its frame with the aim on it (an area's dragged out `r` along x from
  *  its middle), the aim kept a few frames either side. */
 function ctrlInput(p: PlannedPing, frame: number): Frame | null {
   const start = p.frame - HELD;
@@ -64,7 +68,7 @@ function ctrlInput(p: PlannedPing, frame: number): Frame | null {
   let aim: THREE.Vector3 | null = new THREE.Vector3(p.at[0], 0, p.at[1]);
   if (p.kind === 'foe') aim = foeAt(p.at);
   else if (p.kind === 'area') aim.x += (p.r ?? 0) * Math.min(1, Math.max(0, (frame - start) / DRAG));
-  return { aim: aim ?? undefined, keys: held ? ['controlleft'] : [] };
+  return { aim: aim ?? undefined, keys: held ? ['shiftleft'] : [] };
 }
 
 /** The minimap's canvas, its box on the page, its border as drawn, its inner width and its px a metre. */
@@ -121,6 +125,7 @@ function pressInput(p: PlannedPing, frame: number): Frame | null {
 
 /** The input of `role`'s hero in `ping` at `frame` after it settled. */
 export function pingInput(role: 'host' | 'guest', frame: number): Frame {
+  if (role === 'guest' && VIEW_PRESSES.includes(frame)) return { keys: ['v'] };
   for (const p of PINGS) {
     if (p.by !== role) continue;
     const input = p.how.includes('minimap') ? pressInput(p, frame) : ctrlInput(p, frame);
@@ -134,13 +139,30 @@ export function pingInput(role: 'host' | 'guest', frame: number): Frame {
 export interface PingSample {
   slot: number; kind: string; x: number; z: number; r: number; foe: number | null; age: number;
   pin: boolean; ring: boolean; map: XZ | null;
+  /** its pin held at the screen's edge (off screen), and where its head is on the page (css px) */
+  edge: boolean; head: [number, number];
 }
 
 /** Every ping this game shows this frame (none in an older tree), and what its finger was last over on the minimap. */
-export function pingsNow(): { pings: PingSample[]; pressedOn: string } {
+export function pingsNow(): { pings: PingSample[]; pressedOn: string; preview: PreviewSample | null; view: ViewSample } {
   const pings = (pingUi?.pingsOnScreen() ?? []).map((p) => ({ ...p, map: p.map ? fromMinimap(p.map[0], p.map[1]) : null }));
-  return { pings, pressedOn };
+  return { pings, pressedOn, preview: pingUi?.pingPreview?.() ?? null, view: viewNow() };
 }
+
+/** The view a game shows in one frame: its kind and whether it has settled there, the page's size and the
+ *  minimap's box on it (css px: left, top, right, bottom). */
+export interface ViewSample { mode: string; settled: boolean; screen: [number, number]; minimap: [number, number, number, number] | null }
+function viewNow(): ViewSample {
+  const box = document.querySelector('#minimap')?.getBoundingClientRect();
+  return {
+    mode: viewMode(), settled: viewSettled(), screen: [innerWidth, innerHeight],
+    minimap: box && box.width > 0 ? [box.left, box.top, box.right, box.bottom] : null,
+  };
+}
+
+/** The held key's preview as this game shows it in one frame: what letting go would ping, where, and whether its
+ *  pin and ring show. */
+export interface PreviewSample { kind: string; x: number; z: number; pin: boolean; ring: boolean }
 
 /** Each scenario starts with no finger on the minimap. */
 export function resetPings(): void { pressedOn = ''; }

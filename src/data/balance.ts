@@ -88,7 +88,7 @@ export const PING = {
   fadeOut: 1,
   /** the least time between a player's pings (s): a new one replaces the last */
   gap: 0.4,
-  /** the aim dragged this far with Ctrl held marks an area (m), at most this wide a radius */
+  /** the aim dragged this far with Left Shift held marks an area (m), at most this wide a radius */
   areaFrom: 2,
   areaMost: 12,
   /** a spot's ring and a foe's ring past its body (m) */

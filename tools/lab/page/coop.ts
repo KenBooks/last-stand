@@ -128,6 +128,8 @@ export interface Sample {
   slot?: number;
   pings?: PingSample[];
   pressedOn?: string;
+  preview?: import('./coopPing').PreviewSample | null;
+  view?: import('./coopPing').ViewSample;
   planned?: typeof PINGS;
 }
 
@@ -545,13 +547,14 @@ const SCENARIOS: Record<string, Scenario> = {
     guestInput: rushInput,
   },
   ping: {
-    about: 'the guest pings a foe, a spot and an area with Ctrl, then a spot by a finger held on the minimap, and the '
-      + 'host a spot: each shown on the other game\'s screen, in the world and on its minimap',
-    frames: 480,
+    about: 'the guest pings a foe, a spot and an area with Left Shift, then a spot by a finger held on the minimap, and the '
+      + 'host a spot: each shown on the other game\'s screen, in the world and on its minimap; then the guest in '
+      + 'first person, the host\'s ping off to its side',
+    frames: 520,
     host: [9, 19],
     guest: [15, 23],
     foes: [{ type: 'mossback', at: PING_FOE, dazed: true }],
-    pictures: [40, 175, 290],
+    pictures: [40, 175, 290, 440],
     hostInput: (frame) => pingInput('host', frame),
     guestInput: (frame) => pingInput('guest', frame),
   },
