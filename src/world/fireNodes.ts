@@ -26,12 +26,16 @@ export interface FlameUniforms {
   uTurn: { value: THREE.Vector2 };
   uBowl: { value: THREE.Vector2[] };
   uLogs: { value: THREE.Vector4[] };
+  uStepShare: { value: number };
 }
 
 /** fire.ts's numbers the GLSL had written into it: the march's steps, how thick and bright the gas is, its glow against
  *  its life, its blackbody's colours, and the loop's tiles. */
 export interface FlameShape {
   steps: number;
+  /** the fewest steps a ray takes, and the least share of a whole crossing its length counts for */
+  stepsLeast: number;
+  spanLeast: number;
   look: typeof FLAME_LOOK;
   tiles: { across: number; down: number };
   cells: { nx: number; ny: number; nz: number };
@@ -332,7 +336,7 @@ function marchFor(shape: FlameShape): N {
   }`, [side, disc]);
   march = wgslFn(`fn fireLight(world: vec3f, eyeWorld: vec3f, centre: vec3f, pixel: vec2f, noise: texture_3d<f32>,
     noiseAt: sampler, top: f32, reach: f32, frame: f32, turn: vec2f, glow: f32, foot: vec2f,
-    belly: vec2f, rim: vec2f, logs: f32) -> vec4f {
+    belly: vec2f, rim: vec2f, logs: f32, stepShare: f32) -> vec4f {
     let eye = eyeWorld - centre;
     let dir = normalize(world - eyeWorld);
     var span = fireSpan(eye, dir, top, reach);
@@ -341,11 +345,17 @@ function marchFor(shape: FlameShape): N {
     if (span.y <= span.x) {
       return vec4f(0.0);
     }
-    let stride = max(span.y - span.x, 0.0) / f32(${shape.steps});
+    let spanLength = max(span.y - span.x, 0.0);
+    let wanted = f32(${shape.steps}) * stepShare * clamp(spanLength / (2.0 * reach), ${f(shape.spanLeast)}, 1.0);
+    let steps = max(i32(ceil(wanted)), ${shape.stepsLeast});
+    let stride = spanLength / f32(steps);
     let jitter = fract(sin(dot(pixel, vec2f(12.9898, 78.233))) * 43758.5453);
     var light = vec3f(0.0);
     var through = 1.0;
     for (var i = 0; i < ${shape.steps}; i++) {
+      if (i >= steps) {
+        break;
+      }
       let here = fireLife(eye + dir * (span.x + (f32(i) + jitter) * stride), noise, noiseAt, top, reach, frame, turn);
       if (here <= 0.004) {
         continue;
@@ -410,7 +420,7 @@ export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE
     top: read('uHeight', 'float').mul(read('uPuff', 'float')), reach: read('uBox', 'vec3').x,
     frame: read('uFrame', 'float'), turn: read('uTurn', 'vec2'), glow: read('uGlow', 'float'),
     foot: bowlPart(uniforms, 0), belly: bowlPart(uniforms, 1), rim: bowlPart(uniforms, 2),
-    logs: logsHit(uniforms, read('uCentre', 'vec3')),
+    logs: logsHit(uniforms, read('uCentre', 'vec3')), stepShare: read('uStepShare', 'float'),
   });
   // (the flames fade with the prop under them, `seeThroughFade`: fire.ts binds its uniforms first; as one, by the fade
   // along the view through their middle, as fire.ts has it)

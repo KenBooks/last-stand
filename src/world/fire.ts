@@ -56,8 +56,18 @@ export interface FireLog {
 /** the most logs a fire's flames know (a bonfire has 7) */
 export const LOGS_MOST = 8;
 
-/** the steps a ray takes through the flames' box: fewer, and the flames read as slices across the view */
+/** the most steps a ray takes through the flames (one crossing them whole, at full quality): fewer, and the flames
+ *  read as slices across the view */
 const STEPS = 64;
+/** the fewest steps a ray takes, and the least share of a whole crossing's its length counts for (a ray through the
+ *  flames' very edge still steps finely enough not to show slices) */
+const STEPS_LEAST = 8;
+const SPAN_LEAST = 0.25;
+/** the share of the steps every fire's rays take, the quality level's (`setFlameSteps`): a uniform, so a switch
+ *  compiles nothing */
+const stepShare = { value: 1 };
+/** Every fire's flames stepped at `share` of their steps (1 at High; the quality level's `flameSteps`). */
+export function setFlameSteps(share: number): void { stepShare.value = share; }
 /** the frames a second the loop plays at, as it was simulated */
 const LOOP_RATE = 60 / LOOP.stepsEach;
 /** how far round its bed the box reaches and how far up it stands, shares of the bed's radius and of the flames' height */
@@ -207,6 +217,7 @@ const FLAME_FRAGMENT = /* glsl */`
   uniform vec2 uTurn;
   uniform vec2 uBowl[3];
   uniform vec4 uLogs[${LOGS_MOST * 2}];
+  uniform float uStepShare;
   varying vec3 vFlameWp;
   // the gas's light at a flame's life: a blackbody's, its colour and radiance by its heat
   vec3 flameColour(float life) {
@@ -350,7 +361,13 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
     // (none of the flames on this ray: its steps all on one point, their light times a stride of 0 still lit the bowl
     // from below)
     if (span.y <= span.x) discard;
-    float stride = max(span.y - span.x, 0.0) / float(${STEPS});
+    // (the steps by the ray's length through the flames, a share of them as the quality level has it (uStepShare): a
+    // ray crossing them whole takes them all, one through their edge as few as its length needs, never coarser than a
+    // whole crossing's; every ray took all 64, the flames' cost 18 times #432's predecessor's, issue #461)
+    float spanLength = max(span.y - span.x, 0.0);
+    float wanted = float(${STEPS}) * uStepShare * clamp(spanLength / (2.0 * uBox.x), ${glsl(SPAN_LEAST)}, 1.0);
+    int steps = max(int(ceil(wanted)), ${STEPS_LEAST});
+    float stride = spanLength / float(steps);
     // (each pixel starts its steps a little further in than its neighbours, at random: in step, the slices showed,
     // and by a pattern's offsets, its stripes did through a thin tongue)
     float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -359,6 +376,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
     vec3 light = vec3(0.0);
     float through = 1.0;
     for (int i = 0; i < ${STEPS}; i++) {
+      if (i >= steps) break;
       float life = flameLife(eye + dir * (span.x + (float(i) + jitter) * stride));
       if (life <= 0.004) continue;
       float thick = 1.0 - exp(-clamp(life / ${glsl(FLAME_LOOK.glowFullLife)}, 0.0, 1.0) * stride * ${glsl(FLAME_LOOK.thickPerMetre)});
@@ -379,7 +397,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
 
 /** the numbers the flames' shader is written with, for its WGSL (fireNodes.ts) */
 const FLAME_SHAPE = {
-  steps: STEPS, look: FLAME_LOOK,
+  steps: STEPS, stepsLeast: STEPS_LEAST, spanLeast: SPAN_LEAST, look: FLAME_LOOK,
   tiles: TILES, cells: BAKE, kept: KEPT, keptSize: KEPT_SIZE, frames: LOOP.frames,
 };
 
@@ -421,6 +439,8 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
       uBowl: { value: noBowl() },
       // (none: each 0 thick)
       uLogs: { value: Array.from({ length: LOGS_MOST * 2 }, () => new THREE.Vector4()) },
+      // (one for every fire: the quality level's)
+      uStepShare: stepShare,
     },
     vertexShader: FLAME_VERTEX,
     fragmentShader: FLAME_FRAGMENT,
