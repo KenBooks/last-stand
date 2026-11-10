@@ -28,3 +28,9 @@ tools/lab/traces.env
 tools/stalls/out/
 
 server/relay/node_modules/
+
+# portrait exporter browser profiles
+tools/portraits/out/
+
+# Original Codex portrait paintings and local provenance
+.tmp/portrait-art/

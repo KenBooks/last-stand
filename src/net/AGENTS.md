@@ -45,3 +45,5 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
   - **Diagnostics** (`net/netlog.ts`, the pause menu's "Show network stats", `ui/netHud.ts`): the link to the server (open, dropped, its round trip), the partners, the session's steps, in a report copied or shared from the overlay or the co-op dialog.
 
 - Training grounds (#405, PROTOCOL 23): welcome/lobby/start carry the host’s training flag and selected wave. Guests cannot choose their own mode or unlock range. Every game rejects training damage and rewards locally, including late loot reports and host disconnects.
+
+- Optional portraits (#396, PROTOCOL 24): `Look.av` seeds a partner’s picture and `StateMsg.av` carries changes during lobby and fight. IDs are class-scoped packaged choices; URLs, unknown IDs and another class’s portrait are ignored. Local choices are kept per class by `portraits.ts`; remote choices live with their Player and disappear on class rebuild/disconnect.

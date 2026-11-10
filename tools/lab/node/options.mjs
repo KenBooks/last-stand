@@ -1955,6 +1955,13 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  portraits: {
+    help: 'optional portrait picker: no image downloads at boot, current class only on open, selection and None',
+    options: {
+      canary: { kind: 'switch', help: 'request another class portrait and verify the download audit detects it' },
+      ...COMMON_OPTIONS,
+    },
+  },
   guard: {
     help: 'attack while holding Raise Shield, exposed swing and immediate guard return, release/failure cases '
       + 'and two independent touch fingers; pictures in third person and through the eyes',

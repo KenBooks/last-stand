@@ -1,0 +1,167 @@
+[
+  {
+    "classId": "ranger",
+    "id": "11",
+    "original": "ranger-cinematic-sheet.png",
+    "crop": {
+      "x": 28,
+      "y": 136,
+      "size": 399
+    },
+    "prompt": "Owner-supplied Cinematic Fantasy Hero Portraits.png, panel 1: blue hood, dark hair, clean-shaven archer. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "ranger",
+    "id": "12",
+    "original": "ranger-cinematic-sheet.png",
+    "crop": {
+      "x": 462,
+      "y": 136,
+      "size": 393
+    },
+    "prompt": "Owner-supplied Cinematic Fantasy Hero Portraits.png, panel 2: red hood, wavy light brown hair, short stubble. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "ranger",
+    "id": "13",
+    "original": "ranger-cinematic-sheet.png",
+    "crop": {
+      "x": 889,
+      "y": 136,
+      "size": 396
+    },
+    "prompt": "Owner-supplied Cinematic Fantasy Hero Portraits.png, panel 3: green cloak, fur shoulder, dark wavy hair and jeweled headband. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "ranger",
+    "id": "14",
+    "original": "ranger-cinematic-sheet.png",
+    "crop": {
+      "x": 1318,
+      "y": 136,
+      "size": 395
+    },
+    "prompt": "Owner-supplied Cinematic Fantasy Hero Portraits.png, panel 4: purple cloak, dark wavy hair and short full beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "ranger",
+    "id": "15",
+    "original": "ranger-cinematic-sheet.png",
+    "crop": {
+      "x": 1748,
+      "y": 136,
+      "size": 397
+    },
+    "prompt": "Owner-supplied Cinematic Fantasy Hero Portraits.png, panel 5: ochre cloak, fur shoulder, dark hair tied in a bun and short beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "mage",
+    "id": "11",
+    "original": "mage-elemental-lineup-sheet.png",
+    "crop": {
+      "x": 22,
+      "y": 118,
+      "size": 370
+    },
+    "prompt": "Owner-supplied Five Elemental Mages Lineup.png, panel 1: blue embroidered hood, dark hair, clean-shaven mage and blue gem clasp. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "mage",
+    "id": "12",
+    "original": "mage-elemental-lineup-sheet.png",
+    "crop": {
+      "x": 420,
+      "y": 118,
+      "size": 364
+    },
+    "prompt": "Owner-supplied Five Elemental Mages Lineup.png, panel 2: crimson hood, wavy light brown hair, short stubble and red gem clasp. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "mage",
+    "id": "13",
+    "original": "mage-elemental-lineup-sheet.png",
+    "crop": {
+      "x": 812,
+      "y": 118,
+      "size": 358
+    },
+    "prompt": "Owner-supplied Five Elemental Mages Lineup.png, panel 3: green hood, dark curls, jeweled headband and green gem clasp. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "mage",
+    "id": "14",
+    "original": "mage-elemental-lineup-sheet.png",
+    "crop": {
+      "x": 1200,
+      "y": 118,
+      "size": 360
+    },
+    "prompt": "Owner-supplied Five Elemental Mages Lineup.png, panel 4: purple hood, dark wavy hair, full short beard and purple gem clasp. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "mage",
+    "id": "15",
+    "original": "mage-elemental-lineup-sheet.png",
+    "crop": {
+      "x": 1591,
+      "y": 118,
+      "size": 370
+    },
+    "prompt": "Owner-supplied Five Elemental Mages Lineup.png, panel 5: ochre embroidered hood, dark hair, moustache and pointed beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "warrior",
+    "id": "11",
+    "original": "warrior-one-banner-sheet.png",
+    "crop": {
+      "x": 16,
+      "y": 137,
+      "size": 405
+    },
+    "prompt": "Owner-supplied Five Warriors, One Banner.png, panel 1: blue embroidered mantle, engraved steel shoulder armour, long dark waves tied in a loose bun and short stubble. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "warrior",
+    "id": "12",
+    "original": "warrior-one-banner-sheet.png",
+    "crop": {
+      "x": 451,
+      "y": 137,
+      "size": 405
+    },
+    "prompt": "Owner-supplied Five Warriors, One Banner.png, panel 2: crimson collar, fur shoulder, loose wavy blond hair and short stubble. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "warrior",
+    "id": "13",
+    "original": "warrior-one-banner-sheet.png",
+    "crop": {
+      "x": 886,
+      "y": 137,
+      "size": 403
+    },
+    "prompt": "Owner-supplied Five Warriors, One Banner.png, panel 3: green embroidered mantle over scale armour, loose wavy dark hair streaked silver and a full grey beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "warrior",
+    "id": "14",
+    "original": "warrior-one-banner-sheet.png",
+    "crop": {
+      "x": 1319,
+      "y": 137,
+      "size": 404
+    },
+    "prompt": "Owner-supplied Five Warriors, One Banner.png, panel 4: purple embroidered mantle, engraved steel shoulder armour, dark curls and a short beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  },
+  {
+    "classId": "warrior",
+    "id": "15",
+    "original": "warrior-one-banner-sheet.png",
+    "crop": {
+      "x": 1753,
+      "y": 137,
+      "size": 403
+    },
+    "prompt": "Owner-supplied Five Warriors, One Banner.png, panel 5: ochre collar, broad fur shoulder, golden scale armour, long brown braids with shaved sides and a full short beard. Export the supplied painting directly; omit its gold frame and black sheet margins."
+  }
+]

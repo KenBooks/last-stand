@@ -1693,6 +1693,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  portraits: {
+    each(side, options) {
+      return side.command('portraits', { canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('portraits'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   guard: {
     each(side, options) {
       return side.command('guard', { canary: Boolean(options.canary) });

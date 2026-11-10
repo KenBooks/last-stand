@@ -11,3 +11,4 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 - **Check the state happened, and carry a canary** (Writing a measure in `tools/lab/AGENTS.md`).
 - A measure reads what the game sends out (the frame drawn, the WebAudio nodes, the page's styles), not the game's own bookkeeping, which is what it checks.
 - Pure helpers a measure uses get a unit test in `test/` (`flashes.ts`, `patches.ts`, `sweptArea.ts`, `jumps.ts` have theirs).
+- `portraits` checks the real party card at the five required desktop/phone/tablet sizes: class accent, name/class alignment, host portrait star, own border, ordering and overflow. Show the HUD before measuring it (the solo lobby hides it), and yield to the browser after opening native `details`: its deferred `toggle` populates the picker after the click.

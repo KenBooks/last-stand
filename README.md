@@ -164,3 +164,9 @@ This is an early build — feedback, bug reports and ideas are very welcome in [
 ### Training grounds
 
 Choose **Training grounds** in the lobby, pick a battleground and any wave that hero has reached there (including waves lost). Fight holographic enemies with normal skill costs and cooldowns, but take no damage and earn no loot, score or progression. After clearing a wave, repeat it or leave. In co-op the host chooses the mode, biome and wave for everyone. Older saves initially offer their banked waves because earlier failed attempts were not stored by biome.
+
+### Optional party portraits
+
+In **Play together**, open **Your portrait (optional)** to choose from five male portraits in one row for your current class, or **None**. Each set uses Blue, Red, Green, Purple and Ochre outfits. Each class remembers its own choice across save slots. Portraits appear in the lobby and fight party lists only. Unchosen pictures are not downloaded until the picker opens; other classes’ sets stay unloaded.
+
+The top-left co-op party list shows your card first, marked by a gold line on its left edge, followed by your partners. Cards show the player name, class in its Hero Selection colour, portrait, health and current status. A gold star at the bottom-left of a portrait marks the host.
