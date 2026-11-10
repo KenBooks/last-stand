@@ -21,7 +21,7 @@ export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05
 import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';
 import { COARSE_CELL, restingLift, skullGeometry, skullsDrawn } from './skull';
-import { cullInCells, eachInstance, gridCell } from './culling';
+import { asClutter, cullInCells, eachInstance, gridCell } from './culling';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { valueNoise3 } from '../core/patterns';
@@ -1310,6 +1310,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   }
   rocks.castShadow = rocks.receiveShadow = true;
   scene.add(...cullInCells(rocks, CLUTTER_CELLS));
+  asClutter(rocks);
 
   // bones (a shaft with knobbed ends) & skulls
   const boneGeo = mergeGeometries([
@@ -1327,6 +1328,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   }
   bones.castShadow = true;
   scene.add(...cullInCells(bones, CLUTTER_CELLS));
+  asClutter(bones);
   const skullGeo = skullGeometry();
   const skulls = new THREE.InstancedMesh(skullGeo, bone, 24);
   for (let i = 0; i < skulls.count; i++) {

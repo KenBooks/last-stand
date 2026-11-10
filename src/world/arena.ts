@@ -9,7 +9,7 @@ import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, sunShadowStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
 import { buildCrypt, CRYPT_ENV } from './crypt';
@@ -103,6 +103,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
    *  keeps its own lights' maps, so a biome shown again with its props as they were needn't draw them again (closing
    *  the hall of heroes drew the biome's again, 9 ms of the frame after a first visit's hero was chosen) */
   const stillDrawn = new Map<BiomeId | 'hall', number>();
+  /** what the sun's shadow was last drawn of, where it's the still world's alone (`setSunShadowStill`) */
+  let sunDrawn = '';
   /** the props' revision each biome's breakables' shadows were last made at: in a frame's update they're made in one
    *  frame and the still shadows drawn in the next (in one, a run's start held its frame up 24 ms for both) */
   const breakablesAt = new Map<BiomeId, number>();
@@ -141,7 +143,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
    *  after the hero was chosen: the biome had never been shown). */
   function drawStill(inFrames = false): void {
     const shown = hallShown ? 'hall' : biome;
-    if (stillDrawn.get(shown) === propState.rev) return;
+    // (the sun's one map holds what was shown last: where it's the still world's, it's drawn again for another)
+    const sunStale = sunShadowStill() && sunDrawn !== `${shown} ${propState.rev}`;
+    if (stillDrawn.get(shown) === propState.rev && !sunStale) return;
     if (!hallShown && breakablesAt.get(biome) !== propState.rev) {
       biomes[biome].breakables.refresh();
       breakablesAt.set(biome, propState.rev);
@@ -149,6 +153,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     }
     drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
     stillDrawn.set(shown, propState.rev);
+    sunDrawn = `${shown} ${propState.rev}`;
   }
 
   return {
@@ -199,5 +204,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       drawStill(true);
     },
     drawStill,
+    /** The sun's still shadow drawn again at the next frame: its map was made anew, or it's the still world's now. */
+    sunShadowChanged(): void { sunDrawn = ''; },
   };
 }

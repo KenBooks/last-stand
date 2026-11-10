@@ -12,7 +12,7 @@ import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, plac
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
-import { cullInCells, eachInstance, gridCell, ringSector } from './culling';
+import { asClutter, cullInCells, eachInstance, gridCell, ringSector } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
@@ -454,6 +454,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     tuft.receiveShadow = true;
     tuft.name = `grass ${kind + 1}`;
     scene.add(...cullInCells(tuft, FLOOR_CELLS));
+    asClutter(tuft);
   });
 
   const shroomN = 70;
@@ -500,6 +501,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   ferns.receiveShadow = true;
   ferns.name = 'ferns';
   scene.add(...cullInCells(ferns, FLOOR_CELLS));
+  asClutter(ferns);
 
   // roots snaking out of the thicket across the floor, half sunk in it
   // (each a tube's samples as well, the floor's relief: feet step onto them, `world/ground.ts`)
@@ -556,6 +558,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   pebbles.receiveShadow = true;
   pebbles.name = 'pebbles';
   scene.add(pebbles);
+  asClutter(pebbles);
 
   // --- Young trees in the clearing: wood an arrow goes into ----------------------------
   // (last, from streams of their own: placed before, they'd move what's placed round the obstacles; their bark and

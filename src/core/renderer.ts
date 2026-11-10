@@ -12,6 +12,7 @@ import {
   setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
 } from './webgpu';
 import { G } from '../state';
+import { sunShadowStill } from '../world/props';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import { updateSeeThrough } from './seeThrough';
@@ -504,7 +505,8 @@ function sunShadowInTurns(): void {
   const turns = shadowInTurns || (WEBGPU && fast);
   const skip = turns && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
-  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld;
+  // (where the sun's shadow is the still world's alone, it's drawn with the still shadows, by no frame of its own)
+  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill();
 }
 
 /** top-down (the default), over the shoulder, or through the character's eyes */

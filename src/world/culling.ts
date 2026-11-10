@@ -125,6 +125,42 @@ export function cullInCells(mesh: THREE.InstancedMesh, cellOf: CellOf): THREE.In
   return caster ? [mesh, caster] : [mesh];
 }
 
+/** the share of a clutter mesh's instances drawn (`setClutterShare`) */
+let clutterShare = 1;
+/** the floor's clutter that isn't culled in cells (`asClutter`), and each's instances as built */
+const plainClutter = new Map<THREE.InstancedMesh, number>();
+const isClutter = (mesh: THREE.InstancedMesh): boolean => mesh.userData.clutter === true;
+
+/**
+ * `mesh` as the floor's clutter (grass, ferns, pebbles, bones): a quality level draws a share of its instances
+ * (`setClutterShare`), the first of each cell's where it's culled in cells, of them all where it isn't. Call it
+ * after `cullInCells`, which orders the instances.
+ */
+export function asClutter(mesh: THREE.InstancedMesh): void {
+  mesh.userData.clutter = true;
+  if (!culled.some((c) => c.mesh === mesh)) plainClutter.set(mesh, mesh.count);
+  thin();
+}
+
+/** How many of `count` clutter instances the share draws: one at least of any. */
+const thinned = (count: number): number => (count ? Math.max(1, Math.ceil(count * clutterShare)) : 0);
+
+/** Every clutter mesh's drawn instances made the share's. */
+function thin(): void {
+  for (const c of culled) if (isClutter(c.mesh)) pack(c);
+  for (const [mesh, count] of plainClutter) mesh.count = thinned(count);
+}
+
+/**
+ * The share of the floor's clutter drawn (the quality level's: Very low's third), live: counts alone change, on both
+ * renderers. The forest's grass, ferns and pebbles were 59k of its lobby's 266k triangles (`lab draws`).
+ */
+export function setClutterShare(share: number): void {
+  if (share === clutterShare) return;
+  clutterShare = share;
+  thin();
+}
+
 /** `attribute` sent to the GPU as far as `length` floats into it. */
 function sendUpTo(attribute: THREE.BufferAttribute, length: number): void {
   attribute.clearUpdateRanges();
@@ -137,11 +173,14 @@ function pack(c: Culled): void {
   const { mesh, matrices, colors } = c;
   const to = mesh.instanceMatrix.array as Float32Array, toColors = mesh.instanceColor?.array as Float32Array;
   let n = 0;
+  const clutter = isClutter(mesh);
   for (const cell of c.cells) {
     if (!cell.shown) continue;
-    to.set(matrices.subarray(cell.start * 16, (cell.start + cell.count) * 16), n * 16);
-    if (colors) toColors.set(colors.subarray(cell.start * 3, (cell.start + cell.count) * 3), n * 3);
-    n += cell.count;
+    // (a share of a clutter mesh's: the cell's first)
+    const count = clutter ? thinned(cell.count) : cell.count;
+    to.set(matrices.subarray(cell.start * 16, (cell.start + count) * 16), n * 16);
+    if (colors) toColors.set(colors.subarray(cell.start * 3, (cell.start + count) * 3), n * 3);
+    n += count;
   }
   mesh.count = n;
   mesh.visible = n > 0;
