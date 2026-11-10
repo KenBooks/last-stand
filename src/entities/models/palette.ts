@@ -291,7 +291,8 @@ function geometryOf(geometry: THREE.BufferGeometry, row: number): THREE.BufferGe
 function fits(mesh: THREE.Mesh): boolean {
   if (!mesh.isMesh || Array.isArray(mesh.material) || !isKitMaterial(mesh.material)) return false;
   const geometry = mesh.geometry;
-  if (geometry.groups.length || geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity) return false;
+  // (its groups are nothing to one material: a box's six, a cylinder's three, are drawn as one)
+  if (geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity) return false;
   return !Object.keys(geometry.morphAttributes).length && Boolean(geometry.attributes.position);
 }
 
