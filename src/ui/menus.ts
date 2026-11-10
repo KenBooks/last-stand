@@ -24,7 +24,7 @@ import { isTouch } from './touch';
 import { perfHudSize, setPerfHudSize, type PerfHudSize } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
-import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
+import { qualitySetting, qualityLevel, resolutionSetting, setQuality, setResolution } from '../core/quality';
 import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
 import { readCookie, writeCookie } from '../core/cookies';
 import { gearGlow, setGearGlow } from '../core/materials';
@@ -195,6 +195,10 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
+  document.querySelectorAll<HTMLElement>('#opt-resolution button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setResolution(Number(b.dataset.r)); renderResolutionOptions(); };
+  });
+  renderResolutionOptions();
   document.querySelectorAll<HTMLElement>('#opt-vsync button').forEach((b) => {
     b.onclick = () => { sfx.click(); setFramesUncapped(b.dataset.v === 'off'); renderVsyncOptions(); };
   });
@@ -869,6 +873,13 @@ function renderGearGlowOptions(): void {
 function renderPerfOptions(): void {
   const s = perfHudSize();
   document.querySelectorAll<HTMLElement>('#opt-perf button').forEach((b) => b.classList.toggle('active', b.dataset.perf === s));
+}
+
+/** The Resolution row: the share the scene renders at lit. */
+function renderResolutionOptions(): void {
+  const share = resolutionSetting();
+  document.querySelectorAll<HTMLElement>('#opt-resolution button')
+    .forEach((b) => b.classList.toggle('active', Number(b.dataset.r) === share));
 }
 
 function renderQualityOptions(): void {

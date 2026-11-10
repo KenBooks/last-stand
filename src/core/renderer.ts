@@ -800,13 +800,29 @@ export function screenPixels(): number {
   return Math.floor(window.innerWidth * ratio) * Math.floor(window.innerHeight * ratio);
 }
 /** The most pixels the scene renders now: the screen's, within the quality's and Auto's budget. */
-export const scenePixels = (): number => Math.min(screenPixels(), pixelCap, pixelBudget);
+export const scenePixels = (): number =>
+  Math.min(screenPixels() * resolutionShare * resolutionShare, pixelCap, pixelBudget);
+/**
+ * The player's Resolution (the pause menu's, `setResolution` in core/quality.ts): the share of the screen's pixels each
+ * way the scene renders, 1 by default. A choice the player makes alone: no quality level and never Auto lowers it
+ * (from play, "I want to run the game at full phone res"; and, for a device that still lagged at Very low, "resolution
+ * reducing ... 100%, 75, 50 and so on").
+ */
+let resolutionShare = 1;
 /** The share of the screen's pixels each way the scene renders: all of them, or as many as `scenePixels` gives. */
 function sceneShare(): number {
   const most = Math.min(pixelCap, pixelBudget);
-  const screen = screenPixels();
-  if (most >= screen) return 1;
-  return Math.max(SHARE_STEP, Math.floor(Math.sqrt(most / screen) / SHARE_STEP) * SHARE_STEP);
+  const screen = screenPixels() * resolutionShare * resolutionShare;
+  const budgeted = most >= screen ? 1 : Math.sqrt(most / screen);
+  const share = budgeted * resolutionShare;
+  if (share >= 1) return 1;
+  return Math.max(SHARE_STEP, Math.floor(share / SHARE_STEP) * SHARE_STEP);
+}
+/** The scene drawn at `share` of the screen's pixels each way (the player's Resolution), live: the scene's targets sized
+ *  again, no shader changed. */
+export function setResolutionShare(share: number): void {
+  resolutionShare = Math.min(1, Math.max(SHARE_STEP, share));
+  if (applySceneRatio()) fitSceneTarget();
 }
 /** The scene's pixels per css px (the last pass scales it up to the canvas). */
 export const sceneRatio = (): number => canvasRatio() * sceneShare();

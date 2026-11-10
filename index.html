@@ -635,6 +635,12 @@
             <button data-q="auto">Auto<small></small></button><button data-q="high">High</button><button data-q="medium">Medium</button><button data-q="low">Low</button><button data-q="verylow">Very low</button>
           </div>
         </div>
+        <!-- the share of the screen's pixels each way the scene renders, the player's own (core/quality.ts setResolution) -->
+        <div class="opt-row quality-row"><span>Resolution</span>
+          <div class="seg" id="opt-resolution">
+            <button data-r="1">100%</button><button data-r="0.75">75%</button><button data-r="0.5">50%</button><button data-r="0.25">25%</button>
+          </div>
+        </div>
         <!-- frames drawn as the screen asks, or uncapped (core/frameLoop.ts): a frame's real cost -->
         <div class="opt-row quality-row"><span>Vsync</span>
           <div class="seg" id="opt-vsync"><button data-v="on">On</button><button data-v="off">Off</button></div>
