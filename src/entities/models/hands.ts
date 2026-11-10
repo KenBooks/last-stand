@@ -10,7 +10,7 @@ import { triplanar } from './triplanar';
 import { handNodes } from './handNodes';
 import { sameLooks, type KitLooks } from '../../core/materials';
 import type { OwnLooks } from '../../core/shaderPorts';
-import { slimOf, sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
+import { setHandsCoarse, slimOf, sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
 import { clamp } from '../../util';
 import { tunable } from '../../core/tuning';
 import { pbrMaterialMaps, skin as skinMaps } from '../../core/textures';
@@ -199,15 +199,20 @@ function sculpted(h: Hand): HandGeometries {
   return SCULPTED.get(h.s) ?? keep(h.s, sculptAfresh(h), 'page');
 }
 
+/** what a worker's name ends in where its hand is sculpted coarse (`hands.worker.ts` reads it) */
+export const COARSE_NAMED = ' coarse';
+
 /** Both hands sculpted in workers of their own while the game loads (a side took a quarter of a second on the main
  *  thread); a worker that fails leaves its side to the first hand built. Its side is its name, read as it starts: a
  *  message waits for the page's main thread to pass it on (core/textures.ts `preloadTextures`). */
-export async function preloadHands(): Promise<void> {
+export async function preloadHands(coarse = false): Promise<void> {
+  // (the page's own sculpts too: a side whose worker fails, or built before it's done)
+  setHandsCoarse(coarse);
   if (typeof Worker === 'undefined') return;
   const side = (s: number) => new Promise<void>((resolve) => {
     let worker: Worker;
     try {
-      worker = new Worker(new URL('./hands.worker.ts', import.meta.url), { type: 'module', name: String(s) });
+      worker = new Worker(new URL('./hands.worker.ts', import.meta.url), { type: 'module', name: `${s}${coarse ? COARSE_NAMED : ''}` });
     } catch {
       resolve();
       return;

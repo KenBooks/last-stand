@@ -53,7 +53,9 @@ import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, layOutReadyingAhead, READYING, settleReadying } from './ui/readying';
-import { hdrAllowedAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
+/** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
+const COARSE_HANDS_UNDER = 0.2;
 import { runFrames } from './core/frameLoop';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
@@ -91,7 +93,8 @@ async function boot() {
   // first, and the heroes' hands and the forest's stump sculpted: started before anything waits, as nothing they make
   // waits on the page
   const textures = preloadTextures(CLASSES[savedClass()].model);
-  const hands = preloadHands();
+  // (coarse at Very low's detail: a hand is 12,500 triangles otherwise, whatever the level)
+  const hands = preloadHands(heroDetailAtBoot() <= COARSE_HANDS_UNDER);
   preloadStump();
   preloadFlames();
   prepareWind();
