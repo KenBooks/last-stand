@@ -68,6 +68,7 @@ import type { HoodOptions } from './hood';
 import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
+import type { SeamsOptions } from './seams';
 import type { LabelsOptions } from './labels';
 import type { BehindOptions } from './behind';
 import type { PosesOptions } from './poses';
@@ -168,6 +169,13 @@ export async function behind(lab: Lab, command: BehindOptions): Promise<Report> 
  *  problem. */
 export async function coat(lab: Lab, command: CoatOptions): Promise<Report> {
   const { coat: follow } = await import('./coat');
+  return follow(lab, command);
+}
+
+/** `lab seams`: the hero's sewn seams as he stands, walks, attacks and casts; a seam open between its pieces, or a
+ *  canary it missed, is a problem. */
+export async function seams(lab: Lab, command: SeamsOptions): Promise<Report> {
+  const { seams: follow } = await import('./seams');
   return follow(lab, command);
 }
 

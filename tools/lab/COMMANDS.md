@@ -778,6 +778,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   to be packed again), and the tag must be drawn in a slot within 3 frames. On main it never was: a label that found
   no slot was marked painted and never asked again, so a co-op tag that met a fight's numbers vanished until its bar
   stepped ("name tags sometimes appear, then disappear"). `--canary` gives none back, and the tag must stay undrawn.
+- `seams`: the hero's sewn seams as he moves (`page/seams.ts`; `models/tunic.ts` `SetInShoulders`: the ranger's coat
+  and the mage's coat and waistcoat, each sleeve's top sewn into its armhole). Two skinned pieces sewn together share
+  their points as built, and each is carried by its own shares of the joints, so a seam holds only while both give a
+  shared point the same share. Every point two skinned pieces share as built (within 0.05 mm in the frame they were
+  bound in, a geometry's own copies of a point kept once) is followed standing, walking, with the attack held and
+  through each skill on a key, and read as drawn: the pieces over 2 mm apart there are an open seam, a problem, named
+  by its pieces with the move it opened in and its height. Before the fix the coat's armhole kept to the chest
+  under the shoulder joint (`UNDER`) and the sleeve's top went with the arm: 114.5 mm on the ranger (Briarflight) and
+  117.9 on the mage (Starfall), the forest seen through the coat behind a drawing arm; 0.0 and 0.1 since. A hero
+  whose sleeves are set in with no seam found is a problem (nothing was measured); the warrior has none but his
+  hands' layers. `--each` lists every seam; `--canary` moves one sewn piece's points 1 cm for a frame's measure (the
+  mesh itself moved reads nothing: a skinned mesh is drawn where its bones are). About 50 s a hero on a cold server.
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own

@@ -1814,6 +1814,17 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  seams: {
+    help: 'the hero\'s sewn seams as he moves (a sleeve\'s top in its armhole): every point two skinned pieces of '
+      + 'him share as built, followed standing, walking, attacking and through each skill\'s cast, and how far apart '
+      + 'the pieces are there as drawn (over 2 mm, an open seam: the body seen through it)',
+    options: {
+      each: { kind: 'switch', help: 'list every seam\'s worst gap, not the four worst' },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: a sewn piece moved 1 cm for a frame' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   coat: {
     help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
       + 'stands at idle in his head item and body armour, frame '
