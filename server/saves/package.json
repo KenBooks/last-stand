@@ -1,0 +1,18 @@
+{
+  "name": "last-stand-saves",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Last Stand cloud saves: accounts with passkeys, each site's save kept for every device",
+  "type": "module",
+  "main": "serve.mjs",
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "14.0.3"
+  },
+  "overrides": {
+    "tslib": "2.8.1"
+  }
+}

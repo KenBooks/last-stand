@@ -1,0 +1,3 @@
+# The image installs its packages itself, from the lock (Dockerfile): a local install never goes in.
+node_modules
+test

@@ -1,6 +1,7 @@
-# The co-op relay and the traces service as Dokci deploys them (.dokci/project.yaml routes the public host to the
-# relay over Traefik and its /traces to the traces, server/traces: a process of its own so an upload never holds
-# rooms up). The PR previews are stacks of their own (server/game-preview).
+# The co-op relay, the traces service and the saves service as Dokci deploys them (.dokci/project.yaml routes the
+# public host to the relay over Traefik, its /traces to the traces, server/traces, and its /saves to the saves,
+# server/saves: each a process of its own, so an upload never holds rooms up). The PR previews are stacks of their
+# own (server/game-preview).
 services:
   relay:
     build:
@@ -45,5 +46,28 @@ services:
     restart: unless-stopped
     cpus: "0.25"
     mem_limit: 96MiB
+  saves:
+    build:
+      context: ../saves
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      DATA: /data
+      # (the game's pages alone: not localhost or the shared github.io, as the other two take; every other setting
+      # has its default in saves.mjs, none is a secret, none needs Dokci's configuration)
+      ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev
+    volumes:
+      - saves-data:/data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/saves/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 96MiB
 volumes:
   traces-data:
+  saves-data:

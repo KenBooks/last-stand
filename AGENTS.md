@@ -78,7 +78,7 @@ Each directory below has an AGENTS.md saying more.
 
 **Adding a biome:** an entry in `data/biomes.ts` (enemy pool, boss, minimap), a builder in `world/` registered in `arena.ts`, and its enemies in `data/enemies.ts` with models in `entities/models/`. It adds exactly 10 point lights (one at each of its four portals), two of them casting the still shadows, and keeps the dais and the gates where every biome has them (`src/world/AGENTS.md`).
 
-Outside `src/`: `tools/` (the harnesses: the lab, the face harness, the icons, the music, the stalls), `server/relay` (the co-op relay), `server/game-preview` (each PR's preview, built by Dokci), `server/traces` (the performance traces slow games send), `scripts/` (the build's and the workflow's), `public/` (served as it is), `docs/` (notes, research, screenshots), `.github/workflows` (PR checks, production) and `.dokci` (the relay's deploy and the PR previews).
+Outside `src/`: `tools/` (the harnesses: the lab, the face harness, the icons, the music, the stalls), `server/relay` (the co-op relay), `server/game-preview` (each PR's preview, built by Dokci), `server/traces` (the performance traces slow games send), `server/saves` (cloud saves: accounts with passkeys, each site's save), `scripts/` (the build's and the workflow's), `public/` (served as it is), `docs/` (notes, research, screenshots), `.github/workflows` (PR checks, production) and `.dokci` (the relay's deploy and the PR previews).
 
 ## Across the game
 

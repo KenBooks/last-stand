@@ -1,5 +1,6 @@
-# Dokci deploys the co-op relay (server/relay) and the traces service (server/traces) on every push to main, and
-# each open PR's preview (server/game-preview) at a host of its own; production itself stays on GitHub Pages.
+# Dokci deploys the co-op relay (server/relay), the traces service (server/traces) and the saves service
+# (server/saves) on every push to main, and each open PR's preview (server/game-preview) at a host of its own;
+# production itself stays on GitHub Pages.
 apiVersion: compose.control/v1alpha1
 kind: Project
 metadata:
@@ -50,6 +51,16 @@ spec:
           # link the service checks (server/traces/AGENTS.md); the token never leaves Dokci.
           link:
             signInWith: LS_TRACES_TOKEN
+        - service: saves
+          port: 8080
+          host: ls.wellscoped.dev
+          pathPrefix: /saves
+          entryPoint: websecure
+          certificateResolver: letsencrypt
+          healthProbePath: /saves/health
+          # Cloud saves' API for the game's pages, not a page: Dokci shows no link to it.
+          link:
+            hidden: true
       deploymentPolicy:
         requireManualApproval: false
   # Each open PR's preview, built by Dokci from its head (server/game-preview): the game at its own host,
