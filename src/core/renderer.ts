@@ -745,6 +745,31 @@ function loopPointLights(): void {
     + chunk.slice(end + POINT_LIGHTS_END.length);
 }
 
+/** where three's point shadow begins its five soft taps (the only shadow whose taps are spread by this line) */
+const POINT_SHADOW_TAPS = 'float texelSize = shadowRadius / shadowMapSize.x;';
+/** a tap as three reads it, and read at the map's one level */
+const POINT_SHADOW_TAP = 'texture( shadowMap, vec4( direction, dp ) )';
+const POINT_SHADOW_TAP_LEVEL = 'textureGrad( shadowMap, vec4( direction, dp ), vec3( 0.0 ), vec3( 0.0 ) )';
+
+/**
+ * A point light's shadow read only in its light's reach. three reads it in five taps, each a read that takes the
+ * screen's gradients, and no branch can leave such a read out (the compiler works it out at every pixel, then picks):
+ * the loop's `directLight.visible` kept the result and paid for the ten reads at every lit pixel, 1.3 ms of the
+ * crypt's 5.7 ms scene pass at 20.7 Mpx on a 4080 laptop (`lab scenecost`). Read at the map's one level (it has no
+ * other, so the pixels are the same) the branch leaves them out: 0.4 ms.
+ */
+function pointShadowInReach(): void {
+  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const at = chunk.indexOf(POINT_SHADOW_TAPS);
+  const tap = at < 0 ? -1 : chunk.indexOf(POINT_SHADOW_TAP, at);
+  if (tap < 0) {
+    console.error('pointShadowInReach: three\'s shadowmap_pars_fragment has changed: a point shadow is read at every pixel');
+    return;
+  }
+  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, tap) + POINT_SHADOW_TAP_LEVEL
+    + chunk.slice(tap + POINT_SHADOW_TAP.length);
+}
+
 /** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */
 const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], '
   + 'directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, '
@@ -824,6 +849,7 @@ function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
  *  (WebGPU makes its canvas in HDR or not once, `initHdrForWebGPU`). */
 export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) {
   loopPointLights();
+  pointShadowInReach();
   shadeEnvironment();
   // (the village's lamps in every lit shader, and its lights' soft falloff: the village's alone, core/beta.ts)
   if (VILLAGE) lightTheLamps();
