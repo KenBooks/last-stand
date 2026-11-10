@@ -11,6 +11,7 @@ import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
+import { packWhileDrawn } from '../core/lightBounds';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { buildHeroHall } from './heroHall';
@@ -50,6 +51,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
   cullWhileDrawn(scene, renderer);
+  // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
+  packWhileDrawn(scene);
   const fog = scene.fog = new THREE.Fog(0);
 
   const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome; breakables: BreakableShadows }>;

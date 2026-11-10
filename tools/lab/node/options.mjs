@@ -776,6 +776,12 @@ export const COMMANDS = {
       rounds: { kind: 'number', usage: 'n', default: '6', help: 'the rounds of turns, each of 6 renders a side' },
       canary: { kind: 'switch', help: 'draw the scene twice: it must read at least 1.6 times once' },
       each: { kind: 'switch', help: 'time each see-through or cut-out mesh alone too, the costliest listed' },
+      hero: {
+        kind: 'switch',
+        help: 'time the hero\'s parts alone too: his head, his hands, his cloth, the rest of him and the shadows '
+          + 'he casts, '
+          + 'with what a change of nothing reads (the measure\'s noise)',
+      },
       frame: {
         kind: 'switch',
         help: 'time the whole frame too, by the browser\'s clock with the GPU waited for: HDR\'s output (a WebGPU '

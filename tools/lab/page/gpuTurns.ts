@@ -8,13 +8,22 @@
 import * as THREE from 'three';
 import { quantile } from './timing';
 
-/** The frame's median time on the GPU (ms) with the change on and off. */
+/** The frame's median time on the GPU (ms) with the change on and off, and what the change takes. */
 export interface TurnsCost {
   on: number;
   off: number;
+  /** what the change takes (ms): the median over the rounds of each round's own difference, its two turns drawn
+   *  back to back, so the GPU's clock drifting from round to round falls out of it */
+  takes: number;
+  /** how far `takes` may be off (ms): the standard error of that median, from the rounds' spread */
+  error: number;
   /** the renders each side was timed over */
   renders: number;
 }
+
+/** Whether a cost is told from nothing: over twice its own error. Under it, the run can't say the change costs or
+ *  saves anything (a part read -1.3 ms and +1.6 ms in two runs of six rounds, each printed as if it meant it). */
+export const sure = (cost: TurnsCost): boolean => Math.abs(cost.takes) > 2 * cost.error;
 
 /** How the turns run: their rounds, a side's in each, and the renders in a turn. */
 export interface Turns {
@@ -80,9 +89,8 @@ function medianOf(values: number[]): number {
   return values.length ? quantile([...values].sort((a, b) => a - b), 0.5) : 0;
 }
 
-/** `count` renders by `draw`, sent back to back, each timed; the times that came back. */
-async function timedRenders(timer: Timer, draw: () => void, count: number): Promise<number[]> {
-  const queries = Array.from({ length: count }, () => queried(timer, draw));
+/** The times of `queries` that came back. */
+async function timesOf(timer: Timer, queries: WebGLQuery[]): Promise<number[]> {
   const times: number[] = [];
   for (const query of queries) {
     const took = await timeOf(timer, query);
@@ -91,10 +99,26 @@ async function timedRenders(timer: Timer, draw: () => void, count: number): Prom
   return times;
 }
 
+/** a median's standard error over a normal spread's, and a normal spread's over its median deviation */
+const MEDIAN_ERROR = 1.2533;
+const DEVIATION = 1.4826;
+
+/** How far the median of `values` may be off: its standard error, from their median deviation (a round a stray
+ *  load fell on counts for little). */
+function medianError(values: number[]): number {
+  if (values.length < 2) return Infinity;
+  const middle = medianOf(values);
+  const deviation = medianOf(values.map((value) => Math.abs(value - middle)));
+  return (MEDIAN_ERROR * DEVIATION * deviation) / Math.sqrt(values.length);
+}
+
 /**
  * The frame's time on the GPU as `draw` renders it with `change(true)` and `change(false)` in turns, left on; null
  * where the browser times nothing. A change that swaps programs is drawn once each way first, so no turn waits on a
- * link, and the GPU is warmed before the turns.
+ * link, and the GPU is warmed before the turns. Every turn of every round is sent before any time is read: read
+ * turn by turn, the GPU stood idle while each was waited for, its clock fell, and the next turn's first renders ran
+ * slow. A round's turns come in the other order each round, so a drift along the run falls on both sides alike. A
+ * turn's median leaves out what a change costs once as it's made (a mesh merged again, a buffer sent).
  */
 export async function costInTurns(
   renderer: THREE.WebGLRenderer,
@@ -104,22 +128,40 @@ export async function costInTurns(
 ): Promise<TurnsCost | null> {
   const timer = timerOf(renderer);
   if (!timer) return null;
-  const on: number[] = [];
-  const off: number[] = [];
+  const sent: { on: WebGLQuery[]; off: WebGLQuery[] }[] = [];
   try {
     change(false);
     draw();
     change(true);
     for (let render = 0; render < WARM_RENDERS; render++) draw();
     for (let round = 0; round < turns.rounds; round++) {
-      change(true);
-      on.push(...await timedRenders(timer, draw, turns.renders));
-      change(false);
-      off.push(...await timedRenders(timer, draw, turns.renders));
+      const queries = { on: [] as WebGLQuery[], off: [] as WebGLQuery[] };
+      for (const on of round % 2 ? [false, true] : [true, false]) {
+        change(on);
+        const turn = on ? queries.on : queries.off;
+        for (let render = 0; render < turns.renders; render++) turn.push(queried(timer, draw));
+      }
+      sent.push(queries);
     }
   } finally {
     change(true);
   }
-  if (!on.length || !off.length) return null;
-  return { on: medianOf(on), off: medianOf(off), renders: Math.min(on.length, off.length) };
+  const on: number[] = [];
+  const off: number[] = [];
+  const differences: number[] = [];
+  for (const queries of sent) {
+    const with_ = await timesOf(timer, queries.on);
+    const without = await timesOf(timer, queries.off);
+    on.push(...with_);
+    off.push(...without);
+    if (with_.length && without.length) differences.push(medianOf(with_) - medianOf(without));
+  }
+  if (!differences.length) return null;
+  return {
+    on: medianOf(on),
+    off: medianOf(off),
+    takes: medianOf(differences),
+    error: medianError(differences),
+    renders: Math.min(on.length, off.length),
+  };
 }
