@@ -91,6 +91,8 @@ export const VARIANTS = {
   // is, the logo hidden; the logo alone as it's uncovered, the particles' canvas hidden)
   noLobbyLogo: { script: styled, arg: '#menu .logo-art svg { visibility: hidden !important; }' },
   noWind: { script: styled, arg: 'body > canvas[style*="z-index: 101"] { visibility: hidden !important; }' },
+  // (the loading screen without its smoke: the layers that took most of a phone's memory for tiles, `--gpu-memory`)
+  noSmoke: { script: styled, arg: '#loading .ld-smoke { display: none !important; }' },
   // (the lobby's panels at their own size, not zoomed with the UI's scale: the logo's SVG laid out as its snapshot is)
   noPanelZoom: { script: styled, arg: '#menu .panel { zoom: 1 !important; }' },
   cpuCanvas: { script: cpuCanvas },

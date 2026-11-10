@@ -108,8 +108,25 @@ async function loadingBack(): Promise<HTMLElement> {
   const loading = document.importNode(shown, true);
   document.body.append(loading);
   await document.fonts.ready;
+  await smokeDrawn(loading);
   await window.__labClock.realFrame();
   return loading;
+}
+
+/** the most real frames the loading screen's smoke is waited for: it's drawn once its picture has decoded */
+const SMOKE_FRAMES = 60;
+
+/** The loading screen's smoke drawn into its canvases, as index.html's own script draws it at the page's start (a
+ *  script inserted with its markup never runs): waited for till each canvas is shown. */
+async function smokeDrawn(loading: HTMLElement): Promise<void> {
+  const draw = (window as Window & { ldSmoke?: (root: HTMLElement) => void }).ldSmoke;
+  if (!draw) return;
+  draw(loading);
+  const smokes = [...loading.querySelectorAll('.ld-smoke')];
+  for (let frame = 0; frame < SMOKE_FRAMES; frame++) {
+    if (smokes.every((smoke) => smoke.classList.contains('on'))) return;
+    await window.__labClock.realFrame();
+  }
 }
 
 /** The lobby logo's letters' box (css px). */

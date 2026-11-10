@@ -52,14 +52,17 @@ function freePort() {
  * sounds still play (their cost is the page's), but out of no speaker (headless, the owner heard them). Nothing is
  * fetched in the background: the models, Safe Browsing's lists and the components Chrome fetches into a new profile
  * were 85 MB of its 120, each measure's, left behind where a sandboxed shell can't delete Chrome's files.
+ * `gpuMemory` (MB), where given, is the compositor's budget for the page's tiles: a phone's Chrome has at most 256.
  */
-function chromeArgs({ headed, profile, port, width, height, scale, autoplay }) {
+function chromeArgs({ headed, profile, port, width, height, scale, autoplay, gpuMemory }) {
   const size = [`--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`];
   const visible = headed ? size : ['--headless', ...size];
   const angle = process.platform === 'win32' ? ['--use-angle=d3d11'] : [];
+  const memory = gpuMemory ? [`--force-gpu-mem-available-mb=${gpuMemory}`] : [];
   return [
     ...visible,
     ...angle,
+    ...memory,
     '--enable-gpu',
     '--ignore-gpu-blocklist',
     '--no-first-run',
@@ -119,6 +122,15 @@ async function removeOrWarn(profile) {
   console.warn(`stalls: couldn't delete the profile ${profile} (no permission, or still in use): delete it by hand`);
 }
 
+/** Makes `page` a touch screen's where `touch` (CDP's touch emulation, kept across its loads): its pointer coarse
+ *  and no hover, as the game reads a phone's (`src/ui/touch.ts`), and a mouse's presses sent as touches. */
+export async function touchScreen(page, touch) {
+  if (!touch) return;
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await session.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
+}
+
 /** Slows `page`'s CPU `rate` times (CDP's throttling, kept across its loads: a phone's slower cores), unless
  *  `rate` is 1. Returns the way to set it again (1: at full speed), on the session that set it. */
 export async function slowCpu(page, rate) {
@@ -136,12 +148,12 @@ export async function slowCpu(page, rate) {
  * Returns the browser, its profile's folder and `close`, which kills its process tree and deletes its profile.
  */
 export async function startChrome({
-  outDir, headed = false, width = 1536, height = 864, scale = 1, autoplay = 'always',
+  outDir, headed = false, width = 1536, height = 864, scale = 1, autoplay = 'always', gpuMemory = null,
 }) {
   const profile = join(outDir, `profile-${Date.now()}`);
   mkdirSync(profile, { recursive: true });
   const port = await freePort();
-  const args = chromeArgs({ headed, profile, port, width, height, scale, autoplay });
+  const args = chromeArgs({ headed, profile, port, width, height, scale, autoplay, gpuMemory });
   const child = spawn(chromePath(), args, { stdio: 'ignore' });
   const kill = () => killTree(child);
   process.once('exit', kill);

@@ -187,8 +187,37 @@ export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFra
       if (label) phase(label);
     }
   };
-  record.observer = new MutationObserver(step);
+  record.observer = new MutationObserver((mutations) => {
+    step();
+    recordUnder(mutations);
+  });
   record.observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  // (a change to the page under the loading screen while it covers it, `under`: what changed on which element, its
+  // tag, id and first class; none for the loading screen's own, or the logo's exit's canvas, put on the body hidden
+  // till it blows. On the owner's phone the page changed under it flickered it, where desktop Chrome showed nothing)
+  const windCanvas = (node) => node.nodeName === 'CANVAS' && node.style?.zIndex === '101';
+  const underLoading = (mutation, loading) => {
+    const target = mutation.target;
+    const element = target.nodeType === 1 ? target : target.parentElement;
+    if (!element || loading.contains(element) || windCanvas(element)) return null;
+    const moved = [...mutation.addedNodes, ...mutation.removedNodes];
+    if (moved.length && moved.every(windCanvas)) return null;
+    const id = element.id ? `#${element.id}` : '';
+    const first = typeof element.className === 'string' ? element.className.trim().split(/\s+/)[0] : '';
+    const where = `${element.tagName.toLowerCase()}${id}${first ? `.${first}` : ''}`;
+    const what = mutation.type === 'attributes' ? `attr ${mutation.attributeName}` : mutation.type;
+    return { what, where };
+  };
+  record.under = [];
+  const recordUnder = (mutations) => {
+    const loading = document.getElementById('loading');
+    if (!loading || loading.classList.contains('done')) return;
+    const at = performance.now();
+    for (const mutation of mutations) {
+      const change = underLoading(mutation, loading);
+      if (change) record.under.push({ at, ...change });
+    }
+  };
 }
 
 /** Whether the fight's programs are warm: the game's mark of it made (`fight warm`, `src/game/warmup.ts`
@@ -308,8 +337,8 @@ export function stopBootRecording() {
     .filter((entry) => entry.name.startsWith('warm '))
     .map((entry) => ({ name: entry.name.slice('warm '.length), at: entry.startTime, ...entry.detail }));
   const paint = Object.fromEntries(paints);
-  const { goneAt = null, origin, blinks } = record;
-  const ends = { exit, goneAt, origin, blinks, warm, pressed, ran, pressedWhat };
+  const { goneAt = null, origin, blinks, under } = record;
+  const ends = { exit, goneAt, origin, blinks, under, warm, pressed, ran, pressedWhat };
   return { start, frames, changes: [], phases, longTasks, paint, files, maps, ...ends, warmUps };
 }
 

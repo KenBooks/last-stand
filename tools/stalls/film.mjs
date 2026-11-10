@@ -68,12 +68,13 @@ export async function startFilm(page, { full = false } = {}) {
 
 /** The frames of the loading screen's exit among `shots` (`startFilm`'s), on the page's clock (the boot's `record`'s
  *  `origin` on the wall's), in order: each its time (`at`, ms) and its picture (`jpeg`); none where the loading screen
- *  never left. And how many were filmed in all (`caught`). */
-export function filmFrames(record, shots) {
+ *  never left. With `whole`, the loading screen's from the page's first frame on (`--film-boot`). And how many were
+ *  filmed in all (`caught`). */
+export function filmFrames(record, shots, whole = false) {
   const phaseAt = (name) => record.phases.find((phase) => phase.name === name)?.at ?? null;
   const leaving = phaseAt(BLOWN) ?? phaseAt(REVEALED);
   if (leaving === null) return { frames: [], caught: shots.length };
-  const from = leaving - BEFORE_MS;
+  const from = whole ? 0 : leaving - BEFORE_MS;
   const to = record.goneAt ? record.goneAt + AFTER_GONE_MS : phaseAt(REVEALED) + AFTER_REVEAL_MS;
   const frames = shots
     .map((shot) => ({ at: shot.wall - record.origin, jpeg: shot.jpeg }))

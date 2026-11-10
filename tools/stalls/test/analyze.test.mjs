@@ -1,7 +1,7 @@
 // The stalls' analysis and report (tools/stalls): a made-up trace and recording, each piece put on the page's clock.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyze, selfTimes, shortName } from '../analyze.mjs';
+import { analyze, selfTimes, shortName, underOf } from '../analyze.mjs';
 import { measureText, roundsText, summaryText } from '../report.mjs';
 
 const MARK = 'stalls:start';
@@ -365,4 +365,18 @@ test('says the perf overlay\'s GPU time through a phase and a second at a time',
   const text = measureText(measure);
   assert.match(text, /the perf overlay's GPU 9\.5 ms a frame/);
   assert.match(text, /the perf overlay's GPU 5\.0 14\.0 ms a frame/);
+});
+
+test('counts the page\'s changes under the loading screen by the moments each element changed in', () => {
+  const phases = [{ name: 'Loading…', at: 0 }, { name: 'Readying the hall', at: 100 }];
+  const parsed = { at: 50, what: 'childList', where: 'body' };
+  const laidOut = [{ at: 120, what: 'attr class', where: 'div#hud' }, { at: 120, what: 'attr class', where: 'div#hud' }];
+  const redraws = [200, 300, 400, 500, 600].map((at) => ({ at, what: 'childList', where: 'div#perf' }));
+  const under = underOf([parsed, ...laidOut, ...redraws], phases);
+  assert.equal(under.count, 7);
+  assert.deepEqual(under.kinds.map(({ where, times, count }) => [where, times, count]), [
+    ['div#perf', 5, 5],
+    ['div#hud', 1, 2],
+  ]);
+  assert.deepEqual(under.redrawn.map(({ where, step }) => [where, step]), [['div#perf', 'Readying the hall']]);
 });

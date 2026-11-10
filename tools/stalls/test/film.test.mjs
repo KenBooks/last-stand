@@ -52,3 +52,10 @@ test("the film runs from before the exit to after the loading screen has gone, o
   assert.equal(caught, 5);
   assert.deepEqual(frames.map(({ at, jpeg }) => [at, jpeg]), [[600, '600'], [1000, '1000'], [2300, '2300']]);
 });
+
+test('the whole boot filmed starts at the page\'s first frame', () => {
+  const record = { origin: 1_000_000, phases: [{ name: REVEALED, at: 1000 }], goneAt: 1900 };
+  const shots = [300, 600, 2300, 2500].map((at) => ({ wall: record.origin + at, jpeg: String(at) }));
+  const { frames } = filmFrames(record, shots, true);
+  assert.deepEqual(frames.map(({ at }) => at), [300, 600, 2300]);
+});

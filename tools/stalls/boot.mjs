@@ -6,7 +6,7 @@ import { writeFileSync } from 'node:fs';
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
 import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
-import { slowCpu } from './chrome.mjs';
+import { slowCpu, touchScreen } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
 import {
   bootRecording, changeHero, chooseIfAsked, fightWarm, heroesShown, heroesShownAt, loaded, startIfCold, startRun,
@@ -173,7 +173,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   }
   if (options.film) {
     const files = { sheet: picture.film, close: picture.flickers, logo: picture.logo };
-    const frames = filmFrames(record, shots);
+    const frames = filmFrames(record, shots, options.filmBoot);
     findings.film = await filmOf(browser, page, frames, findings.revealedAt, files, record.blinks, logo);
   }
   await setRate(options.cpuSlowdown);
@@ -294,6 +294,7 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           const errors = [];
           keepErrors(page, errors);
           const setRate = await slowCpu(page, options.cpuSlowdown);
+          await touchScreen(page, options.touch);
           options.sourceOf = sourcesFor(url);
           for (const visit of VISITS) {
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);

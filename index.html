@@ -48,11 +48,13 @@
     #loading.blowing > :is(.ld-rule, .ld-bar, .ld-sub, .ld-tip) { opacity: 0; transition: opacity .4s; }
     #loading.done { pointer-events: none; }
     #loading.done > .ld-back, #loading.done.plain { opacity: 0; transition: opacity .9s; }
-    /* smoke: a turbulence texture rendered once, drifted by the compositor */
-    #loading .ld-smoke { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; opacity: .55; will-change: transform; pointer-events: none;
-      -webkit-mask-image: radial-gradient(ellipse 42% 38% at 50% 48%, #000 15%, transparent 72%); mask-image: radial-gradient(ellipse 42% 38% at 50% 48%, #000 15%, transparent 72%);
-      animation: ld-drift 38s ease-in-out infinite alternate; }
-    #loading .ld-smoke.b { opacity: .35; scale: -1.3 1.3; animation-duration: 55s; animation-direction: alternate-reverse; }
+    /* smoke: a turbulence texture drawn once into a small canvas (its mask in it), drifted by the compositor: as SVG
+       filters at the screen's pixels its tiles took most of a phone's memory for them, and the loading screen blinked */
+    #loading .ld-smoke { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; object-fit: cover; opacity: 0; will-change: transform; pointer-events: none;
+      transition: opacity .6s; animation: ld-drift 38s ease-in-out infinite alternate; }
+    #loading .ld-smoke.on { opacity: .55; }
+    #loading .ld-smoke.b { scale: -1.3 1.3; animation-duration: 55s; animation-direction: alternate-reverse; }
+    #loading .ld-smoke.b.on { opacity: .35; }
     #loading .ld-glow { position: absolute; left: 50%; top: 44%; width: 90vmin; height: 55vmin; translate: -50% -50%; border-radius: 50%; pointer-events: none;
       background: radial-gradient(ellipse, rgba(200,40,14,.34), rgba(120,16,6,.12) 45%, transparent 70%); animation: ld-breathe 3.4s ease-in-out infinite alternate; }
     /* the logo: forged steel (SVG lighting filter) over a crimson glow */
@@ -698,8 +700,38 @@
   <div id="alt-cursor" class="hidden" aria-hidden="true"></div>
   <div id="loading" role="status" aria-live="polite">
     <div class="ld-back">
-      <svg class="ld-smoke" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><filter id="ld-fog1" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".004 .007" numOctaves="4" seed="7"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .1  0 0 0 0 .06  0 0 0 1.7 -.6"/></filter><rect width="1200" height="800" filter="url(#ld-fog1)"/></svg>
-      <svg class="ld-smoke b" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><filter id="ld-fog2" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".004 .007" numOctaves="4" seed="23"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .1  0 0 0 0 .06  0 0 0 1.7 -.6"/></filter><rect width="1200" height="800" filter="url(#ld-fog2)"/></svg>
+      <canvas class="ld-smoke" data-seed="7" width="600" height="400" aria-hidden="true"></canvas>
+      <canvas class="ld-smoke b" data-seed="23" width="600" height="400" aria-hidden="true"></canvas>
+      <script>
+        // the smoke drawn once, small, its mask in it: a canvas is drawn by the compositor at its own pixels, where
+        // the SVG filters it was took tiles at the screen's (a phone's 3.75 px a css px: over 100 MB of the 256 its
+        // Chrome has for them, and the whole loading screen blinked as they were dropped and drawn again). A function
+        // on the page: the lab's `wind` puts the loading screen back over the lobby, where a script inserted never runs
+        window.ldSmoke = (loading) => { for (const smoke of loading.querySelectorAll('.ld-smoke')) {
+          const fog = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 1200 800">'
+            + '<filter id="f" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" '
+            + 'baseFrequency=".004 .007" numOctaves="4" seed="' + smoke.dataset.seed + '"/><feColorMatrix '
+            + 'values="0 0 0 0 .55  0 0 0 0 .1  0 0 0 0 .06  0 0 0 1.7 -.6"/></filter>'
+            + '<rect width="1200" height="800" filter="url(#f)"/></svg>';
+          const img = new Image();
+          img.onload = () => {
+            const g = smoke.getContext('2d'), w = smoke.width, h = smoke.height;
+            g.drawImage(img, 0, 0, w, h);
+            // (the mask it had: an ellipse 42% by 38% of its box at 50% 48%, opaque to 15% of the way out, clear by 72%)
+            g.globalCompositeOperation = 'destination-in';
+            g.translate(w * .5, h * .48);
+            g.scale(w * .42, h * .38);
+            const mask = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+            mask.addColorStop(.15, '#000');
+            mask.addColorStop(.72, 'transparent');
+            g.fillStyle = mask;
+            g.fillRect(-3, -3, 6, 6);
+            smoke.classList.add('on');
+          };
+          img.src = 'data:image/svg+xml,' + encodeURIComponent(fog);
+        } };
+        ldSmoke(document.getElementById('loading'));
+      </script>
       <div class="ld-glow"></div>
       <i class="ld-ember" style="left:34%;animation-delay:2.7s;--dx:32px"></i><i class="ld-ember" style="left:54%;animation-delay:4.3s;--dx:-49px"></i><i class="ld-ember s" style="left:12%;animation-delay:0.2s;--dx:10px"></i><i class="ld-ember" style="left:41%;animation-delay:7.2s;--dx:37px"></i><i class="ld-ember" style="left:11%;animation-delay:2.0s;--dx:8px"></i><i class="ld-ember s" style="left:50%;animation-delay:2.5s;--dx:-38px"></i><i class="ld-ember" style="left:17%;animation-delay:2.4s;--dx:60px"></i><i class="ld-ember" style="left:7%;animation-delay:7.5s;--dx:43px"></i><i class="ld-ember s" style="left:37%;animation-delay:7.2s;--dx:-36px"></i><i class="ld-ember" style="left:25%;animation-delay:2.8s;--dx:20px"></i><i class="ld-ember" style="left:51%;animation-delay:0.8s;--dx:17px"></i><i class="ld-ember s" style="left:47%;animation-delay:6.0s;--dx:4px"></i><i class="ld-ember" style="left:35%;animation-delay:1.6s;--dx:0px"></i><i class="ld-ember" style="left:39%;animation-delay:0.8s;--dx:59px"></i><i class="ld-ember s" style="left:74%;animation-delay:7.6s;--dx:-60px"></i><i class="ld-ember" style="left:41%;animation-delay:5.2s;--dx:52px"></i><i class="ld-ember" style="left:43%;animation-delay:7.6s;--dx:5px"></i><i class="ld-ember s" style="left:28%;animation-delay:3.7s;--dx:16px"></i><i class="ld-ember" style="left:40%;animation-delay:3.9s;--dx:-40px"></i><i class="ld-ember" style="left:33%;animation-delay:2.7s;--dx:44px"></i><i class="ld-ember s" style="left:9%;animation-delay:0.7s;--dx:-1px"></i><i class="ld-ember" style="left:84%;animation-delay:9.0s;--dx:6px"></i>
     </div>
