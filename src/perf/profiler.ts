@@ -14,7 +14,7 @@ import { RUNNING } from '../core/rendererChoice';
 import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 import { shadingParts } from './shadingParts';
-import { nodeFrameNow, passesOf, timesPasses } from './webgpuPasses';
+import { PassReader, timesPasses } from './webgpuPasses';
 import { holdWebGpuTimes } from '../ui/perfHud';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
@@ -148,27 +148,34 @@ function meanOf(values: number[]): number {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
-/** A frame drawn, waited out on the GPU and timed (ms). */
-type TimedDraw = () => Promise<number>;
+/** A frame's time (ms), or its time to come (WebGPU's timestamps, read beside the draws after it). */
+type Took = number | Promise<number>;
+
+/** A frame drawn and timed: waited out on the GPU, or its passes' time to come (`PassReader`). */
+type TimedDraw = () => Promise<Took>;
 
 /** A frame's draw: the game's `render`, or the canary's two (a promise on WebGPU: the GPU waited for between them). */
 type Draw = () => void | Promise<void>;
 
-/** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms), or by the
- * GPU's timestamps where `gpuTimed` (the passes of the node frames it drew, summed: the page's clock round a wait for WebGPU's queue read the
- * phone's frame 74 ms where the browser showed it at 60 a second, trace 4ADF-XJBB); stopped when `cancelled`, and
- * `counted` after each. */
-function timing(draw: Draw, options: ProfileOptions, counted: () => void, gpuTimed: boolean): TimedDraw {
+/** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms); or with
+ * `reader`, timed by the GPU's timestamps, nothing waited for (`PassReader`); stopped when `cancelled`, and `counted`
+ * after each. */
+function timing(draw: Draw, options: ProfileOptions, counted: () => void, reader: PassReader | null): TimedDraw {
   const clock = options.clock ?? (() => performance.now());
   const nextFrame = options.nextFrame ?? browserFrame;
   return async () => {
     await nextFrame();
     if (options.cancelled?.()) throw new ProfileCancelled();
+    if (reader) {
+      const before = reader.now();
+      await draw();
+      counted();
+      return reader.drawn(before);
+    }
     const start = clock();
-    const before = nodeFrameNow(G.renderer);
     await draw();
     await waitForGpu();
-    const took = gpuTimed ? await passesOf(G.renderer, before, nodeFrameNow(G.renderer)) : clock() - start;
+    const took = clock() - start;
     counted();
     return took;
   };
@@ -202,8 +209,8 @@ function framesOf(parts: number, turns: ProfileTurns): number {
  *  mean of intervals), left on. */
 async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurns,
   average: (values: number[]) => number = medianOf): Promise<PartCost> {
-  const on: number[] = [];
-  const off: number[] = [];
+  const on: Took[] = [];
+  const off: Took[] = [];
   try {
     for (let round = 0; round < turns.rounds; round++) {
       for (const state of [true, false]) {
@@ -216,7 +223,7 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
   } finally {
     part.change(true);
   }
-  return { name: part.name, on: average(on), off: average(off) };
+  return { name: part.name, on: average(await Promise.all(on)), off: average(await Promise.all(off)) };
 }
 
 /** Profiles the frame as it stands, the game's frames held meanwhile; throws `ProfileCancelled` if cancelled. */
@@ -226,7 +233,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   // (on WebGPU each draw is a node frame of its own, `renderWebGPU`: three's passes draw their scene once a node frame)
   const once = render;
   // (the canary's second frame drawn once the GPU is done with the first: WebGPU's queue takes it as it's sent, and
-  // the second's CPU work ran beside the first's GPU work, read 1.3 times one)
+  // the second's CPU work ran beside the first's GPU work, read 1.3 times one by the page's clock)
   const draw: Draw = () => {
     once();
     if (!twice) return undefined;
@@ -249,7 +256,8 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     options.onProgress?.(progress);
   };
   const gpuTimed = WEBGPU && timesPasses(G.renderer);
-  const timedFrame = timing(draw, options, counted, gpuTimed);
+  const reader = gpuTimed ? new PassReader(G.renderer) : null;
+  const timedFrame = timing(draw, options, counted, reader);
   const now = options.clock ?? (() => performance.now());
   const started = now();
   const programs = compiledSoFar();
@@ -259,7 +267,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   // (the overlay's reads of the timestamps held: a read takes every pass in three's pool; the passes before let go)
   if (gpuTimed) {
     holdWebGpuTimes(true);
-    await passesOf(G.renderer, 0, 0);
+    await reader!.drain();
   }
   try {
     const costs: PartCost[] = [];
@@ -272,8 +280,9 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     // (each part is left in, the canary's too: the whole frame read drawn twice)
     twice = false;
     progress.part = 'the whole frame';
-    const frames: number[] = [];
-    for (let frame = 0; frame < turns.frames * 2; frame++) frames.push(await timedFrame());
+    const timed: Took[] = [];
+    for (let frame = 0; frame < turns.frames * 2; frame++) timed.push(await timedFrame());
+    const frames = await Promise.all(timed);
     costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
     const shownFrame = shownTiming(draw, options, counted);
     const shown = pageParts.length ? await shownCosts(pageParts, shownFrame, progress) : undefined;
