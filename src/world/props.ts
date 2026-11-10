@@ -95,6 +95,17 @@ export function staticShadow(light: THREE.PointLight): void {
   stillShadows.add(light);
 }
 
+/** whether the sun's shadow is of what stands still alone, drawn with the still shadows (`setSunShadowStill`) */
+let sunStill = false;
+/**
+ * The sun's (the moon's) shadow of what stands still alone, drawn again only when that changes, as the braziers' is
+ * (the quality level's, Very low's): its pass drew the whole biome again, 216k of the forest's 483k triangles a frame
+ * and 31 draws (`lab draws --boot low`), of a world that never moves under a sun that never does. The heroes and the
+ * foes then cast no shadow by it. On both renderers: a light's shadow is drawn by its `autoUpdate` on each.
+ */
+export function setSunShadowStill(on: boolean): void { sunStill = on; }
+export const sunShadowStill = (): boolean => sunStill;
+
 /** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
 let stillTarget: THREE.WebGLRenderTarget | null = null;
 
@@ -137,7 +148,7 @@ function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE
 export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   shown: THREE.Group, kept: THREE.LightShadow): void {
   const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
-  if (!lights.length) return;
+  if (!lights.length && !sunStill) return;
   // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
   // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
   // up 260 to 300 ms)
@@ -149,6 +160,8 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
   kept.autoUpdate = false;
+  // (the sun's too where it's the still world's alone: drawn here, the bodies hidden, and by no frame after)
+  if (sunStill) kept.needsUpdate = true;
   renderer.setRenderTarget(into);
   try {
     drawingStill(shown, () => pipelinesAtOnce(() => renderer.render(scene, camera)));
