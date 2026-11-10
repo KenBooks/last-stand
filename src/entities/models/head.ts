@@ -12,6 +12,7 @@ import { faceCanvases, faceGrid } from '../../core/textures';
 import { createKit } from '../../core/materials';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
+import { built } from './steps';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
 export const HEAD_MM = 0.2421 / 228;
@@ -58,16 +59,6 @@ function once<T extends object>(key: string, make: () => T): T {
   return made;
 }
 
-/** How a head's hair is done (`buildHead`'s `o`). */
-export interface HeadHair { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean }
-
-/** each hero's head as his model builds it, by model: whose face and his hair (mage.ts, ranger.ts, warrior.ts) */
-export const HERO_HEADS = {
-  mage: { who: 'mage', hair: { hair: 'short', crop: true } },
-  ranger: { who: 'ranger', hair: { hair: 'swept', crop: true } },
-  warrior: { who: 'warrior', hair: { hair: 'loose' } },
-} as const satisfies Record<string, { who: keyof typeof FACES; hair: HeadHair }>;
-
 /**
  * The geometry of `model`'s head made ahead (`once`: every head built after shares it), so his first build is left
  * only his body: a hero's first build in one task was 210 to 350 ms on the owner's PC, his head's hair most of it,
@@ -76,7 +67,7 @@ export const HERO_HEADS = {
  */
 export function makeHeadAhead(model: string): void {
   const head = HERO_HEADS[model as keyof typeof HERO_HEADS];
-  if (head) buildHead(new THREE.Object3D(), createKit(), head.who, head.hair);
+  if (head) buildHead(new THREE.Object3D(), createKit(), head.who, head);
 }
 
 const grids = new Map<string, HeadGrid>();
@@ -216,6 +207,193 @@ export interface Head {
   shade(depth: number): void;
 }
 
+/** each hero's head as his model builds it: its face and its hair (the head workers make the same, `preloadHeads`) */
+export const HERO_HEADS = {
+  mage: { who: 'mage', hair: 'short', crop: true },
+  ranger: { who: 'ranger', hair: 'swept', crop: true },
+  warrior: { who: 'warrior', hair: 'loose' },
+} as const satisfies Record<string, { who: keyof typeof FACES } & HeadStyle>;
+
+/** A head's hair (`buildHead`'s options). */
+export interface HeadStyle { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean }
+
+/** A head's geometry: the skin, an eye (both share it), the lashes (none where the eyes are shaded), each ear (the
+ *  left's first), and with hair its cap, the crop's tufts, the locks; and a full beard's volume and tufts. */
+export interface HeadShapes {
+  skin: THREE.BufferGeometry;
+  eye: THREE.BufferGeometry;
+  lashes: THREE.BufferGeometry | null;
+  ears: THREE.BufferGeometry[];
+  cap: THREE.BufferGeometry | null;
+  crop: THREE.BufferGeometry | null;
+  locks: THREE.BufferGeometry | null;
+  beard: { volume: THREE.BufferGeometry; tufts: THREE.BufferGeometry } | null;
+}
+
+/** A point on the skin's grid at an azimuth and elevation, lifted off it by `lift` (mm), in the head's group. */
+function surfaceOf(g: HeadGrid) {
+  return (az: number, el: number, lift = 0, out = new THREE.Vector3()) => {
+    const d = gridDir(az, el, { x: 0, y: 0, z: 0 }), C = origin(el, { x: 0, y: 0, z: 0 });
+    const r = radiusAt(g, az, el) + lift;
+    return toGroup(C.x + d.x * r, C.y + d.y * r, C.z + d.z * r, out);
+  };
+}
+
+/**
+ * The head's geometry for `who` with hair `o`, at the current detail: made the first time and shared by every head
+ * after (`once`). No material, canvas or scene in it, so a worker makes it as the game loads (the head was 2.8 s of
+ * the first hero's 6.4 s build on a CPU slowed six times, the loading screen frozen).
+ */
+export function headShapes(who: keyof typeof FACES, o: HeadStyle = {}): HeadShapes {
+  const F: FaceShape = FACES[who], L = LOOKS[who], g = gridFor(who);
+  // (what the head's geometry is made from: the face, the hair, and the detail it is built at)
+  const key = `${who}:${o.hair ?? 'bare'}${o.crop ? '+crop' : ''}:${heroDetail()}`;
+  const shaded = !!L.eyeShade, earAo = L.ao ?? 0, rng = mulberry(7), skullC = toGroup(0, 128, -12);
+  const surface = surfaceOf(g);
+  const skin = once(`${key}:skin`, () => skinGeometry(g));
+  const eye = once(`${key}:eye`, eyeGeometry);
+  const lashes = shaded ? null : once(`${key}:lashes`, () => lashGeometry(F, shaded));
+  const ears = [1, -1].map((s) => once(`${key}:ear${s}`, () => earGeometry(s, F, earAo)));
+  let cap: THREE.BufferGeometry | null = null, crop: THREE.BufferGeometry | null = null;
+  let locks: THREE.BufferGeometry | null = null;
+  if (o.hair) {
+    const loose = o.hair === 'loose';
+    const made = once(`${key}:cap`, () => capGeometry(g, who, loose, !!o.crop));
+    cap = made.cap;
+    const roots = made.roots;
+    if (o.crop) {
+      crop = once(`${key}:crop`, () => {
+        const clear = hairTools(surface, F, L.hairDrop ?? 0, L.templeDrop ?? 0).clear;
+        return cropTufts(made.cap, roots, g, mulberry(13), clear);
+      });
+    }
+    locks = once(`${key}:locks`, () => {
+      const made: THREE.BufferGeometry[] = [];
+      if (loose) looseLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else sweptLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, o.hair === 'mane');
+      const merged = mergeGeometries(made)!;
+      for (const x of made) x.dispose();
+      return merged;
+    });
+  }
+  let beard: HeadShapes['beard'] = null;
+  if (F.beardFull) {
+    beard = once(`${key}:beard`, () => {
+      const { volume, lifts } = beardVolume(g, F);
+      return { volume, tufts: beardTufts(volume, lifts, g, rng) };
+    });
+  }
+  return { skin, eye, lashes, ears, cap, crop, locks, beard };
+}
+
+/** The heads' geometry made so far and the grids they're made on, packed to be sent from a worker: each geometry's
+ *  arrays to transfer. */
+export function packHeadShapes(): { packed: PackedHeads; buffers: ArrayBuffer[] } {
+  const buffers: ArrayBuffer[] = [];
+  const packGeometry = (geo: THREE.BufferGeometry): PackedGeometry => {
+    const attributes: PackedGeometry['attributes'] = {};
+    for (const [name, a] of Object.entries(geo.attributes) as [string, THREE.BufferAttribute][]) {
+      attributes[name] = { array: a.array as Float32Array, itemSize: a.itemSize, normalized: a.normalized };
+      buffers.push(a.array.buffer as ArrayBuffer);
+    }
+    const index = geo.index ? geo.index.array as Uint16Array | Uint32Array : null;
+    if (index) buffers.push(index.buffer as ArrayBuffer);
+    return { attributes, index, groups: geo.groups.map((group) => ({ ...group })) };
+  };
+  const made: PackedHeads['made'] = [];
+  for (const [key, value] of madeOnce) {
+    if (value instanceof THREE.BufferGeometry) {
+      made.push({ key, geometry: packGeometry(value) });
+      continue;
+    }
+    const fields: Record<string, PackedGeometry | unknown> = {};
+    const geometries: string[] = [];
+    for (const [name, field] of Object.entries(value)) {
+      if (field instanceof THREE.BufferGeometry) {
+        fields[name] = packGeometry(field);
+        geometries.push(name);
+      } else {
+        fields[name] = field;
+      }
+    }
+    made.push({ key, fields, geometries });
+  }
+  return { packed: { made, grids: [...grids] }, buffers };
+}
+
+/** A geometry's arrays, as a worker sends them. */
+interface PackedGeometry {
+  attributes: Record<string, { array: Float32Array; itemSize: number; normalized: boolean }>;
+  index: Uint16Array | Uint32Array | null;
+  groups: { start: number; count: number; materialIndex?: number }[];
+}
+
+/** The heads' geometry a worker made: each `once` key's geometry, or its fields, and the grids by their key. */
+export interface PackedHeads {
+  made: ({ key: string; geometry: PackedGeometry } | { key: string; fields: Record<string, unknown>; geometries: string[] })[];
+  grids: [string, HeadGrid][];
+}
+
+/** A worker's heads kept as made here: each key the page hasn't made itself, its geometry shared. */
+let keptFromWorkers = 0;
+/** How many heads' pieces the workers made that the page took (a harness's: 0 means every head was made here). */
+export const headsFromWorkers = (): number => keptFromWorkers;
+
+function keepHeadShapes(packed: PackedHeads): void {
+  const unpack = (p: PackedGeometry): THREE.BufferGeometry => {
+    const geo = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(p.attributes)) {
+      geo.setAttribute(name, new THREE.BufferAttribute(a.array, a.itemSize, a.normalized));
+    }
+    if (p.index) geo.setIndex(new THREE.BufferAttribute(p.index, 1));
+    for (const group of p.groups) geo.addGroup(group.start, group.count, group.materialIndex);
+    geo.userData.shared = true;
+    return geo;
+  };
+  for (const [key, grid] of packed.grids) if (!grids.has(key)) grids.set(key, grid);
+  for (const entry of packed.made) {
+    if (madeOnce.has(entry.key)) continue;
+    keptFromWorkers++;
+    if ('geometry' in entry) {
+      madeOnce.set(entry.key, unpack(entry.geometry));
+      continue;
+    }
+    const value: Record<string, unknown> = { ...entry.fields };
+    for (const name of entry.geometries) value[name] = unpack(entry.fields[name] as PackedGeometry);
+    madeOnce.set(entry.key, value);
+  }
+}
+
+/**
+ * Every hero's head made in a worker of its own while the game loads, at the detail the heroes are built at
+ * (`detail`, the quality's): each a second or two of a phone's main thread otherwise, the loading screen frozen
+ * ("phone has freezes during loading for like 1-2sec, where particles stop moving completely"). A worker that fails
+ * leaves its head to the first build, here.
+ */
+export async function preloadHeads(detail: number): Promise<void> {
+  if (typeof Worker === 'undefined') return;
+  const one = (model: keyof typeof HERO_HEADS) => new Promise<void>((resolve) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./head.worker.ts', import.meta.url), { type: 'module', name: `${model}@${detail}` });
+    } catch {
+      resolve();
+      return;
+    }
+    // (it ends itself once its head is kept across visits: ended here as it came, nothing was kept)
+    worker.onmessage = (e: MessageEvent<PackedHeads>) => {
+      keepHeadShapes(e.data);
+      resolve();
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      resolve();
+    };
+  });
+  await Promise.all((Object.keys(HERO_HEADS) as (keyof typeof HERO_HEADS)[]).map(one));
+}
+
 /**
  * Build the head of `who` on `headJoint` (the rig's head joint). `hair`: a cap of hair over the scalp
  * with locks of cards over it, `swept` back behind the ears to the nape, `mane` swept back as it is but fuller, in
@@ -224,16 +402,25 @@ export interface Head {
  * `crop`: short tufts over the back and sides below a hat's band (`Head.crop`), for a hat to show under its brim.
  * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadHair = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadStyle = {}): Head {
+  return built(headSteps(headJoint, kit, who, o));
+}
+
+/** `buildHead` a piece at a time (models/steps.ts): its geometry, where no worker made it (`preloadHeads`), is a
+ *  piece of its own, 200 to 270 ms on the 4080 for the hair's cap, locks or beard, which held the lobby's frame. */
+export function* headSteps(
+  headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: HeadStyle = {},
+): Generator<void, Head, undefined> {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
   const g = gridFor(who);
-  // (what the head's geometry is made from: the face, the hair, and the detail it is built at)
-  const key = `${who}:${o.hair ?? 'bare'}${o.crop ? '+crop' : ''}:${heroDetail()}`;
+  // (its geometry, made once for the face, the hair and the detail: by a worker as the game loads, `preloadHeads`)
+  const shapes = headShapes(who, o);
+  yield;
   const M = faceMaps(who);
   const skin = kit.rim({ roughness: 1, map: M.map, normalMap: M.normalMap, roughnessMap: M.roughnessMap, normalScale: new THREE.Vector2(0.5, 0.5) }, 0x6a2a1c, 0.25);
-  const face = part(once(`${key}:skin`, () => skinGeometry(g)), skin, head);
+  const face = part(shapes.skin, skin, head);
   face.name = 'face';
 
   // --- eyes: glossy balls in the sockets behind the lids, and lashes along the upper lids
@@ -241,7 +428,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const eyeMat = kit.std({ map: eyeMap(F.iris, LOOKS[who].eyeShade), roughness: LOOKS[who].eyeShade ? 0.2 : 0.08 });
   const shaded = !!LOOKS[who].eyeShade, lash = kit.std({ color: shaded ? 0x2e2016 : 0x1c120c, roughness: 0.9, side: THREE.DoubleSide });
   const eyes: THREE.Mesh[] = [];
-  const eg = once(`${key}:eye`, eyeGeometry);
+  const eg = shapes.eye;
   for (const s of [1, -1]) {
     const m = part(eg, eyeMat, head);
     toGroup(s * EYE.x, EYE.y, EYE.z, m.position);
@@ -251,20 +438,16 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     eyes.push(m);
   }
   // (a deep-set eye's lashes are painted: a strip reads as a line drawn round the eye)
-  if (!shaded) part(once(`${key}:lashes`, () => lashGeometry(F, shaded)), lash, head).castShadow = false;
+  if (shapes.lashes) part(shapes.lashes, lash, head).castShadow = false;
 
   // --- ears
   const earAo = LOOKS[who].ao ?? 0, earMat = plainSkin(kit, who, earAo > 0);
-  for (const s of [1, -1]) part(once(`${key}:ear${s}`, () => earGeometry(s, F, earAo)), earMat, head).name = 'ear';
+  for (const ear of shapes.ears) part(ear, earMat, head).name = 'ear';
 
-  const surface = (az: number, el: number, lift = 0, out = new THREE.Vector3()) => {
-    const d = gridDir(az, el, { x: 0, y: 0, z: 0 }), C = origin(el, { x: 0, y: 0, z: 0 });
-    const r = radiusAt(g, az, el) + lift;
-    return toGroup(C.x + d.x * r, C.y + d.y * r, C.z + d.z * r, out);
-  };
+  const surface = surfaceOf(g);
 
   // --- hair: a cap with some body over the scalp, locks of hair cards swept back over it to the nape
-  const L = LOOKS[who], rng = mulberry(7);
+  const L = LOOKS[who];
   // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
   // hanging apart read as a wig's fringe)
   const hk = o.hair === 'loose' || o.hair === 'mane' || o.hair === 'short' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
@@ -279,27 +462,16 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     // locks over it few and apart, read as a wig)
     const loose = o.hair === 'loose', capK = o.hair === 'mane' ? 1.8 : 1.3, capCol = new THREE.Color().setRGB(L.hair[0] * capK, L.hair[1] * capK, L.hair[2] * capK, THREE.SRGBColorSpace);
     const capMat = kit.std({ color: capCol, roughness: 0.8 });
-    const { cap, roots } = once(`${key}:cap`, () => capGeometry(g, who, loose, !!o.crop));
+    const cap = shapes.cap!;
     hair.push(part(cap, capMat, head));
     if (o.crop) {
-      const tufts = once(`${key}:crop`, () => {
-        const clear = hairTools(surface, F, L.hairDrop ?? 0, L.templeDrop ?? 0).clear;
-        return cropTufts(cap, roots, g, mulberry(13), clear);
-      });
+      const tufts = shapes.crop!;
       crop = part(tufts, cards, head);
       crop.castShadow = true;
       crop.name = 'crop';
     }
     // (the locks draw from `rng` before the beard's tufts do: both are made in the head's first build, in this order)
-    const locks = once(`${key}:locks`, () => {
-      const made: THREE.BufferGeometry[] = [];
-      if (loose) looseLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
-      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
-      else sweptLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, o.hair === 'mane');
-      const merged = mergeGeometries(made)!;
-      for (const x of made) x.dispose();
-      return merged;
-    });
+    const locks = shapes.locks!;
     const m = part(locks, cards, head);
     m.castShadow = true;
     hair.push(m);
@@ -309,10 +481,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   // of cards over its lower part and out past its edge, so its outline is hair, not a smooth rim
   const beards: THREE.Mesh[] = [];
   if (F.beardFull) {
-    const beard = once(`${key}:beard`, () => {
-      const { volume, lifts } = beardVolume(g, F);
-      return { volume, tufts: beardTufts(volume, lifts, g, rng) };
-    });
+    const beard = shapes.beard!;
     beards.push(part(beard.volume, skin, head));
     // (the tufts in the painted beard's colour, darker than the scalp's locks; their strands dense)
     const tuftMat = Object.assign(cards.clone(), { map: strandMap(true), roughness: 0.85, color: hairCol.clone().multiplyScalar(1.2 / hk) });

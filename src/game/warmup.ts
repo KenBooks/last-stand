@@ -19,7 +19,9 @@ import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
-import { buildModel } from '../entities/models/index';
+import { modelSteps } from '../entities/models/index';
+import { built } from '../entities/models/steps';
+import { buildLater, finishNow } from './behind';
 import { makeHeadAhead } from '../entities/models/head';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
@@ -96,7 +98,12 @@ function rememberWarmed(): void {
 /** `model`'s hero with all it can wear shown at once (a model hides what isn't worn, and a hidden mesh draws
  *  nothing), at `at`. */
 function heroAllWorn(model: string, at?: THREE.Vector3): Model {
-  const m = buildModel(model);
+  return built(heroAllWornSteps(model, at));
+}
+
+/** `heroAllWorn` a piece at a time (models/steps.ts). */
+function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, Model, undefined> {
+  const m = yield* modelSteps(model);
   m.root.traverse((o) => { o.visible = true; });
   m.root.name = `warm-up: ${model}, all worn`;   // names show up in the perf report
   if (at) m.root.position.copy(at);
@@ -312,6 +319,21 @@ async function buildHeroesAhead(): Promise<void> {
   }
 }
 
+/**
+ * The other heroes queued to be built behind the lobby a piece a frame (game/behind.ts), for their warm-up behind it
+ * where they come from the GPU's cache (a return's), once: built by their part there, each was a task of 80 to 130 ms
+ * that held the lobby's frame up. A first visit's are built before the lobby shows (`buildHeroesAhead`).
+ */
+export function queueHeroesBehind(): void {
+  if (heroesQueued || isWarm('heroes')) return;
+  heroesQueued = true;
+  for (const model of otherHeroModels()) {
+    if (heroesAhead.has(model)) continue;
+    buildLater(`worn ${model}`, heroAllWornSteps(model, AWAY), (hero) => heroesAhead.set(model, hero));
+  }
+}
+let heroesQueued = false;
+
 /** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
  *  (`heroModelParts`). */
 const heroParts = (): Part[] => [...(hallWarm ? [] : [hallPart()]), ...heroModelParts()];
@@ -342,6 +364,8 @@ function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
     build() {
+      // (one building behind the lobby finished now: he's wanted)
+      finishNow(`worn ${model}`);
       const hero = heroesAhead.get(model) ?? heroAllWorn(model, AWAY);
       heroesAhead.delete(model);
       const parts = [hero.root, ...skillSamples(model)];

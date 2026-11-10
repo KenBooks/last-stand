@@ -69,6 +69,7 @@ import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
 import type { LabelsOptions } from './labels';
+import type { BehindOptions } from './behind';
 import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
@@ -153,6 +154,13 @@ export async function poses(lab: Lab, command: PosesOptions): Promise<Report> {
  *  problem. */
 export async function labels(lab: Lab, command: LabelsOptions): Promise<Report> {
   const { labels: follow } = await import('./labels');
+  return follow(lab, command);
+}
+
+/** `lab behind`: the heroes built behind the lobby a piece a frame; a frame's building past its limit, a hero built
+ *  as the hall opens or one is chosen, or a canary missed, is a problem. */
+export async function behind(lab: Lab, command: BehindOptions): Promise<Report> {
+  const { heroesBehind: follow } = await import('./behind');
   return follow(lab, command);
 }
 

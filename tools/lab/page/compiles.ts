@@ -367,8 +367,12 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
       await lab.clickOn(name);
       await lab.step(HALL_FRAMES);
     }
-    await lab.clickOn(screen.querySelector(`.hs-tabs button[data-c="${id}"]`)!);
-    await lab.clickOn(screen.querySelector('.hs-choose')!);
+    // (his name clicked brings him into focus, and clicked again with him there chooses him, as a player does: the
+    // label on him is placed by the frames, and clicked with none run it still stood where the last hero had)
+    const chosen = screen.querySelector<HTMLElement>(`.hs-tabs button[data-c="${id}"]`)!;
+    await lab.clickOn(chosen);
+    await lab.step(HALL_FRAMES);
+    await lab.clickOn(chosen);
     hall = since();
   } else {
     const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);

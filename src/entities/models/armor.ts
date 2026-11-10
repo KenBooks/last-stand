@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
+import { built } from './steps';
 import { clamp, lerp, smooth } from '../../util';
 import { tunable } from '../../core/tuning';
 
@@ -221,10 +222,22 @@ export const gem = (r: number): THREE.BufferGeometry =>
  * their own weight; `len` and `rad` are the tufts' size, varied by `rng`.
  */
 export function furTufts(rng: () => number, n: number, at: (i: number, out: { p: THREE.Vector3; d: THREE.Vector3 }) => void, len: number, rad: number): THREE.BufferGeometry {
+  return built(furTuftsSteps(rng, n, at, len, rad));
+}
+
+/** the tufts made in a piece of `furTuftsSteps` (the warrior's collar's 280 in one: 12 to 30 ms behind the lobby) */
+const FUR_STEP = 70;
+
+/** `furTufts` a piece at a time (models/steps.ts): the same tufts from the same draws, `FUR_STEP` a piece. */
+export function* furTuftsSteps(
+  rng: () => number, n: number, at: (i: number, out: { p: THREE.Vector3; d: THREE.Vector3 }) => void, len: number,
+  rad: number,
+): Generator<void, THREE.BufferGeometry, undefined> {
   const parts: THREE.BufferGeometry[] = [], o = { p: new THREE.Vector3(), d: new THREE.Vector3() };
   // fewer, fuller tufts at lower detail
   const m = lod(n, 4), k = Math.sqrt(n / m);
   for (let i = 0; i < m; i++) {
+    if (i > 0 && i % FUR_STEP === 0) yield;
     at(Math.floor(i * n / m), o);
     const l = len * (0.7 + rng() * 0.6), d = o.d.clone().normalize();
     d.x += (rng() - 0.5) * 0.5; d.z += (rng() - 0.5) * 0.5; d.normalize();

@@ -61,7 +61,8 @@ declare global {
   }
 }
 
-if (import.meta.env.DEV) {
+// (not in a worker: the head workers import the models, which read tunables)
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   window.__tune = tune;
   window.__tuned = tuned;
 }

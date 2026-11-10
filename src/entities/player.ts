@@ -5,7 +5,7 @@ import { stepVelocity } from './movement';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
-import { buildModel } from './models/index';
+import { buildModel, modelSteps } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
@@ -262,7 +262,19 @@ export class Player {
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
-  constructor(classId: string, equipped: Profile['equipped'], local = true) {
+  /** the heroes built so far (a build is 100 to 200 ms: `lab behind` counts those a hero's choice makes) */
+  static built = 0;
+
+  /** Class `classId`'s hero built a piece at a time (`models/steps.ts`): his model's pieces, then the rest. */
+  static *inSteps(classId: string, equipped: Profile['equipped'], local = true): Generator<void, Player, undefined> {
+    const model = yield* modelSteps(CLASSES[classId].model);
+    yield;
+    return new Player(classId, equipped, local, model);
+  }
+
+  /** `model`: his model built already (`inSteps`). */
+  constructor(classId: string, equipped: Profile['equipped'], local = true, model?: Model) {
+    Player.built++;
     this.cls = CLASSES[classId];
     this.local = local;
     this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
@@ -275,7 +287,7 @@ export class Player {
       lights.hand.color.set(this.cls.aura.hand?.light ?? 0xffffff);
       lights.hand.intensity = 0;
     }
-    this.model = buildModel(this.cls.model);
+    this.model = model ?? buildModel(this.cls.model);
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
@@ -290,6 +302,19 @@ export class Player {
       this.known.set(def.impl, { def, impl });
     }
     this.recomputeStats(equipped);   // loads the loadout for the gear held
+    this.reset();
+  }
+
+  /** Out of the scene, to be brought back whole (`unstowed`): a hero built ahead (`game/hall.ts`). His lights stay: they're
+   *  every hero's (`heroLights`), and the scene's count of them every program's. */
+  stowed(): void {
+    G.scene.remove(this.obj);
+  }
+
+  /** Back in the scene from `stowed`, as if just built in `equipped`. */
+  unstowed(equipped: Profile['equipped']): void {
+    G.scene.add(this.obj);
+    this.recomputeStats(equipped);
     this.reset();
   }
 

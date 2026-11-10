@@ -31,7 +31,8 @@ import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
-import { updateHall } from './game/hall';
+import { hallOpen, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
+import { buildBehind } from './game/behind';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
@@ -47,7 +48,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
+import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, layOutReadyingAhead, READYING, settleReadying } from './ui/readying';
 import { hdrAllowedAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
@@ -62,6 +63,8 @@ import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { tickItemGlow } from './core/materials';
 import { preloadHands } from './entities/models/hands';
+import { preloadHeads } from './entities/models/head';
+import { heroDetail } from './entities/models/armor';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
@@ -110,6 +113,10 @@ async function boot() {
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();
+  // (every hero's head made in workers meanwhile, at the detail the heroes are built at, and kept across visits: made
+  // here, a return's other heroes made theirs behind the lobby, 200 to 270 ms a piece, and on a phone the first
+  // hero's froze the loading screen)
+  const heads = preloadHeads(heroDetail());
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
   compileTheBiome();
@@ -120,6 +127,7 @@ async function boot() {
   await hands;
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
+  await heads;
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
@@ -434,7 +442,7 @@ function swapHero(id: string) {
   clearProjectiles(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   const old = G.player;
-  G.player = new Player(id, G.profile.equipped);
+  G.player = takeSpareHero(id, G.profile) ?? new Player(id, G.profile.equipped);
   G.player.slot = old.slot;
   G.player.spawn.copy(old.spawn);
   G.players[G.players.indexOf(old)] = G.player;
@@ -556,6 +564,13 @@ function update(dt: number): void {
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
   updateHall(dt);
+  // (the other heroes, the hall's and a spare of each class built behind the lobby, a piece a frame: game/behind.ts;
+  // once the lobby's warm-ups behind it are done, not on top of them)
+  if (G.mode === 'menu' && !hallOpen() && !isWarming()) {
+    queueHeroesBehind();
+    queueHallBehind();
+    buildBehind();
+  }
   // (the hero selection screen's choice kept on its hero as the camera moves)
   placeChoice();
   updateGround(dt);

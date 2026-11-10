@@ -6,6 +6,7 @@ import { belt, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp } from '../../util';
 import { joint } from './rig';
+import { built } from './steps';
 
 /** chest joint space (m): at each height its half-width and half-depth, and how square its section is. Over the shoulders
  *  it is as broad as the arms' tops and thin front to back, the trapezius sloping down from the neck and a deltoid
@@ -96,6 +97,14 @@ export const armholeEdge = (s: number, n: number, lift = 0) => Array.from({ leng
  * the seam, and the sleeve's top met it between their points: a jagged seam, with gaps)
  */
 export function tunicCut(around: number, rows: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  return built(tunicCutSteps(around, rows));
+}
+
+/** `tunicCut` a piece at a time (models/steps.ts): its tables, then each half (the right first, as it was), the
+ *  largest single call of a hero's build otherwise, 10 to 38 ms behind the lobby (`lab behind`). */
+export function* tunicCutSteps(
+  around: number, rows: number,
+): Generator<void, [THREE.BufferGeometry, THREE.BufferGeometry], undefined> {
   // (laid out in the half's own terms with the angle round in metres at about the chest's width, about the hole's middle)
   const RW = 0.18, X = Math.PI / 2 * RW, Y0 = TUNIC_Y[0] - ARMHOLE.y, Y1 = TUNIC_Y[1] - ARMHOLE.y;
   const p = new THREE.Vector3(), q = new THREE.Vector3(), da = new THREE.Vector3(), dy = new THREE.Vector3();
@@ -105,7 +114,7 @@ export function tunicCut(around: number, rows: number): [THREE.BufferGeometry, T
   for (let j = 1; j <= NS; j++) sv.push(sv[j - 1] + onTunic(0, ys[j], 0, p).distanceTo(onTunic(0, ys[j - 1], 0, q)) / TILE);
   const at = (tab: number[], x: number) => { const i = Math.min(NS - 1, Math.max(0, Math.floor(x))); return tab[i] + (tab[i + 1] - tab[i]) * (x - i); };
   const uAt = (a: number) => at(su, (a + Math.PI) / H_TAU * NS), vAt = (y: number) => at(sv, (y - TUNIC_Y[0]) / (TUNIC_Y[1] - TUNIC_Y[0]) * NS);
-  return [1, -1].map((s) => {
+  const half = (s: number): THREE.BufferGeometry => {
     // each column from the hole's edge straight out (in those terms) to where that line leaves the half
     const P: THREE.Vector3[][] = [], A: [number, number][][] = [];
     for (let i = 0; i < around; i++) {
@@ -139,7 +148,11 @@ export function tunicCut(around: number, rows: number): [THREE.BufferGeometry, T
     g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     return g;
-  }) as [THREE.BufferGeometry, THREE.BufferGeometry];
+  };
+  yield;
+  const right = half(1);
+  yield;
+  return [right, half(-1)];
 }
 
 /**
