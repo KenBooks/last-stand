@@ -131,7 +131,9 @@ export function serviceHealth(): Promise<{ google: boolean }> {
  *  with it alone. */
 export const googleAddress = (purpose: 'signin' | 'link', nonce: string): Promise<{ url: string }> =>
   json(call('POST', '/auth/google', { json: { purpose, nonce, returnPath: `${location.pathname}${location.search}` } }));
-export const googleFinish = (code: string, nonce: string): Promise<SignedIn> =>
+/** The code Google's answer brought home, finished: a session (a sign-in), or Google linked to the signed-in
+ *  account (a link, sent with that account's production session). */
+export const googleFinish = (code: string, nonce: string): Promise<SignedIn | { linked: true; account: CloudAccount }> =>
   json(call('POST', '/auth/google/finish', { json: { code, nonce } }));
 export const unlinkGoogle = async (): Promise<void> => { await call('DELETE', '/google'); };
 

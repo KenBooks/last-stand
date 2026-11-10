@@ -211,7 +211,9 @@ export function showGoogleLanding(landing: cloud.GoogleLanding): void {
     say('Google is linked: sign in with it on any device, as well as with your passkeys.');
     return;
   }
-  say(GOOGLE_ERRORS[landing.reason] ?? 'The Google sign-in failed. Try again.');
+  // (the reason comes from the page's address: only the screen's own are said)
+  const known = Object.hasOwn(GOOGLE_ERRORS, landing.reason);
+  say(known ? GOOGLE_ERRORS[landing.reason] : 'The Google sign-in failed. Try again.');
 }
 
 function confirmLinkGoogle(): void {

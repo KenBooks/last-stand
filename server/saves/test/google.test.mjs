@@ -134,7 +134,9 @@ test('the state is good once, and Google\'s answer never sends the page anywhere
   const forged = await call('GET', '/saves/auth/google/callback?state=made-up&code=x', { origin: null });
   assert.equal(forged.status, 400);
   // a return path off the page, or a page that isn't the game's, is refused before Google is asked
-  for (const returnPath of ['//evil.example/', 'https://evil.example/', '/\\evil.example', 'relative']) {
+  // (and a control or wider character, which can't go in the Location header)
+  const odd = ['/a\u0001b', '/caf\u00e9'];
+  for (const returnPath of ['//evil.example/', 'https://evil.example/', '/\\evil.example', 'relative', ...odd]) {
     assert.equal((await begin('signin', { returnPath })).status, 400, returnPath);
   }
   assert.equal((await begin('signin', { origin: 'https://evil.example' })).status, 403);
@@ -159,6 +161,16 @@ test('a code Google never gave, or an id token for another client, signs nobody 
   assert.match(denied.headers.get('location') ?? '', /#cloud-google-error=cancelled$/);
 });
 
+/** Google's answer to a link begun by the session `token` on production, `sub` consenting, finished from the tab
+ *  (`nonce`) and session (`finisher`, the same by default) given: the finish's answer. */
+async function linkWithGoogle(token, sub, { finisher = token, nonce = NONCE } = {}) {
+  const { body } = await begin('link', { token });
+  const { location } = await callback(body.url, sub);
+  const code = /#cloud-google=(.+)$/.exec(location)?.[1];
+  assert.ok(code, `no code in ${location}`);
+  return call('POST', '/saves/auth/google/finish', { token: finisher, json: { code, nonce } });
+}
+
 test('Google is linked from production alone, to one account, and is never the last way in', async () => {
   const device = authenticator();
   const token = await signUp(device);
@@ -167,23 +179,67 @@ test('Google is linked from production alone, to one account, and is never the l
   const code = (await call('POST', '/saves/link-code', { token })).body.code;
   const preview = (await call('POST', '/saves/link', { origin: PREVIEW, json: { code } })).body.token;
   assert.equal((await begin('link', { origin: PREVIEW, token: preview })).status, 403);
-  const linking = await begin('link', { token });
-  const linked = await callback(linking.body.url, 'sub-linked');
-  assert.match(linked.location, /#cloud-google-linked$/);
+  const linked = await linkWithGoogle(token, 'sub-linked');
+  assert.equal(linked.status, 200);
+  assert.equal(linked.body.linked, true);
   const account = (await call('GET', '/saves/account', { token })).body;
   assert.equal(account.google, true);
   assert.equal((await signInWithGoogle('sub-linked')).body.account.id, account.id);
   // another account can't take that Google account
   const other = await signUp(authenticator());
-  const taking = await begin('link', { token: other });
-  assert.match((await callback(taking.body.url, 'sub-linked')).location, /#cloud-google-error=taken$/);
+  const taking = await linkWithGoogle(other, 'sub-linked');
+  assert.equal(taking.status, 409);
+  assert.equal(taking.body, 'taken');
   // with a passkey beside it, Google can go, and comes back; the passkey can go while Google stays
   assert.equal((await call('DELETE', '/saves/google', { origin: PREVIEW, token: preview })).status, 403);
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 204);
-  assert.match((await callback((await begin('link', { token })).body.url, 'sub-linked')).location, /linked$/);
+  assert.equal((await linkWithGoogle(token, 'sub-linked')).status, 200);
   const passkey = account.passkeys[0].id;
   assert.equal((await call('DELETE', `/saves/passkey/${encodeURIComponent(passkey)}`, { token })).status, 204);
   // now Google is the last way in
+  assert.equal((await call('DELETE', '/saves/google', { token })).status, 409);
+});
+
+test('a link address sent to another player links nothing: it finishes only from the tab and session that began it', async () => {
+  const attacker = await signUp(authenticator());
+  const victim = await signUp(authenticator());
+  // the attacker begins a link and sends its Google address on; the victim opens it and picks their own Google
+  const { body } = await begin('link', { token: attacker });
+  const { location } = await callback(body.url, 'sub-victim');
+  const code = /#cloud-google=(.+)$/.exec(location)?.[1];
+  assert.ok(code);
+  // nothing is linked by Google's answer itself
+  assert.equal((await call('GET', '/saves/account', { token: attacker })).body.google, false);
+  // the victim's game, signed in to its own account, finishes it (even knowing the attacker's nonce): refused
+  const finish = (token) => call('POST', '/saves/auth/google/finish', { token, json: { code, nonce: NONCE } });
+  assert.equal((await finish(victim)).status, 403);
+  assert.equal((await call('GET', '/saves/account', { token: attacker })).body.google, false);
+  // and the victim's Google is free for the victim's own account
+  assert.equal((await linkWithGoogle(victim, 'sub-victim')).status, 200);
+});
+
+test('a landing code is good once, whatever shape it is sent in', async () => {
+  const { body } = await begin('signin');
+  const { location } = await callback(body.url, 'sub-shape');
+  const code = /#cloud-google=(.+)$/.exec(location)[1];
+  const finish = (sent) => call('POST', '/saves/auth/google/finish', { json: { code: sent, nonce: NONCE } });
+  assert.equal((await finish([code])).status, 200);
+  assert.equal((await finish([code])).status, 401);
+  assert.equal((await finish(code)).status, 401);
+});
+
+test('a preview\'s passkey isn\'t a way into production: Google stays while it is the only one there', async () => {
+  const signedIn = await signInWithGoogle('sub-preview-passkey');
+  const token = signedIn.body.token;
+  const code = (await call('POST', '/saves/link-code', { token })).body.code;
+  const preview = (await call('POST', '/saves/link', { origin: PREVIEW, json: { code } })).body.token;
+  const device = authenticator();
+  const options = await call('POST', '/saves/passkey/options', { origin: PREVIEW, token: preview, json: { purpose: 'register' } });
+  const added = await call('POST', '/saves/passkey/verify', {
+    origin: PREVIEW, token: preview, json: { purpose: 'register', response: device.create(options.body, PREVIEW) },
+  });
+  assert.equal(added.status, 200, added.body);
+  assert.equal((await call('GET', '/saves/account', { token })).body.passkeys.length, 1);
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 409);
 });
 

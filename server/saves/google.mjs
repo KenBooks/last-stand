@@ -10,12 +10,15 @@ export const PENDING_MS = 10 * 60_000;
 export const LANDING_MS = 2 * 60_000;
 /** what the issuer of a Google id token is called */
 const ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
-/** a path the page may ask to come back to: its own, never another host's (`//host`) */
-const RETURN_PATH = /^\/(?!\/)[^\s#\\]{0,511}$/;
+/** a path the page may ask to come back to: its own, never another host's (`//host`), printable ASCII alone (a
+ *  control or wider character can't go in a Location header), without its fragment (`#`) or a backslash */
+const RETURN_PATH = /^\/(?!\/)[\x21\x22\x24-\x5b\x5d-\x7e]{0,511}$/;
+/** sign-ins sent to Google and not back yet, at most (each address may begin 60 an hour) */
+const PENDING_MAX = 10_000;
 
 /** a `state` -> { origin, returnPath, purpose, accountId, nonce, verifier, until } */
 const pending = new Map();
-/** a landing code -> { accountId, origin, nonce, until } */
+/** a landing code -> { purpose, accountId, sub, origin, nonce, until } */
 const landings = new Map();
 
 /** Google's settings: on when the client's id and secret are both set. */
@@ -43,9 +46,12 @@ const challengeOf = (verifier) => createHash('sha256').update(verifier).digest('
 
 /**
  * A sign-in sent to Google: the address to send the page to, its `state` remembered with what it's for
- * (`purpose`: 'signin', or 'link' to the signed-in `accountId`) and where the page comes back to.
+ * (`purpose`: 'signin', or 'link' to the signed-in `accountId`) and where the page comes back to; null while too
+ * many are out at once.
  */
 export function begin(google, { origin, returnPath, purpose, nonce, accountId = null }, now = Date.now()) {
+  if (pending.size >= PENDING_MAX) pruneGoogle(now);
+  if (pending.size >= PENDING_MAX) return null;
   const state = random();
   const verifier = random();
   pending.set(state, { origin, returnPath, purpose, accountId, nonce, verifier, until: now + PENDING_MS });
@@ -64,9 +70,10 @@ export function begin(google, { origin, returnPath, purpose, nonce, accountId = 
 
 /** The sign-in a `state` Google sent back names, taken (good once), or null if it's unknown or expired. */
 export function takePending(state, now = Date.now()) {
-  const entry = pending.get(String(state ?? ''));
+  const key = String(state ?? '');
+  const entry = pending.get(key);
   if (!entry) return null;
-  pending.delete(state);
+  pending.delete(key);
   return entry.until > now ? entry : null;
 }
 
@@ -109,21 +116,23 @@ function claimsOf(token) {
   }
 }
 
-/** A one-time code the page comes back with, traded at `/saves/auth/google/finish` from that page's origin alone,
+/** A one-time code the page comes back with (what Google's answer is for, and Google's id for the account), traded
+ *  at `/saves/auth/google/finish` from that page's origin alone,
  *  with the nonce the tab that began the sign-in kept: a code sent to someone else's browser (a link to a sign-in
  *  of the sender's, to sign that browser in to the sender's account) is refused there. */
-export function landingCode(accountId, origin, nonce, now = Date.now()) {
+export function landingCode({ purpose, accountId, sub, origin, nonce }, now = Date.now()) {
   const code = random();
-  landings.set(code, { accountId, origin, nonce, until: now + LANDING_MS });
+  landings.set(code, { purpose, accountId, sub, origin, nonce, until: now + LANDING_MS });
   return code;
 }
 
 /** The landing a code names, taken (good once), if it's still good and traded from the page and tab it was made
  *  for. */
 export function takeLanding(code, origin, nonce, now = Date.now()) {
-  const entry = landings.get(String(code ?? ''));
+  const key = String(code ?? '');
+  const entry = landings.get(key);
   if (!entry || entry.origin !== origin || entry.nonce !== nonce) return null;
-  landings.delete(code);
+  landings.delete(key);
   return entry.until > now ? entry : null;
 }
 

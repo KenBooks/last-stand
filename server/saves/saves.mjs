@@ -20,8 +20,8 @@
 //   DELETE /saves/save                 this site's save, gone (the device keeps its copy)
 //   POST   /saves/copy-production      production's save copied over this site's (a preview's, a commit build's)
 //   POST   /saves/auth/google          { purpose: 'signin' | 'link', returnPath, nonce } -> { url }: off to Google
-//   GET    /saves/auth/google/callback Google back: the page sent home with #cloud-google=<code> (or -linked, -error)
-//   POST   /saves/auth/google/finish   { code, nonce } -> { token, account }: traded from that page and tab alone
+//   GET    /saves/auth/google/callback Google back: the page sent home with #cloud-google=<code> (or -error=<why>)
+//   POST   /saves/auth/google/finish   { code, nonce } -> { token, account } or { linked, account }: that tab alone
 //   DELETE /saves/google               Google unlinked from the account (never the last way in)
 // Everything but the health and Google's callback takes a page of the game's (ORIGINS) and, but the passkey's, a session: `Authorization:
 // Bearer <token>`, a token made at sign-in for that one site (only its digest is kept).
@@ -312,9 +312,9 @@ async function link(req, res, origin, headers) {
   return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
 }
 
-/** `POST /saves/auth/google { purpose, returnPath }`: the address to send the page to Google at. A sign-in works on
- *  any of the game's pages (Google's id is the same everywhere: the one way into one account from every site);
- *  linking Google to the signed-in account is production's alone, as a preview's token may be anyone's. */
+/** `POST /saves/auth/google { purpose, returnPath, nonce }`: the address to send the page to Google at. A sign-in
+ *  works on any of the game's pages (Google's id is the same everywhere: the one way into one account from every
+ *  site); linking Google to the signed-in account is production's alone, as a preview's token may be anyone's. */
 async function googleBegin(req, res, origin, headers) {
   if (!settings.google.on) return answer(res, 404, 'Google sign-in is off', headers);
   if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
@@ -333,11 +333,15 @@ async function googleBegin(req, res, origin, headers) {
     accountId = signedIn.account.id;
   }
   const url = google.begin(settings.google, { origin, returnPath, purpose, nonce: body.nonce, accountId });
+  if (!url) return answer(res, 503, 'too many sign-ins at once: try again in a while', headers);
   return answer(res, 200, { url }, headers);
 }
 
 /** Google's answer (`GET /saves/auth/google/callback?code&state`): the page that asked sent home, to the origin and
- *  path its `state` was made with (never one the request names), with a one-time code to trade, or why not. */
+ *  path its `state` was made with (never one the request names), with a one-time code to finish with, or why not.
+ *  Nothing is made or linked here: whoever opens an address Google gave can land here, so a sign-in or a link takes
+ *  effect only at `finish`, from the tab that began it (its nonce) and, for a link, its own production session. An
+ *  address made to link someone's account, sent to another player, links nothing when they open it. */
 async function googleCallback(req, res) {
   const query = new URL(req.url ?? '/', 'http://x').searchParams;
   const entry = google.takePending(query.get('state'));
@@ -349,52 +353,61 @@ async function googleCallback(req, res) {
   if (query.has('error') || !query.get('code')) return home('cloud-google-error=cancelled');
   const sub = await google.subOf(settings.google, query.get('code'), entry.verifier);
   if (!sub) return home('cloud-google-error=refused');
-  // one Google account's changes wait their turn: two sign-ins at once make one account
-  return store.withAccount(`google ${sub}`, async () => {
-    if (entry.purpose === 'link') return home(await linkGoogle(entry.accountId, sub));
-    let account = store.accountOfGoogle(sub);
-    if (!account) {
-      if (!allowed(`account ${addressOf(req)}`, settings.accountsPerDay, 86_400_000)) {
-        return home('cloud-google-error=too-many');
-      }
-      account = store.freshAccount();
-      account.google = { sub, linked: Date.now() };
-      await store.keepAccount(account);
-      log('account made by google', account.id.slice(0, 6));
-    }
-    return home(`cloud-google=${google.landingCode(account.id, entry.origin, entry.nonce)}`);
-  });
+  const { purpose, accountId, origin, nonce } = entry;
+  return home(`cloud-google=${google.landingCode({ purpose, accountId, sub, origin, nonce })}`);
 }
 
-/** Links Google's account `sub` to the account `accountId` (its session asked, on production): the fragment the page
- *  is sent home with. */
-async function linkGoogle(accountId, sub) {
-  const holder = store.accountOfGoogle(sub);
-  if (holder && holder.id !== accountId) return 'cloud-google-error=taken';
-  const result = await change(accountId, (changed) => {
-    if (changed.google && changed.google.sub !== sub) return 'other';
-    changed.google = { sub, linked: changed.google?.linked ?? Date.now() };
-    return 'linked';
-  });
-  if (result.gone) return 'cloud-google-error=signed-out';
-  if (result === 'other') return 'cloud-google-error=other';
-  log('google linked', accountId.slice(0, 6));
-  return 'cloud-google-linked';
-}
-
-/** `POST /saves/auth/google/finish { code }`: the code Google's sign-in sent the page home with, traded for a
- *  session there (from that page's origin alone). */
+/** `POST /saves/auth/google/finish { code, nonce }`: the code Google's answer sent the page home with, from that page
+ *  and tab alone: a session there (a sign-in, the account made if Google's id has none), or Google linked to the
+ *  account whose production session began the link and sends this. */
 async function googleFinish(req, res, origin, headers) {
   if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
   const body = await jsonOf(req);
   const entry = google.takeLanding(body?.code, origin, body?.nonce);
   if (!entry) return answer(res, 401, 'no such code, or it expired', headers);
-  const result = await change(entry.accountId, (changed) => ({
-    token: store.addSession(changed, siteOf(origin), 'google'), changed,
-  }));
-  if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
-  log('signed in by google', entry.accountId.slice(0, 6), siteOf(origin));
-  return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
+  const site = siteOf(origin);
+  // one Google account's changes wait their turn: two sign-ins at once make one account
+  return store.withAccount(`google ${entry.sub}`, async () => {
+    if (entry.purpose === 'link') {
+      const signedIn = sessionOf(req, site);
+      if (!signedIn || !trusted(site) || signedIn.account.id !== entry.accountId) {
+        return answer(res, 403, 'signed-out', headers);
+      }
+      const linked = await linkGoogle(entry.accountId, entry.sub);
+      if (linked !== 'linked') return answer(res, 409, linked, headers);
+      return answer(res, 200, { linked: true, account: accountView(store.account(entry.accountId)) }, headers);
+    }
+    let account = store.accountOfGoogle(entry.sub);
+    if (!account) {
+      if (!allowed(`account ${addressOf(req)}`, settings.accountsPerDay, 86_400_000)) {
+        return answer(res, 429, 'too-many', headers);
+      }
+      account = store.freshAccount();
+      account.google = { sub: entry.sub, linked: Date.now() };
+      await store.keepAccount(account);
+      log('account made by google', account.id.slice(0, 6));
+    }
+    const result = await change(account.id, (changed) => ({ token: store.addSession(changed, site, 'google'), changed }));
+    if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
+    log('signed in by google', account.id.slice(0, 6), site);
+    return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
+  });
+}
+
+/** Links Google's account `sub` to the account `accountId`: `linked`, or why not (`taken` by another account,
+ *  `other`: another Google account is linked to it, `signed-out`: the account is gone). */
+async function linkGoogle(accountId, sub) {
+  const holder = store.accountOfGoogle(sub);
+  if (holder && holder.id !== accountId) return 'taken';
+  const result = await change(accountId, (changed) => {
+    if (changed.google && changed.google.sub !== sub) return false;
+    changed.google = { sub, linked: changed.google?.linked ?? Date.now() };
+    return 'linked';
+  });
+  if (result?.gone) return 'signed-out';
+  if (result === false) return 'other';
+  log('google linked', accountId.slice(0, 6));
+  return 'linked';
 }
 
 /** Registrations wait their turn across every account: a credential id is checked to be new and kept as one step. */
@@ -587,9 +600,10 @@ async function signedInRequest(req, res, path, origin, headers) {
     if (id === null) return answer(res, 400, 'not a passkey id', headers);
     const result = await change(account.id, (changed) => {
       if (!changed.passkeys.some((p) => p.id === id)) return 404;
-      // never the last way in: Google counts as one
-      if (waysIn(changed) <= 1) return 409;
+      // never the last way into production: Google counts as one, a preview's passkey doesn't
+      const before = waysIn(changed);
       changed.passkeys = changed.passkeys.filter((p) => p.id !== id);
+      if (before >= 1 && waysIn(changed) < 1) return 409;
       return 204;
     });
     const statuses = { 404: [404, 'no such passkey'], 409: [409, 'the last way in: delete the account instead'] };
@@ -599,8 +613,8 @@ async function signedInRequest(req, res, path, origin, headers) {
   if (path === '/saves/google' && req.method === 'DELETE') {
     const result = await change(account.id, (changed) => {
       if (!changed.google) return 404;
-      if (waysIn(changed) <= 1) return 409;
       delete changed.google;
+      if (waysIn(changed) < 1) return 409;
       return 204;
     });
     const statuses = { 404: [404, 'no Google linked'], 409: [409, 'the last way in: add a passkey first'] };
@@ -611,8 +625,12 @@ async function signedInRequest(req, res, path, origin, headers) {
   return answer(res, 404, 'not here', headers);
 }
 
-/** The ways into an account: its passkeys, and Google if linked. */
-const waysIn = (account) => account.passkeys.length + (account.google ? 1 : 0);
+/** The ways into an account on production: its passkeys of production's relying party, and Google if linked. A
+ *  preview's passkeys don't count (production's login refuses them), nor its codes (they open previews alone). */
+function waysIn(account) {
+  const productionRp = passkeys.rpIdFor(settings.production, settings.rpIds);
+  return account.passkeys.filter((p) => p.rpId === productionRp).length + (account.google ? 1 : 0);
+}
 
 async function handle(req, res) {
   const path = new URL(req.url ?? '/', 'http://x').pathname.replace(/\/+$/, '');

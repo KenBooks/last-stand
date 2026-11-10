@@ -208,22 +208,31 @@ async function landFromGoogle(): Promise<GoogleLanding | null> {
   const fragment = new URLSearchParams(location.hash.slice(1));
   const code = fragment.get('cloud-google');
   const error = fragment.get('cloud-google-error');
-  const linkedNow = fragment.has('cloud-google-linked');
-  if (!code && !error && !linkedNow) return null;
+  if (!code && !error) return null;
   history.replaceState(history.state, '', `${location.pathname}${location.search}`);
   const nonce = takeNonce();
   if (error) return { kind: 'error', reason: error };
-  if (linkedNow) {
+  try {
+    // (a code this tab never asked for, a link someone sent, has no nonce here: refused, as expired; a link is
+    // finished with this device's own production session, which the service checks began it)
+    const finished = await api.googleFinish(code!, nonce);
+    if ('token' in finished) {
+      signedInAs(finished);
+      return { kind: 'signedIn' };
+    }
     if (kept) { kept.google = true; keep(); }
     return { kind: 'linked' };
-  }
-  try {
-    // (a code this tab never asked for, a link someone sent, has no nonce here: refused, as expired)
-    signedInAs(await api.googleFinish(code!, nonce));
-    return { kind: 'signedIn' };
   } catch (e) {
-    return { kind: 'error', reason: e instanceof api.CloudError && e.status === 0 ? 'offline' : 'expired' };
+    return { kind: 'error', reason: landingFailure(e) };
   }
+}
+
+/** Why a finish failed, as the screen names it: the service's reason (`taken`, `other`, `signed-out`, `too-many`),
+ *  offline, or expired (an unknown or used code, another tab's). */
+function landingFailure(e: unknown): string {
+  if (!(e instanceof api.CloudError)) return 'expired';
+  if (e.status === 0) return 'offline';
+  return ['taken', 'other', 'signed-out', 'too-many'].includes(e.message) ? e.message : 'expired';
 }
 
 /** This load's return from Google, if it was one (traded as the game boots, shown once the lobby is). */
