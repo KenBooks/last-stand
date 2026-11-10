@@ -198,7 +198,7 @@ const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
 const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.07, -0.16, 0.14), tipped: new THREE.Vector3(0.08, 0.08, 0.19), pole: new THREE.Vector3(0.35, -1, 0.5), tippedPole: new THREE.Vector3(0.6, -0.4, 1) };
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
-const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
+const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75];
 
 // --- a spell thrown from the free hand (cast: Starfall, Maelstrom), keyed over the cast, released at 0.55
 // (the skill fires): the body coils away (the right shoulder forward, the weight back) as the hand gathers
@@ -1143,11 +1143,18 @@ export function* mageSteps(): ModelSteps {
           // wrist's bends kept: a turn of the hand after them bent the wrist 40 degrees sideways)
           if (fp) j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
           strainHand(handL, 0.75, 0.3 + kick * 0.7, t, 0.04);
-          j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2;
+          if (fp) { j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2; }
           j.chest.rotation.y += -0.25; j.spine.rotation.x += 0.15 - kick * 0.12;
           j.body.position.z += -kick * 0.05;
-          // (braced: the left foot forward, low, the weight leaning into the portal)
-          if (!fp) { j.body.position.z += 0.05; j.body.position.y += -0.06; j.hips.rotation.y += -0.15; j.spine.rotation.x += 0.06; feet = LANCE_FEET; }
+          // (braced as a man pushing against a weight: a long stride, the left foot and shoulder forward, sunk at
+          // the knees, the weight leaning into the portal; the staff drawn back by the rear hip, its arm bent, out
+          // of the cast's way; the head turned back over the leading shoulder to look down the arm. Upright on a
+          // short stride, the staff held straight out beside the casting arm, a review read "a scarecrow")
+          if (!fp) {
+            j.body.position.z += 0.05; j.body.position.y += -0.14; j.hips.rotation.y += -0.3; j.spine.rotation.x += 0.12; feet = LANCE_FEET;
+            j.shoulderR.rotation.x += 0.25; j.elbowR.rotation.x += -0.55;
+            j.neck.rotation.y += 0.45; j.neck.rotation.x += -0.2;
+          }
           // (the arm straight out from its shoulder along the way he casts, square to the portal his fingers feed,
           // drawn back a little by the kick: swung in across the chest, to a portal that stood before his middle,
           // it met the dial at a slant; from play: "arm not perpendicular to dial, it should be, otherwise makes no
