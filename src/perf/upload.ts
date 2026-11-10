@@ -11,7 +11,7 @@ import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
 import { sceneRatio, sceneSamples, sceneSize, viewMode } from '../core/renderer';
 import { hdrActive } from '../core/hdr';
-import { lateCompiles } from '../core/shaders';
+import { auditPrograms, lateCompiles, shaderErrors } from '../core/shaders';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
 import { perfBundle, perfGpuName, perfJsBench } from '../ui/perfHud';
@@ -66,7 +66,13 @@ function settings(): Record<string, number | string | boolean> {
   };
 }
 
+/** the most a report's shader audit holds the page (ms): the rest is asked by the next */
+const AUDIT_MS = 40;
+/** the most programs that failed named in a report */
+const ERRORS_SENT = 6;
+
 function game(): Record<string, number | string | boolean> {
+  auditPrograms(G.renderer, AUDIT_MS);
   return {
     mode: G.mode,
     biome: G.arena.biome,
@@ -76,6 +82,8 @@ function game(): Record<string, number | string | boolean> {
     foes: G.enemies.length,
     compiledLate: lateCompiles.length,
     lateCompiles: lateCompiles.slice(-20).join(' || '),
+    shaderErrors: shaderErrors.slice(0, ERRORS_SENT).join(' || '),
+    shaderErrorCount: shaderErrors.length,
   };
 }
 
@@ -106,7 +114,7 @@ export function traceOf(slow: Slow): Uint8Array {
     reason,
     device: device(),
     settings: settings(),
-    game: { ...game(), bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | ') },
+    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | ') },
     columns,
     longFrames: snapshot.longFrames,
     marks: snapshot.marks,

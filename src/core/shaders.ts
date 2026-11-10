@@ -15,6 +15,34 @@ let compiled = 0, loaded = false;
 /** Programs compiled after loading, described for the perf report (what differs from the nearest known one). */
 export const lateCompiles: string[] = [];
 
+/** Programs that failed to link on this device, each with the driver's word on it (`auditPrograms`). */
+export const shaderErrors: string[] = [];
+const audited = new WeakSet<object>();
+/** the most of the driver's log kept a program */
+const LOG_KEPT = 240;
+
+/**
+ * Every program not yet looked at asked whether it linked, for at most `mostMs`: one that didn't is kept in
+ * `shaderErrors` with its kind and the driver's log. A production build never asks as it compiles (each question is a
+ * round trip to the GPU's process), so a program a phone's driver refused drew nothing and said nothing: the heroes'
+ * palette materials passed every check on desktop GPUs and left an S25 Edge's hero his hair and his shadow (#470,
+ * reverted). Asked as a performance report is put together, a calm moment; WebGL's alone.
+ */
+export function auditPrograms(renderer: THREE.WebGLRenderer, mostMs: number): void {
+  if (WEBGPU) return;
+  const gl = renderer.getContext();
+  const until = performance.now() + mostMs;
+  for (const held of renderer.info.programs ?? []) {
+    if (audited.has(held)) continue;
+    if (performance.now() > until) return;
+    audited.add(held);
+    const program = (held as unknown as { program: WebGLProgram }).program;
+    if (!program || gl.getProgramParameter(program, gl.LINK_STATUS)) continue;
+    const log = (gl.getProgramInfoLog(program) ?? '').replace(/\s+/g, ' ').trim().slice(0, LOG_KEPT);
+    shaderErrors.push(`${held.name || 'a program'} (${ownerOf(renderer, held)}): ${log || 'no log'}`);
+  }
+}
+
 /** Take one extra reference on every program not seen yet, so it is never released. */
 export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => string): void {
   for (const p of renderer.info.programs ?? []) {

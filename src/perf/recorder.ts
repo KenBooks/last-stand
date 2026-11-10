@@ -8,6 +8,7 @@ import { isReadying, isWarming } from '../game/warm';
 import { hallOpen } from '../game/hall';
 import { framesUncapped } from '../core/frameLoop';
 import { autoTrying } from '../core/quality';
+import { sceneNote } from './sceneNote';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -64,6 +65,8 @@ export interface Snapshot {
   marks: MarkRow[];
   boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean };
   refreshHz: number;
+  /** where it was taken and what the hero was doing (`sceneNote.ts`) */
+  scene: string;
 }
 
 const t = new Float64Array(RING);
@@ -184,6 +187,7 @@ function takeSnapshot(): Snapshot {
     marks: since(marks).map(({ t: when, text }) => [at(when), text] as MarkRow),
     boot: { ...boot, steps: boot.steps.slice() },
     refreshHz: Math.round(1000 / refreshMs),
+    scene: sceneNote(),
   };
 }
 

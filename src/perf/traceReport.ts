@@ -113,6 +113,12 @@ export function traceReport(trace: Trace, code = ''): string[] {
   }
   const g = h.game, d = h.device;
   lines.push(`Mode ${g.mode} | biome ${g.biome} | hero ${g.hero} | ${g.coop ? 'co-op' : 'solo'} | wave ${g.wave} | enemies ${g.foes}`);
+  // (where the hero stood and what he did as the report was taken: perf/sceneNote.ts)
+  if (g.scene) lines.push(`Scene: ${g.scene}`);
+  // (programs this device's driver refused: they draw nothing there, and nothing else says so)
+  if (Number(g.shaderErrorCount) > 0) {
+    lines.push(`SHADERS FAILED TO LINK on this device (${g.shaderErrorCount}):`, ...String(g.shaderErrors).split(' || ').map((l) => '  ' + l));
+  }
   lines.push(`GPU ${d.gpu} | CPU cores ${d.cores} | memory ${d.memoryGb || '?'} GB | JS bench ${d.jsBenchMs} ms | screen ${d.screen} | window ${d.window} @${d.dpr}${d.touch ? ' | touch' : ''}${d.installed ? ' | installed' : ''}`);
   lines.push(`UA ${d.ua}`);
 
