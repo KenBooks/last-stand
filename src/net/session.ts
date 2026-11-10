@@ -17,6 +17,7 @@ import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
+import { portraitOf, receivePortrait } from './portraits';
 import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
 import { colourOf, freeColour, ownColour, savedColour, setRoomColour } from './heroColour';
 import type { HeroColourId } from '../data/heroColours';
@@ -25,7 +26,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 23;
+const PROTOCOL = 24;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -34,7 +35,7 @@ const ASKED_MOST = 64;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /** A player's class and gear, which is all another game needs to show them. */
-export interface Look { cls: string; eq: Profile['equipped'] }
+export interface Look { cls: string; eq: Profile['equipped']; av?: string | null }
 
 export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
 
@@ -114,7 +115,7 @@ export function invitedRoom(): string | null {
   return c && /^[A-Z0-9]{4,8}$/i.test(c) ? c.toUpperCase() : null;
 }
 
-export const myLook = (): Look => ({ cls: G.profile.classId, eq: G.profile.equipped });
+export const myLook = (): Look => ({ cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player) });
 
 /** Takes the local player's name tag for a room, kept for next time; false (the session failed, saying why) if it
  *  can't be used. */
@@ -388,6 +389,7 @@ function onLook(from: string, look: Look): void {
   // a new class is a new character; new gear re-dresses the one there
   if (peer.player && peer.player.cls.id === look.cls) {
     peer.player.recomputeStats(look.eq);
+    receivePortrait(peer.player, look.av ?? null);
   } else {
     const at = peer.player?.pos.clone(), facing = peer.player?.facing ?? Math.PI;
     dropPlayer(peer);
@@ -399,13 +401,17 @@ function onLook(from: string, look: Look): void {
 
 /** A player's own state: its clock (ms), where it is, the way it goes and faces, its aim, whether it's in the run and
  *  holding the revive key, its energy's share and its life. */
-interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number }
+interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number; av?: string | null }
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
 
 function onState(from: string, m: StateMsg): void {
   const peer = session.peers.get(from);
   if (!peer?.player) return;
+  if (receivePortrait(peer.player, m.av)) {
+    if (peer.look) peer.look.av = portraitOf(peer.player);
+    hooks.changed();
+  }
   peer.clock.heard(m.t);
   peer.track.add(m.t, { x: m.x, z: m.z, vx: m.vx, vz: m.vz, f: m.f }, m);
   const inRun = m.run === 1;
@@ -504,6 +510,7 @@ function makePlayer(peer: Peer): void {
   const p = new Player(peer.look.cls, peer.look.eq, false);
   p.slot = peer.slot;
   p.tag = peer.tag;
+  receivePortrait(p, peer.look.av ?? null);
   p.setColour(peer.colour);
   peer.player = p;
   G.players.push(p);
@@ -607,7 +614,7 @@ export function updateSession(dt: number, reviving: boolean): void {
     const r2 = (v: number) => Math.round(v * 100) / 100;
     send('pl', {
       t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
-      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life),
+      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

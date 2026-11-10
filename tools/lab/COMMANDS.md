@@ -1081,3 +1081,5 @@ result reports (a canary the measure missed).
   `training --coop` uses two actual game pages over the existing 100 ms delayed lab link: a wave-1 guest follows the host’s wave-4 training selection, both reject damage/loot, repeat and leave, and neither save changes.
 
 - `guard --class warrior --canary`: raises a shield, attacks through real input, verifies the enhanced guard is absent through the swing and returns in the same update it ends, and checks release, cooldown/energy failures and isolation of other channels. Pictures guard/swing/return in third person and through the eyes. Uses two actual touch fingers to hold block and attack together, then release each independently. The canary prevents a shield channel from stopping and must be detected.
+
+- `portraits --canary`: audits real image resource entries before the co-op picker opens, opens its enabled male class choices plus None, selects and clears a picture, checks partner-picture rendering, and pictures the picker. JavaScript URL-manifest entries do not count as image downloads. The canary requests another class’s actual image and must catch it. Run with phone/tablet/desktop `--screen` sizes.

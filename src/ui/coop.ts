@@ -20,6 +20,7 @@ import { sfx } from '../core/audio';
 import { lookFacing } from '../core/renderer';
 import { reportLinks, bindReportLinks } from './netHud';
 import { bindColourPicker, colourPickerHtml } from './colourPicker';
+import { portraitPickerHtml, bindPortraitPicker, portraitHtml, syncPortrait } from './portraitPicker';
 import { heroColour } from '../data/heroColours';
 import type { Player } from '../entities/player';
 import { flyingFree, toggleFree, watchedPlayer, watchNext } from '../game/spectate';
@@ -163,6 +164,7 @@ export function renderCoop(): void {
         <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
       <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
       ${colourPickerHtml(false)}
+      ${portraitPickerHtml()}
       <div class="coop-choice${up ? '' : ' off'}">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
           <button class="btn primary" id="btn-coop-host"${server === 'up' ? '' : ' disabled'}>Open a room</button></div>
@@ -172,6 +174,7 @@ export function renderCoop(): void {
       ${reportLinks()}`;
     bindReportLinks(body);
     bindColourPicker(body, false);
+    bindPortraitPicker(body, renderCoop);
     $('#btn-coop-host', body).onclick = () => {
       if (server !== 'up') return;
       const tag = typedTag(body);
@@ -213,14 +216,15 @@ export function renderCoop(): void {
       <button class="btn" id="btn-coop-leave">Cancel</button>
       ${reportLinks()}`;
   } else {
-    const list = others.length
-      ? others.map((p) => `<li><span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}</li>`).join('')
-      : `<li class="coop-wait">Waiting for a friend to join…</li>`;
+    const list = [G.player, ...others].map((p) =>
+      `<li>${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}</li>`).join('')
+      + (others.length ? '' : '<li class="coop-wait">Waiting for a friend to join…</li>');
     body.innerHTML = `
       <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
       ${s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
       <ul class="coop-list">${list}</ul>
       ${colourPickerHtml(true)}
+      ${portraitPickerHtml()}
       <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
         After each wave everyone decides: bank and leave, or continue together.</p>
       <button class="btn danger" id="btn-coop-leave">Leave room</button>
@@ -231,6 +235,7 @@ export function renderCoop(): void {
       navigator.clipboard?.writeText(inviteLink()).then(() => { copy.textContent = 'Copied'; }, () => $<HTMLInputElement>('.coop-link input', body).select());
     };
   }
+  bindPortraitPicker(body, renderCoop);
   bindReportLinks(body);
   $('#btn-coop-leave', body).onclick = () => { sfx.click(); leaveRoom(); };
 }
@@ -297,7 +302,7 @@ export function nameTagLabels(): { player: Player; label: Label }[] {
 
 // --- in a run ------------------------------------------------------------------------------
 /** A partner's frame in the corner. */
-interface Tag { frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
+interface Tag { frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement; portrait: HTMLElement }
 const tags = new Map<Player, Tag>();
 /** the marker on a downed partner (over them, or at the screen's edge pointing the way to them), and in reach of
  *  them, the prompt to raise them */
@@ -533,10 +538,13 @@ function tagFor(p: Player): Tag {
   let t = tags.get(p);
   if (t) return t;
   const frame = document.createElement('div');
-  frame.className = 'pf';
-  frame.innerHTML = `<div class="pf-name">${esc(who(p))}</div><div class="pf-bar"><div class="pf-fill"></div></div><div class="pf-state"></div>`;
-  $('#party').appendChild(frame);
-  t = { frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame) };
+  frame.className = p.local ? 'pf self' : 'pf';
+  frame.setAttribute('aria-label', who(p));
+  frame.style.setProperty('--class-colour', p.cls.accent);
+  frame.innerHTML = `<span class="pf-portrait${p.slot === 0 ? ' host' : ''}"${p.slot === 0 ? ' role="img" aria-label="Host" title="Host"' : ''} hidden></span><div class="pf-content"><div class="pf-heading"><span class="pf-name">${esc(nameOf(p))}</span><span class="pf-class">${esc(p.cls.name)}</span></div><div class="pf-bar"><div class="pf-fill"></div></div><div class="pf-state"></div></div>`;
+  if (p.local) $('#party').prepend(frame);
+  else $('#party').appendChild(frame);
+  t = { frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame), portrait: $('.pf-portrait', frame) };
   tags.set(p, t);
   return t;
 }
@@ -545,12 +553,18 @@ function tagFor(p: Player): Tag {
 export function updateCoopHud(): void {
   // partners gone from the room take their nameplate and frame with them
   for (const [p, t] of tags) if (!G.players.includes(p)) { t.frame.remove(); tags.delete(p); }
-  if (!isCoop()) { hideRunBits(); return; }
+  if (!isCoop()) {
+    for (const tag of tags.values()) tag.frame.remove();
+    tags.clear();
+    hideRunBits();
+    return;
+  }
   // out of the run and watching: our bars, skills and spoils have nothing more to show
   $('#hud').classList.toggle('watching', !!G.player.out);
   const others = G.players.filter((p) => !p.local);
-  for (const p of others) {
+  for (const p of [G.player, ...others]) {
     const t = tagFor(p);
+    syncPortrait(t.portrait, p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
     const state = p.away ? 'In the lobby' : p.out === 'banked' ? (G.run?.training ? 'Left training' : 'Banked') : p.out === 'dead' ? 'Fallen'

@@ -380,3 +380,5 @@ lists Chrome's layers at each picture, and where the sides' differ.
 - A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.
 
 - `guard`: #399, attacks while blocking in third person and through the eyes, a damage control during the exposed swing, immediate return/release/failure cases, independent shield and attack touch fingers. `--canary` leaves a shield raised during a swing and must detect it.
+
+- `portraits`: optional portrait requests and the real co-op picker; no downloads before use, current class only, selection, peer picture rendering and clearing. `--canary` requests another class and must detect it.

@@ -677,6 +677,12 @@ export async function sound(_lab: Lab, command: SoundOptions): Promise<Report> {
   return soundRound(command);
 }
 
+/** Optional portrait requests, picker selection and clearing. */
+export async function portraits(lab: Lab, command: import('./portraits').PortraitOptions): Promise<Report> {
+  const { portraits: measure } = await import('./portraits');
+  return measure(lab, command);
+}
+
 /** Held shield interrupted by attacks: input, combat window, restoration, touch and both views. */
 export async function guard(lab: Lab, command: import('./guard').GuardOptions): Promise<Report> {
   const { guard: measure } = await import('./guard');

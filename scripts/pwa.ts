@@ -31,7 +31,7 @@ export function pwa(): Plugin {
       }
       const webgpuOnly = webgpuOnlyChunks(bundle);
       const files = [...new Set([...Object.keys(bundle), ...ICONS.map(([f]) => f), ...readdirSync(publicDir)])]
-        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && !webgpuOnly.has(f)).sort();
+        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && !webgpuOnly.has(f) && !f.startsWith('assets/portrait-')).sort();
       const html = bundle['index.html'];
       const version = createHash('sha256').update(files.join('\n')).update(html && 'source' in html ? html.source : '').digest('hex').slice(0, 12);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker(version, files) });
@@ -152,7 +152,14 @@ async function page(req) {
 // requests lacked; ignoreSearch: built files never vary), else the network
 async function file(req) {
   const hit = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
-  return hit || fetch(req);
+  if (hit) return hit;
+  const response = await fetch(req);
+  // Optional portraits stay out of install downloads, but remain available offline once requested.
+  if (response.ok && new URL(req.url).pathname.includes('/assets/portrait-')) {
+    const cache = await caches.open(CACHE);
+    await cache.put(req, response.clone());
+  }
+  return response;
 }
 
 // fonts: from the cache when there, refreshed from the network in the background

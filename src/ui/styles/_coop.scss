@@ -83,7 +83,10 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 #party { position: absolute; top: hud(14px); left: calc(#{hud(14px)} + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }
 body.touch #party { top: touch(104px); left: $touch-beside; scale: var(--touch, 1); }
 .pf { width: 200px; padding: 5px 8px 6px; background: rgba(8,8,12,.72); border: 1px solid rgba($ally, .4); border-radius: 3px; }
-.pf-name { font-family: var(--font-display); font-size: 13px; color: #cfe6ff; }
+.pf-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  font-family: var(--font-display); font-size: 13px; }
+.pf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cfe6ff; }
+.pf-class { flex: none; color: var(--class-colour); }
 .pf-bar { height: 8px; margin-top: 3px; background: rgba(0,0,0,.8); box-shadow: 0 0 0 1px rgba($frame, .35); }
 .pf-fill { height: 100%; background: linear-gradient(#ff5a4a, #8a0c10); transition: width .15s linear; }
 .pf-state { font-size: 12px; color: var(--ink-dim); min-height: 0; }
@@ -133,3 +136,41 @@ body.touch .sp-keys { display: none; }
 .sm-note { color: $ally-text; }
 .sm-note:empty { display: none; }
 #hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }
+
+// Portraits are optional downloads, displayed only in party lists and the explicit picker.
+.party-portrait { display: block; width: 36px; height: 36px; flex: none; object-fit: cover;
+  border: 1px solid rgba($frame, .65); border-radius: 3px; }
+.pf { display: flex; align-items: center; gap: 7px; }
+.pf-content { min-width: 0; flex: 1; }
+.pf-portrait { position: relative; flex: none; }
+.pf-portrait.host::after { content: '★'; position: absolute; left: 1px; bottom: 0;
+  font-size: 14px; line-height: 1; color: var(--highlight); text-shadow: $outline; pointer-events: none; }
+.coop-list li { display: flex; align-items: center; gap: 6px; }
+.coop-list .coop-dot { flex: none; margin-right: 0; }
+.portrait-picker { width: 100%; max-width: 360px; }
+.portrait-picker summary { display: flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: $cursor-hand; font-size: 15px; color: var(--accent); padding: 5px;
+  border: 1px solid rgba($frame, .35); border-radius: 3px; }
+.portrait-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+.portrait-option { padding: 0; min-height: 40px; aspect-ratio: 1; overflow: hidden; cursor: $cursor-hand;
+  border: 1px solid rgba($frame, .5); border-radius: 3px; background: $panel-raised; color: var(--ink); }
+.portrait-option img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portrait-option[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+#coop .modal-box:has(.portrait-picker[open]) { overflow-y: auto; }
+
+.portrait-picker summary::after { content: ""; width: 6px; height: 6px; margin-left: 4px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
+.portrait-picker[open] summary::after { transform: rotate(225deg); }
+
+.pf.self { border: 0; border-left: 3px solid var(--highlight); }
+@media (max-height: 520px) {
+  body.touch #party .pf { padding: 4px 6px; }
+  body.touch #party .party-portrait { width: 28px; height: 28px; }
+  body.touch #party .pf-heading { font-size: 12px; line-height: 1.1; }
+  body.touch #party .pf-bar { height: 6px; margin-top: 2px; }
+  body.touch #party .pf-state { font-size: 11px; }
+}
+
+// Five pictures form one row; None is a separate control and never takes a portrait cell.
+.portrait-clear { display: flex; justify-content: flex-end; margin-top: 6px; }
+.portrait-none { padding: 4px 10px; min-height: 30px; font-size: 14px; }
+body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
