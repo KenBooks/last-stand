@@ -636,6 +636,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `perf <skills>`: skills cast in turn, every frame timed as the performance report times it, or played as a slow
   device: in full in [`commands/perf.md`](commands/perf.md).
 - `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
+  `--limits` holds each program to the least a phone's GPU must give (`page/programLimits.ts`): its uniform vectors
+  by the stage that reads them, its attributes, its samplers, against WebGL 2's minimums (224 fragment and 256 vertex
+  uniform vectors, 16 attributes, 16 samplers). A desktop gives four times a phone's, so a program too big for a
+  phone compiles, links and draws here and draws nothing there: the heroes' palette materials read 272 fragment
+  vectors, an S25 Edge's driver refused them at its 256 and the hero was his hair and his shadow (#470, reverted;
+  trace X6EZ-FS5X has the driver's word). Main's largest lit programs are at 184. Run it for any change to a
+  material or a shader; `--canary` judges a program one vector over.
   (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
   watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
   (a draw's program is linked as it's drawn, the page held up meanwhile); each kind (the material's type and its

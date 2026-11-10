@@ -15,11 +15,14 @@ import { ENEMIES } from '../../../src/data/enemies';
 import { sceneTarget } from '../../../src/core/renderer';
 import { markLoaded, programsCompiledInGame, programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
 import { apartText, fieldsOf, kindOf, kindsApart, type KindApart } from './programKeys';
+import { LEAST_LIMITS, limitsReport } from './programLimits';
 import { cacheCanary, costs, lightsText, longestText, partsText, summedText, type ProgramCost } from './programCost';
 
 export interface ProgramsOptions {
   canary: boolean;
   cost: boolean;
+  /** each program's uniforms, attributes and samplers held to a phone's least (`programLimits.ts`) */
+  limits: boolean;
 }
 
 /** the step a program made after the boot is listed under (`watchPrograms`'s) */
@@ -238,6 +241,11 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
     lines.push(report.text);
     problems.push(...report.problems);
     Object.assign(counts, report.counts);
+  }
+  if (options.limits) {
+    const report = limitsReport(LEAST_LIMITS, options.canary);
+    lines.push(report.text);
+    problems.push(...report.problems);
   }
   if (options.canary) {
     for (const report of [await lateCanary(lab), await canary(lab)]) {

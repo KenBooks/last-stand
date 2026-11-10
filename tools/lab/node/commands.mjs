@@ -1254,7 +1254,8 @@ export const COMMANDS = {
 
   programs: {
     each(side, options) {
-      return side.command('programs', { canary: Boolean(options.canary), cost: Boolean(options.cost) });
+      const asked = { canary: Boolean(options.canary), cost: Boolean(options.cost), limits: Boolean(options.limits) };
+      return side.command('programs', asked);
     },
     textOf: asText,
     problemsOf: problemsIn,

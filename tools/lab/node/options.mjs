@@ -1294,6 +1294,12 @@ export const COMMANDS = {
         help: 'warm a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no '
           + 'camera sees (it must be listed never drawn)',
       },
+      limits: {
+        kind: 'switch',
+        help: 'each program held to the least a phone gives: its uniform vectors by the stage that reads them, its '
+          + 'attributes, its samplers (a program too big for a phone compiles and draws on a desktop, and draws '
+          + 'nothing there)',
+      },
       cost: {
         kind: 'switch',
         help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
