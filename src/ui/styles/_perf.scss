@@ -2,7 +2,7 @@
 @use 'theme' as *;
 
 /* ---------- performance overlay (optional, pause menu) ---------- */
-// (clear of the lobby's panels, `--clear-x` and `--clear-y` from `clearOverlays` in `ui/menus.ts`, moved by the
+// (clear of the lobby's panels and the run's party frames, `--clear-x` and `--clear-y` from `clearOverlays` in `ui/menus.ts`, moved by the
 // compositor on a layer of their own: placed by `left` and `top`, every move laid them out and painted them again;
 // as tall as the screen at most, the battle log giving up its height first; on touch under the touch HUD's corner:
 // the pause and scores buttons, the bars and the buffs beside them, `_touch.scss`)

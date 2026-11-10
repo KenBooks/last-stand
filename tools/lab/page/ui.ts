@@ -50,6 +50,7 @@ import {
 } from './uiPause';
 import { closePerfMini, openPerfMini, PERF_SIZE_CANARY, perfMiniChecked } from './uiPerfSize';
 import { closePerfGraph, openPerfGraph, PERF_GRAPH_CANARY, perfGraphChecked } from './uiPerfGraph';
+import { closePerfParty, openPerfParty, PERF_PARTY_CANARY, perfPartyChecked } from './uiPerfParty';
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
@@ -68,7 +69,7 @@ export type UiState =
   | 'behindProps'
   | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
-  | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph'
+  | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph' | 'perfParty'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pausePerformance' | 'profiling' | 'pauseVolume'
   | 'pauseTabKept'
   | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
@@ -84,7 +85,7 @@ export interface UiOptions {
 
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
-  'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
+  'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
   'pausePerformance', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary',
   'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
@@ -937,6 +938,7 @@ const STEPS: Record<UiState, Steps> = {
     check: (_canary, lab) => perfMiniChecked(lab),
   },
   perfGraph: { open: openPerfGraph, close: closePerfGraph, check: (canary, lab) => perfGraphChecked(lab, canary) },
+  perfParty: { open: (lab) => openPerfParty(lab, canaryAsked), close: closePerfParty, check: perfPartyChecked },
   decision: { open: showDecision, close: closeDecision, check: decisionShown },
   perfAskBreak: { open: openPerfAskBreak, close: closePerfAsk, check: (canary) => perfAskShown('perfAskBreak', canary) },
   pause: { open: () => openPause('controls', canaryAsked), close: closePause, check: () => pauseShown('controls') },
@@ -1031,6 +1033,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(PERF_SIZE_CANARY.name));
     lines.push(`  canary: ${PERF_SIZE_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${PERF_SIZE_CANARY.what} went unseen`);
+  }
+  if (state === 'perfParty') {
+    const caught = found.problems.some((problem) => problem.includes(PERF_PARTY_CANARY.name));
+    lines.push(`  canary: ${PERF_PARTY_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${PERF_PARTY_CANARY.what} went unseen`);
   }
   if (state === 'perfGraph') {
     const caught = found.problems.some((problem) => problem.includes(PERF_GRAPH_CANARY.name));
