@@ -1,18 +1,17 @@
 // The scene's environment on WebGPU worked out where it's looked up, in place of three's prefiltered map: the map is
 // made from a sky gradient and one soft panel (`envScene` in world/props.ts), and both are sums a pixel can do. From
 // the owner's phone (Adreno 830): the environment's two lookups a lit pixel, its reflection and its light, took 42 of
-// a 74 ms frame at Low (trace 5BKG-8B3K), where this PC at the phone's pixels reads 0.2. `?env=sky` (the lab:
-// `--tune webgpuEnv.sky=1`) puts it in place of the map; three's own map otherwise.
+// a 74 ms frame at Low (trace 5BKG-8B3K), where this PC at the phone's pixels reads 0.2, and WebGL's whole lit
+// shading 0.8 there (EZJ6-YGPE). WebGPU's environment from now on; three's map in the lab with `--tune
+// webgpuEnv.sky=0`, and in Profile this spot's part against it (`perf/shadingParts.ts`).
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import { gpu, tsl } from './webgpu';
 import { tunable } from './tuning';
 import type { EnvColours } from '../world/props';
 
-/** whether the sky is worked out (1) or three's map looked up (0): `?env=sky`, or the lab's `--tune` */
-export const SKY_ENVIRONMENT = tunable('webgpuEnv', {
-  sky: new URLSearchParams(location.search).get('env') === 'sky' ? 1 : 0,
-});
+/** whether the sky is worked out (1) or three's map looked up (0): the lab's `--tune` */
+export const SKY_ENVIRONMENT = tunable('webgpuEnv', { sky: 1 });
 
 /** the gradient's floor: `envScene`'s sky shader below the horizon */
 const DARK = [0.02, 0.02, 0.03] as const;

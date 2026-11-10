@@ -1584,7 +1584,7 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */
 let environment: { value: THREE.Texture } | null = null;
-/** the sky worked out in its place, its colours set per biome (`skyEnvironment.ts`, `?env=sky`) */
+/** the sky worked out in its place, its colours set per biome (`skyEnvironment.ts`) */
 let sky: SkyEnvironment | null = null;
 
 /**
@@ -1595,15 +1595,18 @@ let sky: SkyEnvironment | null = null;
 export function oneEnvironment(scene: THREE.Scene, colours: EnvColours): void {
   const map = scene.environment;
   if (!WEBGPU || !map) return;
-  if (SKY_ENVIRONMENT.sky) {
-    sky ??= skyEnvironment();
-    sky.set(colours);
-    (scene as unknown as { environmentNode: unknown }).environmentNode = sky.node;
-    return;
-  }
+  sky ??= skyEnvironment();
+  sky.set(colours);
   environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
   environment.value = map;
-  (scene as unknown as { environmentNode: unknown }).environmentNode = environment;
+  environmentWorkedOut(scene, SKY_ENVIRONMENT.sky === 1);
+}
+
+/** The scene's environment the sky worked out (`skyEnvironment.ts`), or three's map looked up: Profile this spot's
+ *  part times one against the other (`perf/shadingParts.ts`). */
+export function environmentWorkedOut(scene: THREE.Scene, workedOut: boolean): void {
+  const node = workedOut ? sky?.node : environment;
+  if (node) (scene as unknown as { environmentNode: unknown }).environmentNode = node;
 }
 
 /** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
