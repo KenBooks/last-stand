@@ -14,7 +14,7 @@ import { RUNNING } from '../core/rendererChoice';
 import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 import { shadingParts } from './shadingParts';
-import { passesSinceLastRead, timesPasses } from './webgpuPasses';
+import { nodeFrameNow, passesOf, timesPasses } from './webgpuPasses';
 import { holdWebGpuTimes } from '../ui/perfHud';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
@@ -155,7 +155,7 @@ type TimedDraw = () => Promise<number>;
 type Draw = () => void | Promise<void>;
 
 /** `draw` as a frame drawn in the browser's next frame, waited out on the GPU, and timed by `clock` (ms), or by the
- * GPU's timestamps where `gpuTimed` (its passes summed: the page's clock round a wait for WebGPU's queue read the
+ * GPU's timestamps where `gpuTimed` (the passes of the node frames it drew, summed: the page's clock round a wait for WebGPU's queue read the
  * phone's frame 74 ms where the browser showed it at 60 a second, trace 4ADF-XJBB); stopped when `cancelled`, and
  * `counted` after each. */
 function timing(draw: Draw, options: ProfileOptions, counted: () => void, gpuTimed: boolean): TimedDraw {
@@ -165,9 +165,10 @@ function timing(draw: Draw, options: ProfileOptions, counted: () => void, gpuTim
     await nextFrame();
     if (options.cancelled?.()) throw new ProfileCancelled();
     const start = clock();
+    const before = nodeFrameNow(G.renderer);
     await draw();
     await waitForGpu();
-    const took = gpuTimed ? await passesSinceLastRead(G.renderer) : clock() - start;
+    const took = gpuTimed ? await passesOf(G.renderer, before, nodeFrameNow(G.renderer)) : clock() - start;
     counted();
     return took;
   };
@@ -258,7 +259,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   // (the overlay's reads of the timestamps held: a read takes every pass in three's pool; the passes before let go)
   if (gpuTimed) {
     holdWebGpuTimes(true);
-    await passesSinceLastRead(G.renderer);
+    await passesOf(G.renderer, 0, 0);
   }
   try {
     const costs: PartCost[] = [];

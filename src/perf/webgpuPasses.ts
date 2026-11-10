@@ -38,11 +38,13 @@ export function nameWebGpuPasses(renderer: THREE.WebGLRenderer): void {
   };
 }
 
+/** A timestamp id's node frame (`...:f<frame>`), or -1. */
+const frameOf = (uid: string): number => Number(/:f(\d+)$/.exec(uid)?.[1] ?? -1);
+
 /** The last frame's time by part (ms), from the timestamps three's last read resolved, or null if none. */
 export function lastFrameParts(renderer: THREE.WebGLRenderer): Record<string, number> | null {
   const stamps = (renderer as unknown as Timed).backend.timestampQueryPool.render?.timestamps;
   if (!stamps?.size) return null;
-  const frameOf = (uid: string): number => Number(/:f(\d+)$/.exec(uid)?.[1] ?? -1);
   const last = Math.max(...[...stamps.keys()].map(frameOf));
   if (last < 0) return null;
   const parts: Record<string, number> = {};
@@ -54,25 +56,48 @@ export function lastFrameParts(renderer: THREE.WebGLRenderer): Record<string, nu
   return parts;
 }
 
-/** what of three's WebGPU renderer resolves its timestamps */
+/** what of three's WebGPU renderer resolves its timestamps: its frame, and its pool's queries not yet read */
 interface Resolving {
+  info: { frame: number };
   hasFeature(name: string): boolean;
   resolveTimestampsAsync(type: 'render' | 'compute'): Promise<number | undefined>;
-  backend: { timestampQueryPool: { render: { timestamps: Map<string, number> } | null } };
+  backend: { timestampQueryPool: { render: { timestamps: Map<string, number>; currentQueryIndex: number } | null } };
 }
+
+/** the reads a frame's passes are waited for through, at most, and the wait between them (ms) */
+const MOST_READS = 20;
+const READ_AGAIN_MS = 4;
+
+/** The node frame three is on: a draw's frames are those after it, up to the one it's on after (`passesOf`). */
+export const nodeFrameNow = (renderer: THREE.WebGLRenderer): number => (renderer as unknown as Resolving).info.frame;
 
 /** Whether this renderer's passes are timed by the GPU's own timestamps (WebGPU's `timestamp-query`). */
 export function timesPasses(renderer: THREE.WebGLRenderer): boolean {
   return (renderer as unknown as Resolving).hasFeature?.('timestamp-query') === true;
 }
 
-/** Every render pass drawn since the last read, timed by the GPU's timestamps and summed (ms): the profiler's frame
- *  on WebGPU (its own reads held meanwhile, `holdWebGpuTimes`), which a wait for the queue's work timed badly on a
- *  phone (its shadow maps' part read -38 ms, trace 4ADF-XJBB). */
-export async function passesSinceLastRead(renderer: THREE.WebGLRenderer): Promise<number> {
+/**
+ * The render passes of the node frames after `from` up to `to`, timed by the GPU's timestamps and summed (ms): the
+ * profiler's frame on WebGPU (the overlay's reads held meanwhile, `holdWebGpuTimes`), which a wait for the queue's
+ * work timed badly on a phone (its shadow maps' part read -38 ms, trace 4ADF-XJBB). Read again until three has read
+ * every query: a read three skips (its result buffer still mapped) leaves its queries to the next, and each read
+ * summed whole, the phone's frames read 1 to 4 frames' time in steps of about 12 ms (trace 430N-GTXH). Each pass is
+ * counted once, by its id.
+ */
+export async function passesOf(renderer: THREE.WebGLRenderer, from: number, to: number): Promise<number> {
   const resolving = renderer as unknown as Resolving;
-  await resolving.resolveTimestampsAsync('render');
+  const pool = resolving.backend.timestampQueryPool.render;
+  const passes = new Map<string, number>();
+  for (let read = 0; read < MOST_READS && pool; read++) {
+    await resolving.resolveTimestampsAsync('render');
+    for (const [uid, ms] of pool.timestamps) {
+      const frame = frameOf(uid);
+      if (frame > from && frame <= to) passes.set(uid, ms);
+    }
+    if (pool.currentQueryIndex === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, READ_AGAIN_MS));
+  }
   let ms = 0;
-  for (const took of resolving.backend.timestampQueryPool.render?.timestamps.values() ?? []) ms += took;
+  for (const took of passes.values()) ms += took;
   return ms;
 }
