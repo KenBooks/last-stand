@@ -3,7 +3,9 @@
 // skill, drawn to full for a drawn shot, held through for a channel) over an aim ahead, and every frame from the press
 // until the effect is over drawn as the game draws it and read back from the canvas (page/screenCells.ts). Each
 // frame's light is held to the budget taken from the owner's screenshots, the flashes in it are counted as WCAG
-// counts them (page/flashes.ts), and the shaders compiled after loading are counted: none may be.
+// counts them (page/flashes.ts), and the shaders compiled after loading are counted: none may be. A cell that
+// flashes is then shared out among what's in the scene (page/flashSources.ts): the cast is played again, and at
+// each counted change the frame is drawn with each thing taken out in turn.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
@@ -20,6 +22,7 @@ import { cellName, FrameReader, type FrameCells } from './screenCells';
 import { blinksIn, describeBlinks } from './blinks';
 import { whatIsAt } from './whatIsAt';
 import { worstFlashing, type FlashCount } from './flashes';
+import { changeLine, changeSpans, litNow, mostOf, type Lit } from './flashSources';
 
 export interface CastOptions {
   /** the skill: its key (`3`), its behaviour (`maelstrom`) or its name */
@@ -71,6 +74,12 @@ const CELL_MOST = 150;
 const BRIGHT_MOST = 0.05;
 /** flashes in any one second of a cell that are a hazard */
 const FLASHES_MOST = 3;
+/** a cell with this many flashes in a second has them shared out among what's in the scene (a replay) */
+const SOURCES_FROM = 2;
+/** the replay's light may differ from the cast's by this much (a share of white) before it's said */
+const REPLAY_OFF = 0.03;
+/** the canary's strobe is the exposure's: no thing in the scene may be given more of a change than this */
+const CANARY_SHARE = 0.5;
 /** with --canary: the strobe's frames on and off, and how much it raises the exposure */
 const STROBE_SPAN = 6;
 const STROBE_GAIN = 6;
@@ -269,8 +278,15 @@ function strobed(frame: number, exposure: number): number {
   return Math.floor(frame / STROBE_SPAN) % 2 ? exposure * STROBE_GAIN : exposure;
 }
 
-/** `lab cast`, one biome and view: the skill cast, its frames measured; a problem for each check failed. */
-export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
+/** A cast's scene: the skill and its key, and the aim it's cast over. */
+interface CastScene {
+  key: SkillKey;
+  def: SkillDef;
+  aim: THREE.Vector3;
+}
+
+/** The cast's scene set up afresh: the hero stood in the biome and view, the skill his to cast, the foes coming. */
+async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
@@ -285,6 +301,62 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
     .multiplyScalar(AIM_AHEAD));
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
+  return { key, def, aim };
+}
+
+/** What lit a flashing cell's counted changes, and the most of a change any one thing was given. */
+interface Sources {
+  lines: string[];
+  mostShare: number;
+}
+
+/**
+ * What lit the changes counted in `flashing`'s cell: the cast played again from its set-up, and at each change's
+ * two frames the frame drawn with each thing in the scene taken out in turn (page/flashSources.ts). The replay's
+ * light is held to the cast's: where the two differ, what it names lit another frame.
+ */
+async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[], flashing: FlashCount,
+  frameTime: number): Promise<Sources> {
+  const lights = frames.map((frame) => frame.cellLights[flashing.cell]);
+  const spans = changeSpans(flashing.changes, lights);
+  const wanted = new Set(spans.flatMap((span) => [span.from, span.to]));
+  const last = Math.max(...wanted);
+  const { key, def, aim } = await castScene(lab, options);
+  const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
+  const exposure = G.renderer.toneMappingExposure;
+  const drawing = lab.drawing;
+  const lit = new Map<number, Lit>();
+  lab.drawing = true;
+  try {
+    await lab.step(1, () => ({ aim }));
+    for (let frame = 0; frame <= last; frame++) {
+      if (options.canary) G.renderer.toneMappingExposure = strobed(frame, exposure);
+      await lab.step(1, () => pressing(key, aim, frame < holdFrames));
+      if (wanted.has(frame)) lit.set(frame, litNow(lab, flashing.cell));
+    }
+  } finally {
+    G.renderer.toneMappingExposure = exposure;
+    lab.drawing = drawing;
+  }
+  const time = (frame: number): string => seconds(frame * frameTime);
+  const lines = ['    what lit them (the cast played again, each thing in the scene taken out of the frame in turn):'];
+  let mostShare = 0;
+  let off = 0;
+  for (const span of spans) {
+    const from = lit.get(span.from)!;
+    const to = lit.get(span.to)!;
+    lines.push(changeLine(span, from, to, time));
+    mostShare = Math.max(mostShare, mostOf(from, to)?.share ?? 0);
+    if (Math.abs(to.whole - lights[span.to]) > REPLAY_OFF) off++;
+  }
+  if (off) lines.push(`      (the replay's light was not the cast's at ${off} of ${spans.length} changes)`);
+  return { lines, mostShare };
+}
+
+/** `lab cast`, one biome and view: the skill cast, its frames measured; a problem for each check failed. */
+export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
+  const { key, def, aim } = await castScene(lab, options);
+  const hero = G.player;
 
   const frameTime = window.__labClock.frame / 1000;
   const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
@@ -315,12 +387,18 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
         moments.push(await lab.screen(label));
       }
     }
-    const [before, ...frames] = reader.frames();
-    return judged(def, options, { before, frames, frameTime, cast, moments, met, compiledBefore, lateBefore });
   } finally {
     G.renderer.toneMappingExposure = exposure;
     lab.drawing = drawing;
   }
+  const [before, ...frames] = reader.frames();
+  const compiled = programsCompiledInGame() - compiledBefore;
+  const late = lateCompiles.slice(lateBefore);
+  const flashing = worstFlashing(frames.map((frame) => frame.cellLights), frameTime);
+  const sources = flashing.most >= SOURCES_FROM
+    ? await flashSources(lab, options, frames, flashing, frameTime)
+    : null;
+  return judged(def, options, { before, frames, frameTime, cast, moments, met, compiled, late, flashing, sources });
 }
 
 /** the frame's mean is listed every this long through the cast (s) */
@@ -379,15 +457,18 @@ interface Seen {
   moments: Pictured[];
   /** what `--what` found */
   met: string[];
-  compiledBefore: number;
-  lateBefore: number;
+  /** the shaders compiled through the cast, and the late compiles' lines */
+  compiled: number;
+  late: string[];
+  flashing: FlashCount;
+  /** what lit the flashing cell's changes, where it flashed enough to ask */
+  sources: Sources | null;
 }
 
 /** The cast's frames as lines, and a problem for each check they failed (with a canary, for one it missed). */
 function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
   const name = `${options.biome} ${options.view}: ${def.name}`;
-  const flashing = worstFlashing(seen.frames.map((frame) => frame.cellLights), seen.frameTime);
-  const compiled = programsCompiledInGame() - seen.compiledBefore;
+  const { flashing, compiled } = seen;
   const lines = [
     `${name}: ${seen.frames.length} frames from the press${seen.cast ? '' : ', nothing cast'}`,
     `  before it: ${lightLine(seen.before)}`,
@@ -396,11 +477,12 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
     `  flashes: ${flashing.most} in a second at the most`
       + (flashing.most ? ` (${cellName(flashing.cell)}, from ${seconds(flashing.at)})` : ''),
     ...(flashing.most ? [flashTrace(seen.frames, flashing, seen.frameTime)] : []),
+    ...(seen.sources?.lines ?? []),
     `  shaders compiled after loading: ${compiled}`,
     ...describeBlinks(blinksIn(seen.frames.map((frame) => frame.fineMeans)), seen.frameTime),
     ...seen.met,
   ];
-  for (const late of lateCompiles.slice(seen.lateBefore)) lines.push(`    ${late}`);
+  for (const late of seen.late) lines.push(`    ${late}`);
   const budget = budgetJudged(seen.frames, seen.frameTime, seen.before);
   lines.push(...budget.notes);
   const found: string[] = [];
@@ -413,5 +495,9 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
   const caught = flashing.most >= FLASHES_MOST;
   lines.push(`  canary, a strobe of the exposure: ${caught ? 'caught' : 'missed'}`);
   const missed = caught ? [] : [`${name}: the canary's strobe went unseen`];
+  // (the strobe is the exposure's: shared out among the scene's things, it must be left as the rest)
+  const blamed = (seen.sources?.mostShare ?? 0) > CANARY_SHARE;
+  if (caught) lines.push(`  canary, the strobe given to no thing in the scene: ${blamed ? 'missed' : 'caught'}`);
+  if (blamed) missed.push(`${name}: the canary's strobe was given to a thing in the scene`);
   return { text: lines.join('\n'), problems: missed, moments: seen.moments };
 }
