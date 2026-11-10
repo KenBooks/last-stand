@@ -158,13 +158,22 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         // faster, a pattern crossing the view flashes)
         float wind = fract(vUv.x * 2.0 + along * 0.4 - uTime * 0.5);
         float ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
+        // three finer threads winding the other way, crossing the ribbons, and rings of light racing away down
+        // it (a ring passes a point 1.4 times a second, a thread about once): seen along its length, as through
+        // the eyes, what winds round it and runs down it is what shows (from play: "beam is still a little
+        // boring in 1st person")
+        float wind2 = fract(-vUv.x * 3.0 + along * 0.55 - uTime * 0.35);
+        float thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
+        float rings = pow(0.5 + 0.5 * sin(along * 1.6 - uTime * 9.0), 10.0);
         // not far over bloom's threshold: seen low along its length (the lobby) the beam covers much of the
         // screen, and a hotter one blooms into a green haze over the ground round it. Its core keeps its colour:
         // 0.7 of the way to white at 1.6, it was a white bar (from play: "make it less bright, not washed color")
         // (the core white at its very middle alone, green round it; the shell mostly its ribbons, not a fog)
         vec3 hot = mix(uColor, vec3(1.0), 0.75 * pow(vFres, 6.0)) * 1.5;
-        vec3 c = uCore > 0.5 ? hot : uColor * (0.2 + flow * 0.7 + ribbon * 1.5);
-        float a = body * ends * (uCore > 0.5 ? 1.0 : (0.18 + flow * 0.4 + ribbon * 0.7)) * uFade;
+        vec3 c = uCore > 0.5 ? hot * (1.0 + rings * 0.35)
+          : uColor * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4);
+        float shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
+        float a = body * ends * (uCore > 0.5 ? 1.0 : shell) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
   })), ({ wgslFn, uv, varying, normalView, positionViewDirection, modelViewMatrix, vec4 }, u) => {
@@ -189,9 +198,14 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         let body = pow(fres, select(1.2, 2.5, core > 0.5));
         let wind = fract(uv.x * 2.0 + along * 0.4 - time * 0.5);
         let ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
+        let wind2 = fract(-uv.x * 3.0 + along * 0.55 - time * 0.35);
+        let thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
+        let rings = pow(0.5 + 0.5 * sin(along * 1.6 - time * 9.0), 10.0);
         let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.5;
-        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5), hot, core > 0.5);
-        let a = body * ends * select(0.18 + flow * 0.4 + ribbon * 0.7, 1.0, core > 0.5) * fade;
+        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4),
+          hot * (1.0 + rings * 0.35), core > 0.5);
+        let shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
+        let a = body * ends * select(shell, 1.0, core > 0.5) * fade;
         return vec4f(c * a, a);
       }`, [noise2])({
         uv: uv(), fres: varying(fres({ n: normalView, v: positionViewDirection, axis })), time: u.uTime,
