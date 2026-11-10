@@ -163,7 +163,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   1.97 times (2 frames a side read 1.57 once). Its result is sent as the tab's Send sends it, to a traces service of
   the lab's own, and read back as `lab trace` reports it: its Profile section must hold the lines as sent. With
   `--renderer webgpu` or `meshlets` it profiles WebGPU, which must name itself in the first line; there the pipelines
-  made count (over 24 fails: the plain colour's 12 to 16), and the forest's frame read 6.8 to 9 ms, the canary 1.99
+  made count (over 24 fails: the plain colour's 12 to 16; the lit shading's own parts, timed on WebGPU alone, make
+  theirs and are left out of it: 94 in the crypt at the phone's pixels, the profile 24 s), and the forest's frame
+  read 6.8 to 9 ms, the canary 1.99
   to 2.1 times; on `meshlets` half the scene's pixels isn't timed, a line saying why. It keeps no copy of the
   parts: it runs the game's, so it can't be run `--ab` against a commit from before it.
 - `scenecost`: what each kind of work in the scene pass takes of the GPU (`page/sceneCost.ts`), at a level's
