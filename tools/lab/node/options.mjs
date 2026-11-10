@@ -2105,6 +2105,20 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  cloud: {
+    help: 'cloud saves end to end: two devices, each with a passkey of its own, on the save slots screen\'s cloud bar '
+      + 'and dialogs against a saves service of the lab\'s own (server/saves): an account made and slot 2 chosen as the '
+      + 'cloud save, a second device signed in by a code with every slot full (the slot lost named before anything '
+      + 'changes), a hero changed on both while one was offline (asked, the cloud\'s kept, the other copy lost or '
+      + 'moved to a free slot as the dialog said), different heroes changed on each (no question, both kept); each '
+      + 'device\'s slots and the service\'s save read back, and the bar and dialogs pictured within the window at '
+      + 'desktops\', a tablet\'s and a phone\'s sizes (out/cloud)',
+    options: {
+      pictures: { kind: 'switch', help: 'picture the screen at each moment (=false: the checks alone)' },
+      canary: { kind: 'switch', help: 'the mage\'s stash item dropped from the second device\'s download: caught' },
+      ...COMMON_OPTIONS,
+    },
+  },
   recorder: {
     help: 'what the always-on performance recorder (src/perf) costs a frame: a fight played with the foes coming '
       + 'and every frame drawn, each of its calls timed by the browser\'s clock against a budget of 0.05 ms a '

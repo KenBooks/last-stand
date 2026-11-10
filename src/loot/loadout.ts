@@ -4,7 +4,8 @@
 // one loadout per weapon style, so each style comes back as the player left it.
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { CLASS_IDS } from '../data/classes/index';
-import { saveKey } from './saveSlots';
+import { saveKey, saveSlot } from './saveSlots';
+import { cloudTouched } from './cloud';
 import type { ClassDef, Gear, SkillDef, SkillKey, WeaponStyle } from '../types';
 
 export type { WeaponStyle };
@@ -86,6 +87,7 @@ export function loadLoadout(cls: ClassDef, gear: Gear, slot?: number): Loadout {
 
 export function saveLoadout(cls: ClassDef, gear: Gear, loadout: Loadout): void {
   writeCookie(COOKIE(cls.id, weaponStyle(cls, gear)), JSON.stringify(loadout));
+  if (saveSlot() === 1) cloudTouched();
 }
 
 /** Erase a save slot's loadouts (every class and weapon style). */

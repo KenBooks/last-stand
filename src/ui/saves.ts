@@ -1,7 +1,8 @@
 // The save slots screen (the lobby's "Save slot N"): the three saves side by side, each showing what it
 // holds (every hero's waves, gear, skills, attributes, stash and records), to play one or to delete one
 // (typing DELETE confirms). An empty slot is a fresh start, to play from the beginning with a friend,
-// say, while the other slots keep their heroes.
+// say, while the other slots keep their heroes. Slot 1 is the cloud save once signed in (cloudSaves.ts: the bar
+// under the title and its dialogs); slots rearranged by it move into their new places before the player's eyes.
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BIOMES, BIOME_IDS } from '../data/biomes';
@@ -17,6 +18,8 @@ import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { bindTooltip, hideTooltip, itemTooltipHTML } from './tooltip';
 import { makeSkillSlot, rarityChips } from './hud';
 import { sfx } from '../core/audio';
+import { linked } from '../loot/cloud';
+import { CLOUD, askConflicts, closeDialog, cloudDialogOpen, initCloudSaves, renderCloudBar } from './cloudSaves';
 import type { ClassDef, DerivedStats, Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -47,6 +50,7 @@ export function initSaves(h: SavesHooks): void {
   $('.sd-cancel', box).onclick = () => { sfx.click(); askDelete(0); };
   box.onclick = (e) => { if (e.target === box) askDelete(0); };
   window.addEventListener('resize', () => { if (savesOpen()) fades(); });
+  initCloudSaves({ render: () => { if (savesOpen()) render(); }, moveSlots });
 }
 
 const typedDelete = (): boolean => $<HTMLInputElement>('#sd-input').value.trim() === 'DELETE';
@@ -60,17 +64,23 @@ export function openSaves(open: boolean): void {
   askDelete(0);
   $('#saves').classList.toggle('hidden', !open);
   G.player.idle = open;
-  if (open) render();
+  if (!open) closeDialog();
+  if (open) { render(); askConflicts(); }
 }
 
-/** Esc: out of the delete confirmation first, then off the screen. */
+/** The screen drawn again if it's up (the cloud changed what it shows). */
+export function refreshSaves(): void { if (savesOpen()) render(); }
+
+/** Esc: out of a dialog first (the delete confirmation, a cloud save's), then off the screen. */
 export function savesBack(): void {
   if (deleting) askDelete(0);
+  else if (cloudDialogOpen()) closeDialog();
   else openSaves(false);
 }
 
 function render(): void {
   G.player.idle = true;   // a hero rebuilt for an erased slot stands still too
+  renderCloudBar();
   $('#saves .sv-panes').replaceChildren(...SAVE_SLOTS.map(pane));
   document.querySelectorAll<HTMLElement>('#saves .sv-body').forEach((b) => { b.onscroll = () => fade(b); });
   fades();
@@ -97,11 +107,14 @@ function pane(n: number): HTMLElement {
   const status = current ? 'Playing now' : !heroes.length ? 'Empty' : last ? `Last played ${ago(last)}` : 'Saved';
   const play = current ? 'Keep playing' : heroes.length ? `Play slot ${n}` : `Start fresh in slot ${n}`;
 
+  const inCloud = n === 1 && linked();
   const el = document.createElement('section');
-  el.className = `sv-pane${current ? ' current' : ''}${heroes.length ? '' : ' empty'}`;
-  el.setAttribute('aria-label', `Save slot ${n}`);
+  el.className = `sv-pane${current ? ' current' : ''}${heroes.length ? '' : ' empty'}${inCloud ? ' cloud' : ''}`;
+  el.dataset.slot = String(n);
+  el.setAttribute('aria-label', `Save slot ${n}${inCloud ? ', the cloud save' : ''}`);
   el.innerHTML = `<header class="sv-head"><div class="sv-gem" aria-hidden="true">${NUMERALS[n]}</div>
-      <div class="sv-name">Slot ${n}<span class="sv-status">${status}</span></div></header>
+      <div class="sv-name">Slot ${n}<span class="sv-status">${status}</span></div>`
+      + `${inCloud ? `<span class="sv-cloud-mark" title="The cloud save: kept for every device you sign in on">${CLOUD}<span>Cloud</span></span>` : ''}</header>
     ${totals ? `<div class="sv-totals">${totals}</div>` : ''}
     <div class="sv-body"></div>
     <footer class="sv-foot"><button class="btn primary sv-play">${play}</button>`
@@ -183,6 +196,55 @@ function emptyHTML(current: boolean): string {
   return `<div class="sv-empty">${EMBLEM}
     <p>${current ? 'Nothing saved here yet: your hero is fresh, and your next run saves here.' : 'An empty slot: a fresh start, every hero at wave 1 with starter gear.'}</p>
     <p class="sv-note">Starting over with a friend? Play an empty slot: your other slots keep their heroes.</p></div>`;
+}
+
+// --- slots moved: each pane glides from where its save was to where it is now ----------------------------
+const MOVE_MS = 900;
+
+/** Rearranges the slots (`rearrange`) before the player's eyes: `order[i]` the slot whose save is now slot i + 1,
+ *  `lost` the one pushed out (0: none). The screen is drawn anew and each pane slides from its old place to its new
+ *  one (its transform alone), slot 1's rising in last with the cloud's mark; the one pushed out falls away and fades.
+ *  With reduced motion the panes simply change. */
+async function moveSlots(rearrange: () => void | Promise<void>, order: number[], lost: number): Promise<void> {
+  const before = new Map<number, DOMRect>();
+  document.querySelectorAll<HTMLElement>('#saves .sv-pane').forEach((p) => before.set(Number(p.dataset.slot), p.getBoundingClientRect()));
+  const leaving = lost ? document.querySelector<HTMLElement>(`#saves .sv-pane[data-slot="${lost}"]`) : null;
+  const ghost = leaving ? ghostOf(leaving) : null;
+  await rearrange();
+  // the slot in play's hero built again from what its slot holds now
+  hooks.use(saveSlot());
+  render();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { ghost?.remove(); return; }
+  sfx.click();
+  order.forEach((from, i) => {
+    const pane = document.querySelector<HTMLElement>(`#saves .sv-pane[data-slot="${i + 1}"]`);
+    const was = from ? before.get(from) : null;
+    if (!pane || !was) return;
+    const is = pane.getBoundingClientRect();
+    const zoom = is.width / pane.offsetWidth || 1;
+    const lift = i === 0 ? [{ transform: `translate(${(was.left - is.left) / zoom}px, ${(was.top - is.top) / zoom}px)` },
+      { transform: `translate(${(was.left - is.left) / zoom * 0.5}px, -24px) scale(1.03)`, offset: 0.55 },
+      { transform: 'none' }]
+      : [{ transform: `translate(${(was.left - is.left) / zoom}px, ${(was.top - is.top) / zoom}px)` }, { transform: 'none' }];
+    pane.animate(lift, { duration: MOVE_MS, easing: 'cubic-bezier(.3,.7,.2,1)', delay: i === 0 ? 120 : 0 });
+    if (i === 0) pane.querySelector('.sv-cloud-mark')?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: MOVE_MS + 300 });
+  });
+  if (ghost) {
+    const fall = ghost.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(60px)' }], { duration: MOVE_MS, easing: 'ease-in' });
+    fall.onfinish = () => ghost.remove();
+  }
+}
+
+/** A still copy of a pane where it stands, over the screen, to fall away once its save is gone. */
+function ghostOf(pane: HTMLElement): HTMLElement {
+  const box = pane.getBoundingClientRect();
+  const copy = pane.cloneNode(true) as HTMLElement;
+  copy.classList.add('sv-ghost');
+  const zoom = box.width / pane.offsetWidth || 1;
+  Object.assign(copy.style, { position: 'fixed', left: `${box.left / zoom}px`, top: `${box.top / zoom}px`,
+    width: `${pane.offsetWidth}px`, height: `${pane.offsetHeight}px`, zoom: String(zoom), pointerEvents: 'none', zIndex: '36' });
+  document.body.appendChild(copy);
+  return copy;
 }
 
 // --- deleting: a popup over the screen, confirmed by typing DELETE ------------------------------

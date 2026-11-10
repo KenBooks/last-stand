@@ -69,6 +69,14 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 
 - Touch supports one held shield finger alongside one other skill finger (#399), each with its own pointer capture. The attack/aim finger owns the aim; a shield alone can still be dragged to turn it. Release, cancel, lost capture, hidden controls and loadout rebuilds clear the relevant held input. Two non-shield skills remain exclusive.
 
+- **Cloud saves on the save slots screen** (`cloudSaves.ts`, `#saves .sv-cloud`, `#cloud-dialog`; the sync is `loot/cloud.ts`):
+  - The bar under the title. Signed out: sign in with a passkey, New account, Use a sign-in code. Signed in: slot 1's state and Sync now, with the account's actions under Account: Sign in elsewhere (a code) and Delete account on production alone; Copy my production heroes here on a preview.
+  - The dialogs: which slot becomes the cloud save; the cloud's save coming down, naming the slot pushed out before anything changes; a hero changed in two places, both sides side by side; a code; deleting.
+  - Slot 1 wears the cloud's mark. Slots rearranged glide from where their save was to where it is now (`moveSlots` in `saves.ts`: transforms alone, slot 1's rising in last, the one pushed out falling away). With reduced motion they simply change.
+  - Esc closes a dialog before the screen.
+  - The privacy page is `public/privacy.html`, linked from the bar.
+  - Check with `npm run lab -- cloud`.
+
 - Optional party portraits (#396): `portraitPicker.ts`, `portraitArt.ts`, `portraits/`. The closed picker makes no unchosen image requests; opening loads only the current class’s enabled male choices. Selected pictures appear only in lobby/fight party lists, never name tags or chat. None is the default. HUD images refresh only when the ID changes. Each class’s preference is independent of save slots.
 
 - The local player's co-op card is prepended above partners, in addition to appearing first in the room list. It has a plain 3px golden border on the left only and no You prefix. Party cards put the player name left and the class right on one line, in the class's Hero Selection accent. Only the host (slot 0) has a small gold star over the bottom-left of their portrait, with an accessible Host label; no extra text row changes the card layout. Portraits, health and status keep their existing update path. Leaving co-op clears all cards, including the self card; short touch screens use compact cards so four players fit.
