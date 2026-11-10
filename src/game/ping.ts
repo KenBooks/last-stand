@@ -1,4 +1,4 @@
-// Co-op pings: a player shows the party a foe, a spot or an area (Left Shift held and let go, or a long press on the
+// Co-op pings: a player shows the party a foe or a spot (Left Shift held and let go, or a long press on the
 // minimap: ui/ping.ts), and every game shows it for a few seconds, in the world where it points and on the minimap.
 // A ping has no gameplay effect, so every game sends its own straight to every other (`ctl` `ping`, net/session.ts)
 // and shows the others' as they come. One ping a player at a time: a new one replaces the last.
@@ -10,11 +10,12 @@ import type * as THREE from 'three';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 
-/** What a ping points out: a place on the ground, a foe (followed while it lives), or an area round a place. */
-export type PingKind = 'spot' | 'foe' | 'area';
+/** What a ping points out: a place on the ground, or a foe (followed while it lives). Every ping is one size (from
+ *  play: "do not increase radius, just have same size for all"). */
+export type PingKind = 'spot' | 'foe';
 
-/** A ping as it goes over the link: its kind, where (m), an area's radius, a foe's id (the host's, every copy's). */
-export interface PingMessage { k: PingKind; x: number; z: number; r?: number; id?: number }
+/** A ping as it goes over the link: its kind, where (m), a foe's id (the host's, every copy's). */
+export interface PingMessage { k: PingKind; x: number; z: number; id?: number }
 
 /** A ping shown: who sent it, what it points out, where (a foe's: where it is now), and how long it has shown (s). */
 export interface Ping {
@@ -22,7 +23,7 @@ export interface Ping {
   kind: PingKind;
   x: number;
   z: number;
-  /** the ring's radius round it (m) */
+  /** the ring's radius round it (m): `PING.radius`, every ping's */
   r: number;
   /** the foe pointed out, while it lives (a foe ping whose foe this game has no copy of marks its spot) */
   foe: Enemy | null;
@@ -47,11 +48,15 @@ export function foeNear(x: number, z: number, near: number): Enemy | null {
   let best: Enemy | null = null, bd = near;
   for (const e of G.enemies) {
     if (!e.alive || e.spawning) continue;
-    const d = Math.hypot(e.pos.x - x, e.pos.z - z);
+    const at = foeAt(e), d = Math.hypot(at.x - x, at.z - z);
     if (d < bd) { bd = d; best = e; }
   }
   return best;
 }
+
+/** Where a foe is as this game draws it (its body's place: on a guest's copy, eased onto the host's reports, its
+ *  `pos` can stand off it; a ping placed by `pos` stood beside the foe, from play: "center point above mob. not side"). */
+export const foeAt = (e: Enemy): { x: number; z: number } => e.obj.position;
 
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 
@@ -60,7 +65,6 @@ export function ping(m: PingMessage, foe: Enemy | null = null): boolean {
   if (G.time - lastSent < PING.gap) return false;
   lastSent = G.time;
   const sent: PingMessage = { k: m.k, x: r2(m.x), z: r2(m.z) };
-  if (m.k === 'area') sent.r = r2(Math.min(PING.areaMost, m.r ?? PING.areaFrom));
   if (m.k === 'foe' && foe) sent.id = foe.id;
   show(G.player, sent, foe);
   sendPing(sent);
@@ -71,18 +75,18 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 
 /** A partner's ping, as its game sent it (`m` is checked: it came over the link). */
 export function pingHeard(by: Player, m: Record<string, unknown>): void {
-  const kind = m.k === 'foe' || m.k === 'area' ? m.k : 'spot';
+  const kind = m.k === 'foe' ? 'foe' : 'spot';
   if (!finite(m.x) || !finite(m.z) || Math.hypot(m.x, m.z) > 200) return;
   const foe = kind === 'foe' && finite(m.id) ? G.enemies.find((e) => e.id === m.id && e.alive) ?? null : null;
-  show(by, { k: kind, x: m.x, z: m.z, r: finite(m.r) ? Math.max(0, Math.min(PING.areaMost, m.r)) : undefined }, foe);
+  show(by, { k: kind, x: m.x, z: m.z }, foe);
 }
 
 /** `by`'s ping `m` shown from now, in place of its last. */
 function show(by: Player, m: PingMessage, foe: Enemy | null): void {
   const at = pings.findIndex((p) => p.by === by);
   if (at >= 0) pings.splice(at, 1);
-  const r = m.k === 'area' ? m.r ?? PING.areaFrom : foe ? foe.radius + PING.foeRing : PING.spotRadius;
-  pings.push({ by, kind: foe ? 'foe' : m.k === 'foe' ? 'spot' : m.k, x: m.x, z: m.z, r, foe, age: 0 });
+  const where = foe ? foeAt(foe) : m;
+  pings.push({ by, kind: foe ? 'foe' : 'spot', x: where.x, z: where.z, r: PING.radius, foe, age: 0 });
   sfx.ping();
 }
 
@@ -97,7 +101,7 @@ export function updatePings(dt: number): void {
     const p = pings[i];
     p.age += dt;
     if (p.foe && (!p.foe.alive || !G.enemies.includes(p.foe))) p.foe = null;
-    if (p.foe) { p.x = p.foe.pos.x; p.z = p.foe.pos.z; }
+    if (p.foe) { const at = foeAt(p.foe); p.x = at.x; p.z = at.z; }
     if (p.age >= PING.life || !G.players.includes(p.by)) pings.splice(i, 1);
   }
 }

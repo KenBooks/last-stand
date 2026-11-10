@@ -19,14 +19,17 @@ const hud = Object.values(import.meta.glob<Hud>('../../../src/ui/hud.ts', { eage
 
 /** A ping the scenario means: who pings it, what, where, an area's radius, how, and when it's let go (frames after
  *  the scenario settled); `near`: how far from `at` the sender's own game may put it (m: a minimap's pixel is 0.32). */
-export interface PlannedPing { by: 'host' | 'guest'; kind: 'spot' | 'foe' | 'area'; at: XZ; r?: number; how: string; frame: number; near: number }
+export interface PlannedPing {
+  by: 'host' | 'guest'; kind: 'spot' | 'foe'; at: XZ; how: string; frame: number; near: number;
+  /** held first over this spot of the floor, then on `at`: its preview must move from the one to the other */
+  from?: XZ;
+}
 
 /** the dazed foe the guest pings, and where the minimap is held (its arena point) */
 export const PING_FOE: XZ = [12, 15];
 
-/** the frames Left Shift is held before it's let go, and of them the drag of an area's */
+/** the frames the key is held before it's let go (twice that for one held first elsewhere: `from`) */
 const HELD = 20;
-const DRAG = 14;
 /** the frames a finger is held on the minimap (its long press is 0.5 s), and the tap before it that puts the page in
  *  touch mode, as a phone's first touch does */
 const PRESSED = 40;
@@ -35,7 +38,7 @@ const TAP_BEFORE = 10;
 export const PINGS: PlannedPing[] = [
   { by: 'guest', kind: 'foe', at: PING_FOE, how: 'Left Shift let go on a foe', frame: 30, near: 0.5 },
   { by: 'guest', kind: 'spot', at: [18, 21], how: 'Left Shift let go on the floor', frame: 90, near: 0.3 },
-  { by: 'guest', kind: 'area', at: [11, 25], r: 4, how: 'Left Shift dragged 4 m', frame: 160, near: 0.3 },
+  { by: 'guest', kind: 'foe', at: PING_FOE, from: [11, 25], how: 'Left Shift held on the floor, then on a foe', frame: 170, near: 0.5 },
   { by: 'guest', kind: 'spot', at: [-8, 6], how: 'a finger held on the minimap', frame: 280, near: 0.7 },
   { by: 'host', kind: 'spot', at: [5, 23], how: 'Left Shift let go on the floor', frame: 340, near: 0.3 },
 ];
@@ -62,12 +65,12 @@ function foeAt(at: XZ): THREE.Vector3 | null {
 /** A G ping's input: held `HELD` frames up to its frame with the aim on it (an area's dragged out `r` along x from
  *  its middle), the aim kept a few frames either side. */
 function ctrlInput(p: PlannedPing, frame: number): Frame | null {
-  const start = p.frame - HELD;
+  const start = p.frame - HELD * (p.from ? 2 : 1);
   if (frame < start - 5 || frame > p.frame + 5) return null;
   const held = frame >= start && frame < p.frame;
-  let aim: THREE.Vector3 | null = new THREE.Vector3(p.at[0], 0, p.at[1]);
-  if (p.kind === 'foe') aim = foeAt(p.at);
-  else if (p.kind === 'area') aim.x += (p.r ?? 0) * Math.min(1, Math.max(0, (frame - start) / DRAG));
+  // (held first over `from`, the aim moved onto `at` for the last `HELD` frames)
+  const on = p.from && frame < p.frame - HELD ? p.from : p.at;
+  const aim = p.kind === 'foe' && on === p.at ? foeAt(p.at) : new THREE.Vector3(on[0], 0, on[1]);
   return { aim: aim ?? undefined, keys: held ? ['shiftleft'] : [] };
 }
 
@@ -139,6 +142,8 @@ export function pingInput(role: 'host' | 'guest', frame: number): Frame {
 export interface PingSample {
   slot: number; kind: string; x: number; z: number; r: number; foe: number | null; age: number;
   pin: boolean; ring: boolean; map: XZ | null;
+  /** a foe's ping in view: its pin's point across the screen from the foe's middle (css px) */
+  offFoe?: number | null;
   /** its pin held at the screen's edge (off screen), and where its head is on the page (css px) */
   edge: boolean; head: [number, number];
 }

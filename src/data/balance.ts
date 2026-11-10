@@ -88,16 +88,14 @@ export const PING = {
   fadeOut: 1,
   /** the least time between a player's pings (s): a new one replaces the last */
   gap: 0.4,
-  /** the aim dragged this far with Left Shift held marks an area (m), at most this wide a radius */
-  areaFrom: 2,
-  areaMost: 12,
-  /** a spot's ring and a foe's ring past its body (m) */
-  spotRadius: 0.9,
-  foeRing: 0.4,
+  /** every ping's ring (m), a spot's or a foe's alike, whatever the foe's size (from play: "do not increase radius,
+   *  just have same size for all, do not have the option to change size of radius when pinging") */
+  radius: 0.9,
   /** a foe pinged when the aim is this near its body (m), on the minimap this near its middle */
   foeNear: 1.2,
   mapFoeNear: 1.6,
-  /** a touch held this long on the minimap pings there (s), unless it moved this far (css px) */
+  /** a touch held this long on the minimap shows the ping it would make (s), placed as the finger moves and made as it
+   *  lifts; moved this far before then (css px), it's no long press */
   longPress: 0.5,
   pressSlop: 12,
   /** the ripple running out over a ping's ring, once this often (s: slower than 1.5 a second, never a flash) */

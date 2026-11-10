@@ -547,7 +547,7 @@ const SCENARIOS: Record<string, Scenario> = {
     guestInput: rushInput,
   },
   ping: {
-    about: 'the guest pings a foe, a spot and an area with Left Shift, then a spot by a finger held on the minimap, and the '
+    about: 'the guest pings a foe and a spot with Left Shift, then a foe held first over the floor, then a spot by a finger held on the minimap, and the '
       + 'host a spot: each shown on the other game\'s screen, in the world and on its minimap; then the guest in '
       + 'first person, the host\'s ping off to its side',
     frames: 520,

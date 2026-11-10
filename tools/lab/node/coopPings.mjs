@@ -1,5 +1,5 @@
 // `lab coop`'s `ping` scenario judged (page/coopPing.ts plays it): every ping the scenario means must be made by its
-// sender's game as meant (its kind, where, an area's radius), and shown on both screens, the sender's and its
+// sender's game as meant (its kind, where, one size, a foe's centred on it), and shown on both screens, the sender's and its
 // partner's, in the world (its pin and its ring on the floor) and on the minimap where it points; on the partner's
 // within a second of the sender's.
 
@@ -10,8 +10,9 @@ const APART = 0.3;
 const FOE_APART = 0.6;
 /** how far from a ping the minimap may draw it (m: one of its pixels is 0.32) */
 const MAP_OFF = 0.7;
-/** how far off an area's radius may be as made (m) */
-const RADIUS_OFF = 0.3;
+/** how far across the screen a foe's ping's pin may stand from the foe's middle (css px: from play, "center point
+ *  above mob. not side") */
+const OFF_FOE = 3;
 /** the frames before a held key's ping is let go its preview must show in (of the key's 20 held) */
 const PREVIEW_FRAMES = 10;
 
@@ -55,6 +56,21 @@ export function pingsShown(samples) {
     for (const slot of [...current.keys()]) if (!seen.has(slot)) current.delete(slot);
   });
   return shown;
+}
+
+/**
+ * Whether a ping held first over one place (`p.from`) and let go on another showed its preview over the one and then
+ * the other as the key was held: over the floor's spot as a spot, then on the foe as a foe.
+ */
+export function previewMoved(samples, made, p) {
+  let onFloor = -1, onFoe = -1;
+  for (let frame = Math.max(0, made.from - 60); frame < made.from; frame++) {
+    const preview = samples[frame]?.preview;
+    if (!preview) continue;
+    if (preview.kind === 'spot' && Math.hypot(preview.x - p.from[0], preview.z - p.from[1]) < APART && onFloor < 0) onFloor = frame;
+    if (preview.kind === 'foe' && onFloor >= 0 && frame > onFloor) onFoe = frame;
+  }
+  return onFoe > onFloor && onFloor >= 0;
 }
 
 /** how near the screen's edge a ping held at it in first person must be (share of the screen's smaller side, from
@@ -134,7 +150,10 @@ export function judgePings({ host, guest, frameMs }) {
       const off = Math.hypot(made.x - p.at[0], made.z - p.at[1]);
       if (made.kind !== p.kind) problems.push(`${what}: made as a ${made.kind} ping`);
       if (off > p.near) problems.push(`${what}: made ${cm(off)} from where it was meant`);
-      if (p.r !== undefined && Math.abs(made.r - p.r) > RADIUS_OFF) problems.push(`${what}: made ${made.r.toFixed(2)} m across, not ${p.r}`);
+      if (p.from) {
+        const moved = previewMoved(screens[by], made, p);
+        if (!moved) problems.push(`${what}: its preview never moved from the floor onto the foe while held`);
+      }
       problems.push(...shownProblems(what, `the ${by}'s own`, howShown(made)));
       const keyed = !p.how.includes('minimap');
       const previewed = keyed ? previewedFrames(screens[by], made, p.kind === 'foe' ? FOE_APART : APART) : null;
@@ -155,6 +174,10 @@ export function judgePings({ host, guest, frameMs }) {
       if (made.kind === 'foe' && there.foe !== made.foe) problems.push(`${what}: on another foe on the ${other}'s screen`);
       if (apart > (made.kind === 'foe' ? FOE_APART : APART)) problems.push(`${what}: ${cm(apart)} apart on the two screens`);
       const how = howShown(there);
+      for (const [whose, one] of [[`the ${by}'s own`, made], [`the ${other}'s`, there]]) {
+        const off = Math.max(0, ...one.frames.map((frame) => frame.offFoe ?? 0));
+        if (one.kind === 'foe' && off > OFF_FOE) problems.push(`${what}: its pin ${off.toFixed(1)} px beside the foe on ${whose} screen`);
+      }
       problems.push(...shownProblems(what, `the ${other}'s`, how));
       const marks = `pin ${how.pin ? 'shown' : 'missing'}, ring ${how.ring ? 'shown' : 'missing'}, minimap `
         + (how.map ? `${cm(how.off)} off` : 'missing');
@@ -165,6 +188,9 @@ export function judgePings({ host, guest, frameMs }) {
     if (own.length > meant.length) problems.push(`the ${by} made ${own.length} pings, not ${meant.length}`);
   }
   if (pressedOn) lines.push(`the guest's finger went down on ${pressedOn} over the minimap`);
+  const sizes = new Set([...shown.host, ...shown.guest].map((one) => one.r.toFixed(2)));
+  lines.push(`ring sizes shown: ${[...sizes].join(', ')} m`);
+  if (sizes.size > 1) problems.push(`pings in ${sizes.size} sizes (${[...sizes].join(', ')} m), not one`);
   if (guest.some((sample) => sample.view)) {
     const edge = firstPersonEdge(guest, slots.guest);
     lines.push(`in first person the host's ping held at the guest's screen's edge in ${edge.frames} frames, at most `

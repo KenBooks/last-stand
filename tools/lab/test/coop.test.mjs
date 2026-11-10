@@ -215,3 +215,12 @@ test('a partner\'s ping held at the screen\'s edge in first person is found ther
   assert.equal(firstPersonEdge(frames([1800, 200]), 1).overMap, 40);
   assert.equal(firstPersonEdge(frames([60, 540]), 0).frames, 0, 'its own pings are not its partner\'s');
 });
+
+test('a held ping\'s preview moving from the floor onto a foe is seen, and one that never left the floor is not', async () => {
+  const { previewMoved } = await import('../node/coopPings.mjs');
+  const p = { from: [11, 25], at: [12, 15] };
+  const floor = { kind: 'spot', x: 11, z: 25, pin: true, ring: true }, foe = { kind: 'foe', x: 12, z: 15, pin: true, ring: true };
+  const held = (second) => Array.from({ length: 40 }, (_, f) => ({ preview: f < 20 ? floor : second }));
+  assert.equal(previewMoved(held(foe), { from: 40 }, p), true);
+  assert.equal(previewMoved(held(floor), { from: 40 }, p), false);
+});
