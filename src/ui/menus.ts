@@ -488,9 +488,13 @@ function clearance(): { x: number; y: number } {
 /** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels and the run's
  *  party frames, once a frame while any is shown: they lay over the hero panel, and over a partner's frame. */
 export function clearOverlays(): void {
-  const diag = $('#diag');
-  if (![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;
+  const diag = $('#diag'), chat = document.querySelector<HTMLElement>('#chat');
+  const chatShown = !!chat && !chat.classList.contains('hidden');
+  if (!chatShown && ![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;
   const { x, y } = clearance();
+  // (the co-op chat in the bottom left corner, right of the hero panel: ui/chat.ts)
+  const chatX = `${Math.round(x)}px`;
+  if (chat && chat.style.getPropertyValue('--clear-x') !== chatX) chat.style.setProperty('--clear-x', chatX);
   const clear = `${Math.round(x)},${Math.round(y)}`;
   if (clear === overlaysClear) return;
   overlaysClear = clear;

@@ -24,10 +24,12 @@ import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, pingHeard, clearPings } from '../game/ping';
 
+import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
+
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 26;
+const PROTOCOL = 27;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -194,6 +196,8 @@ export function leaveRoom(): void {
   // the lobby floor is the host's: a guest leaving it leaves what's there (the host keeps it)
   if (session.status === 'joined') clearGround();
   setGroundNet(null);
+  setChatNet(null);
+  clearChat();
   for (const peer of session.peers.values()) dropPlayer(peer);
   session.peers.clear();
   session.status = 'off';
@@ -254,6 +258,8 @@ function wire(l: Link): void {
   });
   // a ping has no gameplay effect: every game sends its own to every other (game/ping.ts)
   setPingNet((m) => send('ctl', { t: 'ping', ...m }));
+  // chat has no gameplay effect: every game sends its own to every other (net/chat.ts)
+  setChatNet((text) => send('ctl', { t: 'chat', text }));
 }
 
 /** Who we are, to a game we meet: our slot is -1 until the host has given us one (another guest would take our 0 as
@@ -323,6 +329,11 @@ function onHello(from: string, m: Record<string, unknown>): void {
 
 function onControl(from: string, m: Record<string, unknown>): void {
   if (m.t === 'bye') { peerLeft(from); return; }
+  if (m.t === 'chat') {
+    const by = session.peers.get(from)?.player;
+    if (by) chatHeard(by, m);
+    return;
+  }
   if (onGround(from, m)) return;
   if (m.t === 'ping') {
     const by = session.peers.get(from)?.player;
@@ -513,6 +524,7 @@ function addPeer(id: string, slot: number, look: Look, tag: string, colour: Hero
   };
   session.peers.set(id, peer);
   makePlayer(peer);
+  if (tag) chatNote(`${tag} is in the room`);
 }
 
 function makePlayer(peer: Peer): void {
@@ -542,6 +554,7 @@ function peerLeft(id: string): void {
   const peer = session.peers.get(id);
   if (!peer) return;
   const wasHost = id === session.hostId;
+  if (peer.tag) chatNote(`${peer.tag} left`);
   dropPlayer(peer);
   session.peers.delete(id);
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }

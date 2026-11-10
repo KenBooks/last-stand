@@ -102,6 +102,24 @@ export const PING = {
   ripple: 1.2,
 };
 
+/** Co-op text chat (net/chat.ts, ui/chat.ts). */
+export const CHAT = {
+  /** the most characters a message holds (the relay takes 64 KB a message: far more) */
+  most: 200,
+  /** the lines kept, and how many show at once while the box is shut */
+  keep: 50,
+  shownShut: 6,
+  /** how long the chat shows after the last thing happened in it (a line came, the box was opened or typed in), and
+   *  how long it then takes to fade (s): all of it at once (from play: "make it disappear after some time if no
+   *  activity... you don't type, and no one else sends a new message") */
+  idle: 10,
+  fade: 0.8,
+  /** a player's messages: at most `burst` within `per` s, the rest dropped (on its own game and on every other's,
+   *  the relay's caps, 400 messages and 1 MB a second a socket, far over it) */
+  burst: 5,
+  per: 5,
+};
+
 /**
  * What a party of 1 to `COOP.maxPlayers` meets, against one hero alone: the foes in a wave (`foes`), the life on each
  * (`life`, a boss's summons too) and on a boss (`boss`), and the foes that may stand at once (`alive`, added to the

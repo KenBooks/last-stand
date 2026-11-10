@@ -1,0 +1,68 @@
+// Co-op text chat (ui/chat.ts): its lines in the bottom left corner over the bars, one dark see-through panel behind
+// them all (each line's own strip of it, touching the next), each line `Name: text` on a row of its own (from the
+// owner's reference picture of how it should look), the name in the colour its player picked (ui/chat.ts
+// `nameColour`; the blue here for none). Quiet a while (no line come, nothing typed: `CHAT.idle`), all of it fades
+// together by its opacity alone (the compositor's), and comes back with the next line; with the box open, every line
+// kept, to scroll back through, and the box to type in under them. In the lobby, right of the hero panel (`--clear-x`,
+// `clearOverlays` in ui/menus.ts).
+@use 'theme' as *;
+
+/** a name in the chat with no colour picked (in a room every player has one), and the panel behind its lines */
+$chat-name: #7cc0ff;
+$chat-panel: rgba(12, 12, 16, .5);
+
+// (as wide as its longest line shown, up to `$chat-most`, a longer one wrapping inside it: from play, "make the grey
+// box for the chat smaller, it should not take up this much space"; open, that wide for the box to type in)
+$chat-most: 360px;
+#chat { position: fixed; z-index: 13; left: calc(#{hud(14px)} + env(safe-area-inset-left, 0px)); bottom: hud(132px);
+  translate: var(--clear-x, 0px) 0; width: fit-content; max-width: min(hud($chat-most), calc(100vw - var(--clear-x, 0px) - 28px));
+  display: flex; flex-direction: column; gap: hud(4px); pointer-events: none; font-family: $font-body; }
+#chat.open { width: min(hud($chat-most), calc(100vw - var(--clear-x, 0px) - 28px)); }
+#chat.hidden { display: none; }
+// (on touch, over the move stick's half: its lines let every touch through, as they do the mouse)
+body.touch #chat { bottom: touch(150px); max-width: min(touch(320px), calc(100vw - 28px)); }
+body.touch #chat.open { width: min(touch(320px), calc(100vw - 28px)); }
+
+// (shut, past its height the oldest go over its top, the newest kept at its foot; open, it scrolls from the top)
+.chat-log { display: flex; flex-direction: column; justify-content: flex-end; max-height: hud(200px); overflow: hidden; }
+#chat.open .chat-log { justify-content: flex-start; background: $chat-panel; }
+.chat-line { padding: hud(1px) hud(7px); background: $chat-panel; color: #f4f1ea;
+  font-size: hud(15px); line-height: 1.3; overflow-wrap: anywhere; text-shadow: 0 1px 1px #000, 0 0 3px rgba(0,0,0,.6);
+ }
+// (the panel's own padding at its top and foot)
+.chat-line:first-child { padding-top: hud(3px); }
+.chat-line:last-child { padding-bottom: hud(3px); }
+.chat-name { color: $chat-name; }
+.chat-line.note { color: #b8b2a6; font-style: italic; }
+// (shut, the newest few alone)
+#chat:not(.open) .chat-line:nth-last-child(n + 7) { display: none; }
+// (quiet a while, the lines fade together, by their opacity alone; back at once as the next comes)
+.chat-log { transition: opacity .15s; }
+#chat.idle .chat-log { opacity: 0; transition: opacity var(--chat-fade, .8s) ease-in; }
+@media (prefers-reduced-motion: reduce) { .chat-log, #chat.idle .chat-log { transition: none; } }
+
+// open: every line kept, to scroll back through, and the box to type in
+#chat.open .chat-log { overflow-y: auto; pointer-events: auto; overscroll-behavior: contain; }
+#chat.open .chat-line { background: none; }
+.chat-form { display: none; gap: hud(6px); pointer-events: auto; }
+#chat.open .chat-form { display: flex; }
+.chat-input { flex: 1; min-width: 0; padding: hud(6px) hud(10px); border: 1px solid rgba($chat-name, .45);
+  background: rgba(12,12,16,.8); color: #f4f1ea; font: inherit; font-size: hud(16px); outline: none; }
+.chat-input:focus { border-color: $chat-name; }
+.chat-send { padding: 0 hud(12px); border: 1px solid rgba($chat-name, .45); background: rgba(12,12,16,.8); color: $chat-name;
+  font-family: $font-body; font-size: hud(15px); cursor: pointer; }
+.chat-send { display: flex; align-items: center; gap: hud(5px); }
+.chat-enter { font-size: 1.15em; line-height: 1; padding: 0 hud(3px); border: 1px solid rgba($chat-name, .5);
+  border-radius: hud(3px); }
+// (a finger's size on touch, and a phone's keyboard doesn't zoom the page for a field under 16 px)
+body.touch .chat-input { font-size: 16px; min-height: 40px; }
+body.touch .chat-send { min-height: 40px; min-width: 64px; font-size: 15px; }
+body.touch .chat-line { font-size: touch(14px); }
+
+// on touch: a button under the scores button (the pause and full screen buttons' column)
+#btn-chat { position: fixed; top: calc(118px * var(--touch, 1)); left: $touch-edge; width: 44px; height: 44px; z-index: 13;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba($frame, .6);
+  background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }
+#btn-chat.hidden { display: none; }
+#btn-chat.on { border-color: var(--accent); }
+#btn-chat svg { width: 20px; height: 20px; fill: currentColor; }

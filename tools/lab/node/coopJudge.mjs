@@ -6,6 +6,7 @@
 // blow at the guest by whether it hurt it, against whether the guest was where it landed on its own screen; a
 // guest's charge by whether every foe it met on its screen was carried and thrown on both, and ended before it.
 import { describePings } from './coopPings.mjs';
+import { describeChat } from './coopChat.mjs';
 
 /** the longest delay looked for, frames (a second and a quarter) */
 const MOST_DELAY = 75;
@@ -831,5 +832,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'strike') add(describeStrike(host, guest));
   if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));
   if (name === 'ping') add(describePings(host, guest, frameMs));
+  if (name === 'chat') add(describeChat(host, guest, frameMs));
   return { lines, problems };
 }

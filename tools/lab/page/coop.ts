@@ -27,6 +27,7 @@ export { coopHeroCost } from './coopCost';
 import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
 import { endInput, watchOut } from './coopEnd';
 import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
+import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coopChat';
 export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
@@ -131,6 +132,12 @@ export interface Sample {
   preview?: import('./coopPing').PreviewSample | null;
   view?: import('./coopPing').ViewSample;
   planned?: typeof PINGS;
+  /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
+   *  scenario says and when it presses Esc */
+  chat?: ChatSample;
+  said?: typeof SAID;
+  escAt?: typeof ESC_AT;
+  quiet?: typeof QUIET;
 }
 
 /** Where a page's co-op stands, for the lab to wait on. */
@@ -518,6 +525,19 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [40, 240],
     hostInput: () => ({}),
     guestInput: blinkInput,
+  },
+  chat: {
+    about: 'the guest says a line with markup, the host answers and later says one too long, the guest says seven in '
+      + 'a breath, and opens the box and shuts it with Esc; quiet, the chat fades, and a line brings it back',
+    frames: 1160,
+    host: [9, 19],
+    guest: [15, 23],
+    foes: [],
+    // (the guest's line come; the host's answer typed in its open box; both after it, the box as small as short lines
+    // leave it; the guest's burst told it's too fast; faded for quiet; back)
+    pictures: [70, 220, 250, 448, 1100, 1145],
+    hostInput: (frame) => chatInput('host', frame),
+    guestInput: (frame) => chatInput('guest', frame),
   },
   wave: {
     about: 'the host lets wave 4 come, its foes rising at the gates and fighting, both heroes standing by the dais; '
@@ -943,6 +963,10 @@ function sampleNow(): Sample {
   if (play.scenario === 'ping') {
     Object.assign(sample, { slot: self.slot, ...pingsNow() });
     if (!play.samples.length) sample.planned = PINGS;
+  }
+  if (play.scenario === 'chat') {
+    sample.chat = chatNow();
+    if (!play.samples.length) Object.assign(sample, { said: SAID, escAt: ESC_AT, quiet: QUIET });
   }
   play.ended = [];
   return sample;
