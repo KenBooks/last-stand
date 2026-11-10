@@ -32,6 +32,8 @@ interface LanceState {
   tick: number; t: number;
   /** the beam is out (the portal finished opening) */
   firing: boolean;
+  /** where the portal and the lance take the hand to be (the fingertips' middle, eased), once it's been read */
+  hand: THREE.Vector3; held: boolean;
   /** how far the lance is drawn out (m): it follows the length it's judged to at a pace */
   reach: number;
   stopHum?: () => void;
@@ -90,6 +92,8 @@ const EYES_LIGHT = 0.45;
  *  flashes in a second over a sixteenth of the screen in the forest's third person, on main too (`lab cast`
  *  names what lit each flash: the beam and its core) */
 const REACH_OUT = 45;
+/** how fast the portal and the lance follow the hand (1/s: most of the way in a seventh of a second) */
+const HAND_FOLLOW = 14;
 const REACH_BACK = 40;
 
 /** the lance's outline along its length ([share of its length, share of its width]), as the skill's icon draws a
@@ -169,9 +173,9 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         // screen, and a hotter one blooms into a green haze over the ground round it. Its core keeps its colour:
         // 0.7 of the way to white at 1.6, it was a white bar (from play: "make it less bright, not washed color")
         // (the core white at its very middle alone, green round it; the shell mostly its ribbons, not a fog)
-        vec3 hot = mix(uColor, vec3(1.0), 0.75 * pow(vFres, 6.0)) * 1.5;
-        vec3 c = uCore > 0.5 ? hot * (1.0 + rings * 0.35)
-          : uColor * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4);
+        vec3 hot = mix(uColor, vec3(1.0), 0.75 * pow(vFres, 6.0)) * 1.4;
+        vec3 c = uCore > 0.5 ? hot * (1.0 + rings * 0.2)
+          : uColor * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.0);
         float shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
         float a = body * ends * (uCore > 0.5 ? 1.0 : shell) * uFade;
         gl_FragColor = vec4(c * a, a);
@@ -201,9 +205,9 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         let wind2 = fract(-uv.x * 3.0 + along * 0.55 - time * 0.35);
         let thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
         let rings = pow(0.5 + 0.5 * sin(along * 1.6 - time * 9.0), 10.0);
-        let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.5;
-        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.4),
-          hot * (1.0 + rings * 0.35), core > 0.5);
+        let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.4;
+        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.0),
+          hot * (1.0 + rings * 0.2), core > 0.5);
         let shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
         let a = body * ends * select(shell, 1.0, core > 0.5) * fade;
         return vec4f(c * a, a);
@@ -346,7 +350,7 @@ const skill: ChannelSkill<LanceState> = {
     const opens = rawDef.opening ?? 0;
     const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, strands, strandMat, tick: 0, t: 0, firing: false, reach: 0, beam,
+      outer, core, portal, outerMat, coreMat, portalMat, strands, strandMat, tick: 0, t: 0, firing: false, reach: 0, hand: new THREE.Vector3(), held: false, beam,
       stopHum: opens > 0 && !player.quiet ? sfx.lanceCharge(opens) : undefined, calm: addField(carry(beam)), judged: new Set(),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
@@ -383,6 +387,12 @@ const skill: ChannelSkill<LanceState> = {
       palm.set(0, 0, 0);
       for (let i = 0; i < digits.length; i++) palm.addScaledVector(_tips[i], 1 / digits.length);
     }
+    // (the portal and the lance follow the hand at a pace: a flinch as a foe strikes him moved the hand 20 to 40 cm
+    // in a frame, and the portal, its light and the whole lance with it, 3 to 4 flashes in a second in third
+    // person: `lab cast` names what lit each)
+    if (st.held) palm.copy(st.hand.lerp(palm, 1 - Math.exp(-dt * HAND_FOLLOW)));
+    else st.hand.copy(palm);
+    st.held = true;
     const way = _way.copy(from).addScaledVector(_dir, def.length).sub(palm).normalize();
     const origin = _c.copy(palm).addScaledVector(way, PORTAL_GAP);
 
@@ -467,7 +477,10 @@ const skill: ChannelSkill<LanceState> = {
 
     const fadeIn = Math.min(1, ft / 0.12);
     // it bursts out wide and settles
-    const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
+    // (its width breathes about once a second: at 4.8 times a second, seen along its length in third person, its
+    // light in a sixteenth of the screen swung a tenth of white each way, 3 flashes in a second in the forest,
+    // which `lab cast` laid at the beam and its core every 0.21 s)
+    const w = def.width * (0.9 + Math.sin(st.t * 6) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
     // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
     // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
     // (0.62 up close: at the whole width its shell stood round the view as a horn, swelling out of the portal and

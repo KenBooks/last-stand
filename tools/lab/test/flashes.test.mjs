@@ -2,7 +2,7 @@
 // tenth of white or more, the darker end under 0.8.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { worstFlashing } from '../page/flashes.ts';
+import { changeSpans, worstFlashing } from '../page/flashes.ts';
 
 const FRAME = 1 / 60;
 
@@ -50,4 +50,20 @@ test('the worst cell is the one that flashes, and when its second started', () =
   assert.ok(Math.abs(worst.at - 66 * FRAME) < 1e-9);
   assert.equal(worst.changes.length, 8);
   assert.deepEqual(worst.changes.slice(0, 2), [{ frame: 66, rising: true }, { frame: 72, rising: false }]);
+});
+
+test('a change comes from the darkest frame before a rise and the brightest before a fall', () => {
+  // (dark at frame 3, lit by 6, brightest at 8, dark again by 11)
+  const lights = [0.3, 0.25, 0.2, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.5, 0.3, 0.2];
+  const changes = [{ frame: 6, rising: true }, { frame: 11, rising: false }];
+  assert.deepEqual(changeSpans(changes, lights), [
+    { from: 3, to: 6, rising: true },
+    { from: 8, to: 11, rising: false },
+  ]);
+});
+
+test('a first change is looked for its start no further back than half a second', () => {
+  const lights = Array.from({ length: 100 }, (_, f) => (f < 10 ? 0 : f < 90 ? 0.2 : 0.6));
+  const [span] = changeSpans([{ frame: 90, rising: true }], lights);
+  assert.equal(span.from, 60);
 });

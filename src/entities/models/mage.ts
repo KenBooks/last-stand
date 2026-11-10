@@ -1154,9 +1154,12 @@ export function* mageSteps(): ModelSteps {
           // sense")
           if (!fp) {
             root.updateMatrixWorld(true);
-            const reach = (j.P.upperL + j.P.foreL) * (0.93 - kick * 0.12);
-            j.shoulderL.getWorldPosition(_hp).addScaledVector(root.getWorldDirection(_fw), reach);
-            reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), POLE_L);
+            // (nearly its whole length: at 0.93 of it the elbow bent 61 degrees and stood 14 cm out to the side)
+            const reach = (j.P.upperL + j.P.foreL) * (0.985 - kick * 0.1);
+            // (the way he casts in the chest's own frame, the reach in its own units: laid out in the world's
+            // metres, the model's scale left the arm 8% short of the reach asked, the elbow still bent 48 degrees)
+            root.getWorldDirection(_fw).applyQuaternion(j.chest.getWorldQuaternion(_vr).invert());
+            reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp.copy(j.shoulderL.position).addScaledVector(_fw, reach), POLE_L);
           }
         }
       } else if (a.name === 'drink' && !fp) {

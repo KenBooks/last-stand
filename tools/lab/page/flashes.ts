@@ -23,6 +23,30 @@ export interface FlashCount {
   changes: FlashChange[];
 }
 
+/** A counted change with the frame it came from: the area's darkest frame before a rise, its brightest before a
+ *  fall, since the change before it. */
+export interface ChangeSpan {
+  from: number;
+  to: number;
+  rising: boolean;
+}
+
+/** how far back a run's first change is looked for its start (frames) */
+const FIRST_BACK = 30;
+
+/** Each of `changes` with the frame it came from (`lights`: the area's light frame by frame). */
+export function changeSpans(changes: FlashChange[], lights: number[]): ChangeSpan[] {
+  return changes.map(({ frame, rising }, index) => {
+    const since = index ? changes[index - 1].frame : Math.max(0, frame - FIRST_BACK);
+    let from = since;
+    for (let f = since; f < frame; f++) {
+      const further = rising ? lights[f] < lights[from] : lights[f] > lights[from];
+      if (further) from = f;
+    }
+    return { from, to: frame, rising };
+  });
+}
+
 /** Where an area's light (each frame a share of white) changed by `CHANGE` against the way it last went. */
 function changesOf(lights: number[]): FlashChange[] {
   const changes: FlashChange[] = [];
