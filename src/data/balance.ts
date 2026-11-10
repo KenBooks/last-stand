@@ -80,6 +80,28 @@ export const COOP = {
   sendRate: 20,
 };
 
+/** Co-op pings (game/ping.ts): what a player shows the party, and for how long. */
+export const PING = {
+  /** how long a ping shows (s), fading in and out over its ends */
+  life: 6,
+  fadeIn: 0.15,
+  fadeOut: 1,
+  /** the least time between a player's pings (s): a new one replaces the last */
+  gap: 0.4,
+  /** every ping's ring (m), a spot's or a foe's alike, whatever the foe's size (from play: "do not increase radius,
+   *  just have same size for all, do not have the option to change size of radius when pinging") */
+  radius: 0.9,
+  /** a foe pinged when the aim is this near its body (m), on the minimap this near its middle */
+  foeNear: 1.2,
+  mapFoeNear: 1.6,
+  /** a touch held this long on the minimap shows the ping it would make (s), placed as the finger moves and made as it
+   *  lifts; moved this far before then (css px), it's no long press */
+  longPress: 0.5,
+  pressSlop: 12,
+  /** the ripple running out over a ping's ring, once this often (s: slower than 1.5 a second, never a flash) */
+  ripple: 1.2,
+};
+
 /**
  * What a party of 1 to `COOP.maxPlayers` meets, against one hero alone: the foes in a wave (`foes`), the life on each
  * (`life`, a boss's summons too) and on a boss (`boss`), and the foes that may stand at once (`alive`, added to the

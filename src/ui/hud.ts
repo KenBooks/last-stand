@@ -288,8 +288,15 @@ function updateTarget() {
   setStyle(h('#target .t-ghost'), 'width', k);
 }
 
+/** how many metres across the minimap shows (its canvas's width) */
+export const MINIMAP_METRES = 64;
+/** what draws on the minimap besides the arena, the foes and the heroes (the pings: ui/ping.ts), under the heroes */
+const minimapHooks: ((c: CanvasRenderingContext2D, S: number) => void)[] = [];
+/** Runs `draw` each time the minimap is drawn, in its turned frame (`S` px a metre, its middle the arena's). */
+export function onMinimap(draw: (c: CanvasRenderingContext2D, S: number) => void): void { minimapHooks.push(draw); }
+
 function drawMinimap() {
-  const c = mmCtx, W = 200, S = W / 64; // world units -> px
+  const c = mmCtx, W = 200, S = W / MINIMAP_METRES; // world units -> px
   c.clearRect(0, 0, W, W);
   c.save();
   c.translate(W / 2, W / 2);
@@ -319,6 +326,7 @@ function drawMinimap() {
     c.fillStyle = e.boss ? '#c070ff' : e.hero ? '#ffb040' : '#ff3a30';
     c.beginPath(); c.arc(e.pos.x * S, e.pos.z * S, e.boss ? 5 : e.hero ? 3.5 : 2.2, 0, Math.PI * 2); c.fill();
   }
+  for (const draw of minimapHooks) draw(c, S);
   // player arrows: ours in green, co-op partners in blue
   for (const p of [...G.players].reverse()) {
     if (p.away || p.out === 'banked') continue;

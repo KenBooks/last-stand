@@ -174,3 +174,11 @@ body.touch .sp-keys { display: none; }
 .portrait-clear { display: flex; justify-content: flex-end; margin-top: 6px; }
 .portrait-none { padding: 4px 10px; min-height: 30px; font-size: 14px; }
 body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
+
+// a co-op ping's hint while Left Shift is held (ui/ping.ts): low in the middle, over the revive prompt's place
+.pinghint { position: absolute; left: 50%; bottom: hud(215px); transform: translateX(-50%); display: flex; align-items: center; gap: hud(10px);
+  padding: hud(7px) hud(14px); border-radius: hud(6px); background: rgba(10,6,4,.72); border: 1px solid rgba(#ffd04a, .4);
+  font-size: hud(15px); color: #fff4dc; pointer-events: none; white-space: nowrap; }
+.pinghint kbd { display: inline-flex; align-items: center; justify-content: center; min-width: hud(34px); height: hud(26px); padding: 0 hud(6px);
+  border-radius: hud(4px); font-family: var(--font-display); font-size: hud(14px); color: #1a1208; background: linear-gradient(#fff4d0, #e8c878);
+  border: 1px solid #fff8e0; }

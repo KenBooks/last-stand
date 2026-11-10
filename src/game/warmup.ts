@@ -39,6 +39,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
+import { pingSamples } from '../ui/ping';
 import { buildHallAhead } from './hall';
 import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
@@ -173,7 +174,7 @@ export function compileTheLobby(): void {
   // (the other heroes' skills are theirs to warm, the foes' shots the fight's)
   const extra: THREE.Object3D[] = [
     ...named('cores', coreSamples()), ...named('drops', groundSamples()), ...named('swing trail', swingTrailSamples()),
-    ...skillSamples(G.player.cls.model),
+    ...skillSamples(G.player.cls.model), ...named('ping', pingSamples()),
   ];
   lobbyExtras = extra;
   compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);

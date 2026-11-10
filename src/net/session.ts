@@ -22,11 +22,12 @@ import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
 import { colourOf, freeColour, ownColour, savedColour, setRoomColour } from './heroColour';
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
+import { setPingNet, pingHeard, clearPings } from '../game/ping';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 24;
+const PROTOCOL = 25;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -199,6 +200,8 @@ export function leaveRoom(): void {
   session.hostId = '';
   session.biome = null;
   role.current = 'solo';
+  setPingNet(null);
+  clearPings();
   // (back in the colour picked, or the hero's own)
   wearRoomColour(null);
   stopSync();
@@ -249,6 +252,8 @@ function wire(l: Link): void {
     },
     taken: (id) => send('ctl', { t: 'gtaken', id, to: l.self }),
   });
+  // a ping has no gameplay effect: every game sends its own to every other (game/ping.ts)
+  setPingNet((m) => send('ctl', { t: 'ping', ...m }));
 }
 
 /** Who we are, to a game we meet: our slot is -1 until the host has given us one (another guest would take our 0 as
@@ -319,6 +324,11 @@ function onHello(from: string, m: Record<string, unknown>): void {
 function onControl(from: string, m: Record<string, unknown>): void {
   if (m.t === 'bye') { peerLeft(from); return; }
   if (onGround(from, m)) return;
+  if (m.t === 'ping') {
+    const by = session.peers.get(from)?.player;
+    if (by) pingHeard(by, m);
+    return;
+  }
   if (role.current === 'guest') {
     if (m.t === 'welcome') {
       netLog(`welcomed into slot ${String(m.slot)}`);
