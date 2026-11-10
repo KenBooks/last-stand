@@ -11,7 +11,8 @@
 //   DELETE /saves/account              the account, every site's save and every way in, gone
 //   DELETE /saves/passkey/<id>         one passkey (never the last way in)
 //   POST   /saves/signout              this session ended
-//   POST   /saves/link-code            a sign-in code for another site or device: 8 letters, once, 10 minutes
+//   POST   /saves/link-code            a sign-in code for another site or device: 8 letters, once, 10 minutes (a
+//                                      preview's: previews alone)
 //   POST   /saves/link                 { code } -> { token, account }: signed in here as the account that made it
 //   GET    /saves/save                 this site's save's parts: version, device, updated, bytes each
 //   GET    /saves/save/<part>          a part's gzip (x-save-version, x-save-device, x-save-updated)
@@ -100,7 +101,8 @@ const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 /** `key` -> the times it was counted in its window (writes, accounts, asks) */
 const counts = new Map();
-/** a sign-in code -> { accountId, until }: good once, for LINK_MS */
+/** a sign-in code -> { accountId, until, previewsOnly }: good once, for LINK_MS; one a preview made opens no
+ *  production session */
 const linkCodes = new Map();
 const LINK_MS = 10 * 60_000;
 /** a sign-in code's letters: Crockford's base32 (no I, L, O, U), 8 of them (40 bits) */
@@ -287,6 +289,9 @@ async function link(req, res, origin, headers) {
   prune();
   const entry = linkCodes.get(code);
   if (!entry) return answer(res, 401, 'no such code, or it expired', headers);
+  if (entry.previewsOnly && trusted(siteOf(origin))) {
+    return answer(res, 403, 'a code from a preview signs in on previews alone', headers);
+  }
   linkCodes.delete(code);
   const result = await change(entry.accountId, (changed) => ({
     token: store.addSession(changed, siteOf(origin), 'code'), changed,
@@ -464,17 +469,18 @@ async function signedInRequest(req, res, path, origin, headers) {
     });
     return answer(res, 204, '', headers);
   }
-  // past here, what reaches beyond this site's own save: production's sessions alone (a preview's code may have
-  // sent its token anywhere)
-  const reachesPast = path === '/saves/link-code' || path === '/saves/account' || path.startsWith('/saves/passkey/');
-  if (reachesPast && !trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
   if (path === '/saves/link-code' && req.method === 'POST') {
-    // one code an account at a time: a new one replaces the last
+    // one code an account at a time: a new one replaces the last. A preview's opens previews alone: its session
+    // may be a token its unmerged code sent anywhere, and it must never reach production through a code
     for (const [old, entry] of linkCodes) if (entry.accountId === account.id) linkCodes.delete(old);
     const code = newLinkCode();
-    linkCodes.set(code, { accountId: account.id, until: Date.now() + LINK_MS });
-    return answer(res, 200, { code, until: Date.now() + LINK_MS }, headers);
+    linkCodes.set(code, { accountId: account.id, until: Date.now() + LINK_MS, previewsOnly: !trusted(site) });
+    return answer(res, 200, { code, until: Date.now() + LINK_MS, previewsOnly: !trusted(site) }, headers);
   }
+  // past here, what reaches beyond this site's own save: production's sessions alone (a preview's code may have
+  // sent its token anywhere)
+  const reachesPast = path === '/saves/account' || path.startsWith('/saves/passkey/');
+  if (reachesPast && !trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
   if (path === '/saves/account' && req.method === 'DELETE') {
     await store.withAccount(account.id, () => store.dropAccount(account.id));
     log('account deleted', account.id.slice(0, 6));
