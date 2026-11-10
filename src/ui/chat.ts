@@ -41,8 +41,8 @@ function make(): void {
   root.innerHTML = '<div class="chat-log" role="log" aria-live="polite" aria-label="Chat"></div>'
     + '<form class="chat-form" autocomplete="off"><input class="chat-input" type="text" enterkeyhint="send" '
     + `maxlength="${CHAT.most}" aria-label="Say to the party" placeholder="Say to the party…">`
-    // (its Enter key drawn on it: Enter sends)
-    + '<button type="submit" class="chat-send" aria-label="Send (Enter)">Send <span class="chat-enter" aria-hidden="true">⏎</span></button></form>';
+    // (its Enter key drawn on it with a keyboard, Enter sending; on touch, Send alone: _chat.scss)
+    + '<button type="submit" class="chat-send" aria-label="Send">Send <span class="chat-enter" aria-hidden="true">⏎</span></button></form>';
   document.body.appendChild(root);
   log = root.querySelector('.chat-log')!;
   form = root.querySelector('.chat-form')!;

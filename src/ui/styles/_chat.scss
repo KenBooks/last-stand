@@ -56,7 +56,10 @@ body.touch #chat.open { width: min(touch(320px), calc(100vw - 28px)); }
   border-radius: hud(3px); }
 // (a finger's size on touch, and a phone's keyboard doesn't zoom the page for a field under 16 px)
 body.touch .chat-input { font-size: 16px; min-height: 40px; }
-body.touch .chat-send { min-height: 40px; min-width: 64px; font-size: 15px; }
+body.touch .chat-send { min-height: 40px; min-width: 64px; font-size: 15px; justify-content: center; }
+// (no Enter key on a phone: its keyboard has its own send key, `enterkeyhint`; from play, "on mobile... send key, not
+// enter key")
+body.touch .chat-enter { display: none; }
 body.touch .chat-line { font-size: touch(14px); }
 
 // on touch: a button under the scores button (the pause and full screen buttons' column)
