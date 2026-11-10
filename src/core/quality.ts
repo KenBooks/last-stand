@@ -223,7 +223,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);
-  setFlameSteps(p.flameSteps);
+  setFlameSteps(p.flameSteps, p.flameLite);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

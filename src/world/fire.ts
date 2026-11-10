@@ -66,8 +66,17 @@ const SPAN_LEAST = 0.25;
 /** the share of the steps every fire's rays take, the quality level's (`setFlameSteps`): a uniform, so a switch
  *  compiles nothing */
 const stepShare = { value: 1 };
-/** Every fire's flames stepped at `share` of their steps (1 at High; the quality level's `flameSteps`). */
-export function setFlameSteps(share: number): void { stepShare.value = share; }
+/** whether every fire's flames take the lite path (the quality level's `flameLite`): the nearest loop frame alone and
+ *  no strands at each step, a third of the volume's reads; 1 or 0, a uniform */
+const lite = { value: 0 };
+/** what the strands' read gives on average (0 to 1), taken in its place on the lite path, so its flames burn as bright */
+const LITE_STRANDS = 0.23;
+/** Every fire's flames stepped at `share` of their steps (1 at High; the quality level's `flameSteps`), and on the lite
+ *  path where `light` (`flameLite`). */
+export function setFlameSteps(share: number, light = false): void {
+  stepShare.value = share;
+  lite.value = light ? 1 : 0;
+}
 /** the frames a second the loop plays at, as it was simulated */
 const LOOP_RATE = 60 / LOOP.stepsEach;
 /** how far round its bed the box reaches and how far up it stands, shares of the bed's radius and of the flames' height */
@@ -218,6 +227,7 @@ const FLAME_FRAGMENT = /* glsl */`
   uniform vec2 uBowl[3];
   uniform vec4 uLogs[${LOGS_MOST * 2}];
   uniform float uStepShare;
+  uniform float uLite;
   varying vec3 vFlameWp;
   // the gas's light at a flame's life: a blackbody's, its colour and radiance by its heat
   vec3 flameColour(float life) {
@@ -245,6 +255,15 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
     if (q.y <= 0.0 || q.y >= 1.0 || dot(across, across) >= 1.0) return 0.0;
     float first = floor(uFrame);
     float next = mod(first + 1.0, ${glsl(LOOP.frames)});
+    // (lite, the lower levels': the nearest of the loop's frames alone, and no strands, a third of the reads)
+    if (uLite > 0.5) {
+      float life = flameTile(q, mod(floor(uFrame + 0.5), ${glsl(LOOP.frames)}));
+      if (life <= 0.004) return 0.0;
+      life *= 1.0 - ${glsl(FLAME_LOOK.strandsTake * (1 - LITE_STRANDS))};
+      float sideFrom = mix(${glsl(FLAME_LOOK.sideFadeFoot)}, ${glsl(FLAME_LOOK.sideFade)}, smoothstep(0.0, ${glsl(FLAME_LOOK.footNarrows)}, q.y));
+      float side = 1.0 - smoothstep(sideFrom, sideFrom + 0.3, length(across));
+      return life * side * smoothstep(0.0, ${glsl(FLAME_LOOK.footFade)}, q.y);
+    }
     float life = mix(flameTile(q, first), flameTile(q, next), uFrame - first);
     if (life <= 0.004) return 0.0;
     // (the strands: the loop's own middle read finer, mirrored as it repeats so no seam shows)
@@ -397,7 +416,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
 
 /** the numbers the flames' shader is written with, for its WGSL (fireNodes.ts) */
 const FLAME_SHAPE = {
-  steps: STEPS, stepsLeast: STEPS_LEAST, spanLeast: SPAN_LEAST, look: FLAME_LOOK,
+  steps: STEPS, stepsLeast: STEPS_LEAST, spanLeast: SPAN_LEAST, liteStrands: LITE_STRANDS, look: FLAME_LOOK,
   tiles: TILES, cells: BAKE, kept: KEPT, keptSize: KEPT_SIZE, frames: LOOP.frames,
 };
 
@@ -441,6 +460,7 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
       uLogs: { value: Array.from({ length: LOGS_MOST * 2 }, () => new THREE.Vector4()) },
       // (one for every fire: the quality level's)
       uStepShare: stepShare,
+      uLite: lite,
     },
     vertexShader: FLAME_VERTEX,
     fragmentShader: FLAME_FRAGMENT,
