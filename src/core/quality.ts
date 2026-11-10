@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
-import { setBloomShare, setRenderQuality, setShadowInTurns } from './renderer';
+import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
 import { setParticleShare } from '../fx/particles';
 
 import { readCookie, writeCookie } from './cookies';
@@ -76,7 +76,26 @@ function bootLevel(): QualityLevel {
 /** Whether the level the boot starts at lets HDR show, for a renderer made before `initQuality` (WebGPU's). */
 export const hdrAllowedAtBoot = (): boolean => QUALITY[bootLevel()].hdr;
 
+/** the player's Resolution, a share of the screen's pixels each way (its cookie, and the choices the menu offers) */
+const RESOLUTION_COOKIE = 'last-stand-resolution';
+export const RESOLUTIONS = [1, 0.75, 0.5, 0.25] as const;
+let resolution = 1;
+
+/** The player's Resolution: the share of the screen's pixels each way the scene renders. */
+export const resolutionSetting = (): number => resolution;
+
+/** The scene drawn at `share` of the screen's pixels each way, kept for the next visits: the player's own choice,
+ *  apart from the quality level and Auto, which never touch it. */
+export function setResolution(share: number): void {
+  resolution = (RESOLUTIONS as readonly number[]).includes(share) ? share : 1;
+  writeCookie(RESOLUTION_COOKIE, String(resolution));
+  setResolutionShare(resolution);
+}
+
 export function initQuality(): void {
+  const kept = Number(readCookie(RESOLUTION_COOKIE));
+  resolution = (RESOLUTIONS as readonly number[]).includes(kept) ? kept : 1;
+  setResolutionShare(resolution);
   const saved = readCookie(COOKIE);
   setting = saved === 'auto' || isLevel(saved) ? saved : 'auto';
   if (setting === 'auto') bootAuto(readAuto());
