@@ -34,6 +34,20 @@ export function initCloudSaves(h: CloudUiHooks): void {
   hooks = h;
   const box = $('#cloud-dialog');
   box.onclick = (e) => { if (e.target === box && !busy) closeDialog(); };
+  // the Account menu closes on a press anywhere outside it, as a dropdown does (Esc: `closeAccountMenu`)
+  document.addEventListener('pointerdown', (e) => {
+    const open = openMenu();
+    if (open && !open.contains(e.target as Node)) open.open = false;
+  });
+}
+
+const openMenu = (): HTMLDetailsElement | null => document.querySelector<HTMLDetailsElement>('#saves .sc-more[open]');
+
+/** Closes the Account menu if it is open (the screen's Esc): whether it was. */
+export function closeAccountMenu(): boolean {
+  const open = openMenu();
+  if (open) open.open = false;
+  return Boolean(open);
 }
 
 export const cloudDialogOpen = (): boolean => !$('#cloud-dialog').classList.contains('hidden');
@@ -61,15 +75,17 @@ export function renderCloudBar(): void {
     const state = status === 'syncing' ? 'Syncing...' : status === 'offline' ? 'Offline' : status === 'error' ? 'Not synced'
       : lastSync ? `Synced ${ago(lastSync)}` : 'Synced';
     const more = [
-      onProduction() ? '<button class="btn sc-give">Sign in elsewhere</button>' : '<button class="btn sc-copy">Copy my production heroes here</button>',
-      '<button class="btn sc-key">Add a passkey</button>',
+      '<button class="btn sc-give">Sign in elsewhere</button>',
+      onProduction() ? '' : '<button class="btn sc-copy">Copy my production heroes here</button>',
+      // off production the server takes a passkey only just after a code signed this device in
+      onProduction() || cloud.passkeyWindow() ? '<button class="btn sc-key">Add a passkey</button>' : '',
       '<button class="btn sc-out">Sign out</button>',
       '<button class="btn danger sc-del">Delete cloud save</button>',
       onProduction() ? '<button class="btn danger sc-gone">Delete account</button>' : '',
     ].join('');
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon on" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Slot 1 is your cloud save · account ${accountId.slice(0, 6)} · <b>${state}</b></span>`
-      + `<button class="btn sc-sync">Sync now</button><details class="sc-more"><summary class="btn">Account</summary>`
+      + `<button class="btn sc-sync">Sync now</button><details class="sc-more"><summary class="btn">Account<span class="sc-chevron" aria-hidden="true"></span></summary>`
       + `<div class="sc-menu">${more}</div></details>${privacy}</div>${note}`;
   }
   bind(bar, '.sc-in', () => act(() => cloud.signInWithPasskey(), afterSignIn));
@@ -111,6 +127,12 @@ function failure(e: unknown): string {
     if (e.status === 0) return 'The cloud saves server could not be reached. Try again in a while.';
     if (e.status === 401) return 'Not signed in: that passkey or code isn\'t one this server knows, or it expired.';
     if (e.status === 429) return 'Too many tries: wait a while and try again.';
+    if (e.message.startsWith('add a passkey')) {
+      return 'On a preview, a passkey can be added only in the 10 minutes after signing in with a code. Sign in elsewhere on a device already signed in, type its code here, then add the passkey.';
+    }
+    if (e.message.startsWith('a code from a preview')) {
+      return 'That code was made on a preview, so it signs in on previews only. Make one on last-stand.cc to sign in here.';
+    }
     return e.message;
   }
   return String((e as Error)?.message ?? e);
@@ -166,9 +188,10 @@ function askCode(): void {
 
 async function showCode(): Promise<void> {
   try {
-    const { code, until } = await cloud.makeLinkCode();
+    const { code, until, previewsOnly } = await cloud.makeLinkCode();
     const minutes = Math.round((until - Date.now()) / 60_000);
-    dialog('Sign in elsewhere', `<p class="cd-shown">${code.slice(0, 4)}-${code.slice(4)}</p><p>Type it on the other device or on a preview, under Save slots, <b>Use a sign-in code</b>. It works once, for ${minutes} minutes. Never give it to anyone else: it opens your account.</p>`,
+    const where = previewsOnly ? 'on another device\'s preview (never on last-stand.cc)' : 'on the other device or on a preview';
+    dialog('Sign in elsewhere', `<p class="cd-shown">${code.slice(0, 4)}-${code.slice(4)}</p><p>Type it ${where}, under Save slots, <b>Use a sign-in code</b>. It works once, for ${minutes} minutes. Never give it to anyone else: it opens your account.</p>`,
       [{ label: 'Done', kind: 'primary' }]);
   } catch (e) { say(failure(e)); }
 }

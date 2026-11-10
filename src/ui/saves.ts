@@ -19,7 +19,7 @@ import { bindTooltip, hideTooltip, itemTooltipHTML } from './tooltip';
 import { makeSkillSlot, rarityChips } from './hud';
 import { sfx } from '../core/audio';
 import { linked } from '../loot/cloud';
-import { CLOUD, askConflicts, closeDialog, cloudDialogOpen, initCloudSaves, renderCloudBar } from './cloudSaves';
+import { CLOUD, askConflicts, closeAccountMenu, closeDialog, cloudDialogOpen, initCloudSaves, renderCloudBar } from './cloudSaves';
 import type { ClassDef, DerivedStats, Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -75,7 +75,7 @@ export function refreshSaves(): void { if (savesOpen()) render(); }
 export function savesBack(): void {
   if (deleting) askDelete(0);
   else if (cloudDialogOpen()) closeDialog();
-  else openSaves(false);
+  else if (!closeAccountMenu()) openSaves(false);
 }
 
 function render(): void {
@@ -282,7 +282,7 @@ const count = (n: number, word: string, many = word + 's'): string => `${n.toLoc
 /** Time in the arena: "4h 12m", "35m". */
 function played(s: number): string {
   const m = Math.round(s / 60);
-  return m < 1 ? 'under a minute' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+  return m < 1 ? '<1m' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });

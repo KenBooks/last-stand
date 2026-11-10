@@ -144,8 +144,21 @@ async function link(run) {
   const kept = heroesText(heroesOfSave(save));
   expect(problems, 'the service\'s save', kept, 'mage[A2-mage] warrior[A2-warrior]');
   await shoot(run, a, 'signed-in');
+  await accountMenu(run, problems);
   const lines = [`A's slots: ${slotsText(slots)}`, `the service holds ${kept} (${Object.keys(save).join(', ')})`];
   return { lines, problems };
+}
+
+/** The bar's Account dropdown on A: opened by its button, pictured, and closed by a click elsewhere on the screen,
+ *  as a dropdown closes (the owner: "should be possible to dismiss Account dropdown by clicking anywhere else"). */
+async function accountMenu(run, problems) {
+  const { a } = run;
+  await a.click('#saves .sc-more > summary');
+  await a.until((state) => state.menuOpen, 'opened the Account menu');
+  await shoot(run, a, 'account-menu');
+  await a.click('#saves .sv-title');
+  const after = await a.state();
+  if (after.menuOpen) problems.push('the Account menu stayed open after a click elsewhere');
 }
 
 /** The canary's drop: every copy of the mage B reads from the service loses his stash's items. */

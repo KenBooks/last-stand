@@ -38,6 +38,8 @@ interface Kept {
   /** each part as last synced: its version and content */
   base: Record<string, { version: number; value: Entries }>;
   lastSync: number;
+  /** when this device signed in by a sign-in code: a preview may add its passkey only just after */
+  byCodeAt?: number;
 }
 
 /** One hero changed both here and in the cloud since they last agreed: the player keeps one. */
@@ -153,7 +155,13 @@ function signedInAs(result: api.SignedIn): void {
 
 export async function signUpWithPasskey(): Promise<void> { signedInAs(await api.makePasskey()); }
 export async function signInWithPasskey(): Promise<void> { signedInAs(await api.usePasskey()); }
-export async function signInWithCode(code: string): Promise<void> { signedInAs(await api.signInWithCode(code)); }
+export async function signInWithCode(code: string): Promise<void> {
+  signedInAs(await api.signInWithCode(code));
+  if (kept) { kept.byCodeAt = Date.now(); keep(); }
+}
+
+/** Whether the server lets this session add a passkey off production: in its first 10 minutes, made by a code. */
+export const passkeyWindow = (): boolean => Boolean(kept?.byCodeAt && Date.now() - kept.byCodeAt < 10 * 60_000);
 
 /** Signed out on this device: slot 1 stays here as a local save. */
 export async function signOut(): Promise<void> {
@@ -171,7 +179,7 @@ function forget(): void {
 
 /** The server's account (its passkeys, its sites' saves). */
 export const fetchAccount = (): Promise<api.CloudAccount> => api.account();
-export const makeLinkCode = (): Promise<{ code: string; until: number }> => api.linkCode();
+export const makeLinkCode = (): Promise<{ code: string; until: number; previewsOnly?: boolean }> => api.linkCode();
 export const addPasskey = async (): Promise<void> => { await api.makePasskey(); };
 
 /** The account and every save of it, gone from the server: this device keeps its slots. */

@@ -155,9 +155,13 @@ export class Device {
       const box = title.getBoundingClientRect();
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
     });
+    // an open Account menu closes on a press outside it (and a tap on its padding was moved onto a button by the
+    // browser's touch adjustment): opened again after the tap, as the player's tap on Account opens it
+    const menuOpen = await this.page.evaluate(() => document.querySelector('#saves .sc-more[open]') !== null);
     const point = { x: at.x, y: at.y, id: 0 };
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    if (menuOpen) await this.page.evaluate(() => { document.querySelector('#saves .sc-more').open = true; });
     await pause(SETTLE_MS);
   }
 

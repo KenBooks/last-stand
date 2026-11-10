@@ -70,10 +70,10 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 - Touch supports one held shield finger alongside one other skill finger (#399), each with its own pointer capture. The attack/aim finger owns the aim; a shield alone can still be dragged to turn it. Release, cancel, lost capture, hidden controls and loadout rebuilds clear the relevant held input. Two non-shield skills remain exclusive.
 
 - **Cloud saves on the save slots screen** (`cloudSaves.ts`, `#saves .sv-cloud`, `#cloud-dialog`; the sync is `loot/cloud.ts`):
-  - The bar under the title. Signed out: sign in with a passkey, New account, Use a sign-in code. Signed in: slot 1's state and Sync now, with the account's actions under Account: Sign in elsewhere (a code) and Delete account on production alone; Copy my production heroes here on a preview.
-  - The dialogs: which slot becomes the cloud save; the cloud's save coming down, naming the slot pushed out before anything changes; a hero changed in two places, both sides side by side; a code; deleting.
+  - The bar under the title. Signed out: sign in with a passkey, New account, Use a sign-in code. Signed in: slot 1's state and Sync now, with the account's actions under Account, a dropdown (a chevron, closed by a press anywhere outside it or by Esc): Sign in elsewhere (a code; a preview's signs in on previews alone), Delete account on production alone, Copy my production heroes here on a preview. Add a passkey shows where the server takes one: on production, and on a preview only in the 10 minutes after a code signed this device in (`passkeyWindow`); shown on a preview where it was refused, it showed the server's bare reply.
+  - The dialogs: which slot becomes the cloud save; the cloud's save coming down, naming the slot pushed out before anything changes; a hero changed in two places, both sides side by side; a code; deleting. A refusal is said in a sentence of what to do (`failure`), never the server's own words.
   - Slot 1 wears the cloud's mark. Slots rearranged glide from where their save was to where it is now (`moveSlots` in `saves.ts`: transforms alone, slot 1's rising in last, the one pushed out falling away). With reduced motion they simply change.
-  - Esc closes a dialog before the screen.
+  - Esc closes a dialog, then the Account menu, before the screen.
   - The privacy page is `public/privacy.html`, linked from the bar.
   - Check with `npm run lab -- cloud`.
 

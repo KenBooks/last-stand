@@ -113,7 +113,7 @@ export async function usePasskey(): Promise<SignedIn> {
 }
 
 // --- the account ---------------------------------------------------------------------------------------------
-export const linkCode = (): Promise<{ code: string; until: number }> => json(call('POST', '/link-code'));
+export const linkCode = (): Promise<{ code: string; until: number; previewsOnly?: boolean }> => json(call('POST', '/link-code'));
 export const signInWithCode = (code: string): Promise<SignedIn> => json(call('POST', '/link', { json: { code } }));
 export const account = (): Promise<CloudAccount> => json(call('GET', '/account'));
 export const signOut = async (): Promise<void> => { await call('POST', '/signout'); };

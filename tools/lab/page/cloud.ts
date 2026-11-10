@@ -86,6 +86,8 @@ export interface CloudState {
   token: string;
   dialog: { open: boolean; title: string; text: string; buttons: string[] };
   savesOpen: boolean;
+  /** the bar's Account dropdown is open */
+  menuOpen: boolean;
   mode: string;
 }
 
@@ -105,6 +107,7 @@ export function cloudState(): CloudState {
       buttons,
     },
     savesOpen: !document.getElementById('saves')!.classList.contains('hidden'),
+    menuOpen: document.querySelector('#saves .sc-more[open]') !== null,
     mode: G.mode,
   };
 }
@@ -180,6 +183,11 @@ export function cloudFit(): { lines: string[]; problems: string[] } {
   const problems = [...fitOf('the bar', row), ...fitOf('the bar among the screen', [bar, ...neighbours])];
   const box = document.getElementById('cloud-dialog')!;
   const lines = [`bar ${boxText(bar)}`];
+  const menu = document.querySelector('#saves .sc-more[open] .sc-menu');
+  if (menu) {
+    problems.push(...fitOf('the Account menu', [menu]), ...fitOf('the Account menu\'s buttons', [...menu.children]));
+    lines.push(`Account menu ${boxText(menu)}`);
+  }
   if (!box.classList.contains('hidden')) {
     const panel = box.querySelector('.modal-box')!;
     const parts = [...panel.children];

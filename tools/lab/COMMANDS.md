@@ -615,14 +615,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   sync). The real screen is driven: the lobby's `#btn-saves`, the bar's New account, Use a sign-in code, Sync now,
   and the dialog's buttons. Scenarios, in order, each building on the one before: `link` (A, slots 1 and 2 filled,
   makes an account and chooses slot 2: slots 1 and 2 swap, and the service's save, read back with A's token, holds
-  slot 2's heroes); `download` (B, all three slots full, signs in by A's code: the dialog names slot 3 as lost while
+  slot 2's heroes; then the bar's Account dropdown opened, pictured, and closed by a click on the screen's title);
+  `download` (B, all three slots full, signs in by A's code: the dialog names slot 3 as lost while
   B's slots are still as they were; confirmed, slot 1 holds the cloud's heroes, the others shifted, slot 3's gone);
   `conflict` (the mage changed on A and on B while B's link to the service was cut, `context.route` aborting: B,
   back online, is asked, the dialog saying its copy will be lost, keeps the cloud's; then the warrior so on A, whose
   dialog says its copy goes to slot 3, where it then is); `merge` (the warrior changed on A, the mage on B: each
   syncs with no question and both devices and the service end with both changes). A's code is made by the game's
-  own call: Sign in elsewhere shows on production alone (`onProduction` in `src/ui/cloudSaves.ts`), and the lab's
-  page is localhost. Each moment (signed out, choosing, signed in, the code, the download, both conflicts) is
+  own call. Each moment (signed out, choosing, signed in, the Account menu, the code, the download, both conflicts) is
   pictured at 1024x700, 1920x1080, 820x1180 and a phone's 844x390@2 in touch mode (a finger's tap on a title) into
   `out/cloud/<moment>-<screen>.png`, the bar's parts and the dialog's held within the window and over no other
   (`cloudFit`). The browser's logged failures of calls made offline are the scenario's own, taken out of the
