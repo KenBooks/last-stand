@@ -16,9 +16,9 @@
 // before them, which must come out as drawn by the arms' camera though it isn't the hero's. And what the hero's own
 // draws cost three: a draw in another material than the one before has all its uniforms sent again, some 20 us on a
 // desktop where a draw in the same material takes 4, so a hero's cost is the materials he draws in (the mage's 77
-// scene draws merged into 46 took as long; in 38 materials where 46, less). The hero's switches in the frame, his
-// materials and programs are listed, over `HERO_SWITCHES` a problem (`HERO_SWITCHES_GLOWING` in gear that glows);
-// the canary gives ten of his meshes materials of their own, which must come out over it.
+// scene draws merged into 46 took as long). The hero's switches in the frame, his materials and programs are listed,
+// over `HERO_SWITCHES` a problem; the canary gives ten of his meshes materials of their own, which must come out
+// over it.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -43,11 +43,10 @@ export interface DrawsOptions {
 /** the frames run before the one recorded: the camera's glide in and the foes' first frames come to rest */
 const SETTLE_FRAMES = 30;
 const ROWS = 16;
-/** the most draws in another material than the one before a hero may make a frame, scene and shadow maps together
- *  (the mage in the forest lobby with all his armour: 48), and with gear that glows (`--rarity` Rare and up: each
- *  glowing item's parts draw in copies of their materials, `models/itemGlow.ts`; every item Epic: 58) */
-const HERO_SWITCHES = 50;
-const HERO_SWITCHES_GLOWING = 60;
+/** the most draws in another material than the one before a hero may make a frame, scene and shadow maps together,
+ *  in any gear (in the forest lobby with all their armour the warrior makes 36, the mage 38, the ranger 39, their
+ *  looks drawn from palettes, `models/palette.ts`; each look in its own material, the mage made 58) */
+const HERO_SWITCHES = 42;
 /** how many of the hero's meshes the canary gives a material of their own */
 const CANARY_MATERIALS = 10;
 const CANARY_BOXES = 7;
@@ -346,8 +345,6 @@ function heroProblems(record: FrameDraws, most: number, canary: boolean): string
     + 'more in each pass that draws it)'];
 }
 
-/** The rarities whose items glow (`models/itemGlow.ts`). */
-const GLOWING = ['rare', 'epic', 'legendary'];
 
 /** Ten of the hero's meshes shown given a copy of their material each (the canary's): as many switches more. */
 function plantMaterials(): void {
@@ -576,10 +573,9 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const foes = `${count} ${count === 1 ? 'foe' : 'foes'}`;
   const view = options.fixture.view ?? 'top';
   const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
-  const glowing = GLOWING.includes(options.fixture.rarity ?? '');
   const problems = [
     ...strangerProblems(record),
-    ...heroProblems(record, glowing ? HERO_SWITCHES_GLOWING : HERO_SWITCHES, options.canary),
+    ...heroProblems(record, HERO_SWITCHES, options.canary),
     ...(options.canary ? canaryProblems(record) : []),
   ];
   return { text: [head, heroRow(record), ...lists(record, options.rows ?? ROWS)].join('\n'), problems };

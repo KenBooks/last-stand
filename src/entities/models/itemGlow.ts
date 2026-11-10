@@ -1,14 +1,16 @@
 // A worn item's glow in its rarity's colour (#404): a Rare item and better glows faintly over its own colour and the
 // hero's dye, most at its edges, wisps drifting slowly up it and breathing (`ITEM_GLOW` in core/materials.ts). No
 // light and no program of its own: a glowing item's parts draw with copies of their kit materials (`kitCopy`), the
-// same program as every kit material's, their glow a uniform's colour of their own. An item that doesn't glow (under
-// Rare, or the setting off) draws in the kit's own materials: every material a hero draws in is a switch for three,
-// which sends all of its uniforms again (20 us each on a desktop, a draw of the material before's 4), and with every
-// item's parts in copies always, the mage drew in 46 materials, 21 of them copies, 1.0 ms of a render's 2.4 of JS.
+// same program as every kit material's, their glow a uniform's colour of their own. Every material a hero draws in
+// is a switch for three, which sends all of its uniforms again (13 to 24 us each on a desktop, a draw in the material
+// before's 2 to 4). So where the hero's looks draw from palettes (`palette.ts`, WebGL) a copy is a row of its
+// original's palette, and costs nothing; elsewhere (WebGPU, a part no palette holds) an item that doesn't glow
+// (under Rare, or the setting off) draws in the kit's own materials.
 import * as THREE from 'three';
 import { gearGlow, ITEM_GLOW, kitCopy, ownAura } from '../../core/materials';
 import { RARITIES } from '../../data/items';
 import type { Gear, GlowSlot, RarityId } from '../../types';
+import { PALETTES } from './palette';
 
 /** the lowest rarity that glows (from play: "if green or above") */
 const FROM: RarityId = 'rare';
@@ -87,7 +89,10 @@ export class ItemGlows {
             this.kitMats.push(copy);
             auras.push((copy as unknown as { kitLooks: { aura: { value: THREE.Color } } }).kitLooks.aura.value);
           }
-          if (copy !== material) worn.push({ mesh, at, own: material, copy });
+          if (copy === material) return;
+          // (a palette's row from the start: `drawFromPalettes` finds the part in its copy)
+          if (PALETTES) draw(mesh, at, copy);
+          else worn.push({ mesh, at, own: material, copy });
         };
         [mesh.material].flat().forEach(mine);
       });

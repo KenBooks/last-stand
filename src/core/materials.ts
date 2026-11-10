@@ -59,8 +59,8 @@ export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AUR
 const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells / 2));
 
 /** the setting (Settings' Gear glow, the cookie): on unless turned off ("opt in, enabled by default, but can be
- *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value, and an item's parts draw in
- *  the kit's own materials (`models/itemGlow.ts`): nothing compiles */
+ *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value (and on WebGPU an item's
+ *  parts draw in the kit's own materials, `models/itemGlow.ts`): nothing compiles */
 const GLOW_COOKIE = 'last-stand-gear-glow';
 let gearGlowOn = readCookie(GLOW_COOKIE) !== 'off';
 
@@ -147,6 +147,16 @@ export interface KitLooks {
   aura: { value: THREE.Color };
 }
 
+/** the kits' own patches of their materials' shaders (`createKit`), which a copy of one shares */
+const kitPatches = new WeakSet<THREE.Material['onBeforeCompile']>();
+
+/** Whether `m` draws by a kit's own patch of a standard material: its looks the kit's alone, none a wrapper's (a
+ *  hand's, the fur's, a head's both sides), so a palette can hold them (`models/palette.ts`). */
+export function isKitMaterial(m: THREE.Material): boolean {
+  const standard = (m as THREE.MeshStandardMaterial).isMeshStandardMaterial === true;
+  return standard && kitPatches.has(m.onBeforeCompile) && Boolean((m as { kitLooks?: KitLooks }).kitLooks);
+}
+
 export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   const u = {
     uDissolve: { value: 0 },
@@ -229,6 +239,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
             if (most > knee) reflectedLight.directSpecular = shine * (knee + (most - knee) / (1.0 + (most - knee) / (uShine - knee))) / most;
           }`);
     };
+    kitPatches.add(m.onBeforeCompile);
     m.customProgramCacheKey = () => 'entityfx';
     mats.push(m);
     return m;
