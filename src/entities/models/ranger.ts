@@ -12,7 +12,7 @@ import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bo
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
-import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
+import { onTunic, tunicFront, tunicBack, tunicCutSteps, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
@@ -417,7 +417,7 @@ export function* rangerSteps(): ModelSteps {
   const chainOf = (s: number) => sets.chainOf(s), withArm = (g: THREE.BufferGeometry, s: number) => sets.withArm(g, s);
   yield;
   {
-    const [L, R] = tunicCut(around, lod(22, 12));
+    const [L, R] = yield* tunicCutSteps(around, lod(22, 12));
     yield;
     S.skinChain(withArm(R, -1), coat, j.chest, chainOf(-1));
     yield;
@@ -444,6 +444,7 @@ export function* rangerSteps(): ModelSteps {
   S.add(stitches(ring(stitched, stitched, 0.295), 0.004, 0.0028, 0.0009, true), thread, j.chest);
   for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065 + COLLAR_EASE * 0.935) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
   S.add(stitches([0.234, 0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1].map((y) => tunicFront(0, y, 0.0015))), thread, j.chest);
+  yield;
   for (const sa of [1, -1]) {
     // (moving with the cloth they're sewn into; round the armhole, the sleeve's seam)
     const top = ARMHOLE.y + ARMHOLE.B, pit = ARMHOLE.y - ARMHOLE.B;
@@ -528,7 +529,7 @@ export function* rangerSteps(): ModelSteps {
   }
   yield;
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger);
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
   yield;
   // (on the lips, under the moustache: at the others' height he drank at his nose)

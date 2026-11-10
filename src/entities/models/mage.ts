@@ -20,7 +20,7 @@ import { buildBoot } from './boot';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
-import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
+import { onTunic, tunicFront, tunicCutSteps, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
 import { Dye } from './dye';
@@ -332,7 +332,7 @@ export function* mageSteps(): ModelSteps {
   // at the tunic's own height it came through the cloth behind)
   // (a piece at a time: the cut and each side's sleeve set in, 16 ms whole)
   const cut = function* (into: Sculpt, mat: THREE.Material): Generator<void, void, undefined> {
-    const [L, R] = tunicCut(sets.around, lod(22, 12));
+    const [L, R] = yield* tunicCutSteps(sets.around, lod(22, 12));
     for (const g of [L, R]) {
       const p = g.attributes.position, n = g.attributes.normal;
       for (let i = 0; i < p.count; i++) {
@@ -690,7 +690,7 @@ export function* mageSteps(): ModelSteps {
 
   yield;
   // --- the head: face, a full beard, hair, and a hood (worn with a head item equipped: setGear) in the coat's wool
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage);
   yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);

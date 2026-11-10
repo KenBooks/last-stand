@@ -15,7 +15,7 @@ import { fitArm, solveArm, type ArmResult } from './armIK';
 import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
-import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
+import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { NECKLINE_BACK } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
@@ -567,11 +567,12 @@ export function* warriorSteps(): ModelSteps {
 
   yield;
   // --- fur collar round the neck and over the shoulder tops
-  S.add(furTufts(rng, 280, (i, o) => {
+  const collar = yield* furTuftsSteps(rng, 280, (i, o) => {
     const a = rng() * Math.PI * 2, r = 0.55 + rng() * 0.45, sa = Math.sin(a), ca = Math.cos(a);
     o.p.set(sa * (0.09 + 0.1 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.09 + 0.045 * r));
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
-  }, 0.06, 0.011), furM, j.chest);
+  }, 0.06, 0.011);
+  S.add(collar, furM, j.chest);
   yield;
   // a high collar of the gambeson inside the fur, round the neck as the tunic's neckline is (centred on the chest, his
   // neck came out through it behind), and the neck
@@ -720,7 +721,7 @@ export function* warriorSteps(): ModelSteps {
   // equipped: a steel skull with a low crest, bands riveted over it and round the brow, a nasal down the nose,
   // cheek guards over the ears and a mail curtain over the nape. It is shaped on the head itself (padded over
   // the scalp); the face stays bare.
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior.hair);
+  const head = yield* headSteps(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior);
   yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);

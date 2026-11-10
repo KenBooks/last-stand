@@ -63,6 +63,8 @@ import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { tickItemGlow } from './core/materials';
 import { preloadHands } from './entities/models/hands';
+import { preloadHeads } from './entities/models/head';
+import { heroDetail } from './entities/models/armor';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
@@ -111,6 +113,10 @@ async function boot() {
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();
+  // (every hero's head made in workers meanwhile, at the detail the heroes are built at, and kept across visits: made
+  // here, a return's other heroes made theirs behind the lobby, 200 to 270 ms a piece, and on a phone the first
+  // hero's froze the loading screen)
+  const heads = preloadHeads(heroDetail());
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
   compileTheBiome();
@@ -121,6 +127,7 @@ async function boot() {
   await hands;
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
+  await heads;
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
