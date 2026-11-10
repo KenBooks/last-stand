@@ -219,6 +219,9 @@
 /* ---------- lobby stowed (Space): panels fade out, the arena stays playable ---------- */
 #menu .panel { transition: opacity .35s ease, transform .35s ease, translate .3s ease, box-shadow .3s; }
 #menu.stowed .panel { opacity: 0; pointer-events: none; }
+/* (and everything in them: a `.btn` takes the pointer by its own rule, so Enter the Arena, unseen, started a fight
+   from practice when clicked where it lies. The rail's Practice, which a short screen keeps, has its own rule.) */
+#menu.stowed .panel * { pointer-events: none; }
 #menu.stowed .menu-left { transform: translateX(-24px); }
 #menu.stowed .menu-right { transform: translateX(24px); }
 #menu.stowed #loadout { transform: translateY(24px); }
