@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,scores,perf,perfMini,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
+run,scores,perf,perfMini,perfGraph,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
@@ -94,7 +94,11 @@ the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPaus
 with the mouse: the frame rate and its graph alone showing, drawn, within the window, in a third of Full's room at
 the most, the press kept in `last-stand-perf-hud` and its button lit; then Full and Off pressed likewise, and the
 cookie of the builds before Mini, `1`, read as Full; `--canary` loses the cookie before it's read back, which must be
-caught unsaved), the Music slider clicked a quarter of the
+caught unsaved), the overlay's readings against the frames it counts (`perfGraph`, `page/uiPerfGraph.ts`: shown
+afresh and read after each of 300 frames on the lab's clock, its frame rate and its graph's scale never over 1.5
+times the frames' own rate; the graph rated its first half second from the first frame's end, and a redraw just
+after a bucket's edge read one frame over a fraction of a millisecond, 2500 fps on a 144 Hz screen; `--canary` runs
+100 frames 1 ms apart, a real rise, which must be read), the Music slider clicked a quarter of the
 way along with the mouse (`pauseVolume`, #408: the volume landing there, the slider saying it, the setting saved in
 `last-stand-volume` and the music's own gain eased to its square; `--canary` loses the setting before it's read back,
 which must be caught unsaved; every volume put back to full after), the page going full screen on its own (`autoFull`, `page/uiFullScreen.ts`: the browser's answer stood in for, as the lab's refuses full screen; a finger's press asking nothing and its lift asking, refused and asking again at the next gesture, a mouse's click taken and the prompt shown within the window, pictured, gone after 10 s, Back to window clicked keeping `last-stand-auto-full-screen` and the next visit not asking; then Esc in full screen, the browser's full screen and its Keyboard Lock stood in for too: Esc locked, leaving on Esc held opening nothing, leaving on the browser's Esc where it can't be locked opening the pause menu, the page leaving on its own opening nothing; `--canary` loses the cookie first, which must be caught asking again, and drops the browser's Esc, which must be caught opening nothing), the tab chosen kept (`pauseTabKept`: Settings

@@ -27,9 +27,8 @@ export const UI_STATES = [
   'behindProps',
   'logLobby', 'perfAsk', 'coop', 'coopRename',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
-  'run', 'scores', 'perf', 'perfMini', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pausePerformance',
-  'profiling',
-  'pauseVolume',
+  'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
+  'pausePerformance', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -392,7 +391,9 @@ export const COMMANDS = {
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, perfMini (the performance overlay\'s Mini pressed in the pause menu: the frame rate '
-          + 'and its graph alone, then Full and Off), decision, pause, summary, '
+          + 'and its graph alone, then Full and Off), perfGraph (the overlay\'s frame rate and graph scale read '
+          + 'after every frame of its first 5 s, never far over the frames\' own rate; the canary runs a burst of '
+          + 'frames 1 ms apart), decision, pause, summary, '
           + 'skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '

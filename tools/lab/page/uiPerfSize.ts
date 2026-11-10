@@ -6,10 +6,17 @@
 // it's read back, which must be caught unsaved.
 import type { Lab } from './lab';
 import { pauseTab, showPause } from '../../../src/ui/menus';
-import {
-  PERF_HUD_COOKIE, keptPerfHudSize, perfHudSize, setPerfHudSize, type PerfHudSize,
-} from '../../../src/ui/perfHud';
+// (read through the module's namespace: `ui --ab` copies this page into commits from before Mini, where these names
+// aren't exported, and a named import of one would stop every state of `ui` loading there, not this one alone)
+import * as perfHud from '../../../src/ui/perfHud';
+import type { PerfHudSize } from '../../../src/ui/perfHud';
 import { readCookie, removeCookie, writeCookie } from '../../../src/core/cookies';
+
+/** the cookie the overlay's size is kept in */
+const PERF_HUD_COOKIE = 'last-stand-perf-hud';
+const perfHudSize = (): PerfHudSize => perfHud.perfHudSize();
+const setPerfHudSize = (size: PerfHudSize, persist: boolean): void => perfHud.setPerfHudSize(size, persist);
+const keptPerfHudSize = (): PerfHudSize => perfHud.keptPerfHudSize();
 
 /** What the state found besides its boxes: lines for its report, and its problems. */
 export interface PerfSizeFound {
