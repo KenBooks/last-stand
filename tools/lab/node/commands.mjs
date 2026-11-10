@@ -732,6 +732,7 @@ export const COMMANDS = {
         quality: options.quality === undefined ? undefined : qualityOf(options.quality),
         throttle: options.throttle ?? 1,
         frames: Boolean(options.frames),
+        lobby: Boolean(options.lobby),
         canary: Boolean(options.canary),
       };
       return side.command('perf', command);

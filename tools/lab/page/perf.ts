@@ -23,6 +23,7 @@ import { particles } from '../../../src/fx/particles';
 import { programsCompiledInGame } from '../../../src/core/shaders';
 import { bindKnown, foesAhead, holdFor, pressing, skillNamed } from './cast';
 import { standIn } from './light';
+import { toLobby } from './hallMoves';
 import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { reportRead } from './perfReport';
@@ -37,6 +38,8 @@ export interface PerfOptions {
   at?: [number, number];
   /** the way the hero holds his weapons (as rolled when not given) */
   gear?: WeaponStyle;
+  /** the casts made in the lobby, the run abandoned for it: its camera is lower and nearer than a run's */
+  lobby?: boolean;
   /** the skills cast in turn: each one's key, behaviour or name */
   casts: string[];
   /** s from one press to the next, and from the last one to the end */
@@ -375,9 +378,15 @@ async function castPhases(lab: Lab, options: PerfOptions, aim: THREE.Vector3): P
     const span = i === options.casts.length - 1 ? options.after : options.apart;
     hero.energy = hero.stats.maxEnergy;
     const at = (i * options.apart).toFixed(1);
+    // (a channel leaves no cooldown: it was cast if it was ever channelled, as `cast` judges it; by the cooldown
+    // alone, Void Lance held for its 3 s read "pressed and never cast")
+    let cast = false;
     const phase = await timePhase(lab, `${def.name}, from its press at ${at} s`, Math.round(span / frameTime),
-      (f) => pressing(key, aim, f < held));
-    if (!hero.cooldowns.has(def.impl)) uncast.push(def.name);
+      (f) => {
+        cast ||= Boolean(hero.channel) || Boolean(hero.casting);
+        return pressing(key, aim, f < held);
+      });
+    if (!cast && !hero.cooldowns.has(def.impl)) uncast.push(def.name);
     phases.push(phase);
   }
   return { phases, uncast };
@@ -434,9 +443,11 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   const hero = G.player;
   for (const wanted of options.casts) bindKnown(wanted);
   hero.cooldowns.clear();
-  const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
-    .multiplyScalar(AIM_AHEAD));
-  if (options.foes) await foesAhead(lab, options.biome, options.foes);
+  if (options.lobby) await toLobby(lab);
+  // (from where he stands once there: the lobby puts him on its own spot)
+  const way = THREE.MathUtils.degToRad(options.facing);
+  const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(AIM_AHEAD));
+  if (!options.lobby && options.foes) await foesAhead(lab, options.biome, options.foes);
   const restore = await measuring(lab, options);
   const compiled = programsCompiledInGame();
   const lines: string[] = [];
@@ -445,7 +456,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     if (options.device) lines.push(deviceTitle(options.device));
     lines.push(screenLine());
     const cpu = options.throttle === 1 ? 'the CPU as it is' : `the CPU ${options.throttle} times slower`;
-    lines.push(`${options.biome}, the ${options.view} view, ${cpu}`);
+    lines.push(`${options.biome}, ${options.lobby ? 'the lobby' : `the ${options.view} view`}, ${cpu}`);
     const { phases, uncast } = await castPhases(lab, options, aim);
     for (const phase of phases) {
       lines.push(...phaseLines(phase, options.device), ...(options.frames ? frameLines(phase) : []));

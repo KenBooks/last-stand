@@ -13,7 +13,13 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   triangles, and the particles' fill (`page/particleFill.ts`: each live particle's disc as its shader sizes it, in
   the scene's pixels, every layer: the fill a phone's GPU pays, which a desktop's GPU times don't show; Glacial
   Nova's was 15 times the scene's pixels on #243's phone while the particles were sized by the canvas, 1.4 times
-  since); `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. Run it on
+  since); `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. `--lobby`
+  casts in the lobby, the run abandoned for it (its camera lower and nearer than a run's, its dummies the only
+  foes; the aim `--facing`'s way from where the lobby stands him): a report from play had Void Lance at half the
+  lobby's frame rate, which no way of casting it there showed (the GPU 4 to 5 ms with it and without, each of four
+  ways; its particles' fill twice the lobby's own, 3 times the scene's pixels) and the report's own casts before and
+  after that stretch didn't either: the PC's other load. A channel counts as cast if it was ever channelled (by
+  its cooldown alone, Void Lance held 3 s read "pressed and never cast"). Run it on
   a phone's screen, boot and CPU: `--screen 832x384@3.75 --boot low@518400 --throttle 4` (#243's phone: booted as Auto
   settled there, the hero built at Low's detail and the warm-ups run at it), or `--quality low@518400` on the lab's
   own boot (the level and the most pixels Auto lets the scene render, put to use before the set-up, the hero built
