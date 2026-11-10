@@ -602,7 +602,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   geometry before the hero, which must come out as seven draws of it, seven instanced boxes, four far behind the
   camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
   of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
-  their camera, not the hero's.
+  their camera, not the hero's. Its second line is what the hero costs three: his draws in the scene and its shadow
+  maps, how many of them are in another material than the draw before, his materials and his programs. A draw in
+  another material has every uniform sent again, some 20 us on a desktop where one in the same material takes 4
+  (timed draw by draw), so his cost is the materials he draws in: his 77 scene draws merged into 46 took as long.
+  With his looks drawn from palettes (`models/palette.ts`) the mage switches 33 times a frame where 58, in any gear
+  (the warrior 31, the ranger 34). Over 37 is a problem; the canary gives ten of his meshes materials of their own,
+  which must come out over it. Run it with all he wears (`--wear helm,chest,hands`, and `--rarity epic`).
 - `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
   costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
 - `perf <skills>`: skills cast in turn, every frame timed as the performance report times it, or played as a slow

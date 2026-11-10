@@ -25,6 +25,7 @@ import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { drawAsOne, type OneDraw } from './models/drawAsOne';
+import { drawFromPalettes } from './models/palette';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import { ownColour } from '../net/heroColour';
 import type { HeroColourId } from '../data/heroColours';
@@ -288,6 +289,8 @@ export class Player {
       lights.hand.intensity = 0;
     }
     this.model = model ?? buildModel(this.cls.model);
+    // (once a model: one built ahead, behind the lobby, may have its palettes already)
+    drawFromPalettes(this.model);
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
