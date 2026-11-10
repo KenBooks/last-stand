@@ -297,7 +297,7 @@ test('the closed PRs\' cleanup is off when no repository is set', async () => {
   assert.deepEqual(sites, ['pr-8.ls.wellscoped.dev']);
 });
 
-test('a preview\'s token reaches nothing past its own save: no codes, no deleting, no passkeys', async () => {
+test('a preview\'s token reaches nothing past its own save: codes for previews alone, no deleting, no passkeys', async () => {
   const device = authenticator();
   const token = await signUp(device);
   const { body: { code } } = await call('POST', '/saves/link-code', { token });
@@ -306,7 +306,14 @@ test('a preview\'s token reaches nothing past its own save: no codes, no deletin
   for (const origin of [PRODUCTION, OTHER_PREVIEW]) {
     assert.equal((await call('GET', '/saves/save', { origin, token: preview })).status, 401, origin);
   }
-  assert.equal((await call('POST', '/saves/link-code', { origin: PREVIEW, token: preview })).status, 403);
+  // its code signs in on another preview (another device of the player's), never on production
+  const made = await call('POST', '/saves/link-code', { origin: PREVIEW, token: preview });
+  assert.equal(made.status, 200);
+  assert.equal(made.body.previewsOnly, true);
+  const onProduction = await call('POST', '/saves/link', { origin: PRODUCTION, json: { code: made.body.code } });
+  assert.equal(onProduction.status, 403, 'a preview\'s code signed in on production');
+  const onPreview = await call('POST', '/saves/link', { origin: OTHER_PREVIEW, json: { code: made.body.code } });
+  assert.equal(onPreview.status, 200, 'a preview\'s code refused on another preview');
   assert.equal((await call('DELETE', '/saves/account', { origin: PREVIEW, token: preview })).status, 403);
   const passkeyId = (await call('GET', '/saves/account', { token })).body.passkeys[0].id;
   assert.equal((await call('DELETE', `/saves/passkey/${passkeyId}`, { origin: PREVIEW, token: preview })).status, 403);
