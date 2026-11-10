@@ -232,7 +232,7 @@ function readsDirectly(attribute: THREE.BufferAttribute | THREE.InterleavedBuffe
  * weight, and took 30 ms a frame for the hero); a mesh with morph targets, or attributes that can't be read straight,
  * goes through three's own.
  */
-function placeVertices(mesh: THREE.Mesh, out: Float32Array): void {
+export function placeVertices(mesh: THREE.Mesh, out: Float32Array): void {
   const { position, skinIndex, skinWeight } = mesh.geometry.attributes;
   const morphed = Boolean(mesh.geometry.morphAttributes.position?.length);
   const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh;

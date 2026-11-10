@@ -1610,6 +1610,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  seams: {
+    each(side, options) {
+      return side.command('seams', { each: Boolean(options.each), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   coat: {
     each(side, options) {
       const command = {
