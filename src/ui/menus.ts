@@ -352,6 +352,10 @@ export function lobbyPractice(): boolean {
 export function toggleMenuStowed(stowed?: boolean): void {
   const menu = $('#menu');
   menu.classList.toggle('stowed', stowed);
+  // (unseen, its panels take no click, key or focus: Enter the Arena started a fight from practice, clicked where
+  // it lies, and a focused button is pressed by Space or Enter. The rail keeps its Practice on a short screen.)
+  const unseen = menu.classList.contains('stowed');
+  for (const panel of menu.querySelectorAll<HTMLElement>('.panel:not(#lobby-rail)')) panel.inert = unseen;
   focusSlot(null);
   hideTooltip();
   if (menu.classList.contains('stowed')) { endDrag(); openStashFilter(false); }

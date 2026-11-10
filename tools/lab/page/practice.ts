@@ -192,6 +192,33 @@ async function toggleStowed(lab: Lab, stowed: boolean): Promise<void> {
   if (menuStowed() !== stowed) throw new Error(`lab: practice: the lobby was never ${stowed ? 'stowed' : 'shown'}`);
 }
 
+/**
+ * The stowed lobby's Enter the Arena pressed where it lies, unseen, by the mouse and then by Enter with it focused:
+ * what started a run, in words (from play: "arena fight can be started by clicking on that button while that pane is
+ * hidden ... in practice mode"). A run it starts is abandoned, so the cases after it play on.
+ */
+async function hiddenStart(lab: Lab): Promise<string[]> {
+  const started: string[] = [];
+  const presses: [string, () => Promise<void>][] = [
+    ['a click where it lies', () => lab.clickOn(byId('btn-start'))],
+    ['Enter with it focused', async () => {
+      byId('btn-start').focus();
+      await lab.press('Enter');
+    }],
+  ];
+  for (const [how, press] of presses) {
+    await press();
+    await lab.step(LOBBY_FRAMES);
+    if (G.mode === 'menu') continue;
+    started.push(how);
+    // (held in its countdown, as every run here is, then abandoned)
+    lab.beforeFrame.push(holdTheRun);
+    await leaveRun(lab, () => lab.beforeFrame.splice(lab.beforeFrame.indexOf(holdTheRun), 1));
+    await toggleStowed(lab, true);
+  }
+  return started;
+}
+
 /** Every panel of the lobby folded away, or unfolded, by its tab. */
 async function toggleFolds(lab: Lab, folded: boolean): Promise<void> {
   for (const selector of FOLDS) {
@@ -231,7 +258,13 @@ async function enterRun(lab: Lab, start: () => Promise<void>): Promise<() => voi
 async function leaveRun(lab: Lab, unhold: () => void): Promise<void> {
   unhold();
   await lab.step(1, () => ({ keys: ['escape'] }));
-  await lab.clickOn(byId('btn-abandon'));
+  // (Abandon run is held 2 s to act, by the browser's clock: its hold made none here, where leaving is no measure)
+  const abandon = byId('btn-abandon');
+  const hold = abandon.dataset.holdMs;
+  abandon.dataset.holdMs = '0';
+  await lab.clickOn(abandon);
+  if (hold === undefined) delete abandon.dataset.holdMs;
+  else abandon.dataset.holdMs = hold;
   await lab.until(() => G.mode === 'menu', RUN_FRAMES, 'practice: the run never gave way to the lobby');
   await lab.step(LOBBY_FRAMES);
 }
@@ -277,6 +310,9 @@ export async function practice(lab: Lab, options: PracticeOptions): Promise<Repo
   add(await playCase(lab, 'the lobby', 'free'));
   await toggleStowed(lab, true);
   add(await playCase(lab, 'practice', 'counted'));
+  const started = await hiddenStart(lab);
+  lines.push(`the stowed lobby's Enter the Arena, unseen: ${started.length ? `started a run by ${started.join(' and by ')}` : 'starts nothing'}`);
+  if (started.length) problems.push(`the stowed lobby's Enter the Arena started a run by ${started.join(' and by ')}`);
   await toggleStowed(lab, false);
   add(await playCase(lab, 'the lobby again, after practice', 'free'));
   if (onePanel()) lines.push('every panel folded: not played (this screen shows one panel at a time)');
