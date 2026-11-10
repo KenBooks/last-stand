@@ -610,6 +610,10 @@ export const COMMANDS = {
           + 'and frames a second it would have there',
       },
       frames: { kind: 'switch', help: 'list every frame: its time, the page\'s work by stage, what it drew' },
+      lobby: {
+        kind: 'switch',
+        help: 'cast in the lobby, the run abandoned for it (its camera lower and nearer than a run\'s; no foes come)',
+      },
       canary: {
         kind: 'switch',
         help: 'plant costs the measure must see: the hero\'s update 2 ms slower, the scene drawn twice',
