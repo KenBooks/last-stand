@@ -80,7 +80,7 @@ const PORTAL_Y = 1.7;
  *  ray cast circle size in 3rd and 1st person", "see relative size to hand on both pics", "those dashes on the
  *  circle effect are same size as finger, in 3 person". It was drawn at 0.45 of its size there, and at its full
  *  size 1 m past the hand was under half as large against the hand as third person's */
-const PORTAL_GAP = 0.6;
+const PORTAL_GAP = 0.5;
 /** and how much of its light it keeps there (its `uFade`, a uniform's value): at its full size its rings lie over
  *  the middle of the view, where the player aims, so through the eyes it is fainter and seen through (from play:
  *  "make it more transparent in 1st person") */
@@ -301,7 +301,8 @@ function portalMaterial(): THREE.ShaderMaterial {
   });
 }
 
-const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _tip = new THREE.Vector3(), _toFocus = new THREE.Vector3();
+const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _toFocus = new THREE.Vector3();
+const _tips = Array.from({ length: 5 }, () => new THREE.Vector3());
 const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
@@ -354,7 +355,20 @@ const skill: ChannelSkill<LanceState> = {
     // where the judged one ends, through the portal a little past the hand (`origin`)
     const from = _from.set(player.pos.x + _dir.x * PORTAL_AHEAD, PORTAL_Y, player.pos.z + _dir.z * PORTAL_AHEAD);
     const eyes = player.eyes;
+    // (the fingertips of the free hand, thumb first, as the view shows them, and their middle: the strands from
+    // them form a cone, and the lance runs on along that cone's own line, so hand, portal and lance are one line.
+    // Lined up on the palm's point, by the wrist, the cone leant: from play, "this line should be continue with a
+    // beam")
+    const digits = player.model.hands ? [player.model.hands.L.thumb, ...player.model.hands.L.f] : [];
     const palm = eyes ? seenFromArms(hand, _palm) : _palm.copy(hand);
+    digits.forEach((digit, i) => {
+      const tip = digit.j[2].localToWorld(_tips[i].set(0, -digit.len[2], 0));
+      if (eyes) seenFromArms(tip, tip);
+    });
+    if (digits.length) {
+      palm.set(0, 0, 0);
+      for (let i = 0; i < digits.length; i++) palm.addScaledVector(_tips[i], 1 / digits.length);
+    }
     const way = _way.copy(from).addScaledVector(_dir, def.length).sub(palm).normalize();
     const origin = _c.copy(palm).addScaledVector(way, PORTAL_GAP);
 
@@ -377,7 +391,6 @@ const skill: ChannelSkill<LanceState> = {
     // portal is traced, the thumb's first and the little finger's as the ring closes; the lance then pours out of
     // where they meet (from play: "channel one beam from each finger, as the dial summons (same pace)", "one beam
     // into the center of the dial")
-    const digits = player.model.hands ? [player.model.hands.L.thumb, ...player.model.hands.L.f] : [];
     const traced = Math.min(1, open / 0.7);
     st.strandMat.uniforms.uTime.value = G.time;
     st.strandMat.uniforms.uFade.value = 1;
@@ -387,8 +400,7 @@ const skill: ChannelSkill<LanceState> = {
       const out = Math.min(1, Math.max(0, traced * digits.length - i));
       strand.visible = Boolean(digit) && out > 0;
       if (!digit || out <= 0) return;
-      const tip = digit.j[2].localToWorld(_tip.set(0, -digit.len[2], 0));
-      if (eyes) seenFromArms(tip, tip);
+      const tip = _tips[i];
       const long = tip.distanceTo(origin) * out;
       const wide = STRAND_R * (eyes ? armsScale() : 1);
       strand.position.copy(tip);
