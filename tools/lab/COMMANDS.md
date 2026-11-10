@@ -479,6 +479,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (main: 141 degrees in a frame, each way in each view). `--canary` sends that move twice running (the second, the size
   of the one before, is taken as the hand's): the view turns round in a frame, which must be found each way in each
   view.
+- `nearaim`: the hero's aim as a foe stands under the crosshair near him (`page/nearAim.ts`; `src/core/input.ts`
+  `aimAlong`, `AIM.near`). In each close view (`--views third,first`) a training dummy is stood under the
+  crosshair's ray from abreast of the hero to 7 m ahead of him the way the camera looks, a set-up each, and the
+  aim's way from the hero is held within 10 degrees of the camera's, the dummy still the foe aimed at (`input.foe`);
+  a view that met it at fewer than 3 depths, or none within 1.5 m, measured nothing. The hero aims from his own
+  place at the crosshair's point and the camera stands behind and beside him: on a foe hugging him the point was
+  beside him, and his aim wheeled 75 degrees to it and back as its paw crossed the crosshair (#482: Void Lance's
+  whole beam with it, 4 flashes a second in `cast`). `--canary` takes the aim's least distance off (`--tune
+  aim.near=0`), which third person must show (46 degrees at 0.5 m).
 - `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each
   close view (`--views third,first`) the battle log is filled past its height and the pointer is locked as the
   player's click takes it: the lab's browser plays the lock (`lab.pointerLock`, `noCapture` in `node/browser.mjs`),

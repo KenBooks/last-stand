@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
+import { tunable } from './tuning';
 import { GROUND_LEVELS, groundHeight } from '../world/ground';
 import { castSolid } from '../fx/stuckArrows';
 import type { Enemy } from '../entities/enemy';
@@ -117,6 +118,27 @@ function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y
 }
 
 const _best = new THREE.Vector3(), _hits: THREE.Intersection[] = [];
+/** the crosshair's aim on a body is no nearer the hero than this (m, across the floor): nearer, it goes on along the
+ *  crosshair's ray to there. The hero aims from his own place at the point, and the camera stands behind and beside
+ *  him: a point on a foe hugging him is beside him, and his aim wheeled 75 degrees to it and back as its paw crossed
+ *  the crosshair, Void Lance's whole beam with it (3 to 4 flashes a second, #482). From this far the two lines are
+ *  a few degrees apart, and what's under the crosshair that near is still in his aim's way. */
+const AIM = tunable('aim', { near: 5 });
+
+/**
+ * How far along `r` (from `from` on, `most` at the most) it is `AIM.near` from the hero across the floor: `from`
+ * where it's that far already.
+ */
+function clearOfHero(r: THREE.Ray, from: number, most: number): number {
+  const hero = G.player?.pos;
+  if (!hero) return from;
+  const o = r.origin, d = r.direction, fx = o.x - hero.x, fz = o.z - hero.z;
+  const a = d.x * d.x + d.z * d.z, b = 2 * (fx * d.x + fz * d.z), c = fx * fx + fz * fz - AIM.near * AIM.near;
+  const disc = b * b - 4 * a * c;
+  // (a ray straight down, or one that never comes that near)
+  if (a < 1e-12 || disc <= 0) return from;
+  return Math.min(most, Math.max(from, (-b + Math.sqrt(disc)) / (2 * a)));
+}
 /** a foe's or a prop's cylinder round it, for the cheap test: a little wider than its circle, its arms and its edges out of
  *  it (a foe's: as far as its body reaches, drawn, if that's further) */
 const ROUND = 1.3;
@@ -124,14 +146,14 @@ const ROUND = 1.3;
  * The aim along a ray from the eye: the first thing it meets, as it's drawn, whatever it is: a foe's body, a prop, the
  * floor (and with nothing within `far`, the point `far` along it). Its point goes into `input.ground`, `y` how high it is
  * over the floor under it. A shot goes there and nowhere else: aimed at a man's chest over the floor, it flew over a
- * log, and on a foe the aim snapped to its feet.
+ * log, and on a foe the aim snapped to its feet. `offHero`: a body's point kept `AIM.near` off the hero (the crosshair's).
  */
-function aimAlong(far: number): void {
+function aimAlong(far: number, offHero = false): void {
   const r = ray.ray;
-  let best = far, what = 'none';
+  let best = far, what = 'none', floor = far;
   if (floorHit(r, hit)) {
     const t = r.origin.distanceTo(hit.setY(groundHeight(hit.x, hit.z)));
-    if (t < best) { best = t; _best.copy(hit); what = 'floor'; }
+    if (t < best) { best = floor = t; _best.copy(hit); what = 'floor'; }
   }
   // the foes and props whose cylinders the ray enters before that, nearest first, met as they're drawn
   const near: [number, () => void, Enemy | null][] = [];
@@ -154,6 +176,8 @@ function aimAlong(far: number): void {
   }
   ray.far = Infinity;
   input.foe = what === 'body' ? on : null;
+  // (the foe met is still the one aimed at; the point alone goes on, to the floor or the aim's range at the most)
+  if (offHero && what === 'body' && floor < Infinity) r.at(clearOfHero(r, best, floor), _best);
   if (what === 'none') { if (far === Infinity) return; _best.copy(r.origin).addScaledVector(r.direction, far); }
   input.ground.set(_best.x, _best.y - groundHeight(_best.x, _best.z), _best.z);
 }
@@ -231,7 +255,7 @@ export function updateInputRay(): void {
 function aimAtCenter(): void {
   ndc.set(0, 0);
   ray.setFromCamera(ndc, G.camera);
-  aimAlong(CAMERA.aimRange);
+  aimAlong(CAMERA.aimRange, true);
 }
 
 export function endInputFrame(): void {

@@ -1062,6 +1062,27 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  nearaim: {
+    help: 'the hero\'s aim as a foe stands under the crosshair near him, in each close view: a training dummy stood '
+      + 'under it from abreast of him to 7 m ahead, the aim\'s way from the hero held within 10 degrees of the '
+      + 'camera\'s at each, the dummy still the foe aimed at (a foe hugging him wheeled his aim 75 degrees, #482)',
+    options: {
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['third', 'first'],
+        default: 'third,first',
+        help: 'the close views: third, first',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'take off the least distance the aim on a body keeps from the hero, which third person must show',
+      },
+      at: SETUP_OPTIONS.at,
+      facing: SETUP_OPTIONS.facing,
+      ...COMMON_OPTIONS,
+    },
+  },
   cursor: {
     help: 'the cursor drawn over mouse look while Alt is held: in each close view the pointer locked as the player\'s '
       + 'click takes it (the lab\'s browser plays the lock, every event of the mouse sent to the game\'s canvas while '

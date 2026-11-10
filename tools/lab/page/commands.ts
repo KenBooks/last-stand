@@ -41,6 +41,7 @@ import type { LogOptions } from './log';
 import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
 import type { SpinOptions } from './spin';
+import type { NearAimOptions } from './nearAim';
 import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
@@ -539,6 +540,15 @@ export async function auto(_lab: Lab, command: AutoOptions): Promise<Report> {
 export async function spin(lab: Lab, command: SpinOptions): Promise<Report> {
   const { spinView } = await import('./spin');
   return spinView(lab, command);
+}
+
+/**
+ * `lab nearaim`: a dummy stood under the crosshair near the hero in each close view: his aim's way must stay the
+ * camera's (#482).
+ */
+export async function nearaim(lab: Lab, command: NearAimOptions): Promise<Report> {
+  const { nearAim } = await import('./nearAim');
+  return nearAim(lab, command);
 }
 
 /**
