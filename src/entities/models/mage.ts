@@ -201,6 +201,8 @@ const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.07, -0.16, 0.14), tipped: 
  *  he sinks into the stance: unslid, it stood 7 cm into the floor through the hold. (Turned upright in the fist as
  *  well, the fist closed round it another way and kept it after the cast, the staff 6 cm into the floor as he stood.) */
 const LANCE_SLIDE = 0.2;
+/** how long he takes to sink into the lance's brace once the portal is drawn (s) */
+const BRACE_TIME = 0.35;
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75];
 
@@ -1160,11 +1162,15 @@ export function* mageSteps(): ModelSteps {
           // of the cast's way, upright on the ground beside him; the head turned back over the leading shoulder to look down the arm. Upright on a
           // short stride, the staff held straight out beside the casting arm, a review read "a scarecrow")
           if (!fp) {
-            j.body.position.z += 0.13; j.body.position.y += -0.1; j.hips.rotation.y += -0.3; j.spine.rotation.x += 0.12; feet = LANCE_FEET;
-            j.chest.rotation.y += -0.3;
-            j.shoulderR.rotation.x += 0.35; j.elbowR.rotation.x += -0.95;
-            j.neck.rotation.y += 0.7; j.neck.rotation.x += -0.05;
-            staffSlideWant = LANCE_SLIDE;
+            // (sunk into over a third of a second, from where drawing the portal left him: taken at once as the
+            // dial closed, the staff's hand went 40 cm in a frame, the staff from upright to leaning; from play,
+            // "a noticeable jump from vertical to leaning")
+            const b0 = ramp(ft, 0, BRACE_TIME), b = b0 * b0 * (3 - 2 * b0);
+            j.body.position.z += 0.13 * b; j.body.position.y += -0.1 * b; j.hips.rotation.y += -0.3 * b; j.spine.rotation.x += 0.12 * b; feet = LANCE_FEET;
+            j.chest.rotation.y += -0.3 * b;
+            j.shoulderR.rotation.x += lerp(-0.5, 0.35, b); j.elbowR.rotation.x += lerp(-0.2, -0.95, b);
+            j.neck.rotation.y += 0.7 * b; j.neck.rotation.x += lerp(0.1, -0.05, b);
+            staffSlideWant = LANCE_SLIDE * b;
           }
           // (the arm straight out from its shoulder along the way he casts, square to the portal his fingers feed,
           // drawn back a little by the kick: swung in across the chest, to a portal that stood before his middle,
