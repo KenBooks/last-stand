@@ -197,6 +197,9 @@ const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
 const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.07, -0.16, 0.14), tipped: new THREE.Vector3(0.08, 0.08, 0.19), pole: new THREE.Vector3(0.35, -1, 0.5), tippedPole: new THREE.Vector3(0.6, -0.4, 1) };
+/** braced for Void Lance, how far the staff is turned upright in the fist (rad) and slid up through it (rig units),
+ *  its foot kept on the ground as he sinks into the stance: unslid, it stood 10 cm into the floor */
+const LANCE_STAFF = -0.25, LANCE_SLIDE = 0.07;
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75];
 
@@ -979,6 +982,8 @@ export function* mageSteps(): ModelSteps {
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
+  /** how far the staff is slid up through the fist, and how far it's wanted */
+  let staffSlide = 0, staffSlideWant = 0;
   /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
   let aim = 0, aimV = 0, aimedAt = -9;
   /** how long after a shot the staff stays down */
@@ -1081,7 +1086,7 @@ export function* mageSteps(): ModelSteps {
     }
     // (aimed straight along the shot: angled out to keep its haft out of the cape the heroes wore, it went 9 cm
     // through his own sleeve)
-    staff.rotation.x = STAFF_PITCH + 1.75 * aim;
+    staff.rotation.x = STAFF_PITCH + 1.75 * aim; staffSlideWant = 0;
     // (the haft sits in the fist, the hand on its wrist)
     seat(handR, staff, STAFF_R);
     if (a) {
@@ -1151,9 +1156,11 @@ export function* mageSteps(): ModelSteps {
           // of the cast's way; the head turned back over the leading shoulder to look down the arm. Upright on a
           // short stride, the staff held straight out beside the casting arm, a review read "a scarecrow")
           if (!fp) {
-            j.body.position.z += 0.05; j.body.position.y += -0.14; j.hips.rotation.y += -0.3; j.spine.rotation.x += 0.12; feet = LANCE_FEET;
-            j.shoulderR.rotation.x += 0.25; j.elbowR.rotation.x += -0.55;
-            j.neck.rotation.y += 0.45; j.neck.rotation.x += -0.2;
+            j.body.position.z += 0.13; j.body.position.y += -0.1; j.hips.rotation.y += -0.3; j.spine.rotation.x += 0.12; feet = LANCE_FEET;
+            j.chest.rotation.y += -0.3;
+            j.shoulderR.rotation.x += 0.35; j.elbowR.rotation.x += -0.95;
+            j.neck.rotation.y += 0.7; j.neck.rotation.x += -0.05;
+            staffSlideWant = LANCE_SLIDE;
           }
           // (the arm straight out from its shoulder along the way he casts, square to the portal his fingers feed,
           // drawn back a little by the kick: swung in across the chest, to a portal that stood before his middle,
@@ -1271,6 +1278,9 @@ export function* mageSteps(): ModelSteps {
     }
 
     // the flask comes out of the fist and is put away again (the fist closed round it)
+    // (turned and slid together, at a pace: turned at once as the lance ended, its tip jumped 26 cm in a frame)
+    staffSlide = damp(staffSlide, staffSlideWant, 6, dt); staff.rotation.x += LANCE_STAFF * staffSlide / LANCE_SLIDE;
+    staff.position.set(0, -0.05 + Math.cos(staff.rotation.x) * staffSlide, 0.02 + Math.sin(staff.rotation.x) * staffSlide);
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     void drinkLift;
