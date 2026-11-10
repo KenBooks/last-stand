@@ -1000,6 +1000,8 @@ export function setView(v: ViewMode): void {
 export const viewSettled = (): boolean => rig.blend >= 1;
 /** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
 export const cameraYaw = (): number => rig.yaw;
+/** the top-down view's zoom as drawn (1 the game's own, under it nearer) */
+export const cameraZoom = (): number => rig.zoom;
 
 /** The camera rig as it is, and a function that puts it back: tools/lab pictures the game from its other views and
  *  leaves the game's own as it found it (the aim follows the camera). */
