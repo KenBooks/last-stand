@@ -8,6 +8,8 @@ import { RUNNING } from './rendererChoice';
 import { VILLAGE } from './beta';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';
+import { SKY_ENVIRONMENT, skyEnvironment, type SkyEnvironment } from './skyEnvironment';
+import type { EnvColours } from '../world/props';
 
 /** Whether this page draws with WebGPURenderer: by its address alone (`?renderer=webgpu`, which the pause menu opens;
  *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
@@ -1582,15 +1584,23 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */
 let environment: { value: THREE.Texture } | null = null;
+/** the sky worked out in its place, its colours set per biome (`skyEnvironment.ts`, `?env=sky`) */
+let sky: SkyEnvironment | null = null;
 
 /**
  * The scene's environment map given to WebGPU as one node for good, its map swapped as the look changes: three
  * makes each map a node of its own, whose id is in every lit pipeline's key, so each biome's map and the hall of
  * heroes' had a copy of every lit pipeline, made at the first frames in its look (a first visit's hall: 6 s held up).
  */
-export function oneEnvironment(scene: THREE.Scene): void {
+export function oneEnvironment(scene: THREE.Scene, colours: EnvColours): void {
   const map = scene.environment;
   if (!WEBGPU || !map) return;
+  if (SKY_ENVIRONMENT.sky) {
+    sky ??= skyEnvironment();
+    sky.set(colours);
+    (scene as unknown as { environmentNode: unknown }).environmentNode = sky.node;
+    return;
+  }
   environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
   environment.value = map;
   (scene as unknown as { environmentNode: unknown }).environmentNode = environment;
