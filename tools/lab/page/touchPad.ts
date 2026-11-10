@@ -224,6 +224,52 @@ async function showOverlays(lab: Lab, shown: boolean): Promise<void> {
   await lab.step(OVERLAY_FRAMES);
 }
 
+/** the parts of the performance overlay a tap must copy a report from: its frame rate (a button) and its graph (let
+ *  through to the move stick's pad, which takes a quick still tap over the overlay for a copy) */
+const COPY_TAPPED = ['.pf-head', '.pf-graph'];
+
+/** Whether a finger's quick tap on a part of the performance overlay asks for a report to be copied: the overlay says
+ *  so (`said`: "Copied", or "Copy failed" where the lab's browser keeps the clipboard). On the owner's phone a tap on
+ *  the panel copied nothing once it let touches through to the stick (`body.touch #perf`), its frame rate alone a
+ *  button. Put down and lifted as a touch screen sends them (a tap that wants a click waits for one the pad never
+ *  lets come). */
+async function copiesOnTap(lab: Lab, part: string): Promise<boolean> {
+  const overlay = document.querySelector('#perf');
+  const element = overlay?.querySelector(part);
+  if (!overlay || !element) throw new Error(`lab: touchpad: the performance overlay has no ${part}`);
+  overlay.classList.remove('said');
+  const box = element.getBoundingClientRect();
+  const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  await lab.touchDown(at);
+  await lab.touchUp();
+  // (the click a tap on the frame rate makes comes in a task after the lift, and the clipboard answers in its time)
+  await new Promise((done) => setTimeout(done, 200));
+  await lab.step(LIFT_FRAMES);
+  return overlay.classList.contains('said');
+}
+
+/** Each part of the performance overlay tapped (`COPY_TAPPED`), with the touch controls shown and hidden (as a menu
+ *  open hides them, the lobby's panels too: the panel takes its own taps there): its lines, and a problem where no
+ *  report was copied. */
+async function tapsToCopy(lab: Lab): Promise<{ lines: string[]; problems: string[] }> {
+  await showOverlays(lab, true);
+  const lines: string[] = [];
+  const problems: string[] = [];
+  for (const menuOpen of [false, true]) {
+    G.menuOpen = menuOpen;
+    await lab.step(LIFT_FRAMES);
+    const controls = menuOpen ? 'the touch controls hidden (a menu open)' : 'the touch controls shown';
+    for (const part of COPY_TAPPED) {
+      const copied = await copiesOnTap(lab, part);
+      lines.push(`${controls}: the performance overlay's ${part} tapped: ${copied ? 'a report copied' : 'nothing'}`);
+      if (!copied) problems.push(`${controls}: a tap on the performance overlay's ${part} copied no report`);
+    }
+  }
+  G.menuOpen = false;
+  await showOverlays(lab, false);
+  return { lines, problems };
+}
+
 /** What one round of the grid gave: its lines, problems and picture. */
 interface Round {
   lines: string[];
@@ -264,6 +310,9 @@ export async function touchPad(lab: Lab, options: TouchPadOptions): Promise<Repo
     problems.push(...round.problems);
     moments.push(round.moment);
   }
+  const copies = await tapsToCopy(lab);
+  lines.push(...copies.lines);
+  problems.push(...copies.problems);
   await showOverlays(lab, false);
   if (options.canary) {
     const sheet = plantSheet();

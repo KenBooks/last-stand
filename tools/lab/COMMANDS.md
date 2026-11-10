@@ -263,6 +263,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   panel round, took 15 of the move area's 48 points on the owner's phone (`--screen 832x384@3.75`): from play,
   "they only activate in a small area now". A touch the browser takes as a pan (a page element whose
   `touch-action` isn't none) is cancelled and heard no more: the lab's touches know it (`lab.touchPanned`).
+  Then the performance overlay's frame rate and its graph are each tapped, a finger put down and lifted, with the
+  touch controls shown and hidden (a menu open), and each must copy a report (the overlay says so): on the owner's phone the panel let touches through to the stick, its
+  frame rate alone a button, and a tap on the panel copied nothing (the frame rate's own click came one tap in two).
   `--canary` lays a clear sheet over the move area's lower left, which must be caught.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
