@@ -59,7 +59,8 @@ export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AUR
 const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells / 2));
 
 /** the setting (Settings' Gear glow, the cookie): on unless turned off ("opt in, enabled by default, but can be
- *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value: nothing compiles */
+ *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value, and an item's parts draw in
+ *  the kit's own materials (`models/itemGlow.ts`): nothing compiles */
 const GLOW_COOKIE = 'last-stand-gear-glow';
 let gearGlowOn = readCookie(GLOW_COOKIE) !== 'off';
 
