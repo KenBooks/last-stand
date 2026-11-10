@@ -4,6 +4,7 @@ import { SLOT_INFO, STATS } from '../data/items';
 import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded, fitsOffhand } from '../loot/items';
 import { G } from '../state';
 import { BLOCK } from '../data/balance';
+import { SCHOOLS, schoolCss } from '../data/schools';
 import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
 import { skillDamageHTML, skillHealHTML, skillWardHTML } from './skillDamage';
@@ -69,6 +70,7 @@ function card(item: Item, { header = '', other = null as Item | null, showDelta 
   const pw = itemPower(item), opw = other ? itemPower(other) : 0;
   const pdelta = showDelta && other && pw !== opw ? `<span class="tt-delta ${pw > opw ? 'up' : 'down'}">${pw > opw ? '▲' : '▼'} ${Math.abs(pw - opw)}</span>` : '';
   html += `<div class="tt-type">${r.name} ${isTwoHanded(item, cls) ? 'Two-handed ' : fitsOffhand(item, cls) ? 'One-handed ' : ''}${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
+  if (item.school) html += `<div class="tt-stat implicit" style="color:${schoolCss(item.school)}">School of ${SCHOOLS[item.school].name}</div>`;
   for (const [k, v] of statEntries(item.stats)) {
     const d = showDelta ? v - (other?.stats[k] || 0) : 0;
     html += `<div class="tt-stat ${implicit.has(k) ? 'implicit' : ''}">${formatStat(k, v)}${showDelta ? deltaHTML(k, d) : ''}</div>`;
@@ -193,6 +195,7 @@ export function skillTooltip(raw: SkillDef, ofHero = true): () => TooltipContent
     else if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
     html += `<div class="tt-foot">${bits.join(' · ')}</div>`;
+    if (def.both) html += `<div class="tt-foot">With no staff, put it on two keys: either casts it from one hand, both together from both hands, for ${def.both.cost} Energy / sec.</div>`;
     const alt = (id?: string) => (id ? G.player.known.get(id)?.def.name : undefined);
     if (def.needs === 'shield') {
       const two = alt(def.fallback?.twoHanded), dual = alt(def.fallback?.dual), one = alt(def.fallback?.oneHanded);

@@ -6,9 +6,10 @@
 import { CLASS_IDS } from '../data/classes/index';
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { saveKey } from './saveSlots';
-import type { WeaponStyle } from '../types';
+import type { HeldStyle } from '../types';
 
-const STYLES: (WeaponStyle | null)[] = [null, 'shield', 'twoHanded', 'dual', 'oneHanded'];
+// (every way a loadout is kept: how the weapons are held, the school of the weapon held or `bare`, loadout.ts)
+const STYLES: (HeldStyle | null)[] = [null, 'shield', 'twoHanded', 'dual', 'oneHanded', 'arcane', 'fire', 'lightning', 'healing', 'bare'];
 /** the class last played in the slot */
 export const CLASS_ENTRY = 'last-stand-class';
 /** slot 1's keys from before classes: the mage's (read as his, dropped as his are written) */
@@ -26,6 +27,7 @@ export function heroEntries(classId: string): Entry[] {
     { name: `last-stand.stash-filter.${classId}.v1`, cookie: false },
     { name: `last-stand.pr423-gear.${classId}`, cookie: false },
     { name: `last-stand.pr499-gear.${classId}`, cookie: false },
+    { name: `last-stand.pr487-staffs.${classId}`, cookie: false },
     ...STYLES.map((style) => ({ name: `last-stand-loadout-${classId}${style ? '-' + style : ''}`, cookie: true })),
   ];
 }

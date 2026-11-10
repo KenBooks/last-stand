@@ -51,6 +51,19 @@ input:not([type=checkbox], [type=radio], [type=range]), textarea { cursor: text;
     &:disabled { opacity: .4; cursor: $cursor; }
   }
 }
+/* a held skill's charge in the top-down view (ui/chargeMark.ts): the game's cursor drawn by the page while the
+   browser's is put away, where it was and as large (the alt cursor's box and margins), faint, its lit art rising
+   in it from the bottom. Moved by transforms alone, each part painted once: the lit art lies in a box that hides
+   what's outside it, the box slid down by what's left to charge and the art in it slid up as far, so the art
+   stands still and shows from its foot up. (Filled by a clip changed every frame under filters, the page painted
+   it again each frame of a charge, and a filter on a layer that moves is a pass of the compositor's own:
+   styles/AGENTS.md.) */
+html.charging, html.charging * { cursor: none !important; }
+#charge-cursor { position: fixed; left: 0; top: 0; z-index: 60; width: 32px; height: 32px; margin: -2px 0 0 -3px;
+  pointer-events: none; will-change: transform; }
+#charge-cursor::before { content: ''; position: absolute; inset: 0; background: var(--cursor-art) no-repeat; opacity: .4; }
+#charge-cursor > b { position: absolute; inset: 0; overflow: hidden; will-change: transform; }
+#charge-cursor > b > i { position: absolute; inset: 0; background: var(--cursor-hand-art) no-repeat; will-change: transform; }
 html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
 #game { touch-action: none; }
 

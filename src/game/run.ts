@@ -16,6 +16,7 @@ import { inObstacle, resolveWorld } from '../world/collision';
 import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
 import { forgetFields } from '../world/navigation';
 import { clearProjectiles } from '../combat/projectiles';
+import { clearBurns } from '../combat/burn';
 import { clearEffects } from '../fx/effects';
 import { clearLights } from '../fx/lights';
 import { particles, col } from '../fx/particles';
@@ -132,6 +133,7 @@ function cleanupWorld(): void {
   ui.resetDecision();
   clearEnemies();
   clearProjectiles();
+  clearBurns();
   clearEffects();
   clearLights();
   clearFloaters();

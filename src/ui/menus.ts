@@ -8,7 +8,7 @@ import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { rarityOf, rarityIndex, itemPower, byValue, isTwoHanded, OFFHAND_WEAPON } from '../loot/items';
-import { SKILL_KEYS } from '../loot/loadout';
+import { SKILL_KEYS, usableFirst } from '../loot/loadout';
 import { equipFromStash, unequip, discard, discardEquipped, resetProfile, slotsFor } from '../loot/profile';
 import { throwItem, floorAt } from '../game/groundItems';
 import { saveSlot } from '../loot/saveSlots';
@@ -835,7 +835,8 @@ export function renderMenu(): void {
     sk.innerHTML = '';
     // (each as it is with the weapons held: a two-hander's cleave slower and heavier)
     const shown = (def: SkillDef) => (G.player.cls.id === cls.id ? G.player.known.get(def.impl)?.def : undefined) ?? def;
-    for (const def of cls.skills) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
+    // (those his gear doesn't allow last: another school's staff's spell, a shield's skill with none held)
+    for (const def of usableFirst(cls.skills, G.player.gear)) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
     // (its arrows read off the row in the next frame: read here, its width laid the page out in the middle of the
     // render, which went on changing it, 8.7 ms of the click that chose a first visit's hero)
     requestAnimationFrame(syncSkillStrip);

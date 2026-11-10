@@ -110,6 +110,22 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
 #crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); }
 #crosshair::before { left: 50%; top: 0; bottom: 0; width: var(--w); margin-left: calc(var(--w) / -2); background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
 #crosshair::after { top: 50%; left: 0; right: 0; height: var(--w); margin-top: calc(var(--w) / -2); background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+/* a held skill's charge in the close views (ui/chargeMark.ts): a ring round the crosshair drawn clockwise from the
+   top, whole at full charge. Two half rings, each in a box over one half of the circle that hides what's outside
+   it, each turned into its box by its transform alone (painted once; a stroke's dash changed every frame painted
+   the ring again each frame of a charge): the right box's from the top down to the foot over the charge's first
+   half, the left box's from the foot back up to the top over its second. */
+#charge-ring { position: absolute; left: 50%; top: 50%; width: hud(54px); height: hud(54px); translate: -50% -50%;
+  border-radius: 50%; box-shadow: inset 0 0 0 hud(1.5px) rgba(255, 240, 210, .22); pointer-events: none; --cr: rgba(255, 240, 210, .95); }
+#charge-ring.full { --cr: #ffd98a; }
+#charge-ring > b { position: absolute; top: 0; width: 50%; height: 100%; overflow: hidden; }
+#charge-ring > .cr-right { left: 50%; }
+#charge-ring > .cr-left { left: 0; }
+#charge-ring > b > i { position: absolute; top: 0; width: 200%; height: 100%; box-sizing: border-box; border-radius: 50%;
+  border: hud(3px) solid var(--cr); will-change: transform; }
+/* (each half ring is the half of a whole one that lies outside its box until it's turned in) */
+#charge-ring > .cr-right > i { left: -100%; clip-path: inset(0 50% 0 0); }
+#charge-ring > .cr-left > i { left: 0; clip-path: inset(0 0 0 50%); }
 /* (a heart's knock: a quick swell and a settle, as the downed partner's marker beats, ui/coop.ts) */
 @keyframes crosshair-beat { 0% { scale: 1; animation-timing-function: ease-out; } 35% { scale: 1.5; animation-timing-function: ease-out; } 100% { scale: 1; } }
 @media (prefers-reduced-motion: reduce) { #crosshair.full { animation: none; } }

@@ -3,9 +3,11 @@
 // icon is a small string of shapes. Gems and glows take the item's rarity color.
 import { RARITIES, SLOT_INFO } from '../data/items';
 import { rarityOf, basesFor } from '../loot/items';
-import type { ClassDef, Item, RarityId, Slot } from '../types';
+import { schoolCss } from '../data/schools';
+import type { ClassDef, Item, RarityId, School, Slot } from '../types';
 
 const RARITY_IDS: RarityId[] = RARITIES.map((r) => r.id);
+const SCHOOL_IDS: School[] = ['arcane', 'fire', 'lightning', 'healing'];
 
 /** Cloth palettes, picked per item (stable via its id) for variety. */
 const CLOTHS = ['clothIndigo', 'clothCrimson', 'clothTeal', 'clothUmber'] as const;
@@ -16,8 +18,8 @@ let defs = '';
 /** The icons' shared gradients and filters, as `<defs>` markup (made once). */
 function iconDefs(): string {
   if (defs) return defs;
-  const gem = (r: RarityId) => {
-    const c = rarityOf(r).color;
+  // (a weapon with a school: its gem and glow in the school's colour, its crystal's, #402; its rarity is its slot's)
+  const gem = (r: RarityId | School, c = rarityOf(r as RarityId).color) => {
     return `<radialGradient id="gem-${r}" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity=".35"/></radialGradient>
       <radialGradient id="aura-${r}"><stop offset="0" stop-color="${c}" stop-opacity=".55"/><stop offset=".55" stop-color="${c}" stop-opacity=".12"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`;
   };
@@ -36,7 +38,8 @@ function iconDefs(): string {
     ${lin('clothTeal', '#5fe0bd', '#1c7a64', '#0a2e26')}
     ${lin('clothUmber', '#c89868', '#6e4a2c', '#2c1a0c')}
     ${lin('crystal', '#ffffff', '#9fe8ff', '#2a6aa8')}
-    ${RARITY_IDS.map(gem).join('')}
+    ${RARITY_IDS.map((r) => gem(r)).join('')}
+    ${SCHOOL_IDS.map((s) => gem(s, schoolCss(s))).join('')}
     <radialGradient id="shine" cx="30%" cy="25%" r="60%"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
     <filter id="icoShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".75"/></filter>
     <filter id="icoGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
@@ -298,7 +301,7 @@ function hash(s: string): number {
 export function itemIconSVG(item: Item): string {
   const draw = DRAW[item.base] ?? DRAW[SLOT_INFO[item.slot].bases[0]];
   const cloth = CLOTHS[hash(item.id) % CLOTHS.length];
-  return `<svg class="item-icon" viewBox="0 0 64 64" aria-hidden="true"><g filter="url(#icoShadow)">${draw(item.rarity, cloth)}</g></svg>`;
+  return `<svg class="item-icon" viewBox="0 0 64 64" aria-hidden="true"><g filter="url(#icoShadow)">${draw(item.school ?? item.rarity, cloth)}</g></svg>`;
 }
 
 /** An item's icon as an SVG of its own, `px` square, its gradients and filters inside it: drawn as an image (a label
@@ -307,7 +310,7 @@ export function itemIconImage(item: Item, px: number): string {
   const draw = DRAW[item.base] ?? DRAW[SLOT_INFO[item.slot].bases[0]];
   const cloth = CLOTHS[hash(item.id) % CLOTHS.length];
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 64 64">${iconDefs()}`
-    + `<g filter="url(#icoShadow)">${draw(item.rarity, cloth)}</g></svg>`;
+    + `<g filter="url(#icoShadow)">${draw(item.school ?? item.rarity, cloth)}</g></svg>`;
 }
 
 /** Faded silhouette for an empty equipment slot (in the class's own gear). */

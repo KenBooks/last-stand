@@ -320,13 +320,17 @@ function portalMaterial(): THREE.ShaderMaterial {
 }
 
 const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _toFocus = new THREE.Vector3();
-const _tips = Array.from({ length: 5 }, () => new THREE.Vector3());
+const _tips = Array.from({ length: 10 }, () => new THREE.Vector3());
 const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
 const skill: ChannelSkill<LanceState> = {
   anim: 'channel',
-  hits: (def) => [{ per: 'tick', base: (def.damage ?? 0) * TICK, rate: 1 / TICK, type: 'arcane' }],
+  hits: (def) => [
+    { per: 'tick', base: (def.damage ?? 0) * TICK, rate: 1 / TICK, type: 'arcane' },
+    // (cast from both hands, with no staff: `Player.bothHands`)
+    ...(def.both ? [{ per: 'tick', base: def.both.damage * TICK, rate: 1 / TICK, type: 'arcane' as const, note: 'from both hands, with no staff' }] : []),
+  ],
   channel: true,
   warm: () => [new THREE.Mesh(beamGeo, beamMaterial(false)), new THREE.Mesh(portalGeo, portalMaterial())],
   start(player, rawDef) {
@@ -340,7 +344,7 @@ const skill: ChannelSkill<LanceState> = {
     outer.visible = core.visible = false;
     G.scene.add(outer, core, portal);
     const strandMat = beamMaterial(true);
-    const strands = Array.from({ length: 5 }, () => new THREE.Mesh(strandGeo, strandMat));
+    const strands = Array.from({ length: 10 }, () => new THREE.Mesh(strandGeo, strandMat));
     for (const strand of strands) {
       strand.frustumCulled = false;
       strand.name = 'Void Lance: strands';
@@ -377,7 +381,13 @@ const skill: ChannelSkill<LanceState> = {
     // them form a cone, and the lance runs on along that cone's own line, so hand, portal and lance are one line.
     // Lined up on the palm's point, by the wrist, the cone leant: from play, "this line should be continue with a
     // beam")
-    const digits = player.model.hands ? [player.model.hands.L.thumb, ...player.model.hands.L.f] : [];
+    // (with no staff the hands that cast it feed it, #402: the left's fingers, the right's, or with two of its keys
+    // held every finger of both, the lance from between the two)
+    const hands = player.model.hands, cast = player.bare ? player.hands : 'left', both = cast === 'both';
+    const digits = hands ? [
+      ...(cast === 'right' ? [] : [hands.L.thumb, ...hands.L.f]),
+      ...(cast === 'left' ? [] : [hands.R.thumb, ...hands.R.f]),
+    ] : [];
     const palm = eyes ? seenFromArms(hand, _palm) : _palm.copy(hand);
     digits.forEach((digit, i) => {
       const tip = digit.j[2].localToWorld(_tips[i].set(0, -digit.len[2], 0));
@@ -421,12 +431,13 @@ const skill: ChannelSkill<LanceState> = {
     st.strands.forEach((strand, i) => {
       const digit = digits[i];
       // (how far this finger's strand has reached: each takes a fifth of the tracing)
-      const out = Math.min(1, Math.max(0, traced * digits.length - i));
+      const out = Math.min(1, Math.max(0, traced * 5 - i % 5));
       strand.visible = Boolean(digit) && out > 0;
       if (!digit || out <= 0) return;
       const tip = _tips[i];
       const long = tip.distanceTo(origin) * out;
-      const wide = STRAND_R * (eyes ? armsScale() : 1);
+      // (ten strands from two hands each thinner: at one hand's width they fused into a white wedge)
+      const wide = STRAND_R * (eyes ? armsScale() : 1) * (both ? 0.55 : 1);
       strand.position.copy(tip);
       strand.quaternion.setFromUnitVectors(_up, _toFocus.copy(origin).sub(tip).normalize());
       strand.scale.set(wide, Math.max(0.001, long), wide);
@@ -532,7 +543,7 @@ const skill: ChannelSkill<LanceState> = {
           // (the beam through it where it passes: off its middle, the body turns off the beam)
           const on = { x: from.x + _dir.x * proj, z: from.z + _dir.z * proj };
           const blow = { dir: { x: _dir.x, z: _dir.z }, lift: 0.15, on };
-          hitEnemy(e, def.damage * TICK, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 0.6, from, blow });
+          hitEnemy(e, (player.bothHands && def.both ? def.both.damage : def.damage) * TICK, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 0.6, from, blow });
           burst(new THREE.Vector3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
         }
       }

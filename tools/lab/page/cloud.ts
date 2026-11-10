@@ -4,7 +4,12 @@
 // the cloud's sync), the cloud's state and the dialog as the player sees them, and the bar and the dialog held to the
 // window (src/ui/AGENTS.md: nothing past its edges, nothing over another). The node side drives the screens
 // (tools/lab/node/cloud.mjs).
+import * as THREE from 'three';
 import { CLASS_IDS } from '../../../src/data/classes/index';
+import { VILLAGE } from '../../../src/core/beta';
+import { villageObject } from '../../../src/game/village';
+import { groundHeight } from '../../../src/world/ground';
+import { showVillageCard } from '../../../src/ui/villageCard';
 import { CLASS_ENTRY, readHero, writeSlot, type Entries } from '../../../src/loot/slotData';
 import { loadProfile, peekProfile, saveProfile } from '../../../src/loot/profile';
 import { SAVE_SLOTS } from '../../../src/loot/saveSlots';
@@ -42,6 +47,21 @@ export function cloudSeed(slots: Slots): void {
     if (first) entries[CLASS_ENTRY] = first;
     writeSlot(slot, entries);
   }
+}
+
+/**
+ * The hero stood at the village's chronicle with its card open, as using it leaves him: the card holds the Save
+ * slot button there, which the lobby without the village keeps on its own panel (nothing to do then). The
+ * command clicked the button where the village hides it, and stopped at its first step.
+ */
+export function cloudAtChronicle(): void {
+  if (!VILLAGE) return;
+  const chronicle = villageObject('chronicle');
+  if (!chronicle) throw new Error('lab: cloud: the village has no chronicle to open the save slots from');
+  const [x, z] = chronicle.stand;
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  showVillageCard(chronicle);
 }
 
 /** A slot's heroes, from what it holds now. */

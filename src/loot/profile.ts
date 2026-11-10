@@ -9,6 +9,7 @@ import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
 import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: to remove, unbind these lines only (pr423Gear.ts says why)
 import { seedPr499Gear } from './pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
 import { seedPr527Gear } from './pr527Gear'; // PR 527's test gear: to remove, unbind these lines only
+import { seedPr487Staffs } from './pr487Staffs'; // PR 487's test staffs: to remove, unbind these lines only
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
@@ -21,7 +22,7 @@ function fresh(classId: string): Profile {
   const equipped: Profile['equipped'] = {};
   for (const g of cls.starterGear) {
     // Prefer a one-handed starter only when the class also starts with an off-hand.
-    let it = makeItem({ ...g, cls });
+    let it = makeItem({ ...g, cls, school: cls.schools?.roll[0] });
     for (let i = 0; i < 20 && cls.starterGear.some((s) => s.slot === 'offhand') && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
     equipped[g.slot] = it;
   }
@@ -34,14 +35,23 @@ function fresh(classId: string): Profile {
   seedPr423Gear(p, true); // PR 423's test gear
   seedPr499Gear(p, true); // PR 499's test gear
   seedPr527Gear(p, true); // PR 527's test gear
+  seedPr487Staffs(p, true); // PR 487's test staffs
   return p;
 }
 
-function read(key: string): Profile | null {
+/** Weapons saved before a class's weapons had schools are its first (the mage's: arcane, what they cast then). */
+function attune(p: Profile, classId: string): void {
+  const first = CLASSES[classId]?.schools?.roll[0];
+  if (!first) return;
+  for (const it of [...Object.values(p.equipped), ...p.stash]) if (it?.slot === 'weapon') it.school ??= first;
+}
+
+function read(key: string, classId: string): Profile | null {
   const raw = localStorage.getItem(key);
   if (!raw) return null;
   const p = JSON.parse(raw);
   if (!p || !p.equipped || !Array.isArray(p.stash)) return null;
+  attune(p, classId);
   p.records.bestBanked ??= {}; // older profiles: bestWave counts deaths too, so start over
   p.records.bestReached ??= { ...p.records.bestBanked }; // only banked waves have a known biome in old saves
   return p;
@@ -49,16 +59,17 @@ function read(key: string): Profile | null {
 
 export function loadProfile(classId: string): Profile {
   try {
-    const p = read(KEY(classId));
+    const p = read(KEY(classId), classId);
     if (p) {
       const loaded = { ...p, classId };
       if (seedPr423Gear(loaded, false)) saveProfile(loaded); // PR 423's test gear
       if (seedPr499Gear(loaded, false)) saveProfile(loaded); // PR 499's test gear
       if (seedPr527Gear(loaded, false)) saveProfile(loaded); // PR 527's test gear
+      if (seedPr487Staffs(loaded, false)) saveProfile(loaded); // PR 487's test staffs
       return loaded;
     }
     if (classId === 'mage' && saveSlot() === 1) {
-      const old = read(LEGACY);
+      const old = read(LEGACY, classId);
       if (old) {
         old.classId = classId;
         saveProfile(old);
@@ -79,7 +90,7 @@ export function saveProfile(p: Profile): void {
 /** A class's profile in a save slot as stored, without touching it (null: never played there). */
 export function peekProfile(classId: string, slot: number): Profile | null {
   try {
-    return read(KEY(classId, slot)) ?? (classId === 'mage' && slot === 1 ? read(LEGACY) : null);
+    return read(KEY(classId, slot), classId) ?? (classId === 'mage' && slot === 1 ? read(LEGACY, classId) : null);
   } catch { return null; }
 }
 

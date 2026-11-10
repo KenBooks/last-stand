@@ -12,7 +12,7 @@
 // damage alone, not what the hero deals.)
 import { middleOf } from './lab';
 import type { Fixture, Lab, Report } from './lab';
-import type { DerivedStats, SkillDef, WeaponStyle } from '../../../src/types';
+import type { DerivedStats, HeldStyle, SkillDef } from '../../../src/types';
 import { G } from '../../../src/state';
 import { skillTooltip } from '../../../src/ui/tooltip';
 import { holdFor } from './cast';
@@ -183,7 +183,7 @@ function skillsOf(options: TooltipsOptions): SkillDef[] {
 }
 
 /** Each damage skill held `gear`'s way, its tooltip read and cast at its foes. */
-async function gearRound(lab: Lab, options: TooltipsOptions, gear: WeaponStyle | undefined): Promise<Found> {
+async function gearRound(lab: Lab, options: TooltipsOptions, gear: HeldStyle | undefined): Promise<Found> {
   const fixture: Fixture = { ...options.fixture, gear };
   await lab.setup(fixture);
   const found: Found = { lines: [gear ?? G.player.cls.id], problems: [] };

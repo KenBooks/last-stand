@@ -36,11 +36,42 @@ const mage: ClassDef = {
   },
 
   // Key bindings: 'mouse0', 'mouse2', '1'..'4', 'q'
+  // Left click is the staff's own spell, by its school (the last listed is a new bar's: `resolveFor` swaps in the
+  // school held's). Numbers and names to be settled last (#402).
   skills: [
+    {
+      key: 'mouse0', impl: 'cinderburst', name: 'Cinderburst',
+      desc: 'Hurl a heavy orb of fire that bursts where it strikes, scorching every foe round it, and may set them alight. Costs no Energy.',
+      // (cast a third as often as the arcane bolt, for about as much a second on one foe and far more on a pack)
+      tags: ['fire'], cost: 0, cooldown: 0, castTime: 1.02, school: 'fire',
+      // (on one foe about 108 a second and its burn, the arcane bolt's 106; on a pack of three about 330)
+      damage: 110, speed: 19, range: 22, radius: 2.8, edge: 0.4, burn: { chance: 0.3, perSecond: 22, seconds: 4 },
+      color: 0xffc23a, trailEnd: 0xff4a12,
+      icon: { glyph: '✹', color: '#ffc23a' },
+    },
+    {
+      key: 'mouse0', impl: 'stormcall', name: 'Stormcall',
+      desc: 'Hold to gather a charge for up to 3 seconds, release to loose lightning from the staff at your aim: the longer it is held, the harder it strikes and the wider it bursts. The foe at its middle is dazed for a second, those round it for less. Elites and bosses are not dazed. Costs no Energy.',
+      // (a tap is `least` of the full charge's damage and reach)
+      tags: ['lightning'], cost: 0, cooldown: 0, castTime: 0.3, draw: 3, minDraw: 0.03, school: 'lightning',
+      // (a tap 0.07 of a full charge: at 0.13, taps one after another dealt 143 a second to one foe against a full
+      // charge's 116, `lab hits`; on a pack of three a full charge deals about 377 a second, the arcane bolt 190)
+      damage: 430, range: 20, radius: 4.2, edge: 0.4, least: 0.07, duration: 1,
+      color: 0x4aa8ff,
+      icon: { glyph: 'ϟ', color: '#4aa8ff' },
+    },
+    {
+      key: 'mouse0', impl: 'lifethread', name: 'Lifethread',
+      desc: 'Hold to send an arching beam of light from the staff onto the ally nearest your aim, healing them for as long as it is held. With no ally before you, it heals you. Costs no Energy.',
+      tags: ['healing'], cost: 0, cooldown: 0, castTime: 0, channel: true, school: 'healing',
+      heal: 60, range: 14, arc: Math.PI / 3, moveMult: 0.7,
+      color: 0xff3a48,
+      icon: { glyph: '✚', color: '#ff5b6a' },
+    },
     {
       key: 'mouse0', impl: 'splinterBolt', name: 'Splintering Bolt',
       desc: 'Launch a seeking arcane bolt that shatters on impact into two smaller bolts, which seek out other foes. Costs no Energy.',
-      tags: ['arcane'], cost: 0, cooldown: 0, castTime: 0.34,
+      tags: ['arcane'], cost: 0, cooldown: 0, castTime: 0.34, school: 'arcane',
       damage: 36, missiles: 1, spread: 0.22, speed: 24, splitCount: 2, splitDamage: 0.6, range: 22,
       color: 0xff4fd8, trailEnd: 0x6a1cff,   // VFX colors
       icon: { glyph: '✧', color: '#ff6fe0' },
@@ -54,9 +85,12 @@ const mage: ClassDef = {
     },
     {
       key: 'mouse2', impl: 'voidLance', name: 'Void Lance',
-      desc: 'Draw a portal in the air, then channel a lance of raw arcana through it, piercing every foe in its line. You move slowly as you hold it, and it drains Energy.',
+      desc: 'Draw a portal in the air, then channel a lance of raw arcana through it, piercing every foe in its line. You move slowly as you hold it, and it drains Energy. With no staff, bind it to two keys: either casts it from one hand, both together from both hands, harder and at a higher cost.',
       tags: ['arcane'], cost: 34, cooldown: 0, castTime: 0, channel: true, opening: 0.75,
       damage: 210, length: 17, width: 0.75, moveMult: 0.35,
+      // (with no staff it's cast from either hand, or from both with two of its keys held: half as much damage
+      // again, the Energy gone half as fast again)
+      both: { damage: 315, cost: 51 },
       icon: { glyph: '⟿', color: '#5dffa8' },
     },
     {
@@ -93,6 +127,9 @@ const mage: ClassDef = {
   // Common items granted to a brand-new profile (see loot/items.ts makeItem).
   // the block stats only come on warrior shields
   excludeStats: ['block', 'blockAmount'],
+
+  // A staff's school sets the spell the staff casts (left click's); with none, the lance from both hands
+  schools: { roll: ['arcane', 'fire', 'lightning', 'healing'], bare: 'voidLance' },
 
   starterGear: [
     { slot: 'weapon', rarity: 'common', ilvl: 1 },

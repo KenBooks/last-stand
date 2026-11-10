@@ -19,6 +19,7 @@ import { inYard } from '../game/village';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
 import { dazedStars } from '../fx/dazed';
+import { burnFlames } from '../combat/burn';
 import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
@@ -132,6 +133,8 @@ export class Enemy {
   chill = 0;
   /** seconds left dazed (`daze`): standing, thinking of nothing, stars circling over its head */
   dazed = 0;
+  /** seconds left alight, flames rising off it (combat/burn.ts: the burn's damage is its lighter's game's) */
+  burning = 0;
   hitT = 0;
   flashAt = -1;
   deadT = -1;
@@ -486,6 +489,7 @@ export class Enemy {
 
     this.hitT = Math.max(0, this.hitT - dt * 4);
     this.chill = Math.max(0, this.chill - dt);
+    this.burning = Math.max(0, this.burning - dt);
     const frozen = this.frozen > 0, dazed = this.dazed > 0;
     if (frozen) this.frozen = Math.max(0, this.frozen - dt);
     if (dazed) this.dazed = Math.max(0, this.dazed - dt);
@@ -566,6 +570,7 @@ export class Enemy {
     if (projection) this.applyProjection();
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : projection ? 0.35 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
+    if (this.burning > 0 && dt > 0) burnFlames(this, dt);
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
     this.meter?.update();

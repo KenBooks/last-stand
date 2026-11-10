@@ -1,12 +1,13 @@
 // Spell loadout: which skill is bound to which key. Any skill may be bound to
 // any key, including the same skill on several keys. Persisted in a cookie, per save slot.
 // A class whose skills depend on the gear held (the warrior's shield and two-handed skills) keeps
-// one loadout per weapon style, so each style comes back as the player left it.
+// one loadout per weapon style, so each style comes back as the player left it; one whose weapons have
+// schools (the mage's staffs) one per school, and one for no weapon.
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { CLASS_IDS } from '../data/classes/index';
 import { saveKey, saveSlot } from './saveSlots';
 import { cloudTouched } from './cloud';
-import type { ClassDef, Gear, SkillDef, SkillKey, WeaponStyle } from '../types';
+import type { ClassDef, Gear, HeldStyle, School, SkillDef, SkillKey, WeaponStyle } from '../types';
 
 export type { WeaponStyle };
 
@@ -15,32 +16,46 @@ export const SKILL_KEYS: SkillKey[] = ['mouse0', 'mouse2', '1', '2', '3', '4', '
 /** key -> skill id (the skill's `impl` name), or null for an empty slot */
 export type Loadout = Record<SkillKey, string | null>;
 
-const STYLES: WeaponStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded'];
+const STYLES: HeldStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded', 'arcane', 'fire', 'lightning', 'healing', 'bare'];
 
-export function weaponStyle(cls: ClassDef, gear: Gear): WeaponStyle | null {
+export function weaponStyle(cls: ClassDef, gear: Gear): HeldStyle | null {
+  if (cls.schools) return gear.school ?? 'bare';
   if (!cls.skills.some((s) => s.needs)) return null;   // one loadout, whatever is held
   return gear.shield ? 'shield' : gear.twoHanded ? 'twoHanded' : gear.offWeapon ? 'dual' : 'oneHanded';
 }
 
+/** The school of the weapon a hero of `cls` holds (none: no weapon, or no schools). */
+export const schoolHeld = (cls: ClassDef, weapon: { school?: School } | undefined): School | null =>
+  (cls.schools && weapon ? weapon.school ?? cls.schools.roll[0] : null);
+
 /** A skill as it is with the weapons held `style`'s way: its own tuning, with that style's over it. */
-export function forStyle(def: SkillDef, style: WeaponStyle | null): SkillDef {
+export function forStyle(def: SkillDef, style: HeldStyle | null): SkillDef {
   const tuned = style ? def.styles?.[style] : undefined;
   return tuned ? { ...def, ...tuned } : def;
 }
 
 /** Whether the gear held allows a skill (some need a shield, a two-handed weapon or two weapons). */
 export function usableWith(def: SkillDef, gear: Gear): boolean {
+  if (def.school) return gear.school === def.school;
   return def.needs === 'shield' ? gear.shield : def.needs === 'twoHanded' ? gear.twoHanded : def.needs === 'dual' ? !!gear.offWeapon : true;
 }
 
-/** The skill a key bound to `def` fires with this gear: itself, its fallback for the gear, or none. */
-export function resolveFor(def: SkillDef, gear: Gear): string | null {
+/** `defs` with those the gear held doesn't allow last, each group in its own order: a list of a hero's skills shows
+ *  what he can cast first (from play: "unavailable spells should be pushed to the right side"). */
+export function usableFirst(defs: readonly SkillDef[], gear: Gear): SkillDef[] {
+  return [...defs.filter((def) => usableWith(def, gear)), ...defs.filter((def) => !usableWith(def, gear))];
+}
+
+/** The skill a key bound to `def` fires with this gear: itself, its fallback for the gear, or none. A school's
+ *  spell gives way to the spell of the school held, or with no weapon to the class's `schools.bare`. */
+export function resolveFor(def: SkillDef, gear: Gear, cls?: ClassDef): string | null {
   if (usableWith(def, gear)) return def.impl;
+  if (def.school) return (gear.school ? cls?.skills.find((s) => s.school === gear.school)?.impl : cls?.schools?.bare) ?? null;
   const fb = def.fallback;
   return (gear.shield ? fb?.shield : gear.twoHanded ? fb?.twoHanded : gear.offWeapon ? fb?.dual : fb?.oneHanded) ?? null;
 }
 
-const COOKIE = (classId: string, style: WeaponStyle | null, slot?: number) =>
+const COOKIE = (classId: string, style: HeldStyle | null, slot?: number) =>
   saveKey(`last-stand-loadout-${classId}${style ? '-' + style : ''}`, slot);
 
 /** The class's defaults (a key gets the last skill listing it), fitted to the gear held. */
@@ -54,7 +69,7 @@ export function defaultLoadout(cls: ClassDef, gear?: Gear): Loadout {
 function fit(cls: ClassDef, l: Loadout, gear: Gear): Loadout {
   for (const k of SKILL_KEYS) {
     const def = cls.skills.find((s) => s.impl === l[k]);
-    if (def) l[k] = resolveFor(def, gear);
+    if (def) l[k] = resolveFor(def, gear, cls);
   }
   return l;
 }

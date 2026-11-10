@@ -71,6 +71,13 @@ export function skillDamageHTML(def: SkillDef, stats: DerivedStats | null): stri
 /** A healing skill's figure for a hero of `stats`: what it restores now (empty without a hero: its text says how). */
 export function skillHealHTML(def: SkillDef, stats: DerivedStats | null): string {
   if (!stats || !def.heal) return '';
+  // (a healing beam: a second's healing, raised by the healer's All Damage, as skills/lifethread.ts heals)
+  if (def.channel) {
+    const each = def.heal * (1 + stats.damagePct / 100);
+    const by = stats.damagePct ? ` · +${whole(stats.damagePct)}% all damage` : '';
+    return `<div class="tt-dmg"><div class="tt-hit">Restores <b class="tt-heal">${whole(each)}</b> Health a second</div>`
+      + `<div class="tt-note">Base ${def.heal} a second${by}</div></div>`;
+  }
   const pct = def.healPct ?? 0;
   const healed = def.heal + stats.maxLife * pct;
   const of = pct ? `: ${def.heal} and ${Math.round(pct * 100)}% of your ${whole(stats.maxLife)}` : '';

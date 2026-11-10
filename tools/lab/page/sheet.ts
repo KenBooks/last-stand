@@ -7,7 +7,7 @@ import type { Lab, Fixture, ViewName, Tile } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { HELD, armComfort, describeArm } from './comfort';
 import { bowOf, describeBow } from './ranger';
-import { bindKnown, holdFor, pressing, skillNamed } from './cast';
+import { bindKnown, holdFor, holdingAll, pressing, skillNamed } from './cast';
 import type { SkillDef } from '../../../src/types';
 import { groundHeight } from '../../../src/world/ground';
 import { describeParts, type Look } from './looks';
@@ -73,17 +73,44 @@ function castShare(lab: Lab): number | null {
   return cast && Number.isFinite(cast.dur) ? cast.t / cast.dur : null;
 }
 
-/** A channel's key is held this long (`holdFor`), and pictured at shares of that. */
-async function channelled(lab: Lab, snap: Snap, key: Parameters<typeof pressing>[0], aim: THREE.Vector3,
+/** A channel's keys are held this long (`holdFor`), and pictured at shares of that. */
+async function channelled(lab: Lab, snap: Snap, keys: Parameters<typeof pressing>[0][], aim: THREE.Vector3,
   def: SkillDef, wanted: number[]): Promise<void> {
   const name = def.name;
   const frames = Math.round(holdFor(def) / (window.__labClock.frame / 1000));
   for (let f = 0; f < frames && wanted.length > 0; f++) {
-    await lab.step(1, () => pressing(key, aim, true));
+    await lab.step(1, () => holdingAll(keys, aim));
     if (!lab.player.channel) throw new Error(`lab: sheet: ${name}'s channel ended after ${f + 1} frames of ${frames}`);
     while (wanted.length > 0 && (f + 1) / frames >= wanted[0]) {
       await snap(`${name}, ${wanted.shift()} of its channel`, [castPointNote(lab)]);
     }
+  }
+}
+
+/** the frames after a charged skill's key is let go it's pictured at: its strike on its way, landed, and what it
+ *  leaves */
+const LOOSED_FRAMES = [4, 14, 34];
+
+/** A skill charged while its key is held (`SkillDef.draw`: the lightning staff's) is held to its full charge,
+ *  pictured at shares of that, then let go and pictured as it strikes. */
+async function charged(lab: Lab, snap: Snap, key: Parameters<typeof pressing>[0], aim: THREE.Vector3,
+  def: SkillDef, wanted: number[]): Promise<void> {
+  const name = def.name;
+  for (let f = 0; f < CAST_FRAMES * 4 && wanted.length > 0; f++) {
+    await lab.step(1, () => pressing(key, aim, true));
+    const cast = lab.player.casting;
+    if (!cast?.drawT) throw new Error(`lab: sheet: ${name}'s charge ended after ${f + 1} frames, its key still held`);
+    const share = Math.min(1, cast.t / cast.drawT);
+    while (wanted.length > 0 && share >= wanted[0]) {
+      await snap(`${name}, ${wanted.shift()} of its charge`, [castPointNote(lab)]);
+    }
+  }
+  if (wanted.length > 0) throw new Error(`lab: sheet: ${name} never charged to ${wanted.join(', ')} of its charge`);
+  let stepped = 0;
+  for (const frames of LOOSED_FRAMES) {
+    await lab.step(frames - stepped, () => ({ aim }));
+    stepped = frames;
+    await snap(`${name}, ${frames} frames after it's let go`, [castPointNote(lab)]);
   }
 }
 
@@ -145,13 +172,16 @@ export const STATES: Record<string, State> = {
    *  channel held, at shares of its hold */
   async cast(lab, snap, options) {
     if (!options.skill) throw new Error('lab: sheet: the cast state needs --skill');
-    bindKnown(options.skill);
-    const { key, def } = skillNamed(options.skill);
+    // (`a+b`: a channel held on both keys at once, the mage's lance from both hands with no staff)
+    const [named, ...alsoHeld] = options.skill.split('+');
+    bindKnown(named);
+    const { key, def } = skillNamed(named);
     const facing = lab.player.facing;
     const way = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     const aim = lab.player.pos.clone().addScaledVector(way, CAST_AIM);
     const wanted = [...(options.shares ?? CAST_SHARES)].sort((a, b) => a - b);
-    if (def.channel) return channelled(lab, snap, key, aim, def, wanted);
+    if (def.channel) return channelled(lab, snap, [key, ...alsoHeld.map((other) => skillNamed(other).key)], aim, def, wanted);
+    if (def.draw) return charged(lab, snap, key, aim, def, wanted);
     await lab.step(1, () => pressing(key, aim, true));
     for (let f = 0; f < CAST_FRAMES && wanted.length > 0; f++) {
       const share = castShare(lab);

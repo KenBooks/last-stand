@@ -99,6 +99,23 @@ body.touch #party { top: touch(104px); left: $touch-beside; scale: var(--touch, 
 .pf-state:empty { display: none; }
 .pf.down { border-color: var(--danger); animation: lowpulse .6s infinite alternate; }
 .pf.out { opacity: .55; }
+/* a partner being healed (a draught, a healing staff's beam): a green + over the frame's corner, breathing, and a
+   green light over their bar. Each drawn once and only faded or scaled: a loop of a layer's opacity or transform
+   paints nothing (the frames are few: the partners') */
+.pf { position: relative; }
+.pf-bar { position: relative; }
+.pf-mend { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba($heal, .85), transparent); opacity: 0; will-change: opacity; pointer-events: none; }
+.pf-plus { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 19px/1 var(--font-display); color: #eafff0; background: radial-gradient(circle, $heal 0 45%, rgba($heal, .35) 70%, transparent 72%);
+  text-shadow: 0 0 4px #063; opacity: 0; scale: .6; transition: opacity .2s, scale .2s; will-change: opacity, transform; pointer-events: none; }
+.pf.healed { border-color: rgba($heal, .8); }
+/* (on the portrait's corner where the frame shows one) */
+.pf-portrait:not([hidden]) ~ .pf-plus { right: auto; left: 32px; top: -4px; }
+.pf.healed .pf-plus { opacity: 1; scale: 1; animation: pf-plus .9s ease-in-out infinite alternate; }
+.pf.healed .pf-mend { animation: pf-mend .9s ease-in-out infinite alternate; }
+@keyframes pf-plus { from { transform: scale(.9); } to { transform: scale(1.15); } }
+@keyframes pf-mend { from { opacity: .15; } to { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .pf.healed .pf-plus { animation: none; } .pf.healed .pf-mend { animation: none; opacity: .4; } }
 // a downed partner in reach: the key to hold, low in the middle of the screen, and the revive filling under it
 .rvprompt { position: absolute; left: 50%; bottom: hud(150px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
   gap: hud(6px); padding: hud(10px) hud(18px); border-radius: hud(6px); background: rgba(10,6,4,.78); border: 1px solid rgba(#ffe6a0, .45);

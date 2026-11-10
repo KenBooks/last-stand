@@ -43,6 +43,17 @@ const SPLIT_FLIGHT = 0.25;
 /** Void Lance's portal (s, `opening`) and how long the scene holds the beam out */
 const LANCE_OPENS = 0.75;
 const LANCE_HELD = 4;
+/** Cinderburst's cast pace (s, `castTime`) and its orb's flight to a foe */
+const CINDER_PACE = 1.02;
+const CINDER_FLIGHT = 0.4;
+/** Stormcall's time to a full charge (s, `draw`), its arc's flight, and a tap's charge */
+const STORM_CHARGES = 3;
+const STORM_FLIGHT = 0.3;
+const STORM_TAP = 0.03;
+/** a tapped Stormcall's pace (s: its least draw and its cast's time) */
+const STORM_TAP_PACE = 0.45;
+/** how long the scene holds Lifethread's beam (s) */
+const THREAD_HELD = 5;
 
 /** A bolt's cues: cast at `at`, bursting on a foe and splitting, each split bursting on another (`hits` false: it
  *  flies to its range and is gone). */
@@ -166,6 +177,39 @@ const SCENES: Record<string, Scene> = {
       { at: LANCE_OPENS + LANCE_HELD, stop: 'beam' },
     ],
     held: [LANCE_OPENS + 1, LANCE_OPENS + LANCE_HELD],
+  },
+  cinder: {
+    what: 'Cinderburst held: three orbs a second apart, each bursting on a foe',
+    cues: [0, 1, 2].flatMap((cast): Cue[] => [
+      { at: cast * CINDER_PACE, sound: ['cinder'] },
+      { at: cast * CINDER_PACE + CINDER_FLIGHT, sound: ['cinderBurst'] },
+    ]),
+  },
+  storm: {
+    what: `Stormcall charged ${STORM_CHARGES} s and held a second, let go, its strike landing; then a tap`,
+    cues: [
+      { at: 0, sound: ['stormCharge'], args: [STORM_CHARGES], keep: 'charge' },
+      { at: STORM_CHARGES + 1, stop: 'charge' },
+      { at: STORM_CHARGES + 1, sound: ['storm'], args: [1] },
+      { at: STORM_CHARGES + 1 + STORM_FLIGHT, sound: ['stormStrike'], args: [1] },
+      { at: STORM_CHARGES + 4, sound: ['storm'], args: [STORM_TAP] },
+      { at: STORM_CHARGES + 4 + STORM_FLIGHT, sound: ['stormStrike'], args: [STORM_TAP] },
+    ],
+    held: [1, STORM_CHARGES + 1],
+  },
+  stormTaps: {
+    what: 'Stormcall tapped four times, each spark striking',
+    cues: [0, 1, 2, 3].flatMap((tap): Cue[] => [
+      { at: tap * STORM_TAP_PACE, sound: ['stormCharge'], args: [STORM_CHARGES], keep: `charge${tap}` },
+      { at: tap * STORM_TAP_PACE + 0.1, stop: `charge${tap}` },
+      { at: tap * STORM_TAP_PACE + 0.1, sound: ['storm'], args: [STORM_TAP] },
+      { at: tap * STORM_TAP_PACE + 0.1 + STORM_FLIGHT, sound: ['stormStrike'], args: [STORM_TAP] },
+    ]),
+  },
+  thread: {
+    what: `Lifethread held ${THREAD_HELD} s and let go`,
+    cues: [{ at: 0, sound: ['thread'], keep: 'beam' }, { at: THREAD_HELD, stop: 'beam' }],
+    held: [1, THREAD_HELD],
   },
   ...WARRIOR,
   lanceEarly: {

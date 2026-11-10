@@ -198,7 +198,7 @@ async function everySwing(lab: Lab, options: SwingOptions): Promise<Report> {
   const turns = Boolean((viewSwing as Partial<typeof viewSwing>).cutTurnAt);
   const lines = turns ? [] : ['this game has no `cutTurnAt` (viewSwing.ts): every swing stepped unturned'];
   const problems: string[] = [];
-  const ways = fixture.gear ? [fixture.gear] : (Object.keys(SWINGS_HELD) as WeaponStyle[]);
+  const ways = (fixture.gear ? [fixture.gear] : Object.keys(SWINGS_HELD)) as WeaponStyle[];
   let holds = 0;
   for (const gear of ways) {
     const bases = basesHeld(cls, gear).filter((base) => !fixture.weapon || base === fixture.weapon);
@@ -221,7 +221,7 @@ async function everySwing(lab: Lab, options: SwingOptions): Promise<Report> {
  *  canaries on the cut from rest. */
 function heldSwings(lab: Lab, canary: boolean, turns: boolean): { lines: string[]; problems: string[] } {
   const { cls, gear } = lab.player;
-  const style = weaponStyle(cls, gear)!;
+  const style = weaponStyle(cls, gear) as WeaponStyle;
   const lines: string[] = [];
   const problems: string[] = [];
   for (const held of SWINGS_HELD[style]) {

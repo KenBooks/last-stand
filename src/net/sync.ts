@@ -57,7 +57,7 @@ interface Snapshot { r: number[]; v: number[]; p: number[][]; e: (number | strin
 export interface WorldMessage { t: number; x?: WorldEvent[]; s?: Snapshot }
 
 /** A guest's hit on a foe, for the host: [its number, foe, amount, crit, type, knock, from x, from z, chill, freeze,
- *  daze, carry, carry's way x, z, evade, evade's x, z] (a daze alone, `dazeEnemy`, a charge's carry, `carryEnemy`, and
+ *  daze, carry, carry's way x, z, evade, evade's x, z, burn] (a burn alone, `igniteEnemy`, a daze alone, `dazeEnemy`, a charge's carry, `carryEnemy`, and
  *  the foe getting out of the hero's attack, `evades`, deal nothing), and a kill's throw after them (`flingRow`) */
 export type HitReport = number[];
 
@@ -193,7 +193,7 @@ function snap(): Snapshot {
     e: G.enemies.filter((e) => e.deadT < 0).map((e) => [
       e.id, r2(e.pos.x), r2(e.pos.z), r2(e.facing), Math.round(e.life),
       e.action?.name ?? '', r2(e.action?.t ?? 0), r2(e.action?.dur ?? 0),
-      (e.frozen > 0 ? 1 : 0) | (e.chill > 0 ? 2 : 0) | (e.dazed > 0 ? 4 : 0),
+      (e.frozen > 0 ? 1 : 0) | (e.chill > 0 ? 2 : 0) | (e.dazed > 0 ? 4 : 0) | (e.burning > 0 ? 8 : 0),
     ]),
     a: [...dealtUpTo],
   };
@@ -202,11 +202,12 @@ function snap(): Snapshot {
 /** Host: a guest's hits on the foes, as its own game dealt them on its copies: dealt here too, its kill and loot. */
 export function onGuestHits(p: Player, hits: HitReport[]): void {
   if (role.current !== 'host' || G.mode !== 'run') return;
-  for (const [seq, id, amount, crit, type, knock, ox, oz, chill, freeze, daze, carry, wayX, wayZ, evade, ex, ez, ...thrown] of hits) {
+  for (const [seq, id, amount, crit, type, knock, ox, oz, chill, freeze, daze, carry, wayX, wayZ, evade, ex, ez, burn, ...thrown] of hits) {
     dealtUpTo.set(p.slot, Math.max(dealtUpTo.get(p.slot) ?? 0, seq));
     const e = G.enemies.find((q) => q.id === id);
     if (!e || !e.alive) continue;
     if (daze) { e.daze(daze); continue; }
+    if (burn) { e.burning = Math.max(e.burning, burn); continue; }
     if (carry) { e.carry(p, { x: wayX, z: wayZ }, carry); continue; }
     // (where it blinks to kept clear of the props here too: the guest's copies stand a little off the foes)
     if (evade) { if (evade === EVADE_HOW.duck || !inObstacle({ x: ex, z: ez }, e.radius)) fx('evade', e.id, evade, ex, ez); continue; }
@@ -229,7 +230,7 @@ function onDealt(e: Enemy, hit: DealtHit): void {
     hitSeq, e.id, r2(hit.amount), hit.crit ? 1 : 0, DAMAGE_TYPES.indexOf(hit.type),
     r2(hit.knock ?? 0), r2(from.x), r2(from.z), r2(hit.chill ?? 0), r2(hit.freeze ?? 0), r2(hit.daze ?? 0),
     r2(hit.carry?.seconds ?? 0), r2(hit.carry?.way.x ?? 0), r2(hit.carry?.way.z ?? 0),
-    hit.evade?.how ?? 0, r2(hit.evade?.x ?? 0), r2(hit.evade?.z ?? 0),
+    hit.evade?.how ?? 0, r2(hit.evade?.x ?? 0), r2(hit.evade?.z ?? 0), r2(hit.burn ?? 0),
     ...(hit.fling ? flingRow(hit.fling) : []),
   ]);
 }
@@ -400,6 +401,7 @@ function applySnapshot(s: Snapshot): void {
     if (flags & 1) e.frozen = Math.max(e.frozen, 0.3);
     if (flags & 2) e.chill = Math.max(e.chill, 0.3);
     if (flags & 4) e.dazed = Math.max(e.dazed, 0.3);
+    if (flags & 8) e.burning = Math.max(e.burning, 0.3);
     if (!act) e.action = null;
     else if (!e.action || e.action.name !== act || Math.abs(e.action.t - t) > 0.2) e.action = { name: act, dur, t, events: [], cleanup: null };
   }

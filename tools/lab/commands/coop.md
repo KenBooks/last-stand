@@ -165,3 +165,9 @@ lobby's: its frames here are the first after the run, as the lobby settles in (t
 the garbage collected), and every part of a hero's update runs about 45% slower then; settled, a hero costs the same
 there as in a run (`poses --lobby`: his update 1.05 ms a frame against 1.13, measured 300 frames after the lobby
 came; 1.51 measured as it came).
+
+- `staffs` (`--class mage`, #402): the guest holds a fire staff and casts at three dazed foes, every orb setting
+  what it strikes alight (its chance made sure), then a healing staff, its beam held on the host, hurt to 300 of
+  800 Health as the guest takes it up. The foes alight on the guest's screen must show alight on the host's
+  and lose life there; the host must gain 60 Health or more under the beam on its own screen; and its frame on
+  the guest's must show it healed (`describeStaffs` in `node/coopJudge.mjs`).
