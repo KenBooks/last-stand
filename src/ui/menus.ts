@@ -424,12 +424,44 @@ function restKey(): string {
   return `${innerWidth}x${innerHeight} ${shown} ${FOLDS[0].folded}`;
 }
 
+/** the room the run's party frames leave the overlays, read for the way they're laid out (`key`): read again only as
+ *  that changes or the frames' box does, not every frame (the HUD's text changes every frame, and a box read then
+ *  lays the page out) */
+let partyRoom: { key: string; y: number } | null = null;
+const partyResized = new ResizeObserver(() => { partyRoom = null; });
+let partyWatched = false;
+/** the gap left between the party frames and the overlays under them (css px) */
+const PARTY_GAP = 6;
+
+/**
+ * How far down the overlays go to stand under the run's party frames (css px; 0 with none shown): they stand in the
+ * same top left corner, and the performance overlay lay over a partner's frame (#492).
+ */
+function partyClearance(): number {
+  const party = document.querySelector<HTMLElement>('#party');
+  if (!party) return 0;
+  if (!partyWatched) {
+    partyWatched = true;
+    partyResized.observe(party);
+  }
+  const key = `${innerWidth}x${innerHeight} ${$('#hud').className} ${document.body.className} ${party.childElementCount}`;
+  if (partyRoom?.key === key) return partyRoom.y;
+  const box = party.getBoundingClientRect();
+  let y = 0;
+  if (party.offsetParent && box.height > 0) {
+    const top = parseFloat(getComputedStyle($('#diag')).top) || 0;
+    y = Math.max(0, box.bottom + PARTY_GAP - top);
+  }
+  partyRoom = { key, y };
+  return y;
+}
+
 /** The lobby's clearance (`lobbyClearance`) read from the page as drawn until it rests in a way it's laid out, and
  *  from then on remembered: read every frame, it forced a layout every frame the panels slid, and pressing Space
- *  rapidly kept them sliding. */
+ *  rapidly kept them sliding. With the lobby out of the way, the run's party frames' (`partyClearance`). */
 function clearance(): { x: number; y: number } {
   const menu = $('#menu');
-  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
+  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: partyClearance() };
   if (!panelsWatched) {
     panelsWatched = true;
     menu.querySelectorAll('.menu-left, .menu-center, .menu-right, #hero-fold').forEach((el) => panelsResized.observe(el));
@@ -444,8 +476,8 @@ function clearance(): { x: number; y: number } {
   return drawn;
 }
 
-/** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels, once a frame
- *  while any is shown: they lay over the hero panel. */
+/** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels and the run's
+ *  party frames, once a frame while any is shown: they lay over the hero panel, and over a partner's frame. */
 export function clearOverlays(): void {
   const diag = $('#diag');
   if (![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;

@@ -10,7 +10,7 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,scores,perf,perfMini,perfGraph,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
+run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
@@ -94,7 +94,10 @@ the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPaus
 with the mouse: the frame rate and its graph alone showing, drawn, within the window, in a third of Full's room at
 the most, the press kept in `last-stand-perf-hud` and its button lit; then Full and Off pressed likewise, and the
 cookie of the builds before Mini, `1`, read as Full; `--canary` loses the cookie before it's read back, which must be
-caught unsaved), the overlay's readings against the frames it counts (`perfGraph`, `page/uiPerfGraph.ts`: shown
+caught unsaved), the mini overlay over a co-op run's party frames (`perfParty`, `page/uiPerfParty.ts`: two
+partners' frames made with the game's markup, the overlay clear of each and within the window, #492: it lay over a
+partner's frame; `--canary` pins the overlays back to the corner, which must be caught), the overlay's readings
+against the frames it counts (`perfGraph`, `page/uiPerfGraph.ts`: shown
 afresh and read after each of 300 frames on the lab's clock, its frame rate and its graph's scale never over 1.5
 times the frames' own rate; the graph rated its first half second from the first frame's end, and a redraw just
 after a bucket's edge read one frame over a fraction of a millisecond, 2500 fps on a 144 Hz screen; `--canary` runs
