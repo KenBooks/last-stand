@@ -27,10 +27,12 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   most first, and `the rest`, what none accounts for (the grade's adaptation, the exposure, one thing covering
   another). It says where the replay's light wasn't the cast's (0.03 of white apart): what it names lit another
   frame then. Read it with these in mind: a thing's share is also what it hid or showed of another (a foe before a
-  beam); a cell's edge through a thin bright thing reads a jolt of the camera as its light leaving the cell (the
-  frame's middle, where a close view's aim runs: Void Lance's third person, #475, open); and scenarios run one
-  after another on a page may differ from the same one run alone (the crypt's third person counted 4 flashes after
-  `top` and 1 alone, three times in three). It also lists the frame's mean
+  beam); a light that leaves a cell for its neighbour and comes back is a thing that moved, so look at what moved it
+  before the effect's own light (Void Lance's third person, #482: the lance's light left a cell for the one under
+  it within a frame, 4 flashes a second, three fixes to the effect changing nothing; pictures of the two frames of
+  a change showed the whole lance swung, the hero's aim wheeling to a foe beside him under the crosshair, `lab
+  nearaim`); and scenarios run one after another on a page may differ from the same one run alone (the crypt's
+  third person counted 4 flashes after `top` and 1 alone, three times in three, by the same aim). It also lists the frame's mean
   every tenth of a second through the cast, and the blinks, listed and not judged (`page/blinks.ts`: a patch of a
   64 by 36 grid brightening by 20 or more over the frame before and back within 3 frames, an effect's own crackle
   among them; a broken prop's rubble piece drawn full size at the world's middle for a frame, beside a hero on the
