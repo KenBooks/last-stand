@@ -91,6 +91,19 @@ function skillOn(k: SkillKey): { icon: string; art?: string; color: string; name
   return s ? { icon: skillIconHTML(s.def), art: skillArt(s.def), color: s.def.icon.color, name: s.def.name, hold: !!s.def.channel } : null;
 }
 
+/** A control's icon drawn, where no glyph says it (#519): one path in the key's colour, its holes cut by even-odd. */
+const drawn = (d: string): string => `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="${d}"/></svg>`;
+const CONTROL_ICONS = {
+  /** View: a camera, its lens a ring round a dot */
+  view: drawn('M9 4.5 7.6 7H5a2.5 2.5 0 0 0-2.5 2.5v8A2.5 2.5 0 0 0 5 20h14a2.5 2.5 0 0 0 2.5-2.5v-8A2.5 2.5 0 0 0 19 7h-2.6L15 4.5Z'
+    + 'M12 9a4.2 4.2 0 1 0 0 8.4a4.2 4.2 0 1 0 0-8.4ZM12 11.2a2 2 0 1 0 0 4a2 2 0 1 0 0-4Z'),
+  /** Bank: a chest shut on the spoils, its lock on the front */
+  bank: drawn('M3 11V9.5A5.5 5.5 0 0 1 8.5 4h7A5.5 5.5 0 0 1 21 9.5V11ZM3 12.5h18V19a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19Z'
+    + 'M10.5 12.5h3v3.2a1.5 1.5 0 0 1-3 0Z'),
+  /** Ping: a map's pin */
+  ping: drawn('M12 2.5a7 7 0 0 0-7 7c0 5 7 12 7 12s7-7 7-12a7 7 0 0 0-7-7ZM12 6.8a2.7 2.7 0 1 0 0 5.4a2.7 2.7 0 1 0 0-5.4Z'),
+};
+
 /**
  * The left of a keyboard, rows staggered like the real thing: the keys the game uses are lit and
  * show what they do (a skill's icon in its colour, or a word), the rest are dim.
@@ -102,10 +115,10 @@ function keyboardDiagram(): string {
     esc: { cap: 'Pause', tip: 'Pause' },
     w: { icon: '▲', cap: 'Move', tip: 'Move' }, a: { icon: '◀', cap: 'Move', tip: 'Move' },
     s: { icon: '▼', cap: 'Move', tip: 'Move' }, d: { icon: '▶', cap: 'Move', tip: 'Move' },
-    v: { icon: '◎', cap: 'View', tip: 'View: top-down, over the shoulder, first person' },
-    b: { icon: '⛁', cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
+    v: { icon: CONTROL_ICONS.view, cap: 'View', tip: 'View: top-down, over the shoulder, first person' },
+    b: { icon: CONTROL_ICONS.bank, cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
     e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op)', hold: true },
-    shift: { icon: '⌖', cap: 'Ping', tip: 'Ping the party (co-op), the left one: held, the mark follows the cursor onto a foe or the ground; let go, it pings there', hold: true },
+    shift: { icon: CONTROL_ICONS.ping, cap: 'Ping', tip: 'Ping the party (co-op), the left one: held, the mark follows the cursor onto a foe or the ground; let go, it pings there', hold: true },
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
@@ -572,7 +585,7 @@ export function renderMenu(): void {
   const rec = (icon: string, value: string | number, label: string) =>
     `<div class="rec"><span class="rec-icon">${icon}</span><span class="rec-val">${value}</span><span class="rec-label">${label}</span></div>`;
   $('.records').innerHTML = rec('⚔', r.bestWave, 'Best wave') + rec('✦', r.bestScore.toLocaleString(), 'Best score')
-    + rec('⟳', r.runs, 'Runs') + rec('⛁', r.banked, 'Items banked');
+    + rec('⟳', r.runs, 'Runs') + rec(CONTROL_ICONS.bank, r.banked, 'Items banked');
 
   // equipment
   focusSlot(null); // hovered nodes are about to be replaced
