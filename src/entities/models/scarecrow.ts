@@ -100,6 +100,27 @@ function fringe(rng: () => number, count: number, y: number, rx: number, rz: num
   return mergeGeometries(straws);
 }
 
+/** The brim's edge `a` round the hat (rad, as `atan2(x, z)`): its radius as a share of the brim's, in and out with a
+ *  bite gone from it, and its height, waving (the hat's lathe is bent so in `build`). */
+function brimEdge(a: number): { out: number; y: number } {
+  return { out: 1 + 0.07 * Math.sin(a * 5 + 1) - (Math.abs(a - 2.2) < 0.2 ? 0.2 : 0), y: -0.03 + 0.035 * Math.sin(a * 3 + 0.5) };
+}
+
+/** The brim's fray: `count` short straws rooted just inside its edge where the edge is at each one's angle, leaning
+ *  out past it and a little down. Laid on a flat ring, they hung under the brim where it waved up or was bitten and
+ *  poked up through its top where it waved down. */
+function brimFray(rng: () => number, count: number, brim: number): THREE.BufferGeometry {
+  const straws: THREE.BufferGeometry[] = [], from = new THREE.Vector3(), dir = new THREE.Vector3();
+  for (let i = 0; i < count; i++) {
+    const a = -Math.PI + (i + rng()) / count * Math.PI * 2, edge = brimEdge(a), r = brim * edge.out - 0.006;
+    const lean = 1.62 + (rng() - 0.5) * 0.3;
+    from.set(Math.sin(a) * r, edge.y + 0.001, Math.cos(a) * r);
+    dir.set(Math.sin(a) * Math.sin(lean), Math.cos(lean), Math.cos(a) * Math.sin(lean));
+    straws.push(straw(rng, from, dir, 0.025 + 0.03 * rng()));
+  }
+  return mergeGeometries(straws);
+}
+
 /** the coat's rings from its neck to its hem: height, half width, half depth */
 const COAT_RINGS: readonly (readonly [number, number, number])[] = [
   [1.475, 0.075, 0.07], [1.44, 0.17, 0.105], [1.37, 0.225, 0.14], [1.24, 0.215, 0.145], [1.1, 0.185, 0.13],
@@ -248,8 +269,11 @@ function build(): Parts {
   }));
   straws.push(paint(skin(butt, 1, 1), rgb(0x9c8647), rng, 0.2));
   straws.push(fringe(rng, 170, 0.76, 0.24, 0.18, 2.85, [0.12, 0.3]));
-  straws.push(fringe(rng, 60, 1.445, 0.085, 0.075, 2.0, [0.06, 0.14]));
-  straws.push(sheaf(rng, 30, 0.03, [0.07, 0.15], 0.7).rotateX(1.25).translate(0, 1.38, 0.09));
+  // (the ruff rooted at the collar's rim and laid out along the shoulders' slope, the tuft rooted in the collar's
+  // opening: rooted inside the coat, both came out through its cloth as loose spikes, from play "floating hay pieces
+  // around the hat and body")
+  straws.push(fringe(rng, 50, 1.468, 0.078, 0.072, 2.0, [0.04, 0.1]));
+  straws.push(sheaf(rng, 30, 0.03, [0.07, 0.14], 0.7).rotateX(0.95).translate(0, 1.46, 0.055));
 
   // the head: a stuffed sack tied at the neck, lumpy, its mouth ragged over the collar
   const sack = new THREE.LatheGeometry(SACK_PROFILE.map(([r, y]) => new THREE.Vector2(r, y)), 18).scale(1, 1, HEAD_DEEP);
@@ -290,14 +314,14 @@ function build(): Parts {
     const x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i), r = Math.hypot(x, z), a = Math.atan2(x, z);
     const out = THREE.MathUtils.clamp((r - 0.17) / (BRIM - 0.17), 0, 1), up = THREE.MathUtils.clamp((y - 0.08) / 0.16, 0, 1);
     // (the brim's edge: in and out, a bite gone from it)
-    const edge = y < 0.02 ? 1 + out * out * (0.07 * Math.sin(a * 5 + 1) - (Math.abs(a - 2.2) < 0.2 ? 0.2 : 0)) : 1;
-    hp.setXYZ(i, x * edge + 0.06 * up * up, y + (y < 0.02 ? out * 0.035 * Math.sin(a * 3 + 0.5) : -0.02 * up * up), z * edge + 0.02 * up * up);
+    const brim = brimEdge(a), edge = y < 0.02 ? 1 + out * out * (brim.out - 1) : 1;
+    hp.setXYZ(i, x * edge + 0.06 * up * up, y + (y < 0.02 ? out * (brim.y + 0.03) : -0.02 * up * up), z * edge + 0.02 * up * up);
     huv.setXY(i, huv.getX(i) * 3, huv.getY(i) * 1.5);
   }
   shape.computeVertexNormals();
   hat.push(paint(shape, HAT, rng, 0.1));
   hat.push(paint(new THREE.CylinderGeometry(0.162, 0.171, 0.05, 20, 1, true).translate(0, 0.055, 0), BAND, rng, 0.06));
-  hatStraw.push(fringe(rng, 60, -0.03, BRIM * 0.97, BRIM * 0.97, 1.55, [0.02, 0.05]));
+  hatStraw.push(brimFray(rng, 60, BRIM));
   const worn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.13, 0, 0.05)).setPosition(0, 0.125, -0.02);
   for (const g of hat) headCloths.push(g.applyMatrix4(worn));
   for (const g of hatStraw) headStraws.push(g.applyMatrix4(worn));
