@@ -286,7 +286,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `heropick`: a first visit's hero picked on the hero selection screen (`page/heroPick.ts`, `ui/heroSelect.ts`). It
   boots as `--first` does (no saved hero, the screen open over the hall, the mage in focus; `--class` another if the
-  first visit's hero changes), taps the hero in focus at his middle with a finger as a touch screen sends it, then
+  first visit's hero changes). Escape must first open pause/settings without choosing a hero, navigation behind it
+  must do nothing, and closing pause must preserve the selection. It then navigates to an alternate hero before its bar finishes, repeats its tab
+  and presses Enter: the hall stays responsive, the cold model stays hidden and no hero is saved. It then taps
+  the initial hero at his middle with a finger as a touch screen sends it, then
   opens the screen again as a first visit's and clicks him with the mouse: each pick must land in the lobby, the
   screen closed and the lobby's panels shown, with no run started and no press waiting for the fight's warm-up, and
   the browser's click after the press must reach nothing outside the screen (each line says what of the lobby lay

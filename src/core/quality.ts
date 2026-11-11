@@ -60,16 +60,14 @@ function restart(): void {
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
 
 /**
- * The level Auto starts from where it has settled on none (a first visit, Auto chosen again): the top, but Low on a
- * device whose own pointer is a finger. Started from High, a phone's first visit drew 13 to 22 frames a second for
- * its first seconds, High's HDR at its screen's 4.5 Mpx, Auto held from stepping down while the lobby's warm-ups ran
- * (an S25 Edge, trace AB24-W06J; from the owner: "Yes, start at Low"). It climbs from there as any settled level
+ * The level Auto starts from where it has settled on none (a first visit, Auto chosen again): Low on every device.
+ * High's boot work cannot wait for Auto's later frame samples: an integrated GPU took 27.6 s to reveal the lobby
+ * (trace N8DN-CDRW). Low also avoids HDR, MSAA and the animated loading exit at first boot. It climbs as a settled level
  * does: each boot tries the level above and keeps it where it holds (`bootAuto`). A start, not a verdict: what the
  * device holds is still measured.
  */
 function autoStart(): QualityLevel {
-  const finger = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  return finger ? 'low' : 'high';
+  return 'low';
 }
 
 /** Auto's level from its cookie, `autoStart`'s when there's none. */
@@ -174,7 +172,7 @@ export function setQuality(s: QualitySetting): void {
   aboveNext = false;
   writeCookie(COOKIE, s);
   apply(s === 'auto' ? autoStart() : s);
-  // choosing Auto again starts over (from the top, or a touch device's Low: `autoStart`)
+  // choosing Auto again starts over from Low on every device
   if (s === 'auto') writeAuto();
   writeCookie(TRIAL_COOKIE, '0/0');
 }

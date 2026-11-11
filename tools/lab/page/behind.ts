@@ -5,7 +5,7 @@
 // frame and lets the spares go before the choice.
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
-import { Player } from '../../../src/entities/player';
+import { Player, heroLights } from '../../../src/entities/player';
 import { CLASS_IDS } from '../../../src/data/classes/index';
 import * as behind from '../../../src/game/behind';
 import * as hall from '../../../src/game/hall';
@@ -69,7 +69,13 @@ async function builtAgain(lab: Lab, canary: boolean): Promise<Building> {
   const { ms, most } = behind.BEHIND;
   const now = perfClock.now;
   perfClock.now = realNow;
+  hall.queueHallBehind();
+  for (const id of CLASS_IDS) behind.finishNow(`spare ${id}`);
   hall.dropHeroesBuilt();
+  const lights = heroLights();
+  if (lights.staff.parent !== G.scene || lights.hand.parent !== G.scene) {
+    throw new Error('lab: behind: disposing cached spares detached the active hero lights');
+  }
   if (canary) Object.assign(behind.BEHIND, { ms: Infinity, most: Infinity });
   try {
     return await frameByFrame(lab);
@@ -80,7 +86,9 @@ async function builtAgain(lab: Lab, canary: boolean): Promise<Building> {
 }
 
 /** The heroes built by the hall's opening and by another hero chosen there (`canary`: the spares let go first). */
-async function builtByChoosing(lab: Lab, canary: boolean): Promise<{ opening: number; choosing: number }> {
+async function builtByChoosing(
+  lab: Lab, canary: boolean,
+): Promise<{ opening: number; choosing: number; programs: number }> {
   const was = G.player.cls.id;
   if (canary) hall.dropSpareHeroes();
   const before = Player.built;
@@ -93,13 +101,25 @@ async function builtByChoosing(lab: Lab, canary: boolean): Promise<{ opening: nu
     await lab.step(SETTLE);
   }
   const chose = Player.built;
+  const lights = heroLights();
+  const compiled = G.renderer.info.programs!.length;
   // (the choice's frame and the next: after it the old class's spare is built behind the lobby, a piece a frame)
   await lab.step(2, (frame) => ({ keys: frame === 0 ? ['enter'] : [] }));
   const choosing = Player.built - chose;
+  if (lights.staff.parent !== G.scene || lights.hand.parent !== G.scene) {
+    throw new Error('lab: behind: choosing a cached hero detached the shared lights and changed shader variants');
+  }
   await lab.step(SETTLE);
   if (hall.hallOpen()) throw new Error('lab: behind: Enter never chose a hero');
   if (G.player.cls.id === was) throw new Error('lab: behind: the hero chosen was the one he was');
-  return { opening, choosing };
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(1);
+  } finally {
+    lab.drawing = drawing;
+  }
+  return { opening, choosing, programs: G.renderer.info.programs!.length - compiled };
 }
 
 /** `lab behind`'s report. */
@@ -115,13 +135,14 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
   if (building.heroes !== heroes) {
     throw new Error(`lab: behind: ${building.heroes} heroes were built behind the lobby, not ${heroes}`);
   }
-  const { opening, choosing } = await builtByChoosing(lab, canary);
+  const { opening, choosing, programs } = await builtByChoosing(lab, canary);
   const slowest = building.slowest.map((s) => `${s.name} ${s.ms.toFixed(1)} ms`).join(', ');
   const lines = [
     `${heroes} heroes built behind the lobby in ${building.frames} frames, ${building.pieces} pieces: the longest `
       + `frame's building ${building.longest.toFixed(1)} ms (at most ${MOST_MS})`,
     `the slowest pieces: ${slowest}`,
     `then the hall's opening built ${opening} heroes, the ${G.player.cls.id} chosen in it ${choosing}`,
+    `shared hero lights stayed in the scene; the first lobby draw compiled ${programs} programs`,
   ];
   const slow = building.longest > MOST_MS;
   const builtThen = opening + choosing > 0;
@@ -129,6 +150,6 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
     const missed = [slow ? '' : 'the building in one frame was missed', builtThen ? '' : 'the lost spare was missed'];
     return { text: [...lines, 'canary: one frame and the spares let go'].join('\n'), problems: missed.filter(Boolean) };
   }
-  const problems = [slow ? lines[0] : '', builtThen ? lines[2] : ''].filter(Boolean);
+  const problems = [slow ? lines[0] : '', builtThen ? lines[2] : '', programs ? lines[3] : ''].filter(Boolean);
   return { text: lines.join('\n'), problems };
 }

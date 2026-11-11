@@ -195,7 +195,7 @@ const alt = (k: string): boolean => k === 'altleft' || k === 'altright';
 const typing = (e: KeyboardEvent): boolean => e.target instanceof HTMLElement
   && (e.target.matches('select, textarea, input:not([type=checkbox], [type=radio], [type=range])') || e.target.isContentEditable);
 
-export function initInput(canvas: HTMLCanvasElement): void {
+export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: string) => void = () => {}): void {
   canvasEl = canvas;
   document.addEventListener('pointerlockchange', () => {
     if (pointerLocked() || !lockWanted) return;
@@ -205,7 +205,9 @@ export function initInput(canvas: HTMLCanvasElement): void {
   window.addEventListener('keydown', (e) => {
     // (typing, the game's keys aren't the player's, but Alt still shows the cursor over mouse look: from play, "when
     // typing, holding alt has mouse cursor appearing", ui/altCursor.ts; it types nothing)
-    if (typing(e) && !alt(keyName(e))) return;
+    const editing = typing(e) && !alt(keyName(e));
+    keyboardTarget(editing ? `editing ${(e.target as HTMLElement).tagName.toLowerCase()}` : 'game');
+    if (editing) return;
     const k = keyName(e);
     if (!input.down.has(k)) input.pressed.add(k);
     input.down.add(k);

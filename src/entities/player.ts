@@ -328,7 +328,8 @@ export class Player {
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    // The two local lights belong to the scene, shared with cached heroes. Removing them changes every shader's key.
+    G.scene.remove(this.obj);
     this.shadow.dispose();
     this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)

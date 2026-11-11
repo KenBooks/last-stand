@@ -3,7 +3,7 @@
 // at, and his attributes: the tab last chosen kept), and a choice that leads into the lobby. The save slot under the
 // title opens the save slots, and a slot switched there opens the hall again on its heroes. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
 // The hero under the mouse is outlined, and a click or tap on the hero in focus chooses him. Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
-// Space chooses, Esc goes back; 1, 2, 3 pick each hero); the name or number of the hero in focus, again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
+// Space chooses, Esc opens pause; 1, 2, 3 pick each hero); the name or number of the hero in focus, again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
@@ -207,7 +207,7 @@ function card(cls: ClassDef): HTMLElement {
 }
 
 /** Open the screen, the hall built behind it, the hero of `focusId` in focus. `firstVisit`: there's nothing to go back
- *  to (no Back, no Esc). */
+ *  to (no Back; Escape still opens pause/settings). */
 export function openHeroSelect(focusId: string, firstVisit = false): void {
   if (heroSelectOpen()) return;
   first = firstVisit;
@@ -418,7 +418,7 @@ function tapAt(x: number, y: number): void {
   if (best >= 0 && best !== hallFocus()) { sfx.click(); focusOn(best); }
 }
 
-/** The screen's keys, while it's open (main.ts gives them to it alone). */
+/** The screen's selection keys while open and unpaused; main.ts handles Escape above it. */
 export function heroSelectKeys(): void {
   if (wasPressed('arrowleft') || wasPressed('a')) step(-1);
   if (wasPressed('arrowright') || wasPressed('d')) step(1);
@@ -426,7 +426,6 @@ export function heroSelectKeys(): void {
   const n = CLASS_IDS.findIndex((_, i) => wasPressed(String(i + 1)) || wasPressed(`numpad${i + 1}`));
   if (n >= 0) pick(n);
   else if (wasPressed('enter') || wasPressed('numpadenter') || wasPressed('space')) choose();
-  else if (wasPressed('escape') && !first) closeHeroSelect();
 }
 
 /** Where the view shifts so the hero in focus stands in the room the panel leaves: beside it on a wide screen, above

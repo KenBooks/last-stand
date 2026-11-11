@@ -1,5 +1,5 @@
 // `lab auto`: Auto quality's walk down on a slow device (src/core/quality.ts). Auto is set as a player sets it, which
-// starts it over from High, and fed each frame's time as a GPU-bound device would take it: in proportion to the
+// starts it at Low; the downgrade cases explicitly simulate an older saved High. Each frame is fed as a GPU-bound device takes it,
 // pixels the scene renders, at the level's cost a pixel (`DEVICE`: the laptop's integrated GPU of trace JGNM-1NCF
 // and its report, 5 frames a second at High on a 2864x1536 canvas, 15 ms a frame at Low on 0.52 Mpx). Each of Auto's
 // steps is listed with when it came, and the time until the device holds its target: from play, "for the first
@@ -58,6 +58,7 @@ const frameS = (): number => (scenePixels() / 1e6) * DEVICE[qualityLevel()] / 10
 /** Auto walked down on the device from High: its steps, and when the device first held its target (s; -1 never). */
 function walk(): { steps: Step[]; heldAt: number; start: string } {
   setQuality('auto');
+  useQuality('high');
   const start = `${qualityLevel()}@${Math.round(scenePixels())}, ${(1 / frameS()).toFixed(1)} fps`;
   const steps: Step[] = [];
   let at = 0;
@@ -286,6 +287,9 @@ function walkLines(label: string, w: ReturnType<typeof walk>): string[] {
 export function autoQuality(options: AutoOptions): Report {
   const lines = [`Auto quality's walk down from High on a slow device (${DEVICE.high} ms a Mpx at High):`];
   const problems: string[] = [];
+  setQuality('auto');
+  if (qualityLevel() !== 'low') problems.push(`fresh Auto started at ${qualityLevel()}, not Low`);
+  lines.push(`fresh Auto starts at ${qualityLevel()} on desktop and touch devices`);
   const now = walkAt({});
   lines.push(...walkLines('Auto', now));
   if (!now.steps.length) problems.push('Auto never stepped down: the device wasn\'t slow, or Auto never ran');

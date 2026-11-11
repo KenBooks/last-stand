@@ -114,7 +114,14 @@ async function boot() {
     // (the environments' programs linked as the arena is built, each made as its biome is first shown)
     compileEnvMaps(renderer);
   }
-  initInput(renderer.domElement);
+  let keyboardTarget = '';
+  initInput(renderer.domElement, (target) => {
+    if (target === keyboardTarget) return;
+    keyboardTarget = target;
+    recorder.mark(`keyboard: ${target}`);
+  });
+  window.addEventListener('focus', () => recorder.mark('keyboard: page focused'));
+  window.addEventListener('blur', () => { keyboardTarget = ''; recorder.mark('keyboard: page unfocused'); });
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
@@ -447,7 +454,7 @@ function openPause(open: boolean) {
   }
   G.menuOpen = open;
   G.paused = open && !isCoop();
-  G.player.idle = open && isCoop();
+  G.player.idle = hallOpen() || (open && isCoop());
   showPause(open);
 }
 
@@ -559,8 +566,12 @@ function handleGlobalKeys() {
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
   // screen too, which opens it
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
-  // the hero selection screen takes the keys (ui/heroSelect.ts)
-  if (heroSelectOpen()) { heroSelectKeys(); return; }
+  // Escape reaches Settings before a first hero is chosen too; pause keeps the hall and its selection underneath.
+  if (heroSelectOpen()) {
+    if (wasPressed('escape')) openPause(!G.menuOpen);
+    else if (!G.menuOpen) heroSelectKeys();
+    return;
+  }
   if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
