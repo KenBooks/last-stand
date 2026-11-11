@@ -74,6 +74,7 @@ import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
+import { updateChat } from './ui/chat';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits } from './ui/coop';
 import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
@@ -610,6 +611,8 @@ function update(dt: number): void {
     updateHud();
   }
   updateScoreboard(dt);
+  // co-op chat: in a run or the lobby, with no menu, hall or saves over it
+  updateChat(!G.menuOpen && !heroSelectOpen() && !hallOpen() && !savesOpen());
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);

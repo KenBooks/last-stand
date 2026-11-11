@@ -203,7 +203,9 @@ export function initInput(canvas: HTMLCanvasElement): void {
     onLockLost();
   });
   window.addEventListener('keydown', (e) => {
-    if (typing(e)) return;
+    // (typing, the game's keys aren't the player's, but Alt still shows the cursor over mouse look: from play, "when
+    // typing, holding alt has mouse cursor appearing", ui/altCursor.ts; it types nothing)
+    if (typing(e) && !alt(keyName(e))) return;
     const k = keyName(e);
     if (!input.down.has(k)) input.pressed.add(k);
     input.down.add(k);
@@ -212,8 +214,8 @@ export function initInput(canvas: HTMLCanvasElement): void {
   window.addEventListener('keyup', (e) => {
     const k = keyName(e);
     input.down.delete(k);
-    // (let go alone, Alt would take the keys to the browser's menu)
-    if (alt(k) && !typing(e)) e.preventDefault();
+    // (let go alone, Alt would take the keys to the browser's menu: typing in the chat too, where it shows the cursor)
+    if (alt(k)) e.preventDefault();
   });
   window.addEventListener('blur', releaseInput);
   window.addEventListener('mousemove', (e) => {

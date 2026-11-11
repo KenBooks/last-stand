@@ -63,6 +63,7 @@ Keyboard and mouse:
 | `B` / `C` | Bank / Continue after a wave |
 | `E` (hold) | Revive a downed partner (co-op) |
 | `Left Shift` (hold, let go) | Ping the party (co-op): held, the mark follows the cursor onto the foe under it or the ground (over the minimap, its spot); let go, it's pinged there. On touch, a finger held on the minimap, lifted to ping |
+| `Enter` | Chat with the party (co-op): type, `Enter` sends, `Esc` closes. On touch, the chat button under the scores |
 | Left / right click, `Q` / `E`, `F` | Watching a co-op run: next / previous player, turn the camera, free camera |
 | `Esc` | Pause |
 

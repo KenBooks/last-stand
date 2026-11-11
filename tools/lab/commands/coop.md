@@ -130,6 +130,15 @@ twice), the host's ping off to its side: through 30 settled frames at least it m
 its pin's head within 16% of the screen's smaller side of an edge and never over the minimap (`firstPersonEdge`,
 unit-tested), and the guest goes back to the top-down view.
 
+`chat` (`page/coopChat.ts`, judged by `node/coopChat.mjs`, unit-tested): the guest opens the chat with Enter and says a
+line holding markup; the host answers, and later says one of 320 characters; the guest says seven in a breath, then opens the
+box and presses Esc in it. Every line must show on the sayer's screen and its partner's within a second, under the
+sayer's name tag, as typed (the markup as text) or cut to 200 characters; of the seven, the burst's five on both,
+the guest told twice it's too fast; Alt pressed in the open box must reach the game (held there, for its cursor over mouse look); Esc must shut the box and
+leave the pause menu shut; the guest's chat must still
+show 7.5 s after its last line, be faded 11 s after it, and be back with the host's next line. `--pictures` pictures
+both screens as the long line has come and as the host's answer has.
+
 Last, each game says what every hero's update cost it a frame (`page/coopCost.ts`, `Player.update` timed by the
 browser's clock, lines that differ from run to run): its own hero's and a partner's copy's, in a run, in the lobby
 and in the hall of heroes (the hall's own heroes left out). On this machine a hero took 1.2 to 1.4 ms a frame in a

@@ -224,3 +224,22 @@ test('a held ping\'s preview moving from the floor onto a foe is seen, and one t
   assert.equal(previewMoved(held(foe), { from: 40 }, p), true);
   assert.equal(previewMoved(held(floor), { from: 40 }, p), false);
 });
+
+test('a chat line shown on both screens as typed passes; one lost, read as markup, or Esc that pauses is caught', async () => {
+  const { judgeChat } = await import('../node/coopChat.mjs');
+  const said = [{ by: 'guest', frame: 0, text: 'Hi <b>x</b>' }];
+  const escAt = { open: 20, esc: 25 };
+  const line = (text) => ({ name: 'Guest', text });
+  const screen = (from, text, more = {}) => Array.from({ length: 40 }, (_, f) => ({
+    chat: { lines: f >= from ? [line(text)] : [], open: f >= escAt.open && f <= escAt.esc, focused: f >= escAt.open && f <= escAt.esc, menuOpen: false, ...more },
+    ...(f ? {} : { said, escAt }),
+  }));
+  const good = judgeChat({ host: screen(10, 'Hi <b>x</b>'), guest: screen(2, 'Hi <b>x</b>'), frameMs: 1000 / 60 });
+  assert.deepEqual(good.problems, []);
+  const lost = judgeChat({ host: screen(99, 'Hi <b>x</b>'), guest: screen(2, 'Hi <b>x</b>'), frameMs: 1000 / 60 });
+  assert.ok(lost.problems.some((p) => p.includes("never on the host's screen")));
+  const markup = judgeChat({ host: screen(10, 'Hi x'), guest: screen(2, 'Hi <b>x</b>'), frameMs: 1000 / 60 });
+  assert.ok(markup.problems.some((p) => p.includes("never on the host's screen as typed")));
+  const paused = judgeChat({ host: screen(10, 'Hi <b>x</b>'), guest: screen(2, 'Hi <b>x</b>', { menuOpen: true }), frameMs: 1000 / 60 });
+  assert.ok(paused.problems.some((p) => p.includes('opened the pause menu')));
+});

@@ -732,5 +732,7 @@ export const sfx = {
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
   /** a co-op ping (game/ping.ts): two bright notes, rising */
   ping: guard(() => { if (throttle('ping', 150)) return; tone({ freq: 1320, dur: 0.18, gain: 0.05 }); tone({ freq: 1760, dur: 0.28, gain: 0.045, delay: 0.09 }); }),
+  /** a partner's chat message (ui/chat.ts): a soft rising pair */
+  chat: guard(() => { if (throttle('chat', 250)) return; tone({ freq: 880, dur: 0.09, gain: 0.03, type: 'triangle' }); tone({ freq: 1175, dur: 0.12, gain: 0.025, type: 'triangle', delay: 0.07 }); }),
   spawn: guard(() => { if (throttle('spawn', 150)) return; noise({ dur: 0.6, freq: 250, sweep: 1500, q: 6, gain: 0.12, attack: 0.1 }); }),
 };
