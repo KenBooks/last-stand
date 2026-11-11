@@ -16,6 +16,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 | `combat/` | Damage both ways, projectiles, lures, and the skills' behaviours (`skills/`) |
 | `core/` | The renderer and its post chain, the views, input, sound and music, textures and materials, quality |
 | `data/` | Pure tuning data, typed against `types.ts` |
+| `dev/` | The developer mode (dev builds and PR previews only): the free camera, freezing, the dev panel |
 | `entities/` | The player, the enemies and their AI, first person; their models (`models/`) |
 | `fx/` | Particles, the pooled point lights, transient effects and the skills' looks |
 | `game/` | The run (waves, loot, bank or continue), the warm-up at boot, the lobby floor, the scores |
