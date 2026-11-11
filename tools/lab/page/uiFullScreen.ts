@@ -12,7 +12,7 @@
 import type { Lab, Pictured } from './lab';
 import { middleOf } from './lab';
 import {
-  AUTO_FULL_COOKIE, PROMPT_MS, armAutoFullScreen, autoFullArmed, hidePrompt, leaveFullScreen,
+  AUTO_FULL_COOKIE, PROMPT_MS, armAutoFullScreen, autoFullArmed, hidePrompt, leaveFullScreen, keyboardLockState,
 } from '../../../src/ui/autoFullScreen';
 import { readCookie, removeCookie } from '../../../src/core/cookies';
 import { input } from '../../../src/core/input';
@@ -242,6 +242,20 @@ async function escKept(lab: Lab, canary: boolean, lines: string[], problems: str
     const pageOpens = await leftOpens(lab, spy, leaveFullScreen, false);
     lines.push(`  left by the page (Fullscreen, Back to window): the pause menu opened ${pageOpens}`);
     if (pageOpens) problems.push('autoFull: left by the page, the pause menu opened');
+    const original = location.href;
+    try {
+      const comparison = new URL(original);
+      comparison.searchParams.set('keyboardLock', '0');
+      history.replaceState(null, '', comparison);
+      spy.lockable = true;
+      const before = spy.locks.length;
+      const opens = await leftOpens(lab, spy, () => spy.change(null), false);
+      const disabled = keyboardLockState() === 'disabled' && spy.locks.length === before;
+      lines.push(`  native-hook comparison: lock disabled ${disabled}, browser Escape opens pause ${opens}`);
+      if (!disabled || !opens) problems.push('autoFull: native-hook comparison either locked keys or lost Escape');
+    } finally {
+      history.replaceState(null, '', original);
+    }
   } finally {
     spy.remove();
   }

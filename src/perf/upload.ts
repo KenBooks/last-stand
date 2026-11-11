@@ -3,6 +3,7 @@
 // packed (`traceFormat.ts`), gzipped by the browser (`CompressionStream`) and posted to the traces service beside the
 // co-op relay (server/traces). The service worker never sees it: it only answers GETs of the game's own files.
 import { framesUncapped } from '../core/frameLoop';
+import { keyboardLockState } from '../ui/autoFullScreen';
 import * as THREE from 'three';
 import { G } from '../state';
 import { WEBGPU } from '../core/webgpu';
@@ -28,7 +29,8 @@ const KEPT_SWITCHES = /^(renderer|meshlets|lights)/;
 export const canSend = (): boolean => typeof CompressionStream === 'function' && typeof fetch === 'function';
 
 function page(): string {
-  const kept = [...new URLSearchParams(location.search)].filter(([k]) => KEPT_SWITCHES.test(k));
+  const kept = [...new URLSearchParams(location.search)].filter(([k, value]) =>
+    k === 'keyboardLock' ? value === '0' : KEPT_SWITCHES.test(k));
   return location.pathname + (kept.length ? '?' + new URLSearchParams(kept).toString() : '');
 }
 
@@ -45,6 +47,8 @@ function device(): Record<string, number | string | boolean> {
     touch: navigator.maxTouchPoints > 0,
     jsBenchMs: Math.round(perfJsBench() * 100) / 100,
     installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches,
+    fullscreen: !!document.fullscreenElement,
+    keyboardLock: keyboardLockState(),
   };
 }
 

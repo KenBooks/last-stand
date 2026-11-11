@@ -1,5 +1,7 @@
 # `src/ui`
 
+- `?keyboardLock=0` is a diagnostic comparison: keep HTML fullscreen but skip the Escape keyboard lock. Default behavior stays unchanged; in the comparison the browser's Escape exits fullscreen and opens pause. Manual input rows and report metadata distinguish HTML fullscreen and keyboard-lock state from `display-mode: fullscreen`, which also matches browser fullscreen and must not be treated as proof of an installed app.
+
 - The Performance tab's recording controls (`recordingTab.ts`) start a bounded capture and stop/prepare it without sending. Review shows compressed size, Send recording and Discard; hide the inactive Start button then so the review controls stay on one row on a phone. A failed upload retains its exact bytes for retry. Capture/review suppress automatic reports without changing the saved preference. Use a distinct `.recording-note`: reusing `.profile-note` would make the existing profiler write to the recording status instead. `lab recorder` checks the real controls and service round-trip; `ui --states pausePerformance` shows the recording review and full profiler results together.
 
 The page's UI over the game.

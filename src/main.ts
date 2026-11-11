@@ -6,6 +6,8 @@ import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, s
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio } from './core/audio';
+import { InputDelivery } from './core/inputDelivery';
+import { keyDeliveryDelay } from './core/keyDelivery';
 import { updateMusic, type MusicWanted } from './core/music';
 import { FADES } from './data/music';
 import { schedule, updateTimers } from './core/timers';
@@ -41,7 +43,7 @@ import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
-import { initAutoFullScreen } from './ui/autoFullScreen';
+import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
@@ -117,7 +119,16 @@ async function boot() {
   }
   let keyboardTarget = '';
   let lastDelayedKey = -Infinity;
+  recorder.recordingBoundary = starting => {
+    if (starting) inputDelivery.sample(performance.now(), false);
+    else recordInputDelivery(true);
+  };
+  window.addEventListener('keydown', () => inputDelivery.capture(true), true);
+  window.addEventListener('keyup', () => inputDelivery.capture(false), true);
+  window.addEventListener('pointerdown', () => inputDelivery.pointer(), true);
+  window.addEventListener('pointermove', event => inputDelivery.move(keyDeliveryDelay(event.timeStamp, performance.now())), true);
   initInput(renderer.domElement, (target, delay) => {
+    inputDelivery.accept(target !== 'game', delay);
     const now = performance.now();
     if (delay >= 250 && now - lastDelayedKey >= 1000) {
       recorder.mark(`keyboard delivery delayed ${Math.round(delay)} ms (${target})`);
@@ -751,8 +762,19 @@ function musicWanted(): MusicWanted {
   return { track: music.lobby, fade: FADES.lobby, ready };
 }
 
+const inputDelivery = new InputDelivery();
+
+function recordInputDelivery(force = false): void {
+  const delivery = inputDelivery.sample(performance.now(), recorder.recordingSince() !== null, force);
+  if (delivery) {
+    const focus = document.activeElement?.tagName.toLowerCase() ?? 'none';
+    recorder.mark(`${delivery}; focus ${focus}, page ${document.hasFocus()}, fullscreen ${!!document.fullscreenElement}, keyboard lock ${keyboardLockState()}`);
+  }
+}
+
 function frame(timestamp: number): void {
   lastStep = performance.now();
+  recordInputDelivery();
 
   perfBeginFrame(timestamp);
   timer.update(timestamp);

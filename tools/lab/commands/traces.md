@@ -44,6 +44,10 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   Manual capture reuses the bounded ring, stopping at 60 s or before its start would be overwritten; oversized
   recordings are shown as such rather than silently trimmed. `--canary` also rejects an automatic-reason trace
   substituted for the manual recording.
+  Manual recordings also retain one-second input-arrival/handler counts and pointer movement counts/delays, with
+  focus and HTML-fullscreen/keyboard-lock state. These contain no key values, text or pointer coordinates.
+  `?keyboardLock=0` keeps fullscreen but skips its native keyboard lock for a comparison; browser-owned Escape
+  then exits fullscreen and opens pause. This is diagnostic, not a confirmed fix for input lag.
 - `auto`: Auto quality's walk down from High on a slow device (`page/autoQuality.ts`, `src/core/quality.ts`). Auto is
   set as a player sets it, which starts it over from High, and fed each frame's time as a GPU-bound device takes it:
   in proportion to the scene's pixels, at the level's cost (the integrated GPU of trace JGNM-1NCF and its tester's

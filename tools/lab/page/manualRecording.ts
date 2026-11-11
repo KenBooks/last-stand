@@ -10,7 +10,15 @@ const button = (id: string): HTMLButtonElement => document.getElementById(id)! a
 const note = (): string => document.getElementById('recording-note')!.textContent ?? '';
 
 function manualProblems(trace: Trace): string[] {
-  return trace.header.reason.why === 'manual' && trace.header.frames >= 6 ? [] : ['the sent trace was not the manual capture'];
+  const problems = trace.header.reason.why === 'manual' && trace.header.frames >= 6
+    ? [] : ['the sent trace was not the manual capture'];
+  // Native pointer timestamps use the real browser clock; this fixture has already advanced the parked clock 45 s.
+  // Their apparent delay may exceed the planted 800 ms, so require it to survive as a lower bound, not an exact max.
+  if (!trace.header.marks.some(([, text]) => text.startsWith('input ') && text.includes('down 1, up 1, handled 1')
+    && text.includes('delay 5000 ms') && Number(/move delay ([0-9]+) ms/.exec(text)?.[1]) >= 800)) {
+    problems.push('the final partial-second key/movement arrival counts or delivery delays were lost');
+  }
+  return problems;
 }
 
 /** Compression and HTTP use real tasks, not the lab's parked clock. */
@@ -49,6 +57,9 @@ export async function manualRecording(lab: Lab, server: string, canary: boolean)
     Object.defineProperty(delayed, 'timeStamp', { value: performance.now() - 5000 });
     window.dispatchEvent(delayed);
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyJ', key: 'j', bubbles: true }));
+    const movement = new PointerEvent('pointermove', { bubbles: true });
+    Object.defineProperty(movement, 'timeStamp', { value: performance.now() - 800 });
+    window.dispatchEvent(movement);
     await lab.step(6);
     await lab.clickOn(button('btn-recording'));
     await waited(lab, () => !button('btn-recording-send').disabled, 'Stop never produced a sendable capture');
@@ -111,6 +122,9 @@ export async function manualRecording(lab: Lab, server: string, canary: boolean)
       const planted = { ...trace, header: { ...trace.header, reason: { ...trace.header.reason, why: 'stalls' } } };
       if (!manualProblems(planted).length) problems.push('canary: an automatic report passed as a manual recording');
       lines.push('canary: an automatic report cannot satisfy the manual-capture reason');
+      const missing = { ...trace, header: { ...trace.header, marks: trace.header.marks.filter(([, text]) => !text.startsWith('input ')) } };
+      if (!manualProblems(missing).length) problems.push('canary: losing input arrival diagnostics passed');
+      lines.push('canary: lost input-arrival diagnostics cannot pass the stopped recording');
     }
   } finally {
     window.fetch = fetch;

@@ -289,11 +289,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   first visit's hero changes). Escape must first open pause/settings without choosing a hero, navigation behind it
   must do nothing, and closing pause must preserve the selection. It then navigates to an alternate hero before its bar finishes, repeats its tab
   and presses Enter: the hall stays responsive, the cold model stays hidden and no hero is saved. It then taps
-  the initial hero at his middle with a finger as a touch screen sends it, then
+  a different hero as soon as his bar finishes, at his middle with a finger as a touch screen sends it, then
   opens the screen again as a first visit's and clicks him with the mouse: each pick must land in the lobby, the
   screen closed and the lobby's panels shown, with no run started and no press waiting for the fight's warm-up, and
   the browser's click after the press must reach nothing outside the screen (each line says what of the lobby lay
-  under the pick). From play on the owner's phone: "I picked mage, it entered the area, enemies spawned and started
+  under the pick). No whole body may be completed inside the picking event; the current-hero pick missed that
+  first different-hero stall. The canary drops the prepared spare and must detect this build as well as click-through.
+  From play on the owner's phone: "I picked mage, it entered the area, enemies spawned and started
   attacking me, happens every time": the screen closed as the finger lifted, and the tap's click, which comes after
   it, pressed the lobby's Enter the Arena, which stands under the mage on a 640x360 screen; a first visit's fight
   still cold, the Start waited under the fight's loading bar and began the run once it was warm (on WebGPU, whose

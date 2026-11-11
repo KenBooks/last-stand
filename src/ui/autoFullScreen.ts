@@ -93,6 +93,10 @@ export function leaveFullScreen(): void {
 let leaving = false;
 /** Esc held for the game while in full screen (`keepEsc`) */
 let escKept = false;
+let lockState = 'idle';
+/** A diagnostic comparison keeps HTML fullscreen but skips its native keyboard hook for this visit. */
+const lockDisabled = (): boolean => new URLSearchParams(location.search).get('keyboardLock') === '0';
+export const keyboardLockState = (): string => lockDisabled() ? 'disabled' : lockState;
 
 /** The Keyboard Lock API (Chromium on a desktop): a key locked in the page's full screen is the page's. */
 interface KeyboardLock {
@@ -109,12 +113,19 @@ const keyboard = (): KeyboardLock | undefined => (navigator as Navigator & { key
  */
 function keepEsc(): void {
   if (document.fullscreenElement) {
-    keyboard()?.lock(['Escape']).then(() => { escKept = !!document.fullscreenElement; }, () => {});
+    const keys = keyboard();
+    if (lockDisabled() || !keys) { lockState = 'unavailable'; return; }
+    lockState = 'pending';
+    keys.lock(['Escape']).then(() => {
+      escKept = !!document.fullscreenElement;
+      lockState = escKept ? 'held' : 'idle';
+    }, () => { lockState = 'refused'; });
     return;
   }
   const asked = leaving;
   const held = escKept;
   leaving = escKept = false;
+  lockState = 'idle';
   keyboard()?.unlock();
   // (the Esc held to leave was the game's already; one the browser took must still do what Esc does)
   if (!asked && !held) input.pressed.add('escape');

@@ -217,6 +217,8 @@ export const recorder = {
   /** Manual capture reuses the existing bounded ring; no second per-frame recorder or buffer is allocated. */
   recordingLimitMs: KEPT_MS,
   recordingMaxFrames: RING - 1,
+  /** Let input diagnostics reset at Start and retain the final partial second before Stop freezes its marks. */
+  recordingBoundary: (_starting: boolean): void => {},
   recordingSince: (): number | null => recordingSince,
   recordingFinished: (): boolean => recordingResult !== null,
   automaticSuppressed: (): boolean => manualHeld,
@@ -230,6 +232,7 @@ export const recorder = {
     recordingSince = performance.now();
     mark('manual recording started', recordingSince);
     recordingMark = marks[marks.length - 1];
+    recorder.recordingBoundary(true);
   },
   stopRecording(): Slow | null {
     if (recordingSince === null) {
@@ -237,6 +240,7 @@ export const recorder = {
       recordingResult = null;
       return result;
     }
+    recorder.recordingBoundary(false);
     const start = recordingSince, now = performance.now();
     mark('manual recording stopped', now);
     const snapshot = takeSnapshot(start, recordingFrames, recordingMark);

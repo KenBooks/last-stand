@@ -1,6 +1,8 @@
 # `src/core`
 
-- `keyDelivery.ts` measures event dispatch delay from a valid monotonic timestamp, not the key's value. Ignore missing, future, epoch and non-finite stamps. `main.ts` records at most one delayed-delivery mark a second, plus focus tags; no key codes or typed text enter traces. Use this to distinguish browser/OS-delayed input from an unresponsive game handler while animation continues.
+- `inputDelivery.ts` aggregates key arrival/handler/editing counts, pointer presses, pointer movements and maximum DOM delivery delays once a second during manual recording. Movement without clicks must be counted: windowed trace 65SQ-60GS showed steady frames while the player reported a roughly 5 FPS cursor for ten seconds, without clicking or testing keys. Capture is installed before UI key interceptors. A zero-arrival second with live frames differs from captured keys swallowed before the game's handler. No key codes, coordinates, text or event objects are retained. DOM timestamps cannot measure time spent in a native queue before the browser creates the event.
+
+- `keyDelivery.ts` measures DOM dispatch delay from a valid monotonic timestamp, not the key's value. Ignore missing, future, epoch and non-finite stamps. `main.ts` records at most one delayed-delivery mark a second, plus focus tags; no key codes or typed text enter traces. It cannot alone detect a native queue that delays the event before that timestamp exists; compare manual arrival counts as well.
 
 The engine under the game.
 

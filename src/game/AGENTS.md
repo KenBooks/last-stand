@@ -1,5 +1,7 @@
 # `src/game`
 
+- A first visit's hall has no ordinary lobby frames to build playable spares. Shader readiness alone let an alternate hero be chosen while `swapHero` still had to construct a whole `Player` inside the click; repeat/same-hero picks avoided it. Hero warm-up parts now prepare their playable spare in slices before announcing 100% readiness (`Part.ready`, `prepareSpareHero`). Clamp shader-only progress below 1 until that finishes. `lab heropick` chooses a different hero on the initial screen and fails if the picking event completes any body; it previously tested only the current hero.
+
 - Before Change hero opens, `prepareHeroSelection` waits for heads at the current detail and builds stale hall/spare heroes in safe slices. `warmingRuns` holds Auto and ordinary background stepping during preparation; the lobby remains interactive. Auto also holds while the hall is open: its staged three-hero scene isn't play's workload, and a trial there invalidated the prepared spare before choosing it. Background jobs retain their queued detail and wait for its workers in `buildBehind`. Worker preparation also precedes the warm-up's `makeHeadAhead` path. Never resolve a missing detail by sculpting a head in the opening click or the first frame after Back: this blocked input until queued key events arrived together. `lab behind` changes detail with the hall open, goes Back without a choice, and repeats the opening; `npm run stalls -- --scenario heroes --seconds 18 --auto low@518400 --js` traces the real browser sequence.
 
 The run and what goes round it.

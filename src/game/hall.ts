@@ -212,19 +212,26 @@ export async function prepareHeroSelection(step: () => Promise<void>): Promise<v
   warmingRuns(true);
   try {
     await buildHallAhead(step);
+    for (const id of CLASS_IDS) await prepareSpareHero(id, step);
+  } finally { warmingRuns(false); }
+}
+
+/** A first visit's hall has no lobby frames to build its playable copy; readiness must include that copy. */
+export async function prepareSpareHero(id: string, step: () => Promise<void>): Promise<void> {
+  if (id === G.profile.classId) return;
+  warmingRuns(true);
+  try {
+    await preloadHeads(heroDetail());
     // Finish a partial spare at its original detail, then replace it in slices if the preset changed.
-    for (const id of CLASS_IDS) {
-      if (id === G.profile.classId) continue;
-      await finishInSlices(`spare ${id}`, step);
-      const spare = spares.get(id);
-      const profile = profileOf(id), gear = gearOf(profile);
-      if (spare?.gear === gear) continue;
-      spare?.player.dispose();
-      spares.delete(id);
-      const player = await builtInSlices(Player.inSteps(id, profile.equipped), step);
-      player.stowed();
-      spares.set(id, { player, gear });
-    }
+    await finishInSlices(`spare ${id}`, step);
+    const spare = spares.get(id);
+    const profile = profileOf(id), gear = gearOf(profile);
+    if (spare?.gear === gear) return;
+    spare?.player.dispose();
+    spares.delete(id);
+    const player = await builtInSlices(Player.inSteps(id, profile.equipped), step);
+    player.stowed();
+    spares.set(id, { player, gear });
   } finally { warmingRuns(false); }
 }
 

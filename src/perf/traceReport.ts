@@ -122,6 +122,7 @@ export function traceReport(trace: Trace, code = ''): string[] {
     lines.push(`SHADERS FAILED TO LINK on this device (${g.shaderErrorCount}):`, ...String(g.shaderErrors).split(' || ').map((l) => '  ' + l));
   }
   lines.push(`GPU ${d.gpu} | CPU cores ${d.cores} | memory ${d.memoryGb || '?'} GB | JS bench ${d.jsBenchMs} ms | screen ${d.screen} | window ${d.window} @${d.dpr}${d.touch ? ' | touch' : ''}${d.installed ? ' | installed' : ''}`);
+  if (typeof d.fullscreen === 'boolean') lines.push(`Input context: HTML fullscreen ${d.fullscreen} | keyboard lock ${d.keyboardLock ?? 'unknown'}`);
   lines.push(`UA ${d.ua}`);
 
   const cut = buckets(t);
