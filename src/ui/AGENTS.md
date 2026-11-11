@@ -13,6 +13,8 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 
 ## Gotchas
 
+- The automatic fullscreen gesture listener is installed by a tiny inline script (`bootFullScreen.ts`, injected in the head by `vite.config.ts`), before the game's module graph loads. Requests happen synchronously in the activating event, not deferred to boot. `autoFullScreen.ts` takes over the pending/successful request and its prompt/Escape handling. Preserve opt-out, installed-app, automation and per-visit exclusions in both paths; permanent boot tests run with no game or controls present.
+
 - Escape opens pause/settings over the hero selection screen, including a first visit before choosing anyone. Selection keys do nothing while pause is open; closing it preserves the focused hero and the hidden lobby hero's idle state. Back alone leaves the selection screen without choosing (and is absent on a first visit). `lab heropick --boot low` checks the first-visit path.
 
 - The Alt cursor forwards label activation as well as the first click: a label's browser-generated checkbox click must not be swallowed by the cursor's capture listener. While captured, selects use `altForms.ts`'s in-page option list below the cursor (z 59 / 60), avoiding native popups stealing capture or covering the cursor. Normal unlocked selects stay native. Ranges map pointer position to min/max/step, emit input while clicking/dragging and change on commit; release, Alt-up and blur end the drag. Cursor movement uses pointermove so cancelling the press's compatibility mouse events cannot stop a drag. `alt-hover` mirrors the virtual cursor's hover chain for CSS effects, including after a hovered popup is removed.

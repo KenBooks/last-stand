@@ -1,13 +1,12 @@
 // `lab auto`: Auto quality's walk down on a slow device (src/core/quality.ts). Auto is set as a player sets it, which
-// starts it at Low; the downgrade cases explicitly simulate an older saved High. Each frame is fed as a GPU-bound device takes it,
-// pixels the scene renders, at the level's cost a pixel (`DEVICE`: the laptop's integrated GPU of trace JGNM-1NCF
+// starts it at Low; downgrade cases explicitly simulate an older saved High. Each frame is fed as a GPU-bound device
+// takes it, in proportion to the scene's pixels and the level's cost (`DEVICE`: the device of trace JGNM-1NCF
 // and its report, 5 frames a second at High on a 2864x1536 canvas, 15 ms a frame at Low on 0.52 Mpx). Each of Auto's
 // steps is listed with when it came, and the time until the device holds its target: from play, "for the first
 // minute or two, it was 5 fps". Run it on the tester's screen too: --screen 1432x768@2. The lab's frames are a 60th
 // of a second each, so Auto is fed the device's times directly, its own code run as the game runs it.
-// Then Auto as a boot starts it, at a level it settled on before: once its frames are the device's it tries the level
-// above, kept on a device that
-// holds it (a fast one settled on Medium, from play: a 4070 Ti on Medium "somehow"), left at once for the settled one
+// Then Auto as a boot starts it, at a level it settled on before: successful trials climb all the way to High,
+// while an unsuccessful trial returns to the last level proved capable,
 // on a device that can't, never past it, and the cookie as it was.
 // A device that runs the level above under the target but not far under it (trace 9JA7-BSSS: a phone settled on
 // Medium, at 26 to 47 frames a second on High) must leave it within a settle and a quick window, and boots in a row
@@ -58,7 +57,7 @@ const frameS = (): number => (scenePixels() / 1e6) * DEVICE[qualityLevel()] / 10
 /** Auto walked down on the device from High: its steps, and when the device first held its target (s; -1 never). */
 function walk(): { steps: Step[]; heldAt: number; start: string } {
   setQuality('auto');
-  useQuality('high');
+  bootAuto('high');
   const start = `${qualityLevel()}@${Math.round(scenePixels())}, ${(1 / frameS()).toFixed(1)} fps`;
   const steps: Step[] = [];
   let at = 0;
@@ -94,6 +93,7 @@ const walkAt = (pace: Partial<typeof AUTO_QUALITY>): ReturnType<typeof walk> => 
 function hitched(): string[] {
   return withPace({}, () => {
     setQuality('auto');
+    bootAuto('high');
     const steps: string[] = [];
     for (let frame = 1, at = 0; at < HITCHED_S; frame++) {
       const dt = frame % HITCH_EVERY === 0 ? HITCH_S : FAST_FRAME_S;
@@ -122,7 +122,7 @@ interface Boot {
 }
 
 /** how long a boot is fed frames (s) */
-const BOOT_S = 20;
+const BOOT_S = 30;
 /** the longest a boot may take to keep the level above or leave it (s): two settles and a window */
 const BOOT_MOST_S = 10;
 
@@ -136,10 +136,12 @@ function boot(settled: QualityLevel, deviceS: (level: QualityLevel) => number, o
 
 /** One boot of Auto's from `settled` (the trial's cookie as the last boot left it), fed `deviceS`'s frames. */
 function bootOnce(settled: QualityLevel, deviceS: (level: QualityLevel) => number, old = false): Boot {
-  // (the cookie as a boot finds it: choosing Auto saved High)
+  // (the cookie as a boot finds it, independent of the fresh-start Low)
   writeCookie(AUTO_COOKIE, settled);
-  if (old) useQuality(settled);
-  else bootAuto(settled);
+  if (old) {
+    bootAuto('high');
+    useQuality(settled);
+  } else bootAuto(settled);
   const start = qualityLevel();
   const steps: string[] = [];
   let tryingS = 0;
@@ -179,7 +181,9 @@ function bootProblems(label: string, b: Boot, end: QualityLevel, problems: strin
   if (b.end !== end) problems.push(`${label}: Auto ended at ${b.end}, not ${end}`);
   if (b.saved !== end) problems.push(`${label}: Auto kept ${b.saved} for the next boot, not ${end}`);
   const took = lastStepS(b);
-  if (took > BOOT_MOST_S) problems.push(`${label}: Auto took ${took.toFixed(1)} s, over ${BOOT_MOST_S}`);
+  const extraLevels = Math.max(0, ['high', 'medium', 'low', 'verylow'].indexOf(b.start) - 1);
+  const most = BOOT_MOST_S + extraLevels * (AUTO_QUALITY.settle + AUTO_QUALITY.window);
+  if (took > most) problems.push(`${label}: Auto took ${took.toFixed(1)} s, over ${most}`);
   const missed = b.tried && b.end === b.start;
   if (missed && b.tryingS > TRIAL_MOST_S) {
     problems.push(`${label}: Auto ${TRIED_LONG} ${b.tryingS.toFixed(1)} s, over ${TRIAL_MOST_S.toFixed(1)}`);
@@ -199,7 +203,9 @@ function boots(canary: boolean, problems: string[]): string[] {
   const lines = ['Auto as a boot starts it, from the level it settled on before:'];
   const cases: BootCase[] = [
     { label: 'a fast device settled on Medium', settled: 'medium', device: fastS, end: 'high' },
-    { label: 'a fast device settled on Low', settled: 'low', device: fastS, end: 'medium' },
+    { label: 'a fast device settled on Low', settled: 'low', device: fastS, end: 'high' },
+    { label: 'a fast device settled on Very low', settled: 'verylow', device: fastS, end: 'high' },
+    { label: 'a device holding Medium, starting Low', settled: 'low', device: mediumOnlyS, end: 'medium' },
     { label: 'a device holding Medium alone, settled there', settled: 'medium', device: mediumOnlyS, end: 'medium' },
     { label: 'a phone holding Medium, High at 38 fps', settled: 'medium', device: nearMediumS, end: 'medium' },
     { label: 'a device holding Low alone, settled there', settled: 'low', device: lowOnlyS, end: 'low' },

@@ -1,7 +1,20 @@
-import { defineConfig } from 'vite';
+import { defineConfig, transformWithOxc } from 'vite';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { pwa } from './scripts/pwa.ts';
+
+// Inline the tiny gesture handler so loading-screen clicks need no network-loaded module to be ready.
+const bootFullScreen = () => ({
+  name: 'boot-full-screen',
+  async transformIndexHtml() {
+    const file = fileURLToPath(new URL('./src/ui/bootFullScreen.ts', import.meta.url));
+    const source = `${readFileSync(file, 'utf8').replace(/^export /gm, '')}\ninstallBootFullScreen();`;
+    const { code } = await transformWithOxc(source, file);
+    return [{ tag: 'script', attrs: { id: 'boot-fullscreen' }, children: `(() => {\n${code}\n})();`,
+      injectTo: 'head' as const }];
+  },
+});
 
 // ez-tree (procedural trees) from its source, not its build, which carries its bark and leaf pictures inlined: its
 // texture module is swapped for a stub (src/world/ezTreeTextures.ts), so none of them ship
@@ -45,7 +58,7 @@ const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
-  plugins: [ezTreeTextures(), threeCompileSlice(), pwa()],
+  plugins: [bootFullScreen(), ezTreeTextures(), threeCompileSlice(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
   // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
   // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)

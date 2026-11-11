@@ -141,6 +141,15 @@ export function initAutoFullScreen(): void {
     keepEsc();
   });
   armAutoFullScreen();
+  const boot = window.__bootFullScreen;
+  boot?.stop();
+  if (boot?.pending) {
+    disarm();
+    void boot.pending.then(() => { keepEsc(); showPrompt(); }, () => armAutoFullScreen());
+  } else if (boot?.entered) {
+    disarm();
+    if (document.fullscreenElement) { keepEsc(); showPrompt(); }
+  }
 }
 
 /** Whether it waits for a gesture now (a harness's check). */

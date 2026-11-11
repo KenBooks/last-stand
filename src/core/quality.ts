@@ -122,7 +122,8 @@ export function initQuality(): void {
  * the device's (the first frame sampled after the reveal and its warm-ups: the boot, its warm-ups and the loading
  * screen's exit stay the settled level's, Low's plain fade on a phone). A step down is kept for good, so a desktop
  * slowed once (a build, another program on the GPU) stayed a level down from then on: from play, a 4070 Ti on Medium
- * "somehow". The level above is kept (and saved) once a window's frames hold the target; missed, Auto goes back to
+ * "somehow". Each higher level is kept (and saved) once a window's frames hold the target, then the next is tried
+ * until High. A failed trial stops this visit's climb: Auto goes back to
  * the settled level at once and steps on from there as ever. A device that can't hold it spends a settle and a quick
  * window there a boot (about 3 s), the cookie never changed. Exported for a harness (`lab auto`), which can't boot
  * the page again.
@@ -174,6 +175,7 @@ export function setQuality(s: QualitySetting): void {
   apply(s === 'auto' ? autoStart() : s);
   // choosing Auto again starts over from Low on every device
   if (s === 'auto') writeAuto();
+  aboveNext = s === 'auto' && level !== QUALITY_ORDER[0];
   writeCookie(TRIAL_COOKIE, '0/0');
 }
 
@@ -276,6 +278,7 @@ function keepTrial(): string {
   trialFrom = null;
   writeAuto();
   writeCookie(TRIAL_COOKIE, '0/0');
+  aboveNext = level !== QUALITY_ORDER[0];
   return `${level} kept`;
 }
 
