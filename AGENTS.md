@@ -95,7 +95,7 @@ Outside `src/`: `tools/` (the harnesses: the lab, the face harness, the icons, t
 - **Asset paths:** Vite `base` is `./`. In `index.html` reference assets root-absolute (`/favicon.svg`) so Vite rewrites them; `check:pages` fails on paths that would break under a subpath.
 - Three.js 0.187: use `THREE.Timer` (not `Clock`) and `PCFShadowMap` (not `PCFSoftShadowMap`). Both old forms log deprecation warnings.
 - **Dev hooks:** in dev builds, `window.__G` (game state) and `window.__dev.spawnEnemy` are exposed for scripted testing and screenshots (stripped from production). Spawn enemies well away from the player (near the arena edge) or the player dies before the shot.
-- **Developer mode** (`src/dev/AGENTS.md`): in dev builds and PR previews alone, never production (a build flag only the preview's Docker build sets, and the preview's host): F8 a panel (any wave and biome, foes, every piece of gear, god mode, the class, the frame's parts taken out live), F9 a free camera with the game frozen, F7 freeze.
+- **Developer mode** (`src/dev/AGENTS.md`): **only in PR previews and dev builds, NEVER in production, and it must stay that way.** Two locks: a build flag only the preview's Docker build sets (production's bundle has none of its code), and the preview's host. Never set `BUILD_PREVIEW` in production's build, nor load `src/dev` any other way. What it gives: F8 a panel (any wave and biome, foes, every piece of gear, god mode, the class, the frame's parts taken out live), F9 a free camera with the game frozen, F7 freeze.
 
 ## Style
 
