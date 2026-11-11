@@ -8,11 +8,12 @@
   position: fixed; top: 0; left: 0; z-index: 44; zoom: var(--ui, 1);
   width: min(360px, calc(100vw / var(--ui, 1)));
   max-height: calc(100dvh / var(--ui, 1)); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: rgba($frame, .55) transparent;
   padding: 6px 10px 10px; box-sizing: border-box;
-  background: rgba(12, 11, 14, var(--dev-opacity, .95)); border-right: 1px solid rgba($frame, .6); border-bottom: 1px solid rgba($frame, .6);
+  background: rgba($panel, var(--dev-opacity, .95)); border-right: 1px solid rgba($frame, .6); border-bottom: 1px solid rgba($frame, .6);
   font: 13px $font-body; color: $ink; pointer-events: auto; cursor: $cursor;
   &.hidden { display: none; }
-  &.docked { position: static; width: 100%; zoom: 1; max-height: none; min-height: 0; border: 0; flex: 1; }
+  &.docked { position: static; width: 100%; zoom: 1; max-height: none; min-height: 0; border: 0; flex: 1; background: transparent; }
   details { border-top: 1px solid rgba($frame, .3); padding: 4px 0; }
   summary { font: 700 12px $font-display; letter-spacing: 2px; text-transform: uppercase; color: $accent; cursor: $cursor-hand; padding: 3px 0; }
   button, select, input { font: inherit; color: $ink; background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px; }
@@ -34,7 +35,7 @@
 }
 body.dev-docked #dev-tab { display: none; }
 body.dev-open.dev-docked .menu-left > .ml-body { display: none; }
-body.dev-open.dev-docked .menu-left { background: transparent; }
+body.dev-open.dev-docked .menu-left { background: rgba($panel, var(--dev-opacity, .95)); }
 .dv-head {
   display: flex; align-items: center; gap: 8px; padding-bottom: 4px;
   b { font: 700 14px $font-display; letter-spacing: 2px; color: $accent; }
@@ -46,6 +47,19 @@ body.dev-open.dev-docked .menu-left { background: transparent; }
 .dv-sub { font-size: 12px; color: $ink-dim; margin-top: 6px; }
 .dv-parts { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
 .dv-part { text-align: left; }
+.dv-mode-label { align-self: center; padding: 3px 16px; border: 1px solid $accent; color: $highlight;
+  background: rgba($accent, .12); font: 700 14px $font-display; letter-spacing: 2px; text-transform: uppercase; }
+#pause .build-info::before { content: 'DEV MODE · '; color: $highlight; font-weight: 700; }
+#pause .pb-pages { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba($frame, .55) transparent; }
+.dv-help { padding: 10px 12px; margin-bottom: 14px; border: 1px solid rgba($frame, .6); background: rgba($panel, .8); font-size: 13px;
+  h3 { margin: 0 0 5px; font: 700 14px $font-display; color: $accent; }
+  p { margin: 4px 0 8px; color: $ink-dim; }
+  dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 16px; margin: 0; }
+  dl > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 6px; align-items: start; }
+  dt { color: $highlight; } dd { margin: 0; }
+  kbd { font: inherit; }
+}
+@media (max-width: 720px) { .dv-help dl { grid-template-columns: minmax(0, 1fr); } }
 
 #dev-tab {
   position: fixed; left: 0; top: 50%; translate: 0 -50%; z-index: 44; zoom: var(--ui, 1);

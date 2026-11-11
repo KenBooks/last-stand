@@ -46,7 +46,7 @@ body.touch .stow-hint kbd { display: none; }
   /* the panel spans the screen: ten to a row, the filter as wide as the stash, nothing to fold away */
   #stash { grid-template-columns: repeat(10, 1fr); }
   #stash-filter { width: 100%; }
-  .fold-tab { display: none; }
+  .fold-tab, .fold-tabs { display: none; }
   .menu-right #equip { grid-row: 1 / 4; align-self: start; margin-top: 18px; }
   .menu-right .stash-head { margin-top: 0; }
 }

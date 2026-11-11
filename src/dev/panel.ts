@@ -18,6 +18,7 @@ import { frameParts, type ScenePart } from '../perf/sceneParts';
 import { freeCamOn, freeCamSpeed, freeCamLabels, freeCamToHero, holdFreeCam, setFreeCamLabels, speedFreeCam, turnFreeCam } from './freeCam';
 import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNew, weaponStyles } from './gear';
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
+import { initDevHelp } from './help';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -53,11 +54,12 @@ export function toggleFly(): void { flyFree(!freeCamOn(), hooks); }
 
 export function initPanel(h: DevHooks): void {
   hooks = h;
+  initDevHelp();
   panel = document.createElement('div');
   panel.id = 'dev-panel';
   panel.className = 'hidden';
   panel.innerHTML = `
-    <div class="dv-head"><b>Developer</b><span class="dv-keys">F8 panel · F9 free cam · F7 freeze</span><button data-act="close" title="Close (F8)">✕</button></div>
+    <div class="dv-head"><b>Dev mode</b><span class="dv-keys">F8 panel · F9 free cam · F7 freeze</span></div>
     <div class="dv-row"><button data-act="reset">Reset to loaded scene</button></div>
     <div class="dv-row"><label>Panel opacity <input data-in="opacity" type="range" min="50" max="100" value="95"><output data-out="opacity">95%</output></label></div>
     <details open><summary>Time &amp; camera</summary>
@@ -102,6 +104,23 @@ export function initPanel(h: DevHooks): void {
   tabs.setAttribute('aria-label', 'Lobby panel');
   tabs.innerHTML = '<button role="tab" data-dev-tab="hero" aria-selected="true" class="on">Hero</button><button role="tab" data-dev-tab="dev" aria-selected="false">Dev</button>';
   document.querySelector('.menu-left')!.prepend(tabs);
+  const heroFold = document.getElementById('hero-fold')!;
+  const folds = document.createElement('div');
+  folds.className = 'fold-tabs fold-left';
+  heroFold.before(folds);
+  folds.append(heroFold);
+  const devFold = document.createElement('button');
+  devFold.id = 'dev-fold';
+  devFold.className = 'fold-tab fold-extra';
+  devFold.title = 'Show developer panel';
+  devFold.setAttribute('aria-label', devFold.title);
+  devFold.innerHTML = heroFold.innerHTML.replace('Hero', 'Dev');
+  folds.append(devFold);
+  heroFold.addEventListener('click', () => { if (heroFold.getAttribute('aria-expanded') === 'true') togglePanel(false); });
+  devFold.onclick = () => {
+    if (heroFold.getAttribute('aria-expanded') === 'false') heroFold.click();
+    togglePanel(true);
+  };
   tabs.addEventListener('click', (e) => {
     const name = (e.target as HTMLElement).closest<HTMLElement>('[data-dev-tab]')?.dataset.devTab;
     if (name) togglePanel(name === 'dev');
@@ -122,7 +141,7 @@ export function initPanel(h: DevHooks): void {
   panel.addEventListener('input', (e) => {
     if (!(e.target instanceof HTMLInputElement) || e.target.dataset.in !== 'opacity') return;
     const value = Math.max(50, Math.min(100, Number(e.target.value)));
-    panel.style.setProperty('--dev-opacity', String(value / 100));
+    document.body.style.setProperty('--dev-opacity', String(value / 100));
     $('[data-out=opacity]').textContent = `${value}%`;
   });
   dockPanel();
@@ -189,7 +208,6 @@ function onClick(e: MouseEvent): void {
   if (d.spawn) hooks.whenFightWarm(() => spawn(Number(d.spawn)));
   if (d.class) hooks.switchClass(d.class);
   switch (d.act) {
-    case 'close': togglePanel(false); break;
     case 'freeze': setFrozen(!time.frozen); break;
     case 'step': stepFrozen(); break;
     case 'fly': toggleFly(); break;
