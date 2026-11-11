@@ -13,6 +13,20 @@ export function built<T>(steps: Generator<void, T, undefined>): T {
   }
 }
 
+/** Finish a stepped build under a loading screen, yielding only at its existing safe boundaries after a time slice. */
+export async function builtInSlices<T>(
+  steps: Generator<void, T, undefined>, pause: () => Promise<void>, ms = 12, now = () => performance.now(),
+): Promise<T> {
+  let since = now();
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    if (now() - since < ms) continue;
+    await pause();
+    since = now();
+  }
+}
+
 /** A builder of one piece made a build in pieces (a model with no steps of its own). */
 export function* inOneStep(build: () => Model): ModelSteps {
   return build();

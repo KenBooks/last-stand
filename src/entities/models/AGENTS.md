@@ -1,5 +1,7 @@
 # `src/entities/models`
 
+- The first lobby hero is built with `Player.inSteps` through `builtInSlices` (`steps.ts`) under the loading screen, yielding between existing generator boundaries once 12 ms is spent. Do not replace it with a synchronous constructor: even after restoring geometry workers, an initial full-body build held one task about 0.9 s. The slices reduced that task to about 0.3 s in a local cold trace; single pieces such as engraved maps can still exceed the slice. Never add a yield inside a live `Sculpt` transaction to meet a timing target.
+
 The procedural models, registered by id in `index.ts` (`MODELS`), which class and enemy data name.
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).

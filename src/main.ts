@@ -35,6 +35,7 @@ import { initCloud } from './loot/cloud';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { hallOpen, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
+import { builtInSlices } from './entities/models/steps';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
@@ -146,7 +147,8 @@ async function boot() {
   await textures.ready('steel');
   await heads;
   G.profile = loadProfile(savedClass());
-  G.player = new Player(G.profile.classId, G.profile.equipped);
+  G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
   G.players = [G.player];
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
