@@ -1,5 +1,7 @@
 # `src/ui`
 
+- The Performance tab's recording controls (`recordingTab.ts`) start a bounded capture and stop/prepare it without sending. Review shows compressed size, Send recording and Discard; hide the inactive Start button then so the review controls stay on one row on a phone. A failed upload retains its exact bytes for retry. Capture/review suppress automatic reports without changing the saved preference. Use a distinct `.recording-note`: reusing `.profile-note` would make the existing profiler write to the recording status instead. `lab recorder` checks the real controls and service round-trip; `ui --states pausePerformance` shows the recording review and full profiler results together.
+
 The page's UI over the game.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.

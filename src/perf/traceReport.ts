@@ -60,6 +60,7 @@ function whyText(r: Record<string, number | string>): string {
 
 /** What the detector saw of the play, in a line. */
 function playText(r: Record<string, number | string>): string {
+  if (r.why === 'manual') return `recorded on demand for ${sec(Number(r.tookMs))}, including menus and paused frames`;
   const rate = Number(r.lowFps) >= 0
     ? `1% low ${fps(Number(r.lowFps))} fps, mean ${fps(Number(r.meanFps))}, missed ${fmt(Number(r.missed) * 100, 0)}% of the display's frames, `
     : 'the frame rate not judged (too little play), ';

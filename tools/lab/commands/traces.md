@@ -36,7 +36,14 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   caught. Then a slow boot's trace: its reveal stood in for
   (`slowBootRevealed`) and the lobby played on through its wait (`BOOT_TAIL_MS`, 45 s), the trace taken read back: it
   must hold the 45 s after the reveal and say the play after it beside the boot's time; `--canary` also takes it at
-  the reveal, as before, which must be caught.
+  the reveal, as before, which must be caught against the required normal wait (not the injected zero).
+  It also exercises the actual manual Start/Stop/Send controls (`page/manualRecording.ts`): exact interval and
+  first-frame markers, paused/menu frames, privacy-preserving delayed-key timing, automatic-report suppression,
+  failed upload and retry of identical bytes, touch Start, both capture limits, and sending despite an earlier
+  automatic client quota. Its test uploads go only to the lab's own service and are read back with the token.
+  Manual capture reuses the bounded ring, stopping at 60 s or before its start would be overwritten; oversized
+  recordings are shown as such rather than silently trimmed. `--canary` also rejects an automatic-reason trace
+  substituted for the manual recording.
 - `auto`: Auto quality's walk down from High on a slow device (`page/autoQuality.ts`, `src/core/quality.ts`). Auto is
   set as a player sets it, which starts it over from High, and fed each frame's time as a GPU-bound device takes it:
   in proportion to the scene's pixels, at the level's cost (the integrated GPU of trace JGNM-1NCF and its tester's

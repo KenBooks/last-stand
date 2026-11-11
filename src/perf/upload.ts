@@ -99,12 +99,13 @@ export function traceOf(slow: Slow): Uint8Array {
       stalls: v.stalls, longestMs: round(v.longest), playMs: Math.round(v.playMs) });
   }
   // (a slow boot's, the play after it judged beside it: recorder.ts `bootTail`)
-  if (slow.scene === 'boot') reason.why = 'boot';
+  if (slow.manual) reason.why = 'manual';
+  else if (slow.scene === 'boot') reason.why = 'boot';
   else if (slow.profile) {
     reason.why = 'profile';
     reason.profile = slow.profile.join('\n');
   } else if (!slow.verdict) reason.why = 'readying';
-  if (slow.tookMs) reason.tookMs = Math.round(slow.tookMs);
+  if (slow.tookMs || slow.manual) reason.tookMs = Math.round(slow.tookMs);
   const b = snapshot.boot;
   Object.assign(reason, { bootMs: b.revealMs, bootDownloadMs: b.downloadMs, firstVisit: b.firstVisit });
   const [commit, pr] = parseRef(__BUILD__.ref);

@@ -12,6 +12,7 @@ import { traceReport } from '../../../src/perf/traceReport';
 import { foesAhead } from './cast';
 import { quantile, timeCalls, type Timing } from './timing';
 import { G } from '../../../src/state';
+import { manualRecording } from './manualRecording';
 
 export interface RecorderOptions {
   /** frames played and timed */
@@ -193,9 +194,10 @@ async function bootTail(lab: Lab, tailMs: number): Promise<{ lines: string[]; pr
     const problems: string[] = [];
     if (early && tailMs > 0) problems.push('a slow boot\'s trace was taken at the reveal, not after its wait');
     if (slow.scene !== 'boot') problems.push(`a slow boot's trace was sent for the ${slow.scene}`);
-    if (held < tailMs * TAIL_HELD) {
-      problems.push(`a slow boot's trace holds ${(held / 1000).toFixed(1)} s after the reveal, under its wait's `
-        + `${(tailMs * TAIL_HELD / 1000).toFixed(1)}`);
+    // Judge the required wait, not the injected one: a zero-wait canary must fail even when its mark survives.
+    if (held < kept * TAIL_HELD) {
+      problems.push(`a slow boot's trace holds ${(held / 1000).toFixed(1)} s after the reveal, under the required `
+        + `${(kept * TAIL_HELD / 1000).toFixed(1)} s`);
     }
     if (!why.includes('the play after it')) problems.push('a slow boot\'s trace says nothing of the play after it');
     return { lines, problems, held };
@@ -219,6 +221,9 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const tail = await bootTail(lab, recorder.bootTailMs);
   lines.push(...tail.lines);
   problems.push(...tail.problems);
+  const manual = await manualRecording(lab, options.send, options.canary);
+  lines.push(manual.text);
+  problems.push(...manual.problems);
   if (!options.canary) return { text: lines.join('\n'), problems };
   const tailCanary = await bootTail(lab, 0);
   const tailCaught = tailCanary.problems.length > 0;

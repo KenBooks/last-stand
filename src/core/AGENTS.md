@@ -1,5 +1,7 @@
 # `src/core`
 
+- `keyDelivery.ts` measures event dispatch delay from a valid monotonic timestamp, not the key's value. Ignore missing, future, epoch and non-finite stamps. `main.ts` records at most one delayed-delivery mark a second, plus focus tags; no key codes or typed text enter traces. Use this to distinguish browser/OS-delayed input from an unresponsive game handler while animation continues.
+
 The engine under the game.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).

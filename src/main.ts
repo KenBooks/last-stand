@@ -116,13 +116,23 @@ async function boot() {
     compileEnvMaps(renderer);
   }
   let keyboardTarget = '';
-  initInput(renderer.domElement, (target) => {
+  let lastDelayedKey = -Infinity;
+  initInput(renderer.domElement, (target, delay) => {
+    const now = performance.now();
+    if (delay >= 250 && now - lastDelayedKey >= 1000) {
+      recorder.mark(`keyboard delivery delayed ${Math.round(delay)} ms (${target})`);
+      lastDelayedKey = now;
+    }
     if (target === keyboardTarget) return;
     keyboardTarget = target;
     recorder.mark(`keyboard: ${target}`);
   });
   window.addEventListener('focus', () => recorder.mark('keyboard: page focused'));
   window.addEventListener('blur', () => { keyboardTarget = ''; recorder.mark('keyboard: page unfocused'); });
+  document.addEventListener('focusin', event => {
+    if (event.target instanceof HTMLElement) recorder.mark(`keyboard focus: ${event.target.tagName.toLowerCase()}`);
+  });
+  document.addEventListener('focusout', () => recorder.mark('keyboard focus released'));
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);

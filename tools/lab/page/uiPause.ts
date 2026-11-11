@@ -23,7 +23,8 @@ const CANARY_WINDOWS = 2;
 /** the problem the canary must raise */
 export const PAUSE_CANARY = { name: 'scrolls', what: 'a row twice the window\'s height' };
 /** what must lie inside the box (shown ones: Abandon is hidden in the lobby) */
-const INSIDE = ['#btn-resume', '#btn-abandon', '.pb-title', '.pb-tabs'];
+const INSIDE = ['#btn-resume', '#btn-abandon', '.pb-title', '.pb-tabs',
+  '#btn-recording', '#btn-recording-send', '#btn-recording-discard'];
 /** a scroll this small (css px) is the box's rounding, not a scroll */
 const ROUNDING_PX = 1;
 
@@ -73,12 +74,20 @@ export function openPauseProfiled(canary: boolean): void {
   list.replaceChildren(...PROFILED_PARTS.map(item));
   list.classList.remove('hidden');
   document.querySelector('#btn-profile-send')!.classList.remove('hidden');
+  document.querySelector('#btn-recording-send')!.classList.remove('hidden');
+  document.querySelector('#btn-recording-discard')!.classList.remove('hidden');
+  document.querySelector('#btn-recording')!.classList.add('hidden');
+  document.querySelector('#recording-note')!.textContent = '59.9 s recorded, 512.0 KB. Send when ready; automatic reports are paused.';
 }
 
 /** The profile's results put away again, and the menu closed. */
 export function closePauseProfiled(): void {
   document.querySelector('.profile-parts')!.classList.add('hidden');
   document.querySelector('#btn-profile-send')!.classList.add('hidden');
+  document.querySelector('#btn-recording-send')!.classList.add('hidden');
+  document.querySelector('#btn-recording-discard')!.classList.add('hidden');
+  document.querySelector('#btn-recording')!.classList.remove('hidden');
+  document.querySelector('#recording-note')!.textContent = 'Record up to 60 s, then stop and send. Automatic reports pause during capture and review.';
   closePause();
 }
 

@@ -131,7 +131,11 @@
 .opt-levels { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .renderer-note { font-size: 12px; color: var(--ink-dim); }
 /* the profiler (ui/profileTab.ts): its button, a note saying how far it is or what it found, the costliest parts */
-.profile-note { font-size: 12px; color: var(--ink-dim); }
+.profile-note, .recording-note { font-size: 12px; color: var(--ink-dim); }
+.recording-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.recording-controls .btn { padding: 6px 10px; font-size: 14px; }
+body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
+.profile-row .btn { padding: 6px 10px; font-size: 14px; }
 .profile-parts { margin: 0; padding-left: 18px; font-size: 12px; font-variant-numeric: lining-nums tabular-nums; }
 .profile-parts li { margin: 1px 0; }
 .opt-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
@@ -150,7 +154,7 @@
   .pause-box .controls-help { gap: 1px 12px; font-size: 13px; }
   /* the keyboard and the mouse under it, smaller: full size they ran under the buttons (lab ui pause) */
   .pause-box .controls-help.diagrams { zoom: .6; gap: 8px; }
-  .pb-opts .opt-row { margin: 2px 0 8px; }
+  .pb-opts .opt-row { margin: 1px 0 5px; gap: 4px; }
   .pb-top .btn { padding-top: 7px; padding-bottom: 7px; }
 }
 /* narrow: the settings in one column */

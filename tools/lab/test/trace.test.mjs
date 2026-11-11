@@ -20,6 +20,13 @@ const HEADER = {
   longFrames: [], marks: [],
 };
 
+test('a manual recording is described as an explicit capture, including paused/menu time', () => {
+  const trace = decodeTrace(encodeTrace({ ...HEADER, reason: { scene: 'lobby', why: 'manual', tookMs: 12_500 },
+    columns: [{ name: 'interval', kind: 'ms' }, { name: 'state', kind: 'u8' }] }, 2,
+  { interval: [16.67, 16.67], state: [STATE.paused | STATE.menu, STATE.paused | STATE.menu] }));
+  assert.ok(traceReport(trace).some(line => line.includes('recorded on demand for 12.5 s, including menus and paused frames')));
+});
+
 /** `seconds` of frames at `ms` each, in `state` */
 const frames = (seconds, ms, state = 0) => Array.from({ length: Math.round((seconds * 1000) / ms) }, () => [ms, state]);
 
