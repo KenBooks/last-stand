@@ -6,9 +6,10 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
-# (the PR's head, Dokci's DOKCI_SOURCE_SHA: the pause menu's build label; the image has no git to read it from)
+# (the PR's head, Dokci's DOKCI_SOURCE_SHA: the pause menu's build label; the image has no git to read it from.
+# BUILD_PREVIEW builds the developer mode in, src/dev: a preview's alone, never production's)
 ARG SOURCE_COMMIT=""
-RUN BUILD_SHA="$SOURCE_COMMIT" npx vite build
+RUN BUILD_SHA="$SOURCE_COMMIT" BUILD_PREVIEW=1 npx vite build
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 COPY server/game-preview/nginx.conf /etc/nginx/conf.d/default.conf

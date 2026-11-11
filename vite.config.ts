@@ -50,7 +50,9 @@ export default defineConfig({
   // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
   // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)
   optimizeDeps: { exclude: ['ez-tree'] },
-  define: { __BUILD__: JSON.stringify(buildInfo()) },       // app icons + offline service worker
+  // (`__DEV_TOOLS__`: the developer mode, src/dev, built in. Only a PR preview's Docker build sets BUILD_PREVIEW
+  // (server/game-preview/Dockerfile); production's build doesn't, and its bundle has none of the mode)
+  define: { __BUILD__: JSON.stringify(buildInfo()), __DEV_TOOLS__: JSON.stringify(process.env.BUILD_PREVIEW === '1') },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

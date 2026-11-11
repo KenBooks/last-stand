@@ -1,0 +1,76 @@
+// The developer mode's look: its panel, the DEV tab that opens it on touch, and the free camera's overlay. Loaded with
+// the mode's module alone (src/dev), so a production build's stylesheet has none of it. Sized by the UI's scale
+// (`zoom: var(--ui)`, px inside) and fit to any screen: the panel scrolls within the window's height, and on a narrow
+// screen it takes its width.
+@use '../ui/styles/theme' as *;
+
+#dev-panel {
+  position: fixed; top: 0; right: 0; z-index: 44; zoom: var(--ui, 1);
+  width: min(360px, calc(100vw / var(--ui, 1)));
+  max-height: calc(100dvh / var(--ui, 1)); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 10px 10px; box-sizing: border-box;
+  background: $panel; border-left: 1px solid rgba($frame, .6); border-bottom: 1px solid rgba($frame, .6);
+  font: 13px $font-body; color: $ink; pointer-events: auto; cursor: $cursor;
+  &.hidden { display: none; }
+  details { border-top: 1px solid rgba($frame, .3); padding: 4px 0; }
+  summary { font: 700 12px $font-display; letter-spacing: 2px; text-transform: uppercase; color: $accent; cursor: $cursor-hand; padding: 3px 0; }
+  button, select, input { font: inherit; color: $ink; background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px; }
+  button { padding: 4px 8px; cursor: $cursor-hand; min-height: 28px; }
+  button:hover:not(:disabled) { border-color: $highlight; }
+  button:disabled { opacity: .4; cursor: $cursor; }
+  button.on { background: $well-lit; border-color: $highlight; color: $highlight; }
+  select { padding: 3px 4px; min-height: 28px; max-width: 100%; }
+  input[type=number] { width: 64px; padding: 3px 4px; min-height: 28px; box-sizing: border-box; }
+  input[type=checkbox] { accent-color: $accent; }
+  label { display: inline-flex; align-items: center; gap: 4px; }
+}
+.dv-head {
+  display: flex; align-items: center; gap: 8px; padding-bottom: 4px;
+  b { font: 700 14px $font-display; letter-spacing: 2px; color: $accent; }
+  .dv-keys { flex: 1; font-size: 11px; color: $ink-dim; }
+}
+.dv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 5px 0; }
+.dv-label { color: $ink-dim; }
+.dv-note { font-size: 12px; color: $ink-dim; min-height: 1em; }
+.dv-sub { font-size: 12px; color: $ink-dim; margin-top: 6px; }
+.dv-parts { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+.dv-part { text-align: left; }
+
+#dev-tab {
+  position: fixed; left: 0; top: 50%; translate: 0 -50%; z-index: 44; zoom: var(--ui, 1);
+  padding: 10px 4px; writing-mode: vertical-rl; font: 700 11px $font-display; letter-spacing: 2px;
+  color: $accent; background: $panel; border: 1px solid rgba($frame, .6); border-left: 0; border-radius: 0 4px 4px 0;
+  cursor: $cursor-hand; pointer-events: auto; opacity: .7;
+  &:hover { opacity: 1; }
+}
+
+// the free camera: a layer over the scene (the hero selection screen too) taking the drags and the wheel, under the
+// panel and the modals
+#dev-fly {
+  position: fixed; inset: 0; z-index: 32; display: none; cursor: $cursor; touch-action: none;
+  .df-hint {
+    position: absolute; top: 8px; left: 50%; translate: -50% 0; zoom: var(--ui, 1); max-width: calc(94vw / var(--ui, 1));
+    padding: 4px 10px; font: 12px $font-body; color: $ink; text-shadow: $outline; text-align: center;
+    background: rgba(0, 0, 0, .45); border-radius: 4px; pointer-events: none;
+    b { color: $highlight; }
+  }
+  .df-pad { display: none; }
+  &.touch .df-hint { display: none; }
+  &.touch .df-pad {
+    position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;
+    pointer-events: none;
+  }
+  .df-move { display: grid; grid-template-columns: repeat(3, touch(56px)); gap: 6px; pointer-events: auto; }
+  .df-acts { display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+  button {
+    min-width: touch(56px); min-height: touch(48px); font: 700 14px $font-body; color: $ink;
+    background: rgba(12, 11, 14, .7); border: 1px solid rgba($frame, .6); border-radius: 6px; touch-action: none;
+    &.on { color: $highlight; border-color: $highlight; }
+  }
+}
+body.dev-flying #dev-fly { display: block; }
+// flying, the hero's controls and the lobby's panels are out of the way; Hide UI takes the rest
+body.dev-flying :is(#touch, #menu, #crosshair, #look-hint),
+body.dev-clean :is(#hud, #menu, #touch, #diag, #crosshair, #look-hint) { display: none !important; }
+// (the profiler shows the scene alone)
+body.profiling :is(#dev-panel, #dev-tab, #dev-fly) { display: none !important; }
