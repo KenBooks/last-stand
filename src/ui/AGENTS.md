@@ -13,7 +13,7 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 
 ## Gotchas
 
-- The Alt cursor forwards label activation as well as the first click: a label's browser-generated checkbox click must not be swallowed by the cursor's capture listener. Native selects use `showPicker()` from the real pointer release, then return focus after selection. The synthetic mousedown alone cannot open a native picker. `alt-hover` mirrors the virtual cursor's hover chain for CSS effects.
+- The Alt cursor forwards label activation as well as the first click: a label's browser-generated checkbox click must not be swallowed by the cursor's capture listener. While captured, selects use `altForms.ts`'s in-page option list below the cursor (z 59 / 60), avoiding native popups stealing capture or covering the cursor. Normal unlocked selects stay native. Ranges map pointer position to min/max/step, emit input while clicking/dragging and change on commit; release, Alt-up and blur end the drag. Cursor movement uses pointermove so cancelling the press's compatibility mouse events cannot stop a drag. `alt-hover` mirrors the virtual cursor's hover chain for CSS effects, including after a hovered popup is removed.
 
 - `observePerfHud` lets the Dev panel collect the performance HUD's own timing samples without showing or changing the overlay. `perfHudStats` reads the same window used by the full pane. Closing the panel stops its subscription; an enabled overlay keeps collecting normally.
 

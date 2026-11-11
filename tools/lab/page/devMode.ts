@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { hurtPlayer } from '../../../src/combat/damage';
-import { overFrame, viewMode, viewSettled } from '../../../src/core/renderer';
+import { cameraYaw, overFrame, viewMode, viewSettled } from '../../../src/core/renderer';
 import { HIDDEN_LAYER } from '../../../src/core/layers';
 import { cheats, time } from '../../../src/dev/index';
 import { refreshPanel, togglePanel } from '../../../src/dev/panel';
@@ -10,7 +10,7 @@ import { freeCamOn, freeCamSpeed } from '../../../src/dev/freeCam';
 import { touchMode } from './uiTouch';
 import { showPause, pauseTab } from '../../../src/ui/menus';
 import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
-import { pointerLocked } from '../../../src/core/input';
+import { input, pointerLocked } from '../../../src/core/input';
 import { role } from '../../../src/net/role';
 import { foesAsked, foesTold } from '../../../src/net/sync';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
@@ -297,6 +297,21 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   await lab.keyDown('AltLeft'); await lab.step(2, () => ({ keys: ['altleft'] }));
   check(element('#alt-cursor').checkVisibility(), 'Alt did not show the cursor over the Dev panel');
+  const slider = element<HTMLInputElement>('[data-in=opacity]');
+  slider.scrollIntoView({ block: 'nearest' });
+  const track = slider.getBoundingClientRect();
+  const left = { x: track.left + 1, y: track.y + track.height / 2 };
+  const right = { x: track.right - 1, y: left.y };
+  await lab.click(left);
+  await lab.step(2, () => ({ keys: ['altleft'] }));
+  check(slider.value === '50' && element('[data-out=opacity]').textContent === '50%', 'Alt-click did not change the opacity slider');
+  await lab.mouseDown(left);
+  await lab.mouseTo(right);
+  await lab.step(2, () => ({ keys: ['altleft'] }));
+  check(slider.value === '100' && element('[data-out=opacity]').textContent === '100%', 'Alt-drag did not continuously update opacity');
+  await lab.mouseUp(right);
+  await lab.step(2, () => ({ keys: ['altleft'] }));
+  check(pointerLocked(), 'opacity interaction released mouse look');
   for (const trainingMode of [false, true]) {
     const trainingBox = element<HTMLInputElement>('[data-in=training]');
     const label = trainingBox.closest('label')!;
@@ -312,21 +327,37 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     await lab.mouseTo(point);
     const cursor = new DOMMatrix(getComputedStyle(element('#alt-cursor')).transform);
     check(Math.hypot(cursor.e - point.x, cursor.f - point.y) < 2, 'native-picker control: virtual cursor missed the biome select');
-    // Native popup widgets consume events themselves, rather than acknowledging them on the page.
-    await window.__labMouse!('mousePressed', point.x, point.y, 0, 'left', 1);
-    await window.__labMouse!('mouseReleased', point.x, point.y, 0, 'left', 0);
-    check(biomeSelect.matches(':open'), 'Alt did not expand the native biome dropdown');
-    const arrow = biomeSelect.selectedIndex === 0 ? 'ArrowDown' : 'ArrowUp';
-    for (const key of [arrow, 'Enter']) {
-      await window.__labKey!('keyDown', key); await window.__labKey!('keyUp', key);
-    }
+    await lab.click(point);
+    const menu = element('#alt-select');
+    check(pointerLocked() && menu.checkVisibility(), 'Alt dropdown did not open while keeping mouse look captured');
+    check(Number(getComputedStyle(element('#alt-cursor')).zIndex) > Number(getComputedStyle(menu).zIndex), 'cursor was behind the dropdown');
+    const option = menu.querySelector<HTMLElement>(`[data-option="${biomeSelect.selectedIndex === 0 ? 1 : 0}"]`)!;
+    await lab.mouseTo(middleOf(option));
+    moments.push(await lab.screen(`dev-alt-dropdown-${trainingMode ? 'training' : 'normal'}`, [], '#alt-select'));
+    await lab.click(middleOf(option));
     await lab.step(2, () => ({ keys: ['altleft'] }));
     check(G.arena.biome !== oldBiome && biomeSelect.value === G.arena.biome,
-      'choosing a biome from the native dropdown did not apply mid-run');
+      'choosing a biome from the Alt dropdown did not apply mid-run');
+    check(!document.getElementById('alt-select'), 'Alt dropdown stayed open after choosing an option');
   }
-  lines.push('Alt cursor: Training label and native biome picker checked in normal and Training runs');
+  lines.push('Alt cursor: slider clicks/drags, Training label and mouse-selected biome list checked in normal and Training runs');
   check(!G.menuOpen && pointerLocked(), 'native controls paused or released gameplay mouse look');
+  const select = element<HTMLSelectElement>('[data-in=biome]');
+  await lab.click(middleOf(select));
+  await window.__labKey!('keyDown', 'Escape'); await window.__labKey!('keyUp', 'Escape');
+  check(!document.getElementById('alt-select') && !G.menuOpen && pointerLocked(), 'dismissing the dropdown paused or released play');
   await lab.keyUp('AltLeft');
+  await lab.step(2);
+  check(pointerLocked() && !element('#alt-cursor').checkVisibility(), 'releasing Alt did not return to captured mouse look');
+  const lastMouse = middleOf(select), yaw = cameraYaw();
+  // Move from the physical mouse's last click, rather than the virtual cursor (which may have recentered).
+  await lab.mouseTo({ x: lastMouse.x + 20, y: lastMouse.y });
+  // mouseTo acknowledges pointermove; the browser's compatibility mousemove follows it.
+  await window.__labClock.realFrame();
+  const queuedLook = input.look.x;
+  await lab.step(2);
+  check(Math.abs(cameraYaw() - yaw) > 0.001,
+    `mouse movement did not turn the camera after releasing Alt (${viewMode()}, queued ${queuedLook}, paused ${G.paused}, frozen ${time.frozen})`);
   time.scale = 0.1;
   await lab.press('KeyV');
   const neck = G.player.model.joints!.neck;

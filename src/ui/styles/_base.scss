@@ -42,6 +42,15 @@ input:not([type=checkbox], [type=radio], [type=range]), textarea { cursor: text;
 #alt-cursor { position: fixed; left: 0; top: 0; z-index: 60; width: 32px; height: 32px; margin: -2px 0 0 -3px;
   background: var(--cursor-art) no-repeat; pointer-events: none; will-change: transform; }
 #alt-cursor.lit { background-image: var(--cursor-hand-art); }
+.alt-select { position: fixed; z-index: 59; width: max-content; max-width: calc(100vw - 16px); max-height: min(45vh, calc(240px * var(--ui, 1)));
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba($frame, .55) $panel;
+  background: rgb(from #{$panel} r g b / 1); border: 1px solid $frame; padding: 3px; box-shadow: 0 6px 18px rgba(0,0,0,.7); cursor: $cursor;
+  button { display: block; width: 100%; height: var(--alt-option-height); padding: 3px 8px; border: 0; text-align: left;
+    font: inherit; color: $ink; background: transparent; cursor: $cursor-hand; white-space: nowrap;
+    &.active, &.alt-hover, &:hover { color: $highlight; background: rgba($accent, .18); }
+    &:disabled { opacity: .4; cursor: $cursor; }
+  }
+}
 html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
 #game { touch-action: none; }
 
