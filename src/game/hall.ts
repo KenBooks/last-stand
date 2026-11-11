@@ -185,21 +185,26 @@ const gearOf = (profile: Profile): string => `${heroDetail()} ${JSON.stringify(p
  * kept; a hall already open (a first visit's) builds its own.
  */
 export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
-  await preloadHeads(heroDetail());
-  for (const id of CLASS_IDS) {
-    if (hallOpen()) return;
-    const profile = profileOf(id);
-    if (kept.get(id)?.gear === gearOf(profile)) continue;
-    await step();
-    if (hallOpen()) return;
-    await finishInSlices(`hall ${id}`, step);
-    if (kept.get(id)?.gear !== gearOf(profile)) {
-      const old = kept.get(id);
-      if (old) { halos.delete(old.player); old.player.dispose(); }
-      keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false), step));
+  // Also called by shader warm-up, outside prepareHeroSelection: don't let the frame queue duplicate jobs
+  // while a sliced build has temporarily taken its job out of the background queue.
+  warmingRuns(true);
+  try {
+    await preloadHeads(heroDetail());
+    for (const id of CLASS_IDS) {
+      if (hallOpen()) return;
+      const profile = profileOf(id);
+      if (kept.get(id)?.gear === gearOf(profile)) continue;
+      await step();
+      if (hallOpen()) return;
+      await finishInSlices(`hall ${id}`, step);
+      if (kept.get(id)?.gear !== gearOf(profile)) {
+        const old = kept.get(id);
+        if (old) { halos.delete(old.player); old.player.dispose(); }
+        keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false), step));
+      }
+      G.scene.remove(kept.get(id)!.player.obj);
     }
-    G.scene.remove(kept.get(id)!.player.obj);
-  }
+  } finally { warmingRuns(false); }
 }
 
 /** Prepare the current detail before an opening; Auto stays put while the sliced builds run. */
