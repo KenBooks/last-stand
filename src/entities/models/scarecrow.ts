@@ -280,7 +280,7 @@ function build(): Parts {
   // straw for hair under the hat
   headStraws.push(fringe(rng, 70, 0.075, 0.15, 0.14, 2.3, [0.07, 0.15], 1.1));
 
-  // the hat: woven straw, its crown slumped to one side, its brim wavy and frayed, a red band round it; pushed back
+  // the hat: woven straw, its crown slumped to one side, its brim wavy and frayed, a red band round it; worn nearly level
   const hat: THREE.BufferGeometry[] = [], hatStraw: THREE.BufferGeometry[] = [];
   const BRIM = 0.34;
   const shape = new THREE.LatheGeometry([[BRIM, -0.03], [0.29, -0.012], [0.22, 0], [0.172, 0.01], [0.165, 0.03], [0.155, 0.1], [0.122, 0.175], [0.066, 0.222], [0.001, 0.238]]
@@ -298,7 +298,7 @@ function build(): Parts {
   hat.push(paint(shape, HAT, rng, 0.1));
   hat.push(paint(new THREE.CylinderGeometry(0.162, 0.171, 0.05, 20, 1, true).translate(0, 0.055, 0), BAND, rng, 0.06));
   hatStraw.push(fringe(rng, 60, -0.03, BRIM * 0.97, BRIM * 0.97, 1.55, [0.02, 0.05]));
-  const worn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.4, 0, 0.09)).setPosition(0, 0.118, -0.05);
+  const worn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.13, 0, 0.05)).setPosition(0, 0.125, -0.02);
   for (const g of hat) headCloths.push(g.applyMatrix4(worn));
   for (const g of hatStraw) headStraws.push(g.applyMatrix4(worn));
 
