@@ -37,6 +37,16 @@ import type { EnemyDef, Item } from '../types';
 import type { Portal } from '../world/props';
 
 interface SpawnUnit { type: EnemyId; hero: boolean }
+const pendingUnits = new Set<SpawnUnit>();
+
+/** Retarget enemies still queued or waiting between a gate pulse and their rise. */
+export function remapWaveSpawns(map: (type: EnemyId) => EnemyId): void {
+  const r = G.run;
+  if (!r) return;
+  for (const group of r.queue) for (const unit of group) unit.type = map(unit.type);
+  if (r.boss) r.boss.type = map(r.boss.type);
+  for (const unit of pendingUnits) unit.type = map(unit.type);
+}
 
 /** The party's run: counting down to a wave, fighting it, deciding after it, or over for everyone. */
 export type RunPhase = 'countdown' | 'fighting' | 'cleared' | 'over';
@@ -116,6 +126,7 @@ export function initRun(uiHooks: RunUI): void {
 }
 
 function cleanupWorld(): void {
+  pendingUnits.clear();
   ui.resetDecision();
   clearEnemies();
   clearProjectiles();
@@ -313,7 +324,9 @@ function spawnGroup(group: SpawnUnit[]): void {
       portal.pulse();
       const pos = riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
+      pendingUnits.add(u);
       schedule(j * SPAWN_GAP, () => {
+        pendingUnits.delete(u);
         r.pending--;
         if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult: def.boss ? party.boss : party.life });
       });

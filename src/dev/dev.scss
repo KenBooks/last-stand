@@ -11,7 +11,8 @@
   scrollbar-width: thin; scrollbar-color: rgba($frame, .55) transparent;
   scrollbar-gutter: stable;
   padding: 6px 10px 10px; box-sizing: border-box;
-  background: $panel; opacity: var(--dev-opacity, .95); border-right: 1px solid rgba($frame, .6); border-bottom: 1px solid rgba($frame, .6);
+  background: rgba($panel, var(--dev-opacity, .95)); border-right: 1px solid rgba($frame, .6); border-bottom: 1px solid rgba($frame, .6);
+  overflow-anchor: none;
   font: 15px $font-body; color: $ink; pointer-events: auto; cursor: $cursor;
   &.hidden { display: none; }
   &.docked { position: static; width: 100%; zoom: 1; max-height: none; min-height: 0; border: 0; flex: 1; background: transparent; opacity: 1; }
@@ -36,7 +37,13 @@
 }
 body.dev-docked #dev-tab { display: none; }
 body.dev-open.dev-docked .menu-left > .ml-body { display: none; }
-body.dev-open.dev-docked .menu-left { background: $panel; opacity: var(--dev-opacity, .95); }
+body.dev-open.dev-docked .menu-left { background: rgba($panel, var(--dev-opacity, .95)); }
+// Fade independent controls so the hovered item can become opaque without brightening its neighbours.
+#dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span, .dv-scroll-cue) { opacity: var(--dev-opacity, .95); will-change: opacity; }
+#dev-panel label :is(select, input) { opacity: 1; will-change: auto; }
+#dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span):hover { opacity: 1; }
+#dev-panel button:disabled { opacity: .4; }
+body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:hover { opacity: 1; } }
 .dv-head {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 4px;
   b { font: 700 14px $font-display; letter-spacing: 2px; color: $accent; }
@@ -47,22 +54,36 @@ body.dev-open.dev-docked .menu-left { background: $panel; opacity: var(--dev-opa
   output { min-width: 28px; }
 }
 .dv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 5px 0; }
+.dv-speed-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto auto; gap: 4px;
+  button { padding-inline: 4px !important; min-width: 0; }
+}
+#dev-panel .dv-freeze { color: #8fd8ff; border-color: #4e88aa;
+  &.on { color: #c9f4ff; border-color: #8fd8ff; background: linear-gradient(#19435a, #102b3b); }
+}
+.dv-camera-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, .75fr); gap: 4px;
+  button { padding-inline: 3px !important; min-width: 0; white-space: nowrap; }
+}
+.dv-profile { margin-left: auto; }
 .dv-scroll-cue { position: sticky; bottom: -10px; margin: 0 -10px -10px; padding: 4px 8px; text-align: center;
   background: $panel; border-top: 1px solid rgba($frame, .5); color: $accent; font-size: 11px; pointer-events: none; z-index: 1;
   visibility: hidden;
 }
 #dev-panel.more-below .dv-scroll-cue { visibility: visible; }
-.dv-label { color: $ink-dim; }
+.dv-label { color: rgba($ink-dim, var(--dev-opacity, .95)); }
 .dv-note { font-size: 12px; color: $ink-dim; min-height: 1em; }
 .dv-styles { display: contents; }
 .dv-gear-pick [data-in=base] { flex: 1; min-width: 65px; width: 0; }
 .dv-gear-note:empty { display: none; }
 .dv-fly-speed:empty { display: none; }
 .dv-sub { font-size: 11px; color: $ink-dim; margin-left: auto; }
-.dv-perf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+.dv-perf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px;
   .dv-stats { font: 10px $font-body; color: $ink-dim; letter-spacing: 0; text-transform: none; text-align: right; }
 }
-.dv-perf-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; margin: 5px 0 7px; font-size: 11px; color: $ink-dim; }
+.dv-stats, .dv-perf-info { font-variant-numeric: lining-nums tabular-nums; }
+.dv-stats { white-space: nowrap; line-height: 14px; }
+.dv-perf-info { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 6px; margin: 4px 0; font-size: 11px; line-height: 14px; color: $ink-dim;
+  > span { display: flex; gap: 3px; white-space: nowrap; min-width: 0; }
+}
 .dv-stats strong, .dv-perf-info strong { color: #f6fff9; font-weight: 700; }
 .dv-stats strong:first-child, .dv-perf-info span:nth-child(2) strong { color: #b5f3cc; }
 .dv-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin: 4px 0; }

@@ -13,6 +13,8 @@ import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
 import { pointerLocked } from '../../../src/core/input';
 import { role } from '../../../src/net/role';
 import { foesAsked, foesTold } from '../../../src/net/sync';
+import { BIOMES, BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
+import { updateRun } from '../../../src/game/run';
 import { realWait, type Lab, type Pictured, type Report } from './lab';
 
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
@@ -40,6 +42,12 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   const started = async (): Promise<void> => {
     for (let i = 0; G.mode !== 'run' && i < 1000; i++) { await lab.step(1); await realWait(10); }
     if (G.mode !== 'run') throw new Error('dev: wave never started after warming');
+  };
+  const chooseBiome = async (biome: BiomeId): Promise<void> => {
+    const select = element<HTMLSelectElement>('[data-in=biome]');
+    select.value = biome; select.dispatchEvent(new Event('change', { bubbles: true }));
+    for (let i = 0; G.arena.biome !== biome && i < 1000; i++) { await lab.step(1); await realWait(10); }
+    check(G.arena.biome === biome, 'biome selection did not apply immediately');
   };
   await click('[data-dev-tab=dev]');
 
@@ -89,6 +97,7 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   check(overFrame.draw !== draw, 'World labels did nothing outside flight');
   await action('labels');
   check(overFrame.draw === draw, 'World labels did not restore their draw');
+  await chooseBiome(BIOME_IDS.find((id) => id !== G.arena.biome)!);
 
   // The checkbox must apply to +1 and elite batches even with no run at all.
   const spawn = async (count: number) => {
@@ -133,7 +142,19 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   opacity.value = '0'; opacity.dispatchEvent(new Event('input', { bubbles: true }));
   await realWait(350);
   check(Number(opacity.value) === 50 && element('[data-out=opacity]').textContent === '50%', 'opacity could fall below its readable minimum');
-  check(Math.abs(Number(getComputedStyle(element('.menu-left')).opacity) - 0.5) < 0.01, 'opacity did not affect controls with the whole panel');
+  check(Math.abs(Number(getComputedStyle(element('[data-act=freeze]')).opacity) - 0.5) < 0.01, 'opacity did not fade individual controls');
+  const profile = element('[data-act=profile]');
+  profile.scrollIntoView({ block: 'nearest' });
+  const box = profile.getBoundingClientRect(), checksBefore = parts.map((part) => part.getBoundingClientRect().top);
+  const statsNode = element('.dv-perf-info');
+  await lab.mouseTo({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  for (let i = 0; i < 4; i++) { await lab.step(30); refreshPanel(); }
+  check(getComputedStyle(profile).opacity === '1', 'hovered control did not return to full brightness');
+  check(getComputedStyle(element('[data-perf=off]')).opacity === '0.5', 'hover brightened neighbouring controls');
+  check(element('.dv-perf-info') === statsNode && checksBefore.every((y, i) => Math.abs(y - parts[i].getBoundingClientRect().top) < 0.1)
+    && Math.abs(box.top - profile.getBoundingClientRect().top) < 0.1, 'hover or live performance refresh shifted the layout');
+  moments.push(await lab.screen('dev-hover-brightness', [], 'details:has(.dv-perf-info)'));
+  await lab.mouseTo({ x: innerWidth * 0.7, y: innerHeight * 0.5 });
   moments.push(await lab.screen('dev-opacity-minimum'));
   opacity.value = '95'; opacity.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -146,6 +167,9 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     check(rect.width > 0 && rect.left >= -1 && rect.right <= width + 1 && rect.bottom <= height + 1,
       `${width}x${height}: panel did not fit the viewport`);
     check(panel.scrollWidth <= panel.clientWidth + 1, `${width}x${height}: panel content overflowed`);
+    for (const control of panel.querySelectorAll<HTMLElement>('.dv-speed-row button, .dv-camera-row button')) {
+      check(control.scrollWidth <= control.clientWidth + 1, `${width}x${height}: inline control label overflowed`);
+    }
     const button = element('#dev-panel [data-act=freeze]');
     check(button.offsetHeight === 28 && getComputedStyle(button).fontSize === '15px', 'larger font changed the button height');
     if (panel.scrollHeight > panel.clientHeight + 2) {
@@ -201,6 +225,25 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   check(!time.frozen && !freeCamOn() && !!G.run?.training, 'training remained frozen or started as an ordinary run');
   await lab.until(() => G.enemies.some((foe) => foe.alive && !foe.def.dummy && foe.spawning <= 0), 1000,
     'training did not spawn ghost enemies');
+  // Swap with both standing and gate-scheduled enemies, without resetting progress or loot.
+  const run = G.run!, beforeScore = run.score, beforeBag = run.bag;
+  if (!run.queue.length) run.queue.push([{ type: BIOMES[G.arena.biome].pool(run.wave)[0][0], hero: false }]);
+  run.nextGroupT = 0; updateRun(0);
+  check(run.pending > 0, 'biome swap control did not schedule any enemies');
+  const standing = G.enemies.filter((foe) => foe.alive).map((foe) => ({ id: foe.id, hero: foe.hero, health: foe.life / foe.maxLife }));
+  time.frozen = true;
+  const to = BIOME_IDS.find((id) => id !== G.arena.biome)!;
+  await chooseBiome(to);
+  const roster = new Set([...BIOMES[to].pool(Infinity).map(([id]) => id), BIOMES[to].boss]);
+  check(G.run === run && run.score === beforeScore && run.bag === beforeBag && run.wave === 1, 'mid-run biome change reset progress');
+  check(standing.every((old) => {
+    const foe = G.enemies.find((each) => each.id === old.id);
+    return !!foe && roster.has(foe.type) && foe.hero === old.hero && foe.training && Math.abs(foe.life / foe.maxLife - old.health) < 0.001;
+  }), 'biome change did not preserve and replace standing enemies');
+  check(run.queue.flat().every((unit) => roster.has(unit.type)), 'queued foes kept the old biome');
+  time.frozen = false; await lab.step(90);
+  check(G.enemies.every((foe) => roster.has(foe.type)), 'a pending gate spawn used the old biome');
+  lines.push('immediate lobby/mid-run biome swap: standing, queued and pending enemies checked; progress preserved');
   const health = G.player.life;
   G.player.guardUntil = 0;
   hurtPlayer(G.player, 1e6);

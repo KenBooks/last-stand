@@ -19,6 +19,7 @@ import { freeCamOn, freeCamSpeed, freeCamLabels, freeCamToHero, holdFreeCam, set
 import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNew, weaponStyles } from './gear';
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
 import { initDevHelp } from './help';
+import { changeDevBiome } from './biome';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -63,10 +64,8 @@ export function initPanel(h: DevHooks): void {
     <div class="dv-head"><b>Dev mode</b><label class="dv-opacity">Opacity <input data-in="opacity" type="range" min="50" max="100" value="95"><output data-out="opacity">95%</output></label></div>
     <div class="dv-row"><button data-act="reset">Reset to loaded scene</button></div>
     <details open><summary>Time &amp; camera</summary>
-      <div class="dv-row"><button data-act="freeze" class="dv-tog">Freeze</button><button data-act="step" title="One frame forward while frozen (.)">Step</button></div>
-      <div class="dv-row dv-label">Speed ${SPEEDS.map((s) => `<button data-speed="${s}" class="dv-tog">${s}×</button>`).join('')}</div>
-      <div class="dv-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button></div>
-      <div class="dv-row"><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button></div>
+      <div class="dv-row dv-speed-row" aria-label="Simulation speed">${SPEEDS.map((s) => `<button data-speed="${s}" class="dv-tog">${s}×</button>`).join('')}<button data-act="freeze" class="dv-tog dv-freeze">Freeze</button><button data-act="step" title="One frame forward while frozen (.)">Step</button></div>
+      <div class="dv-row dv-camera-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button></div>
       <div class="dv-note dv-fly-speed"></div>
     </details>
     <details open><summary>Run</summary>
@@ -87,10 +86,13 @@ export function initPanel(h: DevHooks): void {
       <div class="dv-row dv-gear-pick"><select data-in="slot"></select><select data-in="base"></select><button data-act="wear">Wear</button><button data-act="stash">To stash</button></div>
       <div class="dv-note dv-gear-note"></div>
     </details>
-    <details open><summary class="dv-perf-head"><span>Performance</span><span class="dv-stats"></span></summary>
-      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}<span class="dv-sub">Uncheck to hide</span></div>
-      <div class="dv-row"><button data-act="profile" title="The pause menu's profiler, from where the camera is now">Profile this spot…</button></div>
-      <div class="dv-perf-info"></div>
+    <details open><summary class="dv-perf-head"><span>Performance</span><span class="dv-stats"><strong data-v="fps">—</strong> FPS · <strong data-v="frame">—</strong> ms</span></summary>
+      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}<button class="dv-profile" data-act="profile" title="The pause menu's profiler, from where the camera is now">Profile this spot</button></div>
+      <div class="dv-perf-info">
+        <span>CPU <strong data-v="cpu">—</strong> ms</span><span>GPU <strong data-v="gpu">—</strong> ms</span><span>p95 <strong data-v="p95">—</strong> ms</span>
+        <span>1% low <strong data-v="low">—</strong></span><span>Draws <strong data-v="draws">—</strong></span><span>Tris <strong data-v="tris">—</strong></span>
+        <span>Shaders <strong data-v="shaders">—</strong></span><span>Geo/Tex <strong data-v="memory">—</strong></span>
+      </div>
       <div class="dv-parts"></div>
       <div class="dv-row"><button data-act="parts">Check all</button></div>
     </details><div class="dv-scroll-cue" aria-hidden="true">Scroll for more ↓</div>`;
@@ -145,6 +147,7 @@ export function initPanel(h: DevHooks): void {
     $('[data-out=opacity]').textContent = `${value}%`;
   });
   dockPanel();
+  $<HTMLSelectElement>('[data-in=biome]').value = G.arena.biome;
   setFreeCamLabels(true);
   renderParts();
 }
@@ -253,6 +256,11 @@ function onClick(e: MouseEvent): void {
 function onChange(e: Event): void {
   if ((e.target as HTMLElement).matches('[data-in=slot]')) renderBases();
   const target = e.target as HTMLInputElement;
+  if (target.matches('[data-in=biome]')) {
+    const biome = target.value as BiomeId;
+    putPartsBack();
+    hooks.whenFightWarm(() => { changeDevBiome(biome); refreshPanel(); });
+  }
   if (target.dataset.part) { togglePart(target.dataset.part); refreshPanel(); }
   if (target.matches('[data-in=training]') && G.mode === 'run' && G.run) {
     startWave(G.run.wave, G.arena.biome, target.checked);
@@ -378,12 +386,15 @@ export function refreshPanel(): void {
   ].join('|');
   const stats = perfHudStats();
   const number = (n: number | undefined, digits = 1): string => n !== undefined && Number.isFinite(n) ? n.toFixed(digits) : '—';
-  $('.dv-stats').innerHTML = `<strong>${number(stats?.fps, 0)}</strong> FPS · <strong>${number(stats?.p50)}</strong> ms`;
-  $('.dv-perf-info').innerHTML = `
-    <span>CPU <strong>${number(stats?.cpu, 2)}</strong> ms</span><span>GPU <strong>${number(stats?.gpu, 2)}</strong> ms</span>
-    <span>p95 <strong>${number(stats?.p95)}</strong> ms</span><span>1% low <strong>${number(stats?.lowFps, 0)}</strong> FPS</span>
-    <span>Draws <strong>${info.render.calls}</strong></span><span>Tris <strong>${(info.render.triangles / 1000).toFixed(0)}k</strong></span>
-    <span>Shaders <strong>${programs}</strong></span><span>Geo / Tex <strong>${info.memory.geometries} / ${info.memory.textures}</strong></span>`;
+  const values: Record<string, string> = {
+    fps: number(stats?.fps, 0), frame: number(stats?.p50), cpu: number(stats?.cpu, 2), gpu: number(stats?.gpu, 2),
+    p95: number(stats?.p95), low: number(stats?.lowFps, 0), draws: String(info.render.calls),
+    tris: `${(info.render.triangles / 1000).toFixed(0)}k`, shaders: String(programs), memory: `${info.memory.geometries}/${info.memory.textures}`,
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const el = $(`[data-v=${key}]`);
+    if (el.textContent !== value) el.textContent = value;
+  }
   $('.dv-fly-speed').textContent = freeCamOn() ? `Flying at ${freeCamSpeed().toFixed(1)} m/s` : '';
   fly.querySelector('.df-speed')!.textContent = `${freeCamSpeed().toFixed(1)} m/s`;
   fly.classList.toggle('touch', input.touchMode);

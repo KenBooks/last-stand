@@ -23,7 +23,10 @@ import { newItemId } from '../loot/items';
 import { creditRaise } from '../game/stats';
 import { role } from './role';
 import { Playout, Smoother, Track, type Pose } from './timeline';
-import type { Enemy } from '../entities/enemy';
+import { clearEnemies, type Enemy } from '../entities/enemy';
+import { clearProjectiles } from '../combat/projectiles';
+import { clearEffects } from '../fx/effects';
+import type { BiomeId } from '../data/biomes';
 import type { Player } from '../entities/player';
 import type { EnemyId } from '../data/enemies';
 import type { Item } from '../types';
@@ -33,6 +36,7 @@ export type SpawnEvent = { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; tr: 0 
 
 type WorldEvent =
   | SpawnEvent
+  | { k: 'biome'; b: BiomeId }
   | { k: 'die'; id: number; f?: number[] }
   | { k: 'fx'; n: FxName; a: number[] }
   | { k: 'prop'; i: number; l: number }
@@ -278,6 +282,11 @@ export function playWorld(at: number, dt: number): void {
 
 function apply(ev: WorldEvent): void {
   switch (ev.k) {
+    case 'biome':
+      for (const player of G.players) player.stopChannel();
+      clearProjectiles(); clearEffects(); clearEnemies();
+      G.arena.setBiome(ev.b);
+      return;
     case 'spawn': {
       copied.add(ev.id);
       asked.delete(ev.id);
@@ -316,6 +325,9 @@ function apply(ev: WorldEvent): void {
     case 'over': endRun(); return;
   }
 }
+
+/** Report an explicit battlefield swap before the replacement foes are reported. */
+export function sendBiomeSwap(biome: BiomeId): void { push({ k: 'biome', b: biome }); }
 
 /** Our hits on foe `id` the host hadn't dealt yet as of the snapshot just played. */
 const pendingOn = (id: number): number => pending.reduce((sum, h) => (h.id === id ? sum + h.amount : sum), 0);

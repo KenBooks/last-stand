@@ -1,6 +1,6 @@
 # `src/net`
 
-- Protocol 28 adds `tr` to enemy spawn reports, preserving each enemy's Training status on guests, including individually spawned practice enemies outside a training run.
+- Protocol 29 includes `tr` on enemy spawn reports and a battlefield biome event. The Training flag survives on guests; an explicit arena swap clears old foes/attacks before its replacement spawn reports play.
 
 Co-op.
 
