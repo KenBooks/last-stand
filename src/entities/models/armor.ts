@@ -9,13 +9,11 @@ import { built } from './steps';
 import { clamp, lerp, smooth } from '../../util';
 import { tunable } from '../../core/tuning';
 
-let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
  *  use fewer hair locks and fur tufts and coarser curves below 1. */
-export function setHeroDetail(k: number): void { detail = k; }
-export const heroDetail = (): number => detail;
-/** `n` scaled by the detail level, at least `min` */
-export const lod = (n: number, min = 1): number => Math.max(min, Math.round(n * detail));
+export { setHeroDetail, heroDetail, atHeroDetail } from './detail';
+import { lod } from './detail';
+export { lod };
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
 export const TILE = 0.3;

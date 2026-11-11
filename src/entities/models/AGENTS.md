@@ -1,5 +1,9 @@
 # `src/entities/models`
 
+- Head-worker preparation is memoized per geometry detail, including an in-flight request. Auto can change detail after boot: background builds must wait for their own detail's workers, and `atHeroDetail` in `detail.ts` restores the live preset between every queued piece. Using today's global detail halfway through an older build caused head-grid/hair sculpting on the input thread after Change hero then Back. The hall/spare cache keys record the queued detail, not the level at completion. `lab behind` covers Back without a choice after a detail change and a repeated opening; its missing-worker canary must sculpt head pieces on the page.
+
+- The first lobby hero is built with `Player.inSteps` through `builtInSlices` (`steps.ts`) under the loading screen, yielding between existing generator boundaries once 12 ms is spent. Do not replace it with a synchronous constructor: even after restoring geometry workers, an initial full-body build held one task about 0.9 s. The slices reduced that task to about 0.3 s in a local cold trace; single pieces such as engraved maps can still exceed the slice. Never add a yield inside a live `Sculpt` transaction to meet a timing target.
+
 The procedural models, registered by id in `index.ts` (`MODELS`), which class and enemy data name.
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).

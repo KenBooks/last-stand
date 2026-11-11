@@ -61,7 +61,8 @@ const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells 
 /** the setting (Settings' Gear glow, the cookie): on unless turned off ("opt in, enabled by default, but can be
  *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value: nothing compiles */
 const GLOW_COOKIE = 'last-stand-gear-glow';
-let gearGlowOn = readCookie(GLOW_COOKIE) !== 'off';
+// Geometry workers import the material kit too; they have no page preferences or document.
+let gearGlowOn = typeof document === 'undefined' || readCookie(GLOW_COOKIE) !== 'off';
 
 /** Whether worn gear glows in its rarity's colour (the setting). */
 export const gearGlow = (): boolean => gearGlowOn;

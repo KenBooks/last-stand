@@ -6,6 +6,8 @@ import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, s
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio } from './core/audio';
+import { InputDelivery } from './core/inputDelivery';
+import { keyDeliveryDelay } from './core/keyDelivery';
 import { updateMusic, type MusicWanted } from './core/music';
 import { FADES } from './data/music';
 import { schedule, updateTimers } from './core/timers';
@@ -33,14 +35,15 @@ import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/s
 import { askConflicts, renderCloudBar } from './ui/cloudSaves';
 import { initCloud } from './loot/cloud';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
-import { hallOpen, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
+import { hallOpen, prepareHeroSelection, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
+import { builtInSlices } from './entities/models/steps';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
-import { initAutoFullScreen } from './ui/autoFullScreen';
+import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
@@ -114,7 +117,33 @@ async function boot() {
     // (the environments' programs linked as the arena is built, each made as its biome is first shown)
     compileEnvMaps(renderer);
   }
-  initInput(renderer.domElement);
+  let keyboardTarget = '';
+  let lastDelayedKey = -Infinity;
+  recorder.recordingBoundary = starting => {
+    if (starting) inputDelivery.sample(performance.now(), false);
+    else recordInputDelivery(true);
+  };
+  window.addEventListener('keydown', () => inputDelivery.capture(true), true);
+  window.addEventListener('keyup', () => inputDelivery.capture(false), true);
+  window.addEventListener('pointerdown', () => inputDelivery.pointer(), true);
+  window.addEventListener('pointermove', event => inputDelivery.move(keyDeliveryDelay(event.timeStamp, performance.now())), true);
+  initInput(renderer.domElement, (target, delay) => {
+    inputDelivery.accept(target !== 'game', delay);
+    const now = performance.now();
+    if (delay >= 250 && now - lastDelayedKey >= 1000) {
+      recorder.mark(`keyboard delivery delayed ${Math.round(delay)} ms (${target})`);
+      lastDelayedKey = now;
+    }
+    if (target === keyboardTarget) return;
+    keyboardTarget = target;
+    recorder.mark(`keyboard: ${target}`);
+  });
+  window.addEventListener('focus', () => recorder.mark('keyboard: page focused'));
+  window.addEventListener('blur', () => { keyboardTarget = ''; recorder.mark('keyboard: page unfocused'); });
+  document.addEventListener('focusin', event => {
+    if (event.target instanceof HTMLElement) recorder.mark(`keyboard focus: ${event.target.tagName.toLowerCase()}`);
+  });
+  document.addEventListener('focusout', () => recorder.mark('keyboard focus released'));
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
@@ -139,7 +168,8 @@ async function boot() {
   await textures.ready('steel');
   await heads;
   G.profile = loadProfile(savedClass());
-  G.player = new Player(G.profile.classId, G.profile.equipped);
+  G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
   G.players = [G.player];
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
@@ -447,7 +477,7 @@ function openPause(open: boolean) {
   }
   G.menuOpen = open;
   G.paused = open && !isCoop();
-  G.player.idle = open && isCoop();
+  G.player.idle = hallOpen() || (open && isCoop());
   showPause(open);
 }
 
@@ -463,10 +493,16 @@ function abandon() {
 }
 
 /** The lobby's "Change hero": the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
-function changeHero() {
-  if (G.mode !== 'menu' || heroSelectOpen()) return;
-  showMenu(false);
-  openHeroSelect(G.player.cls.id);
+let preparingHeroes = false;
+async function changeHero() {
+  if (G.mode !== 'menu' || heroSelectOpen() || preparingHeroes) return;
+  preparingHeroes = true;
+  try {
+    await prepareHeroSelection(() => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve))));
+    if (G.mode !== 'menu' || G.paused || heroSelectOpen()) return;
+    showMenu(false);
+    openHeroSelect(G.player.cls.id);
+  } finally { preparingHeroes = false; }
 }
 
 /** A hero chosen on the selection screen: the new class brings its own profile (gear, stash, records) and loadout; a
@@ -559,8 +595,12 @@ function handleGlobalKeys() {
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
   // screen too, which opens it
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
-  // the hero selection screen takes the keys (ui/heroSelect.ts)
-  if (heroSelectOpen()) { heroSelectKeys(); return; }
+  // Escape reaches Settings before a first hero is chosen too; pause keeps the hall and its selection underneath.
+  if (heroSelectOpen()) {
+    if (wasPressed('escape')) openPause(!G.menuOpen);
+    else if (!G.menuOpen) heroSelectKeys();
+    return;
+  }
   if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
@@ -722,8 +762,19 @@ function musicWanted(): MusicWanted {
   return { track: music.lobby, fade: FADES.lobby, ready };
 }
 
+const inputDelivery = new InputDelivery();
+
+function recordInputDelivery(force = false): void {
+  const delivery = inputDelivery.sample(performance.now(), recorder.recordingSince() !== null, force);
+  if (delivery) {
+    const focus = document.activeElement?.tagName.toLowerCase() ?? 'none';
+    recorder.mark(`${delivery}; focus ${focus}, page ${document.hasFocus()}, fullscreen ${!!document.fullscreenElement}, keyboard lock ${keyboardLockState()}`);
+  }
+}
+
 function frame(timestamp: number): void {
   lastStep = performance.now();
+  recordInputDelivery();
 
   perfBeginFrame(timestamp);
   timer.update(timestamp);
@@ -735,7 +786,8 @@ function frame(timestamp: number): void {
   // (the developer mode's time: frozen, slowed, a step)
   const simDt = dev ? dev.simDt(dt) : dt;
   if (!G.paused && revealed && simDt > 0) {
-    if (isWarming()) holdQuality();
+    // The hall's three staged heroes aren't a play workload; keep its prepared detail stable for selection.
+    if (isWarming() || hallOpen()) holdQuality();
     else {
       // (each of Auto's steps marked in the performance trace: a slow start is Auto walking down from High)
       const stepped = sampleQuality(rawDt);

@@ -122,7 +122,12 @@ export async function openHall(lab: Lab): Promise<boolean> {
   const button = document.getElementById('btn-hero');
   if (!button) return false;
   await lab.clickOn(button);
-  await lab.until(() => hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to open');
+  // Preparing a new geometry detail waits on real worker replies as well as the game's parked frames.
+  for (let frame = 0; frame < OPEN_FRAMES && !hall.hallOpen(); frame++) {
+    await lab.step(1);
+    if (!hall.hallOpen()) await realWait(5);
+  }
+  if (!hall.hallOpen()) throw new Error('lab: hall: the hall never opened after its worker preparation');
   return true;
 }
 

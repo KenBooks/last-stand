@@ -16,6 +16,8 @@ Gear-driven skills and block (`Player.gear`, `tryBlock`) are in `src/combat/skil
 
 ## Gotchas
 
+- The local hero's two lights (`heroLights`) belong to the scene across hero changes, including cached spares. `Player.dispose` removes the body alone. Removing the shared lights while disposing an unused spare or the outgoing hero changes the scene's light count; a cached replacement does not run its constructor again, so its first draw recompiles the scene's shaders. `lab behind` checks spare disposal and the actual cached selection, then draws the lobby and requires zero new programs.
+
 - `viewModel.ts` hides body meshes when the camera comes within 0.8 m of the neck, before first-person blending finishes. Waiting for `viewSettled()` alone exposes the inside of the head during slow entry. Arm placement still begins only once the view settles (`lab dev --cold`).
 
 - **Hostile bolts leave the caster's tip** (`fireBolt` in `enemyAI.ts` sends `model.tip`'s height with the `bolt` fx), then settle to the level `BOLT_Y` over their first 2.2m: hits and the clear-shot check (`lineClear`) assume that level. A caster's cast pose should still hold its tip near bolt height (the Sporecaller holds its pod out at the target), so the settling is only a few centimetres.

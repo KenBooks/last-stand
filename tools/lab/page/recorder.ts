@@ -12,6 +12,7 @@ import { traceReport } from '../../../src/perf/traceReport';
 import { foesAhead } from './cast';
 import { quantile, timeCalls, type Timing } from './timing';
 import { G } from '../../../src/state';
+import { manualRecording } from './manualRecording';
 
 export interface RecorderOptions {
   /** frames played and timed */
@@ -101,6 +102,9 @@ function countsKept(columns: ColumnInfo[]): string[] {
 /** A send's trace of now, packed, gzipped, read back: its lines, size and what it holds. `canary`: a count's
  *  column with a time planted in a copy of it, which must be found. */
 async function traceNow(send: string, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
+  // Before the captured play: it must survive even though the rolling history excludes it.
+  recorder.longFrame({ startTime: 1, duration: 5000, renderStart: 5001, styleAndLayoutStart: 5001,
+    scripts: [{ duration: 4900, invoker: 'lab', sourceURL: 'boot.js', sourceFunctionName: 'bootStallCanary' }] });
   const start = window.__labClock.realNow();
   const verdict = recorder.judged();
   // (taken as the detector finds a slow stretch, mid-fight: its own time said apart; the packing waits for a calm)
@@ -127,6 +131,9 @@ async function traceNow(send: string, canary: boolean): Promise<{ lines: string[
     ...traceReport(trace).slice(0, REPORT_LINES).map((line) => `    ${line}`),
   ];
   const problems: string[] = [];
+  if (!String(trace.header.game.bootStalls).includes('bootStallCanary')) {
+    problems.push('the trace lost its loading stall before the captured play history');
+  }
   const sent = await sendTrace(gzipped, send);
   if ('code' in sent) lines.push(`  sent to the traces service: ${sent.code}`);
   else problems.push(`the trace couldn't be sent: ${sent.error}`);
@@ -187,9 +194,10 @@ async function bootTail(lab: Lab, tailMs: number): Promise<{ lines: string[]; pr
     const problems: string[] = [];
     if (early && tailMs > 0) problems.push('a slow boot\'s trace was taken at the reveal, not after its wait');
     if (slow.scene !== 'boot') problems.push(`a slow boot's trace was sent for the ${slow.scene}`);
-    if (held < tailMs * TAIL_HELD) {
-      problems.push(`a slow boot's trace holds ${(held / 1000).toFixed(1)} s after the reveal, under its wait's `
-        + `${(tailMs * TAIL_HELD / 1000).toFixed(1)}`);
+    // Judge the required wait, not the injected one: a zero-wait canary must fail even when its mark survives.
+    if (held < kept * TAIL_HELD) {
+      problems.push(`a slow boot's trace holds ${(held / 1000).toFixed(1)} s after the reveal, under the required `
+        + `${(kept * TAIL_HELD / 1000).toFixed(1)} s`);
     }
     if (!why.includes('the play after it')) problems.push('a slow boot\'s trace says nothing of the play after it');
     return { lines, problems, held };
@@ -213,6 +221,9 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const tail = await bootTail(lab, recorder.bootTailMs);
   lines.push(...tail.lines);
   problems.push(...tail.problems);
+  const manual = await manualRecording(lab, options.send, options.canary);
+  lines.push(manual.text);
+  problems.push(...manual.problems);
   if (!options.canary) return { text: lines.join('\n'), problems };
   const tailCanary = await bootTail(lab, 0);
   const tailCaught = tailCanary.problems.length > 0;

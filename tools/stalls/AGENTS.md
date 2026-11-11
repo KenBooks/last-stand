@@ -1,5 +1,7 @@
 # `tools/stalls`
 
+- `--scenario resolution` changes 75/50/25/100% twelve times through the real Performance menu, resumes with Escape after each, and traces GPU storage/release churn plus key event dispatch delay. It is a measure of this workflow, not a synthetic renderer setter. An initial pause-menu Skia compile stall is reported separately from resolution picks; do not call it the reported keyboard-only freeze while the scene animates. Local runs at two render sizes did not reproduce that 5–10 s symptom; use a manual recording from the affected device for its event/frame correlation.
+
 The stalls harness (`README.md`): the game played in the installed Chrome on this machine's GPU, traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding its GPU process up while it builds a Skia program the page needs).
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.

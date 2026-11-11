@@ -9,6 +9,7 @@ import { hallOpen } from '../game/hall';
 import { framesUncapped } from '../core/frameLoop';
 import { autoTrying } from '../core/quality';
 import { sceneNote } from './sceneNote';
+import { keepBootStall, keepPlayStall, longFrameLabel } from './bootStalls';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -54,6 +55,8 @@ export interface Slow {
   snapshot: Snapshot;
   /** a profile's lines, where the player profiled the frame (`profiler.ts`) */
   profile?: string[];
+  /** explicitly started and stopped by the player, independent of automatic slow-game detection */
+  manual?: boolean;
 }
 
 /** The ring's last minute, its times from its first frame (ms). */
@@ -63,7 +66,7 @@ export interface Snapshot {
   kinds: Record<string, ColumnKind>;
   longFrames: LongFrameRow[];
   marks: MarkRow[];
-  boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean };
+  boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean; stalls?: LongFrameRow[] };
   refreshHz: number;
   /** where it was taken and what the hero was doing (`sceneNote.ts`) */
   scene: string;
@@ -77,12 +80,17 @@ let head = -1, count = 0;
 let lastFrame = 0, settleUntil = 0, lastJudged = 0, refreshMs = 1000 / 60;
 const marks: { t: number; text: string }[] = [];
 const longFrames: { t: number; row: LongFrameRow }[] = [];
-const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: false };
+const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: false, stalls: [] as LongFrameRow[] };
 let readyingSince = 0, wasHidden = false;
 const listeners: ((slow: Slow) => void)[] = [];
 let pending: Slow | null = null;
 /** when a slow boot was revealed, its trace waiting for the play after it (`BOOT_TAIL_MS`); 0: none waits */
 let slowBootAt = 0;
+let recordingSince: number | null = null;
+let manualHeld = false;
+let recordingFrames = 0;
+let recordingResult: Slow | null = null;
+let recordingMark: typeof marks[number] | null = null;
 
 /** what the scene was last frame: a change marks it and settles the frames after it */
 const seen = { mode: '', phase: '', wave: 0, biome: '', player: null as unknown, hall: false, window: '' };
@@ -151,6 +159,7 @@ function judgeNow(now: number): void {
 }
 
 function found(where: Scene, verdict: Verdict | null, tookMs: number): void {
+  if (manualHeld) return;
   // (a slow boot's trace, still waiting, takes in whatever else is slow meanwhile: the one ask a session is its)
   if (slowBootAt && where !== 'boot') return;
   if (pending || !recorder.wanted()) return;
@@ -159,9 +168,14 @@ function found(where: Scene, verdict: Verdict | null, tookMs: number): void {
   for (const fn of listeners) fn(pending);
 }
 
-function takeSnapshot(): Snapshot {
+function takeSnapshot(fromTime = -Infinity, maxFrames = RING, firstMark: typeof marks[number] | null = null): Snapshot {
   let n = 0, span = 0;
-  while (n < count && span < KEPT_MS) span += fixed.interval[(head - n++ + RING) % RING];
+  const selected = Number.isFinite(fromTime);
+  const limit = Math.min(count, maxFrames);
+  // Manual selection uses frame count: a rAF stamp can precede a Start handled earlier in that same frame.
+  while (n < limit && (selected || span < KEPT_MS)) {
+    span += fixed.interval[(head - n++ + RING) % RING];
+  }
   const first = (head - n + 1 + RING) % RING;
   const t0 = n ? t[first] : performance.now();
   const columns: Record<string, Float64Array> = {};
@@ -177,15 +191,17 @@ function takeSnapshot(): Snapshot {
   }
   // (the update's stages and the GPU's parts: times, a byte each)
   for (const [name, column] of named) copy(name, column, 'lg');
-  const since = <T extends { t: number }>(rows: T[]): T[] => rows.filter((r) => r.t >= t0 - 1);
-  const at = (ms: number): number => Math.round((ms - t0) * 10) / 10;
+  const since = <T extends { t: number }>(rows: T[]): T[] => rows.filter((r) => r.t >= (selected ? fromTime : t0) - 1);
+  // Controls can emit marks between Start and its first frame; keep them at that first frame's origin.
+  const at = (ms: number): number => Math.max(selected ? 0 : -Infinity, Math.round((ms - t0) * 10) / 10);
   return {
     frames: n,
     columns,
     kinds,
     longFrames: since(longFrames).map(({ t: seenAt, row }) => [at(seenAt), ...row.slice(1)] as LongFrameRow),
-    marks: since(marks).map(({ t: when, text }) => [at(when), text] as MarkRow),
-    boot: { ...boot, steps: boot.steps.slice() },
+    marks: since(firstMark && marks.includes(firstMark) ? marks.slice(marks.indexOf(firstMark)) : marks)
+      .map(({ t: when, text }) => [at(when), text] as MarkRow),
+    boot: { ...boot, steps: boot.steps.slice(), stalls: boot.stalls.slice() },
     refreshHz: Math.round(1000 / refreshMs),
     scene: sceneNote(),
   };
@@ -198,6 +214,43 @@ interface LongFrameEntry {
 }
 
 export const recorder = {
+  /** Manual capture reuses the existing bounded ring; no second per-frame recorder or buffer is allocated. */
+  recordingLimitMs: KEPT_MS,
+  recordingMaxFrames: RING - 1,
+  /** Let input diagnostics reset at Start and retain the final partial second before Stop freezes its marks. */
+  recordingBoundary: (_starting: boolean): void => {},
+  recordingSince: (): number | null => recordingSince,
+  recordingFinished: (): boolean => recordingResult !== null,
+  automaticSuppressed: (): boolean => manualHeld,
+  startRecording(): void {
+    if (recordingSince !== null) return;
+    manualHeld = true;
+    pending = null;
+    slowBootAt = 0;
+    recordingFrames = 0;
+    recordingResult = null;
+    recordingSince = performance.now();
+    mark('manual recording started', recordingSince);
+    recordingMark = marks[marks.length - 1];
+    recorder.recordingBoundary(true);
+  },
+  stopRecording(): Slow | null {
+    if (recordingSince === null) {
+      const result = recordingResult;
+      recordingResult = null;
+      return result;
+    }
+    recorder.recordingBoundary(false);
+    const start = recordingSince, now = performance.now();
+    mark('manual recording stopped', now);
+    const snapshot = takeSnapshot(start, recordingFrames, recordingMark);
+    snapshot.marks = snapshot.marks.filter(([, text]) => text !== 'manual recording started');
+    snapshot.marks.unshift([0, 'manual recording started']);
+    recordingSince = null;
+    return { scene: scene(), verdict: null, tookMs: now - start, at: now, snapshot, manual: true };
+  },
+  /** Sending or discarding the manual result resumes the saved automatic-report policy. */
+  releaseRecording(): void { recordingSince = null; recordingResult = null; recordingMark = null; manualHeld = false; },
   /** Call at the very start of a rAF callback. Returns the frame's place in the ring (for its GPU time). */
   begin(now: number): number {
     noteScene(now);
@@ -205,6 +258,7 @@ export const recorder = {
     lastFrame = now;
     head = (head + 1) % RING;
     count = Math.min(RING, count + 1);
+    if (recordingSince !== null) recordingFrames++;
     t[head] = now;
     fixed.interval[head] = interval;
     fixed.late[head] = performance.now() - now;
@@ -240,6 +294,10 @@ export const recorder = {
     fixed.foes[head] = foes; fixed.particles[head] = particles;
     if (lastFrame - lastJudged >= JUDGE_EVERY_MS) { lastJudged = lastFrame; judgeNow(lastFrame); }
     if (slowBootAt && lastFrame - slowBootAt >= recorder.bootTailMs) bootTail();
+    if (recordingSince !== null && (lastFrame - recordingSince >= recorder.recordingLimitMs
+      || recordingFrames >= Math.min(RING - 1, recorder.recordingMaxFrames))) {
+      recordingResult = recorder.stopRecording();
+    }
   },
 
   /** A frame's GPU time as it came back (ms), and its parts' when it was timed in parts, by its place in the ring. */
@@ -260,11 +318,11 @@ export const recorder = {
     const end = f.startTime + f.duration, render = f.renderStart || end, layout = f.styleAndLayoutStart || end;
     const scripts = f.scripts.reduce((sum, s) => sum + s.duration, 0);
     const longest = [...f.scripts].sort((a, b) => b.duration - a.duration)[0];
-    const file = longest?.sourceURL.split('/').pop()?.split('?')[0];
-    const by = longest ? [longest.invoker, longest.sourceFunctionName, file].filter(Boolean).join(' ') : '';
+    const by = longest ? longFrameLabel(longest.invoker, longest.sourceFunctionName, longest.sourceURL) : '';
     const r = (v: number): number => Math.round(v);
-    longFrames.push({ t: f.startTime, row: [0, r(f.duration), r(render - f.startTime), r(layout - render), r(end - layout), r(scripts), r(longest?.duration ?? 0), by] });
-    if (longFrames.length > MOST_LONG) longFrames.shift();
+    const row: LongFrameRow = [0, r(f.duration), r(render - f.startTime), r(layout - render), r(end - layout), r(scripts), r(longest?.duration ?? 0), by];
+    keepPlayStall(longFrames, { t: f.startTime, row }, performance.now() - KEPT_MS, MOST_LONG);
+    if (!boot.revealMs || f.startTime < boot.revealMs) keepBootStall(boot.stalls, [r(f.startTime), ...row.slice(1)] as LongFrameRow);
   },
 
   /** Something worth seeing beside the frames: a cast, a warm-up... */
@@ -288,7 +346,7 @@ export const recorder = {
   /** A slow boot revealed at `now`: its trace waits `bootTailMs` for the play after it (the lab's `recorder` calls it
    *  to check the wait). */
   slowBootRevealed(now: number): void {
-    if (pending || !recorder.wanted()) return;
+    if (manualHeld || pending || !recorder.wanted()) return;
     slowBootAt = now;
     mark('slow: boot, its trace waits for the play after it', now);
   },
@@ -304,7 +362,7 @@ export const recorder = {
   /** Lets the waiting one go: the next slow stretch may be found. */
   release(): void { pending = null; },
   /** A snapshot of now, and the detector's verdict on it, for a harness (`lab recorder`). */
-  snapshot: takeSnapshot,
+  snapshot: (): Snapshot => takeSnapshot(),
   judged: (): Verdict => judge(framesNow(), refreshMs),
 };
 

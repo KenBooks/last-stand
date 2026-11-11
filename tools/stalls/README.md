@@ -27,6 +27,7 @@ npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
+npm run stalls -- --scenario resolution --seconds 12 --js --listed 50  # twelve resolution changes, Escape resumes after each
 npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own

@@ -4,6 +4,9 @@
 // lobby's frame (`buildBehind`), as many pieces as fit `BEHIND` of it. One wanted before it's built is finished at once
 // (`finishNow`), as it was built before. `lab behind` times each frame's building.
 import { perfClock } from '../ui/perfHud';
+import { atHeroDetail, heroDetail } from '../entities/models/armor';
+import { headsReady, preloadHeads } from '../entities/models/head';
+import { builtInSlices } from '../entities/models/steps';
 
 /** A build in pieces: `steps` builds a piece a `next()`, `done` takes what the last returns. */
 interface Job {
@@ -11,6 +14,7 @@ interface Job {
   steps: Generator<void, unknown, undefined>;
   done: (built: unknown) => void;
   piece: number;
+  detail: number;
 }
 
 /** the builds queued, the first's pieces built first */
@@ -29,7 +33,8 @@ let owed = 0;
 /** `steps` queued as `key` (once: a key queued already is left as it is), `done` given what it builds. */
 export function buildLater<T>(key: string, steps: Generator<void, T, undefined>, done: (built: T) => void): void {
   if (queued(key)) return;
-  jobs.push({ key, steps, done: done as (built: unknown) => void, piece: 0 });
+  const detail = heroDetail();
+  jobs.push({ key, steps: atHeroDetail(steps, detail), detail, done: done as (built: unknown) => void, piece: 0 });
 }
 
 /** Whether `key` is queued and not yet built. */
@@ -51,6 +56,15 @@ export function finishNow(key: string): boolean {
   }
 }
 
+/** A wanted queued build finished without holding input up, after its head workers have returned. */
+export async function finishInSlices(key: string, pause: () => Promise<void>): Promise<void> {
+  const i = jobs.findIndex((job) => job.key === key);
+  if (i < 0) return;
+  const [job] = jobs.splice(i, 1);
+  await preloadHeads(job.detail);
+  job.done(await builtInSlices(job.steps, pause));
+}
+
 /** The queued builds' next pieces, as many as fit `BEHIND`: called each frame the lobby shows. */
 export function buildBehind(): void {
   Object.assign(behindFrame, { ms: 0, pieces: 0, longest: 0, slowest: '' });
@@ -63,6 +77,9 @@ export function buildBehind(): void {
     const at = perfClock.now();
     if (behindFrame.pieces && at - start >= BEHIND.ms) break;
     const job = jobs[0];
+    // A quality change can request heads the boot's workers never made. A generator's first head piece
+    // otherwise sculpts them synchronously, far beyond the frame budget (and queues keyboard events).
+    if (!headsReady(job.detail)) { void preloadHeads(job.detail); break; }
     const next = job.steps.next();
     if (next.done) {
       jobs.shift();

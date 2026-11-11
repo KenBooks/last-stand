@@ -510,5 +510,40 @@ async function latency(page, ms) {
   return [latencyLine(await page.evaluate(() => window.__latency))];
 }
 
+/** Resolution changes through the real menu, each followed by Escape back to play and another pause.
+ * Event delay distinguishes a queued key from a game that deliberately ignores it. */
+async function resolution(page, ms) {
+  await page.evaluate(() => {
+    const record = window.__resolution = { keys: [], allocations: 0, releases: 0 };
+    window.addEventListener('keydown', event => record.keys.push(performance.now() - event.timeStamp), true);
+    const gl = document.querySelector('#game canvas')?.getContext('webgl2');
+    if (!gl) return;
+    for (const name of ['texImage2D', 'texStorage2D', 'renderbufferStorage', 'renderbufferStorageMultisample']) {
+      const call = gl[name].bind(gl);
+      gl[name] = (...args) => { record.allocations++; return call(...args); };
+    }
+    for (const name of ['deleteTexture', 'deleteRenderbuffer']) {
+      const call = gl[name].bind(gl);
+      gl[name] = (...args) => { record.releases++; return call(...args); };
+    }
+  });
+  const shares = [0.75, 0.5, 0.25, 1];
+  for (let pick = 0; pick < 12; pick++) {
+    await tap(page, 'Escape');
+    await page.waitForFunction(pauseShown, true, { timeout: 15_000 });
+    await page.click('[data-pause-tab="performance"]');
+    const share = shares[pick % shares.length];
+    await page.evaluate(markPhase, `resolution ${share * 100}% visit ${Math.floor(pick / shares.length) + 1}`);
+    await page.click(`#opt-resolution [data-r="${share}"]`);
+    await tap(page, 'Escape');
+    await page.waitForFunction(pauseShown, false, { timeout: 15_000 });
+    await page.waitForTimeout(ms / 12);
+  }
+  const record = await page.evaluate(() => window.__resolution);
+  return [`12 resolution choices, each resumed with Escape: ${record.allocations} GPU storage calls, `
+    + `${record.releases} GPU resource releases; ${record.keys.length} keys, `
+    + `worst event dispatch delay ${Math.max(0, ...record.keys).toFixed(1)} ms`];
+}
+
 export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
-  renderer: rendererSwitch, latency };
+  renderer: rendererSwitch, latency, resolution };

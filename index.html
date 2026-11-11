@@ -674,6 +674,14 @@
         <div class="opt-row quality-row"><span>Slow-game reports</span>
           <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
         </div>
+        <div class="opt-row quality-row"><span>Performance recording</span>
+          <div class="recording-controls">
+            <button class="btn" id="btn-recording">Start recording</button>
+            <button class="btn hidden" id="btn-recording-send">Send recording</button>
+            <button class="btn hidden" id="btn-recording-discard">Discard</button>
+          </div>
+          <div class="recording-note" id="recording-note" role="status">Record up to 60 s, then stop and send. Automatic reports pause during capture and review.</div>
+        </div>
         <!-- the profiler (perf/profiler.ts): each part of the frame taken out in turns where the hero stands, the
              result sent as a performance report with the player's consent (perf/consent.ts sendProfile) -->
         <div class="opt-row quality-row profile-row"><span>Profiler</span>

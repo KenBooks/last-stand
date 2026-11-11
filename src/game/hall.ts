@@ -21,8 +21,10 @@ import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
-import { buildLater, finishNow, queued } from './behind';
-import { heroShare } from './warm';
+import { buildLater, finishNow, finishInSlices, queued } from './behind';
+import { heroShare, warmingRuns } from './warm';
+import { preloadHeads } from '../entities/models/head';
+import { builtInSlices } from '../entities/models/steps';
 
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
@@ -183,14 +185,54 @@ const gearOf = (profile: Profile): string => `${heroDetail()} ${JSON.stringify(p
  * kept; a hall already open (a first visit's) builds its own.
  */
 export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
-  for (const id of CLASS_IDS) {
-    if (hallOpen()) return;
-    const profile = profileOf(id);
-    if (kept.get(id)?.gear === gearOf(profile)) continue;
-    await step();
-    if (hallOpen()) return;
-    G.scene.remove(heroIn(id, profile).obj);
-  }
+  // Also called by shader warm-up, outside prepareHeroSelection: don't let the frame queue duplicate jobs
+  // while a sliced build has temporarily taken its job out of the background queue.
+  warmingRuns(true);
+  try {
+    await preloadHeads(heroDetail());
+    for (const id of CLASS_IDS) {
+      if (hallOpen()) return;
+      const profile = profileOf(id);
+      if (kept.get(id)?.gear === gearOf(profile)) continue;
+      await step();
+      if (hallOpen()) return;
+      await finishInSlices(`hall ${id}`, step);
+      if (kept.get(id)?.gear !== gearOf(profile)) {
+        const old = kept.get(id);
+        if (old) { halos.delete(old.player); old.player.dispose(); }
+        keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false), step));
+      }
+      G.scene.remove(kept.get(id)!.player.obj);
+    }
+  } finally { warmingRuns(false); }
+}
+
+/** Prepare the current detail before an opening; Auto stays put while the sliced builds run. */
+export async function prepareHeroSelection(step: () => Promise<void>): Promise<void> {
+  warmingRuns(true);
+  try {
+    await buildHallAhead(step);
+    for (const id of CLASS_IDS) await prepareSpareHero(id, step);
+  } finally { warmingRuns(false); }
+}
+
+/** A first visit's hall has no lobby frames to build its playable copy; readiness must include that copy. */
+export async function prepareSpareHero(id: string, step: () => Promise<void>): Promise<void> {
+  if (id === G.profile.classId) return;
+  warmingRuns(true);
+  try {
+    await preloadHeads(heroDetail());
+    // Finish a partial spare at its original detail, then replace it in slices if the preset changed.
+    await finishInSlices(`spare ${id}`, step);
+    const spare = spares.get(id);
+    const profile = profileOf(id), gear = gearOf(profile);
+    if (spare?.gear === gear) return;
+    spare?.player.dispose();
+    spares.delete(id);
+    const player = await builtInSlices(Player.inSteps(id, profile.equipped), step);
+    player.stowed();
+    spares.set(id, { player, gear });
+  } finally { warmingRuns(false); }
 }
 
 /**
@@ -206,6 +248,7 @@ export function queueHallBehind(): void {
   for (const id of CLASS_IDS) {
     if (kept.has(id) || queued(`hall ${id}`)) continue;
     const profile = profileOf(id);
+    const gear = gearOf(profile);
     building.set(id, profile);
     buildLater(`hall ${id}`, Player.inSteps(id, profile.equipped, false), (player) => {
       building.delete(id);
@@ -213,16 +256,17 @@ export function queueHallBehind(): void {
         player.dispose();
         return;
       }
-      keepHero(id, profile, player);
+      keepHero(id, profile, player).gear = gear;
       G.scene.remove(player.obj);
     });
   }
   for (const id of CLASS_IDS) {
     if (id === G.profile.classId || spares.has(id) || queued(`spare ${id}`)) continue;
     const profile = profileFor(id);
+    const gear = gearOf(profile);
     buildLater(`spare ${id}`, Player.inSteps(id, profile.equipped), (player) => {
       player.stowed();
-      spares.set(id, { player, gear: gearOf(profile) });
+      spares.set(id, { player, gear });
     });
   }
 }

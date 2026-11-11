@@ -1,7 +1,6 @@
 // Graphics quality: the player's setting (auto / high / medium / low / very low, cookie) and the
-// level in effect. Auto steps down the levels while the frame rate stays low, and never
-// steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
-// tries the level above the one it last settled on, kept once it holds its frame rate for a
+// level in effect. Auto steps down while frame rate stays low. Each boot or fresh Auto choice,
+// once the game is shown, it tries higher levels in turn, each kept once it holds its frame rate for a
 // window, else left for the settled one at its first quick window under the target and put off
 // for a few boots (`bootAuto`, `trialMissed`). Every level renders the
 // screen's own pixels: what's cut is other work,
@@ -60,16 +59,14 @@ function restart(): void {
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
 
 /**
- * The level Auto starts from where it has settled on none (a first visit, Auto chosen again): the top, but Low on a
- * device whose own pointer is a finger. Started from High, a phone's first visit drew 13 to 22 frames a second for
- * its first seconds, High's HDR at its screen's 4.5 Mpx, Auto held from stepping down while the lobby's warm-ups ran
- * (an S25 Edge, trace AB24-W06J; from the owner: "Yes, start at Low"). It climbs from there as any settled level
+ * The level Auto starts from where it has settled on none (a first visit, Auto chosen again): Low on every device.
+ * High's boot work cannot wait for Auto's later frame samples: an integrated GPU took 27.6 s to reveal the lobby
+ * (trace N8DN-CDRW). Low also avoids HDR, MSAA and the animated loading exit at first boot. It climbs as a settled level
  * does: each boot tries the level above and keeps it where it holds (`bootAuto`). A start, not a verdict: what the
  * device holds is still measured.
  */
 function autoStart(): QualityLevel {
-  const finger = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  return finger ? 'low' : 'high';
+  return 'low';
 }
 
 /** Auto's level from its cookie, `autoStart`'s when there's none. */
@@ -124,7 +121,8 @@ export function initQuality(): void {
  * the device's (the first frame sampled after the reveal and its warm-ups: the boot, its warm-ups and the loading
  * screen's exit stay the settled level's, Low's plain fade on a phone). A step down is kept for good, so a desktop
  * slowed once (a build, another program on the GPU) stayed a level down from then on: from play, a 4070 Ti on Medium
- * "somehow". The level above is kept (and saved) once a window's frames hold the target; missed, Auto goes back to
+ * "somehow". Each higher level is kept (and saved) once a window's frames hold the target, then the next is tried
+ * until High. A failed trial stops this visit's climb: Auto goes back to
  * the settled level at once and steps on from there as ever. A device that can't hold it spends a settle and a quick
  * window there a boot (about 3 s), the cookie never changed. Exported for a harness (`lab auto`), which can't boot
  * the page again.
@@ -174,8 +172,9 @@ export function setQuality(s: QualitySetting): void {
   aboveNext = false;
   writeCookie(COOKIE, s);
   apply(s === 'auto' ? autoStart() : s);
-  // choosing Auto again starts over (from the top, or a touch device's Low: `autoStart`)
+  // choosing Auto again starts over from Low on every device
   if (s === 'auto') writeAuto();
+  aboveNext = s === 'auto' && level !== QUALITY_ORDER[0];
   writeCookie(TRIAL_COOKIE, '0/0');
 }
 
@@ -278,6 +277,7 @@ function keepTrial(): string {
   trialFrom = null;
   writeAuto();
   writeCookie(TRIAL_COOKIE, '0/0');
+  aboveNext = level !== QUALITY_ORDER[0];
   return `${level} kept`;
 }
 

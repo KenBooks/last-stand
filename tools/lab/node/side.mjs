@@ -23,7 +23,7 @@ export const CONTEXT_OPTIONS = { viewport: VIEWPORT, deviceScaleFactor: 1 };
 // A short local budget can diagnose a blocked boot without loading a shared PC for three minutes.
 const BOOT_TIMEOUT_MS = Number(process.env.LAB_BOOT_TIMEOUT_MS) || 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
-const BOOT_POLL_MS = 100;
+const BOOT_POLL_MS = 16;
 /** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
  *  clock holds, never settled, and every command after it waited on it, `status` too, till the server was stopped */
 const EVALUATE_TIMEOUT_MS = 60_000;
@@ -45,6 +45,13 @@ function bootOutcome(cold) {
   if (loading) return loading.classList.contains('failed') ? loading.textContent.trim() : false;
   if (cold) return 'booted';
   window.__dev?.hurry?.();
+  // The reveal parks requestAnimationFrame in the lab clock. Warm-ups still need those frames before Lab exists.
+  const clock = window.__labClock;
+  if (clock?.mode === 'manual' && window.__dev?.allWarm?.() === false) {
+    clock.t += clock.frame;
+    const callbacks = clock.queue.splice(0);
+    for (const callback of callbacks) callback(clock.t);
+  }
   return window.__dev?.allWarm?.() === false ? false : 'booted';
 }
 

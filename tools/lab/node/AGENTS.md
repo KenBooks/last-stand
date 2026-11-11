@@ -6,6 +6,7 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 
 - A new command's options go in `options.mjs` (each checked as it's read, so a misspelt one stops the command before anything boots), its work in `commands.mjs`, and its page side in `page/`.
 - A script `browser.mjs` serializes into the page can use nothing from its module.
+- Normal boot polling advances the lab clock's parked animation frames until the requested warm-ups finish. The reveal switches that clock to manual before `Lab` exists; merely polling `allWarm` deadlocks every warm-up waiting on its next frame. Cold/first boots still leave background work for the command to exercise.
 - What can be tested without a browser is, in `test/` (`npm run lab:test`).
 - A change to this code restarts the server under `lab:serve` (its hash, `codeStamp.mjs`, is sent with every command).
 - Keep generated output and other checkouts out of Vite's watcher (`UNWATCHED` in `side.mjs`). `tools/stalls/out` can hold hundreds of thousands of browser-profile files: watching it kept the lab busy for minutes and used gigabytes before a picture. If a boot stalls, profile the Node process and check its file traversal before repeating the run; do not delete saved output or references to make it faster.

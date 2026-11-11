@@ -1,5 +1,9 @@
 # `src/ui`
 
+- `?keyboardLock=0` is a diagnostic comparison: keep HTML fullscreen but skip the Escape keyboard lock. Default behavior stays unchanged; in the comparison the browser's Escape exits fullscreen and opens pause. Manual input rows and report metadata distinguish HTML fullscreen and keyboard-lock state from `display-mode: fullscreen`, which also matches browser fullscreen and must not be treated as proof of an installed app.
+
+- The Performance tab's recording controls (`recordingTab.ts`) start a bounded capture and stop/prepare it without sending. Review shows compressed size, Send recording and Discard; hide the inactive Start button then so the review controls stay on one row on a phone. A failed upload retains its exact bytes for retry. Capture/review suppress automatic reports without changing the saved preference. Use a distinct `.recording-note`: reusing `.profile-note` would make the existing profiler write to the recording status instead. `lab recorder` checks the real controls and service round-trip; `ui --states pausePerformance` shows the recording review and full profiler results together.
+
 The page's UI over the game.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.
@@ -12,6 +16,10 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); each direct
 The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `skillArt/AGENTS.md`; the world's overlays `overlay/AGENTS.md`; the stylesheets `styles/AGENTS.md`.
 
 ## Gotchas
+
+- The automatic fullscreen gesture listener is installed by a tiny inline script (`bootFullScreen.ts`, injected in the head by `vite.config.ts`), before the game's module graph loads. Requests happen synchronously in the activating event, not deferred to boot. `autoFullScreen.ts` takes over the pending/successful request and its prompt/Escape handling. Preserve opt-out, installed-app, automation and per-visit exclusions in both paths; permanent boot tests run with no game or controls present.
+
+- Escape opens pause/settings over the hero selection screen, including a first visit before choosing anyone. Selection keys do nothing while pause is open; closing it preserves the focused hero and the hidden lobby hero's idle state. Back alone leaves the selection screen without choosing (and is absent on a first visit). `lab heropick --boot low` checks the first-visit path.
 
 - The Alt cursor forwards label activation as well as the first click: a label's browser-generated checkbox click must not be swallowed by the cursor's capture listener. While captured, selects use `altForms.ts`'s in-page option list below the cursor (z 59 / 60), avoiding native popups stealing capture or covering the cursor. Normal unlocked selects stay native. Ranges map pointer position to min/max/step, emit input while clicking/dragging and change on commit; release, Alt-up and blur end the drag. Cursor movement uses pointermove so cancelling the press's compatibility mouse events cannot stop a drag. `alt-hover` mirrors the virtual cursor's hover chain for CSS effects, including after a hovered popup is removed.
 

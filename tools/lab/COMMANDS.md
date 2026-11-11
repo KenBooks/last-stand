@@ -286,11 +286,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `heropick`: a first visit's hero picked on the hero selection screen (`page/heroPick.ts`, `ui/heroSelect.ts`). It
   boots as `--first` does (no saved hero, the screen open over the hall, the mage in focus; `--class` another if the
-  first visit's hero changes), taps the hero in focus at his middle with a finger as a touch screen sends it, then
+  first visit's hero changes). Escape must first open pause/settings without choosing a hero, navigation behind it
+  must do nothing, and closing pause must preserve the selection. It then navigates to an alternate hero before its bar finishes, repeats its tab
+  and presses Enter: the hall stays responsive, the cold model stays hidden and no hero is saved. It then taps
+  a different hero as soon as his bar finishes, at his middle with a finger as a touch screen sends it, then
   opens the screen again as a first visit's and clicks him with the mouse: each pick must land in the lobby, the
   screen closed and the lobby's panels shown, with no run started and no press waiting for the fight's warm-up, and
   the browser's click after the press must reach nothing outside the screen (each line says what of the lobby lay
-  under the pick). From play on the owner's phone: "I picked mage, it entered the area, enemies spawned and started
+  under the pick). No whole body may be completed inside the picking event; the current-hero pick missed that
+  first different-hero stall. The canary drops the prepared spare and must detect this build as well as click-through.
+  From play on the owner's phone: "I picked mage, it entered the area, enemies spawned and started
   attacking me, happens every time": the screen closed as the finger lifted, and the tap's click, which comes after
   it, pressed the lobby's Enter the Arena, which stands under the mage on a 640x360 screen; a first visit's fight
   still cold, the Start waited under the fight's loading bar and began the run once it was warm (on WebGPU, whose
@@ -818,7 +823,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `animate`, what it all took a frame by part: his whole update (`Player.update`), his skirts' update and their
   drape. `--lobby` makes the moves in the lobby, the run abandoned for it (Abandon run held, as a player holds it:
   `toLobby` in `page/hallMoves.ts`) and 300 frames let pass for the lobby to settle in.
-- `behind`: the heroes built behind the lobby a piece a frame (`page/behind.ts`, `src/game/behind.ts`; from play, "keep loading the game in the background, as long as it does not slow down the player"): from the lobby, the hall's heroes and the spares let go and built again behind it, each frame's building timed by the browser's own clock (`perfClock` swapped for it: the lab's stands still within a frame): the frames, the pieces, the longest frame's building (at most 30 ms; 16 to 22 on the owner's PC, where a hero built whole was 100 to 170) and the slowest pieces by name; then the hall opened and another hero chosen, which must build no hero in the opening or the choice's frame and the next (`Player.built`). `--canary` builds them all in one frame (about 500 ms) and lets the spares go before the choice, each of which must be found. A run left by the pause menu can leave the lobby paused, when nothing of the game's frame runs: it's closed first.
+- `behind`: the heroes built behind the lobby a piece a frame (`page/behind.ts`, `src/game/behind.ts`): cached hall heroes and spares are rebuilt behind the live lobby, with the longest building frame limited to 30 ms. Opening and choosing a prepared hero must build none; the first real lobby draw must compile no programs and retain the shared player lights. Then quality changes with the hall open and Back leaves without choosing: no head geometry may be sculpted on the input thread, background building retains its budget, and another opening must complete. Worker waits yield real time as well as parked frames. `--canary` builds all pieces in one frame, drops spares before choosing, and synchronously finishes missing-detail jobs; all three faults must be detected. A paused lobby is unpaused before measuring.
 - `labels`: a world label kept out by a full atlas (`page/labels.ts`): the atlas filled with labels the size of a
   partner's name tag until a tag laid after them finds no slot, a twentieth of them given back (too few for the atlas
   to be packed again), and the tag must be drawn in a slot within 3 frames. On main it never was: a label that found

@@ -54,7 +54,7 @@ export function setTraceConsent(consent: TraceConsent): void { keep({ ...kept(),
 
 /** Whether a slow stretch found now could go anywhere: the recorder snapshots one only then. */
 function wanted(): boolean {
-  if (!canSend()) return false;
+  if (!canSend() || recorder.automaticSuppressed()) return false;
   const k = kept();
   if (k.consent === 'off' || k.sent.length >= MOST_A_DAY) return false;
   if (k.consent === 'always') return Date.now() - Math.max(0, ...k.sent) > SENT_APART_MS;
@@ -83,6 +83,7 @@ export function initTraceConsent(): void {
 
 /** Each second: a waiting stretch shown (or sent) once a calm moment has lasted; hidden again if a fight starts. */
 function look(): void {
+  if (recorder.automaticSuppressed()) { letGo(); return; }
   const slow = recorder.pending();
   const box = $('#perf-ask');
   if (!slow) return;
@@ -105,7 +106,10 @@ function look(): void {
 
 async function pack(slow: Slow): Promise<void> {
   packing = true;
-  try { packed = { slow, body: await packTrace(slow) }; } catch { letGo(); } finally { packing = false; }
+  try {
+    const body = await packTrace(slow);
+    if (!recorder.automaticSuppressed() && recorder.pending() === slow) packed = { slow, body };
+  } catch { letGo(); } finally { packing = false; }
 }
 
 /** what slowed, said to the player */
@@ -128,7 +132,7 @@ function ask(slow: Slow, bytes: number): void {
 async function send(): Promise<void> {
   const box = $('#perf-ask');
   const body = packed?.body;
-  if (!body || sending) return;
+  if (!body || sending || recorder.automaticSuppressed()) return;
   sending = true;
   // (counted as it's tried: a send that fails still counts, so a failing one never repeats past the day's)
   const k = kept();
@@ -137,6 +141,7 @@ async function send(): Promise<void> {
   box.querySelector('.pa-note')!.textContent = 'Sending the performance report...';
   const sent = await sendTrace(body);
   sending = false;
+  if (recorder.automaticSuppressed()) { letGo(); return; }
   box.querySelector('.pa-note')!.innerHTML = 'code' in sent
     ? `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
     : `The performance report couldn't be sent (${sent.error}).`;

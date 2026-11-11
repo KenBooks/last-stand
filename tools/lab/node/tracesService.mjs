@@ -52,8 +52,21 @@ export async function checkSent(result, service) {
   const whole = trace.header.frames === sentFrames;
   const line = `  read back from the service with its token: ${trace.header.frames} frames, `
     + `${Object.keys(trace.columns).length} columns, ${whole ? 'as sent' : `not the ${sentFrames} sent`}`;
-  const text = `${result.text.replace(CODE_LINE, 'sent to the traces service: a code')}\n${line}`;
-  return { ...result, text, problems: whole ? result.problems : [...result.problems, 'the trace came back changed'] };
+  let text = `${result.text.replace(CODE_LINE, 'sent to the traces service: a code')}\n${line}`;
+  const problems = whole ? [...result.problems] : [...result.problems, 'the trace came back changed'];
+  const manualLine = /manual recording sent to the traces service: ([0-9A-Z]{4}-[0-9A-Z]{4})/;
+  const manualCode = manualLine.exec(result.text)?.[1];
+  if (manualCode) {
+    const manual = await service.readBack(manualCode);
+    const marks = manual.header.marks.map(([, label]) => label);
+    if (manual.header.reason.why !== 'manual' || !marks.includes('resolution 50%')
+      || !marks.some(label => label.startsWith('keyboard delivery delayed 5000 ms'))) {
+      problems.push('the manual recording or its diagnostic marks came back changed');
+    }
+    text = text.replace(manualLine, 'manual recording sent to the traces service: a code')
+      + '\n  manual recording read back from the service: manual reason, resolution and keyboard-delay marks kept';
+  }
+  return { ...result, text, problems };
 }
 
 /** the profile's lines in the page's report: indented under its place's name, before the line saying it was sent */

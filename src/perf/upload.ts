@@ -3,6 +3,7 @@
 // packed (`traceFormat.ts`), gzipped by the browser (`CompressionStream`) and posted to the traces service beside the
 // co-op relay (server/traces). The service worker never sees it: it only answers GETs of the game's own files.
 import { framesUncapped } from '../core/frameLoop';
+import { keyboardLockState } from '../ui/autoFullScreen';
 import * as THREE from 'three';
 import { G } from '../state';
 import { WEBGPU } from '../core/webgpu';
@@ -14,6 +15,7 @@ import { hdrActive } from '../core/hdr';
 import { auditPrograms, lateCompiles, shaderErrors } from '../core/shaders';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
+import { bootStallSummary } from './bootStalls';
 import { perfBundle, perfGpuName, perfJsBench } from '../ui/perfHud';
 import { encodeTrace, TRACE_MAX_BYTES, type ColumnInfo } from './traceFormat.ts';
 import { recorder, type Slow, type Snapshot } from './recorder';
@@ -27,7 +29,8 @@ const KEPT_SWITCHES = /^(renderer|meshlets|lights)/;
 export const canSend = (): boolean => typeof CompressionStream === 'function' && typeof fetch === 'function';
 
 function page(): string {
-  const kept = [...new URLSearchParams(location.search)].filter(([k]) => KEPT_SWITCHES.test(k));
+  const kept = [...new URLSearchParams(location.search)].filter(([k, value]) =>
+    k === 'keyboardLock' ? value === '0' : KEPT_SWITCHES.test(k));
   return location.pathname + (kept.length ? '?' + new URLSearchParams(kept).toString() : '');
 }
 
@@ -44,6 +47,8 @@ function device(): Record<string, number | string | boolean> {
     touch: navigator.maxTouchPoints > 0,
     jsBenchMs: Math.round(perfJsBench() * 100) / 100,
     installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches,
+    fullscreen: !!document.fullscreenElement,
+    keyboardLock: keyboardLockState(),
   };
 }
 
@@ -98,12 +103,13 @@ export function traceOf(slow: Slow): Uint8Array {
       stalls: v.stalls, longestMs: round(v.longest), playMs: Math.round(v.playMs) });
   }
   // (a slow boot's, the play after it judged beside it: recorder.ts `bootTail`)
-  if (slow.scene === 'boot') reason.why = 'boot';
+  if (slow.manual) reason.why = 'manual';
+  else if (slow.scene === 'boot') reason.why = 'boot';
   else if (slow.profile) {
     reason.why = 'profile';
     reason.profile = slow.profile.join('\n');
   } else if (!slow.verdict) reason.why = 'readying';
-  if (slow.tookMs) reason.tookMs = Math.round(slow.tookMs);
+  if (slow.tookMs || slow.manual) reason.tookMs = Math.round(slow.tookMs);
   const b = snapshot.boot;
   Object.assign(reason, { bootMs: b.revealMs, bootDownloadMs: b.downloadMs, firstVisit: b.firstVisit });
   const [commit, pr] = parseRef(__BUILD__.ref);
@@ -114,7 +120,8 @@ export function traceOf(slow: Slow): Uint8Array {
     reason,
     device: device(),
     settings: settings(),
-    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | ') },
+    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | '),
+      bootStalls: bootStallSummary(b.stalls ?? []) },
     columns,
     longFrames: snapshot.longFrames,
     marks: snapshot.marks,

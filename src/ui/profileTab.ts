@@ -5,6 +5,7 @@
 // scene alone shown, with a pane at the top saying how far it is, and Cancel (or Esc) stopping it.
 import { sfx } from '../core/audio';
 import { traceConsent, sendProfile } from '../perf/consent';
+import { recorder } from '../perf/recorder';
 import {
   profile, profileLines, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
 } from '../perf/profiler';
@@ -118,7 +119,7 @@ async function run(): Promise<void> {
     const untimed = untimedNames ? ` (not timed here: ${untimedNames})` : '';
     note(`The frame here: ${result.frame.toFixed(1)} ms drawn (${fps} fps)${shown}. Its costliest parts${untimed}:`);
     showParts(result);
-    if (traceConsent() === 'always') void send();
+    if (traceConsent() === 'always' && !recorder.automaticSuppressed()) void send();
     else $('#btn-profile-send').classList.remove('hidden');
   } catch (error) {
     if (!(error instanceof ProfileCancelled)) throw error;

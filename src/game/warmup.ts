@@ -22,7 +22,8 @@ import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
 import { built } from '../entities/models/steps';
 import { buildLater, finishNow } from './behind';
-import { makeHeadAhead } from '../entities/models/head';
+import { makeHeadAhead, preloadHeads } from '../entities/models/head';
+import { heroDetail } from '../entities/models/armor';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
@@ -40,7 +41,7 @@ import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
-import { buildHallAhead } from './hall';
+import { buildHallAhead, prepareSpareHero } from './hall';
 import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
@@ -229,6 +230,8 @@ interface Part {
   built?: Built;
   /** what of its build is made in a task of its own before it (a hero's head: `makeHeadAhead`) */
   ahead?: () => void;
+  /** Work that must finish before a hero's progress bar permits selecting him. */
+  ready?: (step: () => Promise<void>) => Promise<void>;
 }
 /** A part built: what's compiled, what's added to the scene for the draw, what's drawn alone, what's shown in place
  *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`) and taken
@@ -364,6 +367,9 @@ function hallPart(): Part {
 function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
+    ready: async (step) => {
+      for (const cls of Object.values(CLASSES)) if (cls.model === model) await prepareSpareHero(cls.id, step);
+    },
     build() {
       // (one building behind the lobby finished now: he's wanted)
       finishNow(`worn ${model}`);
@@ -438,6 +444,7 @@ async function warmBuilt(built: Built[], { step, progress, patient, linkingMost,
  *  its own, its build left the rest. */
 async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
   if (part.built || !part.ahead) return;
+  await preloadHeads(heroDetail());
   await next();
   part.ahead();
   part.ahead = undefined;
@@ -474,6 +481,7 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
     progress(BUILT * (i + 1) / parts.length);
   }
   const took = await warmBuilt(built, { progress: (s) => progress(BUILT + (1 - BUILT) * s) });
+  for (const part of parts) await part.ready?.(nextFrame);
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
 
@@ -532,13 +540,14 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
     }
     const share = (s: number): void => {
       progress((from + s * lot.length) / parts.length);
-      if (need === 'heroes') for (const part of lot) heroWarming(part.name, s);
+      if (need === 'heroes') for (const part of lot) heroWarming(part.name, s * 0.99);
     };
     // (a step a frame where no loading bar covers the page, a first visit's hall of heroes, and a step a task under
     // one: a lot's compile in one task was 30 to 64 ms, a hero chosen in it held the hall's frame up 104 ms, and under
     // the fight's bar each held its frame up as long, a frozen bar)
     await warmBuilt(built, { progress: share, step: stepBehind, patient: true, linkingMost: LINKING_MOST,
       poll: nextFrame });
+    for (const part of lot) await part.ready?.(stepBehind);
     if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
   }
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });
@@ -587,7 +596,11 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   let next = 0;
   const held = framesHeld();
   while (next < parts.length && !cold && !hurried) {
-    const partCold = await inTurn(() => warmPart(parts[next], step));
+    const partCold = await inTurn(async () => {
+      const cold = await warmPart(parts[next], step);
+      if (!cold) await parts[next].ready?.(step);
+      return cold;
+    });
     if (!partCold && need === 'heroes') heroWarming(parts[next].name, 1);
     if (!partCold) warming(need, ++next / parts.length);
     cold = partCold || held.worst() > HELD_MOST_MS;

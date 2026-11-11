@@ -8,6 +8,7 @@ import { judge, refreshOf, slowBoot, slowReadying } from '../../../src/perf/dete
 import { replayCommand, traceReport } from '../../../src/perf/traceReport.ts';
 import { readEnvFile, reportOf } from '../node/trace.mjs';
 import { parseCommandLine } from '../node/options.mjs';
+import { bootStallSummary, keepBootStall, keepPlayStall, longFrameLabel } from '../../../src/perf/bootStalls.ts';
 
 /** what a trace's header says beside its frames, for these tests */
 const HEADER = {
@@ -18,6 +19,21 @@ const HEADER = {
   game: { mode: 'run', biome: 'forest', hero: 'mage', wave: 3 },
   longFrames: [], marks: [],
 };
+
+test('a manual recording is described as an explicit capture, including paused/menu time', () => {
+  const trace = decodeTrace(encodeTrace({ ...HEADER, reason: { scene: 'lobby', why: 'manual', tookMs: 12_500 },
+    columns: [{ name: 'interval', kind: 'ms' }, { name: 'state', kind: 'u8' }] }, 2,
+  { interval: [16.67, 16.67], state: [STATE.paused | STATE.menu, STATE.paused | STATE.menu] }));
+  assert.ok(traceReport(trace).some(line => line.includes('recorded on demand for 12.5 s, including menus and paused frames')));
+});
+
+test('HTML fullscreen and keyboard capture are distinct from the legacy display-mode flag', () => {
+  const trace = decodeTrace(encodeTrace({ ...HEADER,
+    device: { ...HEADER.device, installed: true, fullscreen: false, keyboardLock: 'disabled' },
+    columns: [{ name: 'interval', kind: 'ms' }, { name: 'state', kind: 'u8' }] }, 1,
+  { interval: [16.67], state: [0] }));
+  assert.ok(traceReport(trace).includes('Input context: HTML fullscreen false | keyboard lock disabled'));
+});
 
 /** `seconds` of frames at `ms` each, in `state` */
 const frames = (seconds, ms, state = 0) => Array.from({ length: Math.round((seconds * 1000) / ms) }, () => [ms, state]);
@@ -41,6 +57,46 @@ test('a trace packs and reads back: times to a fiftieth of a ms, longer ones exa
   assert.deepEqual([...trace.columns.state], columns.state);
   assert.equal(traceHeader(bytes).build.commit, 'abc1234');
   assert.throws(() => decodeTrace(new TextEncoder().encode('LSPX....')), /not a trace/);
+});
+
+test('the worst loading stalls survive a later trace independently of its play frames', () => {
+  const stalls = [];
+  keepBootStall(stalls, [1200, 5000, 4900, 80, 20, 4800, 4700, 'loading geometry']);
+  for (let index = 0; index < 200; index++) {
+    keepBootStall(stalls, [10_000 + index, 60 + index, 30, 20, 10, 20, 20, 'short loading work']);
+  }
+  assert.equal(stalls.length, 8);
+  assert.equal(stalls[0][1], 5000);
+  const summary = bootStallSummary(stalls);
+  const header = {
+    ...HEADER,
+    game: { ...HEADER.game, bootStalls: summary },
+    columns: [{ name: 'interval', kind: 'ms' }],
+  };
+  const trace = decodeTrace(encodeTrace(header, 1, { interval: [16.7] }));
+  const loading = traceReport(trace).find((line) => line.startsWith('Loading stalls'));
+  assert.match(loading, /5000 ms at 1200 ms/);
+  assert.match(loading, /loading geometry/);
+  assert.equal(bootStallSummary([]), '');
+});
+
+test('many minor hitches cannot push a recent multi-second freeze out of its report', () => {
+  const frames = [];
+  keepPlayStall(frames, { t: 1000, row: [0, 5000, 4900, 80, 20, 4800, 4700, 'blocked input'] }, 0, 200);
+  for (let index = 0; index < 300; index++) {
+    keepPlayStall(frames, { t: 10_000 + index, row: [0, 60, 40, 15, 5, 10, 10, 'small hitch'] }, 0, 200);
+  }
+  assert.equal(frames.length, 200);
+  assert.ok(frames.some((frame) => frame.row[1] === 5000));
+  keepPlayStall(frames, { t: 80_000, row: [0, 70, 40, 20, 10, 10, 10, 'new hitch'] }, 20_000, 200);
+  assert.deepEqual(frames.map((frame) => frame.t), [80_000]);
+});
+
+test('long-frame script labels omit origins, paths and private query values', () => {
+  const label = longFrameLabel('https://private.example/path/main.js?invite=secret', 'boot',
+    'file:///Users/example/local/src/main.js?token=secret#fragment');
+  assert.equal(label, 'main.js boot main.js');
+  assert.equal(longFrameLabel('Window.requestAnimationFrame', 'frame', ''), 'Window.requestAnimationFrame frame');
 });
 
 test('a time in a byte comes back within 4%, under its floor as 0, none as none, as changes alike; the text once', () => {

@@ -42,6 +42,8 @@ import { session, partnerInRun } from '../net/session';
 import type { RunSummary } from '../game/run';
 import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
 import { initProfileTab } from './profileTab';
+import { initRecordingTab } from './recordingTab';
+import { recorder } from '../perf/recorder';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
@@ -191,6 +193,7 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-summary').onclick = () => { sfx.click(); hooks.summaryDone(); };
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   initProfileTab();
+  initRecordingTab();
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   // held 2 s, never a click: a stray click or tap lost the run's spoils
@@ -210,7 +213,12 @@ export function initMenus(h: MenuHooks): void {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
   document.querySelectorAll<HTMLElement>('#opt-resolution button').forEach((b) => {
-    b.onclick = () => { sfx.click(); setResolution(Number(b.dataset.r)); renderResolutionOptions(); };
+    b.onclick = () => {
+      sfx.click();
+      setResolution(Number(b.dataset.r));
+      recorder.mark(`resolution ${Math.round(resolutionSetting() * 100)}%`);
+      renderResolutionOptions();
+    };
   });
   renderResolutionOptions();
   document.querySelectorAll<HTMLElement>('#opt-vsync button').forEach((b) => {
