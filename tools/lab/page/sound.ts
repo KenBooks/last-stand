@@ -107,9 +107,8 @@ const WARRIOR: Record<string, Scene> = {
     ],
   },
   shield: {
-    what: 'Raise Shield: raised, two blows caught, then the guard broken',
+    what: 'Raise Shield: two blows caught on the raised shield (raised, it plays nothing), then the guard broken',
     cues: [
-      { at: 0, sound: ['shieldUp'] },
       { at: 0.6, sound: ['shieldBlock'] },
       { at: 1.3, sound: ['shieldBlock'] },
       { at: 2.1, sound: ['guardBreak'] },

@@ -825,19 +825,6 @@ function crescentArc(): void {
   v.start(); v.stopAt(v.t + 0.6);
 }
 
-/** Raise Shield: the shield hefted up, a knock of wood on the arm, its straps creaking and its iron stirring. */
-function shieldUp(): void {
-  // light, a stone set down on stone: a dry tock, a small whump under it, a grain or two of grit (its iron stirring
-  // and its straps creaking were too much for something done so often: from play, "a very light sound ... almost like
-  // a rock impact")
-  const v = voice(0, 0.1);
-  const tock = v.c.createBiquadFilter(); tock.type = 'bandpass'; tock.frequency.value = 850 + Math.random() * 150; tock.Q.value = 1;
-  v.loop(tock); tock.connect(drive(3)).connect(v.hit(0.3, 0.09, v.out, 0.001));
-  whump(v, 0, 0.35, 0.14);
-  grit(v, 3, 0.003, 0.05, 900, 3000, 0.2);
-  v.start(); v.stopAt(v.t + 0.4);
-}
-
 /** A blow caught on the shield: the thock of its wood, the iron of its boss and rim, and its rattle on the arm. */
 function shieldBlock(): void {
   const v = voice(0, 0.3);
@@ -1119,21 +1106,27 @@ function chip(kind: string | undefined): void {
   v.start(); v.stopAt(v.t + 0.8);
 }
 
-/** Healing Draught drunk: three swallows, each a gulp of dark noise opening, then warmth spreading through him, a
- *  soft rush rising with the draught's fizz over it. No rising note (the shared `potion` is a sine from 440 to 880). */
+/** Healing Draught drunk: the cork's soft pop, three glugs of the draught, each falling as it's swallowed with a
+ *  small swallow under it, then its warmth spreading through him, a dark rush rising and settling. Liquid and breath
+ *  alone, nothing high (from the owner's review of #527, "needs work": its gulps rose 380 to 820 Hz each, a wah like a
+ *  note, and a 4 kHz fizz hissed over the warmth). */
 function draught(): void {
-  const v = voice(0, 0.3);
-  [0, 0.12, 0.24].forEach((at, i) => {
-    const f = glide(v, 'bandpass', 2.2, [[0, 380], [at, 380 + i * 40], [at + 0.07, 760 + i * 60]]);
-    v.loop(f); f.connect(blowAt(v, at, 0.8, 0.13, v.out, 0.012));
+  const v = voice(0, 0.25);
+  // the cork: a short hollow pop and a puff under it
+  const cork = v.c.createBiquadFilter(); cork.type = 'bandpass'; cork.frequency.value = 520 + Math.random() * 60; cork.Q.value = 3;
+  v.loop(cork); cork.connect(blowAt(v, 0, 0.9, 0.05, v.out, 0.001));
+  whump(v, 0, 0.3, 0.08);
+  // three glugs: liquid's hollow band falling as each goes down, and the throat's small swallow after it
+  [0.2, 0.42, 0.66].forEach((at, i) => {
+    const top = 560 - i * 40 + Math.random() * 40;
+    const glug = glide(v, 'bandpass', 4, [[0, top], [at, top], [at + 0.11, top * 0.55]]);
+    v.loop(glug); glug.connect(blowAt(v, at, 0.9, 0.12, v.out, 0.008));
+    whump(v, at + 0.07, 0.25, 0.09);
   });
-  for (const [pan, rate] of [[-0.5, 0.9], [0.5, 1.3]]) {
-    const warm = glide(v, 'bandpass', 0.8, [[0, 450], [0.3, 450], [0.9, 2000]]);
-    v.loop(warm); warm.connect(v.flange(swellAt(v, 0.3, 0.6, 0.26, 0.9, v.lane(1, pan)), 4, 3, rate, 0.5));
-  }
-  const fizz = v.c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 4000;
-  v.crackle(fizz, 1.2); fizz.connect(swellAt(v, 0.3, 0.55, 0.3, 0.8));
-  v.start(); v.stopAt(v.t + 1.7);
+  // the warmth: a dark rush, opening only to 900 Hz, rising and settling
+  const warm = glide(v, 'lowpass', 0.7, [[0, 260], [0.9, 260], [1.4, 900], [2.0, 500]]);
+  v.loop(warm); warm.connect(swellAt(v, 0.9, 1.35, 0.36, 0.7));
+  v.start(); v.stopAt(v.t + 2.2);
 }
 
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
@@ -1273,7 +1266,6 @@ export const sfx = {
   crescentSwing: guard((lead: number) => { crescentSwing(lead); }),
   crescent: guard(() => { crescentStrike(); }),
   crescentArc: guard(() => { if (throttle('crescentArc', 60)) return; crescentArc(); }),
-  shieldUp: guard(() => { if (throttle('shieldUp', 200)) return; shieldUp(); }),
   /** a blow caught on the shield; one too big for it */
   shieldBlock: guard(() => { if (throttle('shieldBlock', 60)) return; shieldBlock(); }),
   guardBreak: guard(() => { guardBreak(); }),
