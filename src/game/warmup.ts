@@ -22,7 +22,8 @@ import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
 import { built } from '../entities/models/steps';
 import { buildLater, finishNow } from './behind';
-import { makeHeadAhead } from '../entities/models/head';
+import { makeHeadAhead, preloadHeads } from '../entities/models/head';
+import { heroDetail } from '../entities/models/armor';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
@@ -438,6 +439,7 @@ async function warmBuilt(built: Built[], { step, progress, patient, linkingMost,
  *  its own, its build left the rest. */
 async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
   if (part.built || !part.ahead) return;
+  await preloadHeads(heroDetail());
   await next();
   part.ahead();
   part.ahead = undefined;

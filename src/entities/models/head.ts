@@ -46,11 +46,15 @@ export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => {
 /** the head's geometry, made once for each face, hair and detail and shared by every head built after it (a class
  *  switch builds the hero again: made afresh each time, the head was 60% of the build, its hair's cards most of it) */
 const madeOnce = new Map<string, object>();
+let madeHere = 0;
+/** Cache misses sculpted by this thread (the lab checks that live hero builds add none). */
+export const headsMadeHere = (): number => madeHere;
 
 /** What `make` made for `key`, made the first time: its geometry marked shared, so a model's dispose keeps it. */
 function once<T extends object>(key: string, make: () => T): T {
   let made = madeOnce.get(key) as T | undefined;
   if (!made) {
+    madeHere++;
     made = make();
     const parts = made instanceof THREE.BufferGeometry ? [made] : Object.values(made);
     for (const geo of parts) if (geo instanceof THREE.BufferGeometry) geo.userData.shared = true;
@@ -371,7 +375,20 @@ function keepHeadShapes(packed: PackedHeads): void {
  * ("phone has freezes during loading for like 1-2sec, where particles stop moving completely"). A worker that fails
  * leaves its head to the first build, here.
  */
-export async function preloadHeads(detail: number): Promise<void> {
+const preloaded = new Map<number, { ready: boolean; promise: Promise<void> }>();
+/** Whether workers have finished preparing this detail (including the existing worker-failure fallback). */
+export const headsReady = (detail: number): boolean => preloaded.get(detail)?.ready ?? false;
+
+export function preloadHeads(detail: number): Promise<void> {
+  const previous = preloaded.get(detail);
+  if (previous) return previous.promise;
+  const state = { ready: false, promise: Promise.resolve() };
+  preloaded.set(detail, state);
+  state.promise = makeHeads(detail).then(() => { state.ready = true; });
+  return state.promise;
+}
+
+async function makeHeads(detail: number): Promise<void> {
   if (typeof Worker === 'undefined') return;
   const one = (model: keyof typeof HERO_HEADS) => new Promise<void>((resolve) => {
     let worker: Worker;

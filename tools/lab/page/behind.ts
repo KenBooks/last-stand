@@ -3,7 +3,7 @@
 // heroes and the spares let go, then built again behind the live lobby, each frame's building timed by the browser's
 // own clock; then the hall opened and another hero chosen, which must build no hero. `canary` builds them all in one
 // frame and lets the spares go before the choice.
-import type { Lab, Report } from './lab';
+import { realWait, type Lab, type Report } from './lab';
 import { G } from '../../../src/state';
 import { Player, heroLights } from '../../../src/entities/player';
 import { CLASS_IDS } from '../../../src/data/classes/index';
@@ -11,6 +11,8 @@ import * as behind from '../../../src/game/behind';
 import * as hall from '../../../src/game/hall';
 import { perfClock } from '../../../src/ui/perfHud';
 import { openHall, toLobby } from './hallMoves';
+import { headsMadeHere } from '../../../src/entities/models/head';
+import { setQuality } from '../../../src/core/quality';
 
 /** Options of `lab behind`. */
 export interface BehindOptions {
@@ -53,6 +55,8 @@ async function frameByFrame(lab: Lab): Promise<Building> {
   const before = Player.built;
   while (building.frames < MOST_FRAMES && (building.frames === 0 || behind.buildingBehind())) {
     await lab.step(1);
+    // Workers use the browser's real clock; advancing 1200 parked frames must not starve their replies.
+    if (!behind.behindFrame.pieces) await realWait(5);
     building.frames++;
     building.pieces += behind.behindFrame.pieces;
     building.longest = Math.max(building.longest, behind.behindFrame.ms);
@@ -90,7 +94,6 @@ async function builtByChoosing(
   lab: Lab, canary: boolean,
 ): Promise<{ opening: number; choosing: number; programs: number }> {
   const was = G.player.cls.id;
-  if (canary) hall.dropSpareHeroes();
   const before = Player.built;
   await openHall(lab);
   await lab.step(SETTLE);
@@ -101,6 +104,7 @@ async function builtByChoosing(
     await lab.step(SETTLE);
   }
   const chose = Player.built;
+  if (canary) hall.dropSpareHeroes();
   const lights = heroLights();
   const compiled = G.renderer.info.programs!.length;
   // (the choice's frame and the next: after it the old class's spare is built behind the lobby, a piece a frame)
@@ -122,6 +126,28 @@ async function builtByChoosing(
   return { opening, choosing, programs: G.renderer.info.programs!.length - compiled };
 }
 
+/** Auto can change detail with the hall open. Back alone must not sculpt the new detail on the input thread. */
+async function afterDetailChange(lab: Lab, canary: boolean): Promise<{ misses: number; building: Building }> {
+  await openHall(lab);
+  setQuality('medium');
+  hall.dropSpareHeroes();
+  const before = headsMadeHere();
+  const now = perfClock.now;
+  perfClock.now = realNow;
+  try {
+    await lab.clickOn(document.querySelector<HTMLElement>('.hs-back')!);
+    await lab.step(1);
+    if (hall.hallOpen()) throw new Error('lab: behind: Back never left hero selection');
+    if (canary) for (const id of CLASS_IDS) behind.finishNow(`spare ${id}`);
+    const building = await frameByFrame(lab);
+    // Repeat the opening after its cached hall heroes became stale too.
+    await openHall(lab);
+    await lab.clickOn(document.querySelector<HTMLElement>('.hs-back')!);
+    await lab.step(1);
+    return { misses: headsMadeHere() - before, building };
+  } finally { perfClock.now = now; }
+}
+
 /** `lab behind`'s report. */
 export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Report> {
   const canary = Boolean(options.canary);
@@ -136,6 +162,7 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
     throw new Error(`lab: behind: ${building.heroes} heroes were built behind the lobby, not ${heroes}`);
   }
   const { opening, choosing, programs } = await builtByChoosing(lab, canary);
+  const changed = await afterDetailChange(lab, canary);
   const slowest = building.slowest.map((s) => `${s.name} ${s.ms.toFixed(1)} ms`).join(', ');
   const lines = [
     `${heroes} heroes built behind the lobby in ${building.frames} frames, ${building.pieces} pieces: the longest `
@@ -143,13 +170,17 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
     `the slowest pieces: ${slowest}`,
     `then the hall's opening built ${opening} heroes, the ${G.player.cls.id} chosen in it ${choosing}`,
     `shared hero lights stayed in the scene; the first lobby draw compiled ${programs} programs`,
+    `Back after a detail change: ${changed.misses} head pieces sculpted on the input thread; `
+      + `longest background build ${changed.building.longest.toFixed(1)} ms (at most ${MOST_MS}); repeated opening completed`,
   ];
   const slow = building.longest > MOST_MS;
   const builtThen = opening + choosing > 0;
   if (canary) {
-    const missed = [slow ? '' : 'the building in one frame was missed', builtThen ? '' : 'the lost spare was missed'];
+    const missed = [slow ? '' : 'the building in one frame was missed', builtThen ? '' : 'the lost spare was missed',
+      changed.misses ? '' : 'the missing worker detail was missed'];
     return { text: [...lines, 'canary: one frame and the spares let go'].join('\n'), problems: missed.filter(Boolean) };
   }
-  const problems = [slow ? lines[0] : '', builtThen ? lines[2] : '', programs ? lines[3] : ''].filter(Boolean);
+  const problems = [slow ? lines[0] : '', builtThen ? lines[2] : '', programs ? lines[3] : '',
+    changed.misses || changed.building.longest > MOST_MS ? lines[4] : ''].filter(Boolean);
   return { text: lines.join('\n'), problems };
 }

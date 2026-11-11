@@ -1,5 +1,7 @@
 # `src/game`
 
+- Before Change hero opens, `prepareHeroSelection` waits for heads at the current detail and builds stale hall/spare heroes in safe slices. `warmingRuns` holds Auto and ordinary background stepping during preparation; the lobby remains interactive. Auto also holds while the hall is open: its staged three-hero scene isn't play's workload, and a trial there invalidated the prepared spare before choosing it. Background jobs retain their queued detail and wait for its workers in `buildBehind`. Worker preparation also precedes the warm-up's `makeHeadAhead` path. Never resolve a missing detail by sculpting a head in the opening click or the first frame after Back: this blocked input until queued key events arrived together. `lab behind` changes detail with the hall open, goes Back without a choice, and repeats the opening; `npm run stalls -- --scenario heroes --seconds 18 --auto low@518400 --js` traces the real browser sequence.
+
 The run and what goes round it.
 
 - `remapWaveSpawns` retargets queued units, the waiting boss and units already gate-scheduled, without restarting a run. Gate-scheduled units remain in `pendingUnits` until their callback runs; cleanup clears it. The dev biome switch uses this so an old-biome foe cannot appear after a swap.

@@ -33,7 +33,7 @@ import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/s
 import { askConflicts, renderCloudBar } from './ui/cloudSaves';
 import { initCloud } from './loot/cloud';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
-import { hallOpen, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
+import { hallOpen, prepareHeroSelection, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
 import { builtInSlices } from './entities/models/steps';
 import { hideTooltip } from './ui/tooltip';
@@ -472,10 +472,16 @@ function abandon() {
 }
 
 /** The lobby's "Change hero": the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
-function changeHero() {
-  if (G.mode !== 'menu' || heroSelectOpen()) return;
-  showMenu(false);
-  openHeroSelect(G.player.cls.id);
+let preparingHeroes = false;
+async function changeHero() {
+  if (G.mode !== 'menu' || heroSelectOpen() || preparingHeroes) return;
+  preparingHeroes = true;
+  try {
+    await prepareHeroSelection(() => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve))));
+    if (G.mode !== 'menu' || G.paused || heroSelectOpen()) return;
+    showMenu(false);
+    openHeroSelect(G.player.cls.id);
+  } finally { preparingHeroes = false; }
 }
 
 /** A hero chosen on the selection screen: the new class brings its own profile (gear, stash, records) and loadout; a
@@ -748,7 +754,8 @@ function frame(timestamp: number): void {
   // (the developer mode's time: frozen, slowed, a step)
   const simDt = dev ? dev.simDt(dt) : dt;
   if (!G.paused && revealed && simDt > 0) {
-    if (isWarming()) holdQuality();
+    // The hall's three staged heroes aren't a play workload; keep its prepared detail stable for selection.
+    if (isWarming() || hallOpen()) holdQuality();
     else {
       // (each of Auto's steps marked in the performance trace: a slow start is Auto walking down from High)
       const stepped = sampleQuality(rawDt);
