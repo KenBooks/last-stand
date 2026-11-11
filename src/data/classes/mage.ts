@@ -46,14 +46,14 @@ const mage: ClassDef = {
       icon: { glyph: '✧', color: '#ff6fe0' },
     },
     {
-      key: 'mouse2', impl: 'starfall', name: 'Starfall',
+      key: '1', impl: 'starfall', name: 'Starfall',
       desc: 'Call down three arcane crystals from the heavens on the target area. Each strikes hardest where it lands, and chills the foes it leaves alive.',
       tags: ['arcane', 'cold'], cost: 38, cooldown: 3, castTime: 0.75,
       damage: 150, shards: 3, radius: 2.5, edge: 0.35, scatter: 1.9, chill: 2.0, aimed: true,
       icon: { glyph: '☄', color: '#8fd8ff' },
     },
     {
-      key: '1', impl: 'voidLance', name: 'Void Lance',
+      key: 'mouse2', impl: 'voidLance', name: 'Void Lance',
       desc: 'Draw a portal in the air, then channel a lance of raw arcana through it, piercing every foe in its line. You move slowly as you hold it, and it drains Energy.',
       tags: ['arcane'], cost: 34, cooldown: 0, castTime: 0, channel: true, opening: 0.75,
       damage: 210, length: 17, width: 0.75, moveMult: 0.35,
