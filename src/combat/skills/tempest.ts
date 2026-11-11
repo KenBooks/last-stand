@@ -4,7 +4,7 @@ import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { sfx } from '../../core/audio';
 import { slashMesh } from './slash';
-import { sparks } from './cleave';
+import { heftOf, sparks } from './cleave';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { ChannelSkill, Needs } from './types';
 import { swingOn, swingWay } from '../fling';
@@ -13,13 +13,15 @@ import { blastCorpses } from '../../entities/corpse';
 type Def = Needs<'damage' | 'radius' | 'spin'>;
 
 interface TempestState {
-  group: THREE.Group; arcs: ReturnType<typeof slashMesh>[]; tick: number; whoosh: number; t: number;
+  group: THREE.Group; arcs: ReturnType<typeof slashMesh>[]; tick: number; t: number;
+  /** its sound's stop: the spin winding down */
+  quiet: (() => void) | undefined;
   /** how far round the hero has turned (rad), and the heading the body was posed at last (its facing and that turn) */
   turn: number; posed: number;
 }
 
-/** how far round it turns between strikes, and between whooshes (rad: a strike each 0.2 s at 15 rad/s) */
-const TICK_TURN = 3, WHOOSH_TURN = 3.15;
+/** how far round it turns between strikes (rad: a strike each 0.2 s at 15 rad/s) */
+const TICK_TURN = 3;
 /** how long the spin takes to come up to its speed from standing (s), as a body speeds up into a turn (started at its
  *  speed, the body's turn faded in from the stance over the pose's fade, and turned 1.7 times as fast as the spin for
  *  its first tenth of a second: lab eyes) */
@@ -39,7 +41,7 @@ const skill: ChannelSkill<TempestState> = {
   },
   channel: true,
   warm: () => [slashMesh(ARC, 0.55, COLOR).mesh],
-  start() {
+  start(player, rawDef) {
     const group = new THREE.Group();
     // two opposed blade trails, one bright and one fainter and lower
     const arcs = [slashMesh(ARC, 0.55, COLOR), slashMesh(ARC, 0.6, 0xffc080)];
@@ -47,7 +49,9 @@ const skill: ChannelSkill<TempestState> = {
     arcs[1].mesh.position.y = -0.25;
     for (const a of arcs) group.add(a.mesh);
     G.scene.add(group);
-    return { group, arcs, tick: 0, whoosh: 0, t: 0, turn: 0, posed: NaN };
+    // (its sound one held voice going round with the blades, not a whoosh a turn: those came 5 times a second)
+    const turns = (rawDef as Def).spin * (1 + player.stats.castSpeed / 100) / (Math.PI * 2);
+    return { group, arcs, tick: 0, t: 0, turn: 0, posed: NaN, quiet: sfx.tempest(turns, heftOf(player)) };
   },
 
   pose(player, _def, st, action) {
@@ -71,8 +75,6 @@ const skill: ChannelSkill<TempestState> = {
     st.arcs[0].mat.uniforms.uFade.value = fade * 0.6;
     st.arcs[1].mat.uniforms.uFade.value = fade * 0.3;
 
-    st.whoosh -= turned;
-    if (st.whoosh <= 0) { st.whoosh += WHOOSH_TURN; sfx.swing(); }
     st.tick += turned;
     if (st.tick < TICK_TURN) return;
     st.tick -= TICK_TURN;
@@ -89,10 +91,11 @@ const skill: ChannelSkill<TempestState> = {
       sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffe0b0, 4);
       hits++;
     }
-    if (hits) sfx.clang();
+    if (hits) sfx.tempestBite(heftOf(player));
   },
 
   stop(_player, _def, st) {
+    st.quiet?.();
     G.scene.remove(st.group);
     for (const a of st.arcs) a.dispose();
   },

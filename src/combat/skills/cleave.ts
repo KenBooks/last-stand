@@ -4,7 +4,7 @@ import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { particles, col } from '../../fx/particles';
 import { addShake } from '../../core/renderer';
-import { sfx } from '../../core/audio';
+import { sfx, type Heft } from '../../core/audio';
 import { rand } from '../../util';
 import { angleBetween } from './slash';
 import type { InstantSkill, Needs } from './types';
@@ -14,6 +14,12 @@ import type { Player } from '../../entities/player';
 import { swingOn, swingWay, type Blow } from '../fling';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
+
+/** How heavy what the hero swings is, for its sound: a blade in each hand, a one-hander, a great weapon. */
+export const heftOf = (player: Player): Heft => (player.weaponStyle === 'twoHanded' ? 2 : player.weaponStyle === 'dual' ? 0 : 1);
+
+/** casts whose swing is already heard (its air starts with the swing and peaks as the blow lands) */
+const swung = new WeakSet<object>();
 
 /** Sparks where the blade bites. */
 export function sparks(x: number, y: number, z: number, color: THREE.ColorRepresentation, n = 10): void {
@@ -63,16 +69,19 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
 const skill: InstantSkill = {
   anim: 'swing',
   hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical' }],
+  charging(player) {
+    const c = player.casting;
+    if (c && !swung.has(c)) { swung.add(c); sfx.cleave(c.fireAt - c.t, heftOf(player), player.model.swing ?? 1); }
+  },
   cast(player, rawDef) {
     const def = rawDef as Def;
     // the way the body (and so the swing) faces, which turned to the target during the cast
     const facing = player.facing;
     // (the cut's one mark is the trail its blade leaves, fx/swingTrail.ts: a flat arc laid at the tip's height drew a
     // second one, level across the view while the cut through the eyes ran down it)
-    sfx.swing();
     const hits = sweep(player, def, facing, { knock: def.knock, swing: player.model.swing ?? 1 });
     if (hits) {
-      sfx.clang();
+      sfx.cleaveBite(heftOf(player));
       addShake(0.08);
       if (!player.sandbox) player.energy = Math.min(player.stats.maxEnergy, player.energy + (def.gain ?? 0) * hits);
     }

@@ -1250,7 +1250,7 @@ export class Player {
         particles.glow.spawn({ x: p.x, y: p.y, z: p.z, vx: rand(-4, 4), vy: rand(0, 4), vz: rand(-4, 4), life: rand(0.2, 0.35), size: rand(0.04, 0.09), sizeEnd: 0,
           color: col(0xffe0a0, 2), colorEnd: col(0xff5010, 0.4), gravity: 12 });
       }
-      sfx.clang();
+      if (r.broke) sfx.guardBreak(); else sfx.shieldBlock();
     }
     if (r.absorbed > 0) this.ward?.onHit?.(r.absorbed);
     if (r.taken <= 0) return;

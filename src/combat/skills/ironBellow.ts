@@ -111,7 +111,7 @@ const skill: InstantSkill = {
     }
     flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: player.eyes ? player.lightAhead(new THREE.Vector3()) : { x: c.x, y: 2, z: c.z } });
     addShake(0.3);
-    sfx.roar();
+    sfx.bellow();
     hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
     for (const e of G.enemies) {
       if (e.alive && Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
@@ -136,7 +136,7 @@ const skill: InstantSkill = {
     const amount = player.stats.maxLife * def.absorbPct;
     const ward = {
       amount, t: def.duration,
-      onHit: () => { hitFlash = 1; sfx.clang(); },
+      onHit: () => { hitFlash = 1; sfx.wardHit(); },
       onEnd: () => { ended = true; },
     };
     player.ward = ward;
