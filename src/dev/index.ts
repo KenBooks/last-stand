@@ -6,7 +6,7 @@ import { G } from '../state';
 import { Player } from '../entities/player';
 import { updateFloaters } from '../ui/floaters';
 import { applyFreeCam, freeCamOn, freeCamToHero, setFreeCam } from './freeCam';
-import { dockPanel, initPanel, panelOpen, refreshPanel, toggleFly, togglePanel } from './panel';
+import { dockPanel, initPanel, refreshPanel, toggleFly, togglePanel } from './panel';
 import type { BiomeId } from '../data/biomes';
 
 /** What main.ts does for the developer mode: the game's own flows, so a wave or a class switch is set up as play
@@ -37,7 +37,7 @@ export interface DevApi {
   simDt(dt: number): number;
   /** a frame's end before it's drawn: the free camera flown and placed (`dt`: the browser's, frozen or not) */
   frame(dt: number): void;
-  /** the cursor is wanted (the panel or the free camera): the close views' mouse look mustn't hold the pointer */
+  /** free flight takes the pointer; the panel uses the normal Alt cursor during mouse look */
   wantsCursor(): boolean;
 }
 
@@ -104,6 +104,6 @@ export function initDev(hooks: DevHooks): DevApi {
       // Labels must project through the flown camera even while simulation is frozen.
       if (freeCamOn()) updateFloaters(0);
     },
-    wantsCursor: () => panelOpen() || freeCamOn(),
+    wantsCursor: () => freeCamOn(),
   };
 }

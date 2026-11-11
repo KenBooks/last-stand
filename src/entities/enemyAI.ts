@@ -363,7 +363,7 @@ function bossSummon(e: Enemy): void {
   for (let i = 0; i < 4; i++) {
     const a = Math.random() * Math.PI * 2;
     const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * 3.5, 0, e.pos.z + Math.sin(a) * 3.5);
-    spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life });
+    spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
   fx('summon', e.pos.x, e.pos.z, e.def.accent ?? 0xb070ff);
 }

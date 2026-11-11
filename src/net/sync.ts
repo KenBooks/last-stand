@@ -29,7 +29,7 @@ import type { EnemyId } from '../data/enemies';
 import type { Item } from '../types';
 
 /** A foe's coming, as the host reports it: what a guest's copy of it is made from. */
-export type SpawnEvent = { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; n: string; x: number; z: number; f: number; ml: number; w: number };
+export type SpawnEvent = { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; tr: 0 | 1; n: string; x: number; z: number; f: number; ml: number; w: number };
 
 type WorldEvent =
   | SpawnEvent
@@ -92,7 +92,7 @@ export function setFoeAsk(fn: typeof askFoes): void { askFoes = fn; }
 /** A foe's spawn report, made from the foe as it stands (the host's: as it spawns, and for a guest that asks). */
 const spawnOf = (e: Enemy): SpawnEvent => ({
   k: 'spawn', id: e.id, ty: e.type, h: e.hero ? 1 : 0, n: e.name, x: r2(e.pos.x), z: r2(e.pos.z), f: r2(e.facing),
-  ml: Math.round(e.maxLife), w: G.run?.wave ?? 1,
+  ml: Math.round(e.maxLife), w: G.run?.wave ?? 1, tr: e.training ? 1 : 0,
 });
 
 /** Hook the fight's reporting in (it only sends anything on a co-op host in a run, or a guest's hits). */
@@ -282,7 +282,7 @@ function apply(ev: WorldEvent): void {
       copied.add(ev.id);
       asked.delete(ev.id);
       if (G.enemies.some((e) => e.id === ev.id)) return;
-      const e = spawnEnemy(ev.ty, new THREE.Vector3(ev.x, 0, ev.z), { id: ev.id, name: ev.n, maxLife: ev.ml, hero: !!ev.h, wave: ev.w });
+      const e = spawnEnemy(ev.ty, new THREE.Vector3(ev.x, 0, ev.z), { id: ev.id, name: ev.n, maxLife: ev.ml, hero: !!ev.h, wave: ev.w, training: !!ev.tr });
       e.facing = ev.f;
       e.net = { x: ev.x, z: ev.z, vx: 0, vz: 0, f: ev.f };
       return;

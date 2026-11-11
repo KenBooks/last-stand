@@ -9,6 +9,10 @@ import { refreshPanel, togglePanel } from '../../../src/dev/panel';
 import { freeCamOn, freeCamSpeed } from '../../../src/dev/freeCam';
 import { touchMode } from './uiTouch';
 import { showPause, pauseTab } from '../../../src/ui/menus';
+import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
+import { pointerLocked } from '../../../src/core/input';
+import { role } from '../../../src/net/role';
+import { foesAsked, foesTold } from '../../../src/net/sync';
 import { realWait, type Lab, type Pictured, type Report } from './lab';
 
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
@@ -71,6 +75,11 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
 
   const parts = [...document.querySelectorAll<HTMLInputElement>('[data-part]')];
   check(parts.length >= 7 && parts.every((part) => part.checked), 'frame parts did not start included');
+  check(element('[data-act=parts]').textContent === 'Uncheck all', 'all-checked button did not offer Uncheck all');
+  await action('parts');
+  check(parts.every((part) => !part.checked), 'Uncheck all did not remove every part');
+  await action('parts');
+  check(parts.every((part) => part.checked), 'Check all did not restore every part');
   await click('[data-part="the hero"]');
   check(!G.player.obj.visible, 'unchecking Hero did not hide it');
   await action('parts');
@@ -81,9 +90,50 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await action('labels');
   check(overFrame.draw === draw, 'World labels did not restore their draw');
 
+  // The checkbox must apply to +1 and elite batches even with no run at all.
+  const spawn = async (count: number) => {
+    const before = new Set(G.enemies);
+    await click(`[data-spawn="${count}"]`);
+    for (let i = 0; G.enemies.filter((foe) => !before.has(foe)).length < count && i < 1000; i++) {
+      await lab.step(1); await realWait(10);
+    }
+    const made = G.enemies.filter((foe) => !before.has(foe));
+    if (made.length !== count) throw new Error(`dev: +${count} did not spawn its enemies`);
+    return made;
+  };
+  await click('[data-in=training]');
+  const one = await spawn(1);
+  await click('[data-in=champion]');
+  const batch = await spawn(5);
+  const ghosts = [...one, ...batch];
+  check(G.run === null && ghosts.every((foe) => foe.training && foe.damage === 0 && !foe.castsShadow
+    && foe.model.kit.u.uDissolve.value >= 0.28), 'manual Training spawns were not harmless ghost projections in the lobby');
+  check(batch.every((foe) => foe.hero), 'Training batch did not preserve Elite');
+  await click('[data-in=champion]');
+  await click('[data-in=training]');
+  const [ordinary] = await spawn(1);
+  const away = G.player.away, life = G.player.life;
+  G.player.away = false; G.player.guardUntil = 0;
+  check(hurtPlayer(G.player, 100, 'vitality', null, { foe: ordinary, attack: 'strike' }) > 0,
+    'ordinary-spawn damage control did no damage');
+  G.player.life = life; G.player.guardUntil = 0;
+  for (const ghost of ghosts) hurtPlayer(G.player, 100, 'vitality', null, { foe: ghost, attack: 'strike' });
+  check(G.player.life === life, 'manual Training spawns could damage the hero');
+  G.player.away = away;
+  await action('reset');
+  lines.push('manual Training: +1, +5 Elite, projection, damage immunity and ordinary damage control checked');
+
+  await click('details:has([data-in=rarity]) > summary');
+  await lab.step(60); refreshPanel();
+  check(perfHudSize() === 'off' && (perfHudStats()?.fps ?? 0) > 0,
+    'compact performance timings did not update with the separate overlay off');
+  check(element('.dv-perf-info').querySelectorAll('strong').length >= 8, 'compact performance numbers were not emphasized');
+
   const opacity = element<HTMLInputElement>('[data-in=opacity]');
   opacity.value = '0'; opacity.dispatchEvent(new Event('input', { bubbles: true }));
+  await realWait(350);
   check(Number(opacity.value) === 50 && element('[data-out=opacity]').textContent === '50%', 'opacity could fall below its readable minimum');
+  check(Math.abs(Number(getComputedStyle(element('.menu-left')).opacity) - 0.5) < 0.01, 'opacity did not affect controls with the whole panel');
   moments.push(await lab.screen('dev-opacity-minimum'));
   opacity.value = '95'; opacity.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -92,9 +142,20 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     if (width === 844 || width === 1180 || width === 820) await touchMode(lab);
     refreshPanel();
     const panel = element('#dev-panel'), rect = panel.getBoundingClientRect();
+    panel.scrollTop = 0; refreshPanel();
     check(rect.width > 0 && rect.left >= -1 && rect.right <= width + 1 && rect.bottom <= height + 1,
       `${width}x${height}: panel did not fit the viewport`);
     check(panel.scrollWidth <= panel.clientWidth + 1, `${width}x${height}: panel content overflowed`);
+    const button = element('#dev-panel [data-act=freeze]');
+    check(button.offsetHeight === 28 && getComputedStyle(button).fontSize === '15px', 'larger font changed the button height');
+    if (panel.scrollHeight > panel.clientHeight + 2) {
+      const cue = element('.dv-scroll-cue');
+      check(getComputedStyle(cue).visibility === 'visible' && cue.getBoundingClientRect().bottom <= rect.bottom + 1,
+        `${width}x${height}: overflowing panel did not offer a visible scroll cue`);
+    }
+    const checks = parts.slice(0, 2).map((part) => part.parentElement!.getBoundingClientRect());
+    check(Math.abs(checks[0].top - checks[1].top) < 1 && checks[1].left > checks[0].left,
+      `${width}x${height}: performance checks did not use two columns`);
     moments.push(await lab.screen(`dev-${width}x${height}`));
     togglePanel(false);
     showPause(true); pauseTab('controls');
@@ -115,6 +176,11 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     showPause(false); togglePanel(true);
   }
   await lab.showOn({ width: 1920, height: 1080, ratio: 1 });
+  await lab.step(60); refreshPanel();
+  element('#dev-panel').scrollTop = element('#dev-panel').scrollHeight;
+  refreshPanel();
+  moments.push(await lab.screen('dev-performance-compact', [], 'details:has(.dv-perf-info)'));
+  moments.push(await lab.screen('dev-gear-compact', [], 'details:has([data-in=rarity])'));
   await action('fly');
   refreshPanel();
   check(freeCamOn() && time.frozen, 'free camera did not freeze the game');
@@ -139,6 +205,18 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   G.player.guardUntil = 0;
   hurtPlayer(G.player, 1e6);
   check(G.player.life === health, 'training enemies could hurt the hero');
+  const source = G.enemies.find((foe) => foe.alive && !foe.def.dummy)!;
+  const oldRole = role.current, training = G.run!.training;
+  role.current = 'host';
+  const report = foesAsked([source.id])[0];
+  check(report?.tr === 1, 'host spawn report omitted the training property');
+  role.current = 'guest';
+  G.run!.training = false;
+  foesTold([{ ...report, id: source.id + 1_000_000 }]);
+  const copy = G.enemies.find((foe) => foe.id === source.id + 1_000_000)!;
+  check(!!copy?.training && copy.damage === 0, 'guest did not preserve an individual Training spawn outside a training run');
+  if (copy) { copy.dispose(); G.enemies.splice(G.enemies.indexOf(copy), 1); }
+  G.run!.training = training; role.current = oldRole;
   moments.push(await lab.screen('dev-training'));
 
   await action('free');
@@ -169,6 +247,13 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await started();
   await lab.press('KeyV');
   await lab.until(() => viewSettled(), 120, 'third person did not settle');
+  lab.pointerLock(true);
+  await lab.click({ x: innerWidth * 0.7, y: innerHeight * 0.5 });
+  await lab.step(2);
+  check(pointerLocked(), 'Dev panel prevented third-person mouse look');
+  await lab.keyDown('AltLeft'); await lab.step(2, () => ({ keys: ['altleft'] }));
+  check(element('#alt-cursor').checkVisibility(), 'Alt did not show the cursor over the Dev panel');
+  await lab.keyUp('AltLeft');
   time.scale = 0.1;
   await lab.press('KeyV');
   const neck = G.player.model.joints!.neck;
@@ -184,6 +269,9 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     });
   });
   check(nearFrames > 0 && exposed === 0, `slow first-person entry exposed head meshes (${exposed}, ${nearFrames} nearby frames)`);
+  check(pointerLocked(), 'Dev panel prevented first-person mouse look');
+  lab.pointerLock(false);
+  await document.exitPointerLock();
   lines.push(`0.1x first-person entry: ${nearFrames} nearby frames, ${exposed} exposed head meshes`);
   G.player.guardUntil = 0;
   G.player.takeDamage(1e9, 'physical', null);

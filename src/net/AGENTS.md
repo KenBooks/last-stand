@@ -1,5 +1,7 @@
 # `src/net`
 
+- Protocol 28 adds `tr` to enemy spawn reports, preserving each enemy's Training status on guests, including individually spawned practice enemies outside a training run.
+
 Co-op.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).

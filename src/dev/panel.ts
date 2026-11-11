@@ -13,7 +13,7 @@ import { CLASSES } from '../data/classes/index';
 import { ARENA } from '../data/balance';
 import { spawnEnemy } from '../entities/spawner';
 import { basesFor } from '../loot/items';
-import { setPerfHudSize, perfHudSize, type PerfHudSize } from '../ui/perfHud';
+import { observePerfHud, perfHudStats, setPerfHudSize, perfHudSize, type PerfHudSize } from '../ui/perfHud';
 import { frameParts, type ScenePart } from '../perf/sceneParts';
 import { freeCamOn, freeCamSpeed, freeCamLabels, freeCamToHero, holdFreeCam, setFreeCamLabels, speedFreeCam, turnFreeCam } from './freeCam';
 import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNew, weaponStyles } from './gear';
@@ -42,6 +42,7 @@ export const panelOpen = (): boolean => !panel.classList.contains('hidden');
 export function togglePanel(open = !panelOpen()): void {
   dockPanel();
   panel.classList.toggle('hidden', !open);
+  observePerfHud(open);
   document.body.classList.toggle('dev-open', open);
   tabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
     const selected = (b.dataset.devTab === 'dev') === open;
@@ -59,9 +60,8 @@ export function initPanel(h: DevHooks): void {
   panel.id = 'dev-panel';
   panel.className = 'hidden';
   panel.innerHTML = `
-    <div class="dv-head"><b>Dev mode</b><span class="dv-keys">F8 panel · F9 free cam · F7 freeze</span></div>
+    <div class="dv-head"><b>Dev mode</b><label class="dv-opacity">Opacity <input data-in="opacity" type="range" min="50" max="100" value="95"><output data-out="opacity">95%</output></label></div>
     <div class="dv-row"><button data-act="reset">Reset to loaded scene</button></div>
-    <div class="dv-row"><label>Panel opacity <input data-in="opacity" type="range" min="50" max="100" value="95"><output data-out="opacity">95%</output></label></div>
     <details open><summary>Time &amp; camera</summary>
       <div class="dv-row"><button data-act="freeze" class="dv-tog">Freeze</button><button data-act="step" title="One frame forward while frozen (.)">Step</button></div>
       <div class="dv-row dv-label">Speed ${SPEEDS.map((s) => `<button data-speed="${s}" class="dv-tog">${s}×</button>`).join('')}</div>
@@ -82,21 +82,18 @@ export function initPanel(h: DevHooks): void {
       <div class="dv-row dv-label">Class ${Object.values(CLASSES).map((c) => `<button data-class="${c.id}" class="dv-tog">${c.name}</button>`).join('')}</div>
     </details>
     <details><summary>Gear</summary>
-      <div class="dv-row"><label>Rarity <select data-in="rarity">${options(RARITIES.map((r) => [r.id, r.name]))}</select></label></div>
-      <div class="dv-row dv-styles"></div>
+      <div class="dv-row"><label>Rarity <select data-in="rarity">${options(RARITIES.map((r) => [r.id, r.name]))}</select></label><span class="dv-styles"></span></div>
       <div class="dv-row"><button data-act="kit">Wear full kit</button><button data-act="every">Stash every base</button><button data-act="empty">Empty stash</button></div>
-      <div class="dv-row"><select data-in="slot"></select><select data-in="base"></select></div>
-      <div class="dv-row"><button data-act="wear">Wear</button><button data-act="stash">To stash</button></div>
+      <div class="dv-row dv-gear-pick"><select data-in="slot"></select><select data-in="base"></select><button data-act="wear">Wear</button><button data-act="stash">To stash</button></div>
       <div class="dv-note dv-gear-note"></div>
     </details>
-    <details open><summary>Performance</summary>
-      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}</div>
+    <details open><summary class="dv-perf-head"><span>Performance</span><span class="dv-stats"></span></summary>
+      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}<span class="dv-sub">Uncheck to hide</span></div>
       <div class="dv-row"><button data-act="profile" title="The pause menu's profiler, from where the camera is now">Profile this spot…</button></div>
-      <div class="dv-note dv-stats"></div>
-      <div class="dv-sub">Include in the frame (live: watch the overlay)</div>
+      <div class="dv-perf-info"></div>
       <div class="dv-parts"></div>
       <div class="dv-row"><button data-act="parts">Check all</button></div>
-    </details>`;
+    </details><div class="dv-scroll-cue" aria-hidden="true">Scroll for more ↓</div>`;
   document.body.append(panel);
   tabs = document.createElement('div');
   tabs.className = 'dv-tabs';
@@ -136,6 +133,9 @@ export function initPanel(h: DevHooks): void {
   buildFly();
   panel.addEventListener('click', onClick);
   panel.addEventListener('change', onChange);
+  panel.addEventListener('scroll', refreshScrollCue);
+  panel.addEventListener('toggle', refreshScrollCue, true);
+  new ResizeObserver(refreshScrollCue).observe(panel);
   // (the stats while the panel is open, twice a second: the frame's own numbers, as the overlay's)
   setInterval(() => { if (panelOpen() || freeCamOn()) refreshPanel(); }, 500);
   panel.addEventListener('input', (e) => {
@@ -147,6 +147,11 @@ export function initPanel(h: DevHooks): void {
   dockPanel();
   setFreeCamLabels(true);
   renderParts();
+}
+
+function refreshScrollCue(): void {
+  if (!panelOpen()) return;
+  panel.classList.toggle('more-below', panel.scrollHeight - panel.scrollTop - panel.clientHeight > 2);
 }
 
 /** Share the hero panel in the lobby; keep F8 available on the left during play or flight. */
@@ -235,7 +240,10 @@ function onClick(e: MouseEvent): void {
     case 'wear': wearNew(slot(), base(), rarity()); gearChanged(); break;
     case 'stash': say(stashNew(slot(), base(), rarity()) ? 'Put in the stash' : 'The stash is full'); gearChanged(); break;
     case 'profile': putPartsBack(); hooks.openPerformance(); break;
-    case 'parts': putPartsBack(); break;
+    case 'parts':
+      if (taken.size) putPartsBack();
+      else panel.querySelectorAll<HTMLInputElement>('[data-part]').forEach((part) => togglePart(part.dataset.part!));
+      break;
   }
   const style = d.style ? weaponStyles(classOf())[Number(d.style)] : undefined;
   if (style) { style.wear(rarity()); gearChanged(); }
@@ -287,13 +295,14 @@ function renderBases(): void {
 function spawn(n: number): void {
   const type = $<HTMLSelectElement>('[data-in=foe]').value as EnemyId;
   const hero = $<HTMLInputElement>('[data-in=champion]').checked;
+  const training = $<HTMLInputElement>('[data-in=training]').checked;
   const at = freeCamOn() ? lookedAt() : G.player.pos;
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 5;
     const pos = new THREE.Vector3(at.x + Math.sin(a) * r, 0, at.z + Math.cos(a) * r);
     const out = Math.hypot(pos.x, pos.z), most = ARENA.radius * 0.92;
     if (out > most) pos.multiplyScalar(most / out);
-    spawnEnemy(type, pos, { wave: G.run?.wave ?? 1, hero });
+    spawnEnemy(type, pos, { wave: G.run?.wave ?? 1, hero, training });
   }
 }
 
@@ -333,7 +342,13 @@ const partKey = (name: string): string => name.replace(/ \(\d+\)$/, '');
 
 function renderParts(): void {
   const keys = frameParts().filter((p) => partKey(p.name) !== PLAIN && !p.untimed).map((p) => partKey(p.name));
-  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part"><input type="checkbox" data-part="${k}" checked>${k === "half the scene's pixels" ? 'Full scene resolution' : k}</label>`).join('');
+  const labels: Record<string, string> = {
+    "half the scene's pixels": 'Full resolution', 'the point lights where they reach': 'Point lights',
+    'drawing the shadow maps': 'Shadow maps', 'the particles': 'Particles', 'the hero': 'Hero',
+    "what's cut out: leaves, grass": 'Leaves & grass', "what's blended: smoke, glows, effects": 'Smoke & effects',
+    "the fires' flames": 'Fire',
+  };
+  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked>${labels[k] ?? k}</label>`).join('');
 }
 
 function togglePart(key: string): void {
@@ -357,17 +372,22 @@ export function refreshPanel(): void {
   dockPanel();
   const info = G.renderer.info;
   const programs = info.programs?.length ?? 0;
-  const foes = G.enemies.filter((e) => e.alive && !e.def.dummy).length;
   const state = [
     time.frozen, time.scale, freeCamOn(), freeCamLabels(), cheats.god, cheats.free, G.player.cls.id, perfHudSize(),
     document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode,
   ].join('|');
-  const stats = `${info.render.calls} draws · ${(info.render.triangles / 1000).toFixed(0)}k triangles · ${programs} programs · `
-    + `${foes} foes · ${G.mode === 'run' && G.run ? `wave ${G.run.wave} (${G.run.phase})` : 'lobby'}`;
-  $('.dv-stats').textContent = stats;
+  const stats = perfHudStats();
+  const number = (n: number | undefined, digits = 1): string => n !== undefined && Number.isFinite(n) ? n.toFixed(digits) : '—';
+  $('.dv-stats').innerHTML = `<strong>${number(stats?.fps, 0)}</strong> FPS · <strong>${number(stats?.p50)}</strong> ms`;
+  $('.dv-perf-info').innerHTML = `
+    <span>CPU <strong>${number(stats?.cpu, 2)}</strong> ms</span><span>GPU <strong>${number(stats?.gpu, 2)}</strong> ms</span>
+    <span>p95 <strong>${number(stats?.p95)}</strong> ms</span><span>1% low <strong>${number(stats?.lowFps, 0)}</strong> FPS</span>
+    <span>Draws <strong>${info.render.calls}</strong></span><span>Tris <strong>${(info.render.triangles / 1000).toFixed(0)}k</strong></span>
+    <span>Shaders <strong>${programs}</strong></span><span>Geo / Tex <strong>${info.memory.geometries} / ${info.memory.textures}</strong></span>`;
   $('.dv-fly-speed').textContent = freeCamOn() ? `Flying at ${freeCamSpeed().toFixed(1)} m/s` : '';
   fly.querySelector('.df-speed')!.textContent = `${freeCamSpeed().toFixed(1)} m/s`;
   fly.classList.toggle('touch', input.touchMode);
+  refreshScrollCue();
   if (state === shown) return;
   shown = state;
   const lit = (sel: string, on: boolean): void => { panel.querySelector(sel)?.classList.toggle('on', on); };
@@ -384,6 +404,7 @@ export function refreshPanel(): void {
     (b as HTMLButtonElement).disabled = G.mode !== 'menu';
   });
   panel.querySelectorAll<HTMLInputElement>('[data-part]').forEach((b) => { b.checked = !taken.has(b.dataset.part!); });
+  $('[data-act=parts]').textContent = taken.size ? 'Check all' : 'Uncheck all';
   fly.querySelector('[data-fly=freeze]')!.classList.toggle('on', time.frozen);
   if (G.player.cls.id !== shownClass) { shownClass = G.player.cls.id; renderGear(); }
 }

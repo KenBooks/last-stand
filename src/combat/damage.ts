@@ -140,7 +140,7 @@ export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): 
 export function hurtPlayer(
   p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null, by: Attacker | null = null,
 ): number {
-  if (!p.active || !p.local || G.run?.training) return 0;
+  if (!p.active || !p.local || G.run?.training || by?.foe?.training) return 0;
   const s = p.stats;
   const reduce = type === 'physical' ? s.armor : s.resist;
   const r = p.takeDamage(amount * (1 - reduce / 100), type, from);

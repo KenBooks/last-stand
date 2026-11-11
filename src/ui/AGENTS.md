@@ -13,6 +13,8 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 
 ## Gotchas
 
+- `observePerfHud` lets the Dev panel collect the performance HUD's own timing samples without showing or changing the overlay. `perfHudStats` reads the same window used by the full pane. Closing the panel stops its subscription; an enabled overlay keeps collecting normally.
+
 - Collapsed side panels use `.fold-tabs` stacks, which stay visible while panel content is hidden. Equipment and Attributes entry tabs reopen their own right-panel page. The dev module adds Hero/Dev entry tabs to the left stack. One-panel phone/tablet layouts hide the stacks and keep the existing rail (`lab dev --cold` checks the entries and the five viewport layouts).
 
 - **The UI must fit any screen size, desktop and mobile.** Anything that overflows or overlaps at some viewport size is a bug.

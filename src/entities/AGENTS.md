@@ -36,3 +36,4 @@ Gear-driven skills and block (`Player.gear`, `tryBlock`) are in `src/combat/skil
 - Training projections keep the screen-door dissolve, with cyan edge light at 0.18 and frost tint at 0.35. Stronger edge emission and a 0.8 frost tint washed out their bodies; keep the glow subtle without changing the arena lighting.
 
 - Apply training projection uniforms immediately after building the model, before joining its crowd. The rising spawn branch returns before updateLooks, so combat-only styling leaves a newly spawned foe looking normal until its rise ends.
+- Training is also per enemy (`EnemyOpts.training`, defaulting to the run's mode), so individually spawned practice enemies stay harmless outside a training run. Their attack damage is zero; `hurtPlayer` also rejects a training attacker. Projection uniforms and shadow suppression use this flag, and summons inherit it.

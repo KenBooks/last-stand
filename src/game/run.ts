@@ -569,7 +569,7 @@ export function localOut(kind: 'banked' | 'dead'): void {
 function onEnemyKilled(e: Enemy): void {
   const r = G.run;
   if (!r || isGuest()) return;
-  if (r.training) return;
+  if (r.training || e.training) return;
   r.kills++;
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;

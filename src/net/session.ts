@@ -29,7 +29,7 @@ import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 27;
+const PROTOCOL = 28;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
