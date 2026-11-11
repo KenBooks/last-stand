@@ -8,6 +8,7 @@ import { cloudTouched } from './cloud';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
 import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: to remove, unbind these lines only (pr423Gear.ts says why)
 import { seedPr499Gear } from './pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
+import { seedPr527Gear } from './pr527Gear'; // PR 527's test gear: to remove, unbind these lines only
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
@@ -32,6 +33,7 @@ function fresh(classId: string): Profile {
   };
   seedPr423Gear(p, true); // PR 423's test gear
   seedPr499Gear(p, true); // PR 499's test gear
+  seedPr527Gear(p, true); // PR 527's test gear
   return p;
 }
 
@@ -52,6 +54,7 @@ export function loadProfile(classId: string): Profile {
       const loaded = { ...p, classId };
       if (seedPr423Gear(loaded, false)) saveProfile(loaded); // PR 423's test gear
       if (seedPr499Gear(loaded, false)) saveProfile(loaded); // PR 499's test gear
+      if (seedPr527Gear(loaded, false)) saveProfile(loaded); // PR 527's test gear
       return loaded;
     }
     if (classId === 'mage' && saveSlot() === 1) {
