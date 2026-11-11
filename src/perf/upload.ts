@@ -14,6 +14,7 @@ import { hdrActive } from '../core/hdr';
 import { auditPrograms, lateCompiles, shaderErrors } from '../core/shaders';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
+import { bootStallSummary } from './bootStalls';
 import { perfBundle, perfGpuName, perfJsBench } from '../ui/perfHud';
 import { encodeTrace, TRACE_MAX_BYTES, type ColumnInfo } from './traceFormat.ts';
 import { recorder, type Slow, type Snapshot } from './recorder';
@@ -114,7 +115,8 @@ export function traceOf(slow: Slow): Uint8Array {
     reason,
     device: device(),
     settings: settings(),
-    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | ') },
+    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | '),
+      bootStalls: bootStallSummary(b.stalls ?? []) },
     columns,
     longFrames: snapshot.longFrames,
     marks: snapshot.marks,

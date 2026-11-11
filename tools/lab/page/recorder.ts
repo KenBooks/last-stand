@@ -101,6 +101,9 @@ function countsKept(columns: ColumnInfo[]): string[] {
 /** A send's trace of now, packed, gzipped, read back: its lines, size and what it holds. `canary`: a count's
  *  column with a time planted in a copy of it, which must be found. */
 async function traceNow(send: string, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
+  // Before the captured play: it must survive even though the rolling history excludes it.
+  recorder.longFrame({ startTime: 1, duration: 5000, renderStart: 5001, styleAndLayoutStart: 5001,
+    scripts: [{ duration: 4900, invoker: 'lab', sourceURL: 'boot.js', sourceFunctionName: 'bootStallCanary' }] });
   const start = window.__labClock.realNow();
   const verdict = recorder.judged();
   // (taken as the detector finds a slow stretch, mid-fight: its own time said apart; the packing waits for a calm)
@@ -127,6 +130,9 @@ async function traceNow(send: string, canary: boolean): Promise<{ lines: string[
     ...traceReport(trace).slice(0, REPORT_LINES).map((line) => `    ${line}`),
   ];
   const problems: string[] = [];
+  if (!String(trace.header.game.bootStalls).includes('bootStallCanary')) {
+    problems.push('the trace lost its loading stall before the captured play history');
+  }
   const sent = await sendTrace(gzipped, send);
   if ('code' in sent) lines.push(`  sent to the traces service: ${sent.code}`);
   else problems.push(`the trace couldn't be sent: ${sent.error}`);

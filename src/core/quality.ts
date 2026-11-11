@@ -1,7 +1,6 @@
 // Graphics quality: the player's setting (auto / high / medium / low / very low, cookie) and the
-// level in effect. Auto steps down the levels while the frame rate stays low, and never
-// steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
-// tries the level above the one it last settled on, kept once it holds its frame rate for a
+// level in effect. Auto steps down while frame rate stays low. Each boot or fresh Auto choice,
+// once the game is shown, it tries higher levels in turn, each kept once it holds its frame rate for a
 // window, else left for the settled one at its first quick window under the target and put off
 // for a few boots (`bootAuto`, `trialMissed`). Every level renders the
 // screen's own pixels: what's cut is other work,

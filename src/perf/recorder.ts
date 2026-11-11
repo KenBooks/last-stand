@@ -9,6 +9,7 @@ import { hallOpen } from '../game/hall';
 import { framesUncapped } from '../core/frameLoop';
 import { autoTrying } from '../core/quality';
 import { sceneNote } from './sceneNote';
+import { keepBootStall, keepPlayStall, longFrameLabel } from './bootStalls';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -63,7 +64,7 @@ export interface Snapshot {
   kinds: Record<string, ColumnKind>;
   longFrames: LongFrameRow[];
   marks: MarkRow[];
-  boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean };
+  boot: { steps: MarkRow[]; revealMs: number; downloadMs: number; firstVisit: boolean; stalls?: LongFrameRow[] };
   refreshHz: number;
   /** where it was taken and what the hero was doing (`sceneNote.ts`) */
   scene: string;
@@ -77,7 +78,7 @@ let head = -1, count = 0;
 let lastFrame = 0, settleUntil = 0, lastJudged = 0, refreshMs = 1000 / 60;
 const marks: { t: number; text: string }[] = [];
 const longFrames: { t: number; row: LongFrameRow }[] = [];
-const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: false };
+const boot = { steps: [] as MarkRow[], revealMs: 0, downloadMs: 0, firstVisit: false, stalls: [] as LongFrameRow[] };
 let readyingSince = 0, wasHidden = false;
 const listeners: ((slow: Slow) => void)[] = [];
 let pending: Slow | null = null;
@@ -185,7 +186,7 @@ function takeSnapshot(): Snapshot {
     kinds,
     longFrames: since(longFrames).map(({ t: seenAt, row }) => [at(seenAt), ...row.slice(1)] as LongFrameRow),
     marks: since(marks).map(({ t: when, text }) => [at(when), text] as MarkRow),
-    boot: { ...boot, steps: boot.steps.slice() },
+    boot: { ...boot, steps: boot.steps.slice(), stalls: boot.stalls.slice() },
     refreshHz: Math.round(1000 / refreshMs),
     scene: sceneNote(),
   };
@@ -260,11 +261,11 @@ export const recorder = {
     const end = f.startTime + f.duration, render = f.renderStart || end, layout = f.styleAndLayoutStart || end;
     const scripts = f.scripts.reduce((sum, s) => sum + s.duration, 0);
     const longest = [...f.scripts].sort((a, b) => b.duration - a.duration)[0];
-    const file = longest?.sourceURL.split('/').pop()?.split('?')[0];
-    const by = longest ? [longest.invoker, longest.sourceFunctionName, file].filter(Boolean).join(' ') : '';
+    const by = longest ? longFrameLabel(longest.invoker, longest.sourceFunctionName, longest.sourceURL) : '';
     const r = (v: number): number => Math.round(v);
-    longFrames.push({ t: f.startTime, row: [0, r(f.duration), r(render - f.startTime), r(layout - render), r(end - layout), r(scripts), r(longest?.duration ?? 0), by] });
-    if (longFrames.length > MOST_LONG) longFrames.shift();
+    const row: LongFrameRow = [0, r(f.duration), r(render - f.startTime), r(layout - render), r(end - layout), r(scripts), r(longest?.duration ?? 0), by];
+    keepPlayStall(longFrames, { t: f.startTime, row }, performance.now() - KEPT_MS, MOST_LONG);
+    if (!boot.revealMs || f.startTime < boot.revealMs) keepBootStall(boot.stalls, [r(f.startTime), ...row.slice(1)] as LongFrameRow);
   },
 
   /** Something worth seeing beside the frames: a cast, a warm-up... */

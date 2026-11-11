@@ -99,6 +99,7 @@ export function traceReport(trace: Trace, code = ''): string[] {
   // (each part of the frame taken out in turns on the player's device: perf/profiler.ts)
   if (r.profile) lines.push('Profile:', ...String(r.profile).split('\n').map((line) => `  ${line}`));
   lines.push(`Boot: shown at ${sec(Number(r.bootMs))} (waiting on its files ${sec(Number(r.bootDownloadMs))}${r.firstVisit ? ', no worker: its files from the network' : ''})${h.game.bootSteps ? ` | ${h.game.bootSteps}` : ''}`);
+  if (h.game.bootStalls) lines.push(`Loading stalls (times from navigation): ${h.game.bootStalls}`);
   lines.push(`FPS over play: mean ${fps((play.length * 1000) / playMs)} | 1% low ${fps(1000 / percentile(playIntervals, 0.99))}`);
   lines.push(`Frame p50 ${fmt(percentile(playIntervals, 0.5))} ms | p95 ${fmt(percentile(playIntervals, 0.95))} ms | CPU ${fmt(meanOver(c.cpu, play), 2)} ms | GPU ${gpu.length ? fmt(meanOver(c.gpu, play), 2) + ' ms' : 'n/a'}`);
   const last = n - 1;
