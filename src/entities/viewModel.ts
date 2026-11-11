@@ -16,6 +16,8 @@ const TILT = -0.4;
 
 const body = new WeakMap<Model, THREE.Object3D[]>(), arms = new WeakMap<Model, THREE.Object3D[]>();
 const shown = new WeakSet<Model>();
+const bodyHidden = new WeakSet<Model>();
+const _neckWorld = new THREE.Vector3();
 /** The pose's own placement of the root, and ours over it: a frame with no new pose (paused) starts again
  *  from the pose's, or the neck would be measured where we put the hero last time */
 const placed = new WeakMap<Model, { pos: THREE.Vector3; quat: THREE.Quaternion; ourPos: THREE.Vector3; ourQuat: THREE.Quaternion }>();
@@ -213,8 +215,14 @@ export function armsLayerOf(m: Model): number {
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   // (a model that has its arms drawn by their own camera has them on its layer, `armsFov`)
   const ownCamera = on && !!m.armsFov;
+  // Hide the body before the gliding camera enters the head, at any simulation speed.
+  const nearHead = !!m.joints && m.joints.neck.getWorldPosition(_neckWorld).distanceTo(cam.position) < 0.8;
+  const hideBody = on || nearHead;
+  if (hideBody !== bodyHidden.has(m)) {
+    for (const o of bodyOf(m)) o.layers.set(hideBody ? HIDDEN_LAYER : WORLD_LAYER);
+    if (hideBody) bodyHidden.add(m); else bodyHidden.delete(m);
+  }
   if (on !== shown.has(m)) {
-    for (const o of bodyOf(m)) o.layers.set(on ? HIDDEN_LAYER : WORLD_LAYER);
     for (const o of armsOf(m)) o.layers.set(ownCamera ? ARMS_LAYER : WORLD_LAYER);
     if (on) shown.add(m); else shown.delete(m);
     m.firstPerson?.(on);

@@ -63,11 +63,12 @@ const classWeight = (stat: StatKey, cls?: ClassDef): number => (stat === 'life' 
 /** Item base names of a slot for a class (its own, or the defaults). */
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
 
-/** Create an item for `cls` (its base names and stats). Everything is plain JSON so it can be saved directly. */
-export function makeItem({ slot, rarity = 'common', ilvl = 1, cls }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef } = {}): Item {
+/** Create an item for `cls` (its base names and stats), of `base` if given (else one of the slot's). Everything is
+ *  plain JSON so it can be saved directly. */
+export function makeItem({ slot, rarity = 'common', ilvl = 1, cls, base: given }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef; base?: string } = {}): Item {
   slot ??= pick(SLOTS.filter((s) => !cls?.excludeSlots?.includes(s)));
   const r = rarityOf(rarity);
-  const base = pick(basesFor(slot, cls));
+  const base = given ?? pick(basesFor(slot, cls));
   const stats: StatBlock = {};
   // a two-handed weapon makes up for the missing off-hand with a much bigger implicit
   const hands = cls?.twoHanded?.includes(base) ? 1.8 : 1;

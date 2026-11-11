@@ -1870,6 +1870,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  dev: {
+    each(side, options) {
+      return side.command('dev', { canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('dev'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   eval: {
     each(side, options) {
       return side.evaluate(options._.join(' '));

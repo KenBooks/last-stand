@@ -302,7 +302,16 @@ export function initMenus(h: MenuHooks): void {
       document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('off', pg.dataset.page !== tab.dataset.tab));
     };
   });
-  for (const f of FOLDS) $(f.tab).onclick = () => { sfx.click(); f.folded = !f.folded; storeFold(f); syncFolds(); };
+  for (const f of FOLDS) $(f.tab).onclick = () => {
+    sfx.click();
+    if (f.folded && f.tab === '#gear-fold') $('.menu-right [data-tab=gear]').click();
+    f.folded = !f.folded; storeFold(f); syncFolds();
+  };
+  $('#attrs-fold').onclick = () => {
+    $('.menu-right [data-tab=attrs]').click();
+    const f = FOLDS[1];
+    f.folded = false; storeFold(f); syncFolds();
+  };
   onePanel.addEventListener('change', syncFolds);
   syncFolds();
   initStashFilter(renderMenu);

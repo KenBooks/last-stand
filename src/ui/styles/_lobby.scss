@@ -98,7 +98,7 @@
 .fold-tab:hover { background: #1c1712; }
 .fold-tab svg { transition: transform .3s; }
 .panel.folded { box-shadow: none; }
-.panel.folded > :not(.fold-tab) { visibility: hidden; transition: visibility 0s .3s; }
+.panel.folded > :not(.fold-tab, .fold-tabs) { visibility: hidden; transition: visibility 0s .3s; }
 .panel.folded .fold-tab svg { transform: rotate(180deg); }
 .fold-label { display: none; font: 700 11px var(--font-display); letter-spacing: 2px; text-transform: uppercase; white-space: nowrap; }
 .panel.folded .fold-label { display: block; }
@@ -115,6 +115,22 @@
   box-shadow: inset -1px 0 0 var(--frame), inset 0 1px 0 var(--frame), inset 0 -1px 0 var(--frame); }
 .menu-right.folded { translate: 100% 0; }
 .menu-left.folded { translate: -100% 0; }
+.fold-tabs { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 4px; width: 24px; }
+.fold-left { left: calc(100% - 1px); }
+.fold-right { right: calc(100% - 1px); }
+.fold-tabs .fold-tab { position: static; }
+.fold-tabs .fold-extra { display: none; }
+.panel.folded .fold-tabs .fold-extra { display: flex; }
+.fold-extra { width: 24px; height: auto; padding: 12px 0; flex-direction: column; gap: 8px;
+  svg { width: 9px; height: 15px; flex: none; }
+  .fold-label { writing-mode: vertical-rl; }
+}
+.fold-right .fold-extra { border-right: none; border-radius: 6px 0 0 6px;
+  box-shadow: inset 1px 0 0 var(--frame), inset 0 1px 0 var(--frame), inset 0 -1px 0 var(--frame); }
+.fold-left .fold-extra { border-left: none; border-radius: 0 6px 6px 0;
+  box-shadow: inset -1px 0 0 var(--frame), inset 0 1px 0 var(--frame), inset 0 -1px 0 var(--frame);
+  .fold-label { rotate: 180deg; }
+}
 .menu-right.folded #gear-fold.new::after { content: ''; position: absolute; top: 5px; left: 5px; width: 6px; height: 6px; border-radius: 50%;
   background: var(--highlight); box-shadow: 0 0 6px var(--highlight); }
 

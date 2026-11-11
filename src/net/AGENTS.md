@@ -1,5 +1,7 @@
 # `src/net`
 
+- Protocol 29 includes `tr` on enemy spawn reports and a battlefield biome event. The Training flag survives on guests; an explicit arena swap clears old foes/attacks before its replacement spawn reports play.
+
 Co-op.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).

@@ -944,6 +944,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   -60 dB in its last quarter second) are problems. `--canary` renders the first scene again under a 440 Hz note
   never stopped, which must be caught as both. `--ab` runs only against a commit that has `playInto`. The
   measures are pure functions in `page/soundMeasure.ts`, tested in `test/soundMeasure.test.mjs`.
+- `dev`: developer controls through their real panel: Hero/Dev tabs, checked frame inclusion, world labels outside flight, opacity floor, five required desktop/phone/tablet layouts, flight speed in the hint, a training start from frozen flight with harmless enemies, continuous No costs refill, reset, and head meshes hidden during 0.1x first-person entry. `--canary` plants a drained resource and requires its detection. Pictures go to `out/dev`.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
   hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:
   awaited, it never settled, and held up every command after it till the server was stopped; the browser's next

@@ -28,7 +28,7 @@ import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerO
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
-import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
+import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays, pauseTab } from './ui/menus';
 import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
 import { askConflicts, renderCloudBar } from './ui/cloudSaves';
 import { initCloud } from './loot/cloud';
@@ -79,6 +79,9 @@ import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joi
 import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
+import type { DevApi } from './dev/index';
+/** the developer mode built in (a PR preview's build: vite.config.ts); a dev build has it too, by `import.meta.env.DEV` */
+declare const __DEV_TOOLS__: boolean;
 import type { Profile } from './types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -191,6 +194,8 @@ async function boot() {
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
   if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry } });
+  // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
+  if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
 
   await loadingStep('Conjuring spells', 0.55);
   enterMenu();
@@ -241,6 +246,52 @@ async function boot() {
     if (room) joinInvited(room);
   });
   runFrames(frame);
+}
+
+// --- the developer mode ----------------------------------------------------------------
+/** the developer mode once loaded (src/dev): null in production, where none of it is built */
+let dev: DevApi | null = null;
+
+/**
+ * The developer mode loaded, behind two locks: the build (`__DEV_TOOLS__`, set by the PR preview's Docker build alone,
+ * or a dev build), and the host, a preview's (`pr-N.` or a commit build's `c-...` under ls.wellscoped.dev) or this
+ * machine's (the preview's image tried locally). Its module is its own chunk, which a production build never makes.
+ */
+async function loadDevMode(): Promise<void> {
+  const host = location.hostname;
+  const preview = /^(pr|c)-[a-z0-9-]+\.ls\.wellscoped\.dev$/.test(host) || host === 'localhost' || host === '127.0.0.1';
+  if (!import.meta.env.DEV && !preview) return;
+  const { initDev } = await import('./dev/index');
+  const fightWarm = whenWarm(['fight'], (fn: () => void) => fn(), READYING.fight);
+  dev = initDev({
+    startWave: (wave, biome, training) => fightWarm(() => {
+      const heldAlt = ['altleft', 'altright'].filter((key) => input.down.has(key));
+      if (G.mode === 'run') toMenu();
+      if (G.mode !== 'menu' || heroSelectOpen()) return;
+      G.arena.setBiome(biome);
+      const seed = nextSeed;
+      nextSeed = Math.floor(Math.random() * 2 ** 31);
+      beginRun(wave, seed, training);
+      for (const key of heldAlt) input.down.add(key);
+    }),
+    toLobby: () => { if (G.mode === 'run') toMenu(); },
+    reset: () => {
+      const loaded = { mode: G.mode, biome: G.arena.biome, wave: G.run?.wave ?? 1, training: G.run?.training ?? false };
+      toMenu();
+      G.arena.setBiome(loaded.biome);
+      if (loaded.mode === 'run') fightWarm(() => beginRun(loaded.wave, nextSeed, loaded.training));
+    },
+    switchClass: (id) => {
+      if (G.mode !== 'menu' || heroSelectOpen() || id === G.player.cls.id) return;
+      saveClass(id);
+      swapHero(id);
+      renderMenu();
+    },
+    gearChanged: () => { profileChanged(); if (G.mode === 'menu') renderMenu(); },
+    topView: () => { view = 'top'; },
+    openPerformance: () => { if (!G.menuOpen) openPause(true); pauseTab('performance'); },
+    whenFightWarm: (fn) => fightWarm(fn),
+  });
 }
 
 // --- flow -------------------------------------------------------------------------
@@ -496,7 +547,7 @@ function syncView(): void {
   const phase = G.run?.phase;
   const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen();
-  const look = v !== 'top' && !G.menuOpen && (inRun || inLobby);
+  const look = v !== 'top' && !G.menuOpen && (inRun || inLobby) && !dev?.wantsCursor();
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
@@ -681,17 +732,21 @@ function frame(timestamp: number): void {
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
   updateMusic(dt, musicWanted());
   const t0 = perfClock.now();
-  if (!G.paused && revealed) {
+  // (the developer mode's time: frozen, slowed, a step)
+  const simDt = dev ? dev.simDt(dt) : dt;
+  if (!G.paused && revealed && simDt > 0) {
     if (isWarming()) holdQuality();
     else {
       // (each of Auto's steps marked in the performance trace: a slow start is Auto walking down from High)
       const stepped = sampleQuality(rawDt);
       if (stepped) recorder.mark(`quality auto: ${stepped}`);
     }
-    G.dt = dt;
-    G.time += dt;
-    update(dt);
+    G.dt = simDt;
+    G.time += simDt;
+    update(simDt);
   }
+  // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
+  if (dev && revealed) dev.frame(Math.min(rawDt, 0.1));
   // (worn items' glow: its wisps' drift and breath, wherever a hero is drawn)
   tickItemGlow(G.time);
   drawBattleLog();

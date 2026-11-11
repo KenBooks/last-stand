@@ -86,6 +86,8 @@ export interface EnemyNet { x: number; z: number; vx: number; vz: number; f: num
 export interface EnemyOpts {
   wave?: number;
   hero?: boolean;
+  /** harmless projection, including a developer-spawned foe outside a training run */
+  training?: boolean;
   pos: THREE.Vector3;
   /** co-op: extra life for a party (host), or the host's own numbers for a guest's copy */
   lifeMult?: number;
@@ -100,6 +102,7 @@ export class Enemy {
   readonly type: EnemyId;
   readonly def: EnemyDef;
   readonly hero: boolean;
+  readonly training: boolean;
   readonly boss: boolean;
   readonly name: string;
   readonly maxLife: number;
@@ -202,18 +205,19 @@ export class Enemy {
   /** training dummies meter damage instead of losing life */
   meter: DamageMeter | null = null;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, pos, lifeMult = 1, id, name, maxLife }: EnemyOpts) {
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife }: EnemyOpts) {
     const def = ENEMIES[typeId];
     this.type = typeId;
     this.def = def;
     this.hero = hero;
+    this.training = training;
     this.boss = !!def.boss;
     this.id = id ?? nextId++;
     this.lifeMult = lifeMult;
     this.name = name ?? (hero ? `${pick(HERO.prefixes)} ${def.name}` : def.name);
     this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult;
     this.life = this.maxLife;
-    this.damage = def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1);
+    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1);
     this.speed = def.speed * SCALING.speed(wave) * rand(0.92, 1.08);
     this.radius = def.radius * (hero ? HERO.scale : 1);
     this.mass = this.radius * this.radius * (this.boss ? 10 : 1);
@@ -224,7 +228,7 @@ export class Enemy {
 
     this.model = buildModel(def.model);
     // The rising branch skips updateLooks: set the projection before its first crowd row or draw.
-    if (G.run?.training && !def.dummy) {
+    if (this.training && !def.dummy) {
       this.applyProjection();
       this.model.kit.u.uFrozen.value = 0.35;
     }
@@ -552,7 +556,7 @@ export class Enemy {
   }
 
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
-    const projection = G.run?.training && this.type !== 'dummy';
+    const projection = this.training && this.type !== 'dummy';
     if (this.def.evade) this.model.kit.u.uDissolve.value = this.goneTo ? 1 : this.forming / BLINK_FORM;
     if (projection) this.applyProjection();
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : projection ? 0.35 : this.chill > 0 ? 0.35 : 0, 10, dt);
@@ -677,7 +681,7 @@ export class Enemy {
   }
 
   /** whether its body casts a shadow (models/crowd.ts): not as it dissolves */
-  get castsShadow(): boolean { return !G.run?.training && !this.corpse?.fading && !this.goneTo; }
+  get castsShadow(): boolean { return !this.training && !this.corpse?.fading && !this.goneTo; }
 
   dispose(): void {
     leaveCrowd(this);

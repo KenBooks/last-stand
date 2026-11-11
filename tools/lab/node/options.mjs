@@ -2010,6 +2010,13 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  dev: {
+    help: 'developer panel tabs, flight speed, frame inclusion, labels, opacity, five viewport layouts, frozen training starts, continuous refills, reset and slow first-person entry',
+    options: {
+      canary: { kind: 'switch', help: 'plant a drained resource and require its detection' },
+      ...COMMON_OPTIONS,
+    },
+  },
   practice: {
     help: 'each skill on a key with a cooldown cast, then cast again as soon as the hero is free, in the lobby as it '
       + 'shows, in practice (stowed, as Space and a phone\'s Practice stow it), shown again after it, with every '

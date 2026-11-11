@@ -45,6 +45,7 @@ interface Sample { t: number; frame: number; cpu: number; upd: number; rnd: numb
 type Stages = Record<string, number>;
 
 let enabled = false;
+let observed = false;
 let shownSize: PerfHudSize = 'off';
 let el: HTMLElement;
 let renderer: THREE.WebGLRenderer;
@@ -139,6 +140,15 @@ export const perfHudEnabled = (): boolean => enabled;
 
 export const perfHudSize = (): PerfHudSize => shownSize;
 
+/** Share the overlay's timings with another visible readout without showing or changing the overlay. */
+export function observePerfHud(on: boolean): void {
+  if (observed === on) return;
+  observed = on;
+  if (!enabled) { samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; lastFrame = 0; }
+}
+
+export const perfHudStats = () => samples.length ? computeStats(frameNow) : null;
+
 /** The overlay shown whole or put away (a harness's switch: the pause menu sets its size). */
 export function setPerfHud(on: boolean, persist = true): void { setPerfHudSize(on ? 'full' : 'off', persist); }
 
@@ -150,7 +160,7 @@ export function setPerfHudSize(to: PerfHudSize, persist = true): void {
   el.classList.toggle('hidden', !on);
   el.classList.toggle('mini', to === 'mini');
   if (persist) writeCookie(PERF_HUD_COOKIE, to);
-  if (on && was) return;
+  if ((on && was) || observed) return;
   samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; longFrames.length = 0; lastFrame = 0;
 
   if (frameParts?.length && gl && timerExt) gl.endQuery(timerExt.TIME_ELAPSED_EXT);
@@ -163,7 +173,7 @@ export function perfBeginFrame(now: number): void {
   cpuStart = perfClock.now();
   frameNow = now;
   ringAt = recorder.begin(now);
-  if (enabled) {
+  if (enabled || observed) {
     if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: performance.now() - now, stages: {}, ctx: '' });
     lastFrame = now;
   }
@@ -193,7 +203,7 @@ export function perfLap(stage?: string): void {
   const now = perfClock.now();
   if (stage) {
     recorder.lap(stage, now - lapT);
-    if (enabled) stages[stage] = (stages[stage] ?? 0) + now - lapT;
+    if (enabled || observed) stages[stage] = (stages[stage] ?? 0) + now - lapT;
   }
   lapT = now;
 }
@@ -215,7 +225,7 @@ export function perfEndFrame(): void {
     if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting, ring: ringAt }); }
     frameParts = null;
   }
-  if (!enabled) return;
+  if (!enabled && !observed) return;
   const last = samples[samples.length - 1];
   if (last) { last.cpu = end - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
   stages = {};
@@ -223,11 +233,11 @@ export function perfEndFrame(): void {
   while (samples.length && samples[0].t < cutoff) samples.shift();
   while (gpuTimes.length && gpuTimes[0].t < cutoff) gpuTimes.shift();
   while (longFrames.length && longFrames[0].seen < cutoff) longFrames.shift();
-  if (frameNow - lastDraw >= REDRAW_MS) { lastDraw = frameNow; draw(frameNow); }
+  if (enabled && frameNow - lastDraw >= REDRAW_MS) { lastDraw = frameNow; draw(frameNow); }
 }
 
 /** What the overlay timed of the last frame (ms): its work, the update's and the render's, and each update stage's
- *  (none while it's off). */
+ *  (none while neither the overlay nor another readout collects timings). */
 export function lastPerfFrame(): Readonly<{ cpu: number; upd: number; rnd: number; stages: Readonly<Stages> }> | null {
   return samples[samples.length - 1] ?? null;
 }
@@ -265,7 +275,7 @@ function takeWebGpuTime(): void {
       const ms = (render ?? 0) + (compute ?? 0);
       if (ms <= 0) return;
       recorder.gpu(at, ms, null);
-      if (enabled) gpuTimes.push({ t: frameNow, ms });
+      if (enabled || observed) gpuTimes.push({ t: frameNow, ms });
       if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
     })
     .finally(() => { readingGpuTime = false; });
@@ -290,7 +300,7 @@ function pollQueries(now: number): void {
     // (a frame timed in parts is slowed by its queries: its parts go to the recorder, its time none)
     recorder.gpu(f.ring, f.split ? -1 : ms, f.split ? parts : null);
     if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
-    if (!enabled) continue;
+    if (!enabled && !observed) continue;
     if (!f.split) gpuTimes.push({ t: now, ms });
     else if (gpuParts.push(parts) > 30) gpuParts.shift();
   }

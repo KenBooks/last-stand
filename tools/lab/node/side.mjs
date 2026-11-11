@@ -314,6 +314,8 @@ const NAMED_KEYS = {
   Enter: { key: 'Enter', windowsVirtualKeyCode: 13 },
   Escape: { key: 'Escape', windowsVirtualKeyCode: 27 },
   Tab: { key: 'Tab', windowsVirtualKeyCode: 9 },
+  ArrowDown: { key: 'ArrowDown', windowsVirtualKeyCode: 40 },
+  ArrowUp: { key: 'ArrowUp', windowsVirtualKeyCode: 38 },
   AltLeft: { key: 'Alt', windowsVirtualKeyCode: 18, location: 1 },
   ControlLeft: { key: 'Control', windowsVirtualKeyCode: 17, location: 1 },
 };

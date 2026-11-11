@@ -326,7 +326,10 @@
     </div>
     <div class="menu-right panel">
       <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
-      <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
+      <div class="fold-tabs fold-right">
+        <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
+        <button id="attrs-fold" class="fold-tab fold-extra" title="Show attributes" aria-label="Show attributes"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Attributes</span></button>
+      </div>
       <div class="tabs">
         <button class="tab active" data-tab="gear">Equipment</button>
         <button class="tab" data-tab="attrs">Attributes</button>

@@ -2,6 +2,8 @@
 
 The run and what goes round it.
 
+- `remapWaveSpawns` retargets queued units, the waiting boss and units already gate-scheduled, without restarting a run. Gate-scheduled units remain in `pendingUnits` until their callback runs; cleanup clears it. The dev biome switch uses this so an old-biome foe cannot appear after a swap.
+
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 - `run.ts`: the run: its waves, scoring, loot rolls, and the choice after every wave to bank or go on (the core loop, the root's Product rules). In co-op the host's game runs it for the party and the guests follow its reports.
