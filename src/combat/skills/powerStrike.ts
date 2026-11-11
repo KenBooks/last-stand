@@ -1,6 +1,6 @@
 // Power Strike: a second and a half of gathering strength around the weapon, then a crushing overhead blow.
 import * as THREE from 'three';
-import { shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
+import { addEffect, shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, debris, smokePuff } from '../../fx/particles';
 import { flash } from '../../fx/lights';
 import { addShake } from '../../core/renderer';
@@ -42,7 +42,12 @@ const skill: InstantSkill = {
   charging(player, rawDef, k, dt) {
     const def = rawDef as Def;
     const c = player.casting;
-    if (c && !charged.has(c)) { charged.add(c); sfx.charge(c.fireAt); }
+    if (c && !charged.has(c)) {
+      charged.add(c);
+      // (a cast cut short, a guard broken under it, lets its sound sink away: watched, as nothing says a cast ended)
+      const quiet = sfx.strikeCharge(c.fireAt - c.t);
+      if (quiet) addEffect({ update: () => { if (c.fired) return false; if (player.casting === c) return true; quiet(); return false; }, dispose() {} });
+    }
     // keep turning towards the aim while charging
     c?.target.copy(player.aim);
     // motes stream into the weapon (each of two), faster and hotter as the charge builds
@@ -85,7 +90,7 @@ const skill: InstantSkill = {
     smokePuff(c, { count: 12, color: 0x2a241c, size: 1.2, sizeEnd: 3.4, speed: 3 });
     flash({ color: def.color, intensity: 26, distance: 10, life: 0.4, pos: { x: c.x, y: 1.2, z: c.z } });
     addShake(0.75);
-    sfx.slam(); sfx.clang();
+    sfx.strike(k);
     // the chop drives what it kills down into the floor ahead, high on the body; the bodies lying round where it
     // lands are thrown up by the blow through the floor
     sweep(player, def, facing, { knock: def.knock, blow: { dir: { x: dir.x, z: dir.z }, lift: -0.45, at: 0.95, force: 1.25 } });

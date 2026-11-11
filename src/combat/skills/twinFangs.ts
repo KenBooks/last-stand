@@ -23,9 +23,8 @@ function strike(player: Player, def: Def, i: number): void {
   // the right blade cuts down from high on the right, the left one mirrors it, each marked by the trail it leaves
   // alone (fx/swingTrail.ts)
   const s = i === 0 ? 1 : -1;
-  sfx.swing();
   // (each cut drives what it kills along it, and down: it comes from high)
-  if (sweep(player, def, facing, { knock: 1.2, swing: s, lift: 0.12 })) { sfx.clang(); addShake(0.1 + i * 0.05); }
+  if (sweep(player, def, facing, { knock: 1.2, swing: s, lift: 0.12 })) { sfx.fangBite(i); addShake(0.1 + i * 0.05); }
 }
 
 const skill: InstantSkill = {
@@ -39,6 +38,7 @@ const skill: InstantSkill = {
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
     // closes in on the aim, but never runs past it
     const lunge = Math.min(MAX_LUNGE, Math.max(0, d - SHORT));
+    sfx.fangs(FANGS.first, FANGS.apart);
     player.startDash(dir, lunge / FANGS.lunge, FANGS.lunge, { anim: 'flurry', hold: FANGS.hold });
     [FANGS.first, FANGS.first + FANGS.apart].forEach((at, i) => schedule(at, () => strike(player, def, i)));
   },

@@ -56,6 +56,7 @@ function launch(p: THREE.Vector3, dir: THREE.Vector3): void {
   smokePuff(back, { count: 10, color: DUST, alpha: 0.55, size: 0.9, sizeEnd: 2.6, speed: 3, life: 1.1 });
   flash({ color: EMBER, intensity: 8, distance: 5, life: 0.2, pos: { x: p.x, y: 0.8, z: p.z } });
   addShake(0.15);
+  sfx.bullLaunch();
 }
 
 /** a footfall at full tilt: the ground thumps, dust and grit kicked up behind */
@@ -65,6 +66,7 @@ function footfall(p: THREE.Vector3, dir: THREE.Vector3, side: number): void {
   debris({ x: f.x, y: 0, z: f.z }, { count: 4, speed: 3 });
   shockwave(f, { color: EMBER, intensity: 0.7, from: 0.1, to: 0.8, life: 0.2 });
   decal(f, { type: 'scorch', size: 0.6, life: 2.5, opacity: 0.45 });
+  sfx.bullStep(side);
 }
 
 function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
@@ -77,7 +79,7 @@ function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
   smokePuff(c, { count: 8, color: DUST, size: 1, sizeEnd: 2.6, speed: 2.5 });
   flash({ color: EMBER, intensity: 14, distance: 7, life: 0.3, pos: { x: c.x, y: 1, z: c.z } });
   addShake(0.35);
-  sfx.slam();
+  sfx.bullLand();
 }
 
 const skill: InstantSkill = {
@@ -93,7 +95,6 @@ const skill: InstantSkill = {
     dir.normalize();
     const hit = new Set<Enemy>(), struck = new Set<Prop>();
     let dust = 0, scrape = 0, arrived = false, launched = false, steps = 0;
-    sfx.rush();
     // (gathering for it: dust stirs round the feet)
     smokePuff(player.pos, { count: 4, color: DUST, alpha: 0.4, size: 0.6, sizeEnd: 1.6, speed: 1.2 });
 
@@ -103,6 +104,7 @@ const skill: InstantSkill = {
     G.scene.add(wedge.mesh);
 
     const run = Math.max(RUN, def.range / def.speed), dur = BRACE + run;
+    sfx.bullRush(BRACE, run);
     // (the fallen in its way driven on before it while it runs, from the push-off to the stop)
     let myDash: typeof player.dash = null;
     const running = () => player.dash === myDash && myDash !== null && myDash.t >= BRACE && myDash.t < myDash.dur;
@@ -163,7 +165,7 @@ const skill: InstantSkill = {
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });
         debris(e.pos, { count: 6, speed: 5 });
         addShake(0.2);
-        sfx.clang();
+        sfx.bullHit();
       }
       if (d && d.t >= d.dur) { arrived = true; arrive(p.clone(), dir); throwPloughed(player, dir); }
     } });

@@ -58,6 +58,97 @@ function boltCues(at: number, hits: boolean): Cue[] {
   ];
 }
 
+/** The warrior's paces (s): Rending Cleave's swing with a shield, a great weapon and a blade in each hand (its
+ *  `castTime`, the blow `FIRES` of the way in), Steel Tempest's turns a second with one and with a great weapon
+ *  (`spin` over a turn), Bull Rush's brace and run, Power Strike's gathering, Twin Fangs' cuts. */
+const FIRES = 0.55;
+const CLEAVE_PACE = [0.3, 0.42, 0.6];
+const TEMPEST_TURNS = [15 / (Math.PI * 2), 15 / (Math.PI * 2), 10.5 / (Math.PI * 2)];
+const TEMPEST_HELD = 3;
+const RUSH = { brace: 0.16, run: 0.42 };
+const STRIKE_GATHERS = 1.35;
+const FANGS = { first: 0.2, apart: 0.15 };
+
+/** Rending Cleave held: three swings at a weapon's pace (`heft`: 0 a blade in each hand, 1 a one-hander, 2 a great
+ *  weapon), each biting. */
+function cleaveCues(heft: number): Cue[] {
+  const pace = CLEAVE_PACE[heft];
+  return [0, 1, 2].flatMap((swing) => [
+    { at: swing * pace, sound: ['cleave'], args: [pace * FIRES, heft, swing % 2 ? -1 : 1] },
+    { at: swing * pace + pace * FIRES, sound: ['cleaveBite'], args: [heft] },
+  ]);
+}
+
+/** Steel Tempest held `TEMPEST_HELD` s and let go, its blades biting every 0.4 s. */
+function tempestCues(heft: number): Cue[] {
+  const bites = Array.from({ length: 6 }, (_, bite) => ({ at: 0.4 + bite * 0.4, sound: ['tempestBite'], args: [heft] }));
+  return [{ at: 0, sound: ['tempest'], args: [TEMPEST_TURNS[heft], heft], keep: 'spin' }, ...bites, { at: TEMPEST_HELD, stop: 'spin' }];
+}
+
+const WARRIOR: Record<string, Scene> = {
+  cleave: { what: 'Rending Cleave held with a one-hander: three swings, each biting', cues: cleaveCues(1) },
+  cleaveGreat: { what: 'Rending Cleave held with a great weapon: three swings, each biting', cues: cleaveCues(2) },
+  cleaveDual: { what: 'Rending Cleave held with a blade in each hand: three swings, each biting', cues: cleaveCues(0) },
+  fangs: {
+    what: 'Twin Fangs: the lunge and its two cuts, each biting',
+    cues: [
+      { at: 0, sound: ['fangs'], args: [FANGS.first, FANGS.apart] },
+      { at: FANGS.first, sound: ['fangBite'], args: [0] },
+      { at: FANGS.first + FANGS.apart, sound: ['fangBite'], args: [1] },
+    ],
+  },
+  crescent: {
+    what: 'Thunder Crescent: the swing down, the strike into the ground, its lightning on two foes',
+    cues: [
+      { at: 0, sound: ['crescentSwing'], args: [0.33] },
+      { at: 0.33, sound: ['crescent'] },
+      { at: 0.55, sound: ['crescentArc'] },
+      { at: 0.75, sound: ['crescentArc'] },
+    ],
+  },
+  shield: {
+    what: 'Raise Shield: raised, two blows caught, then the guard broken',
+    cues: [
+      { at: 0, sound: ['shieldUp'] },
+      { at: 0.6, sound: ['shieldBlock'] },
+      { at: 1.3, sound: ['shieldBlock'] },
+      { at: 2.1, sound: ['guardBreak'] },
+    ],
+  },
+  tempest: { what: `Steel Tempest held ${TEMPEST_HELD} s with a one-hander, biting, and let go`, cues: tempestCues(1), held: [1, TEMPEST_HELD] },
+  tempestGreat: { what: `Steel Tempest held ${TEMPEST_HELD} s with a great weapon, biting, and let go`, cues: tempestCues(2), held: [1, TEMPEST_HELD] },
+  bullRush: {
+    what: 'Bull Rush: the brace, the push-off, two footfalls, a foe met, the stop',
+    cues: [
+      { at: 0, sound: ['bullRush'], args: [RUSH.brace, RUSH.run] },
+      { at: RUSH.brace, sound: ['bullLaunch'] },
+      { at: RUSH.brace + RUSH.run / 3, sound: ['bullStep'], args: [1] },
+      { at: RUSH.brace + RUSH.run / 2, sound: ['bullHit'] },
+      { at: RUSH.brace + RUSH.run * 2 / 3, sound: ['bullStep'], args: [-1] },
+      { at: RUSH.brace + RUSH.run, sound: ['bullLand'] },
+    ],
+  },
+  powerStrike: {
+    what: `Power Strike: gathered ${STRIKE_GATHERS} s, landed`,
+    cues: [
+      { at: 0, sound: ['strikeCharge'], args: [STRIKE_GATHERS], keep: 'gather' },
+      { at: STRIKE_GATHERS, sound: ['strike'], args: [1] },
+    ],
+  },
+  powerStrikeEarly: {
+    what: 'Power Strike cut short as it gathers',
+    cues: [
+      { at: 0, sound: ['strikeCharge'], args: [STRIKE_GATHERS], keep: 'gather' },
+      { at: 0.7, stop: 'gather' },
+    ],
+  },
+  bellow: {
+    what: 'Iron Bellow: the cry, then two blows taken on its shields',
+    cues: [{ at: 0, sound: ['bellow'] }, { at: 1.6, sound: ['wardHit'] }, { at: 2.2, sound: ['wardHit'] }],
+  },
+  draught: { what: 'Healing Draught drunk', cues: [{ at: 0, sound: ['draught'] }] },
+};
+
 const SCENES: Record<string, Scene> = {
   bolt: {
     what: 'Splintering Bolt held: four casts, each bursting on a foe and its two splits on two others',
@@ -77,6 +168,7 @@ const SCENES: Record<string, Scene> = {
     ],
     held: [LANCE_OPENS + 1, LANCE_OPENS + LANCE_HELD],
   },
+  ...WARRIOR,
   lanceEarly: {
     what: 'Void Lance let go as its portal is drawn, before the beam',
     cues: [

@@ -6,6 +6,7 @@ import { portShader } from '../../core/shaderPorts';
 import { G } from '../../state';
 import { BLOCK } from '../../data/balance';
 import type { ChannelSkill } from './types';
+import { sfx } from '../../core/audio';
 
 interface GuardState { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; t: number; seen: number }
 
@@ -51,6 +52,7 @@ const skill: ChannelSkill<GuardState> = {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
     G.scene.add(mesh);
+    sfx.shieldUp();
     return { mesh, mat, t: 0, seen: player.lastBlock };
   },
   tick(player, _def, dt, st) {

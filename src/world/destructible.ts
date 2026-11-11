@@ -127,7 +127,7 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
     propSink(p.id, Math.round(p.life * 10) / 10);
     debris(centre(p, _p), { count: 3, color: p.color, speed: 3, size: 0.12, life: 0.7 });
     rubble(_p.x, _p.z, { count: 1, color: p.color, kind: p.kind, radius: 0.4, height: 0.3, size: 0.1, speed: 2 });
-    sfx.clang();
+    sfx.chip(p.kind);
   }
   return false;
 }

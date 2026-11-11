@@ -599,6 +599,543 @@ function veilstepPass(dur: number): void {
   v.start(); v.stopAt(t + land + 1.1);
 }
 
+// The warrior's sounds: steel, wood, earth and a man's weight, each skill the thing it shows and told from the others
+// by ear (before, every swing was one whoosh, `swing`, and every hit one clang, a triangle note at 1180 Hz; Power
+// Strike's charge a saw gliding up two octaves). Noise alone, as the wizard's: air cut by a blade, driven blows whose
+// weight is in the mids, grit, and iron as short bands of noise at frequencies drawn anew at every blow (`iron`), so
+// metal rings without ever playing the same note twice, or a note at all.
+
+/** how heavy the weapon swung is: a blade in each hand, a one-hander, a great weapon in both */
+export type Heft = 0 | 1 | 2;
+
+/** A gain silent until `from` s in, swelling to `peak` at `peakAt` s and dying over `fall` s, into `to`: a swing's
+ *  air, loudest as the blade passes. */
+function swellAt(v: ReturnType<typeof voice>, from: number, peakAt: number, peak: number, fall: number, to: AudioNode = v.out): GainNode {
+  const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t); g.gain.setValueAtTime(0.0001, v.t + from);
+  g.gain.exponentialRampToValueAtTime(peak, v.t + Math.max(peakAt, from + 0.01));
+  g.gain.exponentialRampToValueAtTime(0.0001, v.t + Math.max(peakAt, from + 0.01) + fall);
+  g.connect(to); return g;
+}
+
+/** A filter whose frequency passes through `points` ([s in, Hz], the first its start). */
+function glide(v: ReturnType<typeof voice>, type: BiquadFilterType, q: number, points: [number, number][]): BiquadFilterNode {
+  const f = v.c.createBiquadFilter(); f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(points[0][1], v.t);
+  for (const [at, hz] of points) {
+    if (at <= 0) f.frequency.setValueAtTime(hz, v.t); else f.frequency.exponentialRampToValueAtTime(hz, v.t + at);
+  }
+  return f;
+}
+
+/** Iron struck, `at` s in: `n` narrow bands of noise between `lo` and `hi` Hz, drawn anew each time, so it rings as
+ *  metal does and never as the same note (the old `clang` was a triangle falling from 1180 Hz, the same at every hit).
+ *  Narrow and long, as steel rings: wide bands dying in a tenth of a second were a knock of wood (from play, "sounds
+ *  like wooden swords"). */
+function iron(v: ReturnType<typeof voice>, at: number, n: number, lo: number, hi: number, peak: number, decay: number, to: AudioNode = v.out): void {
+  for (let i = 0; i < n; i++) {
+    const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 12;
+    f.frequency.value = lo * (hi / lo) ** ((i + Math.random()) / n);
+    v.loop(f); f.connect(blowAt(v, at, peak * 1.8 * (0.7 + 0.6 * Math.random()), decay * (0.6 + 0.8 * Math.random()), to, 0.001));
+  }
+}
+
+/** Grit: `n` grains of noise between `lo` and `hi` Hz scattered over `span` s from `from`, thinning, each in its own
+ *  place: stone splitting, earth thrown, splinters. */
+function grit(v: ReturnType<typeof voice>, n: number, from: number, span: number, lo: number, hi: number, peak: number): void {
+  for (let i = 0; i < n; i++) {
+    const k = Math.pow(Math.random(), 1.6);
+    const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4; f.frequency.value = lo * (hi / lo) ** Math.random();
+    v.loop(f); f.connect(blowAt(v, from + k * span, peak * (1 - 0.7 * k), 0.04 + Math.random() * 0.07, v.lane(1, Math.random() * 1.4 - 0.7), 0.001));
+  }
+}
+
+/** A blow's weight, `at` s in: dark noise closing from `from` Hz to `to`, driven, so a laptop hears its mids; and
+ *  under it the floor of the noise driven hard, so its harmonics carry the weight at 200 to 700 Hz and it lasts
+ *  (a knock alone, starting at 2 kHz and gone in a quarter second, was a wooden sword's). */
+function thump(v: ReturnType<typeof voice>, at: number, from: number, to: number, peak: number, decay: number, out: AudioNode = v.out, k = 3.2): void {
+  // (closing no lower than 110 Hz, and nothing under 70 kept: the dark of it is heard, the sub under it isn't)
+  const f = glide(v, 'lowpass', 0.9, [[0, from], [at, from], [at + decay * 0.5, Math.max(110, to)]]);
+  const floor = v.c.createBiquadFilter(); floor.type = 'highpass'; floor.frequency.value = 70; floor.Q.value = 0.6;
+  v.loop(f); f.connect(drive(k)).connect(floor).connect(blowAt(v, at, peak, decay, out, 0.003));
+  const low = v.c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 150; low.Q.value = 0.7;
+  const tame = v.c.createBiquadFilter(); tame.type = 'lowpass'; tame.frequency.value = 1400;
+  // (what's under 120 Hz cut after the drive: a laptop can't play it, and it only filled the compressor)
+  const cut = v.c.createBiquadFilter(); cut.type = 'highpass'; cut.frequency.value = 120; cut.Q.value = 0.6;
+  const push = v.c.createGain(); push.gain.value = 4;
+  v.loop(low); low.connect(push).connect(drive(6)).connect(cut).connect(tame).connect(blowAt(v, at, peak * 0.7, decay * 1.4, out, 0.004));
+}
+
+/** Armour and what's under it giving, `at` s in: a crunch of mid noise driven hard, and a meaty blow under it. */
+function crunch(v: ReturnType<typeof voice>, at: number, peak: number, decay: number, out: AudioNode = v.out): void {
+  const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700 + Math.random() * 300; f.Q.value = 0.9;
+  v.loop(f); f.connect(drive(5)).connect(blowAt(v, at, peak, decay, out, 0.002));
+  const meat = v.c.createBiquadFilter(); meat.type = 'bandpass'; meat.frequency.value = 260; meat.Q.value = 1.1;
+  v.loop(meat); meat.connect(drive(4)).connect(blowAt(v, at, peak * 1.2, decay * 1.5, out, 0.003));
+}
+
+/** A blow of earth or of a body, `at` s in: the noise under 450 Hz, broad (no band in it to ring, as the narrow
+ *  320 to 360 Hz punch did: from play, "still sounds like its hitting a tincan"), driven hard so its weight is heard
+ *  in the low mids, what's under 90 Hz cut. A whump, not a clang. */
+function whump(v: ReturnType<typeof voice>, at: number, peak: number, decay: number, out: AudioNode = v.out): void {
+  const low = v.c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 450; low.Q.value = 0.5;
+  const push = v.c.createGain(); push.gain.value = 3;
+  const cut = v.c.createBiquadFilter(); cut.type = 'highpass'; cut.frequency.value = 90; cut.Q.value = 0.5;
+  const top = v.c.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 1600; top.Q.value = 0.5;
+  v.loop(low); low.connect(push).connect(drive(5)).connect(cut).connect(top).connect(blowAt(v, at, peak, decay, out, 0.003));
+}
+
+/** A smash, `at` s in: its instant, all the noise over 500 Hz driven hard and gone in a tenth of a second, a driven
+ *  body of it round 1.4 kHz, and what breaks under it, a burst of stone and grit thinning over `spread` s. The front a
+ *  great blow needs: without it, earth and weight alone were a muffled thud (from play, "should be a smash!"). */
+function smash(v: ReturnType<typeof voice>, at: number, peak: number, spread: number, out: AudioNode = v.out): void {
+  const edge = v.c.createBiquadFilter(); edge.type = 'highpass'; edge.frequency.value = 500; edge.Q.value = 0.5;
+  v.loop(edge); edge.connect(drive(6)).connect(blowAt(v, at, peak, 0.14, out, 0.0008));
+  const body = v.c.createBiquadFilter(); body.type = 'bandpass'; body.frequency.value = 1400; body.Q.value = 0.5;
+  v.loop(body); body.connect(drive(4)).connect(blowAt(v, at, peak * 0.8, 0.22, out, 0.001));
+  grit(v, Math.round(10 + spread * 40), at, spread, 700, 5000, peak * 1.1);
+}
+
+/** The ground answering a great blow, `at` s in: dark noise driven, long, its top closing. */
+function rumble(v: ReturnType<typeof voice>, at: number, peak: number, decay: number): void {
+  const f = glide(v, 'lowpass', 1, [[0, 600], [at, 600], [at + decay, 180]]);
+  const floor = v.c.createBiquadFilter(); floor.type = 'highpass'; floor.frequency.value = 90; floor.Q.value = 0.6;
+  v.loop(f); f.connect(drive(4)).connect(floor).connect(blowAt(v, at, peak, decay, v.out, 0.01));
+}
+
+/** A crack, `at` s in: a few milliseconds of bright noise. */
+function crack(v: ReturnType<typeof voice>, at: number, peak: number, out: AudioNode = v.out, hz = 2400): void {
+  const f = v.c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hz;
+  v.loop(f); f.connect(blowAt(v, at, peak, 0.06, out, 0.001));
+}
+
+/** A blade's air through `to`, loudest `lead` s in as it passes: a band of noise rising to `top` Hz and falling
+ *  away, lightly flanged (the edge), and the hiss of the edge itself over `edge` Hz. */
+function bladeAir(v: ReturnType<typeof voice>, from: number, lead: number, tail: number, low: number, top: number, edge: number, peak: number, to: AudioNode): void {
+  const air = glide(v, 'bandpass', 1.3, [[0, low], [from, low], [lead, top], [lead + tail, low * 1.2]]);
+  v.loop(air); air.connect(v.flange(swellAt(v, from, lead, peak, tail * 1.6, to), 1.6, 1, 5, 0.4));
+  const hiss = v.c.createBiquadFilter(); hiss.type = 'highpass'; hiss.frequency.value = edge;
+  v.loop(hiss); hiss.connect(swellAt(v, Math.max(from, lead - 0.06), lead, peak * 0.16, tail, to));
+}
+
+/** A pan crossing from `from` to `to` between `start` and `end` s in, into the voice's output. */
+function crossing(v: ReturnType<typeof voice>, from: number, to: number, start: number, end: number): StereoPannerNode {
+  const p = v.c.createStereoPanner(); p.connect(v.out);
+  p.pan.setValueAtTime(from, v.t); p.pan.setValueAtTime(from, v.t + start); p.pan.linearRampToValueAtTime(to, v.t + end);
+  return p;
+}
+
+/** Rending Cleave's swing, its blade passing `lead` s in (as the blow lands), sweeping `way` (+1 from the right ear
+ *  to the left): a one-hander's cut of air; a great weapon's lower and longer, with the weight of it moving under;
+ *  a blade of two quick and thin. Each a little apart, as a held button swings again and again. */
+function cleaveSwing(lead: number, heft: Heft, way: number): void {
+  const v = voice(0, 0.12);
+  const k = 0.92 + Math.random() * 0.16;
+  const at = Math.max(0.06, lead), from = Math.max(0, at - [0.14, 0.2, 0.3][heft]), tail = [0.13, 0.18, 0.28][heft];
+  const across = crossing(v, way * 0.5, -way * 0.5, from, at + tail);
+  bladeAir(v, from, at, tail, [900, 600, 300][heft] * k, [3200, 2200, 1200][heft] * k, [6000, 4500, 3000][heft], [0.5, 0.6, 0.65][heft], across);
+  // the weapon's weight moving the air: a great weapon's most
+  const body = glide(v, 'lowpass', 0.8, [[0, 220], [from, 220], [at, [700, 600, 520][heft]], [at + tail, 200]]);
+  v.loop(body); body.connect(drive(3.5)).connect(swellAt(v, from, at, [0.14, 0.24, 0.42][heft], tail * 1.8, across));
+  v.start(); v.stopAt(v.t + at + tail * 2 + 0.3);
+}
+
+/** Rending Cleave biting: the blow's weight, the blade's steel on armour and bone, a tear. A great weapon's is a
+ *  heavier, duller blow; a light blade's a sharp one. */
+function cleaveBite(heft: Heft): void {
+  const v = voice(0, 0.3);
+  const lane = v.lane(1, Math.random() * 0.4 - 0.2);
+  crack(v, 0, [0.2, 0.24, 0.28][heft], lane, 2000);
+  thump(v, 0, [1300, 1000, 750][heft], 60, [0.36, 0.46, 0.6][heft], [0.32, 0.42, 0.6][heft], lane, 4);
+  crunch(v, 0, [0.16, 0.2, 0.26][heft], [0.12, 0.15, 0.2][heft], lane);
+  iron(v, 0, 5, [1700, 1200, 650][heft], [6500, 5000, 3000][heft], 0.09, [0.35, 0.45, 0.6][heft], lane);
+  v.start(); v.stopAt(v.t + 1.1);
+}
+
+/** Twin Fangs: a lunge and two cuts, the right blade `first` s in and the left `apart` s after it. A scuff of the
+ *  boot and a push of air as he springs, then two thin, quick slices, each in its own ear and the second higher. */
+function fangs(first: number, apart: number): void {
+  const v = voice(0, 0.12);
+  const scuff = v.c.createBiquadFilter(); scuff.type = 'bandpass'; scuff.frequency.value = 1700; scuff.Q.value = 0.7;
+  v.loop(scuff); scuff.connect(v.hit(0.1, 0.09, v.out, 0.004));
+  const push = glide(v, 'lowpass', 0.8, [[0, 350], [first * 0.6, 1300], [first + apart, 300]]);
+  v.loop(push); push.connect(swellAt(v, 0, first * 0.6, 0.16, 0.35));
+  [first, first + apart].forEach((at, i) => {
+    const side = i ? -1 : 1, k = i ? 1.15 : 1;
+    const across = crossing(v, side * 0.6, -side * 0.15, at - 0.08, at + 0.08);
+    bladeAir(v, Math.max(0, at - 0.09), at, 0.1, 1200 * k, 4200 * k, 6500, 0.4, across);
+  });
+  v.start(); v.stopAt(v.t + first + apart + 0.5);
+}
+
+/** A fang biting: a light, sharp blow on its own side. */
+function fangBite(i: number): void {
+  const v = voice(0, 0.25);
+  const lane = v.lane(1, i ? -0.4 : 0.4);
+  crack(v, 0, 0.18, lane, 2600);
+  thump(v, 0, 1500 * (i ? 1.1 : 1), 70, 0.34, 0.3, lane, 3.5);
+  crunch(v, 0, 0.14, 0.11, lane);
+  iron(v, 0, 4, 2000, 7000, 0.08, 0.35, lane);
+  v.start(); v.stopAt(v.t + 0.9);
+}
+
+/** Thunder Crescent's swing: the great weapon brought down into the ground `lead` s in, its air falling as it comes,
+ *  and the lightning gathering along the blade, a crackle rising. */
+function crescentSwing(lead: number): void {
+  const v = voice(0, 0.15);
+  const at = Math.max(0.08, lead), from = Math.max(0, at - 0.3);
+  const air = glide(v, 'bandpass', 1.2, [[0, 2600], [from, 2600], [at, 480]]);
+  v.loop(air); air.connect(v.flange(swellAt(v, from, at, 0.4, 0.1), 2, 1.4, 4, 0.5));
+  const body = glide(v, 'lowpass', 0.8, [[0, 250], [at, 650]]);
+  v.loop(body); body.connect(drive(2.5)).connect(swellAt(v, from, at, 0.26, 0.12));
+  const gather = glide(v, 'bandpass', 0.7, [[0, 2200], [at, 4600]]);
+  v.crackle(gather, 1.1); gather.connect(swellAt(v, 0, at, 0.7, 0.08));
+  v.start(); v.stopAt(v.t + at + 0.4);
+}
+
+/** Thunder Crescent struck: the blade bites the ground (a blow, a crack of stone, grit thrown), a clap of thunder
+ *  closing from white to dark, and the crescent tearing away along the ground, its crackle and its rush darkening as
+ *  it goes. */
+function crescentStrike(): void {
+  const v = voice(0, 0.5);
+  const { c } = v;
+  thump(v, 0, 1100, 50, 0.55, 0.75, v.out, 4.5);
+  rumble(v, 0.02, 0.24, 1.1);
+  crack(v, 0, 0.26);
+  grit(v, 7, 0.01, 0.18, 500, 2200, 0.3);
+  // the clap
+  const clap = v.sweep('lowpass', 6500, 280, 0.55, 0.9);
+  v.loop(clap); clap.connect(drive(3)).connect(v.hit(0.2, 0.6, v.out, 0.002));
+  // the crescent leaving: lightning's spit, and its rush along the ground, both closing as it goes away
+  const away = v.sweep('lowpass', 9000, 1100, 0.85, 0.7); away.connect(v.out);
+  const spit = c.createBiquadFilter(); spit.type = 'bandpass'; spit.frequency.value = 3300; spit.Q.value = 0.6;
+  v.crackle(spit, 1.5); spit.connect(v.hit(1, 0.95, away, 0.002));
+  const rush = v.sweep('bandpass', 2600, 500, 0.8, 1);
+  v.loop(rush); rush.connect(v.flange(v.hit(0.2, 0.9, away, 0.02), 3, 2.5, 2.4, 0.65));
+  v.start(); v.stopAt(v.t + 1.6);
+}
+
+/** The crescent's lightning leaping onto a foe: a snap, a spit of crackle and a small pop. */
+function crescentArc(): void {
+  const v = voice(0, 0.25);
+  const lane = v.lane(1, Math.random() * 0.8 - 0.4);
+  crack(v, 0, 0.16, lane, 3000);
+  const spit = v.c.createBiquadFilter(); spit.type = 'bandpass'; spit.frequency.value = 3600; spit.Q.value = 0.7;
+  v.crackle(spit, 1.6); spit.connect(v.hit(0.6, 0.24, lane, 0.001));
+  thump(v, 0, 2600, 380, 0.11, 0.22, lane, 2.5);
+  v.start(); v.stopAt(v.t + 0.6);
+}
+
+/** Raise Shield: the shield hefted up, a knock of wood on the arm, its straps creaking and its iron stirring. */
+function shieldUp(): void {
+  // light, a stone set down on stone: a dry tock, a small whump under it, a grain or two of grit (its iron stirring
+  // and its straps creaking were too much for something done so often: from play, "a very light sound ... almost like
+  // a rock impact")
+  const v = voice(0, 0.1);
+  const tock = v.c.createBiquadFilter(); tock.type = 'bandpass'; tock.frequency.value = 850 + Math.random() * 150; tock.Q.value = 1;
+  v.loop(tock); tock.connect(drive(3)).connect(v.hit(0.3, 0.09, v.out, 0.001));
+  whump(v, 0, 0.35, 0.14);
+  grit(v, 3, 0.003, 0.05, 900, 3000, 0.2);
+  v.start(); v.stopAt(v.t + 0.4);
+}
+
+/** A blow caught on the shield: the thock of its wood, the iron of its boss and rim, and its rattle on the arm. */
+function shieldBlock(): void {
+  const v = voice(0, 0.3);
+  const lane = v.lane(1, Math.random() * 0.4 - 0.2);
+  crack(v, 0, 0.2, lane, 2200);
+  const wood = v.c.createBiquadFilter(); wood.type = 'bandpass'; wood.frequency.value = 240 + Math.random() * 50; wood.Q.value = 1.1;
+  v.loop(wood); wood.connect(drive(4)).connect(v.hit(0.4, 0.3, lane, 0.002));
+  thump(v, 0, 1100, 60, 0.4, 0.4, lane, 4);
+  iron(v, 0, 6, 600, 3200, 0.14, 0.55, lane);
+  iron(v, 0.03, 2, 2400, 5600, 0.05, 0.2, lane);
+  v.start(); v.stopAt(v.t + 1.1);
+}
+
+/** The guard broken: a blow too big for the shield. A crack, the wood's thock driven hard, splinters, the iron
+ *  ringing longer and lower, and the shield scraped aside as he staggers. */
+function guardBreak(): void {
+  const v = voice(0, 0.4);
+  crack(v, 0, 0.3, v.out, 2000);
+  const wood = v.c.createBiquadFilter(); wood.type = 'bandpass'; wood.frequency.value = 280; wood.Q.value = 1.1;
+  v.loop(wood); wood.connect(drive(4)).connect(v.hit(0.6, 0.45, v.out, 0.002));
+  thump(v, 0, 1200, 55, 0.55, 0.65, v.out, 4.5);
+  grit(v, 9, 0.01, 0.28, 600, 2800, 0.34);
+  iron(v, 0, 5, 450, 2200, 0.22, 0.7);
+  const scrape = glide(v, 'bandpass', 1.4, [[0, 1700], [0.15, 1700], [0.6, 520]]);
+  v.loop(scrape); scrape.connect(v.flange(swellAt(v, 0.12, 0.24, 0.13, 0.5), 2.5, 2, 3, 0.6));
+  v.start(); v.stopAt(v.t + 1.4);
+}
+
+/** Steel Tempest held: the blades going round `turns` times a second. Their air, a flanged band of noise circling
+ *  the ears and brightening as it passes, the weight of the weapon under it, and the hiss of the edge on the other
+ *  side; a great weapon's lower and heavier. Let go, it winds down: the turn slowing, its air closing to dark, and
+ *  the blade's last sweep falling away. Returns that stop(). */
+function tempestSpin(turns: number, heft: Heft): () => void {
+  const v = voice(0.14, 0.15);
+  const { c, t } = v;
+  const centre = [1200, 900, 560][heft];
+  // the turn: one oscillator, which what goes round follows
+  const turn = c.createGain(); turn.gain.value = 1;
+  const round = v.osc('sine', turns, turn);
+  const follow = (depth: number, param: AudioParam): void => { const g = c.createGain(); g.gain.value = depth; turn.connect(g).connect(param); };
+  // the blades' air
+  const pan = c.createStereoPanner(); pan.connect(v.out); follow(0.65, pan.pan);
+  const air = c.createBiquadFilter(); air.type = 'bandpass'; air.Q.value = 1.2;
+  air.frequency.setValueAtTime(centre * 0.4, t); air.frequency.setTargetAtTime(centre, t, 0.08);
+  follow(centre * 0.35, air.frequency);
+  const airG = c.createGain(); airG.gain.value = 0.24; airG.connect(pan);
+  v.loop(air); air.connect(v.flange(airG, 4, 2.6, turns * 0.37, 0.55));
+  // the weapon's weight
+  const body = c.createBiquadFilter(); body.type = 'lowpass'; body.frequency.value = [460, 420, 380][heft]; body.Q.value = 0.9;
+  const bodyG = c.createGain(); bodyG.gain.value = [0.15, 0.19, 0.27][heft];
+  v.loop(body); body.connect(drive(3)).connect(bodyG).connect(v.out);
+  v.lfo(0.31, 90, body.frequency);
+  // the edge, on the other side of the turn
+  const edgePan = c.createStereoPanner(); edgePan.connect(v.out); follow(-0.7, edgePan.pan);
+  const edge = c.createBiquadFilter(); edge.type = 'highpass'; edge.frequency.value = [6000, 5000, 3600][heft];
+  const edgeG = c.createGain(); edgeG.gain.value = 0.022; edgeG.connect(edgePan);
+  v.loop(edge); edge.connect(edgeG);
+  v.start();
+  return () => {
+    const n = v.end(1.1);
+    v.out.gain.cancelScheduledValues(n); v.out.gain.setValueAtTime(Math.max(v.out.gain.value, 0.0001), n);
+    v.out.gain.setTargetAtTime(0.0001, n, 0.16);
+    round.frequency.setTargetAtTime(0.4, n, 0.2);
+    air.frequency.cancelScheduledValues(n); air.frequency.setTargetAtTime(260, n, 0.18);
+    body.frequency.setTargetAtTime(140, n, 0.18);
+    tempestOut(heft);
+  };
+}
+
+/** The spin's last sweep as it's let go: the blade's air falling from bright to dark, and the feet catching his weight. */
+function tempestOut(heft: Heft): void {
+  const v = voice(0, 0.25);
+  const f = v.sweep('bandpass', [2400, 1900, 1300][heft], 240, 0.45, 1.1);
+  v.loop(f); f.connect(v.flange(v.hit(0.2, 0.55, v.out, 0.02), 4, 3, 1.3, 0.55));
+  thump(v, 0.16, 700, 150, 0.12, 0.3, v.out, 2.5);
+  v.start(); v.stopAt(v.t + 0.9);
+}
+
+/** The tempest's blades biting as they go round: a light blow and a chink of steel, each in its own place. */
+function tempestBite(heft: Heft): void {
+  const v = voice(0, 0.2);
+  const lane = v.lane(1, Math.random() * 1.2 - 0.6);
+  thump(v, 0, [1600, 1300, 900][heft] * (0.85 + Math.random() * 0.3), 70, [0.22, 0.26, 0.36][heft], 0.26, lane, 3.5);
+  crunch(v, 0, [0.08, 0.1, 0.14][heft], 0.1, lane);
+  iron(v, 0, 3, [1800, 1300, 700][heft], [6500, 5000, 3000][heft], 0.06, 0.3, lane);
+  v.start(); v.stopAt(v.t + 0.8);
+}
+
+/** Bull Rush set off: the brace (`brace` s, his boots grinding into the ground), then the run (`run` s), the air
+ *  torn past him and his plate clattering, both dying as he stops. Its push-off, footfalls, blows and stop are their
+ *  own sounds, played as each happens. */
+function bullCharge(brace: number, run: number): void {
+  const v = voice(0, 0.2);
+  const end = brace + run;
+  const grind = v.c.createBiquadFilter(); grind.type = 'bandpass'; grind.frequency.value = 1300; grind.Q.value = 0.8;
+  v.loop(grind); grind.connect(swellAt(v, 0, brace * 0.7, 0.14, 0.18));
+  for (const [pan, rate] of [[-0.6, 2.1], [0.6, 2.7]]) {
+    const wind = glide(v, 'bandpass', 0.9, [[0, 450], [brace, 450], [brace + run * 0.5, 1700], [end + 0.2, 500]]);
+    const g = swellAt(v, brace, brace + run * 0.55, 0.24, 0.45, v.lane(1, pan));
+    v.loop(wind); wind.connect(v.flange(g, 3, 2.2, rate, 0.55));
+  }
+  // his gear jostling as he runs: low and dull (a plate rattle at 2.3 kHz was a tin can)
+  const gear = v.c.createBiquadFilter(); gear.type = 'bandpass'; gear.frequency.value = 900; gear.Q.value = 0.6;
+  v.crackle(gear, 0.4); gear.connect(swellAt(v, brace, brace + run * 0.5, 0.22, 0.35));
+  v.start(); v.stopAt(v.t + end + 0.7);
+}
+
+/** The charge's push-off: the ground cracking under the rear foot, stone thrown back. */
+function bullLaunch(): void {
+  const v = voice(0, 0.35);
+  smash(v, 0, 0.24, 0.15);
+  whump(v, 0, 0.45, 0.45);
+  thump(v, 0, 900, 110, 0.4, 0.5, v.out, 4.5);
+  v.start(); v.stopAt(v.t + 0.8);
+}
+
+/** A footfall at full tilt, on its `side` (+1 the right): the boot's thump, grit under it and a clink of plate. */
+function bullStep(side: number): void {
+  const v = voice(0, 0.25);
+  const lane = v.lane(1, side * 0.35);
+  whump(v, 0, 0.36, 0.26, lane);
+  thump(v, 0, 700 * (0.9 + Math.random() * 0.2), 110, 0.3, 0.28, lane, 4);
+  const dirt = v.c.createBiquadFilter(); dirt.type = 'bandpass'; dirt.frequency.value = 1100; dirt.Q.value = 0.7;
+  v.loop(dirt); dirt.connect(v.hit(0.07, 0.1, lane, 0.002));
+  v.start(); v.stopAt(v.t + 0.6);
+}
+
+/** The charge meeting a body: a shoulder's weight driven into it, the breath knocked out, plate crunching. */
+function bullHit(): void {
+  const v = voice(0, 0.35);
+  const lane = v.lane(1, Math.random() * 0.4 - 0.2);
+  smash(v, 0, 0.3, 0.12, lane);
+  whump(v, 0, 0.55, 0.4, lane);
+  thump(v, 0, 800, 110, 0.45, 0.45, lane, 4.5);
+  // the breath knocked out of it, and its body giving
+  const breath = v.sweep('bandpass', 900, 380, 0.2, 0.8);
+  v.loop(breath); breath.connect(drive(3)).connect(v.hit(0.2, 0.22, lane, 0.004));
+  v.start(); v.stopAt(v.t + 1);
+}
+
+/** The charge's stop, a ground-shaking halt: a boom with its weight in the mids, a blast of dust, his boots
+ *  skidding and the stones it threw coming down. */
+function bullLand(): void {
+  const v = voice(0, 0.55);
+  smash(v, 0, 0.38, 0.28);
+  whump(v, 0, 0.55, 0.75);
+  thump(v, 0, 1000, 110, 0.5, 1, v.out, 5);
+  rumble(v, 0.02, 0.3, 1.3);
+  const dust = v.sweep('lowpass', 6000, 260, 0.5, 0.7);
+  v.loop(dust); dust.connect(drive(3)).connect(v.hit(0.17, 0.6, v.out, 0.003));
+  const skid = v.sweep('bandpass', 1600, 380, 0.36, 0.9);
+  v.loop(skid); skid.connect(v.flange(v.hit(0.12, 0.4, v.out, 0.01), 2.5, 2, 3.2, 0.4));
+  grit(v, 10, 0.15, 0.5, 250, 1400, 0.24);
+  v.start(); v.stopAt(v.t + 1.7);
+}
+
+/** Power Strike gathered over `dur` s: strength drawn into the weapon. Air drawn in from both sides towards the
+ *  middle, opening and swelling, a strain of dark noise under it, the grip creaking; in its last instants the weapon
+ *  comes down, its air falling. No pitch climbs (the old `charge` was a saw gliding from 70 to 260 Hz). Returns a
+ *  stop() for a cast cut short, which lets it sink away. */
+function strikeGather(dur: number): () => void {
+  const v = voice(0.05, 0.25);
+  const { c, t } = v;
+  const closing: BiquadFilterNode[] = [];
+  const swell = (from: number, peak: number, to: AudioNode): GainNode => {
+    const g = c.createGain(); g.gain.setValueAtTime(from, t); g.gain.exponentialRampToValueAtTime(peak, t + dur);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.1); g.connect(to); return g;
+  };
+  // drawn in: from each side to the middle
+  for (const [side, rate] of [[-0.8, 0.9], [0.8, 1.3]]) {
+    const f = v.sweep('bandpass', 500, 2400, dur, 1.5);
+    v.loop(f); f.connect(v.flange(swell(0.004, 0.17, crossing(v, side, 0, 0, dur)), 4, 3, rate, 0.6));
+    closing.push(f);
+  }
+  // the strain
+  const strain = v.sweep('lowpass', 180, 800, dur, 1);
+  v.loop(strain); strain.connect(drive(3)).connect(swell(0.006, 0.2, v.out));
+  closing.push(strain);
+  // the grip
+  const creak = c.createBiquadFilter(); creak.type = 'bandpass'; creak.frequency.value = 700; creak.Q.value = 2.4;
+  v.crackle(creak, 0.3); creak.connect(swell(0.2, 0.55, v.out));
+  // the weapon coming down
+  const fall = glide(v, 'bandpass', 1.2, [[0, 3000], [dur - 0.16, 3000], [dur, 520]]);
+  v.loop(fall); fall.connect(v.flange(swellAt(v, Math.max(0, dur - 0.18), dur, 0.42, 0.1), 2, 1.4, 4, 0.5));
+  v.start(); v.stopAt(t + dur + 0.3);
+  return () => {
+    if (c.currentTime >= t + dur) return;
+    const n = v.end(0.35);
+    for (const f of closing) { const now = f.frequency.value; f.frequency.cancelScheduledValues(n); f.frequency.setValueAtTime(now, n); f.frequency.setTargetAtTime(200, n, 0.09); }
+  };
+}
+
+/** Power Strike landed, his heaviest blow (`size`: 1, or less stopped short on a wall): a smash, the floor
+ *  breaking under it, a broad whump driven hard over a boom, a blast of dust closing to dark, the floor splitting and
+ *  its rubble settling, the ground rumbling after. Earth and stone alone: its steel ringing on the stone and a narrow
+ *  punch at 360 Hz were "a tincan". */
+function strikeLand(size: number): void {
+  const v = voice(0, 0.65);
+  const s = 0.55 + 0.45 * size;
+  smash(v, 0, 0.45 * s, 0.3 * s);
+  whump(v, 0, 0.5 * s, 0.85);
+  thump(v, 0, 1000, 110, 0.5 * s, 1.1, v.out, 5);
+  rumble(v, 0.02, 0.34 * s, 1.5);
+  const blast = v.sweep('lowpass', 7000, 260, 0.6, 0.7);
+  v.loop(blast); blast.connect(drive(3)).connect(v.hit(0.2 * s, 0.6, v.out, 0.002));
+  // the stone thrown up coming down, and the floor settling
+  grit(v, Math.round(6 + 8 * size), 0.2, 0.6, 400, 2500, 0.26 * s);
+  const rubble = v.c.createBiquadFilter(); rubble.type = 'lowpass'; rubble.frequency.value = 1200;
+  v.crackle(rubble, 0.4); rubble.connect(blowAt(v, 0.15, 0.55 * s, 1, v.out, 0.05));
+  v.start(); v.stopAt(v.t + 1.9);
+}
+
+/** Iron Bellow: a war cry and the blast it throws out. The cry is noise, not a note: roughened as a throat does
+ *  (its level shaken some 70 times a second, unsteadily), through a mouth opening and closing (three bands, the
+ *  lowest rising and falling), driven; under it his chest, round it the air thrown outwards in both ears, and the
+ *  shields rising: iron stirring, and a hiss of light. */
+function bellow(): void {
+  const v = voice(0, 0.55);
+  const { c, t } = v;
+  // the throat
+  const rough = c.createGain(); rough.gain.value = 0.55;
+  const shake = c.createGain(); shake.gain.value = 0.45; shake.connect(rough.gain);
+  const cords = v.osc('sawtooth', 76, shake);
+  cords.frequency.setValueAtTime(76, t); cords.frequency.linearRampToValueAtTime(92, t + 0.15); cords.frequency.linearRampToValueAtTime(58, t + 0.85);
+  v.lfo(13, 7, cords.frequency);
+  v.loop(rough);
+  // the mouth
+  const cry = drive(3); cry.connect(v.hit(0.5, 1.05, v.out, 0.05));
+  for (const [q, level, points] of [
+    [3, 1, [[0, 380], [0.14, 780], [0.85, 480]]],
+    [4, 0.6, [[0, 1050], [0.14, 1350], [0.85, 1100]]],
+    [5, 0.3, [[0, 2500], [0.14, 2900], [0.85, 2500]]],
+  ] as [number, number, [number, number][]][]) {
+    const f = glide(v, 'bandpass', q, points), g = c.createGain(); g.gain.value = level * 4;
+    rough.connect(f).connect(g).connect(cry);
+  }
+  // the chest
+  const chest = c.createBiquadFilter(); chest.type = 'lowpass'; chest.frequency.value = 320;
+  rough.connect(chest).connect(drive(3)).connect(v.hit(0.5, 0.9, v.out, 0.05));
+  // the air thrown out
+  for (const [pan, rate] of [[-0.6, 1.6], [0.6, 2.2]]) {
+    const f = v.sweep('bandpass', 420, 2600, 0.4, 0.8);
+    v.loop(f); f.connect(v.flange(v.hit(0.32, 0.75, v.lane(1, pan), 0.03), 3, 2.4, rate, 0.55));
+  }
+  thump(v, 0, 1200, 110, 0.3, 0.5);
+  // the shields rising
+  [0.12, 0.2, 0.28].forEach((at, i) => iron(v, at, 2, 900, 2800, 0.05, 0.22, v.lane(1, (i - 1) * 0.6)));
+  const light = c.createBiquadFilter(); light.type = 'highpass'; light.frequency.value = 5200;
+  v.loop(light); light.connect(v.flange(blowAt(v, 0.1, 0.05, 1.1, v.out, 0.2), 2, 1.5, 0.8, 0.6));
+  v.start(); v.stopAt(t + 1.6);
+}
+
+/** A blow taken on the Bellow's spectral shields: duller than the shield's own, its iron far off, a shimmer shaken
+ *  out of it. */
+function wardHit(): void {
+  const v = voice(0, 0.4);
+  thump(v, 0, 900, 200, 0.3, 0.26, v.out, 2.5);
+  iron(v, 0, 3, 900, 2800, 0.09, 0.2);
+  const shimmer = v.sweep('bandpass', 3400, 1500, 0.3, 1.2);
+  v.loop(shimmer); shimmer.connect(v.flange(v.hit(0.14, 0.34, v.out, 0.005), 1.5, 1, 9, 0.7));
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** A prop chipped by a blow, by what it's made of: timber's thock and splinters, stone's crack and grit (the shared
+ *  `clang` was a triangle note at 1180 Hz on every one, heard over every swing that reached a prop). */
+function chip(kind: string | undefined): void {
+  const v = voice(0, 0.25);
+  const lane = v.lane(1, Math.random() * 0.6 - 0.3);
+  if (kind === 'wood' || kind === 'shroom') {
+    const wood = v.c.createBiquadFilter(); wood.type = 'bandpass'; wood.frequency.value = 300 + Math.random() * 80; wood.Q.value = 1.2;
+    v.loop(wood); wood.connect(drive(4)).connect(v.hit(0.38, 0.22, lane, 0.002));
+    thump(v, 0, 900, 70, 0.3, 0.3, lane, 3.5);
+    grit(v, 5, 0.005, 0.12, 900, 3200, 0.2);
+  } else {
+    crack(v, 0, 0.22, lane, 1800);
+    thump(v, 0, 1000, 60, 0.34, 0.35, lane, 4);
+    grit(v, 7, 0.005, 0.2, 600, 2800, 0.26);
+  }
+  v.start(); v.stopAt(v.t + 0.8);
+}
+
+/** Healing Draught drunk: three swallows, each a gulp of dark noise opening, then warmth spreading through him, a
+ *  soft rush rising with the draught's fizz over it. No rising note (the shared `potion` is a sine from 440 to 880). */
+function draught(): void {
+  const v = voice(0, 0.3);
+  [0, 0.12, 0.24].forEach((at, i) => {
+    const f = glide(v, 'bandpass', 2.2, [[0, 380], [at, 380 + i * 40], [at + 0.07, 760 + i * 60]]);
+    v.loop(f); f.connect(blowAt(v, at, 0.8, 0.13, v.out, 0.012));
+  });
+  for (const [pan, rate] of [[-0.5, 0.9], [0.5, 1.3]]) {
+    const warm = glide(v, 'bandpass', 0.8, [[0, 450], [0.3, 450], [0.9, 2000]]);
+    v.loop(warm); warm.connect(v.flange(swellAt(v, 0.3, 0.6, 0.26, 0.9, v.lane(1, pan)), 4, 3, rate, 0.5));
+  }
+  const fizz = v.c.createBiquadFilter(); fizz.type = 'highpass'; fizz.frequency.value = 4000;
+  v.crackle(fizz, 1.2); fizz.connect(swellAt(v, 0.3, 0.55, 0.3, 0.8));
+  v.start(); v.stopAt(v.t + 1.7);
+}
+
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
  *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
  *  s, landed by about 2.95). Timed to it, and soft, as the first sound a visit hears (from the owner's review of
@@ -725,10 +1262,41 @@ export const sfx = {
   salvage: guard(() => { noise({ dur: 0.25, freq: 900, sweep: 200, q: 2, gain: 0.25 }); tone({ freq: 300, to: 120, dur: 0.2, type: 'square', gain: 0.04 }); }),
   swing: guard(() => { if (throttle('swing', 70)) return; noise({ dur: 0.2, freq: 900, sweep: 2600, q: 1.4, gain: 0.2, attack: 0.03 }); }),
   clang: guard(() => { if (throttle('clang', 60)) return; noise({ dur: 0.15, freq: 3200, q: 3, gain: 0.14 }); tone({ freq: 1180, to: 900, dur: 0.18, type: 'triangle', gain: 0.04 }); tone({ freq: 220, to: 110, dur: 0.12, type: 'square', gain: 0.04 }); }),
+  /** Rending Cleave swung, the blade passing `lead` s on, sweeping `way` (+1 right to left) */
+  cleave: guard((lead: number, heft: Heft, way: number) => { if (throttle('cleave', 70)) return; cleaveSwing(lead, heft, way); }),
+  cleaveBite: guard((heft: Heft) => { if (throttle('cleaveBite', 60)) return; cleaveBite(heft); }),
+  /** Twin Fangs cast: its lunge and its two cuts, `first` s on and `apart` s after */
+  fangs: guard((first: number, apart: number) => { fangs(first, apart); }),
+  /** a fang biting: the right blade's (0) or the left's (1) */
+  fangBite: guard((i: number) => { fangBite(i); }),
+  /** Thunder Crescent: the weapon brought down over `lead` s, its strike into the ground, its lightning on a foe */
+  crescentSwing: guard((lead: number) => { crescentSwing(lead); }),
+  crescent: guard(() => { crescentStrike(); }),
+  crescentArc: guard(() => { if (throttle('crescentArc', 60)) return; crescentArc(); }),
+  shieldUp: guard(() => { if (throttle('shieldUp', 200)) return; shieldUp(); }),
+  /** a blow caught on the shield; one too big for it */
+  shieldBlock: guard(() => { if (throttle('shieldBlock', 60)) return; shieldBlock(); }),
+  guardBreak: guard(() => { guardBreak(); }),
+  /** Steel Tempest held, the blades going round `turns` times a second (returns its stop(), which winds it down) */
+  tempest: guard((turns: number, heft: Heft) => tempestSpin(turns, heft)),
+  tempestBite: guard((heft: Heft) => { if (throttle('tempestBite', 170)) return; tempestBite(heft); }),
+  /** Bull Rush: set off (its brace and run, s), its push-off, a footfall (`side`: +1 the right), a body met, its stop */
+  bullRush: guard((brace: number, run: number) => { bullCharge(brace, run); }),
+  bullLaunch: guard(() => { bullLaunch(); }),
+  bullStep: guard((side: number) => { bullStep(side); }),
+  bullHit: guard(() => { if (throttle('bullHit', 60)) return; bullHit(); }),
+  bullLand: guard(() => { bullLand(); }),
+  /** Power Strike gathered over `dur` s (returns its stop(), for a cast cut short), and landed (`size`: 1, less stopped short) */
+  strikeCharge: guard((dur: number) => strikeGather(dur)),
+  strike: guard((size: number) => { strikeLand(size); }),
+  /** Iron Bellow's cry, and a blow taken on its shields */
+  bellow: guard(() => { bellow(); }),
+  wardHit: guard(() => { if (throttle('wardHit', 60)) return; wardHit(); }),
+  /** a prop chipped by a blow: timber (`wood`, `shroom`) or stone */
+  chip: guard((kind?: string) => { if (throttle('chip', 60)) return; chip(kind); }),
+  /** Healing Draught drunk */
+  draught: guard(() => { draught(); }),
   rush: guard(() => { noise({ dur: 0.45, freq: 220, sweep: 600, type: 'lowpass', gain: 0.45, attack: 0.04 }); tone({ freq: 70, to: 45, dur: 0.4, gain: 0.3 }); }),
-  /** a rising hum over a skill's charge-up of `dur` seconds */
-  charge: guard((dur: number) => { tone({ freq: 70, to: 260, dur, type: 'sawtooth', gain: 0.05, attack: 0.3 }); noise({ dur, freq: 300, sweep: 2400, q: 3, gain: 0.08, attack: 0.4 }); }),
-  roar: guard(() => { tone({ freq: 95, to: 70, dur: 0.9, type: 'sawtooth', gain: 0.1, attack: 0.05 }); tone({ freq: 142, to: 104, dur: 0.9, type: 'sawtooth', gain: 0.06, attack: 0.06 }); noise({ dur: 0.8, freq: 600, q: 0.8, gain: 0.25, attack: 0.06 }); }),
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
   /** a co-op ping (game/ping.ts): two bright notes, rising */
   ping: guard(() => { if (throttle('ping', 150)) return; tone({ freq: 1320, dur: 0.18, gain: 0.05 }); tone({ freq: 1760, dur: 0.28, gain: 0.045, delay: 0.09 }); }),

@@ -27,11 +27,17 @@ const TILT = -0.55, LOW = 0.4;
 const BITE_AHEAD = 2;
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+/** casts whose swing is already heard */
+const swung = new WeakSet<object>();
 
 const skill: InstantSkill = {
   anim: 'smite',
   hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'lightning' }],
   warm: () => [slashMesh(ARC, 0.45, 0xffffff, true).mesh],
+  charging(player) {
+    const c = player.casting;
+    if (c && !swung.has(c)) { swung.add(c); sfx.crescentSwing(c.fireAt - c.t); }
+  },
   cast(player, rawDef) {
     const def = rawDef as Def;
     // the way the body (and so the swing) faces, which turned to the target during the cast
@@ -45,8 +51,7 @@ const skill: InstantSkill = {
     crackDecal(bite, { size: 1.8, color: 0x9cc0ff, intensity: 1.5, life: 2 });
     sparks(bite.x, bite.y + 0.05, bite.z, 0xcfe4ff, 14);
     addShake(0.3);
-    sfx.thud();
-    sfx.zap();
+    sfx.crescent();
 
     // a glowing body and a thin white-hot edge
     const R = def.width;
@@ -112,7 +117,7 @@ const skill: InstantSkill = {
           const at = new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z);
           lightning(new THREE.Vector3(fx, group.position.y + 0.4, fz), at, { color: def.color, intensity: 3, life: 0.14, branches: 2 });
           burst(at, { count: 12, color: 0xcfe4ff, speed: 5, life: 0.35, size: 0.2 });
-          sfx.zap();
+          sfx.crescentArc();
         }
         return t < life && Math.hypot(fx, fz) < G.arena.radius + 0.5;
       },

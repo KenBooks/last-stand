@@ -14,7 +14,7 @@ const skill: InstantSkill = {
   cast(player, rawDef) {
     const def = rawDef as Needs<'heal' | 'healPct'>;
     player.heal(def.heal + player.stats.maxLife * def.healPct);
-    sfx.potion();
+    sfx.draught();
     // through the eyes a swirl round the body starts at the camera, where particles fade out: the motes
     // rise in a wider ring, where they're seen, and the light shines from ahead (Player.lightAhead)
     const eyes = player.eyes;

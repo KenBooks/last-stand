@@ -930,7 +930,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   scenes (`SCENES`, comma separated, `bolt,boltMiss,lance,lanceEarly` by default): `bolt`, Splintering Bolt held,
   four casts at its pace each bursting on a foe 0.3 s out and its two splits on two others; `boltMiss`, one cast
   striking nothing; `lance`, Void Lance's portal drawn, the beam held 4 s and let go; `lanceEarly`, let go as the
-  portal is drawn. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
+  portal is drawn; the warrior's (`WARRIOR`): `cleave`, `cleaveGreat` and `cleaveDual`, Rending Cleave held with each
+  weapon, three swings each biting; `fangs`; `crescent`; `shield`, raised, two blows caught and the guard broken;
+  `tempest` and `tempestGreat`, held 3 s and let go; `bullRush`; `powerStrike` and `powerStrikeEarly`; `bellow`;
+  `draught`. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
   hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
   peak, its loudest half second (the level to hold against the other heroes' sounds: on #413 a bow's shot was
   -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its brightness (its
