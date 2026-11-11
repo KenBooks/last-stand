@@ -74,7 +74,7 @@ body.dev-open.dev-docked .menu-left { background: rgba($panel, var(--dev-opacity
 #dev-fly {
   position: fixed; inset: 0; z-index: 32; display: none; cursor: $cursor; touch-action: none;
   .df-hint {
-    position: absolute; top: 8px; left: 50%; translate: -50% 0; zoom: var(--ui, 1); max-width: calc(94vw / var(--ui, 1));
+    position: absolute; bottom: 8px; left: 50%; translate: -50% 0; zoom: var(--ui, 1); max-width: calc(94vw / var(--ui, 1));
     padding: 4px 10px; font: 12px $font-body; color: $ink; text-shadow: $outline; text-align: center;
     background: rgba(0, 0, 0, .45); border-radius: 4px; pointer-events: none;
     b { color: $highlight; }
