@@ -265,12 +265,14 @@ async function loadDevMode(): Promise<void> {
   const fightWarm = whenWarm(['fight'], (fn: () => void) => fn(), READYING.fight);
   dev = initDev({
     startWave: (wave, biome, training) => fightWarm(() => {
+      const heldAlt = ['altleft', 'altright'].filter((key) => input.down.has(key));
       if (G.mode === 'run') toMenu();
       if (G.mode !== 'menu' || heroSelectOpen()) return;
       G.arena.setBiome(biome);
       const seed = nextSeed;
       nextSeed = Math.floor(Math.random() * 2 ** 31);
       beginRun(wave, seed, training);
+      for (const key of heldAlt) input.down.add(key);
     }),
     toLobby: () => { if (G.mode === 'run') toMenu(); },
     reset: () => {

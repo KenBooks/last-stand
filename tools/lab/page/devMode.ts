@@ -15,7 +15,7 @@ import { role } from '../../../src/net/role';
 import { foesAsked, foesTold } from '../../../src/net/sync';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { updateRun } from '../../../src/game/run';
-import { realWait, type Lab, type Pictured, type Report } from './lab';
+import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab';
 
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
@@ -294,8 +294,38 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await lab.click({ x: innerWidth * 0.7, y: innerHeight * 0.5 });
   await lab.step(2);
   check(pointerLocked(), 'Dev panel prevented third-person mouse look');
+  await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   await lab.keyDown('AltLeft'); await lab.step(2, () => ({ keys: ['altleft'] }));
   check(element('#alt-cursor').checkVisibility(), 'Alt did not show the cursor over the Dev panel');
+  for (const trainingMode of [false, true]) {
+    const trainingBox = element<HTMLInputElement>('[data-in=training]');
+    const label = trainingBox.closest('label')!;
+    label.scrollIntoView({ block: 'nearest' });
+    const labelBox = label.getBoundingClientRect();
+    await lab.click({ x: labelBox.right - 3, y: labelBox.y + labelBox.height / 2 });
+    await lab.step(2, () => ({ keys: ['altleft'] }));
+    check(trainingBox.checked === trainingMode && G.run?.training === trainingMode,
+      'Alt-clicking the Training label did not toggle its checkbox and run mode');
+    const biomeSelect = element<HTMLSelectElement>('[data-in=biome]');
+    biomeSelect.scrollIntoView({ block: 'nearest' });
+    const point = middleOf(biomeSelect), oldBiome = G.arena.biome;
+    await lab.mouseTo(point);
+    const cursor = new DOMMatrix(getComputedStyle(element('#alt-cursor')).transform);
+    check(Math.hypot(cursor.e - point.x, cursor.f - point.y) < 2, 'native-picker control: virtual cursor missed the biome select');
+    // Native popup widgets consume events themselves, rather than acknowledging them on the page.
+    await window.__labMouse!('mousePressed', point.x, point.y, 0, 'left', 1);
+    await window.__labMouse!('mouseReleased', point.x, point.y, 0, 'left', 0);
+    check(biomeSelect.matches(':open'), 'Alt did not expand the native biome dropdown');
+    const arrow = biomeSelect.selectedIndex === 0 ? 'ArrowDown' : 'ArrowUp';
+    for (const key of [arrow, 'Enter']) {
+      await window.__labKey!('keyDown', key); await window.__labKey!('keyUp', key);
+    }
+    await lab.step(2, () => ({ keys: ['altleft'] }));
+    check(G.arena.biome !== oldBiome && biomeSelect.value === G.arena.biome,
+      'choosing a biome from the native dropdown did not apply mid-run');
+  }
+  lines.push('Alt cursor: Training label and native biome picker checked in normal and Training runs');
+  check(!G.menuOpen && pointerLocked(), 'native controls paused or released gameplay mouse look');
   await lab.keyUp('AltLeft');
   time.scale = 0.1;
   await lab.press('KeyV');

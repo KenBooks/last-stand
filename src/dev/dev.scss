@@ -20,7 +20,7 @@
   summary { font: 700 12px $font-display; letter-spacing: 2px; text-transform: uppercase; color: $accent; cursor: $cursor-hand; padding: 3px 0; }
   button, select, input { font: inherit; color: $ink; background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px; }
   button { padding: 3px 8px; cursor: $cursor-hand; height: 28px; min-height: 28px; line-height: 20px; box-sizing: border-box; }
-  button:hover:not(:disabled) { border-color: $highlight; }
+  button:is(:hover, .alt-hover):not(:disabled) { border-color: $highlight; }
   button:disabled { opacity: .4; cursor: $cursor; }
   button.on { background: $well-lit; border-color: $highlight; color: $highlight; }
   select { padding: 3px 4px; height: 28px; min-height: 28px; max-width: 100%; box-sizing: border-box; }
@@ -41,7 +41,7 @@ body.dev-open.dev-docked .menu-left { background: rgba($panel, var(--dev-opacity
 // Fade independent controls so the hovered item can become opaque without brightening its neighbours.
 #dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span, .dv-scroll-cue) { opacity: var(--dev-opacity, .95); will-change: opacity; }
 #dev-panel label :is(select, input) { opacity: 1; will-change: auto; }
-#dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span):hover { opacity: 1; }
+#dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span):is(:hover, .alt-hover) { opacity: 1; }
 #dev-panel button:disabled { opacity: .4; }
 body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:hover { opacity: 1; } }
 .dv-head {
@@ -81,7 +81,7 @@ body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:h
 }
 .dv-stats, .dv-perf-info { font-variant-numeric: lining-nums tabular-nums; }
 .dv-stats { white-space: nowrap; line-height: 14px; }
-.dv-perf-info { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 6px; margin: 4px 0; font-size: 11px; line-height: 14px; color: $ink-dim;
+.dv-perf-info { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px 6px; margin: 4px 0; font-size: 11px; line-height: 14px; color: $ink-dim;
   > span { display: flex; gap: 3px; white-space: nowrap; min-width: 0; }
 }
 .dv-stats strong, .dv-perf-info strong { color: #f6fff9; font-weight: 700; }

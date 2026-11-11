@@ -15,6 +15,9 @@ const at = { x: 0, y: 0 };
 let hovered: Element | null = null, pressedOn: Element | null = null;
 /** the events it sent the page: its own listeners let them through */
 const sent = new WeakSet<Event>();
+/** Native activation may dispatch another click (a label activates its checkbox). Let that click through too. */
+let activating = false;
+let picker: HTMLSelectElement | null = null;
 
 /** Alt held while the pointer is locked for mouse look: the mouse moves the drawn cursor. */
 export const altCursorOn = (): boolean => !input.touchMode && pointerLocked() && (isDown('altleft') || isDown('altright'));
@@ -48,6 +51,8 @@ function hover(): void {
   if (now === hovered) { if (now) send(now, 'mousemove'); return; }
   const was = hovered;
   hovered = now;
+  for (const e of outside(was, now)) e.classList.remove('alt-hover');
+  for (const e of outside(now, was)) e.classList.add('alt-hover');
   el().classList.toggle('lit', !!now && getComputedStyle(now).cursor.endsWith('pointer'));
   if (was) { send(was, 'mouseout', { relatedTarget: now }); for (const e of outside(was, now)) send(e, 'mouseleave', { relatedTarget: now }); }
   if (now) { send(now, 'mouseover', { relatedTarget: was }); for (const e of outside(now, was).reverse()) send(e, 'mouseenter', { relatedTarget: was }); send(now, 'mousemove'); }
@@ -81,7 +86,7 @@ export function updateAltCursor(): void { show(altCursorOn()); }
 export function initAltCursor(gameCanvas: HTMLCanvasElement): void {
   canvas = gameCanvas;
   // (on the window as it captures, before the game's own: mouse look and the canvas's attacks never hear them)
-  const mine = (e: Event): boolean => { if (sent.has(e)) return false; show(altCursorOn()); return shown; };
+  const mine = (e: Event): boolean => { if (sent.has(e) || activating) return false; show(altCursorOn()); return shown; };
   window.addEventListener('mousemove', (e) => {
     if (!mine(e)) return;
     e.stopPropagation();
@@ -111,7 +116,19 @@ export function initAltCursor(gameCanvas: HTMLCanvasElement): void {
     // (a click lands on what both went down and came up on)
     let both: Element | null = down;
     while (both && !both.contains(up)) both = both.parentElement;
-    if (both && both !== document.body && both !== document.documentElement) send(both, 'click', { button: 0, detail: 1 });
+    // Open on release: opening during pointerdown lets that same release dismiss the native popup.
+    const select = both?.closest('select');
+    if (select instanceof HTMLSelectElement && !select.disabled && typeof select.showPicker === 'function') {
+      picker = select;
+      select.focus({ preventScroll: true });
+      select.showPicker();
+      return;
+    }
+    if (both && both !== document.body && both !== document.documentElement) {
+      activating = true;
+      try { send(both, 'click', { button: 0, detail: 1 }); }
+      finally { activating = false; }
+    }
   }, true);
   window.addEventListener('wheel', (e) => {
     if (!mine(e)) return;
@@ -119,4 +136,14 @@ export function initAltCursor(gameCanvas: HTMLCanvasElement): void {
     e.stopPropagation(); e.preventDefault();
     scroller(under())?.scrollBy({ top: e.deltaY });
   }, { capture: true, passive: false });
+  document.addEventListener('change', (event) => {
+    if (event.target !== picker) return;
+    const selected = picker;
+    picker = null;
+    selected?.blur();
+  });
+  window.addEventListener('keyup', (event) => {
+    if (event.key !== 'Alt' || !picker) return;
+    picker.blur(); picker = null;
+  });
 }

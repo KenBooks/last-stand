@@ -13,6 +13,8 @@ The PWA's worker and caches are `scripts/AGENTS.md`; the skill icons' pictures `
 
 ## Gotchas
 
+- The Alt cursor forwards label activation as well as the first click: a label's browser-generated checkbox click must not be swallowed by the cursor's capture listener. Native selects use `showPicker()` from the real pointer release, then return focus after selection. The synthetic mousedown alone cannot open a native picker. `alt-hover` mirrors the virtual cursor's hover chain for CSS effects.
+
 - `observePerfHud` lets the Dev panel collect the performance HUD's own timing samples without showing or changing the overlay. `perfHudStats` reads the same window used by the full pane. Closing the panel stops its subscription; an enabled overlay keeps collecting normally.
 
 - Collapsed side panels use `.fold-tabs` stacks, which stay visible while panel content is hidden. Equipment and Attributes entry tabs reopen their own right-panel page. The dev module adds Hero/Dev entry tabs to the left stack. One-panel phone/tablet layouts hide the stacks and keep the existing rail (`lab dev --cold` checks the entries and the five viewport layouts).

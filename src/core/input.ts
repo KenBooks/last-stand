@@ -191,9 +191,9 @@ function keyName(e: KeyboardEvent): string {
 /** Alt, held in the close views for the cursor drawn over mouse look (ui/altCursor.ts) */
 const alt = (k: string): boolean => k === 'altleft' || k === 'altright';
 
-/** Typing in a text field (a room code, a confirmation) isn't playing: WASD mustn't walk the hero. */
+/** Editing a field or choosing a select option isn't playing: its keys mustn't walk the hero. */
 const typing = (e: KeyboardEvent): boolean => e.target instanceof HTMLElement
-  && (e.target.matches('textarea, input:not([type=checkbox], [type=radio], [type=range])') || e.target.isContentEditable);
+  && (e.target.matches('select, textarea, input:not([type=checkbox], [type=radio], [type=range])') || e.target.isContentEditable);
 
 export function initInput(canvas: HTMLCanvasElement): void {
   canvasEl = canvas;
