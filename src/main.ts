@@ -273,6 +273,12 @@ async function loadDevMode(): Promise<void> {
       beginRun(wave, seed, training);
     }),
     toLobby: () => { if (G.mode === 'run') toMenu(); },
+    reset: () => {
+      const loaded = { mode: G.mode, biome: G.arena.biome, wave: G.run?.wave ?? 1, training: G.run?.training ?? false };
+      toMenu();
+      G.arena.setBiome(loaded.biome);
+      if (loaded.mode === 'run') fightWarm(() => beginRun(loaded.wave, nextSeed, loaded.training));
+    },
     switchClass: (id) => {
       if (G.mode !== 'menu' || heroSelectOpen() || id === G.player.cls.id) return;
       saveClass(id);

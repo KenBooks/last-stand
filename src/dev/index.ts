@@ -4,8 +4,9 @@
 // none of it, not a byte (`src/dev/AGENTS.md`). F8 opens the panel, F9 flies the free camera, F7 freezes the game.
 import { G } from '../state';
 import { Player } from '../entities/player';
+import { updateFloaters } from '../ui/floaters';
 import { applyFreeCam, freeCamOn, freeCamToHero, setFreeCam } from './freeCam';
-import { initPanel, panelOpen, refreshPanel, toggleFly, togglePanel } from './panel';
+import { dockPanel, initPanel, panelOpen, refreshPanel, toggleFly, togglePanel } from './panel';
 import type { BiomeId } from '../data/biomes';
 
 /** What main.ts does for the developer mode: the game's own flows, so a wave or a class switch is set up as play
@@ -15,6 +16,8 @@ export interface DevHooks {
   startWave(wave: number, biome: BiomeId, training: boolean): void;
   /** back to the lobby */
   toLobby(): void;
+  /** restart the loaded wave or restore the lobby, reviving and replacing the hero */
+  reset(): void;
   /** the hero of class `id` in the lobby (in a run: not until it's left) */
   switchClass(id: string): void;
   /** the hero's gear changed: his stats, model and skill bar again */
@@ -43,7 +46,7 @@ export const time = { frozen: false, scale: 1, step: 0 };
 /** one step of a frozen game (s) */
 const STEP = 1 / 60;
 /** the hero takes no damage */
-export const cheats = { god: false };
+export const cheats = { god: false, free: false };
 
 export function setFrozen(on: boolean): void { time.frozen = on; refreshPanel(); }
 export function stepFrozen(): void { if (time.frozen) time.step++; }
@@ -91,7 +94,16 @@ export function initDev(hooks: DevHooks): DevApi {
       time.step--;
       return STEP;
     },
-    frame(dt) { applyFreeCam(dt); },
+    frame(dt) {
+      dockPanel();
+      if (cheats.free) {
+        G.player.energy = G.player.stats.maxEnergy;
+        G.player.cooldowns.clear();
+      }
+      applyFreeCam(dt);
+      // Labels must project through the flown camera even while simulation is frozen.
+      if (freeCamOn()) updateFloaters(0);
+    },
     wantsCursor: () => panelOpen() || freeCamOn(),
   };
 }

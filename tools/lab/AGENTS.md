@@ -14,6 +14,8 @@ The lab as an agent works with it: what every command measures, in a line here a
 
 ## Commands at a glance
 
+- `dev`: developer controls, Hero/Dev tabs, five viewport layouts, frozen training start, refills and reset, and slow first-person entry (`--canary` plants a drained resource).
+
 - `npm run lab:serve`: boots each command's page ahead of it (every command runs on a fresh boot and gives the same result every time)
 - `npm run lab -- sheet`: pictures the hero in the player's views with each arm's load beside them
 - `carry`: measures the carried bow

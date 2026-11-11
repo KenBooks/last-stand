@@ -48,13 +48,13 @@ export function setFreeCam(on: boolean): void {
     state.yaw = _euler.y;
     state.pitch = _euler.x;
   }
-  showLabels(on ? state.labels : true);
+  showLabels(state.labels);
 }
 
 /** The world's labels (damage numbers, names, bars) drawn or not while it flies. */
 export function setFreeCamLabels(on: boolean): void {
   state.labels = on;
-  if (state.on) showLabels(on);
+  showLabels(on);
 }
 
 function showLabels(on: boolean): void {

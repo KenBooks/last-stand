@@ -745,6 +745,12 @@ export async function training(lab: Lab, command: { canary: boolean }): Promise<
   return measure(lab, command);
 }
 
+/** Preview-only developer controls, their layout and recovery paths. */
+export async function dev(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { devMode } = await import('./devMode');
+  return devMode(lab, command);
+}
+
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
 export function setup(lab: Lab, fixture: Fixture): Promise<Record<string, unknown>> {
   return lab.setup(fixture);
