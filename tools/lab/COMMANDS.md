@@ -616,6 +616,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   this does not contact Google. The waiting dialog is checked at five required sizes (pictures in `out/cloud`,
   `--pictures=false` skips them). A changed session discards a late answer. `--canary` returns an invalid landing
   code and must never redeem it.
+  Fullscreen is played by a spy: the game must exit before opening and restore on every completion/cancel/error,
+  retry a refused restore on the next gesture, and leave an initially windowed game windowed. Native popup close
+  dismisses the waiting dialog, even with its address request held unanswered; a provider cancellation adds no
+  second cancellation dialog. No native fullscreen or keyboard lock is taken by the fixture.
 
 - `cloud`: cloud saves end to end (#504; `node/cloud.mjs`, `node/cloudDevice.mjs`, `node/savesService.mjs`,
   `page/cloud.ts`). Two devices: the side's page (A) and a partner's in a context of its own (B), each with a passkey

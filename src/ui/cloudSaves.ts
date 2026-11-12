@@ -13,6 +13,8 @@ import { slotHeroes } from '../loot/cloud';
 import { readHero, type Entries } from '../loot/slotData';
 import { sfx } from '../core/audio';
 import { isTouch } from './touch';
+import { leaveFullScreen, suspendAutoFullScreen } from './autoFullScreen';
+import { fullScreenTrip } from './fullScreenTrip';
 import type { Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -235,6 +237,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
 
 /** The game's return from Google, shown on the save slots screen: on to choosing the cloud save, or what went on. */
 export function showGoogleLanding(landing: cloud.GoogleLanding): void {
+  if (landing.kind === 'error' && landing.reason === 'cancelled') { closeDialog(); return; }
   if (landing.kind === 'signedIn') { afterSignIn(); return; }
   if (landing.kind === 'linked') {
     say('Google is linked: sign in with it on any device on last-stand.cc, as well as with your passkeys.');
@@ -270,7 +273,7 @@ function confirmLinkGoogle(): void {
   ]);
 }
 
-/** Starts inside the click so browsers can open the sign-in window before the first network request. */
+/** Leave fullscreen before opening Google's popup, then return to the previous state on every completion path. */
 function startGoogle(purpose: 'signin' | 'link', redirect = false): void {
   if (busy) return;
   const controller = new AbortController();
@@ -281,13 +284,21 @@ function startGoogle(purpose: 'signin' | 'link', redirect = false): void {
     [{ label: 'Show Google window', whileBusy: true, run: () => focusGoogle() },
       { label: 'Cancel', whileBusy: true, run: () => closeDialog() },
       { label: 'Continue in this tab', whileBusy: true, run: () => { useThisTab = true; closeDialog(); } }]);
-  let result: cloud.GoogleLanding | null = null;
+  const fullscreen = fullScreenTrip(leaveFullScreen, suspendAutoFullScreen());
+  let result: Awaited<ReturnType<typeof cloud.goToGoogle>> = null;
   void act(async () => {
-    try { result = await cloud.goToGoogle(purpose, controller.signal, redirect, (focus) => { focusGoogle = focus; }); }
-    finally { closeDialog(); }
+    try {
+      await fullscreen.ready;
+      if (!controller.signal.aborted) {
+        result = await cloud.goToGoogle(purpose, controller.signal, redirect, (focus) => { focusGoogle = focus; });
+      }
+    } finally {
+      closeDialog();
+      fullscreen.finish(!useThisTab && result?.kind !== 'redirect');
+    }
   }, () => {
     if (useThisTab) queueMicrotask(() => startGoogle(purpose, true));
-    else if (result) showGoogleLanding(result);
+    else if (result && result.kind !== 'redirect') showGoogleLanding(result);
   });
 }
 

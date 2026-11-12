@@ -9,6 +9,9 @@ import { googleReply, openGoogleWindow } from '../../../src/loot/googleWindow.ts
 function fixture({ blocked = false, unavailable = false } = {}) {
   const channels = [];
   const timers = new Map();
+  const intervals = new Map();
+  let now = 0;
+  let focused = true;
   const navigations = [];
   const popup = { focused: 0, focus() { this.focused++; }, opener: {}, document: { body: {} }, location: {
     replace: (url) => navigations.push(url),
@@ -30,13 +33,19 @@ function fixture({ blocked = false, unavailable = false } = {}) {
     URL,
     URLSearchParams,
     location: { href: 'https://game.example/subpath/?server=private' },
+    document: { hasFocus: () => focused },
+    Date: { now: () => now },
     setTimeout: (callback) => { timers.set(callback, callback); return callback; },
     clearTimeout: (callback) => timers.delete(callback),
+    setInterval: (callback) => { intervals.set(callback, callback); return callback; },
+    clearInterval: (callback) => intervals.delete(callback),
   };
   const open = runInNewContext(`const googleReply = ${googleReply.toString()};
     (${openGoogleWindow.toString()})`, scope);
   const controller = new AbortController();
-  return { open: () => open(controller.signal), controller, popup, channels, timers, navigations };
+  return { open: () => open(controller.signal), controller, popup, channels, timers, intervals, navigations,
+    focused: (value) => { focused = value; },
+    tick: (ms) => { now += ms; for (const callback of intervals.values()) callback(); } };
 }
 
 test('opens before any await, severs opener and uses a unique channel without the nonce or server query', async () => {
@@ -55,6 +64,7 @@ test('opens before any await, severs opener and uses a unique channel without th
   assert.equal((await opened.result).code, 'A'.repeat(32));
   assert.equal(page.channels[0].closed, true);
   assert.equal(page.timers.size, 0);
+  assert.equal(page.intervals.size, 0);
   assert.equal(page.channels[0].sent[0].type, 'close');
   opened.focus();
   assert.equal(page.popup.focused, 3, 'a finished window is never focused');
@@ -104,6 +114,33 @@ test('a browser refusing foreground does not cancel authentication', async () =>
   assert.ok(opened);
   opened.navigate('https://accounts.google.com/');
   opened.focus();
+  page.channels[0].onmessage({ data: { fragment: '#cloud-google=' + 'A'.repeat(32) } });
+  assert.equal((await opened.result).code, 'A'.repeat(32));
+});
+
+test('closing the native popup cancels after focus returns and clears the watcher', async () => {
+  const page = fixture();
+  const opened = page.open();
+  page.focused(false);
+  page.popup.closed = true;
+  page.tick(1000);
+  assert.equal(page.channels[0].closed, undefined);
+  page.focused(true);
+  page.tick(250);
+  page.tick(750);
+  assert.equal(await opened.result, null);
+  assert.equal(page.intervals.size, 0);
+});
+
+test('a detached OAuth handle does not cancel before focus returns; the reply wins the grace period', async () => {
+  const page = fixture();
+  const opened = page.open();
+  page.focused(false);
+  page.popup.closed = true;
+  page.tick(5000);
+  assert.equal(page.channels[0].closed, undefined);
+  page.focused(true);
+  page.tick(250);
   page.channels[0].onmessage({ data: { fragment: '#cloud-google=' + 'A'.repeat(32) } });
   assert.equal((await opened.result).code, 'A'.repeat(32));
 });

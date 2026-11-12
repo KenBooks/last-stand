@@ -36,6 +36,7 @@ export function openGoogleWindow(signal: AbortSignal): {
     let finish: (reply: GoogleReply | null) => void;
     let done = false;
     const result = new Promise<GoogleReply | null>((resolve) => { finish = resolve; });
+    let closedSince = 0;
     const focus = (): void => {
       if (done) return;
       try { child.focus(); } catch { /* COOP or the browser may refuse; the redirect fallback remains available */ }
@@ -44,6 +45,7 @@ export function openGoogleWindow(signal: AbortSignal): {
       if (done) return;
       done = true;
       clearTimeout(timer);
+      clearInterval(watching);
       signal.removeEventListener('abort', cancel);
       bus.postMessage({ type: 'close' });
       bus.close();
@@ -52,6 +54,15 @@ export function openGoogleWindow(signal: AbortSignal): {
     const settle = (reply: GoogleReply | null): void => { close(); finish(reply); };
     const cancel = (): void => settle(null);
     const timer = setTimeout(() => settle({ error: 'expired' }), 10 * 60_000);
+    // OAuth can sever the handle (closed=true) while the popup is still alive. Only cancel after the game has
+    // regained focus, allowing the return page's channel message to arrive before treating a close as Cancel.
+    const watching = setInterval(() => {
+      let closed = false;
+      try { closed = child.closed; } catch { /* an unavailable handle alone says nothing */ }
+      if (!closed || !document.hasFocus()) { closedSince = 0; return; }
+      if (!closedSince) closedSince = Date.now();
+      else if (Date.now() - closedSince >= 750) settle(null);
+    }, 250);
     signal.addEventListener('abort', cancel, { once: true });
     bus.onmessage = (event: MessageEvent<unknown>) => {
       if (done || !event.data || typeof event.data !== 'object' || !('fragment' in event.data)) return;

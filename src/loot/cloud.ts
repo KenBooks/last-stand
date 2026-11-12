@@ -180,19 +180,23 @@ export const hasGoogle = (): boolean => Boolean(kept?.google);
 
 /** Keeps the game loaded while Google opens separately; a blocked window uses the existing redirect flow. */
 export async function goToGoogle(purpose: 'signin' | 'link', signal: AbortSignal, redirect = false,
-  opened?: (focus: () => void) => void): Promise<GoogleLanding | null> {
+  opened?: (focus: () => void) => void): Promise<GoogleLanding | { kind: 'redirect' } | null> {
   const nonce = randomNonce();
   const state = kept;
   const popup = redirect ? null : openGoogleWindow(signal);
   if (popup) opened?.(popup.focus);
   try {
-    const { url } = await api.googleAddress(purpose, nonce, popup?.returnPath, signal);
+    const address = api.googleAddress(purpose, nonce, popup?.returnPath, signal);
+    // A native close must release the waiting UI even if the address request has not answered yet.
+    const started = popup ? await Promise.race([address, popup.result.then(() => null)]) : await address;
+    if (!started) return null;
+    const { url } = started;
     if (signal.aborted || kept !== state) return null;
     if (!popup) {
       // Refuse before navigating if the nonce cannot survive the redirect.
       sessionStorage.setItem(GOOGLE_NONCE, nonce);
       location.assign(url);
-      return null;
+      return { kind: 'redirect' };
     }
     popup.navigate(url);
     const reply = await popup.result;

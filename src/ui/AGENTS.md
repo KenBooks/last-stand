@@ -7,6 +7,7 @@
 The page's UI over the game.
 
 - Google sign-in/link uses `cloudSaves.ts`'s waiting dialog with Show Google window, Cancel and Continue in this tab. Only these waiting controls may operate while `act` is busy; closing the dialog aborts the pending attempt. Request foreground synchronously when opening, again when navigating to Google, and on Show Google window; foreground is the browser/OS's decision. Complete through the same save-choice/link/move/error dialogs as the redirect flow, updating the running game in place.
+- `fullScreenTrip.ts` preserves the game's HTML fullscreen around Google sign-in/link: suspend automatic entry, await the marked programmatic exit before opening the popup, and restore on success, cancellation, native close or error. A refused restore retries on focus or the next mouse/touch/key gesture; Escape or a manual fullscreen control cancels that retry. A windowed start stays windowed. Do not restore just before a same-tab redirect or while switching to that fallback. `leaveFullScreen()` returns whether the exit succeeded and marks it so `keepEsc` cannot interpret the exit as a pause key. Browser-owned F11 fullscreen cannot be exited through this API.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.
 
