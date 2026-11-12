@@ -391,6 +391,9 @@ export class Sculpt {
 
   private push(parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void { this.pushTo(this.groups, parent, mat, g); }
   private pushTo(store: Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>, parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void {
+    // (a piece of no triangles is left out, so a material none of whose pieces has any draws nothing: a hero's
+    // stitches below Low's detail, models/armor.ts. Never a replay's stand-in, which holds a cached piece's place)
+    if (g !== NONE && !this.cached && !(g.attributes.position?.count > 0)) { g.dispose(); return; }
     let m = store.get(parent);
     if (!m) store.set(parent, (m = new Map()));
     let list = m.get(mat);
@@ -401,6 +404,8 @@ export class Sculpt {
   /** the piece on the left joint and its mirror image (x → -x) on the right one */
   pair(geo: THREE.BufferGeometry, mat: THREE.Material, parentL: THREE.Object3D, parentR: THREE.Object3D | null,
     pos: [number, number, number] = [0, 0, 0], rot: [number, number, number] = [0, 0, 0], scale: number | [number, number, number] = 1): this {
+    // (a piece of no triangles has no mirror image either: `pushTo` leaves it out)
+    if (!this.cached && !(geo.attributes.position?.count > 0)) return this;
     this.add(geo, mat, parentL, pos, rot, scale);
     const list = this.groups.get(parentL)!.get(mat)!;
     this.push(parentR ?? parentL, mat, this.cached ? NONE : mirrorX(list[list.length - 1].clone()));

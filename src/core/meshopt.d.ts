@@ -1,4 +1,5 @@
-// meshoptimizer's builds in three's addons (r187), as much of them as core/meshlets.worker.ts uses: three ships them
+// meshoptimizer's builds in three's addons (r187), as much of them as core/meshlets.worker.ts and
+// models/handShape.ts (a coarse hand) use: three ships them
 // untyped.
 
 declare module 'three/addons/libs/meshopt_clusterizer.module.js' {
@@ -24,6 +25,8 @@ declare module 'three/addons/libs/meshopt_simplifier.module.js' {
   export const MeshoptSimplifier: {
     ready: Promise<void>;
     getScale(positions: Float32Array, stride: number): number;
+    simplify(indices: Uint32Array, positions: Float32Array, stride: number, targetIndexCount: number,
+      targetError: number, flags?: string[]): Simplified;
     simplifyWithAttributes(indices: Uint32Array, positions: Float32Array, stride: number, attributes: Float32Array,
       attributeStride: number, weights: number[], locks: null, targetIndexCount: number, targetError: number,
       flags: string[]): Simplified;

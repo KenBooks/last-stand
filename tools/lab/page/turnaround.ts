@@ -16,6 +16,48 @@ export interface TurnaroundOptions {
   reference?: { url: string; panels: [number, number, number, number][] };
   /** picture an empty studio too: the measure of what's drawn must find nothing there */
   canary?: boolean;
+  /** list his triangles by part too: each shown mesh by the joint it hangs from and its material */
+  parts?: boolean;
+}
+
+/** The joint a mesh hangs from: the nearest of its ancestors that is one of the hero's joints, by its name there. */
+function jointOf(mesh: THREE.Object3D, names: Map<THREE.Object3D, string>): string {
+  for (let o: THREE.Object3D | null = mesh.parent; o; o = o.parent) {
+    const name = names.get(o);
+    if (name) return name;
+  }
+  return '(root)';
+}
+
+/** What a material is called: its name, else its kind and colour. */
+function materialName(material: THREE.Material | undefined): string {
+  if (!material) return '?';
+  if (material.name) return material.name;
+  const colour = (material as THREE.MeshStandardMaterial).color;
+  return `${material.type.replace(/^Mesh|Material$/g, '')}${colour ? ` #${colour.getHexString()}` : ''}`;
+}
+
+/** His shown triangles by part, most first: each row a joint and a material, with its share of the whole. */
+function partsOf(lab: Lab, root: THREE.Object3D, total: number): string[] {
+  const joints = lab.joints as unknown as Record<string, THREE.Object3D>;
+  const names = new Map(lab.jointNames().map((name) => [joints[name], name] as const));
+  const rows = new Map<string, { triangles: number; meshes: number }>();
+  root.traverseVisible((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const geometry = mesh.geometry;
+    const triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    const what = mesh.name || materialName(material);
+    const key = `${jointOf(mesh, names)} · ${what}${mesh.userData.drawsAlone ? ' (alone)' : ''}`;
+    const row = rows.get(key) ?? { triangles: 0, meshes: 0 };
+    row.triangles += triangles;
+    row.meshes++;
+    rows.set(key, row);
+  });
+  return [...rows].sort((a, b) => b[1].triangles - a[1].triangles).map(([key, row]) =>
+    `  ${row.triangles.toLocaleString('en').padStart(7)}  ${((row.triangles / total) * 100).toFixed(1).padStart(5)}%  ${key}`
+    + (row.meshes > 1 ? ` (${row.meshes} meshes)` : ''));
 }
 
 /** A side the studio's camera looks at him from (the hero facing +z, his left +x), and what it frames. */
@@ -131,6 +173,7 @@ export async function turnaround(lab: Lab, options: TurnaroundOptions): Promise<
     const { triangles, meshes } = countsOf(placed.root);
     const counts = `${triangles.toLocaleString('en')} triangles in ${meshes} meshes shown`;
     lines.push(`${lab.player.cls.id}: ${counts}`);
+    if (options.parts) lines.push(...partsOf(lab, placed.root, triangles));
     if (least < LEAST_DRAWN) problems.push(`the hero covers ${(least * 100).toFixed(1)}% of a picture: not drawn`);
     moments.push({ label: `${lab.player.cls.id} as he stands`, tiles, notes: [counts] });
     if (options.reference) {

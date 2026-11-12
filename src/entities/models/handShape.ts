@@ -8,7 +8,7 @@
 // were strings of beads.) The glove is the same surface a little further out, cut off over each finger's first
 // segment and round the thumb's, and the nails are plates laid on the backs of the fingertips.
 import * as THREE from 'three';
-import { surfaceNets, type Field } from './surfaceNets';
+import { surfaceNets, type Field, type Net } from './surfaceNets';
 import { above, beyond, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
 import type { Part, Shape } from './sdf';
 import { clamp } from '../../util';
@@ -91,11 +91,53 @@ const CELL = 0.0032;
 const COARSE_CELL = 0.0056;
 let cell = CELL;
 /**
+ * What a coarse hand's meshes are simplified to, as shares of their triangles on the coarse grid (the skin's 4,100 to
+ * about 500, the glove's 2,100 to about 350), and the most a simplified surface may stray from the sculpt (m): from
+ * the game's cameras a hand is a few dozen pixels, and its 4,000 triangles a side were still a seventh of a hero at
+ * Very low (from play: "wayy too much detail, especially for the hands"). The edge-collapse keeps the vertices it
+ * leaves where the sculpt put them (on the surface, with its normals), so the hand keeps its shape, its fingers and
+ * its shading, and its rim at the wrist is kept whole (`LockBorder`), where the cuff and the sleeve meet it.
+ */
+const COARSE_SHARE = { skin: 0.12, glove: 0.17 };
+const COARSE_ERROR = 0.0025;
+/** the simplifier (three's meshoptimizer), loaded only for a coarse hand: null until it's ready */
+let simplifier: typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier | null = null;
+let coarseHand = false;
+/**
  * The hands sculpted from now on meshed coarse, or not (Very low's: a hand was 12,500 triangles at any level, the
  * two a quarter of the hero's and an eighth of the crypt's lobby there, `lab draws --boot verylow`). A side's hand
- * is sculpted once and kept, so it's set before the first is (`preloadHands`), as the hero's detail is.
+ * is sculpted once and kept, so it's set before the first is (`preloadHands`), as the hero's detail is. A coarse
+ * hand is simplified too once the simplifier has loaded (what it returns waits for it; a hand sculpted before that
+ * is on the coarse grid alone).
  */
-export function setHandsCoarse(coarse: boolean): void { cell = coarse ? COARSE_CELL : CELL; }
+export async function setHandsCoarse(coarse: boolean): Promise<void> {
+  cell = coarse ? COARSE_CELL : CELL;
+  coarseHand = coarse;
+  if (!coarse || simplifier) return;
+  const { MeshoptSimplifier } = await import('three/addons/libs/meshopt_simplifier.module.js');
+  await MeshoptSimplifier.ready;
+  simplifier = MeshoptSimplifier;
+}
+
+/** `net` simplified to `share` of its triangles (`COARSE_SHARE`), its vertices those it keeps (none moved). */
+function simplified(net: Net, share: number): Net {
+  if (!simplifier || !coarseHand) return net;
+  const target = Math.max(3, Math.floor((net.index.length / 3) * share) * 3);
+  const [index] = simplifier.simplify(net.index, net.positions, 3, target, COARSE_ERROR, ['LockBorder', 'ErrorAbsolute']);
+  const remap = new Int32Array(net.positions.length / 3).fill(-1);
+  let count = 0;
+  for (const v of index) if (remap[v] < 0) remap[v] = count++;
+  const positions = new Float32Array(count * 3);
+  const normals = new Float32Array(count * 3);
+  remap.forEach((to, from) => {
+    if (to < 0) return;
+    for (let k = 0; k < 3; k++) {
+      positions[to * 3 + k] = net.positions[from * 3 + k];
+      normals[to * 3 + k] = net.normals[from * 3 + k];
+    }
+  });
+  return { positions, normals, index: index.map((v) => remap[v]) };
+}
 /** how far a vertex's joints' say in it falls off with its distance from their parts (m), and how far a part may be
  *  and still have any */
 const FALLOFF = 0.0022;
@@ -120,8 +162,9 @@ const NAIL_DEPTH = 0.0009;
 const NAIL_FROM = 0.26;
 const NAIL_TO = 0.8;
 const NAIL_HALF = 0.5;
-const NAIL_ACROSS = 6;
-const NAIL_ALONG = 7;
+const NAIL_GRID = { across: 6, along: 7 };
+/** a coarse hand's nails (`setHandsCoarse`): a plate of four quads, 24 triangles a nail where 136 */
+const COARSE_NAIL_GRID = { across: 2, along: 2 };
 /** where the hand's surface ends up the wrist, inside the cuff, and the glove's (m over the wrist joint) */
 const WRIST_TOP = 0.008;
 const GLOVE_TOP = 0.006;
@@ -487,8 +530,8 @@ function weightsAt(parts: Part[], x: number, y: number, z: number, out: { bones:
 }
 
 /** A mesh of `field` within `box` as a geometry, its vertices skinned to the joints `parts` say. */
-function skinnedNet(field: Field, box: THREE.Box3, parts: Part[]): THREE.BufferGeometry {
-  const net = surfaceNets(field, box, cell);
+function skinnedNet(field: Field, box: THREE.Box3, parts: Part[], share: number): THREE.BufferGeometry {
+  const net = simplified(surfaceNets(field, box, cell), share);
   const count = net.positions.length / 3;
   // (the bones' indices as floats, as models/shapes.ts's: Uint16 ones made ANGLE compile a vertex shader at the
   // first draw, on the GPU process's main thread)
@@ -649,6 +692,7 @@ function nail(field: Field, digit: DigitShape, bone: number, space: THREE.Object
   const l2 = digit.len[2];
   const half = digit.width * slimOf(thumb) * NAIL_HALF;
   const down = new THREE.Vector3(0, 0, -1).transformDirection(toHand);
+  const { across: NAIL_ACROSS, along: NAIL_ALONG } = coarseHand ? COARSE_NAIL_GRID : NAIL_GRID;
   const rows: number[][] = [];
   for (let a = 0; a <= NAIL_ALONG; a++) {
     const t = NAIL_FROM + (NAIL_TO - NAIL_FROM) * (a / NAIL_ALONG);
@@ -775,12 +819,12 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const frames = digits.map((digit) => digit.j.map((joint) => frameIn(joint, space)));
   const nails = new NailMesh();
   digits.forEach((digit, i) => nail(hand, digit, 3 + i * 3, space, nails, i === fingers.length));
-  const skin = skinnedNet(hand, box, parts);
+  const skin = skinnedNet(hand, box, parts, COARSE_SHARE.skin);
   shadeSkin(skin, hand, digits, frames);
   return {
     skin,
     tips: bareOf(skin, digits, frames),
-    glove: skinnedNet(gloveField(hand, digits, frames), gloveBox(digits, space), parts),
+    glove: skinnedNet(gloveField(hand, digits, frames), gloveBox(digits, space), parts, COARSE_SHARE.glove),
     nails: nails.geometry(),
   };
 }

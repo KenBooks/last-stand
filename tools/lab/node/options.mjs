@@ -731,6 +731,12 @@ export const COMMANDS = {
           + 'its GPU played by this one drawing its screen at more pixels',
       },
       rounds: { kind: 'number', usage: 'n', help: 'the rounds of turns a part (the game\'s own, 3, by default)' },
+      arrows: {
+        kind: 'number',
+        usage: 'n',
+        help: 'n spent arrows stood in the ground round him first: what they cost, its part '
+          + '"the spent arrows"',
+      },
       canary: { kind: 'switch', help: 'a part of its own, the frame drawn twice: it must read 1.6 times once' },
       ...COMMON_OPTIONS,
     },
@@ -1604,6 +1610,7 @@ export const COMMANDS = {
           + 'edges as shares of the picture; an empty one leaves its place empty',
       },
       canary: { kind: 'switch', help: 'an empty studio pictured too: the measure of what\'s drawn must find nothing' },
+      parts: { kind: 'switch', help: 'his triangles by part too: each shown mesh by the joint it hangs from and its material' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

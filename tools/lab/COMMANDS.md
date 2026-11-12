@@ -173,6 +173,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
   for that, have the player press the button and read their trace with `lab trace` (its Profile section).
   `--canary` draws the frame twice, which must read 1.6 times once (on WebGPU the GPU waited out between the two).
+  `--arrows <n>` stands n spent arrows in the ground round the hero first, timed as their own part (1,000, the
+  most kept, read nothing of a phone's 8.5 ms frame at Very low: `--device phone --level verylow --arrows 1000`).
   The forest at 15.4,15.4: the frame 4.6 to 4.9 ms here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to
   1.97 times (2 frames a side read 1.57 once). Its result is sent as the tab's Send sends it, to a traces service of
   the lab's own, and read back as `lab trace` reports it: its Profile section must hold the lines as sent. With
@@ -787,7 +789,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
   him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
   he holds, and his head close from the front, his right side, three-quarters to his left and behind (a hood is judged
-  all round; from his right front the staff came between), with how many triangles and meshes he's drawn with.
+  all round; from his right front the staff came between), with how many triangles and meshes he's drawn with; `--parts` lists them by part, each joint's meshes of a material,
+  most first (`--boot verylow` for a level's: the hands, the head, the coat).
   `--ref <sheet> --panels l,t,r,b;...` cuts a reference sheet's panels (shares of it, one a view in that order; an
   empty one leaves its place empty) and sets them in a row under ours, each fitted whole into a tile the size of ours.
   A hero is rebuilt against such a sheet part by part from the same side (the mage against Codex's realistic render
