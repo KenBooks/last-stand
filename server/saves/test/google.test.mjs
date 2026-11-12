@@ -95,6 +95,20 @@ test('the health says Google and the backups are on', async () => {
   assert.deepEqual(health.body.backups, { state: 'pending', last: 0 });
 });
 
+test('a signed-in browser can preflight the public health request', async () => {
+  const response = await fetch(`${base}/saves/health`, {
+    method: 'OPTIONS',
+    headers: {
+      origin: PRODUCTION,
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': 'authorization',
+    },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('access-control-allow-origin'), PRODUCTION);
+  assert.match(response.headers.get('access-control-allow-headers') ?? '', /authorization/);
+});
+
 test('a Google sign-in goes by Google with PKCE and the openid scope alone, and comes home to the page that asked', async () => {
   const started = await begin('signin', { origin: PREVIEW });
   assert.equal(started.status, 200);

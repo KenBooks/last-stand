@@ -635,6 +635,16 @@ function waysIn(account) {
 async function handle(req, res) {
   const path = new URL(req.url ?? '/', 'http://x').pathname.replace(/\/+$/, '');
   const headers = cors(req);
+  if (!path.startsWith('/saves')) return answer(res, 404, 'not here');
+  const origin = req.headers.origin ?? '';
+  if (req.method === 'OPTIONS') {
+    if (!settings.origins.has(origin)) return answer(res, 403, 'not from the game');
+    return answer(res, 204, '', {
+      ...headers, 'access-control-allow-methods': 'GET, PUT, POST, DELETE',
+      'access-control-allow-headers': 'authorization, content-type, x-save-base, x-save-device',
+      'access-control-max-age': '86400',
+    });
+  }
   if (path === '/saves/health') {
     return answer(res, 200, {
       ok: true, passkeys: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
@@ -642,16 +652,7 @@ async function handle(req, res) {
     }, headers);
   }
   if (path === '/saves/auth/google/callback' && req.method === 'GET') return googleCallback(req, res);
-  if (!path.startsWith('/saves')) return answer(res, 404, 'not here');
-  const origin = req.headers.origin ?? '';
   if (!settings.origins.has(origin)) return answer(res, 403, 'not from the game');
-  if (req.method === 'OPTIONS') {
-    return answer(res, 204, '', {
-      ...headers, 'access-control-allow-methods': 'GET, PUT, POST, DELETE',
-      'access-control-allow-headers': 'authorization, content-type, x-save-base, x-save-device',
-      'access-control-max-age': '86400',
-    });
-  }
   if (path === '/saves/passkey/options' && req.method === 'POST') return passkeyOptions(req, res, origin, headers);
   if (path === '/saves/passkey/verify' && req.method === 'POST') return passkeyVerify(req, res, origin, headers);
   if (path === '/saves/link' && req.method === 'POST') return link(req, res, origin, headers);
