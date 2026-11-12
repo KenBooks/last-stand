@@ -27,14 +27,15 @@ export const setToken = (t: string): void => { token = t; };
 
 const TIMEOUT_MS = 15_000;
 
-async function call(method: string, path: string, init: { json?: unknown; body?: BodyInit; headers?: Record<string, string>; public?: boolean } = {}): Promise<Response> {
+async function call(method: string, path: string, init: { json?: unknown; body?: BodyInit; headers?: Record<string, string>; public?: boolean; signal?: AbortSignal } = {}): Promise<Response> {
   const headers: Record<string, string> = { ...init.headers };
   if (token && !init.public) headers.authorization = `Bearer ${token}`;
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   let answer: Response;
   try {
     answer = await fetch(`${serverHttp()}/saves${path}`, {
-      method, headers, cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS),
+      method, headers, cache: 'no-store', signal: init.signal
+        ? AbortSignal.any([init.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
       body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
     });
   } catch {
@@ -132,13 +133,13 @@ export function serviceHealth(): Promise<{ google: boolean }> {
 /** The address to send this page to for Google's sign-in (`signin`) or to link Google (`link`, production's alone);
  *  Google sends it home to this path and query. `nonce` binds it to this tab: the code it comes home with is traded
  *  with it alone. */
-export const googleAddress = (purpose: 'signin' | 'link', nonce: string): Promise<{ url: string }> =>
-  json(call('POST', '/auth/google', { json: { purpose, nonce, returnPath: `${location.pathname}${location.search}` } }));
+export const googleAddress = (purpose: 'signin' | 'link', nonce: string, returnPath = `${location.pathname}${location.search}`, signal?: AbortSignal): Promise<{ url: string }> =>
+  json(call('POST', '/auth/google', { json: { purpose, nonce, returnPath }, signal }));
 /** The code Google's answer brought home, finished: a session (a sign-in), or Google linked to the signed-in
  *  account (a link, sent with that account's production session). */
 export interface GoogleMoveOffer { code: string; previewSaves: number; hasProductionSave: boolean; hasPasskey: boolean }
-export const googleFinish = (code: string, nonce: string): Promise<SignedIn | { linked: true; account: CloudAccount } | { move: GoogleMoveOffer }> =>
-  json(call('POST', '/auth/google/finish', { json: { code, nonce } }));
+export const googleFinish = (code: string, nonce: string, signal?: AbortSignal): Promise<SignedIn | { linked: true; account: CloudAccount } | { move: GoogleMoveOffer }> =>
+  json(call('POST', '/auth/google/finish', { json: { code, nonce }, signal }));
 export const moveGoogle = (code: string): Promise<{ linked: true; account: CloudAccount }> =>
   json(call('POST', '/google/move', { json: { code } }));
 export const unlinkGoogle = async (): Promise<void> => { await call('DELETE', '/google'); };

@@ -80,10 +80,10 @@ function backToWindow(): void {
 }
 
 /** Full screen left by the page itself (Back to window, the Fullscreen buttons), not by the player's Esc. */
-export function leaveFullScreen(): void {
-  if (!document.fullscreenElement) return;
+export function leaveFullScreen(): Promise<boolean> {
+  if (!document.fullscreenElement) return Promise.resolve(false);
   leaving = true;
-  document.exitFullscreen().catch(() => { leaving = false; });
+  return document.exitFullscreen().then(() => true, () => { leaving = false; return false; });
 }
 
 /** the page asked to leave full screen (`leaveFullScreen`): the change that follows is no Esc */
@@ -136,10 +136,25 @@ export function fullScreenChosen(): void {
 /** Waits for the first gesture to go full screen, where this visit should (`force`: a harness's check). */
 export function armAutoFullScreen(force = false): void {
   prompt().querySelector<HTMLElement>('.fp-back')!.onclick = backToWindow;
-  if (armed || !wanted(force)) return;
+  if (suspended || armed || !wanted(force)) return;
   armed = true;
   forced = force;
   for (const type of ACTIVATING) window.addEventListener(type, onGesture, true);
+}
+
+let suspended = 0;
+/** An external sign-in owns its fullscreen round trip; its waiting controls must not re-enter behind the popup. */
+export function suspendAutoFullScreen(): () => void {
+  const rearm = armed;
+  suspended++;
+  disarm();
+  let resumed = false;
+  return () => {
+    if (resumed) return;
+    resumed = true;
+    suspended--;
+    if (rearm && !suspended) armAutoFullScreen(forced);
+  };
 }
 
 /** Set up once at boot: the prompt goes with full screen. */

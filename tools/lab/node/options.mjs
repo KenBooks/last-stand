@@ -2134,6 +2134,7 @@ export const COMMANDS = {
       + 'device\'s slots and the service\'s save read back, and the bar and dialogs pictured within the window at '
       + 'desktops\', a tablet\'s and a phone\'s sizes (out/cloud)',
     options: {
+      google: { kind: 'switch', help: 'Google window sign-in/link, cancel and redirect fallback alone (local replies)' },
       pictures: { kind: 'switch', help: 'picture the screen at each moment (=false: the checks alone)' },
       canary: { kind: 'switch', help: 'the mage\'s stash item dropped from the second device\'s download: caught' },
       ...COMMON_OPTIONS,

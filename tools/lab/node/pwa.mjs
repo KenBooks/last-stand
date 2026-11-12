@@ -320,6 +320,39 @@ async function playInstalled({ page, context, host, url, builds, canary }) {
   return { lines, problems };
 }
 
+/** The static Google callback works through the current worker without loading another game. */
+async function googleReturn(page, context, url) {
+  const attempt = 'c'.repeat(48);
+  await page.evaluate((attempt) => {
+    window.__labGoogleReply = new Promise((resolve) => {
+      const channel = new BroadcastChannel('last-stand.google.' + attempt);
+      const timeout = setTimeout(() => {
+        channel.close();
+        resolve(null);
+      }, 5000);
+      channel.onmessage = (event) => {
+        clearTimeout(timeout);
+        channel.postMessage({ type: 'close' });
+        channel.close();
+        resolve(event.data.fragment);
+      };
+    });
+  }, attempt);
+  const callback = await context.newPage();
+  const scripts = [];
+  callback.on('request', (request) => {
+    if (request.resourceType() === 'script') scripts.push(request.url());
+  });
+  try {
+    const fragment = '#cloud-google=' + 'd'.repeat(32);
+    await callback.goto(url + 'google-signin.html?attempt=' + attempt + fragment);
+    const received = await page.evaluate(() => window.__labGoogleReply);
+    return received === fragment && scripts.length === 0;
+  } finally {
+    await callback.close();
+  }
+}
+
 /** The loads played in a fresh browser: each one's line and problems. */
 async function playLoads(builds, canary) {
   const host = new StaticHost(BASE);
@@ -342,6 +375,11 @@ async function playLoads(builds, canary) {
       const found = judged(load, await stateOf(page, load), builds);
       lines.push(found.line);
       problems.push(...found.problems);
+      if (load.shows === 'now' && !canary) {
+        const returned = await googleReturn(page, context, url);
+        lines.push(`    lightweight Google return: ${returned ? 'ok, no game scripts' : 'FAILED'}`);
+        if (!returned) problems.push(`${load.name}: lightweight Google return failed`);
+      }
     }
     lines.push('the installed app:');
     const installed = await playInstalled({ page, context, host, url, builds, canary });

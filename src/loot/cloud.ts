@@ -13,6 +13,7 @@ import { readCookie, writeCookie } from '../core/cookies';
 import * as api from './cloudApi';
 import { CLASS_ENTRY, readHero, writeHero, readSlot, rearrangeSlots, slotEmpty, type Entries } from './slotData';
 import { SAVE_SLOTS, setSaveSlot } from './saveSlots';
+import { openGoogleWindow, type GoogleReply } from './googleWindow';
 
 const KEY = 'last-stand.cloud.v1';
 const HERO = 'hero.';
@@ -177,13 +178,36 @@ export const googleOn = async (): Promise<boolean> => (await api.serviceHealth()
 /** Whether Google is linked to the signed-in account. */
 export const hasGoogle = (): boolean => Boolean(kept?.google);
 
-/** Sends this page to Google to sign in, or (`link`, production's alone) to link Google to the account. The game
- *  reloads as it comes home: its saves are written as they change, so nothing is lost. */
-export async function goToGoogle(purpose: 'signin' | 'link'): Promise<void> {
+/** Keeps the game loaded while Google opens separately; a blocked window uses the existing redirect flow. */
+export async function goToGoogle(purpose: 'signin' | 'link', signal: AbortSignal, redirect = false,
+  opened?: (focus: () => void) => void): Promise<GoogleLanding | { kind: 'redirect' } | null> {
   const nonce = randomNonce();
-  const { url } = await api.googleAddress(purpose, nonce);
-  try { sessionStorage.setItem(GOOGLE_NONCE, nonce); } catch { /* no storage: the return is refused, and says so */ }
-  location.assign(url);
+  const state = kept;
+  const popup = redirect ? null : openGoogleWindow(signal);
+  if (popup) opened?.(popup.focus);
+  try {
+    const address = api.googleAddress(purpose, nonce, popup?.returnPath, signal);
+    // A native close must release the waiting UI even if the address request has not answered yet.
+    const started = popup ? await Promise.race([address, popup.result.then(() => null)]) : await address;
+    if (!started) return null;
+    const { url } = started;
+    if (signal.aborted || kept !== state) return null;
+    if (!popup) {
+      // Refuse before navigating if the nonce cannot survive the redirect.
+      sessionStorage.setItem(GOOGLE_NONCE, nonce);
+      location.assign(url);
+      return { kind: 'redirect' };
+    }
+    popup.navigate(url);
+    const reply = await popup.result;
+    if (!reply || signal.aborted || kept !== state) return null;
+    return await finishGoogle(reply, nonce, () => !signal.aborted && kept === state, signal);
+  } catch (error) {
+    if (signal.aborted || kept !== state) return null;
+    throw error;
+  } finally {
+    popup?.close();
+  }
 }
 
 export async function unlinkGoogle(): Promise<void> {
@@ -222,11 +246,17 @@ async function landFromGoogle(): Promise<GoogleLanding | null> {
   if (!code && !error) return null;
   history.replaceState(history.state, '', `${location.pathname}${location.search}`);
   const nonce = takeNonce();
-  if (error) return { kind: 'error', reason: error };
+  return finishGoogle({ code: code ?? undefined, error: error ?? undefined }, nonce);
+}
+
+/** The nonce and current session stay in the initiating game, including while the other window is open. */
+async function finishGoogle(reply: GoogleReply, nonce: string, current = (): boolean => true, signal?: AbortSignal): Promise<GoogleLanding | null> {
+  if (reply.error) return { kind: 'error', reason: reply.error };
   try {
     // (a code this tab never asked for, a link someone sent, has no nonce here: refused, as expired; a link is
     // finished with this device's own production session, which the service checks began it)
-    const finished = await api.googleFinish(code!, nonce);
+    const finished = await api.googleFinish(reply.code!, nonce, signal);
+    if (!current()) return null;
     if ('token' in finished) {
       signedInAs(finished);
       return { kind: 'signedIn' };
@@ -235,6 +265,7 @@ async function landFromGoogle(): Promise<GoogleLanding | null> {
     if (kept) { kept.google = true; keep(); }
     return { kind: 'linked' };
   } catch (e) {
+    if (!current()) return null;
     return { kind: 'error', reason: landingFailure(e) };
   }
 }

@@ -133,18 +133,20 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin || !url.pathname.startsWith(SCOPE)) return;
   // PR previews live under the production scope but have workers of their own
   if (url.pathname.slice(SCOPE.length).startsWith('pr-preview/')) return;
-  e.respondWith(req.mode === 'navigate' ? page(req) : file(req));
+  // OAuth's return window must never bootstrap the game, even if the network drops on the way back.
+  const fallback = url.pathname === SCOPE + 'google-signin.html' ? './google-signin.html' : './';
+  e.respondWith(req.mode === 'navigate' ? page(req, fallback) : file(req));
 });
 
 // the page: from the network (revalidated past the HTTP cache), the cached copy when offline or slow
-async function page(req) {
+async function page(req, fallback) {
   const net = fetch(req, { cache: 'no-cache' });
   net.catch(() => {});
   try {
     const r = await Promise.race([net, new Promise((res) => setTimeout(res, PAGE_WAIT))]);
     if (r && r.ok) return r;
   } catch { /* offline */ }
-  const hit = await caches.open(CACHE).then((c) => c.match('./'));
+  const hit = await caches.open(CACHE).then((c) => c.match(fallback));
   return hit || net;
 }
 

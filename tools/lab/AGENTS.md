@@ -14,6 +14,8 @@ The lab as an agent works with it: what every command measures, in a line here a
 
 ## Commands at a glance
 
+- `cloud --google`: real sign-in controls/window and lightweight callback, with local OAuth replies: no game reload, one nonce-bound finish, link, cancel and blocked-popup redirect; `--canary` supplies an invalid code.
+
 - `dev`: developer controls, Hero/Dev tabs, five viewport layouts, frozen training start, refills and reset, and slow first-person entry (`--canary` plants a drained resource).
 
 - `npm run lab:serve`: boots each command's page ahead of it (every command runs on a fresh boot and gives the same result every time)
