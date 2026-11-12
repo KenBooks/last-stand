@@ -19,8 +19,12 @@ class Pointer extends Event {
 }
 
 /** A page with only its document element: no game bundle, controls, or input system. */
-function page({ cookie = '', installed = false, webdriver = false, search = '' } = {}) {
-  const window = new EventTarget();
+function page({ cookie = '', standalone = false, fullscreen = false, webdriver = false, search = '' } = {}) {
+  class Element extends EventTarget {
+    fullButton = false;
+    closest(selector) { return this.fullButton && selector.includes('#btn-full') ? this : null; }
+  }
+  const window = new Element();
   const requests = [];
   let answer = () => Promise.resolve();
   const document = {
@@ -34,7 +38,8 @@ function page({ cookie = '', installed = false, webdriver = false, search = '' }
   };
   runInNewContext(`(${installBootFullScreen.toString()})();`, {
     window, document, navigator: { webdriver }, location: { search }, URLSearchParams,
-    matchMedia: () => ({ matches: installed }), KeyboardEvent: Key, PointerEvent: Pointer,
+    matchMedia: (query) => ({ matches: query.includes('fullscreen') ? fullscreen : standalone }),
+    Element, KeyboardEvent: Key, PointerEvent: Pointer,
   });
   return { window, requests, state: window.__bootFullScreen, answer: (next) => { answer = next; } };
 }
@@ -89,9 +94,29 @@ test('boot handoff removes listeners without losing a request already in flight'
   assert.equal(boot.state.entered, true);
 });
 
+test('a standalone app enters on the first press, including after a reload', async () => {
+  for (let visit = 0; visit < 2; visit += 1) {
+    const boot = page({ standalone: true });
+    boot.window.dispatchEvent(new Pointer('pointerdown', 'mouse'));
+    assert.equal(boot.requests.length, 1);
+    await boot.state.pending;
+    assert.equal(boot.state.entered, true);
+  }
+});
+
+test('a fullscreen control owns its click instead of entering on pointerdown', () => {
+  const boot = page();
+  boot.window.fullButton = true;
+  boot.window.dispatchEvent(new Pointer('pointerdown', 'mouse'));
+  assert.equal(boot.requests.length, 0);
+  boot.window.fullButton = false;
+  boot.window.dispatchEvent(new Pointer('pointerdown', 'mouse'));
+  assert.equal(boot.requests.length, 1);
+});
+
 for (const [label, options] of [
   ['saved opt-out', { cookie: 'other=x; last-stand-auto-full-screen=off' }],
-  ['installed app', { installed: true }],
+  ['fullscreen display mode', { fullscreen: true }],
   ['automation', { webdriver: true }],
   ['visit opt-out', { search: '?fullscreen=0' }],
 ]) {

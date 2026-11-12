@@ -4,8 +4,8 @@
 // finger's press isn't, and a tap's click never comes where the touch controls cancel its touch), on a desktop and a
 // phone alike; and a prompt then offers "Back to window" for `PROMPT_MS`. Going back is remembered (`COOKIE`) and the page doesn't ask again on later
 // visits, until the player goes full screen by hand (the pause menu's Fullscreen, the touch HUD's button:
-// `fullScreenChosen`). Not where the page can't go full screen (an iPhone's Safari), not as the installed app (its own
-// window has no browser bars to hide), and not in a harness's browser (`navigator.webdriver`: a lab or stalls run
+// `fullScreenChosen`). Not where the page can't go full screen (an iPhone's Safari), or is already in fullscreen display
+// mode, and not in a harness's browser (`navigator.webdriver`: a lab or stalls run
 // would change its window's size at its first click); `?fullscreen=0` leaves it off for a visit.
 // In the page's full screen (this one, and the Fullscreen buttons') Esc is the game's, as in the browser's own (F11):
 // from play, "first escape removes full screen and second opens the menu" (`keepEsc`).
@@ -24,14 +24,9 @@ let armed = false;
 let forced = false;
 let hideTimer = 0;
 
-/** Running as the installed app, in its own window. */
-const installed = (): boolean =>
-  matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
-  || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-
 /** Whether this visit goes full screen on its own (`force`: a harness's check, past `navigator.webdriver`). */
 function wanted(force: boolean): boolean {
-  if (!document.fullscreenEnabled || installed()) return false;
+  if (!document.fullscreenEnabled || matchMedia('(display-mode: fullscreen)').matches) return false;
   if (readCookie(AUTO_FULL_COOKIE) === 'off') return false;
   if (force) return true;
   return !navigator.webdriver && new URLSearchParams(location.search).get('fullscreen') !== '0';
@@ -64,6 +59,8 @@ function activates(event: Event): boolean {
 /** The first gesture: full screen asked for, the prompt shown once it's taken; refused, the next gesture asks again. */
 function onGesture(event: Event): void {
   if (!activates(event)) return;
+  // The manual controls inspect fullscreenElement on click; entering on press would make that click exit.
+  if (event.target instanceof Element && event.target.closest('#btn-fullscreen, #btn-full')) return;
   disarm();
   if (document.fullscreenElement) return;
   document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(showPrompt, () => armAutoFullScreen(forced));
