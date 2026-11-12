@@ -243,3 +243,12 @@ test('a chat line shown on both screens as typed passes; one lost, read as marku
   const paused = judgeChat({ host: screen(10, 'Hi <b>x</b>'), guest: screen(2, 'Hi <b>x</b>', { menuOpen: true }), frameMs: 1000 / 60 });
   assert.ok(paused.problems.some((p) => p.includes('opened the pause menu')));
 });
+
+test('a guest\'s copy that goes soon after the host\'s foe is found going; one that stands to the end is found left', async () => {
+  const { judgeGhosts } = await import('../node/coopJudge.mjs');
+  const foes = (until, end) => Array.from({ length: end }, (_, f) => ({ foes: f <= until ? [{ id: 7 }] : [] }));
+  const host = foes(60, 240);
+  const gone = judgeGhosts(host, foes(130, 240)).foes[0];
+  assert.deepEqual([gone.host, gone.guest, gone.left], [60, 130, false]);
+  assert.equal(judgeGhosts(host, foes(239, 240)).foes[0].left, true);
+});

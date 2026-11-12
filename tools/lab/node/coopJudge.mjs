@@ -754,6 +754,39 @@ function drawnAt(samples, who) {
  * A scenario judged: its lines (each copy's following, the arrows, the blows, as the scenario has them) and the
  * problems found. `host` and `guest` are the two games' samples, frame for frame.
  */
+/** how long a guest's copy may stand after the host's foe has gone, its death's report lost (s): the host's
+ *  snapshots no longer name it for a second (`GHOST_SNAPSHOTS` in src/net/sync.ts), with the link's delay on top */
+const GHOST_SLACK = 1.6;
+
+/**
+ * Each foe's last frame standing on the host's screen and on the guest's, in `ghosts` (its death's report never
+ * reaching the guest): how long the copy stood after, and whether it never went. Returns `{ foes: [{ id, host, guest,
+ * left }] }` (frames; `left`: still standing at the end).
+ */
+export function judgeGhosts(host, guest) {
+  const ids = new Set(host.flatMap((sample) => sample.foes.map((foe) => foe.id)));
+  const lastOn = (samples, id) => samples.findLastIndex((sample) => sample.foes.some((foe) => foe.id === id));
+  return {
+    foes: [...ids].map((id) => {
+      const hostLast = lastOn(host, id), guestLast = lastOn(guest, id);
+      return { id, host: hostLast, guest: guestLast, left: guestLast === guest.length - 1 };
+    }),
+  };
+}
+
+function describeGhosts(host, guest, frameMs) {
+  const { foes } = judgeGhosts(host, guest);
+  const problems = [];
+  const said = foes.map((foe) => {
+    const after = (foe.guest - foe.host) * frameMs / 1000;
+    if (foe.left) problems.push(`foe ${foe.id} still stood on the guest's screen at the end, gone from the host's ${(((guest.length - 1) - foe.host) * frameMs / 1000).toFixed(1)} s before`);
+    else if (after > GHOST_SLACK) problems.push(`foe ${foe.id} stood on the guest's screen ${after.toFixed(2)} s after the host's went`);
+    return `${foe.id} ${foe.left ? 'never went' : `went ${after.toFixed(2)} s after`}`;
+  });
+  if (!foes.length) problems.push('no foe stood on the host\'s screen');
+  return { line: `copies whose deaths' reports were lost, on the guest's screen after the host's foe went: ${said.join(', ')}`, problems };
+}
+
 /** how long a risen foe may go undrawn on a screen before it's a problem (s): a frame or two of hand-over */
 const UNDRAWN_SLACK = 0.25;
 
@@ -831,6 +864,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'rush' || name === 'strike') add(describeRush(host, guest));
   if (name === 'strike') add(describeStrike(host, guest));
   if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));
+  if (name === 'ghosts') add(describeGhosts(host, guest, frameMs));
   if (name === 'ping') add(describePings(host, guest, frameMs));
   if (name === 'chat') add(describeChat(host, guest, frameMs));
   return { lines, problems };
