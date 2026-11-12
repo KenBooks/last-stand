@@ -67,6 +67,7 @@ import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouc
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
 import { autoFullChecked, autoFullPictures, ESC_CANARY, FULL_CANARY } from './uiFullScreen';
+import { BETA_NOTICE_CANARY, betaNoticeHere, betaNoticeShown, closeBetaNotice, openBetaNotice } from './uiBeta';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
@@ -83,11 +84,12 @@ const joinFound = (a: { lines: string[]; problems: string[] }, b: { lines: strin
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps' | 'cloudIdentity'
-  | 'logLobby' | 'perfAsk' | 'pauseLobby' | 'coop' | 'coopRename'
+  | 'logLobby' | 'perfAsk' | 'pauseLobby' | 'betaNotice' | 'coop' | 'coopRename'
   | 'villageMap' | 'villageHud' | 'villageHudTouch'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph' | 'perfParty'
-  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pausePerformance' | 'profiling' | 'pauseVolume'
+  | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pausePerformance' | 'pauseBeta' | 'profiling'
+  | 'pauseVolume'
   | 'pauseTabKept'
   | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
@@ -103,7 +105,7 @@ export interface UiOptions {
 /** the states pictured in a run (the rest are the lobby's) */
 const RUN_STATES: UiState[] = [
   'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
-  'pausePerformance', 'profiling', 'pauseVolume',
+  'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary',
   'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -1006,6 +1008,7 @@ const STEPS: Record<UiState, Steps> = {
   coop: { open: openCoopPicked, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
   coopRename: { open: openCoopRename, close: closeCoopDialog, check: (canary) => coopShown('coopRename', canary) },
   pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
+  betaNotice: { open: openBetaNotice, close: closeBetaNotice, check: betaNoticeShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   villageHud: { open: (lab) => openVillageHud(lab, false), close: closeVillageHud, check: villageHudShown },
   villageMap: { open: openVillageMap, close: closeVillageMap, check: villageMapShown },
@@ -1044,6 +1047,8 @@ const STEPS: Record<UiState, Steps> = {
   pausePerformance: {
     open: () => openPauseProfiled(canaryAsked), close: closePauseProfiled, check: () => pauseShown('performance'),
   },
+  // (the features to try: the village's switch, its note and, once switched, Reload)
+  pauseBeta: { open: () => openPause('beta', canaryAsked), close: closePause, check: () => pauseShown('beta') },
   // (the profiler at work: every panel hidden, its pane at the top)
   profiling: { open: () => openProfiling(canaryAsked), close: closeProfiling, check: profilingShown },
   pauseVolume: {
@@ -1154,7 +1159,12 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: ${PROFILING_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${PROFILING_CANARY.what} went unseen`);
   }
-  if (state === 'pause' || state === 'pauseSettings' || state === 'pausePerformance') {
+  if (state === 'betaNotice' && betaNoticeHere()) {
+    const caught = found.problems.some((problem) => problem.includes(BETA_NOTICE_CANARY.name));
+    lines.push(`  canary: ${BETA_NOTICE_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${BETA_NOTICE_CANARY.what} went unseen`);
+  }
+  if (['pause', 'pauseSettings', 'pausePerformance', 'pauseBeta'].includes(state)) {
     const caught = found.problems.some((problem) => problem.includes(PAUSE_CANARY.name));
     lines.push(`  canary: ${PAUSE_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${PAUSE_CANARY.what} went unseen`);

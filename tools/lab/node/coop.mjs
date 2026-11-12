@@ -26,7 +26,7 @@ const STALL_JITTERS = 3;
 /** the most frames a turn runs (a turn can't be longer than the quickest message takes, or it would come late) */
 const MOST_TURN = 8;
 /** the frames the guest has to join, and the run to start on both, before the command gives up */
-const JOIN_FRAMES = 1800;
+export const JOIN_FRAMES = 1800;
 /** the frames the guest's lobby has to become practice */
 const PRACTICE_FRAMES = 60;
 const START_FRAMES = 900;

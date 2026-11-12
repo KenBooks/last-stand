@@ -25,11 +25,11 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps', 'cloudIdentity',
-  'logLobby', 'perfAsk', 'pauseLobby', 'coop', 'coopRename',
+  'logLobby', 'perfAsk', 'pauseLobby', 'betaNotice', 'coop', 'coopRename',
   'villageMap', 'villageHud', 'villageHudTouch',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
   'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
-  'pausePerformance', 'profiling', 'pauseVolume',
+  'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -2125,6 +2125,24 @@ export const COMMANDS = {
     help: 'developer panel tabs, flight speed, frame inclusion, labels, opacity, five viewport layouts, frozen training starts, continuous refills, reset and slow first-person entry',
     options: {
       canary: { kind: 'switch', help: 'plant a drained resource and require its detection' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  beta: {
+    help: 'the village beta opted into and out of, on a page of its own, by the browser\'s own clicks and loads: '
+      + 'the pause menu\'s Beta tab and its Reload (the page loaded with ?village=1, the choice kept in its '
+      + 'cookie), the notice as the game opens, the next visit with no parameter, the notice\'s Back to the old '
+      + 'lobby; then a co-op room of this command\'s page asked from the other lobby: refused, told which lobby '
+      + 'it is in, the switch offered, clicked (the page loaded in the room\'s lobby as an invite to it) and the '
+      + 'room joined; --panels hosts the room in the lobby without the village',
+    options: {
+      ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
+      jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults it must catch: the notice put away before it\'s read, the cookie lost before the '
+          + 'next visit, and the lobby the room refused the game for forgotten (no switch offered)',
+      },
       ...COMMON_OPTIONS,
     },
   },

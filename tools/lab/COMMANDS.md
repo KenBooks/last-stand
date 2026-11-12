@@ -344,6 +344,25 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   each drag's last preview before a frame showed it, holds its cast against the stop before's preview, and reads the
   plain ring as shown beside a preview: each must be caught. (A dummy risen outside the arena or in a prop is pushed
   in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
+- `beta`: the village beta as a player opts into it and out again (`src/core/beta.ts`, `src/ui/beta.ts`), and a
+  co-op room keeping to its host's lobby (`src/net/session.ts` `onHello`). The command's own page is the room's
+  host; a second page, the visitor's, is booted in the lobby without the village (cold: what a game warms behind
+  its lobby isn't measured here) and taken through every step by the browser's own mouse, each load the page's
+  own (`node/beta.mjs`, `page/beta.ts`; `Side.bootBy` waits a load out as a boot's): the Beta tab says Off now
+  and offers nothing; its switch clicked On, it offers "Reload to open the village"; Reload loads the page with
+  `village=1`, in the village (the page's own script's lobby, the game's `VILLAGE` and the cookie agreeing), the
+  notice shown inside the window with both its buttons found by the mouse, the tab saying On now; the next visit,
+  no parameter on the address, opens the village by the cookie; the notice's Back to the old lobby loads
+  `village=0`, no notice there, and the visit after it stays. Then the visitor, in the lobby the host isn't in,
+  asks to join the host's room over the lab's link (`coop`'s, `--ping`, `--jitter`): it must be refused, told
+  which lobby the room is in, and offered the switch in its dialog; the switch's click must load the page in the
+  room's lobby with `room=` the room's code, the dialog open on that code as the page loads (an invite's), and
+  the room joined after, each game with the other in a slot of its own. `--panels` boots the host without the
+  village, the visitor crossing to the village before it asks. `--canary` plants three faults, each of which
+  must be caught, and stops before the switch: the notice put away before it's read, the cookie lost before the
+  next visit (found in the lobby without the village), and the lobby the room refused the game for forgotten
+  (no switch offered). About 80 s: the visitor's page loads six times. Not measured: the notice going by itself
+  after 20 s, and a join through the real relay (the invite's own join waits for a name tag here).
 - `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
   second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
   or charge under way), from full energy. In the lobby as it shows, and shown again after practice, casting is free:
@@ -520,7 +539,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   beside him, and his aim wheeled 75 degrees to it and back as its paw crossed the crosshair (#482: Void Lance's
   whole beam with it, 4 flashes a second in `cast`). `--canary` takes the aim's least distance off (`--tune
   aim.near=0`), which third person must show (46 degrees at 0.5 m).
-- `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each
+- `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each And the cursor's layer: every element of the page whose z-index is the cursor's or more, shown or not, is a problem (the loading screen and the turn-your-phone cover aside): it would be drawn over the cursor, as the beta's notice was; `--canary` plants such a layer too.
   close view (`--views third,first`) the battle log is filled past its height and the pointer is locked as the
   player's click takes it: the lab's browser plays the lock (`lab.pointerLock`, `noCapture` in `node/browser.mjs`),
   so while it's held every event of the mouse goes to the game's canvas, as Chrome sends it, and a click on the HUD

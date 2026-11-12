@@ -294,7 +294,40 @@ function canaryProblems(problems: string[]): string[] {
   if (!problems.some((problem) => problem.includes('didn\'t pause it'))) {
     missed.push('the canary\'s click on Pause going to the world went unseen');
   }
+  if (!problems.some((problem) => problem.includes(STACKED))) {
+    missed.push('the canary\'s layer planted over the cursor went unseen');
+  }
   return missed;
+}
+
+/** the page's covers: over everything, the cursor too, with nothing of the game shown under them to click (the loading
+ *  screen, an upright phone's "turn your phone") */
+const COVERS = ['loading', 'rotate'];
+/** what the layers' problem says, which the canary's planted layer must raise */
+const STACKED = 'stacked over the cursor';
+
+/** An element as a report names it. */
+const named = (element: Element): string => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`;
+
+/**
+ * The page's layers that would be drawn over the cursor (from play, of the beta's notice: "mouse appears under it,
+ * need to be on top, otherwise cannot click"): every element whose z-index is the cursor's or more, shown now or
+ * not, the covers aside. With the canary, a layer planted over it, which must be found.
+ */
+function layersOverCursor(canary: boolean): { lines: string[]; problems: string[] } {
+  const drawn = document.getElementById('alt-cursor');
+  if (!drawn) return { lines: [], problems: ['no cursor element on the page'] };
+  const planted = canary ? document.body.appendChild(document.createElement('div')) : null;
+  if (planted) planted.style.cssText = 'position: fixed; z-index: 100000;';
+  const own = Number(getComputedStyle(drawn).zIndex);
+  const over = [...document.querySelectorAll('body *')].filter((element) => {
+    if (element === drawn || COVERS.includes(element.id)) return false;
+    return Number(getComputedStyle(element).zIndex) >= own;
+  });
+  planted?.remove();
+  const real = over.filter((element) => element !== planted);
+  const lines = [`the cursor's layer (z-index ${own}): ${real.length} of the page's layers over it`];
+  return { lines, problems: over.map((element) => `${named(element)} is ${STACKED}`) };
 }
 
 /** `lab cursor`: the cursor drawn over mouse look while Alt is held, in each close view. */
@@ -321,6 +354,9 @@ export async function cursor(lab: Lab, options: CursorOptions): Promise<Report> 
   await lab.setup({ ...options.fixture, view: 'top' });
   lab.pointerLock(false);
   log.setBattleLog(false, false);
+  const layers = layersOverCursor(options.canary);
+  lines.push(...layers.lines);
+  problems.push(...layers.problems);
   lines.push(...problems.map((problem) => `! ${problem}`));
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const missed = canaryProblems(problems);

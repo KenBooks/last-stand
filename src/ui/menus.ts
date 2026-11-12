@@ -1341,6 +1341,9 @@ export function showPause(v: boolean): void {
     renderHourOption();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
+    // (the village's links are the lobby's: a run has no hero to change nor room to open, and on a phone held
+    // sideways their row took 38 px of the pages' cell; the lobby without the village has them on its own panel)
+    document.querySelector('#pause .pb-links')?.classList.toggle('hidden', G.mode === 'run');
     // (short beside the title: what it costs is its tooltip)
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run' : 'Abandon run';
     $('.pause-note').classList.toggle('hidden', !isCoop() || G.mode !== 'run');

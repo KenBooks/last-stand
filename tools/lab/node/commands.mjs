@@ -3,6 +3,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
+import { runBeta } from './beta.mjs';
 import { runTrainingCoop } from './trainingCoop.mjs';
 import { DEVICES, screenPlaying } from './devices.mjs';
 import { labError } from './errors.mjs';
@@ -1806,6 +1807,15 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     pictures: picturePairs,
+  },
+
+  beta: {
+    each(side, options) {
+      const { ping, jitter } = options;
+      return runBeta(side, { ping, jitter, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   practice: {

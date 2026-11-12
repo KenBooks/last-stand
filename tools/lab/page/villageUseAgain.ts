@@ -87,7 +87,9 @@ export async function objectsUsedAgain(lab: Lab, canary: boolean): Promise<Light
     const failure = await usedAgain(lab, o, canary && i === 0);
     if (failure) failed.push(failure);
   }
-  const dismissed = OPENED.filter((o) => o.id !== 'hall');
+  // (the hall's screen too, from play, "in hall of heroes pressing E should cancel back, same like other E
+  // interactions")
+  const dismissed = OPENED;
   for (const [i, o] of dismissed.entries()) {
     const failure = await putAwayByE(lab, o, canary && i === 0);
     if (failure) failed.push(failure);

@@ -7,6 +7,7 @@
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
+import { VILLAGE } from '../core/beta';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { wasPressed } from '../core/input';
@@ -422,6 +423,13 @@ function tapAt(x: number, y: number): void {
 
 /** The screen's selection keys while open and unpaused; main.ts handles Escape above it. */
 export function heroSelectKeys(): void {
+  // (E leaves the village's hall as Back does, from play, "in hall of heroes pressing E should cancel back, same
+  // like other E interactions"; a first visit has nothing to go back to)
+  if (VILLAGE && !first && wasPressed('e')) {
+    sfx.click();
+    closeHeroSelect();
+    return;
+  }
   if (wasPressed('arrowleft') || wasPressed('a')) step(-1);
   if (wasPressed('arrowright') || wasPressed('d')) step(1);
   // 1, 2, 3...: each hero in the row's order (the number row's or the numpad's)

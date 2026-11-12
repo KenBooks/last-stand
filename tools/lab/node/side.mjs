@@ -586,18 +586,24 @@ export class Side {
   /**
    * Opens another page of this side's game in a context of its own, booted for `heroClass` and with the lab installed
    * as `boot` does: a co-op partner (`coop`; a party of more opens one for each). Its errors count as this side's,
-   * said to be the partner's. Returns the page; `closePartner` closes every partner's.
+   * said to be the partner's. Returns the page; `closePartner` closes every partner's. `how`: booted another way than
+   * this side's page (the other lobby, `beta`).
    */
-  async openPartner(heroClass) {
+  async openPartner(heroClass, how = this.bootedAs ?? LAB_BOOT) {
     const context = await this.newContext();
     this.partnerContexts.push(context);
-    const page = await this.openPageIn(context, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
-    await page.evaluate(async () => {
+    const page = await this.openPageIn(context, heroClass, 'partner: ', how);
+    await this.installLab(page);
+    return page;
+  }
+
+  /** The lab installed in `page` once its maps have come, as a command's page has it. */
+  installLab(page) {
+    return page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
       await lab.mapsCome();
       lab.install();
     });
-    return page;
   }
 
   /** Closes the co-op partners' pages, if any is open. */
@@ -657,10 +663,21 @@ export class Side {
     await page.exposeFunction('__labThrottle', (rate) => throttleOf(page, rate));
     // (a probe's `lab.showOn`: the window resized as the command runs, as the player's is taken to full screen)
     await page.exposeFunction('__labScreen', (screen) => screenOf(page, screen));
-    const failed = scriptFailure(page);
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
-    await page.goto(bootAddress(this.url, how),{ timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' });
+    const loading = { timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' };
+    await this.bootBy(page, () => page.goto(bootAddress(this.url, how), loading), prefix, cold);
+    return page;
+  }
+
+  /**
+   * `page` loaded by `load` (its first address gone to, or a control of the game's that loads it again: the Beta
+   * tab's Reload, `beta`) and its loading screen waited out, `cold` or with all it warms; a boot that fails throws,
+   * saying at which stage, and closes the page.
+   */
+  async bootBy(page, load, prefix, cold) {
+    const failed = scriptFailure(page);
+    await load();
     // (Chrome raises a page's renderer to normal priority as it shows it: lowered again to the lab's)
     await lowerProcesses(this.browser);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
@@ -684,7 +701,6 @@ export class Side {
     } finally {
       failed.stop();
     }
-    return page;
   }
 
   // A command runs in one task of the page, its modules imported first and the lab readied after them (`begin`: the
