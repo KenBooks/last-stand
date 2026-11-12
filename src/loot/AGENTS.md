@@ -28,5 +28,6 @@ Where each is stored is the `src/loot/` row of the root's Architecture.
   - Offline, slot 1 plays as a local save.
   - A refused session (401) signs the device out; slot 1 stays.
   - **Google** (`goToGoogle`, #503): the page goes to Google through the service and comes home reloaded, with `#cloud-google=<code>` in its address (or `-error=<why>`), which `initCloud` takes off the address and finishes as the game boots (a sign-in's session, or a link finished with this device's production session) (`googleLanding`, shown once the lobby is: `main.ts`). The tab binds the sign-in with a nonce in its session storage, sent as it goes and again with the code: a code from a link someone sent is refused. Its buttons show only when the service's health says Google is on; Link and Unlink Google are production's alone.
+  - `/saves/health` is public: ask it without the account's bearer token. A signed-in browser preflights a token-bearing GET; if that preflight fails, `googleOn` reads false and hides Link Google even while saves and `/saves/health` otherwise work.
 
 - records.bestReached holds each biome’s highest attempted normal-run wave for Training grounds, per hero and save slot. Old profiles seed it from bestBanked only: their global bestWave cannot identify a biome. Training never writes progression or banks items.

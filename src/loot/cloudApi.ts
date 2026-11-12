@@ -25,9 +25,9 @@ export const setToken = (t: string): void => { token = t; };
 
 const TIMEOUT_MS = 15_000;
 
-async function call(method: string, path: string, init: { json?: unknown; body?: BodyInit; headers?: Record<string, string> } = {}): Promise<Response> {
+async function call(method: string, path: string, init: { json?: unknown; body?: BodyInit; headers?: Record<string, string>; public?: boolean } = {}): Promise<Response> {
   const headers: Record<string, string> = { ...init.headers };
-  if (token) headers.authorization = `Bearer ${token}`;
+  if (token && !init.public) headers.authorization = `Bearer ${token}`;
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   let answer: Response;
   try {
@@ -123,7 +123,8 @@ export const deleteAccount = async (): Promise<void> => { await call('DELETE', '
 /** What the service has on: Google's sign-in among them (asked once a visit). */
 let health: Promise<{ google: boolean }> | null = null;
 export function serviceHealth(): Promise<{ google: boolean }> {
-  health ??= json<{ google: boolean }>(call('GET', '/health')).catch(() => { health = null; return { google: false }; });
+  // Health is public. Sending a session would preflight this GET and could hide Google on CORS failure.
+  health ??= json<{ google: boolean }>(call('GET', '/health', { public: true })).catch(() => { health = null; return { google: false }; });
   return health;
 }
 /** The address to send this page to for Google's sign-in (`signin`) or to link Google (`link`, production's alone);
