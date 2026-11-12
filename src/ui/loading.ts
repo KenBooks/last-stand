@@ -16,8 +16,12 @@ function showTip(): void {
   t.classList.add('on');
 }
 
+/** each step the loading screen showed and when (the page's clock, ms), for the perf report's boot */
+export const loadingSteps: { at: number; label: string }[] = [];
+
 /** Show a step, then wait until the browser has painted it: the work that follows blocks the main thread. */
 export async function loadingStep(label: string, progress: number): Promise<void> {
+  loadingSteps.push({ at: performance.now(), label });
   if (!tipTimer) { showTip(); tipTimer = window.setInterval(showTip, 6000); }
   sub().textContent = label;
   recorder.bootStep(label);
@@ -30,16 +34,19 @@ export async function loadingStep(label: string, progress: number): Promise<void
 // use (on a first visit its shader cache is cold), and that should not be seen as a stutter
 const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
-// the logo's particle field gathers into the lobby's logo (a first visit's hero selection screen's, ui/heroSelect.ts,
-// where it opens on that). A plain fade instead with reduced motion, on low
+// the logo's particle field gathers into the lobby's logo (a first visit opens on the hero selection screen, which
+// has none: it blows away). A plain fade instead with reduced motion, on low
 // graphics quality and under (picked, or where Auto settled last time), and on a device where the particles were too slow
 // before
 const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || (qualityLevel() === 'low' || qualityLevel() === 'verylow') || logoWindOff();
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
+  // (the panels' lobby's hero selection screen has a logo of its own to gather into; the village's has none, and the
+  // letters blow away)
+  const onHeroes = document.querySelector('#heroes:not(.hidden)') !== null;
   const target = document.querySelector<HTMLElement>('#heroes:not(.hidden) .logo-art')
-    ?? document.querySelector<HTMLElement>('#menu .logo-art');
+    ?? (onHeroes ? null : document.querySelector<HTMLElement>('#menu .logo-art'));
   return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, target);
 };
 
@@ -48,6 +55,19 @@ const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
 export function lobbyLaidOut(): void {
   if (!exit && !plainExit()) exit = blowFor(el());
 }
+
+/** The loading screen seen through by a thousandth (`on`), or opaque again: Chrome rasters and draws nothing an
+ *  opaque layer covers, so what the boot rehearses under it to build Chrome's programs (the lobby's panels, the
+ *  chest's opening, the practice's bar, the tracker, Play together, How to play) is drawn while it's seen through.
+ *  Under it opaque, the first walks still met them: the practice's bar 1.3 s, Play together 0.5 to 0.8 s, the
+ *  tracker 0.6 s (`npm run stalls -- --scenario walks`). A thousandth of the lobby under it shows by no level of a
+ *  colour's 255. */
+export function seeThroughLoading(on: boolean): void { el().style.opacity = on ? '0.999' : ''; }
+
+/** The loading screen's animations held still (`on`) or let go: moving, its smoke and embers redraw the whole
+ *  screen every frame, where the chest's opening redraws its panels alone, and a return's first opening still
+ *  built a compositor's program its rehearsal hadn't (`rehearseChest` in `menus.ts`). */
+export function stillLoading(on: boolean): void { el().classList.toggle('still', on); }
 
 /** the most the loading screen takes to leave after the reveal (ms): its logo's exit, or a fade whose end never came */
 const LEFT_MOST_MS = 4000;

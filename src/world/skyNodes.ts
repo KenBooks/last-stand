@@ -92,3 +92,53 @@ export function daySkyMaterial(uniforms: Uniforms): THREE.Material {
     time: reference('value', 'float', uniforms.uTime),
   }));
 }
+
+/** The village's sky (`buildDaySky` in `village.ts`, its `uHorizon`, `uZenith`, `uSun`, `uDay` and `uTime`): the sun's
+ *  glow and disc by day, the moon's by night, stars fading in as the day goes, clouds lit by the day and grey by night. */
+export function villageSkyMaterial(uniforms: Uniforms): THREE.Material {
+  const { reference, wgslFn } = tsl as any;
+  const hash = wgslFn(`fn villageSkyHash(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+  }`);
+  const star = wgslFn(`fn villageStarHash(cell: vec3f) -> f32 {
+    var p = fract(cell * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+  }`);
+  const value = wgslFn(`fn villageSkyValue(p: vec2f) -> f32 {
+    let i = floor(p);
+    var f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(villageSkyHash(i), villageSkyHash(i + vec2f(1.0, 0.0)), f.x),
+      mix(villageSkyHash(i + vec2f(0.0, 1.0)), villageSkyHash(i + vec2f(1.0, 1.0)), f.x), f.y);
+  }`, [hash]);
+  const sky = wgslFn(`fn villageSky(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, day: f32, time: f32) -> vec4f {
+    let d = normalize(direction);
+    let y = max(d.y, 0.0);
+    var c = mix(horizon, zenith, smoothstep(0.0, 0.55, y));
+    let m = max(dot(d, sun), 0.0);
+    let glow = mix(vec3f(0.05, 0.06, 0.1), vec3f(0.55, 0.38, 0.2), day);
+    c += glow * pow(m, 10.0) * 0.4;
+    let disc = smoothstep(mix(0.99988, 0.9993, day), mix(0.99993, 0.9996, day), m);
+    c += mix(vec3f(0.5, 0.54, 0.64), vec3f(1.0, 0.9, 0.72) * 2.4, day) * disc;
+    let ad = abs(d);
+    let g = floor(d * 700.0);
+    let dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
+    let b = villageStarHash(g + 1.0);
+    let lit = step(1.0 - dens, villageStarHash(g)) * smoothstep(0.12, 0.4, y) * (0.25 + b * b * b) * (1.0 - day);
+    c += vec3f(0.8, 0.82, 1.0) * 0.5 * lit;
+    let p = d.xz / max(d.y, 0.08) * 1.6 + vec2f(time * 0.01, time * 0.004);
+    var cl = villageSkyValue(p) * 0.55 + villageSkyValue(p * 2.3 + 5.0) * 0.3 + villageSkyValue(p * 5.1 + 9.0) * 0.15;
+    cl = smoothstep(0.52, 0.82, cl) * smoothstep(0.04, 0.3, y);
+    c = mix(c, horizon * mix(0.7, 1.25, day) + vec3f(0.1, 0.06, 0.03) * pow(m, 4.0), cl * 0.6);
+    return vec4f(c, 1.0);
+  }`, [value, star]);
+  return domeMaterial((direction) => sky({
+    direction,
+    horizon: reference('value', 'color', uniforms.uHorizon),
+    zenith: reference('value', 'color', uniforms.uZenith),
+    sun: reference('value', 'vec3', uniforms.uSun),
+    day: reference('value', 'float', uniforms.uDay),
+    time: reference('value', 'float', uniforms.uTime),
+  }));
+}

@@ -2597,7 +2597,9 @@ export function* warriorSteps(): ModelSteps {
       else if (held?.off != null && grasp.held) fists.push({ hand: 'left', ...fistOn(handL, offGrip, held.r) });
       return fists;
     },
-    reset: () => { legs.reset(); fade.reset(); },
+    // (the fight forgotten too: a hall's hero chosen away from as his showcase's strike landed stood on its dais finishing
+    // it, the end of the blow held on one bent knee, "warrior is dancing on one leg like irish dancer")
+    reset: () => { legs.reset(); fade.reset(); fightT = -9; lastName = ''; lastK = 1; tailT = 0; chopTail = 0; },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     armsFov: () => EYES.fov,
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; },

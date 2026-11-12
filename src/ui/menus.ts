@@ -1,6 +1,8 @@
-// Sanctuary (main menu with equipment & stash), summary, pause and help modals.
+// The lobby's panels (the inventory: equipment, attributes, skills; with the village's chest, the stash), summary,
+// pause and help modals. The village's objects open them (game/village.ts); I opens the inventory anywhere.
 import { G } from '../state';
 import { holdToConfirm, resetHold } from './holdButton';
+import { restartTraining, trainingPending } from '../game/training';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
@@ -35,7 +37,10 @@ import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
+import { VILLAGE } from '../core/beta';
+import { initBeta, renderBetaOptions } from './beta';
 import { whenWarm } from '../game/warm';
+import { heldHour, holdHour, hourNow } from '../game/clock';
 import { READYING } from './readying';
 import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
@@ -67,7 +72,13 @@ export interface MenuHooks {
   summaryDone(): void;
   /** the battleground or starting wave changed (a co-op host shows its guests) */
   lobbyChanged(): void;
+  /** the inventory or the stash opened or put away (`open`: which, or null): the chest's lid follows it */
+  panels(open: Panels): void;
 }
+
+/** What the lobby's panels show: the inventory (equipment, attributes and skills), the stash's chest (the inventory
+ *  and the stash beside it), or nothing (the hero walks the village). */
+export type Panels = 'inventory' | 'chest' | null;
 
 let hooks: MenuHooks;
 const newIds = new Set<string>();
@@ -79,7 +90,10 @@ export function renderControlsHelp(): void {
   if (isTouch()) {
     const rows = [['Left half', 'Drag to move'], ['Big button', 'Attack (hold to keep attacking)'],
       ['Skill buttons', 'Tap: cast at the nearest foe'], ['', 'Drag, then let go: cast where you aim'], ['', 'Hold a channelled skill to keep it going'],
-      ['Pinch', 'Zoom'], ['❚❚', 'Pause'], ['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']];
+      ['Pinch', 'Zoom'], ['❚❚', 'Pause'],
+      ...(VILLAGE && G.mode === 'menu'
+        ? [['Use', 'What the hero is near (a tap on it walks him there)'], ['Bag', 'The inventory'], ['Map', "The village's map"]]
+        : [['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']])];
     const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
     document.querySelectorAll('.controls-help').forEach((el) => { el.classList.remove('diagrams'); el.innerHTML = html; });
     return;
@@ -125,17 +139,36 @@ function keyboardDiagram(): string {
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
+  // (in the village E uses what the hero is near, I and M open the inventory and the map; a run's keys shown still,
+  // as the game's: left out there, B and C were missed beside the rules' Bank and Continue)
+  if (VILLAGE && G.mode === 'menu') {
+    Object.assign(used, {
+      e: { icon: '✋', cap: 'Use', tip: 'Use what the hero is near (a click on it walks him there)' },
+      i: { icon: '⛉', cap: 'Inventory', tip: 'Inventory: equipment, attributes and skills' },
+      m: { icon: '⌖', cap: 'Map', tip: "The village's map" },
+    });
+  }
   for (const k of SKILL_KEYS) {
     if (k.startsWith('mouse')) continue;
     const sk = skillOn(k);
     used[k] = sk ? { skill: sk.icon, art: sk.art, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
   }
-  const rows: Cap[][] = [
+  // (as far as I and M, in their places, each row on to the diagram's faded edge: from play, I and M set beside Alt
+  // were "not a real keyboard layout")
+  const keys = (s: string): Cap[] => s.split('').map((k) => ({ k }));
+  const rows: Cap[][] = VILLAGE ? [
     [{ k: 'esc' }],
-    [{ k: '`' }, ...'123456'.split('').map((k) => ({ k }))],
-    [{ k: 'tab', w: 1.5 }, ...'qwerty'.split('').map((k) => ({ k }))],
-    [{ k: 'caps', w: 1.75 }, ...'asdfgh'.split('').map((k) => ({ k }))],
-    [{ k: 'shift', w: 2.25 }, ...'zxcvbn'.split('').map((k) => ({ k }))],
+    [{ k: '`' }, ...keys('1234567890')],
+    [{ k: 'tab', w: 1.5 }, ...keys('qwertyuiop')],
+    [{ k: 'caps', w: 1.75 }, ...keys('asdfghjkl')],
+    [{ k: 'shift', w: 2.25 }, ...keys('zxcvbnm,.')],
+    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }, { k: 'space', w: 6 }],
+  ] : [
+    [{ k: 'esc' }],
+    [{ k: '`' }, ...keys('123456')],
+    [{ k: 'tab', w: 1.5 }, ...keys('qwerty')],
+    [{ k: 'caps', w: 1.75 }, ...keys('asdfgh')],
+    [{ k: 'shift', w: 2.25 }, ...keys('zxcvbn')],
     [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }],
   ];
   const cap = (c: Cap): string => {
@@ -181,9 +214,11 @@ function mouseDiagram(id: string): string {
   </div>`;
 }
 
-/** The hero selection screen or a battleground picked in the lobby: picked before the heroes' or the fight's programs
- *  are warm, done once they are, the bar saying what it readies (the screen shows every hero). */
-const changeHero = whenWarm(['heroes'], () => hooks.changeHero(), READYING.heroes);
+/** The hero selection screen opened from the lobby: before the heroes' programs are warm, once they are, the bar saying
+ *  what it readies (the screen shows every hero). */
+export const changeHero = whenWarm(['heroes'], () => hooks.changeHero(), READYING.heroes);
+
+/** A battleground picked in the panels' lobby: before the fight's programs are warm, once they are. */
 const pickBiome = whenWarm(['fight'], (setting: BiomeSetting) => {
   setBiomeSetting(setting); renderBiomeOptions(); renderWaveOptions(); hooks.lobbyChanged();
 }, READYING.biome);
@@ -212,6 +247,12 @@ export function initMenus(h: MenuHooks): void {
   });
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
+  // (the slider's first step, under the hours, is Auto: the clock followed again)
+  $<HTMLInputElement>('#opt-hour').oninput = (e) => {
+    const h = Number((e.target as HTMLInputElement).value);
+    holdHour(h < 0 ? null : h);
+    renderHourOption();
+  };
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
@@ -245,47 +286,64 @@ export function initMenus(h: MenuHooks): void {
   onHdrChange(renderHdrOptions);
   initVolumeOptions();
   initRendererOptions();
-  $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
-  // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
-  // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
-  // onto a line of their own, and the ranger's tagline took two lines)
-  $('.cc-name').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].name}</span>`).join('');
-  $('.cc-tag').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].tagline}</span>`).join('');
-  const biomes = $('#opt-biome');
-  biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
-  biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
-    b.onclick = () => {
-      if (isGuest()) return;   // the host picks
-      sfx.click(); pickBiome(b.dataset.b as BiomeSetting);
-    };
-  });
-  document.querySelectorAll<HTMLButtonElement>('#opt-training button').forEach((b) => {
-    b.onclick = () => {
-      if (isGuest()) return;
-      sfx.click();
-      training = b.dataset.training === 'true';
-      renderLobbyOptions();
-      hooks.lobbyChanged();
-    };
-  });
+  initBeta();
+  // (the village's is the pause menu's: the hall of heroes' way in from anywhere in the lobby)
+  $('#btn-hero').onclick = () => {
+    sfx.click();
+    if (VILLAGE) hooks.resume();
+    changeHero();
+  };
+  if (!VILLAGE) {
+    // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
+    // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
+    // onto a line of their own, and the ranger's tagline took two lines)
+    $('.cc-name').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].name}</span>`).join('');
+    $('.cc-tag').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].tagline}</span>`).join('');
+    const biomes = $('#opt-biome');
+    biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
+    biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
+      b.onclick = () => {
+        if (isGuest()) return;   // the host picks
+        sfx.click(); pickBiome(b.dataset.b as BiomeSetting);
+      };
+    });
+    document.querySelectorAll<HTMLButtonElement>('#opt-training button').forEach((b) => {
+      b.onclick = () => {
+        if (isGuest()) return;
+        sfx.click();
+        grounds = b.dataset.training === 'true';
+        renderLobbyOptions();
+        hooks.lobbyChanged();
+      };
+    });
+  }
   const waves = $('#opt-wave');
   waves.querySelectorAll<HTMLElement>('button').forEach((b) => {
     b.onclick = () => { sfx.click(); stepWave(Number(b.dataset.d)); };
   });
   waves.addEventListener('wheel', (e) => { e.preventDefault(); stepWave(e.deltaY < 0 ? 1 : -1); }, { passive: false });
-  // short screens: the rail picks the one panel shown
+  // short screens: the rail picks the one panel of the inventory shown
   const menu = $('#menu');
   const pickTab = (t: string) => {
     menu.dataset.tab = t;
     document.querySelectorAll<HTMLElement>('#lobby-rail [data-lt]').forEach((b) => b.classList.toggle('active', b.dataset.lt === t));
   };
   document.querySelectorAll<HTMLElement>('#lobby-rail [data-lt]').forEach((b) => {
-    b.onclick = () => { sfx.click(); toggleMenuStowed(false); pickTab(b.dataset.lt!); };
+    b.onclick = () => {
+      sfx.click();
+      if (!VILLAGE) toggleMenuStowed(false);
+      pickTab(b.dataset.lt!);
+    };
   });
-  $('#rail-practice').onclick = () => { sfx.click(); toggleMenuStowed(); };
-  $('#rail-play').onclick = () => { if (isGuest()) return; sfx.click(); hooks.start(); };
-  $('.stow-hint').onclick = () => { sfx.click(); toggleMenuStowed(); };
-  $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
+  if (VILLAGE) {
+    $('#rail-close').onclick = () => { sfx.click(); openPanels(null); };
+    $('#btn-help').onclick = () => { sfx.click(); hooks.resume(); showHelp(); };
+  } else {
+    $('#rail-practice').onclick = () => { sfx.click(); toggleMenuStowed(); };
+    $('#rail-play').onclick = () => { if (isGuest()) return; sfx.click(); hooks.start(); };
+    $('.stow-hint').onclick = () => { sfx.click(); toggleMenuStowed(); };
+    $('#btn-help').onclick = () => showHelp();
+  }
   // fullscreen: the browser's bars take a lot of a phone's screen
   const fs = $('#btn-fullscreen');
   const syncFs = () => { fs.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'; };
@@ -299,6 +357,10 @@ export function initMenus(h: MenuHooks): void {
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
+  $('#btn-help-restart').onclick = () => {
+    restartTraining();
+    hideHelp();
+  };
   $('#btn-reset').onclick = () => {
     const name = CLASSES[G.profile.classId].name;
     if (!confirm(`Reset the ${name} of save slot ${saveSlot()}? Their stash, equipment and records will be erased (other classes and slots keep theirs).`)) return;
@@ -313,20 +375,22 @@ export function initMenus(h: MenuHooks): void {
       document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('off', pg.dataset.page !== tab.dataset.tab));
     };
   });
-  for (const f of FOLDS) $(f.tab).onclick = () => {
-    sfx.click();
-    if (f.folded && f.tab === '#gear-fold') $('.menu-right [data-tab=gear]').click();
-    f.folded = !f.folded; storeFold(f); syncFolds();
-  };
-  $('#attrs-fold').onclick = () => {
-    $('.menu-right [data-tab=attrs]').click();
-    const f = FOLDS[1];
-    f.folded = false; storeFold(f); syncFolds();
-  };
-  onePanel.addEventListener('change', syncFolds);
-  syncFolds();
+  if (!VILLAGE) {
+    for (const f of FOLDS) $(f.tab).onclick = () => {
+      sfx.click();
+      if (f.folded && f.tab === '#gear-fold') $('.menu-right [data-tab=gear]').click();
+      f.folded = !f.folded; storeFold(f); syncFolds();
+    };
+    $('#attrs-fold').onclick = () => {
+      $('.menu-right [data-tab=attrs]').click();
+      const f = FOLDS[1];
+      f.folded = false; storeFold(f); syncFolds();
+    };
+    onePanel.addEventListener('change', syncFolds);
+    syncFolds();
+    initSkillStrip($('.cc-strip'));
+  }
   initStashFilter(renderMenu);
-  initSkillStrip($('.cc-strip'));
   const stash = $('#stash');
   stash.addEventListener('contextmenu', (e) => e.preventDefault());
   stash.addEventListener('dragover', (e) => { if (drag?.from === 'equip') e.preventDefault(); });
@@ -359,30 +423,137 @@ export function initMenus(h: MenuHooks): void {
  * The lobby's panels laid out under the loading screen before their content (`showMenu`'s render, which needs the
  * hero), at the boot's start: their first raster builds Skia's programs on the GPU process's main thread one after
  * another (a first visit's 86, 1.2 s), and shown with the hero, the lobby's warm-up waited behind it. Rastered while
- * he is built, it's done by then.
+ * he is built, it's done by then. Laid out open (the village keeps them stowed till I or the chest opens them, and
+ * stowed they'd raster first there, mid-walk); `showMenu` stows them.
  */
-export function layOutMenuAhead(): void { $('#menu').classList.remove('hidden'); }
+export function layOutMenuAhead(): void {
+  const menu = $('#menu');
+  menu.classList.remove('hidden', 'stowed');
+  if (!VILLAGE) return;
+  // (the chest's, the stash beside the rest: first rastered at the chest, a first visit's held Chrome 1.3 s there;
+  // over the loading screen unseen, as the village's map is, as under it Chrome rasters them and draws nothing, and
+  // their slide in was drawn first at the chest, 0.66 s)
+  menu.dataset.open = 'chest';
+  menu.classList.add('ahead');
+}
+
+/** The panels laid out ahead slid away (`away`) or back, so their slide is drawn under the loading screen too. */
+export function slideMenuAhead(away: boolean): void { $('#menu').classList.toggle('stowed', away); }
+
+/** how long the chest's rehearsal lets its panels fade in, frames drawn throughout (ms: their transition's .35 s) */
+const CHEST_FADE_MS = 400;
+
+/**
+ * The panels opened as the chest's under the loading screen, as the lobby has them at its entry (the hero's gear in
+ * them, a hidden menu shown, the minimap put away as the chest puts it), and faded in, then put back as they were,
+ * while the boot sees the loading screen through (`seeThroughLoading` in `loading.ts`), so Chrome draws them onto
+ * the screen as the chest's opening will: over it in a faded layer (`.ahead`), their fade was drawn into that
+ * layer's pass, and the chest's first opening still built a compositor's program for the screen's own, 0.4 to 0.9 s
+ * of a first visit's GPU process (`npm run stalls -- --scenario walks --stops yard,heroes,stash`). Each look is held
+ * till Chrome has drawn it (`drawn`: put back after a frame of the page's, behind the boot's compiles on the GPU's
+ * process, it was drawn in some boots and not others, and the chest held 0.12 to 0.5 s in most walks).
+ */
+export async function rehearseChest(drawn: () => Promise<void>): Promise<void> {
+  const menu = $('#menu');
+  const was = { classes: menu.className, open: menu.dataset.open };
+  const minimap = $('#minimap-wrap');
+  const minimapWas = minimap.classList.contains('hidden');
+  minimap.classList.add('hidden');
+  // (the HUD as the square has it: the boot's practice showed the bar, its shadow a pass of its own)
+  const hud = $('#hud');
+  const practiceWas = hud.classList.contains('practice');
+  hud.classList.remove('practice');
+  menu.classList.remove('hidden', 'ahead');
+  menu.classList.add('stowed');
+  menu.dataset.open = 'chest';
+  await drawn();
+  menu.classList.remove('stowed');
+  await new Promise((done) => setTimeout(done, CHEST_FADE_MS));
+  await drawn();
+  menu.className = was.classes;
+  if (was.open === undefined) delete menu.dataset.open;
+  else menu.dataset.open = was.open;
+  minimap.classList.toggle('hidden', minimapWas);
+  hud.classList.toggle('practice', practiceWas);
+}
 
 export function showMenu(v: boolean): void {
+  $('#menu').classList.remove('ahead');
   $('#menu').classList.toggle('hidden', !v);
-  if (v) { toggleMenuStowed(false); openBook(false); renderMenu(); }
+  if (v) { toggleMenuStowed(VILLAGE); openBook(false); renderMenu(); }
   else openSaves(false);   // a co-op host can start the run while the save slots are open
   syncDiscard();
 }
 
-/** Whether the lobby's panels are stowed (faded out to walk round and practise). */
+/** How to play (the notice board's, whose `board` offers the training again, or the pause menu's link). */
+export function showHelp(board = false): void {
+  renderControlsHelp();
+  $('#btn-help-restart').classList.toggle('hidden', !board);
+  $('#help').classList.remove('hidden');
+}
+
+/** How to play laid out under the loading screen (`on`) and put away (not), so its first raster builds Chrome's Skia
+ *  programs there: 13 of them as the notice board was first used, held a first visit's GPU process 0.24 s. */
+export function layOutHelpAhead(on: boolean): void {
+  if (on) showHelp(true);
+  else hideHelp();
+}
+
+/** Whether how to play is up. */
+export const helpOpen = (): boolean => !$('#help').classList.contains('hidden');
+
+/** How to play put away. */
+export function hideHelp(): void { $('#help').classList.add('hidden'); }
+
+/** What the lobby's panels show now (`Panels`). */
+export function panelsOpen(): Panels {
+  const menu = $('#menu');
+  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return null;
+  return menu.dataset.open === 'chest' ? 'chest' : 'inventory';
+}
+
+/** The inventory or the stash's chest shown, or nothing (`open` null: the hero walks the village). The inventory is
+ *  the hero's equipment, attributes and skills; the chest's adds the stash beside them. */
+export function openPanels(open: Panels): void {
+  const menu = $('#menu');
+  const was = panelsOpen();
+  menu.classList.toggle('stowed', open === null);
+  // (unseen, its panels take no click, key or focus: Enter the Arena started a fight from practice, clicked where
+  // it lies, and a focused button is pressed by Space or Enter. The rail keeps its Practice on a short screen, and
+  // the village's card shows while they're stowed.)
+  const unseen = open === null;
+  for (const panel of menu.querySelectorAll<HTMLElement>('.panel:not(#lobby-rail):not(#vcard)')) {
+    panel.inert = unseen;
+  }
+  if (open) menu.dataset.open = open;
+  focusSlot(null);
+  hideTooltip();
+  if (open !== 'chest') openStashFilter(false);
+  if (!open) { endDrag(); openBook(false); }
+  // (a short screen opens on the gear, the stash's or the equipment's)
+  if (open && !was) $<HTMLElement>('#lobby-rail [data-lt="gear"]').click();
+  syncDiscard();
+  if (open !== was) hooks.panels(open);
+}
+
+/** Whether the lobby's panels are stowed: the hero walks the village. */
 export const menuStowed = (): boolean => $('#menu').classList.contains('stowed');
 
-/** Whether the lobby is practice, as a run is: its panels all out of the way, stowed or (laid out side by side)
- *  each folded away. */
+/** Whether the lobby is practice, as a run is: its panels all out of the way (in the yard, its dummies to practise on:
+ *  game/village.ts). */
 export function lobbyPractice(): boolean {
   if ($('#menu').classList.contains('hidden')) return false;
   if (menuStowed()) return true;
-  return !onePanel.matches && FOLDS.every((f) => f.folded);
+  // (the panels' lobby laid out side by side: each folded away)
+  return !VILLAGE && !onePanel.matches && FOLDS.every((f) => f.folded);
 }
 
-/** Fade the lobby panels out (to walk around and practice on the dummies) or back in. */
+/** The panels put away (`stowed`), or shown (the village's inventory); with no argument, the one or the other. */
 export function toggleMenuStowed(stowed?: boolean): void {
+  if (VILLAGE) {
+    openPanels((stowed ?? !menuStowed()) ? null : 'inventory');
+    return;
+  }
   const menu = $('#menu');
   menu.classList.toggle('stowed', stowed);
   // (unseen, its panels take no click, key or focus: Enter the Arena started a fight from practice, clicked where
@@ -400,7 +571,7 @@ const onePanel = matchMedia('(max-height: 520px), (orientation: portrait) and (m
 
 // The hero panel folds away to the left, the equipment panel to the right and the skills panel down,
 // each on its own (a per-viewer preference, kept for every save slot); one panel at a time never
-// folds them.
+// folds them. The panels' lobby's alone: the village's panels have no folds.
 interface Fold { panel: string; tab: string; what: string; key: string; folded: boolean; onFold?: () => void }
 const readFold = (key: string): boolean => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
 const FOLDS: Fold[] = [
@@ -416,6 +587,7 @@ function storeFold(f: Fold): void {
 }
 
 function syncFolds(): void {
+  if (VILLAGE) return;
   for (const f of FOLDS) {
     const folded = f.folded && !onePanel.matches, tab = $(f.tab);
     $(f.panel).classList.toggle('folded', folded);
@@ -434,10 +606,22 @@ export function lobbyViewShift(): { x: number; y: number } {
   return window.innerWidth > window.innerHeight ? { x: r.right / 2, y: 0 } : { x: 0, y: r.bottom / 2 };
 }
 
-/** Where the lobby's panels leave the window's top left corner free (css px; 0, 0 with the lobby out of the way):
- *  right of the hero panel's fold tab (it rides on the panel's edge, folded or not, through the slide), or of the one
- *  panel shown on a short screen, or under it on an upright one. As drawn, so it follows a panel as it slides. */
+/** Where the lobby's panels leave the window's top left corner free (css px; 0, 0 with the lobby out of the way or
+ *  its panels at the right and the foot): right of the one panel shown on a short screen, or under it on an upright
+ *  one. As drawn, so it follows a panel as it slides. */
 function lobbyClearance(): { x: number; y: number } {
+  if (!VILLAGE) return panelsClearance();
+  const menu = $('#menu');
+  if (menu.classList.contains('hidden') || menu.classList.contains('stowed') || !onePanel.matches) return { x: 0, y: 0 };
+  const panel = [...menu.querySelectorAll<HTMLElement>('#lobby-rail, .menu-center, .menu-right')].filter((p) => p.offsetParent).pop();
+  if (!panel) return { x: 0, y: 0 };
+  const r = panel.getBoundingClientRect();
+  return window.innerWidth > window.innerHeight ? { x: r.right, y: 0 } : { x: 0, y: r.bottom };
+}
+
+/** The panels' lobby's: right of the hero panel's fold tab (it rides on the panel's edge, folded or not, through
+ *  the slide), or of the one panel shown on a short screen, or under it on an upright one. */
+function panelsClearance(): { x: number; y: number } {
   const menu = $('#menu');
   if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
   if (!onePanel.matches) return { x: $('#hero-fold').getBoundingClientRect().right, y: 0 };
@@ -459,11 +643,10 @@ const STILL_FRAMES = 12;
 const panelsResized = new ResizeObserver(() => restingClearance.clear());
 let panelsWatched = false;
 
-/** What places the lobby's panels where they rest: the window, a short screen's panel shown, and the hero panel
- *  folded or not. */
+/** What places the lobby's panels where they rest: the window, and a short screen's panel shown. */
 function restKey(): string {
   const shown = onePanel.matches ? $('#menu').dataset.tab : 'side by side';
-  return `${innerWidth}x${innerHeight} ${shown} ${FOLDS[0].folded}`;
+  return `${innerWidth}x${innerHeight} ${shown}${VILLAGE ? '' : ` ${FOLDS[0].folded}`}`;
 }
 
 /** the room the run's party frames leave the overlays, read for the way they're laid out (`key`): read again only as
@@ -506,7 +689,8 @@ function clearance(): { x: number; y: number } {
   if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: partyClearance() };
   if (!panelsWatched) {
     panelsWatched = true;
-    menu.querySelectorAll('.menu-left, .menu-center, .menu-right, #hero-fold').forEach((el) => panelsResized.observe(el));
+    const watched = VILLAGE ? '#lobby-rail, .menu-center, .menu-right' : '.menu-left, .menu-center, .menu-right, #hero-fold';
+    menu.querySelectorAll(watched).forEach((el) => panelsResized.observe(el));
   }
   const key = restKey();
   const rested = restingClearance.get(key);
@@ -537,8 +721,9 @@ export function clearOverlays(): void {
 
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
-/** The battleground and starting wave (a co-op guest sees the host's, and the start button waits for it). */
-export function renderLobbyOptions(): void { renderBiomeOptions(); renderWaveOptions(); }
+/** The portal's card: its battleground's starting wave and its way in (a co-op guest sees the host's, and its way in
+ *  waits for it). */
+export function renderLobbyOptions(): void { renderStart(); renderWaveOptions(); }
 
 function renderBiomeOptions(): void {
   // a co-op guest sees the host's battleground (Random shows the one rolled at the start)
@@ -560,11 +745,48 @@ function renderBiomeOptions(): void {
   $('#rail-play').textContent = rehearsal ? 'Train' : 'Play';
 }
 
-// Starting wave: Arena uses the best banked wave; Training grounds uses the highest attempted wave (on
-// Random, in every biome), defaulting to that best and jumping back to it when the biome or
-// best changes.
-let training = false;
-export const trainingSelected = (): boolean => isGuest() ? session.training : training;
+function renderStart(): void {
+  if (!VILLAGE) {
+    renderBiomeOptions();
+    return;
+  }
+  // a co-op host waits for a partner still finishing a run; a guest, for the host
+  const guest = isGuest(), grounds = trainingSelected();
+  const start = $<HTMLButtonElement>('#btn-start');
+  const busy = !guest && isHost() && partnerInRun();
+  start.disabled = guest || busy;
+  const host = guest && session.biome ? ` (the host chose ${BIOMES[session.biome].title})` : '';
+  start.textContent = guest ? (partnerInRun() ? 'The host is in a run' : `The host starts the run${host}`)
+    : busy ? 'Your partner is still in a run' : grounds ? 'Enter the Training Grounds' : `Enter ${BIOMES[G.arena.biome].title}`;
+  start.title = grounds ? 'Replay any wave reached. No damage, loot, score or progress.' : '';
+  // (the ghost's card picks the battleground; a portal's is its own)
+  const biome = guest ? session.biome : G.arena.biome;
+  document.querySelectorAll<HTMLButtonElement>('#opt-biome button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.b === biome);
+    b.disabled = guest;
+  });
+  // (a first visit's training unfinished: a portal's card warns, offers to skip it, and lets no one in until then; the
+  // training grounds stake nothing, so the ghost lets him in)
+  const training = !guest && !grounds && trainingPending();
+  start.classList.toggle('hidden', training);
+  $('#vcard .vc-training').classList.toggle('hidden', !training);
+}
+
+// The training grounds (the ghost by the village's yard, game/village.ts; the panels' lobby's Game mode): a wave
+// reached replayed with nothing at stake. A co-op guest's is the host's.
+let grounds = false;
+export const trainingSelected = (): boolean => isGuest() ? session.training : grounds;
+/** The training grounds chosen (the ghost's card) or not (a portal's). */
+export function selectTraining(on: boolean): void {
+  if (on === grounds || isGuest()) return;
+  grounds = on;
+  renderLobbyOptions();
+  hooks.lobbyChanged();
+}
+
+// Starting wave: any wave up to the best one cleared and banked in the portal's biome (in the training grounds, the
+// best reached), defaulting to that best and jumping back to it when the biome or best changes. « and » go to the
+// first and the best (a step of ±1000, clamped).
 let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 
@@ -575,9 +797,12 @@ function stepWave(d: number): void {
 }
 
 function renderWaveOptions(): void {
-  const s = biomeSetting(), bests = trainingSelected() ? G.profile.records.bestReached : G.profile.records.bestBanked;
+  // (the village's portal is its biome's; the panels' lobby picks one, or Random: the least of every biome's)
+  const s = VILLAGE ? G.arena.biome : biomeSetting(), grounds = trainingSelected();
+  const bests = grounds ? G.profile.records.bestReached : G.profile.records.bestBanked;
   const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
-  if (`${G.profile.classId}:${trainingSelected()}:${s}:${best}` !== seen) { seen = `${G.profile.classId}:${trainingSelected()}:${s}:${best}`; startWave = maxWave = best; }
+  const key = `${G.profile.classId}:${grounds}:${s}:${best}`;
+  if (key !== seen) { seen = key; startWave = maxWave = best; }
   // a co-op guest plays the host's choice
   const guest = isGuest(), wave = guest ? session.wave : startWave;
   const box = $('#opt-wave');
@@ -587,22 +812,25 @@ function renderWaveOptions(): void {
 
 export function renderMenu(): void {
   const p = G.profile;
-  renderBiomeOptions();
+  renderStart();
   renderWaveOptions();
   const cls = CLASSES[p.classId];
-  $('.class-card').style.setProperty('--cc', cls.accent);
   $('.lo-title').textContent = cls.book;
   document.querySelectorAll<HTMLElement>('#equip .doll').forEach((d) => d.classList.toggle('hidden', d.dataset.class !== cls.id));
-  document.querySelectorAll<HTMLElement>('.cc-name span, .cc-tag span').forEach((s) => s.classList.toggle('active', s.dataset.c === cls.id));
-  const sk = $('.cc-skills');
-  if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
-  sk.innerHTML = '';
-  // (each as it is with the weapons held: a two-hander's cleave slower and heavier)
-  const shown = (def: SkillDef) => (G.player.cls.id === cls.id ? G.player.known.get(def.impl)?.def : undefined) ?? def;
-  for (const def of cls.skills) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
-  // (its arrows read off the row in the next frame: read here, its width laid the page out in the middle of the
-  // render, which went on changing it, 8.7 ms of the click that chose a first visit's hero)
-  requestAnimationFrame(syncSkillStrip);
+  // (the panels' lobby's class card)
+  if (!VILLAGE) {
+    $('.class-card').style.setProperty('--cc', cls.accent);
+    document.querySelectorAll<HTMLElement>('.cc-name span, .cc-tag span').forEach((s) => s.classList.toggle('active', s.dataset.c === cls.id));
+    const sk = $('.cc-skills');
+    if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
+    sk.innerHTML = '';
+    // (each as it is with the weapons held: a two-hander's cleave slower and heavier)
+    const shown = (def: SkillDef) => (G.player.cls.id === cls.id ? G.player.known.get(def.impl)?.def : undefined) ?? def;
+    for (const def of cls.skills) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
+    // (its arrows read off the row in the next frame: read here, its width laid the page out in the middle of the
+    // render, which went on changing it, 8.7 ms of the click that chose a first visit's hero)
+    requestAnimationFrame(syncSkillStrip);
+  }
 
   $('#btn-saves').textContent = `Save slot ${saveSlot()}`;
   const r = p.records;
@@ -648,14 +876,24 @@ export function renderMenu(): void {
     } else if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
     else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      const how = 'Click or drag to the stash to unequip · drag it onto the floor to throw it there';
+      // (taken off at the chest alone, where the stash is: by I a click sent it there from anywhere, from play,
+      // "clicking an item on character in I mode teleports it to stash")
+      const atStash = () => !VILLAGE || panelsOpen() !== 'inventory';
+      const how = () => (atStash() ? 'Click or drag to the stash to unequip · ' : 'Unequip at the stash · ')
+        + 'drag it onto the floor to throw it there';
       bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
-        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
-      const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
+        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how()}` : how() }));
+      const doUnequip = () => {
+        if (!atStash()) return;
+        unequip(p, slot);
+        hideTooltip();
+        sfx.click();
+        changed();
+      };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
         if (longPressClick()) return;
-        openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
+        openItemSheet(it, false, 'Unequip', atStash() && p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
       // (a long press is a context menu on Android: on touch it lights the slot's items, and unequips nothing)
       d.oncontextmenu = (e) => { e.preventDefault(); if (!isTouch()) doUnequip(); };
@@ -670,7 +908,7 @@ export function renderMenu(): void {
 
   // stash (sorted: rarity desc, then power; the stat filter moves its matches first)
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
-  $('#gear-fold').classList.toggle('new', p.stash.some((it) => newIds.has(it.id)));   // shown while folded
+  if (!VILLAGE) $('#gear-fold').classList.toggle('new', p.stash.some((it) => newIds.has(it.id)));   // shown while folded
   renderStashFilter();
   const st = $('#stash');
   st.innerHTML = '';
@@ -1039,10 +1277,11 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
-/** the pause menu's pages: the controls, the settings, and performance (the quality, the reports, the profiler) */
-export type PauseTab = 'controls' | 'settings' | 'performance';
+/** the pause menu's pages: the controls, the settings, performance (the quality, the reports, the profiler) and the
+ *  betas to try (ui/beta.ts) */
+export type PauseTab = 'controls' | 'settings' | 'performance' | 'beta';
 /** every pause tab, in the menu's order */
-const PAUSE_TABS: PauseTab[] = ['controls', 'settings', 'performance'];
+const PAUSE_TABS: PauseTab[] = ['controls', 'settings', 'performance', 'beta'];
 /** the tab the pause menu opens on: the one chosen last (from play: "default to tab in pause screen that was open
  *  before... not always controls... persists between reloads"), Controls until one is */
 export const PAUSE_TAB_COOKIE = 'last-stand-pause-tab';
@@ -1074,6 +1313,15 @@ export function pauseTab(tab: PauseTab): void {
 /** how long Abandon run is held before it abandons (ms) */
 export const ABANDON_HOLD_MS = 2000;
 
+/** The time of day's slider and its value: the hour held, or Auto with the clock's hour. */
+function renderHourOption(): void {
+  const held = heldHour();
+  const h = held ?? hourNow();
+  const clock = `${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
+  $<HTMLInputElement>('#opt-hour').value = String(held ?? -0.5);
+  $('#opt-hour-value').textContent = held === null ? `Auto ${clock}` : clock;
+}
+
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
@@ -1087,6 +1335,10 @@ export function showPause(v: boolean): void {
     renderTraceOptions();
     renderHdrOptions();
     renderRendererOptions();
+    renderBetaOptions();
+    // the hour is the village's alone (a biome keeps its own light)
+    $('.hour-row').classList.toggle('hidden', G.arena.place !== 'village' || G.mode === 'run');
+    renderHourOption();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
     // (short beside the title: what it costs is its tooltip)

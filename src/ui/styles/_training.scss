@@ -1,0 +1,31 @@
+// The first visit's training (ui/training.ts): its tracker under the village's minimap, in the minimap's column (so
+// scaled with it, by --hud, as a run's objectives there are), each step ticked as it's done, and its word on a portal's
+// card while it's unfinished.
+@use 'theme' as *;
+
+/* (its right edge on the minimap's, which stands 6 px in from its column's; no panel behind it, from play, "too bold as
+   it is": its words read over the world by a shadow of their own) */
+#training { align-self: flex-end; box-sizing: border-box; width: 250px; margin: 10px 6px 0 0;
+  padding: 10px 14px 8px; pointer-events: auto; text-shadow: 0 1px 1px #000, 0 0 2px #000, 0 0 3px #000, 0 0 6px #000, 0 0 10px rgba(0, 0, 0, .8); }
+#training.hidden { display: none; }
+.tr-title { font: 700 15px var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #ffe7b0; }
+.tr-steps { margin: 8px 0 6px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.tr-steps li { position: relative; padding-left: 22px; font-size: 14px; line-height: 1.3; color: #fbf3e0; }
+/* each step's box, ticked once it's done */
+.tr-steps li::before { content: ''; position: absolute; left: 0; top: 2px; width: 12px; height: 12px;
+  border: 1px solid #e8d9b4; border-radius: 2px; background: rgba(0, 0, 0, .45); box-shadow: 0 0 2px #000, 0 0 4px #000; }
+/* (its tick says it's done: a line through its words left them unreadable over the grass) */
+.tr-steps li.done { color: #d9cfb8; }
+.tr-steps li.done::after { content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px;
+  border: solid var(--accent); border-width: 0 2px 2px 0; rotate: 40deg; }
+.tr-finished { display: none; font-size: 14px; color: #ffe7b0; font-style: italic; }
+#training:not(.pending) .tr-steps, #training:not(.pending) .tr-skip { display: none; }
+#training:not(.pending) .tr-finished { display: block; margin-top: 6px; }
+.tr-skip { font-size: 13px; color: #fbf3e0; }
+/* (a finger's room round its words) */
+body.touch .tr-skip { padding: 10px 14px 10px 0; }
+
+/* a portal's card while the training is unfinished: its warning and its skip in Enter's place */
+.vc-training { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.vc-training.hidden { display: none; }
+.vc-training p { margin: 0; font-size: 14px; color: #f0c88a; }

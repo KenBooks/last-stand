@@ -1,7 +1,7 @@
 // The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, the stash's items
 // lit for a hovered item's slot (`uiGlow.ts`: pictured at set moments of its loops, which mustn't paint), How to play,
 // the save slots, the hero selection screen over the hall of heroes (`uiHeroes.ts`), the fight's loading bar for it
-// asked for with the heroes cold, a battleground's button clicked with the mouse and a key pressed after it (where the
+// asked for with the heroes cold, a portal card's Leave clicked with the mouse and a key pressed after it (where the
 // focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
@@ -17,6 +17,10 @@ import * as THREE from 'three';
 import { middleOf, onTheClock } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import { goUse, villageObject } from '../../../src/game/village';
+import { groundHeight } from '../../../src/world/ground';
+import { YARD, yardToWorld } from '../../../src/data/village';
+import type { Spot } from '../../../src/data/village';
 import * as warm from '../../../src/game/warm';
 import * as readying from '../../../src/ui/readying';
 import type { Need } from '../../../src/game/warm';
@@ -25,7 +29,7 @@ import type { Enemy } from '../../../src/entities/enemy';
 import { NUMBER_COLORS } from '../../../src/data/balance';
 import { DAMAGE_TYPES, hitEnemy, hurtPlayer } from '../../../src/combat/damage';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
-import { anchoredLabels, floatText } from '../../../src/ui/floaters';
+import { anchoredLabels, floatText, OWN_PROP } from '../../../src/ui/floaters';
 import { metersBehindHero } from './uiBehindHero';
 import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
@@ -38,11 +42,13 @@ import { openCloudIdentity, closeCloudIdentity, cloudIdentityChecked, CLOUD_IDEN
 import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
+import { closePauseLobby, HOUR_CANARY, hourHiddenInRun, hourShown, openPauseLobby } from './uiHour';
+import { panelsBack, showPanels } from './lobbyPanels';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 import {
-  closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, heroLabelPictures, openHeroes,
+  changeHeroLink, closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, heroLabelPictures, openHeroes,
 } from './uiHeroes';
 import {
   ABANDON_CANARY, PAUSE_CANARY, TAB_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
@@ -53,7 +59,10 @@ import { closePerfMini, openPerfMini, PERF_SIZE_CANARY, perfMiniChecked } from '
 import { closePerfGraph, openPerfGraph, PERF_GRAPH_CANARY, perfGraphChecked } from './uiPerfGraph';
 import { closePerfParty, openPerfParty, PERF_PARTY_CANARY, perfPartyChecked } from './uiPerfParty';
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
+import { closeVillageHud, openVillageHud, VILLAGE_HUD_CANARY, villageHudShown } from './uiVillageHud';
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
+import { closeVillageMap, openVillageMap, VILLAGE_MAP_CANARY, VILLAGE_MAP_WALK_CANARY, villageMapShown }
+  from './uiVillageMap';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
@@ -64,11 +73,18 @@ import {
   SHEET_CANARIES, sheetTouchShown,
 } from './uiSheet';
 
+/** Two checks' lines and problems as one. */
+const joinFound = (a: { lines: string[]; problems: string[] }, b: { lines: string[]; problems: string[] }) => ({
+  lines: [...a.lines, ...b.lines],
+  problems: [...a.problems, ...b.problems],
+});
+
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps' | 'cloudIdentity'
-  | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
+  | 'logLobby' | 'perfAsk' | 'pauseLobby' | 'coop' | 'coopRename'
+  | 'villageMap' | 'villageHud' | 'villageHudTouch'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph' | 'perfParty'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pausePerformance' | 'profiling' | 'pauseVolume'
@@ -106,10 +122,14 @@ const NUMBERS = [
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */
 const NUMBER_FRAMES = 12;
-/** the key pressed after the battleground's button is clicked: one the game takes in the lobby (a step forward) */
+/** the key pressed after the portal card's Leave is clicked: one the game takes in the lobby (a step forward) */
 const KEY_AFTER_CLICK = 'KeyW';
+/** the frames run for the hero to settle where he's put, and for a village card to open */
+const CARD_FRAMES = 2;
 /** the frames run after each press of V as the camera glides to the next view (its glide is 0.45 s) */
 const SWITCH_FRAMES = 40;
+/** the most frames the dummies' readouts may take to fade in as he comes into the yard (`METER_FADE`, 0.35 s) */
+const READOUTS_IN_FRAMES = 120;
 /** a label further than this from where its anchor shows on the screen is off (css px) */
 const LABEL_SLACK = 1;
 /** frames Tab is held for the scores */
@@ -300,8 +320,8 @@ let askedCold = false;
  */
 async function openReadyingHeroes(lab: Lab): Promise<void> {
   const chill = chillOf();
-  const button = document.getElementById('btn-hero');
-  if (!chill || !button) return;
+  if (!chill || !document.getElementById('btn-hero')) return;
+  const button = (await changeHeroLink(lab))!;
   chill('heroes');
   askedCold = true;
   await lab.clickOn(button);
@@ -425,10 +445,15 @@ function labelsOff(): { labels: number; worst: number } {
 
 /**
  * The lobby's camera switched with V through every view and back to the top-down one, each glide played and drawn:
- * every frame of it, the labels over the dummies measured against where their anchors show.
+ * every frame of it, the labels over the dummies measured against where their anchors show. The hero stands in the
+ * village's training yard facing its dummies (through the eyes, the labels are those before him).
  */
 async function switchViews(lab: Lab): Promise<void> {
   switches = [];
+  await standAt(lab, yardToWorld(0, -2), YARD.turn);
+  // (the dummies' readouts faded in first: they fade in as he comes into the yard, and stood there two frames before
+  // the first switch, none was measured through it)
+  await lab.until(() => labelsOff().labels > 0, READOUTS_IN_FRAMES, 'the dummies\' readouts faded in in the yard');
   // (every frame drawn, as the game draws them: the drawing refreshed the camera's matrices once a frame)
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -473,14 +498,41 @@ function labelsThroughSwitches(): Found {
   return { lines, problems };
 }
 
+/** where the hero stood before a state took him elsewhere in the village, put back as it closes */
+let stoodAt: { at: THREE.Vector3; facing: number } | null = null;
+
+/** The hero stood at `spot` facing `facing`, where he stood kept for `standBack`, and let settle. */
+async function standAt(lab: Lab, spot: Spot, facing: number): Promise<void> {
+  stoodAt ??= { at: lab.player.pos.clone(), facing: lab.player.facing };
+  const [x, z] = spot;
+  lab.player.walkTo = null;
+  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  await lab.step(CARD_FRAMES);
+}
+
+/** The hero put back where he stood before `standAt`, so the states after it picture the lobby as it was. */
+async function standBack(lab: Lab): Promise<void> {
+  if (!stoodAt) return;
+  lab.player.walkTo = null;
+  lab.player.place(stoodAt.at, stoodAt.facing);
+  stoodAt = null;
+  await lab.step(CARD_FRAMES);
+}
+
 /**
- * The battleground's button the lobby has on clicked with the mouse (nothing changes) and a game key pressed after it,
- * as a player picks one and then plays, each as the browser gets it from a mouse and a keyboard (the class buttons that
- * stood in the lobby kept the focus so). Throws if the click never reached the button.
+ * The crypt's portal used where the hero stands for it, and its card's Leave clicked with the mouse and a game key
+ * pressed after it, as a player looks at a portal, leaves it and plays on, each as the browser gets it from a mouse
+ * and a keyboard (the class buttons that stood in the lobby kept the focus so). Throws if the card never opened or
+ * the click never reached its button.
  */
 async function clickClass(lab: Lab): Promise<void> {
-  const button = document.querySelector<HTMLElement>('#opt-biome button.active');
-  if (!button) throw new Error('lab: ui: the lobby has no battleground\'s button on');
+  const portal = villageObject('crypt');
+  if (!portal) throw new Error('lab: ui: the village has no crypt\'s portal');
+  await standAt(lab, portal.stand, lab.player.facing);
+  goUse(portal);
+  await lab.step(CARD_FRAMES);
+  const button = document.querySelector<HTMLElement>('#vcard:not(.hidden) .vc-close');
+  if (!button) throw new Error('lab: ui: the crypt\'s portal opened no card to leave');
   let clicked = false;
   const heard = (event: MouseEvent) => {
     clicked = event.detail > 0;
@@ -489,9 +541,10 @@ async function clickClass(lab: Lab): Promise<void> {
   const box = button.getBoundingClientRect();
   await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   button.removeEventListener('click', heard);
-  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the battleground\'s button');
+  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the card\'s Leave');
   await lab.press(KEY_AFTER_CLICK);
 }
+
 
 /** `element` named for a report: its tag, its id or its data attributes, and the id of what it's in. */
 function describe(element: Element): string {
@@ -794,6 +847,7 @@ async function tapIfReached(lab: Lab, element: HTMLElement | null): Promise<bool
  */
 async function openSkillTipsTouch(lab: Lab): Promise<void> {
   openedBy = 'a tap';
+  showPanels('inventory');
   // (the first tap puts the page in touch mode, as a phone starts in it: what a finger reaches is judged in it)
   await tapIfReached(lab, document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]'));
   // (a short screen shows it whole, with no toggle)
@@ -815,6 +869,7 @@ async function closeSkillTipsTouch(lab: Lab): Promise<void> {
   hideTooltip();
   openBook(false);
   document.querySelector<HTMLElement>('#lobby-rail [data-lt="hero"]')?.click();
+  panelsBack();
   await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   await lab.mouseTo({ x: innerWidth / 2 + 1, y: innerHeight / 2 });
   if (document.body.classList.contains('touch')) throw new Error('lab: ui: the mouse left the page in touch mode');
@@ -857,15 +912,52 @@ function dummyLabels(): { shown: number; all: number } {
   return { shown: labels.filter(({ label }) => label.shown).length, all: labels.length };
 }
 
-/** A column for each dummy's label, half way along the line from the camera to it (`aside`: that far off the line). */
+/** how far past a label's own props a planted column stands (m) */
+const PAST_OWN = 0.1;
+
+/**
+ * A column for each dummy's label on the line from the camera to it (`aside`: that far off the line): half way along,
+ * or nearer the camera where half way is within the label's own props (`OWN_PROP`, which never hide it). On a short
+ * screen the camera stands nearly over the dummies, and a column half way stood by the label as its own.
+ */
 function columnsBefore(aside: number): Obstacle[] {
   const from = G.camera.position;
   return anchoredLabels().flatMap(({ at }) => {
     if (!at) return [];
     const dx = at.x - from.x, dz = at.z - from.z, length = Math.hypot(dx, dz) || 1;
-    const x = (from.x + at.x) / 2 - (dz / length) * aside, z = (from.z + at.z) / 2 + (dx / length) * aside;
+    const fromLabel = Math.max(length / 2, COLUMN.r + OWN_PROP + PAST_OWN);
+    if (fromLabel > length - COLUMN.r - PAST_OWN) {
+      throw new Error(`lab: ui: no room for a column between the camera and a label ${length.toFixed(2)} m off`);
+    }
+    const along = 1 - fromLabel / length;
+    const x = from.x + dx * along - (dz / length) * aside;
+    const z = from.z + dz * along + (dx / length) * aside;
     return [{ x, z, ...COLUMN }];
   });
+}
+
+/** how long the camera may glide into the view a state before left it (frames) */
+const CAMERA_SETTLES = 240;
+/** a camera moving less than this a frame is still (m) */
+const CAMERA_STILL = 1e-4;
+
+/** Frames until the camera stands still: a column planted on the line to a label as the camera followed him back
+ *  out of the yard (`views` closing before this) stood off the line a frame later. */
+async function cameraSettled(lab: Lab): Promise<void> {
+  const was = G.camera.position.clone();
+  await lab.until(() => {
+    const moved = G.camera.position.distanceTo(was);
+    was.copy(G.camera.position);
+    return moved < CAMERA_STILL;
+  }, CAMERA_SETTLES, 'the camera came to rest');
+}
+
+/** The hero stood in the training yard facing its dummies, their readouts faded in and the camera at rest: left to
+ *  `views` before it, the state ran as he was put back out of the yard, its readouts fading and the camera moving. */
+async function standByDummies(lab: Lab): Promise<void> {
+  await standAt(lab, yardToWorld(0, -2), YARD.turn);
+  await lab.until(() => dummyLabels().shown > 0, READOUTS_IN_FRAMES, "the dummies' readouts faded in in the yard");
+  await cameraSettled(lab);
 }
 
 /**
@@ -906,14 +998,18 @@ const STEPS: Record<UiState, Steps> = {
   },
   readying: { open: openReadying, close: closeReadying, check: readyingShown },
   readyingHeroes: { open: openReadyingHeroes, close: closeReadyingHeroes, check: readyingHeroesShown },
-  clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
-  views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
-  behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
+  clicked: { open: clickClass, close: standBack, check: focusAfterClick },
+  views: { open: switchViews, close: standBack, check: labelsThroughSwitches },
+  behindProps: { open: standByDummies, close: standBack, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
   coop: { open: openCoopPicked, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
   coopRename: { open: openCoopRename, close: closeCoopDialog, check: (canary) => coopShown('coopRename', canary) },
+  pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
+  villageHud: { open: (lab) => openVillageHud(lab, false), close: closeVillageHud, check: villageHudShown },
+  villageMap: { open: openVillageMap, close: closeVillageMap, check: villageMapShown },
+  villageHudTouch: { open: (lab) => openVillageHud(lab, true), close: closeVillageHud, check: villageHudShown },
   heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
   litTouch: {
@@ -941,7 +1037,8 @@ const STEPS: Record<UiState, Steps> = {
   pause: { open: () => openPause('controls', canaryAsked), close: closePause, check: () => pauseShown('controls') },
   pauseSettings: {
     open: () => openPause('settings', canaryAsked), close: closePause,
-    check: (canary, lab) => canary ? pauseShown('settings') : pauseColourChecked(lab),
+    check: async (canary, lab) => (canary ? pauseShown('settings')
+      : joinFound(await pauseColourChecked(lab), hourHiddenInRun())),
   },
   // (as a profile leaves it, its costliest parts and Send shown: the tab at its fullest)
   pausePerformance: {
@@ -1086,7 +1183,8 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   }
   if (state === 'behindProps') {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));
-    lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
+    const seen = through ? 'caught' : 'went unseen';
+    lines.push(`  canary: the labels beside the columns ${seen}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
     const overHero = found.problems.some((problem) => problem.includes('shown over the hero'));
     lines.push(`  canary: the meters placed seeing no hero ${overHero ? 'caught' : 'went unseen'}`);
@@ -1096,6 +1194,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(SUMMARY_CANARY.name));
     lines.push(`  canary: ${SUMMARY_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${SUMMARY_CANARY.what} went unseen`);
+  }
+  if (state === 'pauseLobby') {
+    const caught = found.problems.some((problem) => problem.includes(HOUR_CANARY.name));
+    lines.push(`  canary: ${HOUR_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${HOUR_CANARY.what} went unseen`);
   }
   if (state === 'decision') {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));
@@ -1118,6 +1221,13 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
+  if (state === 'villageMap') {
+    for (const canary of [VILLAGE_MAP_CANARY, VILLAGE_MAP_WALK_CANARY]) {
+      const caught = found.problems.some((problem) => problem.includes(canary.name));
+      lines.push(`  canary: ${canary.what} ${caught ? 'caught' : 'went unseen'}`);
+      if (!caught) missed.push(`${state}: the canary's ${canary.what} went unseen`);
+    }
+  }
   if (state === 'buttonsTouch' || state === 'buttonsRunTouch') {
     const caught = found.problems.some((problem) => problem.includes(BUTTONS_CANARY.name));
     lines.push(`  canary: ${BUTTONS_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
@@ -1127,6 +1237,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(HEROES_WARMING_CANARY.name));
     lines.push(`  canary: ${HEROES_WARMING_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${HEROES_WARMING_CANARY.what} went unseen`);
+  }
+  if (state === 'villageHud' || state === 'villageHudTouch') {
+    const caught = found.problems.some((problem) => problem.includes(VILLAGE_HUD_CANARY.name));
+    lines.push(`  canary: ${VILLAGE_HUD_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${VILLAGE_HUD_CANARY.what} went unseen`);
   }
   if (state === 'sheetTouch' || state === 'litTouch') {
     for (const { name, what } of SHEET_CANARIES[state]) {

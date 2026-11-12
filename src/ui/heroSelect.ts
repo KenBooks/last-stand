@@ -212,7 +212,7 @@ export function openHeroSelect(focusId: string, firstVisit = false): void {
   if (heroSelectOpen()) return;
   first = firstVisit;
   hideTooltip();
-  openHall(focusId, first);
+  openHall(focusId);
   const box = $('#heroes');
   box.classList.toggle('first', first);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
@@ -230,7 +230,7 @@ export function heroSelectSlotSwitched(focusId: string): void {
   if (!heroSelectOpen()) return;
   hideTooltip();
   closeHall();
-  openHall(focusId, true);
+  openHall(focusId);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
   for (const h of hallHeroes()) $(`.hs-card[data-c="${h.id}"] .hs-records`).innerHTML = records(h.profile);
   shown();
@@ -340,6 +340,8 @@ function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', o
 function focusOn(i: number): void {
   if (!hallOpen()) return;
   hideTooltip();
+  // (the camera glides along the row to him: cut there at once, from play "we lost camera animation when selecting
+  // characters"; the hall's opening and its leaving stay at once)
   focusHall(i);
   shown();
 }

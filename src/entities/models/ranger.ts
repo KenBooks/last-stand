@@ -545,6 +545,10 @@ export function* rangerSteps(): ModelSteps {
   // behind the head, and the arm reaching for it went 113 degrees past its range)
   // (long and narrow as the sheet's, down to the belt, three bands round it and a cap on its foot)
   // (as deep as the arrows are long, less the 28 cm standing out of it)
+  // (the feathers in the quiver, grey goose rather than the string's pale cord: a card of that held up beside a fire took
+  // past the bloom's threshold, a ball of light at his shoulder, "arrows still blinding reflection near fire";
+  // \`lab village --class ranger --only heroBesideFire\`)
+  const stowedVane = kit.std({ color: 0x5f5a50, roughness: 0.95, metalness: 0 });
   const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35; quiver.name = 'quiver';
   S.add(lathe([[0.02, -0.52], [0.05, -0.5], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
   S.add(lathe([[0.045, -0.525], [0.055, -0.51], [0.056, -0.45]], 18), strapLeather, quiver);
@@ -552,7 +556,7 @@ export function* rangerSteps(): ModelSteps {
   for (let i = 0; i < 6; i++) {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
     S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 5), bowWood, quiver, [x, 0.19, z]);
-    S.add(new THREE.BoxGeometry(0.026, 0.09, 0.004), cord, quiver, [x, 0.385, z]);
+    S.add(new THREE.BoxGeometry(0.026, 0.09, 0.004), stowedVane, quiver, [x, 0.385, z]);
     yield;
   }
   S.build();

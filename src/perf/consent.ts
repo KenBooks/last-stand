@@ -81,6 +81,14 @@ export function initTraceConsent(): void {
   setInterval(look, LOOK_EVERY_MS);
 }
 
+/** The prompt laid out under the loading screen (`on`) and put away (not), so its first raster builds Chrome's Skia
+ *  programs there: shown first in the village, a first visit's held Chrome's GPU process 0.8 s. */
+export function layOutAskAhead(on: boolean): void {
+  const box = $('#perf-ask');
+  if (on) box.className = 'asking';
+  else if (!askedFor) box.className = 'hidden';
+}
+
 /** Each second: a waiting stretch shown (or sent) once a calm moment has lasted; hidden again if a fight starts. */
 function look(): void {
   if (recorder.automaticSuppressed()) { letGo(); return; }

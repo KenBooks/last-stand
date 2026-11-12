@@ -3,9 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, EYES_SKILLS, RUSH_PARTS, castParts, countsLine, countsOver,
-  eyesParts, jobsOf, offsetsOf, scenariosOf,
+  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, EYES_SKILLS, RUSH_PARTS, VILLAGE_SHARDS, castParts,
+  countsLine, countsOver, eyesParts, jobsOf, offsetsOf, scenariosOf, whyFailed,
 } from '../node/check.mjs';
+import { inShard } from '../page/shards.ts';
 import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
 const names = (jobs) => jobs.map((job) => job.name);
@@ -118,6 +119,33 @@ test('every swing of every weapon each way held stepped through the eyes in one 
   assert.equal(swing.options.canary, true);
 });
 
+test('the village\'s checks in shards, a job each, for the ranger alone, and only when named', () => {
+  assert.ok(!names(jobsOf({})).some((name) => name.startsWith('village')));
+  const jobs = jobsOf({ commands: ['village'] });
+  assert.equal(jobs.length, VILLAGE_SHARDS);
+  assert.equal(jobs[0].name, `village-ranger-1of${VILLAGE_SHARDS}`);
+  assert.equal(jobs[2].options.shard, `3/${VILLAGE_SHARDS}`);
+  assert.ok(jobs.every((job) => job.group === 'village-ranger' && job.heroClass === 'ranger'));
+  assert.equal(jobsOf({ commands: ['village'], classes: ['mage'] }).length, 0);
+});
+
+test('a shard a run of the checks in their order, about as long as the others, the shards every check once', () => {
+  const checks = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  assert.deepEqual(inShard(checks, '2/3'), ['c', 'd', 'e']);
+  assert.deepEqual(inShard(checks), checks);
+  const all = [1, 2, 3].flatMap((k) => inShard(checks, `${k}/3`));
+  assert.deepEqual(all, checks);
+  const long = (name) => (name === 'a' ? 10 : 1);
+  assert.deepEqual(inShard(checks, '1/2', long), ['a']);
+  assert.deepEqual(inShard(checks, '2/2', long), checks.slice(1));
+  // (one that follows on from the check before it stays in that check's run)
+  const follows = (name) => name === 'b';
+  assert.deepEqual(inShard(checks, '1/2', long, follows), ['a', 'b']);
+  assert.deepEqual(inShard(checks, '2/2', long, follows), checks.slice(2));
+  assert.throws(() => inShard(checks, '4/3'));
+  assert.throws(() => inShard(checks, 'x'));
+});
+
 test('the charge\'s sets apart from the skills cast with it, those cast with a shield and with two weapons', () => {
   const jobs = jobsOf({ commands: ['rush'], classes: ['warrior', 'mage'] });
   assert.deepEqual(names(jobs), ['rush-warrior-sets', 'rush-warrior-shield-casts', 'rush-warrior-dual-casts']);
@@ -186,4 +214,12 @@ test('a job\'s page: shared among the commands that share pages, its own command
   const twoHanded = (part) => jobsOf({ commands: ['eyes'], classes: ['warrior'], only: `twoHanded-Maul-${part}` })[0];
   assert.equal(twoHanded('row').page, 'shared');
   assert.equal(twoHanded('tempest').page, null);
+});
+
+test('a failed job says why: its first problem, cut short, and how many more', () => {
+  assert.equal(whyFailed([]), '');
+  assert.equal(whyFailed(['the hero never walked']), ': the hero never walked');
+  assert.equal(whyFailed(['first\nits detail', 'second', 'third']), ': first (and 2 more)');
+  const long = whyFailed(['x'.repeat(500)]);
+  assert.ok(long.length <= 202 && long.endsWith('…'));
 });

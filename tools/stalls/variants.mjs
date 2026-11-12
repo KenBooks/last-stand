@@ -95,6 +95,15 @@ export const VARIANTS = {
   noSmoke: { script: styled, arg: '#loading .ld-smoke { display: none !important; }' },
   // (the lobby's panels at their own size, not zoomed with the UI's scale: the logo's SVG laid out as its snapshot is)
   noPanelZoom: { script: styled, arg: '#menu .panel { zoom: 1 !important; }' },
+  // (the village's map folding away a stall's cause, told apart in `walks`: the minimap coming back beside it, turned
+  // with the camera; the hero's mark on the map, turned the way he faces)
+  noMinimap: { script: styled, arg: '#minimap-wrap { display: none !important; }' },
+  noMapMark: { script: styled, arg: '.vm-you { display: none !important; }' },
+  // (and the chest's first opening's raster: the stash's slots, the equipment's)
+  noStashSlots: { script: styled, arg: '#stash .sitem { display: none !important; }' },
+  noEquipSlots: { script: styled, arg: '#menu .eslot { display: none !important; }' },
+  noLoadout: { script: styled, arg: '#loadout { display: none !important; }' },
+  noMenuRight: { script: styled, arg: '#menu .menu-right { display: none !important; }' },
   cpuCanvas: { script: cpuCanvas },
   noParallelCompile: { script: noParallelCompile },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },

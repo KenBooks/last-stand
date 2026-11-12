@@ -14,6 +14,7 @@ import * as renderer from '../../../src/core/renderer';
 import { BIOMES } from '../../../src/data/biomes';
 import { bindKnown, pressing, skillNamed } from './cast';
 import { foeKind } from './death';
+import { clearFacing, clearLane, waysOf, type LaneSize } from './lanes';
 import { castsWithRush } from './rushCasts';
 
 /** The parts `lab rush` can run: the sets of foes the charge is cast through, and the skills cast with it. */
@@ -61,22 +62,17 @@ const SETS: FoeSet[] = [
 ];
 
 /** where the hero stands and the way he faces unless the fixture says: the nearest spot to `SPOT` on a grid of
- *  `GRID` m, off the dais, from which a way round by `FACING_STEP` deg has its lane clear (`laneClear`; from the
- *  spot the fixture gives, the first way from `FACING`). From the forest's open ground at `SPOT` every way was
+ *  2 m, off the dais, from which a way round has its lane clear (`lanes.ts`; from the spot the fixture gives, the
+ *  first way from `FACING`). From the forest's open ground at `SPOT` every way was
  *  blocked by a stump a metre off. */
 const SPOT: [number, number] = [-11, -12];
 const FACING = 90;
-const FACING_STEP = 15;
-const GRID = 2;
-/** the dais's square and a little round it (m from the middle, each way): no spot on it, no lane over it */
-const OFF_DAIS = 7;
 /** how far the charge is aimed (m): its whole range */
 const AIM_AHEAD = 9;
 /** the lane kept clear of props and the arena's wall (m): the charge, and as far again as a throw goes past its
  *  stop, as wide as the sets' foes reach either side (a thrown foe stops at a prop as it should: met by a log at the
  *  forest's stop, two flew 0.4 m and ended at its side) */
-const LANE_LONG = AIM_AHEAD + 6;
-const LANE_WIDE = 3;
+const RUSH_LANE: LaneSize = { long: AIM_AHEAD + 6, wide: 3 };
 /** a living foe's life: past what the charge deals it */
 const LIVING = 1e5;
 /** frames looked at from the press, at most, and once the charge has stopped and every foe is still, a few more */
@@ -123,11 +119,7 @@ const frameTime = (): number => window.__labClock.frame / 1000;
 const flat = (from: THREE.Vector3, to: THREE.Vector3): number => Math.hypot(to.x - from.x, to.z - from.z);
 
 /** The charge's way along the ground and its left, for a hero facing `facing` (rad). */
-export function waysOf(facing: number): { forward: THREE.Vector3; left: THREE.Vector3 } {
-  const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  const left = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
-  return { forward, left };
-}
+export { waysOf };
 
 /** The foes of `set` risen round a hero at `at` facing `facing`, standing dazed (still, thinking of nothing). */
 async function foesOf(lab: Lab, set: FoeSet, at: THREE.Vector3, facing: number): Promise<Followed[]> {
@@ -301,59 +293,9 @@ async function picture(lab: Lab, followed: Followed[], label: string): Promise<P
 export function fixtureOf(options: RushOptions): Fixture {
   const { at, facing } = options.fixture;
   if (at && facing !== undefined) return options.fixture;
-  const lane = at ? clearFacing(at) : clearLane();
+  const first = (FACING * Math.PI) / 180;
+  const lane = at ? clearFacing(at, first, RUSH_LANE) ?? { at, facing: first } : clearLane(SPOT, first, RUSH_LANE);
   return { ...options.fixture, at: lane.at, facing: facing ?? lane.facing };
-}
-
-/** A lane: where the hero stands and the way he faces (rad). */
-interface Lane {
-  at: [number, number];
-  facing: number;
-}
-
-/** The first way from `FACING` round whose lane from `at` is clear; `FACING` itself if none is. */
-function clearFacing(at: [number, number]): Lane {
-  for (let turn = 0; turn < 360; turn += FACING_STEP) {
-    const facing = ((FACING + turn) * Math.PI) / 180;
-    if (laneClear(at, facing)) return { at, facing };
-  }
-  return { at, facing: (FACING * Math.PI) / 180 };
-}
-
-/** The clear lane from the grid's spot nearest `SPOT` that has one; `SPOT` at `FACING` if none has. */
-function clearLane(): Lane {
-  const most = Math.floor(G.arena.radius / GRID) * GRID;
-  const spots: [number, number][] = [];
-  for (let x = -most; x <= most; x += GRID) {
-    for (let z = -most; z <= most; z += GRID) {
-      if (Math.max(Math.abs(x), Math.abs(z)) >= OFF_DAIS) spots.push([x, z]);
-    }
-  }
-  const away = (spot: [number, number]) => Math.hypot(spot[0] - SPOT[0], spot[1] - SPOT[1]);
-  spots.sort((a, b) => away(a) - away(b));
-  for (const spot of spots) {
-    const lane = clearFacing(spot);
-    if (laneClear(spot, lane.facing)) return lane;
-  }
-  return { at: SPOT, facing: (FACING * Math.PI) / 180 };
-}
-
-/** Whether the lane from `at` along `facing` (rad) is clear of every prop and inside the arena's wall. */
-function laneClear(at: [number, number], facing: number): boolean {
-  const { forward, left } = waysOf(facing);
-  const from = new THREE.Vector3(at[0], 0, at[1]);
-  const end = from.clone().addScaledVector(forward, LANE_LONG);
-  if (Math.hypot(end.x, end.z) > G.arena.radius - LANE_WIDE) return false;
-  for (let along = 0; along <= LANE_LONG; along++) {
-    const point = from.clone().addScaledVector(forward, along);
-    if (Math.max(Math.abs(point.x), Math.abs(point.z)) < OFF_DAIS) return false;
-  }
-  return G.arena.obstacles.every((prop) => {
-    const off = new THREE.Vector3(prop.x - from.x, 0, prop.z - from.z);
-    const along = off.dot(forward);
-    const across = Math.abs(off.dot(left));
-    return along < -prop.r || along > LANE_LONG + prop.r || across > LANE_WIDE + prop.r;
-  });
 }
 
 /** Where a foe ended against the hero's stop: along the charge's way (m, + before him) and across it (+ his left). */

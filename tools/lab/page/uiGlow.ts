@@ -23,6 +23,7 @@
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
 import * as menus from '../../../src/ui/menus';
+import { panelsBack, showPanels } from './lobbyPanels';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, RarityId, Slot } from '../../../src/types';
 import { middleOf, realWait } from './lab';
@@ -76,6 +77,7 @@ export async function openGlow(lab: Lab): Promise<void> {
     cls: G.player.cls,
   }));
   menus.renderMenu();
+  showPanels('chest');
   railTurned = !document.getElementById('stash')?.checkVisibility();
   const gearTab = document.querySelector('#lobby-rail [data-lt="gear"]');
   if (railTurned && gearTab) await lab.clickOn(gearTab);
@@ -101,6 +103,7 @@ export async function closeGlow(lab: Lab): Promise<void> {
   menus.renderMenu();
   if (railTurned) document.querySelector<HTMLElement>('#lobby-rail [data-lt="hero"]')?.click();
   railTurned = false;
+  panelsBack();
   await lab.reduceMotion(true);
 }
 

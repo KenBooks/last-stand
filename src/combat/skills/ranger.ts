@@ -20,6 +20,7 @@ import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { entry, strikesBody } from '../strikes';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
+import { FOUNTAIN, inBasin } from '../../world/fountain';
 import { wallHit } from '../../world/wall';
 import { clamp, rand } from '../../util';
 import { FULL_DRAW } from '../../data/balance';
@@ -72,6 +73,32 @@ export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
   tip.y = groundHeight(tip.x, tip.z);
   if (floorIsStone(tip.x, tip.z)) glance(tip, vel, _n.set(0, 1, 0));
   else stickAt(tip, _d.copy(vel).normalize(), SINK.ground);
+}
+
+/** Whether an arrow's point at `at` is in the village fountain's water. */
+export const inWater = (at: THREE.Vector3): boolean => G.arena.place === 'village' && at.y <= FOUNTAIN.water && inBasin(at.x, at.z);
+
+/** how steep an arrow rests on the basin's floor, a share straight down: the water takes its speed and it settles leaning,
+ *  all of it under the surface (standing, half of it rose out of the water and read as drawn over it, a review); how far it
+ *  stays off the pedestal and the basin's wall (m), and how far its point goes into the floor */
+const RESTS_AT = -0.4;
+const OFF_PEDESTAL = 0.62;
+const OFF_RIM = 0.1;
+const INTO_BASIN = 0.02;
+const _down = new THREE.Vector3();
+const _floor = new THREE.Vector3();
+
+/** An arrow into the water at `at` going `vel`: a splash, and it rests on the basin's floor there, under the water (from
+ *  play, "arrow rain should cause some arrows underwater"). */
+export function intoWater(at: THREE.Vector3, vel: THREE.Vector3): void {
+  debris(_floor.set(at.x, FOUNTAIN.water, at.z), { count: 6, color: 0xcfe4e8, speed: 1.6, size: 0.06, life: 0.4 });
+  _down.copy(vel).setY(0).normalize().multiplyScalar(Math.sqrt(1 - RESTS_AT * RESTS_AT)).setY(RESTS_AT);
+  _floor.copy(at).setY(FOUNTAIN.floor);
+  const out = Math.hypot(_floor.x, _floor.z) || 1;
+  const kept = clamp(out, OFF_PEDESTAL, (FOUNTAIN.r - FOUNTAIN.rim) * Math.cos(Math.PI / 8) - OFF_RIM) / out;
+  _floor.x *= kept;
+  _floor.z *= kept;
+  stickAt(_floor, _down, INTO_BASIN);
 }
 
 /** An arrow into a prop met on its circle at `at`, going `vel`: off it if it's stone, else into it (and down with it when it
@@ -132,6 +159,7 @@ function fly(proj: Projectile, dt: number): void {
   proj.mesh.quaternion.setFromUnitVectors(FWD, _v);
   _p.copy(proj.pos).addScaledVector(_v, ARROW / 2);
   if (_p.y <= groundHeight(_p.x, _p.z)) { intoGround(_p, proj.vel); proj.kill(); return; }
+  if (inWater(_p)) { intoWater(_p, proj.vel); proj.kill(); return; }
   _prev.addScaledVector(_v, ARROW / 2);
   if (throughGate(_prev, _p)) { proj.kill(); return; }
   if (!G.arena.wall.cast(_prev, _p, _hit)) return;
@@ -178,6 +206,10 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
       // (where between the step's ends the point went under)
       const g0 = py + (_b.y - pos.y) - groundHeight(px, pz), g1 = _b.y - groundHeight(_b.x, _b.z);
       t = g0 > 0 ? g0 / (g0 - g1) : 0;
+    }
+    if (inWater(_b)) {
+      const g0 = py + (_b.y - pos.y) - FOUNTAIN.water, g1 = _b.y - FOUNTAIN.water;
+      t = Math.min(t, g0 > 0 ? g0 / (g0 - g1) : 0);
     }
     // (the wall where it's drawn, by the arrow's point as `fly` has it: out through a gate the path just ends)
     _c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2);

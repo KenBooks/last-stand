@@ -130,6 +130,8 @@ export class LabSession {
     const layersOf = new Map();
     for (const turn of turns) {
       const side = turn.side;
+      // (a turn on a renderer of its own boots on it, `--renderers`)
+      const turnBoot = turn.renderer === undefined ? boot : { ...boot, renderer: turn.renderer };
       // (every set-up building the hero afresh, a check's: `afresh` in check.mjs `jobOf`)
       const afresh = Boolean(options.afresh) && Boolean(handler.keepsPage);
       const key = this.keyOf(side, command, options, heroClass);
@@ -150,8 +152,8 @@ export class LabSession {
       const kind = pageKind(command, options);
       const keeps = this.keepPages && kind !== null && side.pageKind === kind;
       const keeping = { used: keeps, clean: Boolean(handler.countsCompiles) };
-      if (await side.ready(heroClass, boot, keeping)) {
-        notes.push(`${turn.name}: booted the ${heroClass}${bootText(boot)} (${seconds(bootStarted)})`);
+      if (await side.ready(heroClass, turnBoot, keeping)) {
+        notes.push(`${turn.name}: booted the ${heroClass}${bootText(turnBoot)} (${seconds(bootStarted)})`);
         booting += (Date.now() - bootStarted) / 1000;
       }
       side.used = true;
@@ -228,10 +230,21 @@ export class LabSession {
   /**
    * The turns a command runs, in the order they're shown (the one compared against first), each a side, its name, the
    * screen it's put on (none: the boot's own) and what its files' names start with: this tree alone; with `--ab`, the
-   * other commit and then this tree; with `--screens`, this tree on each screen.
+   * other commit and then this tree; with `--screens`, this tree on each screen; with `--renderers`, this tree booted
+   * on each renderer (`renderer`, the boot's for that turn).
    */
   async turnsFor(options) {
     const mine = this.repoSide;
+    if (options.renderers) {
+      const screen = withInsets(options.screen, options.insets);
+      return options.renderers.map((renderer) => ({
+        side: mine,
+        name: `this tree on ${renderer}`,
+        screen,
+        filePrefix: `${renderer}-`,
+        renderer: renderer === 'webgl' ? null : renderer,
+      }));
+    }
     if (options.screens) {
       return options.screens.map((screen) => withInsets(screen, options.insets)).map((screen) => ({
         side: mine,

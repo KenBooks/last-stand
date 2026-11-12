@@ -15,6 +15,7 @@ import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { barArt, barStep, FOE_BAR, FOE_NAME, HERO_FOE_BAR } from '../ui/overlay/bars';
 import { DamageMeter } from '../ui/damageMeter';
+import { inYard } from '../game/village';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
 import { dazedStars } from '../fx/dazed';
@@ -253,8 +254,12 @@ export class Enemy {
     this.model.root.rotation.y = this.facing;
     G.scene.add(this.obj);
 
-    if (def.dummy) this.meter = new DamageMeter(def.name, () => ({ x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }));
-    else if (!this.boss) this.createBar();
+    // (in the village a dummy's readout shows while the hero is in the training yard alone: from play, "training dummy
+    // labels only should be visible when player enters the training area")
+    if (def.dummy) {
+      this.meter = new DamageMeter(def.name, () => ({ x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }),
+        () => G.arena.place !== 'village' || inYard(G.player.pos.x, G.player.pos.z));
+    } else if (!this.boss) this.createBar();
   }
 
   createBar(): void {
@@ -643,6 +648,7 @@ export class Enemy {
     }
     if (this.meter) {
       this.meter.record(amount);
+      emit('dummyHit');
       debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });
     } else if (this.life <= 0) {
       this.die(info.fling ?? flingOf(this, amount - before, info.type ?? 'physical', this.frozen > 0, info.from ?? info.by?.pos, info.blow));

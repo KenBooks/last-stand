@@ -3,6 +3,7 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
+import { reloadWithVillage } from '../core/beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
 import { serverUp, SERVER_DOWN } from '../net/transport';
@@ -26,6 +27,15 @@ import { flyingFree, toggleFree, watchedPlayer, watchNext } from '../game/specta
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** The switch offered where a room refused us for its lobby (`session.lobbyAsked`): this game loaded again in the
+ *  room's lobby (the village beta on or off) and joined to it. */
+function lobbySwitchHtml(): string {
+  if (session.lobbyAsked === null) return '';
+  const says = session.lobbyAsked ? 'Switch to the village and join' : 'Switch to the old lobby and join';
+  return `<div class="coop-offline" role="status"><p>The game reloads to switch. You can switch back in Settings, `
+    + `under Beta.</p><button class="btn primary" id="btn-coop-lobby">${says}</button></div>`;
+}
 
 /** What a player is called in co-op: its name tag (the hero's class where it has none, solo). */
 export function nameOf(p: Player): string {
@@ -133,7 +143,24 @@ function typedTag(body: HTMLElement): string | null {
   return tag;
 }
 
-function openCoop(open: boolean): void {
+/** The room dialog laid out under the loading screen as the server leaves it (`look`: nothing asked of it here, the
+ *  campfire asks as it opens it), or put away (null): first rastered at the campfire, a first visit's held Chrome
+ *  0.5 to 0.7 s; rehearsed as it is once the server's up alone, its look while it's checked (the choices dimmed)
+ *  still held it 0.26 to 1.06 s. The boot lays out each look in turn. */
+export function layOutCoopAhead(look: typeof server | null): void {
+  const was = server;
+  if (look) {
+    server = look;
+    renderCoop();
+  }
+  server = was;
+  $('#coop').classList.toggle('hidden', !look);
+}
+
+/** Whether the room dialog is up. */
+export const coopOpen = (): boolean => !$('#coop').classList.contains('hidden');
+
+export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
   if (!open) return;
   if (session.status === 'off' || session.status === 'failed') void checkServer();
@@ -158,7 +185,7 @@ export function renderCoop(): void {
       <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
       ${server === 'down' ? `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`
         : server === 'checking' ? '<p class="coop-checking" role="status">Checking the co-op server…</p>'
-        : s === 'failed' ? `<p class="coop-error" role="alert">${esc(session.error)}</p>` : ''}
+        : s === 'failed' ? `<p class="coop-error" role="alert">${esc(session.error)}</p>${lobbySwitchHtml()}` : ''}
       <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
         <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
       <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
@@ -196,6 +223,8 @@ export function renderCoop(): void {
     }
     const retry = $('#btn-coop-retry', body) as HTMLElement | null;
     if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
+    const toLobby = body.querySelector<HTMLElement>('#btn-coop-lobby');
+    if (toLobby) toLobby.onclick = () => reloadWithVillage(session.lobbyAsked === true, session.code);
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();

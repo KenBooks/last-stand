@@ -139,7 +139,8 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
   // (a first visit opens on the hero selection screen: `--hero` chosen there, else the hero in focus, as a player
   // chooses one; a return keeps him)
-  await page.evaluate(chooseIfAsked, options.hero);
+  // (watched as long again after the choice, before Start is pressed: what the choice holds up is its own phase)
+  if (await page.evaluate(chooseIfAsked, options.hero)) await page.waitForTimeout(options.seconds * 1000);
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
@@ -246,11 +247,19 @@ function distinctErrors(errors) {
   return [...told.slice(0, ERRORS_SHOWN), ...more];
 }
 
+/** An uncaught error with the function that threw it and the one under that: its message alone doesn't say where a
+ *  frame's error came from, and each frame then draws nothing (`--js` builds this tree with its functions named). */
+function errorWithPlace(error) {
+  const frames = (error.stack ?? '').split('\n').filter((line) => line.trim().startsWith('at '));
+  const named = frames.slice(0, 2).map((line) => line.trim().replace(/^at /, '').replace(/\s*\(.*\)$/, ''));
+  return named.length ? `${error} (in ${named.join(' < ')})` : String(error);
+}
+
 /** `page`'s errors kept in `errors` as they come: its uncaught ones, and those it logs (three logs a shader that
  *  failed to compile, and draws on without it). */
 function keepErrors(page, errors) {
   const keep = (text) => errors.push(text.slice(0, ERROR_CHARS));
-  page.on('pageerror', (error) => keep(String(error)));
+  page.on('pageerror', (error) => keep(errorWithPlace(error)));
   page.on('console', (message) => {
     if (message.type() === 'error') keep(`logged: ${message.text()}`);
   });

@@ -68,6 +68,23 @@ function longFramesOf(report: string): { head: string; frames: string[] } {
   return { head: lines[at], frames };
 }
 
+/**
+ * The report's boot: its long frames up to the loading screen's leaving, each named by the loading step it came in.
+ * A lab boot compiles every program behind its loading screen, so it always has some: none listed is a problem.
+ */
+function bootRead(report: string): { lines: string[]; problems: string[] } {
+  const lines = report.split('\n');
+  const at = lines.findIndex((text) => text.startsWith('Boot\'s long frames'));
+  if (at < 0) return { lines: ['the report\'s boot: none'], problems: ['the report has no boot\'s long frames'] };
+  const frames = [];
+  for (let index = at + 1; index < lines.length && lines[index].startsWith('  '); index++) frames.push(lines[index]);
+  const named = frames.filter((frame) => / at [\d.]+s \(.+\):/.test(frame));
+  const problems = [];
+  if (!frames.length) problems.push('the report\'s boot lists no long frame');
+  if (named.length < frames.length) problems.push('the report\'s boot has a frame without its time and step');
+  return { lines: [`the report's boot: ${lines[at]}`, ...frames.slice(0, 2).map((frame) => `  ${frame.trim()}`)], problems };
+}
+
 /** Each history's count of buckets, and a problem for one that hasn't `BUCKETS`. */
 function historiesRead(report: string): { lines: string[]; problems: string[] } {
   const lines: string[] = [];
@@ -94,6 +111,9 @@ export async function reportRead(canary: boolean): Promise<{ lines: string[]; pr
   await window.__labClock.realFrame();
   const report = read();
   const { lines, problems } = historiesRead(report);
+  const boot = bootRead(report);
+  lines.push(...boot.lines);
+  problems.push(...boot.problems);
   if (!ran()) problems.push('the report\'s long frames: the planted task never ran');
   const { head, frames } = longFramesOf(report);
   const listed = frames.find((frame) => isPlanted(frame, ms));

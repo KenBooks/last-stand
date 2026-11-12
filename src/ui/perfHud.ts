@@ -13,6 +13,8 @@ import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
+import { loadingLeft, loadingSteps } from './loading';
+import { isWarm, isWarming } from '../game/warm';
 import { gpuMarks, viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
@@ -91,7 +93,22 @@ const LONG_FRAMES = 'long-animation-frame';
 const longFramesSeen = (): boolean => PerformanceObserver.supportedEntryTypes?.includes(LONG_FRAMES) ?? false;
 /** each long frame in the window, by the timestamp of the frame it was seen in (the window's clock) */
 const longFrames: { seen: number; frame: LongFrame }[] = [];
+/** the boot's long frames, from the page's start to the loading screen's leaving (from play: a phone's loading froze
+ *  1 to 2 s at a time, its particles still, with the overlay hidden and its window long past by the time it shows) */
+const bootFrames: LongFrame[] = [];
+let bootLeft = Infinity;
+function watchBootFrames(): void {
+  if (!longFramesSeen()) return;
+  void loadingLeft.then(() => { bootLeft = performance.now(); });
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.startTime < bootLeft) bootFrames.push(e as unknown as LongFrame);
+    }
+  }).observe({ type: LONG_FRAMES, buffered: true });
+}
+
 function watchLongFrames(): void {
+  watchBootFrames();
   if (!longFramesSeen()) return;
   // (buffered: the boot's, from before this was set up, go to the recorder too)
   new PerformanceObserver((list) => {
@@ -209,7 +226,10 @@ export function perfLap(stage?: string): void {
 }
 // (WebGPU's `calls` counts its renders since the page started; the frame's draws are its `drawCalls`)
 const frameDraws = (): number => (WEBGPU ? (renderer.info.render as unknown as { drawCalls: number }).drawCalls : renderer.info.render.calls);
-const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${particles.glow.count + particles.smoke.count} particles, ${frameDraws()} draws`;
+// (a warm-up behind the lobby said: a phone's lobby stalled 150 to 300 ms at a time with our own work at 10 ms, and
+// the report couldn't tell whether the fight's programs were being made then)
+const frameContext = (): string => `${G.mode}${isWarming() ? ' (warming)' : ''}, ${G.enemies.length} foes, `
+  + `${particles.glow.count + particles.smoke.count} particles, ${frameDraws()} draws`;
 
 /** Call after the frame has been rendered. */
 export function perfEndFrame(): void {
@@ -431,12 +451,30 @@ function bucketMeans(points: { t: number; v: number }[]): string {
  *  timers, messages), its animation frame callbacks (the game's frame among them), style and layout, its scripts in
  *  all and the longest by what ran it. */
 function longFrameLine({ seen, frame: f }: { seen: number; frame: LongFrame }): string {
+  return frameLine(f, `at -${((frameNow - seen) / 1000).toFixed(1)}s`);
+}
+
+/** The loading screen's step showing at `at` (the page's clock). */
+const stepAt = (at: number): string => loadingSteps.filter((step) => step.at <= at).pop()?.label ?? 'before the first step';
+
+/** The boot's long frames, the worst first, each at its time from the page's start and the step showing. */
+function bootFramesText(): string[] {
+  if (!longFramesSeen()) return [];
+  const worst = [...bootFrames].sort((a, b) => b.duration - a.duration).slice(0, 8);
+  const all = bootFrames.reduce((sum, f) => sum + f.duration, 0);
+  return [`Boot's long frames (to the loading screen's leaving at ${(bootLeft / 1000).toFixed(1)}s): ${bootFrames.length},`
+    + ` ${(all / 1000).toFixed(1)} s in all`,
+  ...worst.map((f) => frameLine(f, `at ${(f.startTime / 1000).toFixed(1)}s (${stepAt(f.startTime)})`))];
+}
+
+/** A long frame's line, its time said by `when`. */
+function frameLine(f: LongFrame, when: string): string {
   const end = f.startTime + f.duration, render = f.renderStart || end, layout = f.styleAndLayoutStart || end;
   const scripts = f.scripts.reduce((sum, s) => sum + s.duration, 0);
   const longest = [...f.scripts].sort((a, b) => b.duration - a.duration)[0];
   const file = longest?.sourceURL.split('/').pop()?.split('?')[0];
   const named = longest && [longest.invoker, longest.sourceFunctionName, file].filter(Boolean).join(' ');
-  return `  ${f.duration.toFixed(0)} ms at -${((frameNow - seen) / 1000).toFixed(1)}s: before its render ${(render - f.startTime).toFixed(0)}, `
+  return `  ${f.duration.toFixed(0)} ms ${when}: before its render ${(render - f.startTime).toFixed(0)}, `
     + `frame callbacks ${(layout - render).toFixed(0)}, style and layout ${(end - layout).toFixed(0)} | scripts ${scripts.toFixed(0)}`
     + (longest ? `, the longest ${longest.duration.toFixed(0)}: ${named}` : '');
 }
@@ -470,6 +508,7 @@ function report(): string {
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used | vsync ${framesUncapped() ? 'off' : 'on'}`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
+    `Warm: the fight ${isWarm('fight') ? 'yes' : 'no'}, the heroes ${isWarm('heroes') ? 'yes' : 'no'}${isWarming() ? ', warming now' : ''}`,
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
 
     `GPU ${gpuName} | CPU cores ${navigator.hardwareConcurrency ?? '?'} | JS bench ${fmt(jsBench(), 2)} ms`,
@@ -485,6 +524,7 @@ function report(): string {
       `  ${f.frame.toFixed(1)} ms at -${((frameNow - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}${topStages(f.stages) ? ` | ${topStages(f.stages)}` : ''}`),
     `CPU p95 ${fmt(percentile(samples.map((f) => f.cpu).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...samples.map((f) => f.cpu)), 2)} | GPU p95 ${fmt(percentile(gpuTimes.map((g) => g.ms).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...gpuTimes.map((g) => g.ms)), 2)}`,
     ...longFramesText(),
+    ...bootFramesText(),
     'Update stages (ms: mean p95 max):',
     ...stageStats(),
     ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),

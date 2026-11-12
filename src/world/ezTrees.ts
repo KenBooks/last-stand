@@ -5,6 +5,7 @@
 // a height of 1 with its foot at the origin, for instancing.
 import * as THREE from 'three';
 import { Tree, TreePreset } from 'ez-tree';
+import { mulberry } from '../util';
 
 /** a tree kind: its two geometries, the bark's and the leaves', 1 high, foot at the origin */
 export interface TreeKind {
@@ -113,7 +114,18 @@ function footOf(bark: THREE.BufferGeometry, trunk: Rings): number {
   return radius;
 }
 
+/** each kind grown, by how it was asked for: the forest's and the village's trees grown once */
+const grown = new Map<string, TreeKind>();
+
+/** A kind grown (once for each way of growing it: the village shares the forest's). */
 export function growTree(g: Grow): TreeKind {
+  const key = JSON.stringify(g);
+  let kind = grown.get(key);
+  if (!kind) grown.set(key, kind = growAfresh(g));
+  return kind;
+}
+
+function growAfresh(g: Grow): TreeKind {
   const json = structuredClone(TreePreset[g.preset]) as unknown as {
     seed: number;
     branch: { levels: number; sections: Record<string, number>; segments: Record<string, number> };
@@ -166,4 +178,61 @@ export function growTree(g: Grow): TreeKind {
     }
   }
   return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach };
+}
+
+/** A leaf card's four corners and two triangles. */
+const CARD_CORNERS = 4;
+const CARD_INDICES = 6;
+
+/** The leaves of a kind with `keep` of its cards kept, picked by `seed`, each `grow` times as wide about its middle: a
+ *  card stood at the same place as the next (ez-tree's crossed pair) goes with it. Fewer layers of cards shade fewer pixels,
+ *  each pixel of a card lit whether or not another hides it (a test on its alpha holds back the depth test). */
+export function thinnedLeaves(leaves: THREE.BufferGeometry, keep: number, grow: number, seed: number): THREE.BufferGeometry {
+  const position = leaves.attributes.position as THREE.BufferAttribute;
+  const cards = position.count / CARD_CORNERS;
+  const middle = (card: number): THREE.Vector3 => {
+    const at = new THREE.Vector3();
+    for (let corner = 0; corner < CARD_CORNERS; corner++) {
+      at.x += position.getX(card * CARD_CORNERS + corner) / CARD_CORNERS;
+      at.y += position.getY(card * CARD_CORNERS + corner) / CARD_CORNERS;
+      at.z += position.getZ(card * CARD_CORNERS + corner) / CARD_CORNERS;
+    }
+    return at;
+  };
+  const crossed = cards > 1 && middle(0).distanceTo(middle(1)) < 1e-4 ? 2 : 1;
+  const rng = mulberry(seed);
+  const kept: number[] = [];
+  for (let card = 0; card < cards; card += crossed) {
+    if (rng() < keep) for (let of = 0; of < crossed; of++) kept.push(card + of);
+  }
+  const thin = new THREE.BufferGeometry();
+  for (const [name, attribute] of Object.entries(leaves.attributes)) {
+    const size = attribute.itemSize;
+    const from = attribute.array as Float32Array;
+    const to = new Float32Array(kept.length * CARD_CORNERS * size);
+    kept.forEach((card, at) => {
+      const start = card * CARD_CORNERS * size;
+      to.set(from.subarray(start, start + CARD_CORNERS * size), at * CARD_CORNERS * size);
+    });
+    thin.setAttribute(name, new THREE.BufferAttribute(to, size));
+  }
+  const grown = thin.attributes.position as THREE.BufferAttribute;
+  kept.forEach((card, at) => {
+    const about = middle(card);
+    for (let corner = 0; corner < CARD_CORNERS; corner++) {
+      const i = at * CARD_CORNERS + corner;
+      grown.setXYZ(i, about.x + (grown.getX(i) - about.x) * grow, about.y + (grown.getY(i) - about.y) * grow,
+        about.z + (grown.getZ(i) - about.z) * grow);
+    }
+  });
+  // (each card's two triangles as the first card's are, moved on to its corners)
+  const first = leaves.index ? Array.from(leaves.index.array).slice(0, CARD_INDICES) : [0, 1, 2, 2, 3, 0];
+  const index = new Uint32Array(kept.length * CARD_INDICES);
+  kept.forEach((_, at) => {
+    first.forEach((corner, i) => { index[at * CARD_INDICES + i] = at * CARD_CORNERS + corner; });
+  });
+  thin.setIndex(new THREE.BufferAttribute(index, 1));
+  thin.computeBoundingSphere();
+  thin.computeBoundingBox();
+  return thin;
 }

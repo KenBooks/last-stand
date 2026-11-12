@@ -13,8 +13,9 @@ import { Player, setActionSink, type PlayerAction } from '../entities/player';
 import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
 import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
-import { role } from './role';
-import { showBiomeSetting } from '../game/biome';
+import { readying, role } from './role';
+import { VILLAGE } from '../core/beta';
+import { ownOffset, setHostOffset } from '../game/clock';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { portraitOf, receivePortrait } from './portraits';
@@ -23,13 +24,14 @@ import { changedColour, colourOf, freeColour, ownColour, saveColour, savedColour
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, pingHeard, clearPings } from '../game/ping';
+import { showBiomeSetting } from '../game/biome';
 
 import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 30;
+const PROTOCOL = 31;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -50,6 +52,8 @@ interface Peer {
   tag: string;
   /** the colour its hero wears (net/heroColour: the host gave it) */
   colour: HeroColourId | null;
+  /** sent the start of a run and not yet in it: readying it (the host's countdown holds for it) */
+  readying: boolean;
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
@@ -72,6 +76,9 @@ export const session = {
   error: '',
   /** joining failed as the room already has our name tag: we're asked for another */
   renameAsked: false,
+  /** joining failed as the room is in the other lobby (the village beta on there and off here, or the other way):
+   *  whether the room's is the village, for the switch offered; null otherwise */
+  lobbyAsked: null as boolean | null,
   /** the local player's name tag in the room (net/nameTag) */
   tag: '',
   /** the host's peer id, on a guest */
@@ -200,6 +207,7 @@ export async function hostRoom(tag: string): Promise<void> {
   netLog(`hosting room ${session.code}`);
   session.error = '';
   session.renameAsked = false;
+  session.lobbyAsked = null;
   role.current = 'host';
   G.player.slot = 0;
   wearRoomColour(freeColour([], savedColour()));
@@ -225,6 +233,7 @@ export async function joinRoom(code: string, tag: string): Promise<void> {
   netLog(`joining room ${session.code}`);
   session.error = '';
   session.renameAsked = false;
+  session.lobbyAsked = null;
   hooks.changed();
   try {
     link = await openLink(session.code);
@@ -255,6 +264,7 @@ export function leaveRoom(): void {
   session.peers.clear();
   roomColours.clear();
   pendingColour = null;
+  syncReadying();
   session.status = 'off';
   session.hostId = '';
   session.biome = null;
@@ -267,8 +277,10 @@ export function leaveRoom(): void {
   actions = [];
   G.player.slot = 0;
   placeSpawns();
-  // back to our own battleground
-  if (G.mode === 'menu') showBiomeSetting();
+  // (the village lit by our own clock again)
+  setHostOffset(null);
+  // (the panels' lobby back on its own battleground: a guest stood on the host's)
+  if (!VILLAGE) showBiomeSetting();
   // an invite link in the address bar would join again on reload
   if (invitedRoom()) history.replaceState(null, '', location.pathname);
   hooks?.changed();
@@ -280,6 +292,7 @@ function fail(why: string, rename = false): void {
   session.status = 'failed';
   session.error = why;
   session.renameAsked = rename;
+  session.lobbyAsked = null;
   hooks.changed();
 }
 
@@ -321,6 +334,8 @@ function wire(l: Link): void {
  *  the host's slot). */
 const hello = () => ({
   v: PROTOCOL, look: myLook(), tag: session.tag, host: role.current === 'host', col: ownColour() ?? '',
+  // (the lobby this game stands in: a room is its host's, the village beta's or the panels', core/beta.ts)
+  village: VILLAGE,
   slot: session.status === 'joining' ? -1 : G.player.slot,
 });
 
@@ -338,6 +353,12 @@ function onHello(from: string, m: Record<string, unknown>): void {
     if (role.current === 'host') send('ctl', { t: 'refuse', why: 'version' }, from);
     return;
   }
+  // (a game in the other lobby: the two would stand in different places, each walking the other's hero through its
+  // own; refused, and told which lobby the room is in)
+  if (Boolean(m.village) !== VILLAGE) {
+    if (role.current === 'host') send('ctl', { t: 'refuse', why: 'lobby', village: VILLAGE }, from);
+    return;
+  }
   const look = m.look as Look;
   const tag = cleanTag(typeof m.tag === 'string' ? m.tag : '');
   if (role.current === 'host') {
@@ -352,7 +373,10 @@ function onHello(from: string, m: Record<string, unknown>): void {
     // its colour: its pick if no one in the room wears it, else one no one does (the host decides, as for the slots)
     const colour = freeColour([ownColour(), ...[...session.peers.values()].map((p) => p.colour)], colourOf(m.col));
     addPeer(from, slot, look, tag, colour);
-    const welcome = { t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, training: session.training, inRun: G.mode === 'run' };
+    const welcome = {
+      t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, training: session.training,
+      inRun: G.mode === 'run', tz: ownOffset(),
+    };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
@@ -424,6 +448,8 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.wave = m.wave as number;
       session.training = m.training === true;
       if (G.mode === 'menu' && BIOME_IDS.includes(session.biome)) G.arena.setBiome(session.biome);
+      // (the village lit by the host's clock: the party stands in the same light)
+      if (typeof m.tz === 'number') setHostOffset(m.tz);
       placeSpawns();
       // step over to our side of the spawn
       if (G.mode === 'menu') G.player.place(G.player.spawn, G.player.facing);
@@ -433,13 +459,20 @@ function onControl(from: string, m: Record<string, unknown>): void {
       hooks.changed();
     } else if (m.t === 'refuse') {
       netLog(`refused: ${String(m.why)}`);
-      if (m.why === 'name') fail(`Someone in that room is already called ${session.tag}: pick another name tag to join.`, true);
+      if (m.why === 'lobby') {
+        const village = Boolean(m.village);
+        fail(village ? 'That room is in the village, a beta lobby you have switched off.'
+          : 'That room is in the old lobby: its host has the village beta switched off.');
+        session.lobbyAsked = village;
+        hooks.changed();
+      } else if (m.why === 'name') fail(`Someone in that room is already called ${session.tag}: pick another name tag to join.`, true);
       else fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
     } else if (m.t === 'lobby') {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
       session.training = m.training === true;
       if (G.mode === 'menu') G.arena.setBiome(session.biome);
+      if (typeof m.tz === 'number') setHostOffset(m.tz);
       hooks.changed();
     } else if (m.t === 'foes' && from === session.hostId) {
       foesTold(m.list as SpawnEvent[]);
@@ -456,8 +489,13 @@ function onControl(from: string, m: Record<string, unknown>): void {
     if (list.length) send('ctl', { t: 'foes', list }, from);
     return;
   }
-  // host: a guest's choices in the run
+  // host: a guest in the run it was sent (its countdown held till then), or its choices in the run
   const peer = session.peers.get(from);
+  if (m.t === 'inrun') {
+    if (peer) peer.readying = false;
+    syncReadying();
+    return;
+  }
   if (peer?.player) onGuestControl(peer.player, m);
 }
 
@@ -591,7 +629,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 function addPeer(id: string, slot: number, look: Look, tag: string, colour: HeroColourId | null): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, tag, colour, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, tag, colour, player: null, look, inRun: false, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [],
   };
   session.peers.set(id, peer);
@@ -631,6 +669,8 @@ function peerLeft(id: string): void {
   dropPlayer(peer);
   session.peers.delete(id);
   if (role.current === 'host') publishColours();
+  // (a guest gone while it readied the run isn't waited for)
+  syncReadying();
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }
   hooks.changed();
 }
@@ -667,16 +707,31 @@ export function sendLook(): void { send('look', myLook()); }
 export function sendLobby(biome: BiomeId, wave: number, training = false): void {
   session.wave = wave;
   session.training = training;
-  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave, training });
+  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave, training, tz: ownOffset() });
 }
 
 /** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */
 export function sendStart(biome: BiomeId, wave: number, seed: number, training = false): void {
   if (role.current !== 'host') return;
-  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave, seed, training }, peer.id);
+  for (const peer of session.peers.values()) {
+    if (peer.inRun) continue;
+    send('ctl', { t: 'start', biome, wave, seed, training }, peer.id);
+    peer.readying = true;
+  }
   // they're in from now on (their reports will say so too)
   for (const peer of session.peers.values()) peer.inRun = true;
   syncAway();
+  syncReadying();
+}
+
+/** A guest: our run begun as the host's start asked (its fight's programs warm): the host's countdown goes on. */
+export function sendInRun(): void { sendControl({ t: 'inrun' }); }
+
+/** The guests still readying the run the host started, for its countdown (net/role.ts `readying`). */
+function syncReadying(): void {
+  readying.guests = [...session.peers.values()]
+    .filter((peer) => peer.readying)
+    .map((peer) => peer.player?.cls.name ?? 'a partner');
 }
 
 /** A guest's choice in the run, for the host. */

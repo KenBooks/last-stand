@@ -39,6 +39,14 @@ test('reads a screen, its pixel ratio 1 when left out', () => {
   assert.throws(() => parseCommandLine(['sheet', '--screen', '1280*720']), /--screen: a size and pixel ratio/);
 });
 
+test('reads two renderers, and takes no --ab, --screens or --renderer with them', () => {
+  assert.deepEqual(parseCommandLine(['village', '--renderers', 'webgl,webgpu']).options.renderers, ['webgl', 'webgpu']);
+  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl']), /--renderers: two of them/);
+  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl,vulkan']), /--renderers/);
+  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl,webgpu', '--ab']), /takes no --ab/);
+  assert.throws(() => parseCommandLine(['village', '--renderers=webgl,webgpu', '--renderer=webgpu']), /no --renderer/);
+});
+
 test('reads two screens, and takes no --ab or --screen with them', () => {
   assert.deepEqual(parseCommandLine(['probe', 'x.ts', '--screens', '3840x2160@1,1280x720@3']).options.screens,
     [{ width: 3840, height: 2160, ratio: 1 }, { width: 1280, height: 720, ratio: 3 }]);

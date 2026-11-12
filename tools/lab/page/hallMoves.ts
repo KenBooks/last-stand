@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
+import { pressHeld } from './holdPress';
 import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
@@ -18,6 +19,7 @@ import type { Model } from '../../../src/types';
 import { realWait, type Lab, type Report } from './lab';
 import { ABANDON_HOLD_MS } from '../../../src/ui/menus';
 import { OpenTones } from './soundsLeft';
+import * as heroesUi from './uiHeroes';
 
 /** What `lab hall` takes. */
 export interface HallOptions {
@@ -117,9 +119,11 @@ async function holdDown(lab: Lab, element: Element, ms: number): Promise<void> {
   await lab.mouseUp(at);
 }
 
-/** The hall opened from the lobby (Change hero), waited for until it's up. */
+/** The hall opened from the lobby (Change hero: in the village's pause menu, Esc first; an older tree's lobby shows
+ *  it, `changeHeroLink` missing there), waited for until it's up. */
 export async function openHall(lab: Lab): Promise<boolean> {
-  const button = document.getElementById('btn-hero');
+  const link = (heroesUi as { changeHeroLink?: (lab: Lab) => Promise<HTMLElement | null> }).changeHeroLink;
+  const button = link ? await link(lab) : document.getElementById('btn-hero');
   if (!button) return false;
   await lab.clickOn(button);
   // Preparing a new geometry detail waits on real worker replies as well as the game's parked frames.

@@ -79,7 +79,10 @@ a frame's change anywhere sent every later stride elsewhere, and a change's gall
 check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the same from any
 moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is added up over a
 hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's (`hops 2
-(048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it.
+(048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it. A failed
+job's line says why, its first problem (cut to 200 characters, and how many more), and the log's last lines list every
+failed job again with its reason (`whyFailed`): a line that said `FAILED` alone sent whoever watched the log, a lent
+PC's console among them, to its report to learn anything ("I think we need better logging").
 
 ## What it takes
 

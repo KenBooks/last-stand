@@ -49,7 +49,7 @@ interface Timer {
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /** The GPU's timer on `renderer`'s context, or null. */
-function timerOf(renderer: THREE.WebGLRenderer): Timer | null {
+export function timerOf(renderer: THREE.WebGLRenderer): Timer | null {
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   return ext ? { gl, ext } : null;
@@ -85,7 +85,7 @@ async function timeOf(timer: Timer, query: WebGLQuery): Promise<number | null> {
 }
 
 /** The median of `values`, or 0 with none. */
-function medianOf(values: number[]): number {
+export function medianOf(values: number[]): number {
   return values.length ? quantile([...values].sort((a, b) => a - b), 0.5) : 0;
 }
 
@@ -97,6 +97,12 @@ async function timesOf(timer: Timer, queries: WebGLQuery[]): Promise<number[]> {
     if (took !== null) times.push(took);
   }
   return times;
+}
+
+/** `count` renders by `draw`, sent back to back, each timed; the times that came back. */
+export function timedRenders(timer: Timer, draw: () => void, count: number): Promise<number[]> {
+  const queries = Array.from({ length: count }, () => queried(timer, draw));
+  return timesOf(timer, queries);
 }
 
 /** a median's standard error over a normal spread's, and a normal spread's over its median deviation */

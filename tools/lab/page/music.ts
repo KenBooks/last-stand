@@ -12,7 +12,8 @@ import { BIOMES } from '../../../src/data/biomes';
 import { FADES } from '../../../src/data/music';
 import { RUN } from '../../../src/data/balance';
 import { musicShown } from '../../../src/core/music';
-import { setBiomeSetting } from '../../../src/game/biome';
+// (an older tree's lobby stood in a biome picked by its setting; this one's, in the village, by the portal's)
+const BIOME_SETTING = import.meta.glob<{ setBiomeSetting(b: BiomeId): void }>('../../../src/game/biome.ts');
 import { MusicJudge, type Wanted } from './musicJudge';
 import { realWait } from './lab';
 import { Ears, SourceLog } from './musicTap';
@@ -184,7 +185,9 @@ async function winTheWave(listening: Listening): Promise<void> {
 /** The biome's lobby: switched to, its track decoded and faded in. */
 async function lobby(listening: Listening, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s lobby`);
-  setBiomeSetting(biome);
+  const setting = Object.values(BIOME_SETTING)[0];
+  if (setting) (await setting()).setBiomeSetting(biome);
+  else G.arena.setBiome(biome);
   await listening.decoded(EXPECTED[biome].lobby, DECODE_LIMIT_MS);
   await listening.frames(framesOf(LOBBY_SECONDS));
   await listening.listen();

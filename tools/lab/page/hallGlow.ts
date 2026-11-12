@@ -56,7 +56,7 @@ const FLARE_MOST = 1.25;
 const GLOWING_LEAST = 0.3;
 
 /** One frame's light in the box. */
-interface FrameGlow {
+export interface FrameGlow {
   frame: number;
   nearWhite: number;
   mean: number;
@@ -66,7 +66,7 @@ interface FrameGlow {
 }
 
 /** The light of a box of the canvas: its near white share, its mean and its brightest, and how much of it glows. */
-function glowOf(canvas: Canvas, frame: number): FrameGlow {
+export function glowOf(canvas: Canvas, frame: number): FrameGlow {
   const pixels = canvas.width * canvas.height;
   let nearWhite = 0;
   let glowing = 0;
@@ -84,7 +84,7 @@ function glowOf(canvas: Canvas, frame: number): FrameGlow {
 
 /** The canvas's box `across` m wide round `point` as the game's camera sees it (drawing buffer pixels, from its
  *  bottom left), kept inside the canvas. */
-function boxRound(point: THREE.Vector3, across: number): CanvasBox {
+export function boxRound(point: THREE.Vector3, across: number): CanvasBox {
   const camera = G.camera as THREE.PerspectiveCamera;
   const { width, height } = canvasSize();
   const distance = point.distanceTo(camera.position);
@@ -99,7 +99,7 @@ function boxRound(point: THREE.Vector3, across: number): CanvasBox {
 }
 
 /** `canvas` (rows from the bottom, encoded channels) as a picture. */
-function tileOf(view: string, canvas: Canvas): Tile {
+export function tileOf(view: string, canvas: Canvas): Tile {
   const { width, height, pixels } = canvas;
   const image = new ImageData(width, height);
   for (let y = 0; y < height; y++) {
@@ -121,7 +121,7 @@ function tileOf(view: string, canvas: Canvas): Tile {
 
 /** The gems under `tip` that glow (a physical material with a glow of its own, not a glow alone as the crystal's
  *  rings are): the staff's crystal. */
-function glowingGemsUnder(tip: THREE.Object3D): THREE.MeshPhysicalMaterial[] {
+export function glowingGemsUnder(tip: THREE.Object3D): THREE.MeshPhysicalMaterial[] {
   const found = new Set<THREE.MeshPhysicalMaterial>();
   tip.traverse((object) => {
     const material = (object as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined;
@@ -140,7 +140,7 @@ const MAINS_POLISH = { roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0, spe
 
 /** Each of `gems` lit as main lit the crystal: its colour its glow's hue, its brightest channel full (main's crystal
  *  was 0xff4fd8 both ways), and polished as main's; returns a way to put them back. */
-function lightAsMain(gems: THREE.MeshPhysicalMaterial[]): () => void {
+export function lightAsMain(gems: THREE.MeshPhysicalMaterial[]): () => void {
   const kept = gems.map((gem) => ({
     colour: gem.color.clone(),
     roughness: gem.roughness,
@@ -262,7 +262,7 @@ export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Repo
 }
 
 /** The middle of `values`. */
-function medianOf(values: number[]): number {
+export function medianOf(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }

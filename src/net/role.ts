@@ -13,6 +13,8 @@ export const role = { current: 'solo' as Role };
 export const isCoop = (): boolean => role.current !== 'solo';
 export const isGuest = (): boolean => role.current === 'guest';
 export const isHost = (): boolean => role.current === 'host';
+/** The guests a host started a run with that aren't in it yet (still readying it: net/session.ts), by name. */
+export const readying = { guests: [] as string[] };
 
 /** This game runs the world: always in the lobby (each practises on its own dummies), in a run unless a guest. */
 export const simulates = (): boolean => G.mode === 'menu' || role.current !== 'guest';

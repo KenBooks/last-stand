@@ -111,6 +111,16 @@ export const RUSH_PARTS = [
   { part: 'shield-casts', options: { scenarios: ['casts'], gear: 'shield' } },
   { part: 'dual-casts', options: { scenarios: ['casts'], gear: 'dual' } },
 ];
+/**
+ * the commands a check runs only when `--commands` names them, and the heroes each is for: the village's checks, the
+ * hero `lab village` boots by default (the ranger: the fountain's arrows need his bow)
+ */
+export const CHECK_NAMED = { village: ['ranger'] };
+/**
+ * how many shards the village's checks are run in, a job each (`lab village --shard k/n`): one after another on one
+ * page, the whole took over half an hour on the 4080
+ */
+export const VILLAGE_SHARDS = 8;
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
@@ -174,7 +184,16 @@ function partsOf(command, starts) {
   if (command === 'eyes') return eyesParts();
   if (command === 'cast') return castParts();
   if (command === 'rush') return RUSH_PARTS;
+  if (command === 'village') return villageParts();
   return [null];
+}
+
+/** The village's shards, a part each (`3of8`, `lab village --shard 3/8`). */
+export function villageParts(shards = VILLAGE_SHARDS) {
+  return Array.from({ length: shards }, (_, index) => {
+    const shard = `${index + 1}/${shards}`;
+    return { part: `${index + 1}of${shards}`, options: { shard } };
+  });
 }
 
 /**
@@ -208,7 +227,7 @@ export function jobsOf(options, plan = CHECK_PLAN) {
   if (options.ab) base.ab = options.ab;
   const jobs = [];
   for (const command of commands) {
-    const heroes = (plan[command] ?? classes).filter((hero) => classes.includes(hero));
+    const heroes = (plan[command] ?? CHECK_NAMED[command] ?? classes).filter((hero) => classes.includes(hero));
     const parts = partsOf(command, options.starts);
     for (const heroClass of heroes) {
       for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
@@ -289,13 +308,30 @@ function otherName(job) {
   return String(job.options.ab ?? 'the other').slice(0, 7);
 }
 
-/** What a job's report says in one line: its time, the A/B's verdict, its counts, and whether it failed. */
+/** the most of a failed job's first problem its line says (its report has the rest) */
+const WHY_CHARS = 200;
+
+/**
+ * Why a failed job failed, for its line: its first problem, cut to `WHY_CHARS`, and how many more. A line that said
+ * FAILED alone sent whoever watched it (a lent PC's console) to the report to learn anything (from the owner, "I think
+ * we need better logging").
+ */
+export function whyFailed(problems) {
+  if (!problems.length) return '';
+  const first = problems[0].split('\n')[0];
+  const cut = first.length > WHY_CHARS ? `${first.slice(0, WHY_CHARS - 1)}…` : first;
+  const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
+  return `: ${cut}${more}`;
+}
+
+/** What a job's report says in one line: its time, the A/B's verdict, its counts, and whether it failed and why. */
 function verdictOf(job, result) {
   const verdict = result.text.match(/^A\/B: .*$/m)?.[0] ?? '';
   const counts = countsLine(countsOver([result]), otherName(job));
   const state = result.ok ? 'ok' : 'FAILED';
   const tail = [verdict, counts].filter(Boolean).map((part) => `; ${part}`).join('');
-  return `${job.name}: ${state} in ${result.seconds.toFixed(0)} s${tail}`;
+  const why = result.ok ? '' : whyFailed(result.problems);
+  return `${job.name}: ${state} in ${result.seconds.toFixed(0)} s${tail}${why}`;
 }
 
 /**
@@ -326,18 +362,21 @@ async function runJob(session, job, started) {
   let ok;
   let counts = [];
   let booting = 0;
+  let problems = [];
   try {
     const ran = await session.run({ command: job.command, options: job.options });
     text = ran.text;
+    problems = ran.problems;
     ok = ran.problems.length === 0;
     counts = ran.counts;
     booting = ran.booting;
   } catch (error) {
     text = describeError(error);
+    problems = [text];
     ok = false;
   }
   const seconds = (Date.now() - jobStarted) / 1000;
-  const result = { job, seconds, ok, text, counts, booting };
+  const result = { job, seconds, ok, text, counts, booting, problems };
   if (!job.part && !isStopping()) {
     writeFileSync(join(CHECK_DIR, `${job.name}.txt`), text);
     logLine(started, verdictOf(job, result));
@@ -393,7 +432,9 @@ function joinParts(done, order, started) {
     const state = failed.length ? `FAILED (${failed.join(', ')})` : 'ok';
     const lines = parts.reduce((sum, part) => sum + differing(part.text), 0);
     const tail = [`A/B: ${lines} lines differ`, counts].filter(Boolean).join('; ');
-    logLine(started, `${group}: ${state}, ${parts.length} runs in ${seconds.toFixed(0)} s; ${tail}`);
+    const firstFailed = parts.find((part) => !part.ok);
+    const why = firstFailed ? whyFailed(firstFailed.problems ?? []) : '';
+    logLine(started, `${group}: ${state}, ${parts.length} runs in ${seconds.toFixed(0)} s; ${tail}${why}`);
   }
 }
 
@@ -497,6 +538,8 @@ export async function runCheck(options) {
   const failed = done.filter((result) => !result.ok);
   const shown = relative(REPO, CHECK_DIR).split('\\').join('/');
   logLine(started, `done: ${done.length - failed.length} ok, ${failed.length} failed; the reports in ${shown}`);
+  // (each failed job again with why, where the end of the log is all that's read)
+  for (const result of failed) logLine(started, `  ${result.job.name}${whyFailed(result.problems ?? [])}`);
   const unlike = options.like ? logLikeness(jobs, options.like, started) : 0;
   return failed.length || unlike ? 1 : 0;
 }

@@ -58,3 +58,10 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
 };
 
 export const BIOME_IDS = Object.keys(BIOMES) as BiomeId[];
+
+/** A place the arena shows: a biome a run is fought in, or the village the lobby stands in (data/village.ts). */
+export type PlaceId = BiomeId | 'village';
+
+/** The shape of a place's wall: the crypt's octagon, a ring (the thicket's), or none but what's built (the village's
+ *  palisade and its entrances, `free`). */
+export const wallShape = (place: PlaceId): 'octagon' | 'circle' | 'free' => (place === 'village' ? 'free' : BIOMES[place].minimap.wall);

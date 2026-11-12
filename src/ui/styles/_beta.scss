@@ -1,0 +1,39 @@
+// The village lobby's beta (core/beta.ts, ui/beta.ts), in both lobbies: the notice shown as the game opens with it on,
+// and the pause menu's Beta page, where it's switched.
+@use 'theme' as *;
+
+/* ---------- the notice: at the top's middle, under where the full screen prompt shows (_pwa.scss `#full-prompt`, 12 px
+   down and some 46 tall in the same zoom, which scales this one's offset too), so both fit at once ---------- */
+/* (within the window on a phone: its words wrap, and its buttons after them) */
+#beta-notice { position: fixed; top: 64px; left: 50%; translate: -50% 0; z-index: 101; box-sizing: border-box;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px;
+  width: max-content; max-width: calc((100vw - 16px) / var(--ui, 1)); padding: 8px 10px 8px 14px; font-size: 14px; color: var(--ink);
+  background: linear-gradient(rgba(20,17,16,.97), rgba(8,7,8,.97)); border: 1px solid var(--frame);
+  box-shadow: 0 6px 18px rgba(0,0,0,.7); zoom: var(--ui, 1); animation: beta-in .35s ease-out; }
+#beta-notice.hidden { display: none; }
+#beta-notice b { margin-right: 6px; padding: 1px 7px; font: 700 11px var(--font-display); letter-spacing: 1.5px; text-transform: uppercase;
+  color: #1a1206; background: var(--accent); border-radius: 9px; }
+#beta-notice .btn { padding: 5px 12px; font-size: 13px; }
+#beta-notice .bn-close { width: 28px; padding: 5px 0; line-height: 1; }
+/* (a finger's size on touch: --ui zooms it, so the floor is over it) */
+body.touch #beta-notice .btn { min-height: calc(40px / var(--ui, 1)); }
+body.touch #beta-notice .bn-close { min-width: calc(40px / var(--ui, 1)); }
+@keyframes beta-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #beta-notice { animation: none; } }
+
+/* ---------- the pause menu's Beta page ---------- */
+/* (one column, across the page's two) */
+.pb-opts .beta-col { grid-column: 1 / -1; }
+.beta-col { display: flex; flex-direction: column; align-items: flex-start; }
+.beta-lead, .beta-note { max-width: 46ch; margin: 0 0 10px; font-size: 12px; line-height: 1.4; color: var(--ink-dim); }
+#beta-state { font-size: 12px; color: var(--ink-dim); }
+/* what's switched differs from the lobby running: noticed, with its Reload */
+#beta-apply { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px; font-size: 13px;
+  border: 1px solid rgba($accent, .55); background: rgba($highlight, .06); }
+#beta-apply.hidden { display: none; }
+#beta-apply .btn { flex: none; padding: 5px 14px; font-size: 13px; }
+/* short screens (phones held sideways): tighter, as the page's other rows (_modals.scss) */
+@media (max-height: 520px) {
+  .beta-lead, .beta-note { margin-bottom: 5px; font-size: 11px; line-height: 1.3; }
+  #beta-apply { margin-top: 5px; padding: 4px 8px; gap: 8px; }
+}

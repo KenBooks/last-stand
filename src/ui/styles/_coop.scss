@@ -82,6 +82,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 .coop-wait { color: var(--ink-dim); }
 @media (max-width: 560px) { .coop-choice { flex-direction: column; } }
 @media (max-height: 520px) { .coop-body { gap: 6px; } .coop-intro { font-size: 13px; } #coop .sm-title { font-size: 24px; } .coop-col { padding: 8px; } .coop-code { font-size: 24px; } }
+// (a phone held sideways with the browser's bars, 298 css px tall: asked to rename, the dialog scrolled 16 px)
+@media (max-height: 340px) { #coop .modal-box { padding-top: 12px; padding-bottom: 12px; } .coop-body { gap: 4px; } #coop .sm-title { font-size: 20px; } }
 
 /* the partners' frames, top left (below the bars on touch) */
 #party { position: absolute; top: hud(14px); left: calc(#{hud(14px)} + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }

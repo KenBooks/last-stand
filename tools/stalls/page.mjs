@@ -149,8 +149,9 @@ export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFra
   };
   window.__stalls = record;
   console.timeStamp(mark);
+  // (each once: a phase pushed by a step of the run's own, the hero chosen, isn't taken back by the loading screen's)
   const phase = (name) => {
-    if (record.phases[record.phases.length - 1].name !== name) record.phases.push({ name, at: performance.now() });
+    if (!record.phases.some((each) => each.name === name)) record.phases.push({ name, at: performance.now() });
   };
   let last = record.start;
   const tick = (now) => {
@@ -240,13 +241,17 @@ export function focusHero(hero) {
 }
 
 /** `hero` (or the hero in focus) chosen where the hero selection screen is up, as a first visit's player chooses one
- *  before the lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
+ *  before the lobby: whether it was. The choice is a phase of the boot's (`bootRecording`): from play, "insane slowdown
+ *  when choosing a hero upon first entry into the game, on phone and low end devices", read within the reveal's phase,
+ *  the Start pressed after it, it couldn't be told apart. (Run in the page, alone: `heroesShown`'s test written again.)
+ */
 export function chooseIfAsked(hero) {
   const screen = document.getElementById('heroes');
   if (!screen || !screen.checkVisibility()) return false;
   // (his name brings him into focus; clicked while he's in focus already, it chooses him, so only when he isn't)
   const name = hero ? screen.querySelector(`.hs-tabs [data-c="${hero}"]`) : null;
   if (name && !name.classList.contains('active')) name.click();
+  window.__stalls?.phases.push({ name: `${hero ?? 'the hero in focus'} chosen`, at: performance.now() });
   // (the choice on him is a label the pointer goes through: Enter chooses the hero in focus, as in every tree)
   for (const type of ['keydown', 'keyup']) {
     window.dispatchEvent(new KeyboardEvent(type, { code: 'Enter', key: 'Enter' }));

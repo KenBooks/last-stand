@@ -8,6 +8,7 @@ import { DEVICES, screenPlaying } from './devices.mjs';
 import { labError } from './errors.mjs';
 import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
+import { villageSince } from './villageSince.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { pictureUrl } from './pictureFile.mjs';
 import { writeSheet, writeStack } from './sheetImage.mjs';
@@ -724,6 +725,8 @@ export const COMMANDS = {
       if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
       if (options.quality !== undefined) qualityOf(options.quality);
       if (options.device) playAsDevice(options);
+      if (!options.village && options._.length === 0) throw labError('perf needs its skills (or --village)');
+      if (options.spin && !options.village) throw labError('perf --spin: with --village');
     },
     each(side, options) {
       const device = options.device ? DEVICES[options.device] : undefined;
@@ -735,7 +738,7 @@ export const COMMANDS = {
           screen: device.screen,
           pageWork: device.pageWork,
         },
-        casts: options._[0].split(','),
+        casts: options._[0]?.split(',') ?? [],
         biome: options.biome ?? 'forest',
         view: options.view ?? 'top',
         facing: options.facing ?? 0,
@@ -749,6 +752,10 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         lobby: Boolean(options.lobby),
         canary: Boolean(options.canary),
+        village: Boolean(options.village),
+        parts: Boolean(options.parts),
+        hour: options.hour,
+        spin: Boolean(options.spin),
       };
       return side.command('perf', command);
     },
@@ -1259,7 +1266,8 @@ export const COMMANDS = {
 
   programs: {
     each(side, options) {
-      const asked = { canary: Boolean(options.canary), cost: Boolean(options.cost), limits: Boolean(options.limits) };
+      const asked = { canary: Boolean(options.canary), cost: Boolean(options.cost), limits: Boolean(options.limits),
+        of: options.of ?? '' };
       return side.command('programs', asked);
     },
     textOf: asText,
@@ -1366,6 +1374,32 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  village: {
+    check(options) {
+      if (!options.since) return;
+      if (options.only) throw labError('village --since: it chooses the checks itself; no --only');
+      const chosen = villageSince(options.since, REPO);
+      for (const line of chosen.why) console.log(`lab: village --since ${options.since}: ${line}`);
+      if (!chosen.all && chosen.names.length === 0) {
+        throw labError(`village --since ${options.since}: nothing changed that a check reads`);
+      }
+      const said = chosen.all ? 'every check' : `${chosen.names.length} checks: ${chosen.names.join(', ')}`;
+      console.log(`lab: village --since ${options.since}: ${said}`);
+      // (each by its whole name: `only` takes any name with one of these in it)
+      options.only = chosen.all ? undefined : chosen.names.join(',');
+    },
+    each(side, options) {
+      const { only, shard } = options;
+      return side.command('village', { canary: Boolean(options.canary), only, shard, times: Boolean(options.times) });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('village'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   columns: {
     each(side, options) {
       return side.command('columns', { seeds: options.seeds?.map(Number), canary: Boolean(options.canary) });
@@ -1394,6 +1428,8 @@ export const COMMANDS = {
         count: options.count === undefined ? undefined : Math.round(options.count),
         rows: options.rows === undefined ? undefined : Math.round(options.rows),
         biome: options.biome,
+        village: Boolean(options.village),
+        hour: options.hour,
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);
@@ -1667,6 +1703,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  parity: {
+    each(side, options) {
+      return side.command('parity', { scenes: options.scenes, hours: options.hours?.map(Number) });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('parity'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   coat: {
     each(side, options) {
       const command = {
@@ -1749,6 +1797,11 @@ export const COMMANDS = {
     each(side, options) {
       if (options.coop) return runTrainingCoop(side, options);
       return side.command('training', { canary: Boolean(options.canary) });
+    },
+    // (its moments written: the ghost's card at the yard's gate, the projections, the wave cleared)
+    finish(results, options, session) {
+      if (options.coop) return results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+      return textWithMoments(results, session.outFor('training'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

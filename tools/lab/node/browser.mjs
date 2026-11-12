@@ -20,11 +20,14 @@ const CHANNELS = ['chromium', 'msedge', 'chrome'];
 
 /**
  * The GPU's flags: the machine's own graphics through ANGLE (Direct3D 11 on Windows, Metal on macOS; elsewhere the
- * browser's own choice), and the GPU used even where the browser's blocklist would turn it off.
+ * browser's own choice), and the GPU used even where the browser's blocklist would turn it off. A page that lost its
+ * context isn't then refused another: with eight browsers booting at once on a lent PC, a boot lost its context and
+ * Chrome blocked the page from WebGL till the browser closed ("Web page caused context loss and was blocked"), so
+ * the boot tried again failed too, two shards of a check's eight.
  */
 function gpuArgs() {
   const angle = { win32: 'd3d11', darwin: 'metal' }[process.platform];
-  const args = ['--enable-gpu', '--ignore-gpu-blocklist'];
+  const args = ['--enable-gpu', '--ignore-gpu-blocklist', '--disable-domain-blocking-for-3d-apis'];
   if (angle) args.unshift(`--use-angle=${angle}`);
   return args;
 }

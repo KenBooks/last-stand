@@ -60,18 +60,24 @@ function bootOutcome(cold) {
  * not (`bootOutcome`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
  * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too. It
- * draws with `renderer`: WebGL, WebGPU or WebGPU with its GPU-driven drawing (`RENDERER_QUERIES`).
+ * draws with `renderer`: WebGL, WebGPU or WebGPU with its GPU-driven drawing (`RENDERER_QUERIES`). Its lobby is the
+ * village, the beta a player opts into (`src/core/beta.ts`, by its cookie), or with `panels` the lobby as it is
+ * without it.
  */
-export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, renderer: 'webgl' });
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, renderer: 'webgl', panels: false });
+
+/** the cookie that keeps the village beta's choice (`src/core/beta.ts`) */
+const VILLAGE_COOKIE = 'last-stand-beta-village';
 
 /** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
 const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1' };
 
-/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`). */
+/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`, `--panels`). */
 export function bootOf(options) {
   const first = Boolean(options.first);
   const renderer = options.renderer ?? 'webgl';
-  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, renderer };
+  const panels = Boolean(options.panels);
+  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, renderer, panels };
 }
 
 /** The renderer `boot` draws with (a boot from before `--renderer`: WebGL). */
@@ -94,7 +100,9 @@ export function bootText(boot) {
 /** Whether two boots are the same. */
 function sameBoot(a, b) {
   const sameRenderer = rendererOf(a) === rendererOf(b);
-  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameRenderer;
+  const sameLobby = Boolean(a.panels) === Boolean(b.panels);
+  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameRenderer
+    && sameLobby;
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -169,6 +177,10 @@ export function unwatched(root, path) {
   const relative = toSlashes(path).toLowerCase().slice(toSlashes(root).toLowerCase().length + 1);
   return UNWATCHED.some((folder) => relative === folder || relative.startsWith(`${folder}/`));
 }
+/** what the loading screen says where the page has no WebGL 2 (src/ui/loading.ts) */
+const NO_WEBGL = 'does not support WebGL 2';
+/** how a boot that failed on the page says so (`openPageIn`) */
+const BOOT_FAILED = 'the game failed to boot';
 /** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
 const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 
@@ -557,7 +569,18 @@ export class Side {
     this.errors = [];
     this.stale = false;
     this.used = false;
-    this.page = await this.openPageIn(this.context, heroClass, '', how);
+    try {
+      this.page = await this.openPageIn(this.context, heroClass, '', how);
+    } catch (error) {
+      if (!String(error.message).includes(BOOT_FAILED)) throw error;
+      // (the GPU's process now and then gives a page no WebGL 2, or loses its context mid-boot, with eight browsers
+      // booting at once, as a check's sessions do on a lent PC: one shard of eight failed so, run after run; the next
+      // boot has it. A boot that fails for the tree's own fault fails again)
+      const why = String(error.message).includes(NO_WEBGL) ? 'found no WebGL 2' : 'failed';
+      console.log(`lab: a boot ${why}, booting again (${heroClass})`);
+      this.errors = [];
+      this.page = await this.openPageIn(this.context, heroClass, '', how);
+    }
   }
 
   /**
@@ -599,7 +622,7 @@ export class Side {
    * side's (each after `prefix`), booted as `how` asks: at its `quality`, set as the player's setting.
    */
   async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
-    const { quality, cold, first } = how;
+    const { quality, cold, first, renderer, panels } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
@@ -608,7 +631,7 @@ export class Side {
     const settled = quality ? { 'last-stand-quality': quality.split('@')[0] } : {};
     // (a first visit's has no saved hero: the game boots its default one, and opens on the hero selection screen)
     const hero = first ? {} : { 'last-stand-class': heroClass };
-    const cookies = { ...BOOT_COOKIES, ...settled, ...hero };
+    const cookies = { ...BOOT_COOKIES, [VILLAGE_COOKIE]: panels ? '0' : '1', ...settled, ...hero };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
     // (the maps made once kept in the context's store, under a name for their code: src/core/kept.ts `keepAs`)
@@ -656,6 +679,7 @@ export class Side {
         return loading?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 600) ?? 'loading screen gone';
       }).catch(() => 'page not responding');
       const errors = this.errors.slice(-4).join(' | ');
+      await page.close().catch(() => undefined);
       throw labError(`${error.message}; boot stage: ${stage}; page errors: ${errors}`);
     } finally {
       failed.stop();

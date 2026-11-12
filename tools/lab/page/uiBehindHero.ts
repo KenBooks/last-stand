@@ -187,6 +187,9 @@ async function judgeMeters(lab: Lab, canary: boolean, tally: Tally): Promise<voi
       for (const back of BACKS) {
         const { meter, body, shown } = await placeBefore(lab, label, at, back, canary);
         if (!Number.isFinite(body.top) || meter.right <= meter.left) continue;
+        // (a meter off the screen's top or left is judged by nothing: stood that far before a dummy in the village,
+        // he's out of its yard, where the meters are put away and their boxes lie off the screen)
+        if (meter.bottom < 0 || meter.right < 0) continue;
         const into = reach(meter, body);
         const where = `${back} m before it: the meter ${boxText(meter)}, his body ${boxText(body)}`;
         if (into >= EDGE) {

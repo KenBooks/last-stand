@@ -1,4 +1,6 @@
-// The lobby: layout, class card, records, options, equipment, stats, stash and its filter.
+// The lobby, the panels' and the village's (index.html `data-lobby`: `$panels`, `$village` in _theme.scss): layout,
+// class card, records, options, equipment, stats, stash and its filter; the village's crest and the card one of its
+// objects opens.
 @use 'theme' as *;
 @use 'mixins' as *;
 
@@ -9,29 +11,47 @@
    stash scrolling. Lobby scrollbars are thin and in the frame's colour. */
 #menu { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); gap: 16px; align-items: stretch; padding: 0; pointer-events: none;
   scrollbar-color: rgba($frame, .55) transparent; }
+/* the village's: [center column] [right panel: the inventory], and only while it's open (I, or the chest:
+   ui/menus.ts `openPanels`); the crest over the top middle */
+#{$village} #menu { grid-template-columns: minmax(0, 1fr) auto; }
 .menu-left { align-self: start; max-height: 100%; }
 .menu-right { align-self: stretch; }
 .menu-center { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
 #menu .panel { pointer-events: auto; }
+/* (laid out over the loading screen unseen: ui/menus.ts layOutMenuAhead) */
+#menu.ahead { z-index: 101; opacity: .004; }
+#menu.ahead .panel { pointer-events: none; }
 .menu-left { position: relative; width: 420px; display: flex; flex-direction: column; background: linear-gradient(90deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .ml-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding: 22px 28px; overflow-y: auto; scrollbar-width: thin; }
-/* the side panels wear the ornamented frame of the full-screen menus (see .pause-box) */
-.menu-left, .menu-right { @include frame(var(--frame), 0 10px 40px rgba(0,0,0,.8)); }
-.menu-left::before, .menu-right::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .22);
+/* the side panels and the village's card wear the ornamented frame of the full-screen menus (see .pause-box) */
+.menu-left, .menu-right, #vcard { @include frame(var(--frame), 0 10px 40px rgba(0,0,0,.8)); }
+.menu-left::before, .menu-right::before, #vcard::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .22);
   @include corner-brackets; }
 /* (the right panel's in front of what it frames: the stash's box reaches past it, and its fade, laid
    over the box, would put out the line and its brackets along it) */
 .menu-right::before { z-index: 4; }
+/* the crest over the village: its name (the loading screen's logo gathers into it), small at the top's middle,
+   a co-op room's bar under it; it takes no pointer but the bar's */
+.menu-crest { position: absolute; top: 10px; left: 50%; translate: -50% 0; width: 300px; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; zoom: var(--ui, 1); }
+.menu-crest #coop-bar { pointer-events: auto; }
 .logo { text-align: center; padding: 6px 0 4px; }
+#{$village} .logo { width: 100%; padding: 0; }
 /* the logo art (SVG, shared with the loading screen) is defined in index.html */
 .logo .logo-art { width: 100%; max-width: 300px; margin: 0 auto; }
+#{$village} .logo .logo-art { aspect-ratio: 700 / 150; filter: drop-shadow(0 2px 6px rgba(0,0,0,.8)); }
 .logo .logo-glow { opacity: .8; }
+/* the crest blown away after a while over the village (ui/crestBlow.ts): the wind takes the letters;
+   with no wind (reduced motion, Low quality) the letters fade too */
+.menu-crest .logo-art { transition: opacity 1.2s ease; }
+.menu-crest.blown .logo-art { opacity: 0; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
 .class-card { padding: 16px 18px; background: var(--panel-raised); border: 1px solid rgba($frame, .5); }
 /* the name and Change hero on one row at every size (the class buttons that stood there, wrapped, took a line each at
    most zooms, as the text's width rounds) */
 .cc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-#btn-hero { flex: none; font-size: 14px; padding: 6px 12px; }
+/* (the panels' alone: the village's Change hero is a link in the pause menu) */
+#{$panels} #btn-hero { flex: none; font-size: 14px; padding: 6px 12px; }
 .cc-name { font-family: var(--font-display); font-size: 28px; color: var(--cc, #9fffd0); text-shadow: 0 0 10px color-mix(in srgb, var(--cc, #9fffd0) 35%, transparent); }
 .cc-tag { color: var(--ink-dim); font-size: 16px; margin-bottom: 12px; }
 /* every class's name and tagline in one cell, the others hidden: sized by the largest, the card stays put as the class
@@ -66,14 +86,18 @@
 .rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
 .biome-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .br-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
-#opt-biome button { font-size: 15px; padding: 6px 14px; }
-#opt-biome .dice { display: flex; align-items: center; padding: 4px 10px; }
-#opt-biome .dice svg { width: 20px; height: 20px; }
+/* (the panels': the village's card leaves its battlegrounds the segment's own sizes) */
+#{$panels} #opt-biome button { font-size: 15px; padding: 6px 14px; }
+#{$panels} #opt-biome .dice { display: flex; align-items: center; padding: 4px 10px; }
+#{$panels} #opt-biome .dice svg { width: 20px; height: 20px; }
 #opt-wave button { font-size: 18px; line-height: 1; padding: 5px 12px; }
+/* (the village's card has four of them, the first and the best wave's too) */
+#{$village} #opt-wave button { padding: 5px 10px; }
 #opt-wave button:disabled { cursor: $cursor; opacity: .35; }
 #opt-wave button:disabled:hover { color: var(--ink-dim); }
 #opt-wave .wv-val { min-width: 7.5em; padding: 6px 8px; text-align: center; font-size: 15px; color: #ffe7b0; border-left: 1px solid rgba($frame, .35);
   background: $well; user-select: none; }
+#{$village} #opt-wave .wv-val { min-width: 6.5em; }
 #opt-wave .wv-val small { color: var(--accent); }
 .menu-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 6px; }
 
@@ -233,12 +257,33 @@
 .sitem.filtered:hover { opacity: .75; filter: grayscale(.4) brightness(1.3); }
 #menu .panel { zoom: var(--ui, 1); }
 
-/* ---------- lobby stowed (Space): panels fade out, the arena stays playable ---------- */
+/* the inventory alone (I) shows the hero's own: his equipment and attributes, his skills; the chest's, the stash too */
+#menu[data-open="inventory"] .stash-head, #menu[data-open="inventory"] #stash { display: none; }
+
+/* ---------- the card a village object opens (ui/villageCard.ts): over the village's foot, the hero's middle clear ---------- */
+#vcard { position: absolute; left: 50%; bottom: 28px; translate: -50% 0; width: 380px; max-width: calc(100vw / var(--ui, 1) - 24px);
+  display: flex; flex-direction: column; gap: 12px; padding: 18px 22px 14px; text-align: center;
+  background: linear-gradient(180deg, rgba(8,7,9,.94), rgba(8,7,9,.86)); }
+#vcard.hidden { display: none; }
+.vc-title { font-family: var(--font-display); font-size: 24px; color: #ffe7b0; text-shadow: 0 0 10px rgba($accent, .3); }
+.vc-sub { margin-top: -6px; font-size: 14px; color: var(--ink-dim); font-style: italic; }
+.vc-page { display: flex; flex-direction: column; gap: 12px; }
+.vc-page.hidden { display: none; }
+.vc-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.vc-close { align-self: center; }
+
+/* the pause menu's ways to what the village's objects open: in the lobby alone */
+.pb-links { margin: 4px 0 2px; }
+
+/* ---------- lobby stowed (Space; in the village, no panel open): the panels fade out, the arena stays playable,
+   the village walkable; the village's card stays ---------- */
 #menu .panel { transition: opacity .35s ease, transform .35s ease, translate .3s ease, box-shadow .3s; }
-#menu.stowed .panel { opacity: 0; pointer-events: none; }
+#{$panels} #menu.stowed .panel { opacity: 0; pointer-events: none; }
+#{$village} #menu.stowed .panel:not(#vcard) { opacity: 0; pointer-events: none; }
 /* (and everything in them: a `.btn` takes the pointer by its own rule, so Enter the Arena, unseen, started a fight
    from practice when clicked where it lies. The rail's Practice, which a short screen keeps, has its own rule.) */
-#menu.stowed .panel * { pointer-events: none; }
+#{$panels} #menu.stowed .panel * { pointer-events: none; }
+#{$village} #menu.stowed .panel:not(#vcard) * { pointer-events: none; }
 #menu.stowed .menu-left { transform: translateX(-24px); }
 #menu.stowed .menu-right { transform: translateX(24px); }
 #menu.stowed #loadout { transform: translateY(24px); }

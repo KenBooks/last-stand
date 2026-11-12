@@ -5,6 +5,7 @@ import {
   runOver, scoresShown, stowsRecorded,
 } from './page.mjs';
 import { latencyLine, pressInTurn, watchLatency } from './latency.mjs';
+import { walks } from './villageWalks.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
 const WALK_KEYS = ['w', 'd', 's', 'a', 'w', 'a', 's', 'd'];
@@ -130,6 +131,16 @@ const HEROES_MS = 10_000;
 /** Whether the hero selection screen has gone. (Run in the page.) */
 const heroesGone = () => !document.getElementById('heroes').checkVisibility();
 
+/** The lobby's Change hero clicked, in the pause menu Esc opens where the lobby is a village, and the screen waited
+ *  for. */
+async function openHeroes(page) {
+  const shown = () => document.getElementById('btn-hero').checkVisibility();
+  if (!(await page.evaluate(shown))) await page.keyboard.press('Escape');
+  await page.waitForFunction(shown, null, { timeout: HEROES_MS });
+  await page.click('#btn-hero');
+  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+}
+
 /** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
  *  clicked, then Enter), or by the lobby's class buttons in a tree from before it. */
 export async function pickHero(page, hero) {
@@ -137,8 +148,7 @@ export async function pickHero(page, hero) {
     await page.click(`#opt-class button[data-c="${hero}"]`);
     return;
   }
-  await page.click('#btn-hero');
-  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+  await openHeroes(page);
   await page.evaluate(chooseIfAsked, hero);
   await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
 }
@@ -333,8 +343,7 @@ async function heroes(page, ms) {
   const half = (ms * 4) / 5 / HERO_TRIPS / 2;
   for (let trip = 1; trip <= HERO_TRIPS; trip++) {
     await page.evaluate(markPhase, `opening ${trip}`);
-    await page.click('#btn-hero');
-    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await openHeroes(page);
     await page.waitForTimeout(half);
     await page.evaluate(markPhase, `closing ${trip}`);
     await page.click('#heroes .hs-back');
@@ -501,6 +510,63 @@ async function rendererSwitch(page, ms, { picture }) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
+/**
+ * Another hero chosen on the hero selection screen, and back, `HERO_TRIPS` times (from play: "choose hero in hall
+ * freezes for like 10sec"): each trip's way in and its choice, the hero's tab clicked and then Choose, a phase of
+ * its own.
+ */
+async function choosing(page, ms) {
+  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: chose nothing'];
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const half = (ms * 4) / 5 / HERO_TRIPS / 2;
+  for (let trip = 1; trip <= HERO_TRIPS; trip++) {
+    await page.evaluate(markPhase, `opening ${trip}`);
+    await openHeroes(page);
+    await page.waitForTimeout(half);
+    await page.evaluate(markPhase, `choosing ${trip}`);
+    await page.click(`#heroes .hs-tabs [data-c="${trip % 2 ? 'ranger' : 'warrior'}"]`);
+    await page.click('#heroes .hs-choose');
+    await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
+    await page.waitForTimeout(half);
+  }
+  return [`the lobby, then a hero chosen on the hero selection screen ${HERO_TRIPS} times`];
+}
+
+/** how long `hall` gives him to walk to the hall's dais from anywhere in the village (ms) */
+const HALL_WALK_MS = 30_000;
+
+/**
+ * The hero sent to the hall of heroes' dais by the village's map (M, its name clicked), through its door and down its
+ * length, its screen opening as he gets there, then another hero chosen on it (from play: "as I entered heroes hall,
+ * had an FPS drop", "choosing here freezes for 0.5-1sec ... first time only"), each a phase of its own. It starts with
+ * a tenth of `ms` standing (the frames to beat), and gives each screen a tenth to settle.
+ */
+async function hall(page, ms) {
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 10);
+  await page.evaluate(markPhase, 'walking in');
+  await tap(page, 'm');
+  await page.click('.vm-name[data-use="heroes"]');
+  await page.waitForFunction(heroesShown, null, { timeout: HALL_WALK_MS, polling: 100 });
+  await page.evaluate(markPhase, 'on the screen');
+  await page.waitForTimeout(ms / 10);
+  await page.evaluate(markPhase, 'choosing');
+  const other = await page.evaluate(otherHero);
+  await page.click(`#heroes .hs-tabs [data-c="${other}"]`);
+  await page.click('#heroes .hs-choose');
+  await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
+  await page.waitForTimeout(ms / 10);
+  return [`walked into the hall by the map, and chose the ${other} on its screen`];
+}
+
+/** A hero's tab on the hero selection screen other than the one it opened on. (Run in the page.) */
+const otherHero = () => {
+  const tabs = [...document.querySelectorAll('#heroes .hs-tabs [data-c]')];
+  const other = tabs.find((tab) => !tab.classList.contains('on') && !tab.classList.contains('active')) ?? tabs[0];
+  return other.dataset.c;
+};
+
 /** Standing in the lobby, a key tapped every quarter second: each press timed to the GPU done with the frame that
  *  read it (latency.mjs). A/B Vsync with `--url "this?vsync=1,this?vsync=0"`. */
 async function latency(page, ms) {
@@ -545,5 +611,7 @@ async function resolution(page, ms) {
     + `worst event dispatch delay ${Math.max(0, ...record.keys).toFixed(1)} ms`];
 }
 
-export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
-  renderer: rendererSwitch, latency, resolution };
+export const SCENARIOS = {
+  fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause, choosing, hall,
+  renderer: rendererSwitch, walks, latency, resolution,
+};

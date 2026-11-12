@@ -173,8 +173,55 @@ const PARTS: Part[] = [
     },
   },
 ];
+/** A part of a lit program's source taken away: its fragment shader as the scene lights it, edited (null where the
+ *  shader hasn't that part: a commit before the village's lamps). */
+interface SourcePart {
+  name: string;
+  edit: (fragment: string) => string | null;
+}
+
+/** the lamps' code in a lit shader (`core/lamps.ts`), read from the source itself (an A/B runs this module on commits
+ *  without the lamps, where an import of them would fail): lit in the point lights' loop, its bound with them; or (as
+ *  the lamps were first lit) in a block of their own after it, from its first line to its `#endif` */
+const LAMPS_JOINED = 'i < NUM_POINT_LIGHTS + LAMPS_MOST;';
+const LAMPS_BEGIN = '#if defined( RE_Direct )\n\t{\n\t\tvec3 seen = transpose( mat3( viewMatrix ) )';
+/** the lamps' shadow read, and their shadow's four blended tests (`lampShadowAt`) and one */
+const LAMP_SHADOW_READ = /lampLit = lampShadowAt\([^;]*\);/;
+const LAMP_SHADOW_FOUR = /return 0\.25 \* \( lampLitNear[\s\S]*?\);/;
+const LAMP_SHADOW_ONE = 'return lampLitNear( at, far );';
+
+/** `fragment` without its lamps (their turns of the loop, or their block), or null where it has none. */
+function withoutLamps(fragment: string): string | null {
+  if (fragment.includes(LAMPS_JOINED)) return fragment.replace(LAMPS_JOINED, 'i < NUM_POINT_LIGHTS;');
+  const from = fragment.indexOf(LAMPS_BEGIN);
+  if (from < 0) return null;
+  const to = fragment.indexOf('#endif', fragment.indexOf('lampShadowAt(', from));
+  if (to < 0) throw new Error('lab: programs --cost: the lamps\' block has no end');
+  return fragment.slice(0, from) + fragment.slice(to + '#endif'.length);
+}
+
+/** `fragment` made over by `edit` where it reads the lamps' shadows, else null. */
+function withLamps(fragment: string, edit: (fragment: string) => string): string | null {
+  return LAMP_SHADOW_READ.test(fragment) ? edit(fragment) : null;
+}
+
+/** the lamps' code in every lit shader taken out, their shadows unread, or read by one test (`npm run lab --
+ *  programs --cost`: lit in a loop of their own, every lit shader took about a third longer to compile; their lighting
+ *  call taken out of it, or their loop's bound one the compiler can't know, each left most of that) */
+const SOURCE_PARTS: SourcePart[] = [
+  { name: 'without the lamps', edit: withoutLamps },
+  {
+    name: 'its lamps unshadowed (their map never read)',
+    edit: (fragment) => withLamps(fragment, (all) => all.replace(LAMP_SHADOW_READ, 'lampLit = 1.0;')),
+  },
+  {
+    name: 'its lamps\' shadows by one test of four texels (not four)',
+    edit: (fragment) => withLamps(fragment, (all) => all.replace(LAMP_SHADOW_FOUR, LAMP_SHADOW_ONE)),
+  },
+];
+
 /** each part's compile timed this many times (the middle one taken) */
-const PART_TIMES = 3;
+const PART_TIMES = 5;
 
 /** A plain lit material's program as `scene` lights it (a ledger entry: `watchPrograms` records its GLSL). */
 function plainLit(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): ProgramMade {
@@ -200,25 +247,44 @@ export async function partsText(
   camera: THREE.Camera,
 ): Promise<string> {
   const gl = renderer.getContext() as WebGL2RenderingContext;
-  const salt = freshSalt();
-  const pieces: string[] = [];
-  for (const [i, part] of PARTS.entries()) {
+  const variants: { name: string; entry: ProgramMade | null }[] = [];
+  for (const part of PARTS) {
     const giveBack = part.without(scene, renderer);
-    let entry: ProgramMade;
     try {
-      entry = plainLit(renderer, scene, camera);
+      variants.push({ name: part.name, entry: plainLit(renderer, scene, camera) });
     } finally {
       giveBack();
     }
-    const times: number[] = [];
-    for (let time = 0; time < PART_TIMES; time++) {
-      times.push(costWith(gl, entry, salt + i * PART_TIMES + time));
+  }
+  const lit = plainLit(renderer, scene, camera);
+  for (const part of SOURCE_PARTS) {
+    const fragment = part.edit(lit.fragment);
+    variants.push({ name: part.name, entry: fragment === null ? null : { ...lit, fragment } });
+  }
+  const fastest = await fastestInTurns(gl, variants.map(({ entry }) => entry));
+  const pieces = variants.map(({ name, entry }, i) => {
+    if (!entry) return `none ${name}`;
+    return `${(fastest[i] / 1000).toFixed(2)} s ${name} (fragment ${(entry.fragment.length / 1024).toFixed(0)} kB)`;
+  });
+  return `  a plain lit material, each its fastest of ${PART_TIMES} compiled in turns: ${pieces.join('; ')}`;
+}
+
+/**
+ * Each of `entries` compiled `PART_TIMES` times, a round of one each in turn, each its fastest time (ms; none where an
+ * entry is null). The machine's load comes and goes: timed one variant after another, a variant timed under another
+ * session's work read slower than the whole it was taken from, and its fastest in turns reads what each costs alone.
+ */
+async function fastestInTurns(gl: WebGL2RenderingContext, entries: (ProgramMade | null)[]): Promise<number[]> {
+  const salt = freshSalt();
+  const fastest = entries.map(() => Infinity);
+  for (let round = 0; round < PART_TIMES; round++) {
+    for (const [i, entry] of entries.entries()) {
+      if (!entry) continue;
+      fastest[i] = Math.min(fastest[i], costWith(gl, entry, salt + round * entries.length + i));
       await realWait(BREATH_MS);
     }
-    const ms = times.sort((a, b) => a - b)[Math.floor(PART_TIMES / 2)];
-    pieces.push(`${(ms / 1000).toFixed(2)} s ${part.name} (fragment ${(entry.fragment.length / 1024).toFixed(0)} kB)`);
   }
-  return `  a plain lit material: ${pieces.join('; ')}`;
+  return fastest;
 }
 
 /** The canary: the longest program compiled again with its own salt (the cache must answer) and with a new one (it

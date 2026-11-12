@@ -118,6 +118,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   channel apart 1 (rounding). Once the exit is done the window is made a tenth smaller each way, which sizes the UI
   again: the logo must show as itself then, any picture of it gone. The stalls' `--resize` checks the exit's places as
   the window changes; this, its picture.
+- `parity`: the same scenes pictured as the player sees them, to compare what two renderers draw (`page/parity.ts`,
+  `--renderers webgl,webgpu`): each biome's arena from the run's countdown, then the village at noon and midnight
+  (`--hours 12,0`) from the square, the hall's door and inside it, the training yard, the campfire and a cottage, from
+  above and over the shoulder (`--scenes square,crypt`: those whose names hold any). The pictures are the page's own
+  (`lab.screen`), as WebGPU's canvas can't be read back by WebGL's `readPixels`. It finds nothing itself: what
+  differs is the A/B's verdict and the pictures side by side (`out/parity`, `out/ab/parity`). Its first run, on the
+  village's branch, found WebGPU drawing the paving, the plaster and the hero near black at noon, and the arenas far
+  darker than WebGL after a biome switch, where main's WebGPU arenas match its WebGL ones.
 - `light`: the frame's light as the player sees it. The hero stands in each biome (`--biomes crypt,forest`), in each
   view (`--views top,third,first`), the close views looking each way (`--facings 0,90,180,270`, degrees: the camera
   turned by mouse look, which the body follows), and the frame is drawn by the game's own camera and read back from
@@ -446,15 +454,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   throws one back at the hero, and turns the first struck off its middle the other way.
 - `hits <skills>`: each skill's blows as they land (`page/hits.ts`): foes stand dazed where it strikes (`death`'s
   stands), living past every blow, and it's cast at them on a fresh set-up as the player casts it (`cast.ts`
-  `holdFor`). Every hit is caught as it lands, a blow being the hits within a frame of each other (one cut striking
-  three foes): each blow's time from the press, the gaps between them, when the hero was free again and the damage a
-  second till then. Striking nothing, a gap past `--apart s`, and blows no quicker than `--than`'s (held down 1.2 s
-  for a row of its blows: the basic attack, `cleave`) are problems. `--canary` strikes a blow of its own 1 s after the
-  first (with `--apart` or `--than`), or else keeps the foes from harm. In `check` as `hits twinFangs --than cleave
-  --apart 0.2 --gear dual`: Twin Fangs' two cuts came 0.35 s apart, slower than a dual wielder's cleave at 0.30 (the
-  owner's "too slow", "both hits in a rapid succession"); they're 0.15 s apart now. Its cast (`castAt`, each hit's
-  type, crit and kill caught too, a canary's plant tried each frame, followed on for `lasting` s from the press for
-  an effect that strikes on after the hero is free: a firestorm's ticks) is `log`'s and `tooltips`'.
+  `holdFor`). Where the set-up's props stand in the 9 m before him (the crypt's columns are rolled with each run) and
+  `--at` doesn't say where he stands, he's set up again at the nearest lane clear of them (`page/lanes.ts`, `rush`'s
+  too): at the lab's spot a column stood between him and the foes in some runs, and the log's bolts struck nothing
+  (`log --class mage`). Every hit is caught as it lands, a blow being the hits within a frame of each other (one cut
+  striking three foes): each blow's time from the press, the gaps between them, when the hero was free again and the
+  damage a second till then. Striking nothing, a gap past `--apart s`, and blows no quicker than `--than`'s (held down
+  1.2 s for a row of its blows: the basic attack, `cleave`) are problems. `--canary` strikes a blow of its own 1 s
+  after the first (with `--apart` or `--than`), or else keeps the foes from harm. In `check` as `hits twinFangs --than
+  cleave --apart 0.2 --gear dual`: Twin Fangs' two cuts came 0.35 s apart, slower than a dual wielder's cleave at 0.30
+  (the owner's "too slow", "both hits in a rapid succession"); they're 0.15 s apart now. Its cast (`castAt`, each
+  hit's type, crit and kill caught too, a canary's plant tried each frame, followed on for `lasting` s from the press
+  for an effect that strikes on after the hero is free: a firestorm's ticks) is `log`'s and `tooltips`'.
 - `log`: the battle log (`src/ui/battleLog.ts`) held to the hits as they land (`page/log.ts`). Each skill the hero can
   use (`--skills` for fewer), in each way of holding weapons for the warrior (`--gear` for one), is cast at foes as
   `hits` casts it, with the log cleared first, and the basic attack once more at foes it kills. Every hit caught as
@@ -1052,6 +1063,9 @@ Options every command run on a page takes:
 - `--insets left,top,right,bottom` (with `--screen` or `--screens`): the screen's safe-area insets in css px, as a
   phone's camera cutout gives them to the page's `env(safe-area-inset-*)` (DevTools' `setSafeAreaInsetsOverride`):
   `ui --states hudTouch --screen 832x384@2.8125 --insets 34,0,0,0` is the owner's S25 Edge held sideways;
+- `--renderers webgl,webgpu`: this tree booted on two renderers (of `webgl`, `webgpu`, `webgpu-gl`), one after the
+  other, compared as `--ab` compares two commits; it takes no `--ab`, `--screens` or `--renderer`. A measure that
+  reads the frame back reads WebGL's alone: compare pictures the page takes itself (`lab.screen`, `parity`);
 - `--screens WxH[@ratio],WxH[@ratio]`: this tree on two screens, one after the other, compared as `--ab` compares two
   commits: the lines that differ, and the pictures pixel by pixel (both 3840x2160 for a 4K screen at 100% and 300%);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
@@ -1091,7 +1105,7 @@ canary?)`). The exit status is 1 when the command failed or found a problem: an 
 result reports (a canary the measure missed).
 
 
-- `training`: verifies a failed normal-run wave is saved per biome and survives profile loading; old profiles migrate from banked waves only. Selects Training grounds through the lobby, tests every damage type and a normal-run damage control, kills a projection, rejects a late loot report, clears/repeats/leaves without changing the saved profile. Pictures the lobby, holograms and wave decision. `--canary` temporarily removes training immunity and must detect damage.
+- `training`: verifies a failed normal-run wave is saved per biome and survives profile loading; old profiles migrate from banked waves only. Checks the ghost by the village's training yard's gate (drawn as a projection, no foe; at noon the Thornwood's alone, at midnight the crypt's), talks to it by E (its card on its battleground) and picks each battleground on its card (the waves reached offered), tests every damage type and a normal-run damage control, kills a projection, rejects a late loot report, clears/repeats/leaves without changing the saved profile. Pictures the lobby, holograms and wave decision. `--canary` temporarily removes training immunity and must detect damage, and makes the ghost solid and shows both ghosts at noon, each of which must be found.
 
   `training --coop` uses two actual game pages over the existing 100 ms delayed lab link: a wave-1 guest follows the host’s wave-4 training selection, both reject damage/loot, repeat and leave, and neither save changes.
 

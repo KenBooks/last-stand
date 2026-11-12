@@ -57,3 +57,12 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); each direct
   none at all with the CPU slowed 4 times): compare a setting of the loop on one build (`?ahead=N`) by that count,
   not by the lag across builds, which the machine moved by 20 ms between two builds of the same loop.
 - **Its profiles are left behind from a sandboxed shell** (Chrome's files there can't be deleted: the tool says which), so its Chrome fetches nothing in the background: the models, Safe Browsing's lists and the components were 85 MB of a profile's 120. Delete `out/profiles/profile-*` from an unsandboxed shell now and then (each is a measure's own, never used again).
+- **Each step of a run says how long it took** (`steps.mjs`: the build, Chrome, the game's boot, the set-up, the
+  scenario, the trace handed back, its analysis), and the trace what Chrome sent by category (`trace.mjs`
+  `sentText`). A `walks` round took 98 to 137 s: the game's first-visit boot 11 to 15 s of it, the walks 42 to 57,
+  and the trace handed back 25 to 55 s, 3.4 to 4 million events of which a third were the GPU's flow
+  markers (`gpu,toplevel.flow`), read by nothing here: excluding `toplevel.flow` kept them (Chrome records an event
+  if any of its categories is on, and they're the GPU's too), and leaving out the timeline's disabled-by-default
+  category made it no faster. What's left to try: the trace read back as a stream at its end, which once was too
+  large for Chrome's stream.
+- **A walk through the game is a script of its own** (`walks/`, `--before @path`): `walks/portal.js` uses a portal as a player does, on a page whose fight is cold, and says each second's frames and the warm-ups' own measures. The lab's boots warm everything first and its GPU cache answers at once, so its `village --cold --only portalAtNight` reads how many lights cast at a render and never saw the 38 s: a hang in a real first visit is read here. Try the hours too (`?hour=0`): the lamps cast by night alone, and noon took 3 s.

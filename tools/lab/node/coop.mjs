@@ -30,6 +30,8 @@ const JOIN_FRAMES = 1800;
 /** the frames the guest's lobby has to become practice */
 const PRACTICE_FRAMES = 60;
 const START_FRAMES = 900;
+/** how long the guest is kept readying the run after the host's is under way (frames): past the countdown's 3.5 s */
+const READYING_FRAMES = 360;
 /** the seed the link's delays are drawn from */
 const LINK_SEED = 0x9e3779b9;
 /** each page's name tag: the host's, the guest's, the party's others' (the third first joins as the guest's) */
@@ -72,12 +74,17 @@ export class Way {
   }
 }
 
-/** Calls `fn` of page/coop.ts in `page` with the page's lab and `args`. */
-export function callPage(page, fn, args = {}) {
-  return page.evaluate(async ([fn, args]) => {
-    const coop = await import('/tools/lab/page/coop.ts');
-    return coop[fn](window.__lab, args);
-  }, [fn, args]);
+/** Calls `fn` of page/coop.ts in `page` with the page's lab and `args`; a failure names the call and its page's
+ *  address (a page that navigated away said only "Execution context was destroyed"). */
+export async function callPage(page, fn, args = {}) {
+  try {
+    return await page.evaluate(async ([fn, args]) => {
+      const coop = await import('/tools/lab/page/coop.ts');
+      return coop[fn](window.__lab, args);
+    }, [fn, args]);
+  } catch (error) {
+    throw labError(`coop: ${fn} on ${page.url()}: ${error.message}`);
+  }
 }
 
 /**
@@ -262,9 +269,44 @@ export class Pair {
 }
 
 /**
+ * The host's run under way while the guest readies it, slow to (its fight's programs cold, `READYING_FRAMES` past the
+ * host's start): the host's countdown must hold, no wave coming, until the guest is in, and then go on. From play,
+ * "readying the fight for slower device takes forever, and first wave already launched, we should display waiting for
+ * player instead.. and dont deploy the wave". Returns its lines and problems; `canary`: the host told no guest is
+ * readying, whose wave must be found coming.
+ */
+async function slowGuestStart(pair, canary) {
+  await callPage(pair.guest, 'coopSlowToReady');
+  if (canary) await callPage(pair.host, 'coopForgetReadying');
+  await callPage(pair.host, 'coopStart');
+  const hostInRun = (host) => host.mode === 'run';
+  await pair.until(hostInRun, START_FRAMES, 'the host\'s run never started');
+  const [host, guest] = await pair.run(READYING_FRAMES);
+  if (canary) await callPage(pair.host, 'coopRememberReadying');
+  const seconds = (READYING_FRAMES / 60).toFixed(1);
+  const held = host.held ? ', held, "Waiting for players"' : '';
+  const guestIs = guest.mode === 'run' ? 'in it' : 'still readying';
+  const lines = [`the guest readying for ${seconds} s past the host's start: the host's run ${host.phase}`
+    + `${held}, the guest ${guestIs}`];
+  const problems = [];
+  if (guest.mode === 'run') problems.push('coop: the guest kept readying was in the run already (nothing measured)');
+  if (host.phase !== 'countdown') {
+    problems.push(`coop: the host's wave came while the guest readied the run (${host.phase})`);
+  }
+  else if (!host.held) problems.push('coop: the host\'s countdown wasn\'t held for the guest readying the run');
+  await callPage(pair.guest, 'coopReady');
+  const inRun = (h, g) => h.mode === 'run' && g.mode === 'run';
+  await pair.until(inRun, START_FRAMES, 'the guest never joined the run once ready');
+  const goesOn = (h) => h.phase === 'fighting' || (h.phase === 'countdown' && !h.held);
+  const [after] = await pair.until(goesOn, START_FRAMES, 'the host\'s countdown never went on once the guest was in');
+  lines.push(`the guest in: the host's countdown ${after.held ? 'still held' : 'goes on'}`);
+  return { lines, problems };
+}
+
+/**
  * The room opened on the host, the guest in it practising in its lobby while it waits (as a player does), and the
- * run started on both. Returns the problems of the start: a game whose hero casts freely in the run, as the guest's
- * did, begun in practice.
+ * run started on both, the guest slow to ready it (`slowGuestStart`). Returns the lines and problems of the start: a
+ * game whose hero casts freely in the run, as the guest's did, begun in practice; a wave that came without the guest.
  */
 async function startTogether(pair, link, lines, canary) {
   const { problems } = await openTogether(pair, link, lines, canary);
@@ -272,12 +314,13 @@ async function startTogether(pair, link, lines, canary) {
   const practising = (host, guest) => guest.stowed && !guest.free;
   await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
   await pair.reseed();
-  await callPage(pair.host, 'coopStart');
+  const slow = await slowGuestStart(pair, canary);
+  lines.push(...slow.lines);
   const inRun = (host, guest, states) => states.every((state) => state.mode === 'run');
   const states = await pair.until(inRun, START_FRAMES, 'the run never started on every game');
   const free = states.flatMap((state, index) => (state.free ? [PARTY_TAGS[index]] : []));
   problems.push(...free.map((tag) => `${tag}'s run kept the lobby's free casting (no costs or cooldowns)`));
-  return problems;
+  return { problems: [...problems, ...slow.problems], free: free.length > 0 };
 }
 
 /** Open the party without starting a fight, so colour checks need no combat scenarios. */
@@ -523,6 +566,8 @@ async function heroCostLines(pair) {
     return `the heroes' update a frame on ${PARTY_TAGS[index]}'s game: ${places}`;
   });
 }
+/** the canary's problem: the wave came while the guest readied */
+const SLOW_GUEST_CANARY = 'the host\'s wave came while the guest readied the run';
 
 /**
  * Runs `scenarios` (names of page/coop.ts's) on a side as host, a partner page as guest, over a link of `ping` and
@@ -547,9 +592,16 @@ export async function runCoop(side, options) {
     if (scenarios?.length === 1 && scenarios[0] === 'colours') {
       return await changeColours(pair, { ping, jitter }, lines, canary);
     }
-    const problems = await startTogether(pair, { ping, jitter }, lines, canary);
-    const casting = problems.length ? 'free casting' : 'a run\'s costs and cooldowns';
+    const start = await startTogether(pair, { ping, jitter }, lines, canary);
+    const casting = start.free ? 'free casting' : 'a run\'s costs and cooldowns';
     lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);
+    const problems = [...start.problems];
+    if (canary) {
+      const caught = problems.some((problem) => problem.includes(SLOW_GUEST_CANARY));
+      lines.push(`canary: the host told no guest readies ${caught ? 'caught' : 'went unseen'}`);
+      if (!caught) problems.push('coop: the canary\'s wave without the guest went unseen');
+      else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(SLOW_GUEST_CANARY)));
+    }
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);
       const unplayable = await callPage(guest, 'coopUnplayable', { name });

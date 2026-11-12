@@ -1,11 +1,14 @@
 // `lab coop`'s way back to the lobby after the scenarios, as players take it: each leaves the run from the pause menu
 // (Leave the run held, as a player holds it), returns to the lobby from the summary once the run is over, and
-// practises there (its panels stowed). The lobby's skill bar must then show on every game: after a co-op run, the
+// practises there (its panels stowed, in the village's training yard). The lobby's skill bar must then show on every game: after a co-op run, the
 // HUD kept the run's "watching" look (its bars and skills hidden) through the lobby, and through the hero selection
 // screen after it. Then the host opens the hall of heroes (Change hero) as the others cast in their lobbies: no partner
 // may show in it, nor cast there (four in a room stood among the hall's heroes, a warrior's ward glowing over a
 // plinth).
+import * as THREE from 'three';
 import { G } from '../../../src/state';
+import * as village_ from '../../../src/data/village';
+import { groundHeight } from '../../../src/world/ground';
 import { hallOpen } from '../../../src/game/hall';
 import { isCoop } from '../../../src/net/role';
 import { project } from '../../../src/ui/floaters';
@@ -43,9 +46,22 @@ export async function coopSummaryDone(lab: Lab): Promise<void> {
   await lab.clickOn(button);
 }
 
-/** The lobby stowed into practice, as Space and a phone's Practice stow it. */
-export function coopPractiseAgain(): void {
+/**
+ * The lobby stowed into practice, as Space and a phone's Practice stow it, and in the village the hero in its
+ * training yard, where the dummies stand (anywhere else a hero isn't armed, and its lobby is never practice).
+ */
+export function practiseInTheYard(): void {
   toggleMenuStowed(true);
+  const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
+  if (G.arena.place !== 'village' || !village.yardToWorld) return;
+  const [x, z] = village.yardToWorld(0, 0);
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+}
+
+/** The lobby practised in again after the run (`practiseInTheYard`). */
+export function coopPractiseAgain(): void {
+  practiseInTheYard();
 }
 
 /** how often a partner casts in its lobby as the host's hall is open (frames) */
@@ -99,7 +115,8 @@ function inView(player: (typeof G.players)[number]): boolean {
 
 /** Notes, a frame, each hero shown and whether its name tag is drawn over it. */
 export function watchTags(): void {
-  // (out of a room, as the party's others are until they've joined, a game shows no tags, as solo shows none)
+  // (out of a room no game shows a tag, online only: a third asked to rename, and a fourth joining last, are out of
+  // one for a while in their lobbies)
   if (hallOpen() || !isCoop()) return;
   if (G.mode === 'run') tagsSeen.runFrames++;
   else tagsSeen.lobbyFrames++;
@@ -130,9 +147,10 @@ export function watchHall(): void {
   if (partners.some((p) => p.casting || p.channel)) hallSeen.casting++;
 }
 
-/** The hall of heroes opened as a player opens it (the lobby's Change hero clicked). */
+/** The hall of heroes opened as a player opens it (Change hero clicked: in the village, the pause menu's). */
 export async function coopOpenHall(lab: Lab): Promise<void> {
   const button = document.getElementById('btn-hero');
+  if (button && !button.checkVisibility()) showPause(true);
   if (!button) throw new Error('lab: coop: no Change hero button in the lobby');
   await lab.clickOn(button);
 }

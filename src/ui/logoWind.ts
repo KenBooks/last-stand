@@ -90,8 +90,10 @@ export interface LogoBlow {
 
 const letters = (logo: Element): SVGSVGElement | null => logo.querySelector('svg:not(.logo-glow)');
 
-/** Snapshot the letters of `logo` into a particle field that will gather into `target` (both .logo-art). */
-export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null): Promise<LogoBlow | null> {
+/** Snapshot the letters of `logo` into a particle field that will gather into `target` (both .logo-art), drawn
+ *  with `own` (a context made ahead for it: `windAhead`), else the loading screen's made ahead or a new one. */
+export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null,
+  own: WindContext | null = null): Promise<LogoBlow | null> {
   const metal = letters(logo), glow = logo.querySelector<SVGSVGElement>('svg.logo-glow');
   if (!metal) return null;
   const box = metal.getBoundingClientRect();
@@ -137,7 +139,7 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   const home = into && dst ? await homeOf(into, dst, dpr) : null;
   const gather = home !== null;
   // a point covers its cell of the grid (CSS px, at the letters' size then)
-  const field = createField(pos, col, rnd, c, { box, dst: gather ? dst! : null, cell: step / grid, most, home });
+  const field = createField(pos, col, rnd, c, { box, dst: gather ? dst! : null, cell: step / grid, most, home, own });
   if (import.meta.env.DEV) console.info(`logo wind: ${c} points (budget ${budget}), grid ${grid.toFixed(2)}x, canvas ${dpr}x`);
   if (!field) return null;
   // the lobby logo is made of the particles until they have settled. It stays on its own layer at
@@ -457,6 +459,8 @@ interface Context {
 }
 /** the context made ahead (`prepareWind`) */
 let ahead: Context | null = null;
+/** A blow's context and its programs, made ahead of it (`windAhead`). */
+export type WindContext = Context;
 
 /** The points' program's attribute and uniform locations, and the picture's uniforms'. */
 type Uniforms = Record<string, WebGLUniformLocation | null>;
@@ -529,6 +533,15 @@ function makeContext(): Context | null {
  */
 export function prepareWind(): void { ahead ??= makeContext(); }
 
+/** A context of the field's own made ahead of a blow other than the loading screen's (the lobby's crest:
+ *  ui/crestBlow.ts), its programs linking meanwhile: made as it blew, on a first visit, its reads waited behind the
+ *  fight's compiles after Start (840 ms). */
+export const windAhead = (): WindContext | null => makeContext();
+
+/** Whether `made`'s programs have linked, so a blow on it waits on nothing (where the browser can't say, at once). */
+export const windLinked = (made: WindContext): boolean =>
+  made.linked !== undefined || !made.gl.getExtension('KHR_parallel_shader_compile');
+
 /** The context made ahead let go, where the exit is a plain fade. */
 export function dropWind(): void {
   ahead?.gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -544,11 +557,11 @@ interface HomeTex extends Spot { data: Pixels; w: number; h: number; x: number; 
 interface Place { box: DOMRect; dst: DOMRect | null }
 /** The field as it's made: where things are then, the CSS px a point covers with the letters that size, the most
  *  canvas pixels a CSS px, and the lobby logo's snapshot. */
-interface FieldOpts extends Place { cell: number; most: number; home: HomeTex | null }
+interface FieldOpts extends Place { cell: number; most: number; home: HomeTex | null; own: Context | null }
 
 function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count: number, o: FieldOpts) {
-  const made = ahead ?? makeContext();
-  ahead = null;
+  const made = o.own ?? ahead ?? makeContext();
+  if (!o.own) ahead = null;
   if (!made) return null;
   const { canvas, gl, prog, homeProg } = made;
   Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });

@@ -102,24 +102,29 @@ export function initPanel(h: DevHooks): void {
   tabs.setAttribute('role', 'tablist');
   tabs.setAttribute('aria-label', 'Lobby panel');
   tabs.innerHTML = '<button role="tab" data-dev-tab="hero" aria-selected="true" class="on">Hero</button><button role="tab" data-dev-tab="dev" aria-selected="false">Dev</button>';
-  document.querySelector('.menu-left')!.prepend(tabs);
-  const heroFold = document.getElementById('hero-fold')!;
-  const folds = document.createElement('div');
-  folds.className = 'fold-tabs fold-left';
-  heroFold.before(folds);
-  folds.append(heroFold);
-  const devFold = document.createElement('button');
-  devFold.id = 'dev-fold';
-  devFold.className = 'fold-tab fold-extra';
-  devFold.title = 'Show developer panel';
-  devFold.setAttribute('aria-label', devFold.title);
-  devFold.innerHTML = heroFold.innerHTML.replace('Hero', 'Dev');
-  folds.append(devFold);
-  heroFold.addEventListener('click', () => { if (heroFold.getAttribute('aria-expanded') === 'true') togglePanel(false); });
-  devFold.onclick = () => {
-    if (heroFold.getAttribute('aria-expanded') === 'false') heroFold.click();
-    togglePanel(true);
-  };
+  // (the hero panel it shares is the panels' lobby's: the village beta's lobby has none, core/beta.ts, and the panel
+  // floats there as it does in a run, by F8 or its DEV tab)
+  const heroPanel = document.querySelector('.menu-left');
+  const heroFold = document.getElementById('hero-fold');
+  if (heroPanel && heroFold) {
+    heroPanel.prepend(tabs);
+    const folds = document.createElement('div');
+    folds.className = 'fold-tabs fold-left';
+    heroFold.before(folds);
+    folds.append(heroFold);
+    const devFold = document.createElement('button');
+    devFold.id = 'dev-fold';
+    devFold.className = 'fold-tab fold-extra';
+    devFold.title = 'Show developer panel';
+    devFold.setAttribute('aria-label', devFold.title);
+    devFold.innerHTML = heroFold.innerHTML.replace('Hero', 'Dev');
+    folds.append(devFold);
+    heroFold.addEventListener('click', () => { if (heroFold.getAttribute('aria-expanded') === 'true') togglePanel(false); });
+    devFold.onclick = () => {
+      if (heroFold.getAttribute('aria-expanded') === 'false') heroFold.click();
+      togglePanel(true);
+    };
+  }
   tabs.addEventListener('click', (e) => {
     const name = (e.target as HTMLElement).closest<HTMLElement>('[data-dev-tab]')?.dataset.devTab;
     if (name) togglePanel(name === 'dev');
@@ -160,9 +165,11 @@ function refreshScrollCue(): void {
 /** Share the hero panel in the lobby; keep F8 available on the left during play or flight. */
 export function dockPanel(): void {
   const menu = document.getElementById('menu')!;
-  const docked = G.mode === 'menu' && !freeCamOn() && !menu.classList.contains('hidden') && !menu.classList.contains('stowed');
+  const heroPanel = document.querySelector('.menu-left');
+  const docked = !!heroPanel && G.mode === 'menu' && !freeCamOn() && !menu.classList.contains('hidden')
+    && !menu.classList.contains('stowed');
   if (panel.classList.contains('docked') === docked && document.body.classList.contains('dev-docked') === docked) return;
-  const parent = docked ? document.querySelector('.menu-left')! : document.body;
+  const parent = docked ? heroPanel! : document.body;
   if (panel.parentElement !== parent) parent.append(panel);
   panel.classList.toggle('docked', docked);
   document.body.classList.toggle('dev-docked', docked);

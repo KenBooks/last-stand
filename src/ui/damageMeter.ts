@@ -9,6 +9,9 @@ const BURST_GAP = 3; // seconds without hits that end a burst
 /** how quickly a finished burst's readout dims (s) */
 const DIM_TIME = 0.4;
 
+/** how long a readout takes to fade in or out as he crosses into or out of its area (s) */
+export const METER_FADE = { time: 0.35 };
+
 type WorldPos = { x: number; y: number; z: number };
 
 const SHADOWS: Shadow[] = [{ x: 0, y: 1, blur: 3, color: '#000' }, { x: 0, y: 0, blur: 8, color: 'rgba(0,0,0,.8)' }];
@@ -28,11 +31,25 @@ export class DamageMeter {
   private last = -Infinity;
   private nextDraw = 0;
   private updated = 0;
+  /** how much of it shows by his being in its area, and how far a finished burst has dimmed it (each 0..1) */
+  private fade = 0;
+  private dim = 1;
+  private wasIn = false;
 
-  constructor(private readonly name: string, getPos: () => WorldPos | null) {
-    this.label = anchorLabel(ORDER.bar, getPos, false, true, true);
+  /** `inArea`: whether he's where the readout shows; it fades as he crosses, and counts afresh as he comes back. */
+  constructor(
+    private readonly name: string,
+    getPos: () => WorldPos | null,
+    private readonly inArea: () => boolean = () => true,
+  ) {
+    this.label = anchorLabel(ORDER.bar, () => (this.fade > 0 ? getPos() : null), false, true, true);
     this.paint();
   }
+
+  /** The label it paints (tools/lab reads it against the screen). */
+  get readout(): Label { return this.label; }
+  /** What's counted now. */
+  get burst(): { hits: number; total: number } { return { hits: this.hits, total: this.total }; }
 
   record(amount: number): void {
     const now = G.time;
@@ -47,10 +64,24 @@ export class DamageMeter {
     // a finished burst's readout dims (as its fade did, over DIM_TIME)
     const dt = Math.max(0, G.time - this.updated);
     this.updated = G.time;
-    const target = this.hits > 0 && G.time - this.last > BURST_GAP ? 0.55 : 1, gap = target - this.label.alpha;
-    this.label.alpha += Math.sign(gap) * Math.min(Math.abs(gap), (0.45 / DIM_TIME) * dt);
+    const inArea = this.inArea();
+    if (inArea && !this.wasIn) this.reset();
+    this.wasIn = inArea;
+    this.fade = Math.max(0, Math.min(1, this.fade + (inArea ? dt : -dt) / METER_FADE.time));
+    const target = this.hits > 0 && G.time - this.last > BURST_GAP ? 0.55 : 1, gap = target - this.dim;
+    this.dim += Math.sign(gap) * Math.min(Math.abs(gap), (0.45 / DIM_TIME) * dt);
+    this.label.alpha = this.dim * this.fade;
     if (this.hits === 0 || G.time < this.nextDraw) return;
     this.nextDraw = G.time + 0.1;
+    this.paint();
+  }
+
+  /** Nothing counted: the name alone again. */
+  private reset(): void {
+    if (this.hits === 0) return;
+    this.total = 0;
+    this.hits = 0;
+    this.last = -Infinity;
     this.paint();
   }
 

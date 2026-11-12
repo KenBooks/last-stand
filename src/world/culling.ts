@@ -226,7 +226,34 @@ function intoShadow(camera: THREE.Camera): () => void {
   return () => {
     for (const undo of after) undo();
     for (const caster of casters) caster.visible = false;
+    // (and every one made meanwhile: a hero's shadow cast as one made again round this draw, as the hall of heroes
+    // showed his gear, stayed shown, and the frame drew it in its own basic material, a program compiled there)
+    if (!stillOf) for (const caster of shadowOnly) caster.visible = false;
   };
+}
+
+/** The shadow map's own draw: of `lights`' maps, of `scene` as `camera`'s layers show it. */
+export type ShadowDraw = (lights: THREE.Light[], scene: THREE.Scene, camera: THREE.Camera) => void;
+/** Work run after each draw of the shadow map, with that draw to draw more by (`afterShadows`). */
+type AfterShadows = (draw: ShadowDraw, scene: THREE.Scene, camera: THREE.Camera, still: boolean) => void;
+const afterShadow = new Set<AfterShadows>();
+
+/** `after` run after each draw of the shadow map, still or not (`drawingStill`), inside the work round it (a hero's
+ *  shadow cast as one stays set up for it): the lamps' shadows keep their still maps and draw the heroes over them
+ *  (`world/lampShadows.ts`). */
+export function afterShadows(after: AfterShadows): void {
+  afterShadow.add(after);
+}
+
+/** Whether the work after a shadow map's draw may be let go this time, told whether the draw is a still one
+ *  (`skipAfterShadows`). */
+type SkipsAfter = (camera: THREE.Camera, still: boolean) => boolean;
+let skipsAfter: SkipsAfter | null = null;
+
+/** `skips` asked before each draw's work after it (`afterShadows`): true lets it go, the maps left as they stand
+ *  (`world/shadowsOnMove.ts`: on Low, nothing that moves has). */
+export function skipAfterShadows(skips: SkipsAfter): void {
+  skipsAfter = skips;
 }
 
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
@@ -245,8 +272,16 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
   const draw = shadows.render.bind(shadows);
   shadows.render = (lights, scene, camera) => {
     const back = intoShadow(camera);
+    // (a render that draws no shadow map, its `autoUpdate` held off (the ghosts' count's, the outline's), has no work
+    // after one: asked all the same, the count's render and the scene's each asked whether the movers had moved, the
+    // second finding they hadn't, and Low's kept maps were left in half the frames he walked, `lab village --only
+    // shadowsOnMove`; and each such render drew the movers over the maps again)
+    const draws = shadows.autoUpdate || shadows.needsUpdate;
     try {
       draw(lights, scene, camera);
+      if (!draws) return;
+      const still = stillOf !== null;
+      if (!skipsAfter?.(camera, still)) for (const then of afterShadow) then(draw, scene, camera, still);
     } finally {
       back();
     }

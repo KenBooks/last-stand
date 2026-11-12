@@ -11,13 +11,13 @@ export const GROUND_LEVELS = [ARENA.daisHeight, STEP, 0];
 export const GROUND_EDGES = [ARENA.daisHalf, ARENA.daisHalf + 0.7];
 
 export function groundHeight(x: number, z: number): number {
-  return Math.max(levelAt(Math.max(Math.abs(x), Math.abs(z))), reliefAt(x, z));
+  return Math.max(daisAt(Math.max(Math.abs(x), Math.abs(z))), reliefAt(x, z));
 }
 
 /** The highest floor any part of a ball `r` across its middle over (x, z) is over: what it rests on, overhanging a
  *  step's edge (the levels' squares are nearer the middle the higher they are). */
 export function groundUnder(x: number, z: number, r: number): number {
-  return Math.max(levelAt(Math.max(Math.abs(x), Math.abs(z)) - r), reliefAt(x, z));
+  return Math.max(daisAt(Math.max(Math.abs(x), Math.abs(z)) - r), reliefAt(x, z));
 }
 
 /** What lies on the floor that feet step onto (a biome's: the forest's roots), as the height of its top over a grid
@@ -27,6 +27,8 @@ export interface Relief {
   cell: number;
   n: number;
   heights: Float32Array;
+  /** false: no dais in the middle (the village's square is level with its lanes; its floor is its relief alone) */
+  dais?: boolean;
 }
 
 /** the biome's relief, if it has one (the arena sets it as it switches biome) */
@@ -81,6 +83,9 @@ function reliefAt(x: number, z: number): number {
   return near + (far - near) * v;
 }
 
+
+/** the dais's level at `m` out from the middle along its squares' axes, where the place has one */
+const daisAt = (m: number): number => (relief?.dais === false ? 0 : levelAt(m));
 
 /** the floor's level at `m` out from the middle along the squares' axes */
 function levelAt(m: number): number {

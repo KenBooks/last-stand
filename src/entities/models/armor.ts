@@ -17,6 +17,10 @@ export { lod };
 /** `n` at every level down to Low's detail, and fewer below it (`lod(n, n)`): the gear's belts, plates, rims and studs,
  *  which kept their full count at every level */
 const below = (n: number): number => lod(n, n);
+/** the rounds a skirt's drape puts its cloth out of the limbs and holds it to its lengths before its last pass off them
+ *  (a quality's `drapeRounds`: the drape was a third of the hero's update, from play an S25 Edge's frame) */
+let drapeRounds = 4;
+export function setDrapeRounds(rounds: number): void { drapeRounds = rounds; }
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
 export const TILE = 0.3;
@@ -557,7 +561,7 @@ export class Skirt {
       }
     };
     // (the lines between points kept out of the legs in the last passes only: the first pull the cloth most of the way)
-    const passes = DRAPE.passes;
+    const passes = Math.min(DRAPE.passes, drapeRounds);
     for (let it = 0; it < passes; it++) {
       offAll(it >= passes - 1);
       // (down the cloth from the waist, which stays: each point no further from the one above than its length and a little)

@@ -1,7 +1,8 @@
 // Short screens (phones held sideways), upright tablets and upright phones.
 @use 'theme' as *;
 
-/* ---------- short screens (phones held sideways) and upright tablets: one lobby panel at a time ---------- */
+/* ---------- short screens (phones held sideways) and upright tablets: one lobby panel at a time (the village's: one of the
+   inventory's) ---------- */
 #lobby-rail { display: none; }
 body.touch .stow-hint kbd { display: none; }
 @media (max-height: 520px), (orientation: portrait) and (max-width: 1000px) {
@@ -15,24 +16,28 @@ body.touch .stow-hint kbd { display: none; }
   #menu:not(.stowed) #rail-practice .sh-show, #menu.stowed #rail-practice .sh-hide { display: none; }
   // (stowed, the rail is gone from sight but for its Practice button, and lets every other tap through: it took the
   // pause and full screen buttons' under it, which did nothing on a phone)
-  #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
+  #{$panels} #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
   // (and its Practice, Back now, stands in the touch HUD's corner under the pause button, where the run has its
   // scores: half way down the rail, the overlays down the left lay over it, and stood aside for it they left the
   // edge. Its panel's zoom, `--ui`, scales its offsets too, so they're the screen's divided by it: as they were, on
   // a phone of a high ratio it lay half over the pause button, `lab ui --states buttonsTouch`)
-  #menu.stowed #rail-practice { position: fixed; left: calc(#{$touch-edge} / var(--ui, 1));
+  #{$panels} #menu.stowed #rail-practice { position: fixed; left: calc(#{$touch-edge} / var(--ui, 1));
     top: calc((10px + 52px * var(--touch, 1)) / var(--ui, 1)); pointer-events: auto; }
-  #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
+  #{$panels} #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
+  #rail-close { margin-top: auto; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
   #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
   #menu[data-tab="gear"] .menu-right { display: grid; }
   .menu-left { width: 460px; }
   .ml-body { flex: 1 1 auto; gap: 10px; padding: 14px 20px; }
   .menu-left .logo, .cc-strip { display: none; }
+  /* (the crest gives the panel the screen: the room is a short screen's) */
+  #menu:not(.stowed) .menu-crest { display: none; }
   .records { grid-template-columns: repeat(4, 1fr); }
   .rec { grid-template-columns: 1fr; text-align: center; padding: 6px 4px; } .rec-icon { display: none; }
   .menu-center { justify-content: flex-start; }
   .menu-center .stow-hint { display: none; }
+  #vcard { bottom: 12px; padding: 12px 18px 10px; gap: 8px; }
   #spellbook .slot { width: 56px; height: 56px; } #spellbook .slot .icon { font-size: 29px; }
   #loadout-bar .slot { width: 60px; height: 60px; } #loadout-bar .slot .icon { font-size: 31px; }
   #loadout .lo-hint { font-size: 13px; }
@@ -58,6 +63,12 @@ body.touch .stow-hint kbd { display: none; }
   /* the minimap at the corner, a thin line round it in place of the bezel and its dark ring */
   #hud { --mm-room: 180px; }
   #minimap-wrap { align-items: flex-end; }
+  body { --minimap-room: 160px; }
+  /* no room under the minimap above the skill buttons' arc (it hid three of them): the training beside it, under the
+     village's touch buttons */
+  #training { position: absolute; top: calc(42px / var(--hud, 1)); right: 184px; margin: 0; }
+  /* (over the view there: what's done goes, so it shrinks as he goes through it) */
+  .tr-steps li.done { display: none; }
   #minimap { width: 144px; height: 144px; border-width: 1px; border-color: rgba(#6e6a62, .8); box-shadow: 0 2px 8px rgba(0,0,0,.6); }
   /* the choice after a wave kept to the top quarter, clear of the touch HUD's bars: a smaller title, its spoils and
      the risk on one line, the buttons as tall as anywhere (a thumb's) */
@@ -89,3 +100,14 @@ body.touch .stow-hint kbd { display: none; }
   #rotate svg { width: 84px; height: 84px; }
 }
 #lobby-rail button:disabled { opacity: .45; cursor: $cursor; }
+
+/* a phone held sideways with the browser's bars (298 css px tall on an S25 Edge): the skill buttons' arc reaches up
+   to the tracker's foot, so it stands further from the minimap there (after the short screen's rule, which it
+   overrides); off the yard, where they're hidden, beside the minimap as on any short screen ("training bullet
+   points could be further right, there is space there") */
+@media (max-height: 340px) {
+  body.touch:not(.unarmed) #training { right: 240px; }
+  /* (and the minimap a little smaller, its spoils' line clear of the arc's top button) */
+  #minimap-wrap { zoom: .85; }
+  #hud { --mm-room: 153px; }
+}

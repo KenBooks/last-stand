@@ -27,6 +27,21 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 - If you die, **all unbanked spoils are lost**, never seen.
 - Equip what you find between runs; items roll random affixes across five rarities.
 
+### Beta: the village lobby
+
+A new lobby to try: a village you walk around, in place of the lobby's panels. Switch it on in the pause menu
+(**Esc**), under **Beta**, and press **Reload**; the game remembers the choice, and a notice as it opens (or the same
+tab) takes you back to the old lobby. Your heroes and saves are the same either way.
+
+- Walk up to something and press **E** (or click it, or tap it) to use it: the portals to the **Crypt** and the
+  **Forest**, the chest for your stash, the hall of heroes to change hero, the campfire to play together, the
+  chronicle for save slots, the notice board for how to play, the ghost by the training yard for the training grounds.
+- **I** opens the inventory (equipment, attributes, skills) anywhere and **M** the village's map. On touch, **Use**,
+  **Bag** and **Map** stand beside the minimap, and a camera button changes the view.
+- Skills work in the training yard, on its dummies: free while the inventory is open, with a run's costs and cooldowns
+  once it's put away. A first visit starts with a short training round the village, which you can skip.
+- In co-op a room is in its host's lobby: joining one in the other lobby offers to switch and join.
+
 ### Play together
 
 Up to four players can hold the arena together over the internet, each under a name tag of their own (asked for once, and unique in a room). In the lobby, **Play together** → **Open a room** gives a short code and an invite link to send friends; opening the link (or entering the code) joins the room. The games talk through a small relay server of ours (`server/relay`, deployed by Dokci on every push to `main`), over a WebSocket that gets through any network a web page does.
@@ -126,6 +141,7 @@ A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The 
 
 - [Three.js](https://threejs.org/) 0.187 with an HDR post-processing chain (bloom, tone mapping, grading)
 - The Thornwood's trees are grown by [ez-tree](https://github.com/dgreenheck/ez-tree) (MIT), its geometry with our own procedural bark and leaves
+- The fires' flames are a fluid simulated once and played back, after the physics of [Fire Pro](https://github.com/dgreenheck/threejs-fire-pro) (MIT)
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural textures (cobblestone, slabs, runes), procedural humanoid rigs and animation, CPU particles, pooled dynamic lights
 - WebAudio-synthesized sound effects, and music for each biome: one track in its lobby and between waves, one through each wave's fight (looped by `tools/music`)

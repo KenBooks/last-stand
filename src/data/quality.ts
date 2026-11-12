@@ -1,5 +1,7 @@
 // Graphics quality presets. None of these settings change shader variants, so they
 // can be switched live without a compile hitch (see core/shaders.ts).
+import { VILLAGE } from '../core/beta';
+
 export type QualityLevel = 'high' | 'medium' | 'low' | 'verylow';
 export type QualitySetting = 'auto' | QualityLevel;
 
@@ -21,6 +23,19 @@ export interface QualityPreset {
   ikRange: number;
   /** the floors' relief: the most steps down each view ray (core/parallax.ts), 0 = flat */
   relief: number;
+  /** how far apart the grass's blades stand, against High's, each as many times wider (`setGrassSpread` in
+   *  world/meadow.ts): twice, a quarter of the blades cover the ground as before, a quarter of the vertices shaded
+   *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame) */
+  grassSpread: number;
+  /** the share of the village's lamps' reach, and whether they read the shadows' map of what stands round them
+   *  (`setLampQuality` in core/lamps.ts) */
+  lampReach: number;
+  lampShadows: boolean;
+  /** whether the village draws what moves into its kept shadow maps only on frames it moved
+   *  (`world/shadowsOnMove.ts`) */
+  shadowsOnMove: boolean;
+  /** the rounds a skirt's cloth is draped over the limbs a frame (`setDrapeRounds` in entities/models/armor.ts) */
+  drapeRounds: number;
   /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
    *  the frame at the screen's pixels cost a 4K laptop's integrated GPU 26 ms of 38 */
   hdr: boolean;
@@ -45,12 +60,12 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:    { label: 'High',     pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false, bloomShare: 1, shadowInTurns: false, particles: 1, stillSunShadow: false, clutter: 1 },
-  medium:  { label: 'Medium',   pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false, bloomShare: 1, shadowInTurns: false, particles: 1, stillSunShadow: false, clutter: 1 },
-  low:     { label: 'Low',      pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5, shadowInTurns: false, particles: 1, stillSunShadow: false, clutter: 1 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1 },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1 },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1 },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
@@ -61,7 +76,9 @@ export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'
  * phone res, if we need to cut, we need to cut something else, not resolution"); or to Low at once after
  * `quickWindow` seconds whose middle frame is under `farBelow` of it (a hitch doesn't move the middle). A frame longer
  * than `longestFrame` s is no measure (a tab switch, a breakpoint). What the hardware holds is measured, never guessed
- * from the device or the OS's scaling. From play, a laptop's integrated GPU switched to Auto ran at 5 frames a
- * second "for the first minute or two" (`npm run lab -- auto`: to Low in 3.4 s).
+ * from the device or the OS's scaling. From play, a step at a time, 6 s each, a phone's first visit (Auto starting
+ * from High) drew a few frames a second for half a minute ("insane slowdown when choosing a hero upon first entry
+ * into the game, on phone"), and a laptop's integrated GPU switched to Auto ran at 5 frames a second "for the first
+ * minute or two" (`npm run lab -- auto`: to Low in 3.4 s, where it holds 7.8 frames a second at its full 4.4 Mpx).
  */
 export const AUTO_QUALITY = { minFps: 50, window: 4, quickWindow: 1, farBelow: 0.5, settle: 2, longestFrame: 1 };
