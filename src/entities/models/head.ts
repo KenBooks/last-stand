@@ -215,7 +215,7 @@ export interface Head {
 export const HERO_HEADS = {
   mage: { who: 'mage', hair: 'short', crop: true },
   ranger: { who: 'ranger', hair: 'swept', crop: true },
-  warrior: { who: 'warrior', hair: 'loose' },
+  warrior: { who: 'warrior', hair: 'short', crop: true },
 } as const satisfies Record<string, { who: keyof typeof FACES } & HeadStyle>;
 
 /** A head's hair (`buildHead`'s options). */

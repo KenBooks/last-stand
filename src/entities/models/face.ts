@@ -199,8 +199,9 @@ export function faceY(y: number, F: FaceShape): number {
 }
 
 export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
-  // a strong jaw and chin, a brow over deep-set eyes, a straight nose
-  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.78, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 10.5, mouthW: 1.07, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
+  // a scarred veteran: a broad jaw, a heavy jutting brow drawn into a frown over narrowed deep-set eyes, a nose
+  // broken once (the face as it was, wide-eyed with long hair, read young and soft: "it looks lame")
+  warrior: { jaw: 60, chin: 10, chinFwd: -3.4, brow: 2.4, cheek: 0.9, noseLen: 50, noseW: 14, nosePro: 1.5, hump: 0.5, lips: 0.78, long: 0.96, tip: 1.15, eyeOpen: 2.5, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 10, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, occiput: 12, lipFwd: 10.5, mouthW: 1.07, mouthUp: 6, beardLine: 22, browDrop: 5, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.15, earIn: 2, earThick: 5.5, earRound: 1, zygo: 3, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5, browFrown: 3,
     templeNarrow: -4.4, lidFold: 5, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
@@ -746,10 +747,14 @@ export interface FaceLook {
   /** the face's outer edge darker, the temples and the cheeks' sides, as the hair standing over them shades them, and the
    *  cheekbones turning away under the eyes (0 none, 1 under thick hair) */
   cheekShade?: number;
+  /** an old scar down through the left brow onto the cheekbone (0 none, 1 clear) */
+  scar?: number;
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.822, 0.628, 0.572], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.42, 0.29, 0.17], eyeShade: 0.55, flush: 1.3, noseWarm: 0.1, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.5, brows: 0.92, hairDrop: 20, cheekShade: 0.5, stubble: 0.8, beardClump: 1, contour: 0.6, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
+  // (weathered and ruddy, dark hair cropped short, a little grey in the stubble, lined, and an old scar down through
+  // the left brow onto the cheekbone)
+  warrior: { skin: [0.76, 0.54, 0.44], hair: [0.12, 0.09, 0.06], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.25, 0.18, 0.12], eyeShade: 0.55, flush: 1.1, noseWarm: 0.1, lipGloss: 0.3, grey: 0.12, beard: 1, age: 0.8, brows: 1.25, hairDrop: 8, nape: 35, cheekShade: 0.5, stubble: 0.7, beardClump: 1, contour: 0.9, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -8, browIn: 10, templeDrop: 8, folds: 0.7, scar: 1 },
   // (a lean face weathered by the sun, dark brown hair with warm lights and a dark beard, as his sheet's; shaded and
   // textured as the others: his plain look left the face flat, the skin pale peach and the eyes staring)
   mage: { skin: [0.64, 0.5, 0.42], hair: [0.15, 0.085, 0.055], streak: [0.22, 0.13, 0.08], ao: 0.6, beardHair: [0.055, 0.04, 0.032], eyeShade: 0.6, flush: 0.8, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 0, age: 0.45, folds: 0, brows: 0.8, hairDrop: 6, nape: 40, templeDrop: 6, cheekShade: 0, beardClump: 0.55, contour: 0, browArch: 0.12, pores: 0.9, lipTint: 1, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.5, browEven: 1, under: 0.9, browLift: 2.5, browY: -3.5, browIn: 10 },
@@ -1069,6 +1074,19 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         if (L.grey > 0 && tnoise(tx * 0.5, ty * 0.05, w * 0.5, 11) > 1 - L.grey) { hr = 0.42; hg = 0.4; hb = 0.38; }
         mix(clamp(cover, 0, 0.97), hr, hg, hb);
         hh += b * (s1 * 0.9 + s3 * 0.3); rr = lerp(rr, 0.8, clamp(cover, 0, 1));
+      }
+      // --- an old scar: a pale, shiny seam from the forehead down through the brow and over the cheekbone, sunk a little
+      // with its edges raised, cutting the brow's and the beard's hairs
+      if (L.scar && x > 0 && z > 40 && yy > 70 && yy < 180) {
+        const ax0 = 20, ay0 = 168, vx = 27, vy = -84;
+        const t = clamp(((x - ax0) * vx + (yy - ay0) * vy) / (vx * vx + vy * vy), 0, 1);
+        const d = Math.hypot(x - ax0 - vx * t, yy - ay0 - vy * t) * (1 + 0.5 * vnoise(yy / 9, 0, 1.7, 19));
+        // (fading out at both ends, and where it crosses the eye's lids)
+        const ends = sm(0, 0.12, t) * sm(1, 0.85, t) * (1 - 0.85 * G(ax - EYE.x, yy - EYE.y, 0, 9)) * L.scar;
+        const core = Math.exp(-((d / 1.6) ** 2)) * ends, rim = Math.exp(-(((d - 2.6) / 1.1) ** 2)) * ends;
+        mix(0.85 * core, S[0] * 1.08, S[1] * 0.86, S[2] * 0.84);
+        c[0] *= 1 - 0.06 * rim; c[1] *= 1 - 0.09 * rim; c[2] *= 1 - 0.09 * rim;
+        hh += rim * 0.5 - core * 1.4; rr -= core * 0.25;
       }
       // --- the scalp under the hair
       // (hair cut short at the nape, `nape`, thins out down the neck below its line in streaks the way it grows: ending

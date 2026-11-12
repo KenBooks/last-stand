@@ -1133,7 +1133,7 @@ export function* warriorSteps(): ModelSteps {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    helm.visible = gear.helm; for (const m of head.hair) m.visible = !gear.helm;
+    helm.visible = gear.helm; for (const m of [...head.hair, ...(head.crop ? [head.crop] : [])]) m.visible = !gear.helm;
     for (const o of harness) o.visible = gear.chest;
     gloved = gear.hands;
     for (const o of gloves) o.visible = gloved;
