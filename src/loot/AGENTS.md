@@ -20,6 +20,7 @@ Where each is stored is the `src/loot/` row of the root's Architecture.
   - Switching slot (`switchSaveSlot` in `main.ts`) rebuilds the hero in place, like a class switch, and in co-op sends the new look. While the screen is open the hero stands idle and the screen takes Esc.
 
 - **Cloud saves** (`cloud.ts`):
+  - Linked methods and the current session method are separate. Cache only the server-confirmed session identity with the bearer token; refresh at boot and on opening Save Slots. Discard a response if its starting session changed. A linked Google account does not mean this session authenticated with Google; only that session may show its verified email.
   - The cloud save is slot 1. At the first sign-in on a device the player chooses which slot goes up, or the account's save comes down. Then slots are rearranged (`rearrangeSlots`: each read before any is written) and slot 1 is played at once (`setSaveSlot(1)` with the move, so a save of the hero in memory can't land on the slot his save just left).
   - Parts: `hero.<class>` (his `heroEntries`, as stored) and `shared` (the class last played, the co-op name tag and colour, the volumes, the portraits; not the quality: a phone's isn't a PC's).
   - Each part's last synced copy is kept (`last-stand.cloud.v1`, with the session's token), so a change on either side is told by content: an older build, cached, writes slot 1 with no idea of syncing, and is still caught.

@@ -1,8 +1,8 @@
 // Signing in with Google, by redirect (server/saves/AGENTS.md, #503): the game asks for a sign-in, the service sends
-// the page to Google with the OAuth code flow (the `openid` scope alone, PKCE, a `state` remembered here with the
+// the page to Google with the OAuth code flow (`openid email`, PKCE, a `state` remembered here with the
 // page's origin), Google sends it back to the service's callback, and the service sends it back to the page with a
 // one-time code the page trades for a session. No Google script runs in the game, and only Google's id for the
-// account (`sub`) is kept: no name, email or picture. Off while GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is unset.
+// account (`sub`) binds it; a verified email labels its session. No name or picture is kept. Off without credentials.
 import { createHash, randomBytes } from 'node:crypto';
 
 /** how long a sign-in sent to Google may take to come back, and a landing code to be traded, ms */
@@ -18,7 +18,7 @@ const PENDING_MAX = 10_000;
 
 /** a `state` -> { origin, returnPath, purpose, accountId, nonce, verifier, until } */
 const pending = new Map();
-/** a landing code -> { purpose, accountId, sub, origin, nonce, until } */
+/** a landing code -> { purpose, accountId, sub, email, origin, nonce, until } */
 const landings = new Map();
 
 /** Google's settings: on when the client's id and secret are both set. */
@@ -59,7 +59,7 @@ export function begin(google, { origin, returnPath, purpose, nonce, accountId = 
     response_type: 'code',
     client_id: google.clientId,
     redirect_uri: google.redirectUri,
-    scope: 'openid',
+    scope: 'openid email',
     state,
     code_challenge: challengeOf(verifier),
     code_challenge_method: 'S256',
@@ -78,11 +78,11 @@ export function takePending(state, now = Date.now()) {
 }
 
 /**
- * Google's id for the account behind `code`, traded at Google's token endpoint with the PKCE verifier and the client's
+ * Google's id and verified email behind `code`, traded at Google's token endpoint with the PKCE verifier and the client's
  * secret; null if Google refuses it or its id token isn't one for this client. The token comes straight from Google
  * over TLS, so its claims are checked and its signature needn't be (OpenID Connect Core 3.1.3.7).
  */
-export async function subOf(google, code, verifier, now = Date.now()) {
+export async function identityOf(google, code, verifier, now = Date.now()) {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code: String(code ?? ''),
@@ -102,7 +102,10 @@ export async function subOf(google, code, verifier, now = Date.now()) {
   const claims = claimsOf(tokens?.id_token);
   if (!claims || !ISSUERS.has(claims.iss) || claims.aud !== google.clientId) return null;
   if (typeof claims.exp !== 'number' || claims.exp * 1000 < now) return null;
-  return typeof claims.sub === 'string' && claims.sub ? claims.sub : null;
+  if (typeof claims.sub !== 'string' || !claims.sub) return null;
+  const email = claims.email_verified === true && typeof claims.email === 'string'
+    && claims.email.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(claims.email) ? claims.email : undefined;
+  return { sub: claims.sub, email };
 }
 
 /** A JWT's claims, unchecked, or null if it isn't one. */
@@ -120,9 +123,9 @@ function claimsOf(token) {
  *  at `/saves/auth/google/finish` from that page's origin alone,
  *  with the nonce the tab that began the sign-in kept: a code sent to someone else's browser (a link to a sign-in
  *  of the sender's, to sign that browser in to the sender's account) is refused there. */
-export function landingCode({ purpose, accountId, sub, origin, nonce }, now = Date.now()) {
+export function landingCode({ purpose, accountId, sub, email, origin, nonce }, now = Date.now()) {
   const code = random();
-  landings.set(code, { purpose, accountId, sub, origin, nonce, until: now + LANDING_MS });
+  landings.set(code, { purpose, accountId, sub, email, origin, nonce, until: now + LANDING_MS });
   return code;
 }
 

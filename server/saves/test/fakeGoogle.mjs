@@ -58,7 +58,8 @@ export async function fakeGoogle() {
     if (!entry || createHash('sha256').update(verifier).digest('base64url') !== entry.challenge) {
       return [400, { error: 'invalid_grant' }];
     }
-    const claims = { iss: 'https://accounts.google.com', aud: fake.aud, sub: entry.sub, exp: Date.now() / 1000 + 3600 };
+    const claims = { iss: 'https://accounts.google.com', aud: fake.aud, sub: entry.sub,
+      exp: Date.now() / 1000 + 3600, ...entry.claims };
     const part = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
     return [200, { id_token: `${part({ alg: 'RS256' })}.${part(claims)}.signature`, access_token: 'ignored' }];
   }
@@ -94,9 +95,9 @@ export async function fakeGoogle() {
   fake.addFile = (parent, name, daysAgo) => made({ name, mimeType: 'application/gzip', parents: [parent] }, Buffer.alloc(0),
     new Date(Date.now() - daysAgo * 86_400_000).toISOString());
   /** A code Google would send back once `sub` consented to the sign-in whose address was `authUrl`. */
-  fake.consent = (authUrl, sub) => {
+  fake.consent = (authUrl, sub, claims = { email: `${sub}@example.test`, email_verified: true }) => {
     const code = randomBytes(8).toString('hex');
-    codes.set(code, { sub, challenge: new URL(authUrl).searchParams.get('code_challenge') });
+    codes.set(code, { sub, claims, challenge: new URL(authUrl).searchParams.get('code_challenge') });
     return code;
   };
   fake.folderNamed = (name) => [...files.values()].find((f) => f.name === name && f.mimeType === FOLDER_TYPE);
