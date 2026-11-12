@@ -3,7 +3,7 @@
 // arrow shot at each one's trunk over the shoulder, from 7 m off it on a line clear of the other props, must stay
 // standing in that tree.
 // Then the arena is switched to another biome, and no arrow may be left: the floor and the props it lay in aren't
-// there. And again as a wave starts: every arrow is cleared then, whatever the quality level. `--canary` plants
+// there. And again as a wave starts: every arrow dissolves then, whatever the quality level. `--canary` plants
 // the faults: the first tree made stone (its arrow glances off it) and an arrow stuck again after the switch and
 // after the wave's start.
 import * as THREE from 'three';
