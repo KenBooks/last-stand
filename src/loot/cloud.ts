@@ -165,7 +165,8 @@ export async function signInWithCode(code: string): Promise<void> {
 
 // --- Google (#503): the page goes to Google and comes home with a code in its address's fragment ----------------
 /** How a return from Google went: signed in, Google linked, or why not (the service's reason). */
-export type GoogleLanding = { kind: 'signedIn' } | { kind: 'linked' } | { kind: 'error'; reason: string };
+export type GoogleLanding = { kind: 'signedIn' } | { kind: 'linked' }
+  | { kind: 'move'; offer: api.GoogleMoveOffer } | { kind: 'error'; reason: string };
 
 /** Whether the service signs in with Google (its health says; asked once a visit). */
 export const googleOn = async (): Promise<boolean> => (await api.serviceHealth()).google;
@@ -184,6 +185,10 @@ export async function goToGoogle(purpose: 'signin' | 'link'): Promise<void> {
 export async function unlinkGoogle(): Promise<void> {
   await api.unlinkGoogle();
   if (kept) { kept.google = false; keep(); }
+}
+export async function moveGoogle(code: string): Promise<void> {
+  await api.moveGoogle(code);
+  if (kept) { kept.google = true; keep(); }
 }
 
 /** where this tab keeps the nonce its Google sign-in is bound to, until it comes home */
@@ -220,6 +225,7 @@ async function landFromGoogle(): Promise<GoogleLanding | null> {
       signedInAs(finished);
       return { kind: 'signedIn' };
     }
+    if ('move' in finished) return { kind: 'move', offer: finished.move };
     if (kept) { kept.google = true; keep(); }
     return { kind: 'linked' };
   } catch (e) {
