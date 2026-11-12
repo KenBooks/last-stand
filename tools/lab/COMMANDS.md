@@ -610,6 +610,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
   of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
   their camera, not the hero's.
+- `cloud --google`: Google sign-in transport alone (`node/googleWindow.mjs`): clicks real Sign in controls,
+  returns through `public/google-signin.html` in another window, checks the game/URL survive and the original
+  nonce finishes once, then linking, Cancel and blocked-window redirect. All OAuth/saves replies are local fixtures;
+  this does not contact Google. The waiting dialog is checked at five required sizes (pictures in `out/cloud`,
+  `--pictures=false` skips them). A changed session discards a late answer. `--canary` returns an invalid landing
+  code and must never redeem it.
+
 - `cloud`: cloud saves end to end (#504; `node/cloud.mjs`, `node/cloudDevice.mjs`, `node/savesService.mjs`,
   `page/cloud.ts`). Two devices: the side's page (A) and a partner's in a context of its own (B), each with a passkey
   on a virtual authenticator of the browser's (the DevTools protocol's `WebAuthn` domain: ctap2, internal, resident

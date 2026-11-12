@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Last Stand · Google sign-in</title>
+<style>
+  :root { color-scheme: dark; font: 18px/1.5 system-ui, sans-serif; background: #100e0b; color: #ead8b2; }
+  body { max-width: 32rem; margin: 12vh auto; padding: 24px; }
+  button { font: inherit; padding: 8px 20px; cursor: pointer; }
+</style>
+<h1>Google sign-in</h1>
+<p id="status">Returning to your game…</p>
+<button id="close" type="button">Close this window</button>
+<script>
+  // No game bundle, session token or nonce here. The original game alone can redeem this one-use code.
+  (() => {
+    const attempt = new URLSearchParams(location.search).get('attempt');
+    const fragment = location.hash;
+    history.replaceState(null, '', location.pathname);
+    const status = document.getElementById('status');
+    document.getElementById('close').onclick = () => window.close();
+    if (!/^[a-f0-9]{48}$/.test(attempt || '') || !fragment || fragment.length > 512) {
+      status.textContent = 'This sign-in is invalid. Return to your original game and try again.';
+      return;
+    }
+    try {
+      const channel = new BroadcastChannel('last-stand.google.' + attempt);
+      const interval = setInterval(() => channel.postMessage({ fragment }), 250);
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        channel.close();
+        status.textContent = 'Your game could not be reached. Return to the original game, cancel sign-in and try again.';
+      }, 15000);
+      channel.onmessage = (event) => {
+        if (event.data?.type !== 'close') return;
+        clearInterval(interval);
+        clearTimeout(timeout);
+        channel.close();
+        status.textContent = 'You can close this window and return to your game.';
+        window.close();
+      };
+      channel.postMessage({ fragment });
+    } catch {
+      status.textContent = 'Your browser could not return the sign-in. Return to your original game and try again.';
+    }
+  })();
+</script>
+</html>

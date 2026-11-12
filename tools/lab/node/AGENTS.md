@@ -6,6 +6,9 @@ The lab's Node side: the command line's options (`options.mjs`), what each comma
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md).
 
+- `googleWindow.mjs` runs `cloud --google` through real controls and the static callback with intercepted OAuth responses. Every saves request is handled locally; no player data or Google service is used. The fixture verifies a boot marker survives, the callback imports no game assets, and the original nonce alone finishes. Server OAuth validation stays in `server/saves/test/google.test.mjs`.
+- Browser waits inside the cloud fixture use timed polling: the lab parks requestAnimationFrame, so Playwright's default waitForFunction polling can time out while the desired dialog is already visible. A redirect fallback is intercepted with a same-origin HTML response; aborting navigation gives Chrome's error document no sessionStorage to verify.
+
 - A new command's options go in `options.mjs` (each checked as it's read, so a misspelt one stops the command before anything boots), its work in `commands.mjs`, and its page side in `page/`.
 - A script `browser.mjs` serializes into the page can use nothing from its module.
 - Normal boot polling advances the lab clock's parked animation frames until the requested warm-ups finish. The reveal switches that clock to manual before `Lab` exists; merely polling `allWarm` deadlocks every warm-up waiting on its next frame. Cold/first boots still leave background work for the command to exercise.

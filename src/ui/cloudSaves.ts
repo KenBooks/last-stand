@@ -56,7 +56,13 @@ export function closeAccountMenu(): boolean {
 }
 
 export const cloudDialogOpen = (): boolean => !$('#cloud-dialog').classList.contains('hidden');
-export function closeDialog(): void { $('#cloud-dialog').classList.add('hidden'); $('#cloud-dialog').classList.remove('typing'); }
+let cancelGoogle: (() => void) | null = null;
+export function closeDialog(): void {
+  cancelGoogle?.();
+  cancelGoogle = null;
+  $('#cloud-dialog').classList.add('hidden');
+  $('#cloud-dialog').classList.remove('typing');
+}
 
 /** Authentication is the session's, never inferred from a linked method. Email is escaped like any server text. */
 export function cloudIdentityHTML(identity = cloud.cloudIdentity()): string {
@@ -128,7 +134,7 @@ export function renderCloudBar(): void {
   bind(bar, '.sc-key', () => act(() => cloud.addPasskey(), () => say('Passkey added: this device can sign in with it.')));
   bind(bar, '.sc-del', confirmDeleteSave);
   bind(bar, '.sc-gone', confirmDeleteAccount);
-  bind(bar, '.sc-google', () => act(() => cloud.goToGoogle('signin')));
+  bind(bar, '.sc-google', () => startGoogle('signin'));
   bind(bar, '.sc-glink', confirmLinkGoogle);
   bind(bar, '.sc-gunlink', () => act(() => cloud.unlinkGoogle(), () => say('Google is unlinked: sign in with a passkey or a code.')));
   showIfGoogle(bar);
@@ -189,7 +195,7 @@ function failure(e: unknown): string {
 function afterSignIn(): void { void chooseCloudSave(); }
 
 // --- the dialog ------------------------------------------------------------------------------------------
-interface Button { label: string; kind?: 'primary' | 'danger'; run?: () => void | Promise<void> }
+interface Button { label: string; kind?: 'primary' | 'danger'; run?: () => void | Promise<void>; whileBusy?: boolean }
 
 /** The dialog with a title, its text (HTML) and buttons; a button without `run` closes it. */
 function dialog(title: string, html: string, buttons: Button[]): void {
@@ -202,7 +208,7 @@ function dialog(title: string, html: string, buttons: Button[]): void {
     el.className = `btn${b.kind ? ' ' + b.kind : ''}`;
     el.textContent = b.label;
     el.onclick = async () => {
-      if (busy) return;
+      if (busy && !b.whileBusy) return;
       sfx.click();
       if (!b.run) { closeDialog(); return; }
       await b.run();
@@ -258,11 +264,29 @@ export function showGoogleLanding(landing: cloud.GoogleLanding): void {
 
 function confirmLinkGoogle(): void {
   dialog('Link Google', '<p>Google becomes a second way into this account on last-stand.cc. Google tells the '
-    + 'server its account id and verified email. Your email is shown only when you sign in with Google; no name or picture is kept.</p><p>The game reloads on its way back from Google; '
-    + 'your heroes are saved as you play, so nothing is lost.</p>', [
-    { label: 'Go to Google', kind: 'primary', run: () => { closeDialog(); return act(() => cloud.goToGoogle('link')); } },
+    + 'server its account id and verified email. Your email is shown only when you sign in with Google; no name or picture is kept.</p>', [
+    { label: 'Go to Google', kind: 'primary', run: () => { closeDialog(); startGoogle('link'); } },
     { label: 'Cancel' },
   ]);
+}
+
+/** Starts inside the click so browsers can open the sign-in window before the first network request. */
+function startGoogle(purpose: 'signin' | 'link', redirect = false): void {
+  if (busy) return;
+  const controller = new AbortController();
+  let useThisTab = false;
+  cancelGoogle = () => controller.abort();
+  dialog('Google sign-in', '<p>Finish signing in in the Google window, then return here. Your game stays loaded.</p>',
+    [{ label: 'Cancel', whileBusy: true, run: () => closeDialog() },
+      { label: 'Continue in this tab', whileBusy: true, run: () => { useThisTab = true; closeDialog(); } }]);
+  let result: cloud.GoogleLanding | null = null;
+  void act(async () => {
+    try { result = await cloud.goToGoogle(purpose, controller.signal, redirect); }
+    finally { closeDialog(); }
+  }, () => {
+    if (useThisTab) queueMicrotask(() => startGoogle(purpose, true));
+    else if (result) showGoogleLanding(result);
+  });
 }
 
 function askCode(): void {
