@@ -275,13 +275,15 @@ function startGoogle(purpose: 'signin' | 'link', redirect = false): void {
   if (busy) return;
   const controller = new AbortController();
   let useThisTab = false;
+  let focusGoogle = (): void => {};
   cancelGoogle = () => controller.abort();
   dialog('Google sign-in', '<p>Finish signing in in the Google window, then return here. Your game stays loaded.</p>',
-    [{ label: 'Cancel', whileBusy: true, run: () => closeDialog() },
+    [{ label: 'Show Google window', whileBusy: true, run: () => focusGoogle() },
+      { label: 'Cancel', whileBusy: true, run: () => closeDialog() },
       { label: 'Continue in this tab', whileBusy: true, run: () => { useThisTab = true; closeDialog(); } }]);
   let result: cloud.GoogleLanding | null = null;
   void act(async () => {
-    try { result = await cloud.goToGoogle(purpose, controller.signal, redirect); }
+    try { result = await cloud.goToGoogle(purpose, controller.signal, redirect, (focus) => { focusGoogle = focus; }); }
     finally { closeDialog(); }
   }, () => {
     if (useThisTab) queueMicrotask(() => startGoogle(purpose, true));

@@ -85,6 +85,13 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     assert.equal(begins.length, 1);
     assert.equal(await popup.evaluate(() => window.opener), null);
     lines.push(...await waitingDialog(page, context, pictures));
+    await popup.evaluate(() => {
+      window.__googleFocusRequests = 0;
+      window.focus = () => { window.__googleFocusRequests++; };
+    });
+    await page.locator('#cloud-dialog button').filter({ hasText: /^Show Google window$/ }).click();
+    assert.equal(await popup.evaluate(() => window.__googleFocusRequests), 1);
+    lines.push('Show Google window: requests foreground during sign-in without starting another attempt');
     const callback = new URL(begins.at(-1).returnPath, originalUrl);
     assert.match(callback.pathname, /google-signin\.html$/);
     assert.ok(!callback.search.includes(begins.at(-1).nonce), 'the nonce stays in the original game');

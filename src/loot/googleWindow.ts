@@ -15,7 +15,7 @@ export function googleReply(fragment: string): GoogleReply | null {
 
 /** Opens synchronously inside the activating click, before requesting the OAuth address. Null means redirect. */
 export function openGoogleWindow(signal: AbortSignal): {
-  returnPath: string; result: Promise<GoogleReply | null>; navigate(url: string): void; close(): void;
+  returnPath: string; result: Promise<GoogleReply | null>; navigate(url: string): void; focus(): void; close(): void;
 } | null {
   let popup: Window | null = null;
   let channel: BroadcastChannel | null = null;
@@ -24,6 +24,8 @@ export function openGoogleWindow(signal: AbortSignal): {
     channel = new BroadcastChannel(`last-stand.google.${id}`);
     popup = window.open('about:blank', '_blank', 'popup,width=520,height=700');
     if (!popup) { channel.close(); return null; }
+    // Request foreground while the initiating click still has activation, including from fullscreen.
+    try { popup.focus(); } catch { /* the browser owns whether a window may take focus */ }
     popup.opener = null;
     popup.document.title = 'Signing in to Last Stand';
     popup.document.body.textContent = 'Opening Google sign-in…';
@@ -34,6 +36,10 @@ export function openGoogleWindow(signal: AbortSignal): {
     let finish: (reply: GoogleReply | null) => void;
     let done = false;
     const result = new Promise<GoogleReply | null>((resolve) => { finish = resolve; });
+    const focus = (): void => {
+      if (done) return;
+      try { child.focus(); } catch { /* COOP or the browser may refuse; the redirect fallback remains available */ }
+    };
     const close = (): void => {
       if (done) return;
       done = true;
@@ -55,7 +61,7 @@ export function openGoogleWindow(signal: AbortSignal): {
     };
     if (signal.aborted) cancel();
     return { returnPath: callback.pathname + callback.search, result,
-      navigate: (url) => { if (!done) child.location.replace(url); }, close: cancel };
+      navigate: (url) => { if (!done) { child.location.replace(url); focus(); } }, focus, close: cancel };
   } catch {
     channel?.close();
     popup?.close();

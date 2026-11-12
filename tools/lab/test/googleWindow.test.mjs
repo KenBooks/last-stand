@@ -10,7 +10,7 @@ function fixture({ blocked = false, unavailable = false } = {}) {
   const channels = [];
   const timers = new Map();
   const navigations = [];
-  const popup = { opener: {}, document: { body: {} }, location: {
+  const popup = { focused: 0, focus() { this.focused++; }, opener: {}, document: { body: {} }, location: {
     replace: (url) => navigations.push(url),
   }, close() { this.closed = true; } };
   class Channel {
@@ -43,15 +43,21 @@ test('opens before any await, severs opener and uses a unique channel without th
   const page = fixture();
   const opened = page.open();
   assert.equal(page.popup.opener, null);
+  assert.equal(page.popup.focused, 1, 'foreground is requested inside the activating click');
   assert.match(opened.returnPath, /^\/subpath\/google-signin.html\?attempt=[a-f0-9]{48}$/);
   assert.equal(page.channels.length, 1);
   opened.navigate('https://accounts.google.com/');
   assert.deepEqual(page.navigations, ['https://accounts.google.com/']);
+  assert.equal(page.popup.focused, 2, 'foreground is requested again after navigating to Google');
+  opened.focus();
+  assert.equal(page.popup.focused, 3, 'an explicit Show Google window press can request foreground');
   page.channels[0].onmessage({ data: { fragment: '#cloud-google=' + 'A'.repeat(32) } });
   assert.equal((await opened.result).code, 'A'.repeat(32));
   assert.equal(page.channels[0].closed, true);
   assert.equal(page.timers.size, 0);
   assert.equal(page.channels[0].sent[0].type, 'close');
+  opened.focus();
+  assert.equal(page.popup.focused, 3, 'a finished window is never focused');
   const other = fixture();
   const second = other.open();
   assert.notEqual(page.channels[0].name, other.channels[0].name);
@@ -89,6 +95,17 @@ test('blocked windows and unavailable channels fall back; timeout and provider c
   const attempt = cancelled.open();
   cancelled.channels[0].onmessage({ data: { fragment: '#cloud-google-error=cancelled' } });
   assert.equal((await attempt.result).error, 'cancelled');
+});
+
+test('a browser refusing foreground does not cancel authentication', async () => {
+  const page = fixture();
+  page.popup.focus = () => { throw new Error('Focus denied'); };
+  const opened = page.open();
+  assert.ok(opened);
+  opened.navigate('https://accounts.google.com/');
+  opened.focus();
+  page.channels[0].onmessage({ data: { fragment: '#cloud-google=' + 'A'.repeat(32) } });
+  assert.equal((await opened.result).code, 'A'.repeat(32));
 });
 
 test('reply parsing rejects mixed, oversized and hostile fragments', () => {

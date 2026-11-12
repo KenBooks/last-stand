@@ -179,10 +179,12 @@ export const googleOn = async (): Promise<boolean> => (await api.serviceHealth()
 export const hasGoogle = (): boolean => Boolean(kept?.google);
 
 /** Keeps the game loaded while Google opens separately; a blocked window uses the existing redirect flow. */
-export async function goToGoogle(purpose: 'signin' | 'link', signal: AbortSignal, redirect = false): Promise<GoogleLanding | null> {
+export async function goToGoogle(purpose: 'signin' | 'link', signal: AbortSignal, redirect = false,
+  opened?: (focus: () => void) => void): Promise<GoogleLanding | null> {
   const nonce = randomNonce();
   const state = kept;
   const popup = redirect ? null : openGoogleWindow(signal);
+  if (popup) opened?.(popup.focus);
   try {
     const { url } = await api.googleAddress(purpose, nonce, popup?.returnPath, signal);
     if (signal.aborted || kept !== state) return null;
