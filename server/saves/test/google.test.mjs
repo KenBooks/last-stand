@@ -283,6 +283,10 @@ test('Google is linked from production alone, to one account, and is never the l
   assert.equal((await call('DELETE', `/saves/passkey/${encodeURIComponent(passkey)}`, { token })).status, 204);
   // now Google is the last way in
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 409);
+  assert.equal((await call('GET', '/saves/account', { token })).body.google, true,
+    'a refused unlink must keep Google');
+  assert.equal((await signInWithGoogle('sub-linked')).body.account.id, account.id,
+    'the refused unlink must leave a way back in');
 });
 
 test('an OAuth-proven owner can move Google from preview junk to the account they are signed into', async () => {
@@ -375,6 +379,8 @@ test('a preview\'s passkey isn\'t a way into production: Google stays while it i
   assert.equal(added.status, 200, added.body);
   assert.equal((await call('GET', '/saves/account', { token })).body.passkeys.length, 1);
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 409);
+  assert.equal((await call('GET', '/saves/account', { token })).body.google, true);
+  assert.equal((await signInWithGoogle('sub-preview-passkey')).body.account.id, signedIn.body.account.id);
 });
 
 test('a backup uploads every account and save, checked by its MD5, drops those past 14 days and restores whole', async () => {

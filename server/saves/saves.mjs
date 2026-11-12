@@ -688,8 +688,9 @@ async function signedInRequest(req, res, path, origin, headers) {
       if (!changed.passkeys.some((p) => p.id === id)) return 404;
       // never the last way into production: Google counts as one, a preview's passkey doesn't
       const before = waysIn(changed);
-      changed.passkeys = changed.passkeys.filter((p) => p.id !== id);
-      if (before >= 1 && waysIn(changed) < 1) return 409;
+      const remaining = changed.passkeys.filter((p) => p.id !== id);
+      if (before >= 1 && waysIn({ ...changed, passkeys: remaining }) < 1) return 409;
+      changed.passkeys = remaining;
       return 204;
     });
     const statuses = { 404: [404, 'no such passkey'], 409: [409, 'the last way in: delete the account instead'] };
@@ -699,8 +700,8 @@ async function signedInRequest(req, res, path, origin, headers) {
   if (path === '/saves/google' && req.method === 'DELETE') {
     const result = await change(account.id, (changed) => {
       if (!changed.googles?.[site]) return 404;
+      if (waysIn(changed) <= 1) return 409;
       delete changed.googles[site];
-      if (waysIn(changed) < 1) return 409;
       return 204;
     });
     const statuses = { 404: [404, 'no Google linked'], 409: [409, 'the last way in: add a passkey first'] };

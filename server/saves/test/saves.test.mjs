@@ -258,6 +258,9 @@ test('deleting: never the last passkey; a site\'s save; the whole account', asyn
   await put(token, 'shared', { a: 1 }, 0);
   const { body: account } = await call('GET', '/saves/account', { token });
   assert.equal((await call('DELETE', `/saves/passkey/${account.passkeys[0].id}`, { token })).status, 409);
+  assert.deepEqual((await call('GET', '/saves/account', { token })).body.passkeys.map((key) => key.id),
+    [account.passkeys[0].id], 'a refused deletion must keep the credential');
+  assert.equal((await signIn(device)).status, 200, 'the refused deletion must leave a way back in');
   assert.equal((await call('DELETE', '/saves/save', { token })).status, 204);
   assert.deepEqual((await call('GET', '/saves/save', { token })).body.parts, {});
   assert.equal((await call('DELETE', '/saves/account', { token })).status, 204);
