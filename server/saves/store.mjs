@@ -11,7 +11,7 @@ import { join } from 'node:path';
 const accounts = new Map();
 /** a passkey's credential id -> its account's id */
 const byCredential = new Map();
-/** a site's Google id -> its account's id */
+/** a site's Google id -> the newest linked account (a transfer survives a restart between its two writes) */
 const byGoogle = new Map();
 /** a session token's digest -> its account's id */
 const bySession = new Map();
@@ -36,13 +36,20 @@ async function writeWhole(file, value) {
 function indexAccount(account) {
   for (const passkey of account.passkeys) byCredential.set(passkey.id, account.id);
   for (const session of account.sessions) bySession.set(session.hash, account.id);
-  for (const [site, { sub }] of Object.entries(account.googles ?? {})) byGoogle.set(googleKey(site, sub), account.id);
+  for (const [site, { sub, linked }] of Object.entries(account.googles ?? {})) {
+    const key = googleKey(site, sub);
+    const before = byGoogle.get(key);
+    if (!before || (linked ?? 0) >= before.linked) byGoogle.set(key, { id: account.id, linked: linked ?? 0 });
+  }
 }
 
 function unindexAccount(account) {
   for (const passkey of account.passkeys) byCredential.delete(passkey.id);
   for (const session of account.sessions) bySession.delete(session.hash);
-  for (const [site, { sub }] of Object.entries(account.googles ?? {})) byGoogle.delete(googleKey(site, sub));
+  for (const [site, { sub }] of Object.entries(account.googles ?? {})) {
+    const key = googleKey(site, sub);
+    if (byGoogle.get(key)?.id === account.id) byGoogle.delete(key);
+  }
 }
 
 const googleKey = (site, sub) => `${site}\0${sub}`;
@@ -90,7 +97,7 @@ export function withAccount(id, change) {
 
 export const account = (id) => accounts.get(id) ?? null;
 export const accountOfCredential = (credentialId) => account(byCredential.get(credentialId));
-export const accountOfGoogle = (site, sub) => account(byGoogle.get(googleKey(site, sub)));
+export const accountOfGoogle = (site, sub) => account(byGoogle.get(googleKey(site, sub))?.id);
 export const accountOfSession = (token) => account(bySession.get(digest(token)));
 export const allAccounts = () => [...accounts.values()];
 /** Where the accounts and saves are kept (a backup's snapshot reads it). */

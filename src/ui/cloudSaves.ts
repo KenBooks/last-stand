@@ -148,6 +148,7 @@ function failure(e: unknown): string {
   if (e instanceof CloudError) {
     if (e.status === 0) return 'The cloud saves server could not be reached. Try again in a while.';
     if (e.message.startsWith('no such copy code')) return 'That copy code expired or was already used. Make a new one on last-stand.cc.';
+    if (e.message.startsWith('no such move offer')) return 'That Google move offer expired or was already used. Choose Link Google and try again.';
     if (e.status === 401) return 'Not signed in: that passkey or code isn\'t one this server knows, or it expired.';
     if (e.status === 429) return 'Too many tries: wait a while and try again.';
     if (e.message.startsWith('no production save')) return 'No production cloud save was found. Sync slot 1 on last-stand.cc, then make a new copy code.';
@@ -201,7 +202,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
   cancelled: 'The Google sign-in was cancelled.',
   refused: 'Google didn\'t confirm the sign-in. Try again.',
   'too-many': 'Too many new accounts from this network today: try again tomorrow, or use a passkey.',
-  taken: 'That Google account is linked to another Last Stand account already. Sign in with Google to use that one.',
+  taken: 'That Google account belongs to another Last Stand account with a production save. Sign in with Google there and add a passkey before moving its Google login here.',
   other: 'Another Google account is linked to this account already: unlink it first.',
   'signed-out': 'This device was signed out before Google answered. Sign in and try again.',
   expired: 'The Google sign-in took too long, or was used already. Try again.',
@@ -213,6 +214,23 @@ export function showGoogleLanding(landing: cloud.GoogleLanding): void {
   if (landing.kind === 'signedIn') { afterSignIn(); return; }
   if (landing.kind === 'linked') {
     say('Google is linked: sign in with it on any device on last-stand.cc, as well as with your passkeys.');
+    return;
+  }
+  if (landing.kind === 'move') {
+    const { code, previewSaves, hasProductionSave, hasPasskey } = landing.offer;
+    const previews = previewSaves
+      ? ` It has ${previewSaves} preview save${previewSaves === 1 ? '' : 's'} that stay there${hasPasskey ? '.' : ' but may no longer be accessible without another sign-in method.'}`
+      : '';
+    const saves = hasProductionSave
+      ? `The other account has a production save. It stays there and can still be opened with its passkey.${previews}`
+      : previewSaves ? `The other account has no production save.${previews}` : 'The other account has no cloud saves.';
+    dialog('Move Google here?', `<p>${saves}</p><p>Google will sign in to this account on last-stand.cc after the move. No saves are merged or deleted.${hasPasskey ? ' The other account keeps its passkey.' : ''}</p>`, [
+      { label: 'Move Google here', kind: 'primary', run: () => {
+        closeDialog();
+        return act(() => cloud.moveGoogle(code), () => say('Google now signs in to this account on last-stand.cc.'));
+      } },
+      { label: 'Cancel' },
+    ]);
     return;
   }
   // (the reason comes from the page's address: only the screen's own are said)

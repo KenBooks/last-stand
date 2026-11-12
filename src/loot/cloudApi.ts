@@ -134,8 +134,11 @@ export const googleAddress = (purpose: 'signin' | 'link', nonce: string): Promis
   json(call('POST', '/auth/google', { json: { purpose, nonce, returnPath: `${location.pathname}${location.search}` } }));
 /** The code Google's answer brought home, finished: a session (a sign-in), or Google linked to the signed-in
  *  account (a link, sent with that account's production session). */
-export const googleFinish = (code: string, nonce: string): Promise<SignedIn | { linked: true; account: CloudAccount }> =>
+export interface GoogleMoveOffer { code: string; previewSaves: number; hasProductionSave: boolean; hasPasskey: boolean }
+export const googleFinish = (code: string, nonce: string): Promise<SignedIn | { linked: true; account: CloudAccount } | { move: GoogleMoveOffer }> =>
   json(call('POST', '/auth/google/finish', { json: { code, nonce } }));
+export const moveGoogle = (code: string): Promise<{ linked: true; account: CloudAccount }> =>
+  json(call('POST', '/google/move', { json: { code } }));
 export const unlinkGoogle = async (): Promise<void> => { await call('DELETE', '/google'); };
 
 // --- this site's save ----------------------------------------------------------------------------------------

@@ -23,6 +23,7 @@
 //   POST   /saves/auth/google          { purpose: 'signin' | 'link', returnPath, nonce } -> { url }: off to Google
 //   GET    /saves/auth/google/callback Google back: the page sent home with #cloud-google=<code> (or -error=<why>)
 //   POST   /saves/auth/google/finish   { code, nonce } -> { token, account } or { linked, account }: that tab alone
+//   POST   /saves/google/move           { code }: move an OAuth-proven Google login to this production account
 //   DELETE /saves/google               Google unlinked from the account (never the last way in)
 // Everything but the health and Google's callback takes a page of the game's (ORIGINS) and, but the passkey's, a session: `Authorization:
 // Bearer <token>`, a token made at sign-in for that one site (only its digest is kept).
@@ -117,7 +118,11 @@ const counts = new Map();
 const linkCodes = new Map();
 /** a production session's one-time, read-only authorization to copy that account's save into a preview */
 const copyCodes = new Map();
+/** an OAuth-proven, one-use offer to move a Google login between production accounts */
+const moveCodes = new Map();
 const LINK_MS = 10 * 60_000;
+const MOVE_MS = 5 * 60_000;
+const MOVE_LIMIT = 10_000;
 /** a sign-in code's letters: Crockford's base32 (no I, L, O, U), 8 of them (40 bits) */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
@@ -154,6 +159,7 @@ function prune(now = Date.now()) {
   for (const [key, times] of counts) if (!times.some((t) => now - t < 86_400_000)) counts.delete(key);
   for (const [code, { until }] of linkCodes) if (until <= now) linkCodes.delete(code);
   for (const [code, { until }] of copyCodes) if (until <= now) copyCodes.delete(code);
+  for (const [code, { until }] of moveCodes) if (until <= now) moveCodes.delete(code);
   google.pruneGoogle(now);
 }
 
@@ -377,6 +383,21 @@ async function googleFinish(req, res, origin, headers) {
       if (!signedIn || !trusted(site) || signedIn.account.id !== entry.accountId) {
         return answer(res, 403, 'signed-out', headers);
       }
+      const holder = store.accountOfGoogle(site, entry.sub);
+      if (holder && holder.id !== entry.accountId) {
+        const target = store.account(entry.accountId);
+        if (target.googles?.[site]) return answer(res, 409, 'other', headers);
+        const hasPasskey = waysIn(holder) > 1;
+        const hasProductionSave = Boolean(holder.sites[site]);
+        if (hasProductionSave && !hasPasskey) return answer(res, 409, 'taken', headers);
+        prune();
+        if (moveCodes.size >= MOVE_LIMIT) return answer(res, 503, 'too many Google moves at once', headers);
+        const code = randomBytes(24).toString('base64url');
+        moveCodes.set(code, { site, sub: entry.sub, from: holder.id, to: target.id,
+          session: signedIn.session.hash, until: Date.now() + MOVE_MS });
+        const previewSaves = Object.keys(holder.sites).filter((saved) => saved !== site).length;
+        return answer(res, 200, { move: { code, previewSaves, hasProductionSave, hasPasskey } }, headers);
+      }
       const linked = await linkGoogle(entry.accountId, site, entry.sub);
       if (linked !== 'linked') return answer(res, 409, linked, headers);
       return answer(res, 200, { linked: true, account: accountView(store.account(entry.accountId), site) }, headers);
@@ -396,6 +417,41 @@ async function googleFinish(req, res, origin, headers) {
     log('signed in by google', account.id.slice(0, 6), site);
     return answer(res, 200, { token: result.token, account: accountView(result.changed, site) }, headers);
   });
+}
+
+/** Moves a Google login after its owner proved that identity in the target account's OAuth link flow. The old
+ *  account and all its saves stay; an account with a production save also needs a passkey before losing Google. */
+async function moveGoogle(req, res, signedIn, site, headers) {
+  if (!trusted(site)) return answer(res, 403, 'only from last-stand.cc', headers);
+  const code = String((await jsonOf(req))?.code ?? '');
+  prune();
+  const offer = moveCodes.get(code);
+  if (!offer) return answer(res, 401, 'no such move offer, or it expired', headers);
+  if (offer.to !== signedIn.account.id || offer.session !== signedIn.session.hash || offer.site !== site) {
+    return answer(res, 403, 'not this account and session', headers);
+  }
+  moveCodes.delete(code);
+  return store.withAccount(`google ${site} ${offer.sub}`, () =>
+    store.withAccount(offer.from, () => store.withAccount(offer.to, async () => {
+      const source = store.account(offer.from);
+      const target = store.account(offer.to);
+      if (!source || !target || store.accountOfGoogle(site, offer.sub)?.id !== source.id
+        || source.googles?.[site]?.sub !== offer.sub || target.googles?.[site]) {
+        return answer(res, 409, 'Google link changed: start again', headers);
+      }
+      if (source.sites[site] && waysIn(source) <= 1) {
+        return answer(res, 409, 'add a passkey to the old account before moving Google', headers);
+      }
+      const moved = structuredClone(target);
+      moved.googles ??= {};
+      moved.googles[site] = { sub: offer.sub, linked: Math.max(Date.now(), source.googles[site].linked + 1) };
+      const left = structuredClone(source);
+      delete left.googles[site];
+      await store.keepAccount(moved);
+      await store.keepAccount(left);
+      log('google moved', source.id.slice(0, 6), 'to', target.id.slice(0, 6));
+      return answer(res, 200, { linked: true, account: accountView(moved, site) }, headers);
+    })));
 }
 
 /** Links Google's account `sub` to the account `accountId`: `linked`, or why not (`taken` by another account,
@@ -595,6 +651,7 @@ async function signedInRequest(req, res, path, origin, headers) {
     if (!store.account(entry.accountId)) return answer(res, 401, 'production account is gone', headers);
     return copyProduction(res, account, entry.accountId, site, headers);
   }
+  if (path === '/saves/google/move' && req.method === 'POST') return moveGoogle(req, res, signedIn, site, headers);
   if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account, site), headers);
   if (path === '/saves/signout' && req.method === 'POST') {
     await change(account.id, (changed) => {

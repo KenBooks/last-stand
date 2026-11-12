@@ -229,11 +229,11 @@ test('Google is linked from production alone, to one account, and is never the l
   const account = (await call('GET', '/saves/account', { token })).body;
   assert.equal(account.google, true);
   assert.equal((await signInWithGoogle('sub-linked')).body.account.id, account.id);
-  // another account can't take that Google account
+  // another account gets an explicit move offer after proving the same Google identity
   const other = await signUp(authenticator());
   const taking = await linkWithGoogle(other, 'sub-linked');
-  assert.equal(taking.status, 409);
-  assert.equal(taking.body, 'taken');
+  assert.equal(taking.status, 200);
+  assert.ok(taking.body.move.code);
   // with a passkey beside it, Google can go, and comes back; the passkey can go while Google stays
   assert.equal((await call('DELETE', '/saves/google', { origin: PREVIEW, token: preview })).status, 403);
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 204);
@@ -242,6 +242,55 @@ test('Google is linked from production alone, to one account, and is never the l
   assert.equal((await call('DELETE', `/saves/passkey/${encodeURIComponent(passkey)}`, { token })).status, 204);
   // now Google is the last way in
   assert.equal((await call('DELETE', '/saves/google', { token })).status, 409);
+});
+
+test('an OAuth-proven owner can move Google from preview junk to the account they are signed into', async () => {
+  const source = await signInWithGoogle('sub-move');
+  const store = await import('../store.mjs');
+  const junk = structuredClone(store.account(source.body.account.id));
+  await store.keepSite(junk, 'pr-5.ls.wellscoped.dev', { site: 'pr-5.ls.wellscoped.dev', parts: {} });
+  await store.keepAccount(junk);
+  const target = await signUp(authenticator());
+  const stranger = await signUp(authenticator());
+  const offer = await linkWithGoogle(target, 'sub-move');
+  assert.equal(offer.status, 200);
+  assert.equal(offer.body.move.previewSaves, 1);
+  assert.equal(offer.body.move.hasProductionSave, false);
+  assert.equal(offer.body.move.hasPasskey, false);
+  const code = offer.body.move.code;
+  assert.equal((await call('POST', '/saves/google/move', { token: stranger, json: { code } })).status, 403);
+  const moved = await call('POST', '/saves/google/move', { token: target, json: { code } });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.account.google, true);
+  assert.equal((await signInWithGoogle('sub-move')).body.account.id, moved.body.account.id);
+  assert.equal((await call('GET', '/saves/account', { token: source.body.token })).body.google, false);
+  assert.ok(await store.readSite(source.body.account.id, 'pr-5.ls.wellscoped.dev'), 'old preview save remains');
+  assert.equal((await call('POST', '/saves/google/move', { token: target, json: { code } })).status, 401);
+  await store.load(DATA);
+  assert.equal((await signInWithGoogle('sub-move')).body.account.id, moved.body.account.id, 'the move survives a restart');
+});
+
+test('moving Google cannot strand an account with a production save', async () => {
+  const source = await signInWithGoogle('sub-kept-save');
+  const store = await import('../store.mjs');
+  const withSave = structuredClone(store.account(source.body.account.id));
+  await store.keepSite(withSave, 'last-stand.cc', { site: 'last-stand.cc', parts: {} });
+  await store.keepAccount(withSave);
+  const target = await signUp(authenticator());
+  const refused = await linkWithGoogle(target, 'sub-kept-save');
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body, 'taken');
+  assert.equal((await signInWithGoogle('sub-kept-save')).body.account.id, source.body.account.id);
+  const device = authenticator();
+  const options = await call('POST', '/saves/passkey/options', { token: source.body.token, json: { purpose: 'register' } });
+  const added = await call('POST', '/saves/passkey/verify', {
+    token: source.body.token, json: { purpose: 'register', response: device.create(options.body, PRODUCTION) },
+  });
+  assert.equal(added.status, 200);
+  const offered = await linkWithGoogle(target, 'sub-kept-save');
+  assert.equal(offered.status, 200);
+  assert.equal(offered.body.move.hasProductionSave, true);
+  assert.equal(offered.body.move.hasPasskey, true);
 });
 
 test('a link address sent to another player links nothing: it finishes only from the tab and session that began it', async () => {
