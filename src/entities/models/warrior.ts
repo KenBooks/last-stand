@@ -493,12 +493,11 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // (the surcoat's cloth and the shield's paint: his blue)
   const dye = new Dye('blue').cloth(cloth);
-  // Independent materials: dye the cuirass and trousers without colouring buckles, boots or weapons.
+  // Independent materials: tint the cuirass without colouring the lower body, fittings or weapons.
   const cuirass = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap,
     roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
   const cuirassBack = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
-  const trousers = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2), map: null });
-  dye.tint(cuirass, cuirassBack, trousers);
+  dye.tint(cuirass, cuirassBack);
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
@@ -638,8 +637,8 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), trousers, th, kn, 0.32, 0.46);
-    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), trousers, kn, an, 0.3, 0.41);
+    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
+    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), leatherDark, kn, an, 0.3, 0.41);
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
