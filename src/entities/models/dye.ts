@@ -10,6 +10,8 @@ interface Dyed {
   material: THREE.Material & { color: THREE.Color };
   /** its colour and its rim's as built */
   color: THREE.Color;
+  tone: THREE.Color;
+  matched: boolean;
   rim: THREE.Color | null;
   rimBuilt: THREE.Color | null;
   tint: boolean;
@@ -36,12 +38,19 @@ export class Dye {
     return this.add(materials, true);
   }
 
-  private add(materials: THREE.Material[], tint: boolean): this {
+  /** Cover another torso surface in the cloth's shade, while Any still restores its original material colour. */
+  tintLike(reference: THREE.Material, ...materials: THREE.Material[]): this {
+    return this.add(materials, true, (reference as Dyed['material']).color);
+  }
+
+  private add(materials: THREE.Material[], tint: boolean, reference?: THREE.Color): this {
     for (const material of materials) {
       const m = material as Dyed['material'];
       const rim = (material as { kitLooks?: KitLooks }).kitLooks?.rim.value ?? null;
       if (!this.dyed.length) m.color.getHSL(this.main, THREE.SRGBColorSpace);
-      this.dyed.push({ material: m, color: m.color.clone(), rim, rimBuilt: rim?.clone() ?? null, tint });
+      const color = m.color.clone();
+      this.dyed.push({ material: m, color, tone: reference?.clone() ?? color, matched: !!reference,
+        rim, rimBuilt: rim?.clone() ?? null, tint });
     }
     return this;
   }
@@ -84,7 +93,8 @@ export class Dye {
     for (const d of this.dyed) {
       const own = !id || !heroColour(id) || (id === this.native && !d.tint);
       if (own) d.material.color.copy(d.color);
-      else this.shade(d.color, id, d.material.color, d.tint);
+      else if (id === this.native && d.matched) d.material.color.copy(d.tone);
+      else this.shade(d.tone, id, d.material.color, d.tint);
       for (const copy of copies.get(d) ?? []) copy.color.copy(d.material.color);
       if (d.rim && d.rimBuilt) {
         if (own) d.rim.copy(d.rimBuilt);

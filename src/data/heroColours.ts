@@ -1,5 +1,5 @@
 // The colours a player's hero can wear: his cloth dyed (the mage's coat, the warrior's tunic and shield, the ranger's
-// coat and hat), with the warrior's cuirass tinted too; never legs, skin, weapons or other fittings.
+// coat and hat), with the warrior's cuirass and lower torso tinted too; never legs, skin, weapons or other fittings.
 // Each is the main cloth's colour (HSL, sRGB); the hero's other
 // dyed cloths keep their shade against it (models/dye.ts). A class's own colour is its look as built, untouched.
 

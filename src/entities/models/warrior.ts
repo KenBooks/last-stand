@@ -498,6 +498,10 @@ export function* warriorSteps(): ModelSteps {
     roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
   const cuirassBack = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
   dye.tint(cuirass, cuirassBack);
+  // The abdomen and its broad leather bands are torso too; keep them separate from the legs and waist belt.
+  const torsoLeather = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2), map: null });
+  const torsoBands = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2), map: null });
+  dye.tintLike(cloth, torsoLeather, torsoBands);
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
@@ -525,8 +529,8 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
   S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
-  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), leatherDark, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), leather, j.spine);
+  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), torsoLeather, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), torsoBands, j.spine);
   yield;
   // rivets along each band
   const studs: THREE.BufferGeometry[] = [];

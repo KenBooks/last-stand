@@ -31,3 +31,23 @@ test('every colour dyes only registered materials and copies, without a shader v
   assert.equal(cloth.color.getHex(), original[0]);
   assert.notEqual(metal.color.getHex(), original[1], 'an explicit native-blue pick must tint the added cuirass too');
 });
+
+test('the leather abdomen matches the torso cloth while legs and the original look stay independent', () => {
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x323c56 });
+  const abdomen = new THREE.MeshStandardMaterial({ color: 0x2c1d14 });
+  const legs = new THREE.MeshStandardMaterial({ color: 0x2c1d14 });
+  cloth.onBeforeCompile = () => {};
+  abdomen.onBeforeCompile = () => {};
+  legs.onBeforeCompile = () => {};
+  const root = new THREE.Group();
+  for (const material of [cloth, abdomen, legs]) root.add(new THREE.Mesh(new THREE.BufferGeometry(), material));
+  const original = abdomen.color.getHex();
+  const dye = new Dye('blue').cloth(cloth).tintLike(cloth, abdomen);
+  for (const colour of ['gold', 'red', 'teal', 'blue']) {
+    dye.apply(root, colour);
+    assert.equal(abdomen.color.getHex(), cloth.color.getHex());
+    assert.equal(legs.color.getHex(), original);
+  }
+  dye.apply(root, null);
+  assert.equal(abdomen.color.getHex(), original);
+});
