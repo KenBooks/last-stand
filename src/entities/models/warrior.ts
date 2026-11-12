@@ -9,6 +9,7 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { buildTrousers, type TrouserCut } from './trousers';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { fitArm, solveArm, type ArmResult } from './armIK';
@@ -47,6 +48,11 @@ const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
+/** his trousers' cut (models/trousers.ts): a fighter's hips and thighs under the hide, tucked into the boots under their fur */
+const TROUSERS: TrouserCut = {
+  top: 0.13, waistW: 0.132, waistD: 0.108, hipW: 0.188, front: 0.1, seat: 0.118, crotch: -0.115,
+  thigh: 0.088, knee: 0.064, calf: 0.058, ankle: 0.042, tuck: 0.1, folds: 0.004,
+};
 interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
@@ -489,6 +495,9 @@ export function* warriorSteps(): ModelSteps {
   const brass = kit.std({ color: 0xb08a4a, metalness: 1, roughness: 0.38 });
   const leather = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const leatherDark = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  // the trousers' hide: lighter than the straps over it and lit at its edges, so a leg's shape reads against the dark
+  // (in the straps' own near-black a leg was a flat silhouette, #520)
+  const hide = kit.rim({ color: 0x46342a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) }, 0x6e5a48, 0.3);
   const cloth = kit.rim({ color: 0x323c56, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x3a4a70, 0.35);
   yield;
   // (the surcoat's cloth and the shield's paint: his blue)
@@ -639,9 +648,11 @@ export function* warriorSteps(): ModelSteps {
 
   yield;
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
-  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
-    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), leatherDark, kn, an, 0.3, 0.41);
+  // (the trousers one piece a leg from the waist to the ankle, the seat and hips with them, models/trousers.ts: two
+  // round-topped tubes from the hip joints had no pelvis between them, and bare of the mail the world showed there)
+  buildTrousers(S, j, TROUSERS, hide, leatherDark);
+  yield;
+  for (const [kn, an] of [[j.kneeL, j.ankleL], [j.kneeR, j.ankleR]] as const) {
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
