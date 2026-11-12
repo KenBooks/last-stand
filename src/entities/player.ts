@@ -316,6 +316,7 @@ export class Player {
     G.scene.add(this.obj);
     this.recomputeStats(equipped);
     this.reset();
+    if (this.local) this.setColour(ownColour());
   }
 
   /** Dyes the hero's cloth in `colour` (null: his own). A material's colour alone: nothing compiles. */

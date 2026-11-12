@@ -3,7 +3,7 @@
 // compiles nothing (root AGENTS.md: shaders compile at load), and on WebGPU the merged meshes read it live off their
 // base material (`standInFor` in drawAsOne.ts).
 import * as THREE from 'three';
-import { heroColour, type HeroColourId } from '../../data/heroColours';
+import { heroColour, type HeroColourId } from '../../data/heroColours.ts';
 import type { KitLooks } from '../../core/materials';
 
 interface Dyed {
@@ -12,6 +12,7 @@ interface Dyed {
   color: THREE.Color;
   rim: THREE.Color | null;
   rimBuilt: THREE.Color | null;
+  tint: boolean;
 }
 
 const _hsl = { h: 0, s: 0, l: 0 };
@@ -22,15 +23,25 @@ export class Dye {
   private readonly main = { h: 0, s: 0, l: 0 };
 
   /** `native`: the colour the hero is built in (that colour leaves him as he is) */
-  constructor(readonly native: HeroColourId) {}
+  readonly native: HeroColourId;
+  constructor(native: HeroColourId) { this.native = native; }
 
   /** Cloth dyed with the rest, the main cloth first. */
   cloth(...materials: THREE.Material[]): this {
+    return this.add(materials, false);
+  }
+
+  /** Added surfaces keep their original look under Any, but take even the class's explicit native colour. */
+  tint(...materials: THREE.Material[]): this {
+    return this.add(materials, true);
+  }
+
+  private add(materials: THREE.Material[], tint: boolean): this {
     for (const material of materials) {
       const m = material as Dyed['material'];
       const rim = (material as { kitLooks?: KitLooks }).kitLooks?.rim.value ?? null;
       if (!this.dyed.length) m.color.getHSL(this.main, THREE.SRGBColorSpace);
-      this.dyed.push({ material: m, color: m.color.clone(), rim, rimBuilt: rim?.clone() ?? null });
+      this.dyed.push({ material: m, color: m.color.clone(), rim, rimBuilt: rim?.clone() ?? null, tint });
     }
     return this;
   }
@@ -45,11 +56,13 @@ export class Dye {
    * against the main cloth's. (The hue too was kept against the main cloth's at first: the ranger's felt sits 0.03
    * greener than his coat, nothing in green, but in gold it turned olive and in red brown, the hat another cloth.)
    */
-  private shade(built: THREE.Color, id: HeroColourId, out: THREE.Color): void {
+  private shade(built: THREE.Color, id: HeroColourId, out: THREE.Color, tint: boolean): void {
     const [h, s, l] = heroColour(id)!.hsl;
     built.getHSL(_hsl, THREE.SRGBColorSpace);
-    const sat = this.main.s > 0.01 ? (_hsl.s * s) / this.main.s : s;
-    const light = this.main.l > 0.01 ? (_hsl.l * l) / this.main.l : l;
+    let sat = this.main.s > 0.01 ? (_hsl.s * s) / this.main.s : s;
+    let light = this.main.l > 0.01 ? (_hsl.l * l) / this.main.l : l;
+    // Silver's low saturation and high lightness otherwise wash every dye back to almost white.
+    if (tint) { sat = Math.max(sat, s * 0.65); light = Math.min(light, l * 1.7); }
     out.setHSL(h, Math.min(1, sat), Math.min(0.92, light), THREE.SRGBColorSpace);
   }
 
@@ -58,7 +71,6 @@ export class Dye {
    * material (`Sculpt.build`), found by the shader patch it shares with its kit's.
    */
   apply(root: THREE.Object3D, id: HeroColourId | null): void {
-    const own = !id || id === this.native || !heroColour(id);
     const copies = new Map<Dyed, Dyed['material'][]>();
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -70,12 +82,13 @@ export class Dye {
       }
     });
     for (const d of this.dyed) {
+      const own = !id || !heroColour(id) || (id === this.native && !d.tint);
       if (own) d.material.color.copy(d.color);
-      else this.shade(d.color, id, d.material.color);
+      else this.shade(d.color, id, d.material.color, d.tint);
       for (const copy of copies.get(d) ?? []) copy.color.copy(d.material.color);
       if (d.rim && d.rimBuilt) {
         if (own) d.rim.copy(d.rimBuilt);
-        else this.shade(d.rimBuilt, id, d.rim);
+        else this.shade(d.rimBuilt, id, d.rim, d.tint);
       }
     }
   }

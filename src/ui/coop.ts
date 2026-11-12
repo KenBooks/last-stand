@@ -162,7 +162,7 @@ export function renderCoop(): void {
       <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
         <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
       <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
-      ${colourPickerHtml(false)}
+      ${colourPickerHtml()}
       ${portraitPickerHtml()}
       <div class="coop-choice${up ? '' : ' off'}">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
@@ -172,7 +172,7 @@ export function renderCoop(): void {
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
-    bindColourPicker(body, false);
+    bindColourPicker(body);
     bindPortraitPicker(body, renderCoop);
     $('#btn-coop-host', body).onclick = () => {
       if (server !== 'up') return;
@@ -222,7 +222,7 @@ export function renderCoop(): void {
       <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
       ${s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
       <ul class="coop-list">${list}</ul>
-      ${colourPickerHtml(true)}
+      ${colourPickerHtml()}
       ${portraitPickerHtml()}
       <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
         After each wave everyone decides: bank and leave, or continue together.</p>
@@ -234,6 +234,7 @@ export function renderCoop(): void {
       navigator.clipboard?.writeText(inviteLink()).then(() => { copy.textContent = 'Copied'; }, () => $<HTMLInputElement>('.coop-link input', body).select());
     };
   }
+  bindColourPicker(body);
   bindPortraitPicker(body, renderCoop);
   bindReportLinks(body);
   $('#btn-coop-leave', body).onclick = () => { sfx.click(); leaveRoom(); };

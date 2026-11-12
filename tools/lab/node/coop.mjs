@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
+import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
 import { OUT } from './paths.mjs';
 
 /** where `--pictures` puts each scenario's pictures of the two screens */
@@ -174,6 +175,7 @@ function describeStates(states) {
 export class Pair {
   constructor({ pages, ping, jitter, frameMs }) {
     this.pages = pages;
+    this.frameMs = frameMs;
     const random = seededRandom(LINK_SEED);
     // (one way from each page to each other, all drawing from one stream: with two, the host's way to the guest
     // and back, as a pair has always had them)
@@ -265,6 +267,21 @@ export class Pair {
  * did, begun in practice.
  */
 async function startTogether(pair, link, lines, canary) {
+  const { problems } = await openTogether(pair, link, lines, canary);
+  await callPage(pair.guest, 'coopPractise');
+  const practising = (host, guest) => guest.stowed && !guest.free;
+  await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
+  await pair.reseed();
+  await callPage(pair.host, 'coopStart');
+  const inRun = (host, guest, states) => states.every((state) => state.mode === 'run');
+  const states = await pair.until(inRun, START_FRAMES, 'the run never started on every game');
+  const free = states.flatMap((state, index) => (state.free ? [PARTY_TAGS[index]] : []));
+  problems.push(...free.map((tag) => `${tag}'s run kept the lobby's free casting (no costs or cooldowns)`));
+  return problems;
+}
+
+/** Open the party without starting a fight, so colour checks need no combat scenarios. */
+async function openTogether(pair, link, lines, canary) {
   await pair.reseed();
   const opening = (index) => ({ tag: PARTY_TAGS[index], colour: PARTY_PICKS[index], ...link });
   const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...opening(0) });
@@ -281,16 +298,83 @@ async function startTogether(pair, link, lines, canary) {
     const colours = colourLines(pairStates, PARTY_PICKS.slice(0, 2), lines);
     problems = canary ? canaryLines(colours, lines) : colours;
   }
-  await callPage(pair.guest, 'coopPractise');
-  const practising = (host, guest) => guest.stowed && !guest.free;
-  await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
-  await pair.reseed();
+  return { problems, code };
+}
+
+/** Real picker changes plus conflicting requests over the same delayed link as combat. */
+async function changeColours(pair, link, lines, canary) {
+  const { problems, code } = await openTogether(pair, link, lines, false);
+  const tags = PARTY_TAGS.slice(0, pair.pages.length);
+  const settled = async () => {
+    const states = await pair.run(Math.ceil((link.ping + link.jitter * 8 + 1000) / pair.frameMs));
+    problems.push(...(judgeColours(states, tags, states.map(state => state.colour)) ?? []));
+    return states;
+  };
+  let states = await pair.run(1);
+  const available = () => HERO_COLOURS.slice(6).find(colour => !states.some(state => state.colour === colour.id)).id;
+  const hostColour = available();
+  await callPage(pair.host, 'coopPickColour', { colour: hostColour });
+  states = await settled();
+  if (states[0].colour !== hostColour) problems.push('the host could not change colour without leaving');
+  const guestColour = available();
+  await callPage(pair.guest, 'coopPickColour', { colour: guestColour });
+  states = await settled();
+  if (states[1].colour !== guestColour) problems.push('the guest could not change colour without leaving');
+  const contested = available();
+  const ask = page => callPage(page, 'coopPickColour', { colour: contested, request: true });
+  await Promise.all(pair.pages.slice(0, 2).map(ask));
+  states = await settled();
+  if (states.filter(state => state.colour === contested).length !== 1) {
+    problems.push('competing requests did not reserve exactly one colour');
+  }
+  if (states[1].colour !== guestColour) problems.push('a rejected request replaced the guest\'s existing colour');
+  if (pair.pages.length > 2) {
+    const previous = states.map(state => state.colour);
+    const contested = available();
+    const ask = page => callPage(page, 'coopPickColour', { colour: contested, request: true });
+    await Promise.all(pair.pages.slice(1, 3).map(ask));
+    states = await settled();
+    if (states.slice(1, 3).filter(state => state.colour === contested).length !== 1) {
+      problems.push('two guests did not resolve their colour race');
+    }
+    for (const index of [1, 2]) {
+      if (states[index].colour !== contested && states[index].colour !== previous[index]) {
+        problems.push('a losing guest lost its previous colour');
+      }
+    }
+    await callPage(pair.pages[2], 'coopRejoin', { code, tag: PARTY_TAGS[2] });
+    const rejoined = (host, guest, all) => all.every(state =>
+      state.status !== 'joining' && state.partners === pair.pages.length - 1);
+    await pair.until(rejoined, JOIN_FRAMES, 'rejoining after live colour changes lost a party member');
+    states = await settled();
+    lines.push('two guests racing resolved uniquely; rejoining after changes preserved the authoritative roster');
+  }
+  await callPage(pair.guest, 'coopPickColour', { colour: null });
+  states = await settled();
+  if (states.some(state => state.status !== 'hosting' && state.status !== 'joined')) {
+    problems.push('a colour change left the party');
+  }
+  lines.push('live colours: picker changes, competing requests and Any stayed unique and agreed on every game');
   await callPage(pair.host, 'coopStart');
-  const inRun = (host, guest, states) => states.every((state) => state.mode === 'run');
-  const states = await pair.until(inRun, START_FRAMES, 'the run never started on every game');
-  const free = states.flatMap((state, index) => (state.free ? [PARTY_TAGS[index]] : []));
-  problems.push(...free.map((tag) => `${tag}'s run kept the lobby's free casting (no costs or cooldowns)`));
-  return problems;
+  const inRun = (host, guest, all) => all.every(state => state.mode === 'run');
+  await pair.until(inRun, START_FRAMES, 'the colour test run never started');
+  const runColour = available();
+  await callPage(pair.guest, 'coopPickColour', { colour: runColour });
+  states = await settled();
+  if (states[1].colour !== runColour || states.some(state => state.mode !== 'run')) {
+    problems.push('a live Settings colour change failed during a run');
+  }
+  lines.push('during the run: Settings changed the guest\'s colour without leaving the party or interrupting the run');
+  if (canary) {
+    await callPage(pair.guest, 'coopWearColour', { colour: states[0].colour });
+    const broken = await pair.until(() => true, 1, 'no canary frame ran');
+    const found = judgeColours(broken, tags, broken.map(state => state.colour)) ?? [];
+    if (!found.some(problem => problem.includes('two players wear one colour'))) {
+      problems.push('canary: duplicate live colour went undetected');
+    }
+    lines.push('canary: an unannounced duplicate colour was detected');
+  }
+  return { text: lines.join('\n'), problems };
 }
 
 /** the frames the lobby's practice has to show its bar */
@@ -446,6 +530,9 @@ async function heroCostLines(pair) {
  */
 export async function runCoop(side, options) {
   const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2, canary } = options;
+  if (scenarios?.includes('colours') && scenarios.length !== 1) {
+    throw labError('coop: colours runs alone, without combat');
+  }
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -457,6 +544,9 @@ export async function runCoop(side, options) {
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
     const pair = new Pair({ pages: [side.page, ...partners], ping, jitter, frameMs });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
+    if (scenarios?.length === 1 && scenarios[0] === 'colours') {
+      return await changeColours(pair, { ping, jitter }, lines, canary);
+    }
     const problems = await startTogether(pair, { ping, jitter }, lines, canary);
     const casting = problems.length ? 'free casting' : 'a run\'s costs and cooldowns';
     lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);

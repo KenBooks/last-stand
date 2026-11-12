@@ -1,5 +1,11 @@
 # `coop`
 
+`coop --scenarios colours` checks live colour changes without running the combat suite: host and guest picker changes,
+competing requests for the same colour, Any, and agreement of the colours actually drawn on every game across the
+delayed link. `--party 3|4` includes the remaining party members; `--canary` deliberately puts the guest in the
+host's colour and must detect the duplicate. It finishes by changing colour from Settings during a run. The normal
+combat scenarios keep their existing room checks.
+
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 

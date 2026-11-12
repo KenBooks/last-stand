@@ -1,8 +1,10 @@
 // The colours a player's hero can wear: his cloth dyed (the mage's coat, the warrior's tunic and shield, the ranger's
-// coat and hat), never his skin, steel or leather. Each is the main cloth's colour (HSL, sRGB); the hero's other
+// coat and hat), with the warrior's cuirass tinted and his trousers dyed too; never skin, weapons or other fittings.
+// Each is the main cloth's colour (HSL, sRGB); the hero's other
 // dyed cloths keep their shade against it (models/dye.ts). A class's own colour is its look as built, untouched.
 
-export type HeroColourId = 'red' | 'blue' | 'green' | 'gold' | 'purple' | 'white';
+export type HeroColourId = 'red' | 'blue' | 'green' | 'gold' | 'purple' | 'white'
+  | 'orange' | 'teal' | 'cyan' | 'rose' | 'brown' | 'black';
 
 export interface HeroColour {
   id: HeroColourId;
@@ -25,6 +27,12 @@ export const HERO_COLOURS: readonly HeroColour[] = [
   { id: 'gold', name: 'Gold', hsl: [0.112, 0.62, 0.4], swatch: '#c7942a' },
   { id: 'purple', name: 'Purple', hsl: [0.8, 0.36, 0.32], swatch: '#7a4aa0' },
   { id: 'white', name: 'White', hsl: [0.11, 0.12, 0.66], swatch: '#dcd5c6' },
+  { id: 'orange', name: 'Orange', hsl: [0.055, 0.64, 0.35], swatch: '#b96429' },
+  { id: 'teal', name: 'Teal', hsl: [0.46, 0.5, 0.26], swatch: '#318b79' },
+  { id: 'cyan', name: 'Ice blue', hsl: [0.53, 0.43, 0.47], swatch: '#70b9c8' },
+  { id: 'rose', name: 'Rose', hsl: [0.94, 0.43, 0.45], swatch: '#bc6d89' },
+  { id: 'brown', name: 'Brown', hsl: [0.065, 0.35, 0.24], swatch: '#79543a' },
+  { id: 'black', name: 'Black', hsl: [0.61, 0.1, 0.12], swatch: '#30333b' },
 ];
 
 export const heroColour = (id: string | null | undefined): HeroColour | null =>
