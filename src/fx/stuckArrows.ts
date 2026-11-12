@@ -1,5 +1,5 @@
 // Spent arrows: every arrow that came down stays where it ended until the arena shows another biome (`clearSpent`: they
-// all go) or the next wave starts (they dissolve); when there are too many (STUCK_MAX), the oldest fade out too:
+// all go), its wave is won (they dissolve as a killed foe's body does: `dissolveSpent`); when there are too many (STUCK_MAX), the oldest fade out too:
 // standing in the ground or a prop, riding a foe's body (on the joint it struck, until the body dissolves or the prop breaks, when they drop), or loose, glancing off stone and
 // tumbling to lie on the floor. Two instanced meshes hold them: the whole arrow within NEAR of the camera, the plain
 // one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
@@ -15,6 +15,7 @@ import { sfx } from '../core/audio';
 import { col, particles } from './particles';
 import { clamp, rand } from '../util';
 import { on } from '../events';
+import { createKit } from '../core/materials';
 import type { Obstacle } from '../types';
 
 /** how many spent arrows stay; past that the oldest fade out over FADE s (shrinking into their buried point) */
@@ -80,13 +81,27 @@ const total = (): number => lists[0].length + lists[1].length;
 /** every arrow's material, in flight and spent (double-sided: an arrow's feathers are single sheets) */
 export const arrowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
 
+/** the spent arrows' material: the arrow's, on the material kit, so they dissolve as a killed foe's body does (its noise,
+ *  its glowing edge in the kit's colour: entities/corpse.ts), all of them at once by the kit's one uniform */
+const kit = createKit();
+const spentMat = kit.std({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
+/** how long they take to dissolve (s: a foe's body's, corpse.ts `FADE`) */
+const DISSOLVE = 1.1;
+/** s since they began to dissolve (-1: they aren't), and when the next motes rise off the near ones */
+let dissolving = -1;
+let dissolveMoteAt = 0;
+
 export function warmStuck(): THREE.Object3D[] {
-  return [arrowGeometry(), arrowLite()].map((g) => { const m = new THREE.InstancedMesh(g, arrowMat, 1); m.count = 1; return m; });
+  return [arrowGeometry(), arrowLite()].flatMap((g) => [arrowMat, spentMat].map((mat) => {
+    const m = new THREE.InstancedMesh(g, mat, 1);
+    m.count = 1;
+    return m;
+  }));
 }
 
 function start(): void {
   const ms = meshes = [arrowLite(), arrowGeometry()].map((g, i) => {
-    const m = new THREE.InstancedMesh(g, arrowMat, STUCK_MAX + HEADROOM);
+    const m = new THREE.InstancedMesh(g, spentMat, STUCK_MAX + HEADROOM);
     m.count = 0; m.frustumCulled = false; m.name = i ? 'spent arrows' : 'spent arrows (plain)';
     // (the profiler's part of them, perf/sceneParts.ts: 1,000 of them in the forest's top view, the most kept, read
     // nothing of a phone's 8.5 ms frame at Very low, `lab profile --device phone --level verylow --arrows 1000`)
@@ -182,6 +197,16 @@ function write(s: Spent): void {
 }
 
 function step(dt: number): boolean {
+  if (dissolving >= 0) {
+    dissolving += dt;
+    kit.u.uDissolve.value = Math.min(1, dissolving / DISSOLVE);
+    if (dissolving >= DISSOLVE) clearSpent();
+    else if (dissolving >= dissolveMoteAt) {
+      // (motes off the whole arrows near the camera alone, as a foe's body gives them: a thousand far off would be noise)
+      for (const s of lists[1]) if (Math.random() < 0.5) dissolveMote(s);
+      dissolveMoteAt += 0.12 + rand(0, 0.05);
+    }
+  }
   for (const s of [...moving]) {
     if (s.fade >= 0 && (s.fade += dt) >= FADE) { remove(s); continue; }
     if (s.mode === 'body' && s.gone!()) release(s);
@@ -380,14 +405,20 @@ export function spentStats(): { all: number; fixed: number; inProp: number; body
 /** The old floor and props aren't there after a biome switch, so remove their arrows immediately. */
 export function clearSpent(): void {
   for (const l of lists) for (const s of [...l]) remove(s);
+  dissolving = -1;
+  kit.u.uDissolve.value = 0;
 }
 on('biomeChanged', clearSpent);
 
-/** Start the enemy-like dissolve for every arrow when a fresh wave begins. */
+/** Every spent arrow dissolving, as a killed foe's body does, and then gone (one shot meanwhile dissolves with them). */
 export function dissolveSpent(): void {
-  for (const l of lists) for (const s of [...l]) fadeOut(s);
+  if (!total() || dissolving >= 0) return;
+  dissolving = 0;
+  dissolveMoteAt = rand(0.03, 0.16);
 }
-// Every game, the host's and each guest's, hears its wave start (game/run.ts, net/sync.ts), at every quality level.
+// As the wave is won, and again as the next starts (what was shot between them): every game hears both, the host's and
+// each guest's (game/run.ts, net/sync.ts), at every quality level.
+on('waveCleared', dissolveSpent);
 on('waveStarted', dissolveSpent);
 
 /** Every spent arrow's middle and its point (for the probes: where they lie against the floor, the props and the wall). */
