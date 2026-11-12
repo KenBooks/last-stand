@@ -82,6 +82,7 @@ export function renderCloudBar(): void {
       : lastSync ? `Synced ${ago(lastSync)}` : 'Synced';
     const more = [
       '<button class="btn sc-give">Sign in elsewhere</button>',
+      onProduction() ? '<button class="btn sc-copy-code">Copy heroes to a preview</button>' : '',
       onProduction() ? '' : '<button class="btn sc-copy">Copy my production heroes here</button>',
       // off production the server takes a passkey only just after a code signed this device in
       onProduction() || cloud.passkeyWindow() ? '<button class="btn sc-key">Add a passkey</button>' : '',
@@ -104,6 +105,7 @@ export function renderCloudBar(): void {
   bind(bar, '.sc-out', () => act(() => cloud.signOut()));
   bind(bar, '.sc-sync', () => act(() => cloud.syncNow()));
   bind(bar, '.sc-give', () => void showCode());
+  bind(bar, '.sc-copy-code', () => void showCopyCode());
   bind(bar, '.sc-copy', confirmCopy);
   bind(bar, '.sc-key', () => act(() => cloud.addPasskey(), () => say('Passkey added: this device can sign in with it.')));
   bind(bar, '.sc-del', confirmDeleteSave);
@@ -145,8 +147,10 @@ function failure(e: unknown): string {
   if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError')) return 'Cancelled: no passkey was used.';
   if (e instanceof CloudError) {
     if (e.status === 0) return 'The cloud saves server could not be reached. Try again in a while.';
+    if (e.message.startsWith('no such copy code')) return 'That copy code expired or was already used. Make a new one on last-stand.cc.';
     if (e.status === 401) return 'Not signed in: that passkey or code isn\'t one this server knows, or it expired.';
     if (e.status === 429) return 'Too many tries: wait a while and try again.';
+    if (e.message.startsWith('no production save')) return 'No production cloud save was found. Sync slot 1 on last-stand.cc, then make a new copy code.';
     if (e.message.startsWith('Google sign-in is off')) return 'Signing in with Google is off on this server for now.';
     if (e.message.startsWith('the last way in')) {
       return 'Google is the only way into this account: add a passkey first, then unlink Google.';
@@ -208,7 +212,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
 export function showGoogleLanding(landing: cloud.GoogleLanding): void {
   if (landing.kind === 'signedIn') { afterSignIn(); return; }
   if (landing.kind === 'linked') {
-    say('Google is linked: sign in with it on any device, as well as with your passkeys.');
+    say('Google is linked: sign in with it on any device on last-stand.cc, as well as with your passkeys.');
     return;
   }
   // (the reason comes from the page's address: only the screen's own are said)
@@ -217,7 +221,7 @@ export function showGoogleLanding(landing: cloud.GoogleLanding): void {
 }
 
 function confirmLinkGoogle(): void {
-  dialog('Link Google', '<p>Google becomes a second way into this account, on any device and any preview. Google tells the '
+  dialog('Link Google', '<p>Google becomes a second way into this account on last-stand.cc. Google tells the '
     + 'server only an id for your Google account: no name, email or picture.</p><p>The game reloads on its way back from Google; '
     + 'your heroes are saved as you play, so nothing is lost.</p>', [
     { label: 'Go to Google', kind: 'primary', run: () => { closeDialog(); return act(() => cloud.goToGoogle('link')); } },
@@ -280,6 +284,15 @@ async function showCode(): Promise<void> {
     const minutes = Math.round((until - Date.now()) / 60_000);
     const where = previewsOnly ? 'on another device\'s preview (never on last-stand.cc)' : 'on the other device or on a preview';
     dialog('Sign in elsewhere', `<p class="cd-shown">${code.slice(0, 4)}-${code.slice(4)}</p><p>Type it ${where}, under Save slots, <b>Use a sign-in code</b>. It works once, for ${minutes} minutes. Never give it to anyone else: it opens your account.</p>`,
+      [{ label: 'Done', kind: 'primary' }]);
+  } catch (e) { say(failure(e)); }
+}
+
+async function showCopyCode(): Promise<void> {
+  try {
+    const { code, until } = await cloud.makeCopyCode();
+    const minutes = Math.round((until - Date.now()) / 60_000);
+    dialog('Copy heroes to a preview', `<p class="cd-shown">${code.slice(0, 4)}-${code.slice(4)}</p><p>Open the preview\'s Save slots, choose <b>Copy my production heroes here</b>, and type this code. It copies your production save once, for ${minutes} minutes, without signing the preview into your production account. Keep the code private.</p>`,
       [{ label: 'Done', kind: 'primary' }]);
   } catch (e) { say(failure(e)); }
 }
@@ -387,10 +400,22 @@ const power = (p: Profile): number => Object.values(p.equipped).reduce((s, it) =
 
 // --- copying and deleting ------------------------------------------------------------------------------------
 function confirmCopy(): void {
-  dialog('Copy your production heroes here?', '<p>This preview\'s cloud save (slot 1 here) is replaced by your heroes from last-stand.cc. Production\'s save stays as it is: nothing here ever writes it.</p>', [
-    { label: 'Copy them here', kind: 'primary', run: () => { closeDialog(); return act(() => cloud.copyProduction(), () => say('Your production heroes are in slot 1 here.')); } },
+  dialog('Copy your production heroes here?', '<input class="cd-code" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="ABCD-EFGH">'
+    + '<p>Sign in separately at last-stand.cc. Under Save slots, choose Account, then <b>Copy heroes to a preview</b>, and type its code above. This preview\'s cloud save is replaced; production stays as it is.</p>', [
+    { label: 'Copy them here', kind: 'primary', run: () => {
+      const code = $<HTMLInputElement>('#cloud-dialog .cd-code').value;
+      closeDialog();
+      return act(() => cloud.copyProduction(code), () => say('Your production heroes are in slot 1 here.'));
+    } },
     { label: 'Cancel' },
   ]);
+  const field = $<HTMLInputElement>('#cloud-dialog .cd-code');
+  aboveKeyboard(field);
+  field.focus();
+  field.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
+    if (e.key === 'Enter') { e.preventDefault(); ($('#cloud-dialog .dc-buttons .primary') as HTMLElement).click(); }
+  };
 }
 
 function confirmDeleteSave(): void {

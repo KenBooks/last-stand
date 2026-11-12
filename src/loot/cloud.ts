@@ -275,9 +275,30 @@ export async function deleteCloudSave(): Promise<void> {
 }
 
 /** Production's heroes copied into this preview's cloud save, then down into slot 1. */
-export async function copyProduction(): Promise<void> {
-  await api.copyProduction();
-  await syncNow();
+export const makeCopyCode = (): Promise<{ code: string; until: number }> => api.copyCode();
+export async function copyProduction(code: string): Promise<void> {
+  const state = kept;
+  if (!state?.linked) return;
+  clearTimeout(timer);
+  if (running) await running;
+  await api.copyProduction(code);
+  // Copy is an explicit replacement, so take every part from production rather than raising sync conflicts.
+  const { parts } = await api.listParts();
+  const base: Kept['base'] = {};
+  const values: { name: string; value: Entries }[] = [];
+  for (const name of partNames()) {
+    const theirs = parts[name] ? await api.readPart(name) : null;
+    const value = (theirs?.value ?? {}) as Entries;
+    values.push({ name, value });
+    if (theirs) base[name] = { version: theirs.version, value };
+  }
+  if (kept !== state) throw new Error('The preview account changed during the copy. Sign in again to sync it.');
+  for (const { name, value } of values) applyPart(name, value);
+  state.base = base;
+  state.lastSync = Date.now();
+  keep();
+  hooks?.reloaded();
+  setStatus('synced');
 }
 
 // --- the first sign-in on this device: which slot is the cloud save -------------------------------------------

@@ -18,7 +18,8 @@
 //   GET    /saves/save/<part>          a part's gzip (x-save-version, x-save-device, x-save-updated)
 //   PUT    /saves/save/<part>          a part's gzip, x-save-base: the version it builds on (0: new) -> { version }
 //   DELETE /saves/save                 this site's save, gone (the device keeps its copy)
-//   POST   /saves/copy-production      production's save copied over this site's (a preview's, a commit build's)
+//   POST   /saves/copy-code            production's one-time code to copy its heroes into a preview account
+//   POST   /saves/copy-production      { code }: production's save copied into this preview account's site
 //   POST   /saves/auth/google          { purpose: 'signin' | 'link', returnPath, nonce } -> { url }: off to Google
 //   GET    /saves/auth/google/callback Google back: the page sent home with #cloud-google=<code> (or -error=<why>)
 //   POST   /saves/auth/google/finish   { code, nonce } -> { token, account } or { linked, account }: that tab alone
@@ -114,6 +115,8 @@ const counts = new Map();
 /** a sign-in code -> { accountId, until, previewsOnly }: good once, for LINK_MS; one a preview made opens no
  *  production session */
 const linkCodes = new Map();
+/** a production session's one-time, read-only authorization to copy that account's save into a preview */
+const copyCodes = new Map();
 const LINK_MS = 10 * 60_000;
 /** a sign-in code's letters: Crockford's base32 (no I, L, O, U), 8 of them (40 bits) */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -150,6 +153,7 @@ function allowedEach(key, limits, now = Date.now()) {
 function prune(now = Date.now()) {
   for (const [key, times] of counts) if (!times.some((t) => now - t < 86_400_000)) counts.delete(key);
   for (const [code, { until }] of linkCodes) if (until <= now) linkCodes.delete(code);
+  for (const [code, { until }] of copyCodes) if (until <= now) copyCodes.delete(code);
   google.pruneGoogle(now);
 }
 
@@ -243,11 +247,11 @@ async function touch({ account, session }, now = Date.now()) {
 }
 
 /** What the page shows of an account: no keys, no session digests. */
-function accountView(account) {
+function accountView(account, site) {
   return {
     id: account.id, created: account.created,
     passkeys: account.passkeys.map(({ id, rpId, created, used }) => ({ id, rpId, created, used })),
-    google: Boolean(account.google),
+    google: Boolean(account.googles?.[site]),
     sites: Object.entries(account.sites).map(([site, { updated, bytes }]) => ({ site, updated, bytes })),
   };
 }
@@ -287,7 +291,7 @@ async function passkeyVerify(req, res, origin, headers) {
     const token = store.addSession(changed, site);
     await store.keepAccount(changed);
     log('signed in', changed.id.slice(0, 6), site);
-    return answer(res, 200, { token, account: accountView(changed) }, headers);
+    return answer(res, 200, { token, account: accountView(changed, site) }, headers);
   });
 }
 
@@ -309,7 +313,7 @@ async function link(req, res, origin, headers) {
   }));
   if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
   log('signed in by code', entry.accountId.slice(0, 6), siteOf(origin));
-  return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
+  return answer(res, 200, { token: result.token, account: accountView(result.changed, siteOf(origin)) }, headers);
 }
 
 /** `POST /saves/auth/google { purpose, returnPath, nonce }`: the address to send the page to Google at. A sign-in
@@ -367,41 +371,43 @@ async function googleFinish(req, res, origin, headers) {
   if (!entry) return answer(res, 401, 'no such code, or it expired', headers);
   const site = siteOf(origin);
   // one Google account's changes wait their turn: two sign-ins at once make one account
-  return store.withAccount(`google ${entry.sub}`, async () => {
+  return store.withAccount(`google ${site} ${entry.sub}`, async () => {
     if (entry.purpose === 'link') {
       const signedIn = sessionOf(req, site);
       if (!signedIn || !trusted(site) || signedIn.account.id !== entry.accountId) {
         return answer(res, 403, 'signed-out', headers);
       }
-      const linked = await linkGoogle(entry.accountId, entry.sub);
+      const linked = await linkGoogle(entry.accountId, site, entry.sub);
       if (linked !== 'linked') return answer(res, 409, linked, headers);
-      return answer(res, 200, { linked: true, account: accountView(store.account(entry.accountId)) }, headers);
+      return answer(res, 200, { linked: true, account: accountView(store.account(entry.accountId), site) }, headers);
     }
-    let account = store.accountOfGoogle(entry.sub);
+    let account = store.accountOfGoogle(site, entry.sub);
     if (!account) {
       if (!allowed(`account ${addressOf(req)}`, settings.accountsPerDay, 86_400_000)) {
         return answer(res, 429, 'too-many', headers);
       }
       account = store.freshAccount();
-      account.google = { sub: entry.sub, linked: Date.now() };
+      account.googles[site] = { sub: entry.sub, linked: Date.now() };
       await store.keepAccount(account);
       log('account made by google', account.id.slice(0, 6));
     }
     const result = await change(account.id, (changed) => ({ token: store.addSession(changed, site, 'google'), changed }));
     if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
     log('signed in by google', account.id.slice(0, 6), site);
-    return answer(res, 200, { token: result.token, account: accountView(result.changed) }, headers);
+    return answer(res, 200, { token: result.token, account: accountView(result.changed, site) }, headers);
   });
 }
 
 /** Links Google's account `sub` to the account `accountId`: `linked`, or why not (`taken` by another account,
  *  `other`: another Google account is linked to it, `signed-out`: the account is gone). */
-async function linkGoogle(accountId, sub) {
-  const holder = store.accountOfGoogle(sub);
+async function linkGoogle(accountId, site, sub) {
+  const holder = store.accountOfGoogle(site, sub);
   if (holder && holder.id !== accountId) return 'taken';
   const result = await change(accountId, (changed) => {
-    if (changed.google && changed.google.sub !== sub) return false;
-    changed.google = { sub, linked: changed.google?.linked ?? Date.now() };
+    const before = changed.googles?.[site];
+    if (before && before.sub !== sub) return false;
+    changed.googles ??= {};
+    changed.googles[site] = { sub, linked: before?.linked ?? Date.now() };
     return 'linked';
   });
   if (result?.gone) return 'signed-out';
@@ -434,7 +440,7 @@ async function register(req, res, origin, site, response, headers) {
     const token = existing ? signedIn.token : store.addSession(changed, site);
     await store.keepAccount(changed);
     log(existing ? 'passkey added' : 'account made', changed.id.slice(0, 6), made.passkey.rpId);
-    return answer(res, existing ? 200 : 201, { token, account: accountView(changed) }, headers);
+    return answer(res, existing ? 200 : 201, { token, account: accountView(changed, site) }, headers);
   }));
 }
 
@@ -512,12 +518,12 @@ async function writePart(req, res, account, site, part, headers) {
 
 /** Production's save copied over this site's: each part's version moves past this site's own, so a device that
  *  had this site's older copy is told it changed (409), never writes over it unseen. */
-async function copyProduction(res, account, site, headers) {
+async function copyProduction(res, account, sourceId, site, headers) {
   const production = siteOf(settings.production);
   if (site === production) return answer(res, 400, 'this is production', headers);
+  const from = await store.readSite(sourceId, production);
+  if (!from) return answer(res, 404, 'no production save', headers);
   const result = await change(account.id, async (changed) => {
-    const from = await store.readSite(changed.id, production);
-    if (!from) return { status: 404, body: 'no production save' };
     const here = (await store.readSite(changed.id, site)) ?? { site, parts: {} };
     const isNew = !changed.sites[site];
     const others = Object.keys(changed.sites).filter((s) => s !== production).length;
@@ -570,8 +576,26 @@ async function signedInRequest(req, res, path, origin, headers) {
   await touch(signedIn);
   const { account } = signedIn;
   if (path === '/saves/save' || path.startsWith('/saves/save/')) return siteSave(req, res, signedIn, site, headers);
-  if (path === '/saves/copy-production' && req.method === 'POST') return copyProduction(res, account, site, headers);
-  if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account), headers);
+  if (path === '/saves/copy-code' && req.method === 'POST') {
+    if (!trusted(site)) return answer(res, 403, 'sign in on last-stand.cc', headers);
+    for (const [old, entry] of copyCodes) if (entry.accountId === account.id) copyCodes.delete(old);
+    const code = newLinkCode();
+    const until = Date.now() + LINK_MS;
+    copyCodes.set(code, { accountId: account.id, until });
+    return answer(res, 200, { code, until }, headers);
+  }
+  if (path === '/saves/copy-production' && req.method === 'POST') {
+    if (trusted(site)) return answer(res, 400, 'this is production', headers);
+    if (!allowed(`ask ${addressOf(req)}`, settings.asksPerHour, 60 * 60_000)) return answer(res, 429, 'too many', headers);
+    const code = String((await jsonOf(req))?.code ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+    prune();
+    const entry = copyCodes.get(code);
+    if (!entry) return answer(res, 401, 'no such copy code, or it expired', headers);
+    copyCodes.delete(code);
+    if (!store.account(entry.accountId)) return answer(res, 401, 'production account is gone', headers);
+    return copyProduction(res, account, entry.accountId, site, headers);
+  }
+  if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account, site), headers);
   if (path === '/saves/signout' && req.method === 'POST') {
     await change(account.id, (changed) => {
       changed.sessions = changed.sessions.filter((s) => s.hash !== signedIn.session.hash);
@@ -612,8 +636,8 @@ async function signedInRequest(req, res, path, origin, headers) {
   }
   if (path === '/saves/google' && req.method === 'DELETE') {
     const result = await change(account.id, (changed) => {
-      if (!changed.google) return 404;
-      delete changed.google;
+      if (!changed.googles?.[site]) return 404;
+      delete changed.googles[site];
       if (waysIn(changed) < 1) return 409;
       return 204;
     });
@@ -629,7 +653,8 @@ async function signedInRequest(req, res, path, origin, headers) {
  *  preview's passkeys don't count (production's login refuses them), nor its codes (they open previews alone). */
 function waysIn(account) {
   const productionRp = passkeys.rpIdFor(settings.production, settings.rpIds);
-  return account.passkeys.filter((p) => p.rpId === productionRp).length + (account.google ? 1 : 0);
+  return account.passkeys.filter((p) => p.rpId === productionRp).length
+    + (account.googles?.[siteOf(settings.production)] ? 1 : 0);
 }
 
 async function handle(req, res) {
