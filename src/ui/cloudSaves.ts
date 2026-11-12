@@ -64,8 +64,8 @@ export function cloudIdentityHTML(identity = cloud.cloudIdentity()): string {
   const current = session?.via === 'google'
     ? `${GOOGLE}<span>Signed in with Google${session.email ? ` · <b>${escape(session.email)}</b>` : ' · sign in again to show email'}</span>`
     : `<span>${session?.via === 'passkey' ? 'Signed in with a passkey' : session?.via === 'code'
-      ? 'Signed in with a code' : 'Signed in'}</span>`;
-  const methods = [google ? 'Google' : '', passkey ? 'Passkey' : ''].filter(Boolean).join(' + ');
+      ? 'Signed in with a code' : 'Signed in · login details unavailable'}</span>`;
+  const methods = [google ? `${GOOGLE}<span>Google</span>` : '', passkey ? '<span>Passkey</span>' : ''].filter(Boolean).join(' + ');
   return `<div class="sc-identity">${current}</div>${methods ? `<div class="sc-methods">Linked: ${methods}</div>` : ''}`;
 }
 
@@ -88,7 +88,7 @@ export function renderCloudBar(): void {
       : '<span class="sc-state">This browser can\'t use passkeys.</span>';
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Keep slot 1 on every device: sign in.</span>${passkeys}`
-      + '<button class="btn sc-google" hidden>Sign in with Google</button>'
+      + `<button class="btn sc-google" hidden>${GOOGLE}<span>Sign in with Google</span></button>`
       + `<button class="btn sc-code">Use a sign-in code</button>${privacy}</div>${note}`;
   } else if (status === 'unlinked') {
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
@@ -105,8 +105,8 @@ export function renderCloudBar(): void {
       // off production the server takes a passkey only just after a code signed this device in
       onProduction() || cloud.passkeyWindow() ? '<button class="btn sc-key">Add a passkey</button>' : '',
       // (Google is linked and unlinked from production alone: a preview's session may be anyone's token)
-      onProduction() && !cloud.hasGoogle() ? '<button class="btn sc-glink" hidden>Link Google</button>' : '',
-      onProduction() && cloud.hasGoogle() ? '<button class="btn sc-gunlink">Unlink Google</button>' : '',
+      onProduction() && !cloud.hasGoogle() ? `<button class="btn sc-glink" hidden>${GOOGLE}<span>Link Google</span></button>` : '',
+      onProduction() && cloud.hasGoogle() ? `<button class="btn sc-gunlink">${GOOGLE}<span>Unlink Google</span></button>` : '',
       '<button class="btn sc-out">Sign out</button>',
       '<button class="btn danger sc-del">Delete cloud save</button>',
       onProduction() ? '<button class="btn danger sc-gone">Delete account</button>' : '',

@@ -34,10 +34,11 @@ export function cloudIdentityChecked(canary: boolean): { lines: string[]; proble
   for (const via of ['passkey', 'code'] as const) {
     const box = document.createElement('div');
     box.innerHTML = cloudIdentityHTML({ google: true, passkey: true, session: { via } });
-    if (box.querySelector('svg') || !box.textContent?.includes(`Signed in with a ${via}`)) {
+    if (box.querySelector('.sc-identity svg') || !box.textContent?.includes(`Signed in with a ${via}`)) {
       problems.push(`cloudIdentity: linked Google mislabels a ${via} session`);
     }
     if (!box.textContent?.includes('Linked: Google + Passkey')) problems.push('cloudIdentity: linked methods missing');
+    if (!box.querySelector('.sc-methods svg')) problems.push('cloudIdentity: linked Google logo missing');
   }
   const unsafe = document.createElement('div');
   const text = '<img src=x onerror="throw 1">@example.test';
@@ -46,6 +47,16 @@ export function cloudIdentityChecked(canary: boolean): { lines: string[]; proble
   const legacy = cloudIdentityHTML({ google: true, session: { via: 'google' } });
   if (!legacy.includes('sign in again to show email')) problems.push('cloudIdentity: older Google session has no explanation');
   const panel = document.querySelector<HTMLElement>('#saves .sv-account')!;
+  const button = document.querySelector<HTMLElement>('#saves .sc-google');
+  if (!button?.querySelector('svg')) problems.push('cloudIdentity: Google sign-in button logo missing');
+  if (button) {
+    const box = button.getBoundingClientRect();
+    if (!button.checkVisibility() || box.left < 0 || box.right > innerWidth || box.bottom > innerHeight) {
+      problems.push('cloudIdentity: Google sign-in button is not visible within the window');
+    }
+  }
+  const unknown = cloudIdentityHTML({ google: true });
+  if (!unknown.includes('login details unavailable')) problems.push('cloudIdentity: missing session details unexplained');
   if (canary) panel.querySelector('b')!.textContent = '';
   if (!panel.textContent?.includes(EMAIL)) problems.push('cloudIdentity: email missing');
   if (!panel.querySelector('svg')?.checkVisibility()) problems.push('cloudIdentity: Google logo missing');

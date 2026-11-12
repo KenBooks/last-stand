@@ -191,3 +191,7 @@
 .sc-identity > span { min-width: 0; }
 .sc-google-logo { width: 20px; height: 20px; flex: 0 0 20px; }
 .sc-methods { color: var(--ink-dim); font-size: 13px; margin-top: 4px; }
+.sc-methods, .sc-google:not([hidden]), .sc-glink:not([hidden]), .sc-gunlink {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+}
+.sc-methods .sc-google-logo { width: 16px; height: 16px; flex-basis: 16px; }
