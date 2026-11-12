@@ -21,7 +21,7 @@
 <body>
 <main>
   <h1>Privacy</h1>
-  <p class="dim">Last Stand, an open-source browser game. Updated 10 November 2026.</p>
+  <p class="dim">Last Stand, an open-source browser game. Updated 12 November 2026.</p>
 
   <section>
     <h2>Playing without an account</h2>
@@ -34,11 +34,11 @@
     <ul>
       <li>an account id the server makes up at random;</li>
       <li>your passkeys' public keys (a passkey's private part never leaves your device);</li>
-      <li>if you sign in with Google or link it, Google's id for your Google account (a number), nothing else of it;</li>
+      <li>if you sign in with Google or link it, Google's id for your Google account (a number); signing in also keeps your verified email with that session, to show you which Google account you used;</li>
       <li>the save of each site you sync (the game, and any test build you sign in on): your heroes, their gear, stash and records, skill loadouts, stash filters, your co-op name tag and colour, your volumes and portraits, which device last wrote each part, and when;</li>
       <li>the sessions you're signed in with (only a fingerprint of each, never the session itself).</li>
     </ul>
-    <p>It keeps no name, email address, picture or password. Signing in with Google asks Google for the <code>openid</code> scope alone: Google tells the server only its id for your account, never your name, email or picture, and no Google script runs in the game.</p>
+    <p>Signing in with Google asks for <code>openid email</code>. Your email is shown privately on Save Slots when that device signed in with Google, including after reload. It is not shown to other players or included in performance reports or logs. No Google name, picture or password is kept, and no Google script runs in the game. The email is last confirmed at sign-in and kept with the session, which ends after 180 days unused; signing in with a passkey or code does not reveal another session's Google email.</p>
     <p>The server's data is backed up nightly to the maintainer's own Google Drive, in a folder only the server's backups write to.</p>
     <p>The server is the game's own, run by the game's maintainer. Nothing is sold or shared, and nothing is used for advertising.</p>
   </section>

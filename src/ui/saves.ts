@@ -18,8 +18,8 @@ import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { bindTooltip, hideTooltip, itemTooltipHTML } from './tooltip';
 import { makeSkillSlot, rarityChips } from './hud';
 import { sfx } from '../core/audio';
-import { linked } from '../loot/cloud';
-import { CLOUD, askConflicts, closeAccountMenu, closeDialog, cloudDialogOpen, initCloudSaves, renderCloudBar } from './cloudSaves';
+import { linked, refreshAccount } from '../loot/cloud';
+import { CLOUD, cloudIdentityHTML, askConflicts, closeAccountMenu, closeDialog, cloudDialogOpen, initCloudSaves, renderCloudBar } from './cloudSaves';
 import type { ClassDef, DerivedStats, Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -65,7 +65,7 @@ export function openSaves(open: boolean): void {
   $('#saves').classList.toggle('hidden', !open);
   G.player.idle = open;
   if (!open) closeDialog();
-  if (open) { render(); askConflicts(); }
+  if (open) { render(); askConflicts(); refreshAccount(); }
 }
 
 /** The screen drawn again if it's up (the cloud changed what it shows). */
@@ -115,6 +115,7 @@ function pane(n: number): HTMLElement {
   el.innerHTML = `<header class="sv-head"><div class="sv-gem" aria-hidden="true">${NUMERALS[n]}</div>
       <div class="sv-name">Slot ${n}<span class="sv-status">${status}</span></div>`
       + `${inCloud ? `<span class="sv-cloud-mark" title="The cloud save: kept for every device you sign in on">${CLOUD}<span>Cloud</span></span>` : ''}</header>
+    ${inCloud ? `<div class="sv-account">${cloudIdentityHTML()}</div>` : ''}
     ${totals ? `<div class="sv-totals">${totals}</div>` : ''}
     <div class="sv-body"></div>
     <footer class="sv-foot"><button class="btn primary sv-play">${play}</button>`

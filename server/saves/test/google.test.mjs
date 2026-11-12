@@ -74,17 +74,17 @@ async function begin(purpose, { origin = PRODUCTION, token, returnPath = '/?rend
 }
 
 /** Google coming back to the service for the sign-in at `authUrl`, `sub` consenting: where the page is sent. */
-async function callback(authUrl, sub, { code } = {}) {
+async function callback(authUrl, sub, { code, claims } = {}) {
   const state = new URL(authUrl).searchParams.get('state');
-  const query = new URLSearchParams({ state, code: code ?? google.consent(authUrl, sub) });
+  const query = new URLSearchParams({ state, code: code ?? google.consent(authUrl, sub, claims) });
   const answer = await call('GET', `/saves/auth/google/callback?${query}`, { origin: null });
   return { status: answer.status, location: answer.headers.get('location') ?? '' };
 }
 
 /** A whole sign-in from `origin` as `sub`: the session's answer. */
-async function signInWithGoogle(sub, origin = PRODUCTION) {
+async function signInWithGoogle(sub, origin = PRODUCTION, claims) {
   const { body } = await begin('signin', { origin });
-  const { location } = await callback(body.url, sub);
+  const { location } = await callback(body.url, sub, { claims });
   const code = /#cloud-google=(.+)$/.exec(location)?.[1];
   assert.ok(code, `no code in ${location}`);
   return call('POST', '/saves/auth/google/finish', { origin, json: { code, nonce: NONCE } });
@@ -110,12 +110,12 @@ test('a signed-in browser can preflight the public health request', async () => 
   assert.match(response.headers.get('access-control-allow-headers') ?? '', /authorization/);
 });
 
-test('a Google sign-in goes by Google with PKCE and the openid scope alone, and comes home to the page that asked', async () => {
+test('a Google sign-in asks for identity and email with PKCE, and comes home to the page that asked', async () => {
   const started = await begin('signin', { origin: PREVIEW });
   assert.equal(started.status, 200);
   const sent = new URL(started.body.url);
   assert.equal(`${sent.origin}${sent.pathname}`, `${google.url}/auth`);
-  assert.equal(sent.searchParams.get('scope'), 'openid');
+  assert.equal(sent.searchParams.get('scope'), 'openid email');
   assert.equal(sent.searchParams.get('code_challenge_method'), 'S256');
   assert.equal(sent.searchParams.get('client_id'), CLIENT_ID);
   const back = await callback(started.body.url, 'sub-preview');
@@ -130,6 +130,7 @@ test('a Google sign-in goes by Google with PKCE and the openid scope alone, and 
   const finished = await finish(PREVIEW, NONCE);
   assert.equal(finished.status, 200);
   assert.equal(finished.body.account.google, true);
+  assert.deepEqual(finished.body.account.session, { via: 'google', email: 'sub-preview@example.test' });
   assert.deepEqual(finished.body.account.passkeys, []);
   assert.equal((await finish(PREVIEW, NONCE)).status, 401);
   // its session and Google binding belong to this preview alone
@@ -142,6 +143,46 @@ test('a Google sign-in goes by Google with PKCE and the openid scope alone, and 
   const production = await signInWithGoogle('sub-preview');
   assert.notEqual(production.body.account.id, finished.body.account.id);
   assert.notEqual(production.body.account.id, other.body.account.id);
+});
+
+test('only the current Google session returns its verified email, including after a restart', async () => {
+  const token = await signUp(authenticator());
+  assert.deepEqual((await call('GET', '/saves/account', { token })).body.session, { via: 'passkey' });
+  await linkWithGoogle(token, 'sub-private-email');
+  const googleLogin = (await signInWithGoogle('sub-private-email')).body;
+  assert.equal(googleLogin.account.passkeys.length, 1);
+  const identity = { via: 'google', email: 'sub-private-email@example.test' };
+  assert.deepEqual(googleLogin.account.session, identity);
+  const code = (await call('POST', '/saves/link-code', { token })).body.code;
+  const codeLogin = (await call('POST', '/saves/link', { json: { code } })).body;
+  assert.equal(codeLogin.account.id, googleLogin.account.id);
+  assert.equal(codeLogin.account.google, true);
+  assert.deepEqual(codeLogin.account.session, { via: 'code' });
+  const store = await import('../store.mjs');
+  await store.load(DATA);
+  assert.deepEqual((await call('GET', '/saves/account', { token: googleLogin.token })).body.session, identity);
+  for (const [sessionToken, via] of [[token, 'passkey'], [codeLogin.token, 'code']]) {
+    const view = (await call('GET', '/saves/account', { token: sessionToken })).body;
+    assert.deepEqual(view.session, { via });
+    assert.ok(!JSON.stringify(view).includes(identity.email), 'another session must not disclose the Google email');
+  }
+  // Older Google sessions still identify Google accurately without inventing an email.
+  const account = structuredClone(store.account(googleLogin.account.id));
+  for (const session of account.sessions) delete session.email;
+  await store.keepAccount(account);
+  assert.deepEqual((await call('GET', '/saves/account', { token: googleLogin.token })).body.session, { via: 'google' });
+});
+
+test('an unverified, missing or malformed Google email never becomes a session label', async () => {
+  const claims = [{}, { email: 'unverified@example.test', email_verified: false },
+    { email: 'string@example.test', email_verified: 'true' },
+    { email: 'bad\naddress@example.test', email_verified: true },
+    { email: `${'a'.repeat(255)}@example.test`, email_verified: true }];
+  for (const [index, value] of claims.entries()) {
+    const login = await signInWithGoogle(`sub-email-validation-${index}`, PRODUCTION, value);
+    assert.equal(login.status, 200);
+    assert.deepEqual(login.body.account.session, { via: 'google' });
+  }
 });
 
 test('a preview Google sign-in does not reserve Google on a production passkey account', async () => {

@@ -58,6 +58,23 @@ export function closeAccountMenu(): boolean {
 export const cloudDialogOpen = (): boolean => !$('#cloud-dialog').classList.contains('hidden');
 export function closeDialog(): void { $('#cloud-dialog').classList.add('hidden'); $('#cloud-dialog').classList.remove('typing'); }
 
+/** Authentication is the session's, never inferred from a linked method. Email is escaped like any server text. */
+export function cloudIdentityHTML(identity = cloud.cloudIdentity()): string {
+  const { google, passkey, session } = identity;
+  const current = session?.via === 'google'
+    ? `${GOOGLE}<span>Signed in with Google${session.email ? ` · <b>${escape(session.email)}</b>` : ' · sign in again to show email'}</span>`
+    : `<span>${session?.via === 'passkey' ? 'Signed in with a passkey' : session?.via === 'code'
+      ? 'Signed in with a code' : 'Signed in'}</span>`;
+  const methods = [google ? 'Google' : '', passkey ? 'Passkey' : ''].filter(Boolean).join(' + ');
+  return `<div class="sc-identity">${current}</div>${methods ? `<div class="sc-methods">Linked: ${methods}</div>` : ''}`;
+}
+
+const GOOGLE = '<svg class="sc-google-logo" viewBox="0 0 24 24" aria-hidden="true">'
+  + '<path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.89-1.74 2.98-4.3 2.98-7.36Z"/>'
+  + '<path fill="#34a853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.51c-.9.6-2.05.97-3.38.97-2.6 0-4.8-1.76-5.59-4.12H3.07v2.59A10 10 0 0 0 12 22Z"/>'
+  + '<path fill="#fbbc05" d="M6.41 13.92a6 6 0 0 1 0-3.84V7.49H3.07a10 10 0 0 0 0 9.02l3.34-2.59Z"/>'
+  + '<path fill="#ea4335" d="M12 5.96c1.47 0 2.79.51 3.83 1.51l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.93 5.49l3.34 2.59C7.2 7.72 9.4 5.96 12 5.96Z"/></svg>';
+
 // --- the bar ----------------------------------------------------------------------------------------------
 /** The bar under the screen's title, drawn afresh with the screen. */
 export function renderCloudBar(): void {
@@ -77,6 +94,7 @@ export function renderCloudBar(): void {
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Signed in (account ${accountId.slice(0, 6)}). Choose which save is your cloud save.</span>`
       + `<button class="btn primary sc-link">Choose the cloud save</button><button class="btn sc-out">Sign out</button>${privacy}</div>${note}`;
+    bar.insertAdjacentHTML('beforeend', `<div class="sc-account">${cloudIdentityHTML()}</div>`);
   } else {
     const state = status === 'syncing' ? 'Syncing...' : status === 'offline' ? 'Offline' : status === 'error' ? 'Not synced'
       : lastSync ? `Synced ${ago(lastSync)}` : 'Synced';
@@ -240,7 +258,7 @@ export function showGoogleLanding(landing: cloud.GoogleLanding): void {
 
 function confirmLinkGoogle(): void {
   dialog('Link Google', '<p>Google becomes a second way into this account on last-stand.cc. Google tells the '
-    + 'server only an id for your Google account: no name, email or picture.</p><p>The game reloads on its way back from Google; '
+    + 'server its account id and verified email. Your email is shown only when you sign in with Google; no name or picture is kept.</p><p>The game reloads on its way back from Google; '
     + 'your heroes are saved as you play, so nothing is lost.</p>', [
     { label: 'Go to Google', kind: 'primary', run: () => { closeDialog(); return act(() => cloud.goToGoogle('link')); } },
     { label: 'Cancel' },

@@ -13,6 +13,8 @@
 
 - `behind` also changes quality while the hall is open, presses Back without choosing, and reopens it. No new head-cache misses may be sculpted on the page; background pieces retain their timing budget. Its canary finishes missing-detail jobs synchronously and must detect those misses. Worker messages use real time, so idle build polling and `hallMoves.openHall` yield real time as well as advancing the parked game clock; exhausting hundreds of simulated frames instantly can falsely report a preparation deadlock.
 
+`uiCloudIdentity` uses explicit account snapshots with the real identity renderer inside Save Slots: Google email/logo, linked methods, passkey/code distinction, legacy Google sessions and hostile email text. Its canary removes the email; service OAuth/session persistence is checked separately in `server/saves/test/google.test.mjs`.
+
 The lab inside the game's page: TypeScript, typechecked with the game (`tsconfig.json` includes it) and imported as the game imports its modules, so there's one copy of each. `lab.ts` is the lab a measure is given (the clock, input, set-ups, pictures), `commands.ts` what the session calls, and each command has a module of its own (`gait.ts`, `spawns.ts`...), with the pieces measures share (`geometry.ts`, `corners.ts`, `screenCells.ts` and its sums on the GPU `gridSums.ts`, `flashes.ts`, `legTrace.ts`...), the pictures' looks (`looks.ts`: wireframe, faces, parts, skeleton) and the drawing buffer read back (`pixels.ts`), and `live`'s steps (`live.ts`).
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md) (what the lab gives a measure, and what keeps it repeatable).

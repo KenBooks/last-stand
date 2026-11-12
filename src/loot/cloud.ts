@@ -42,6 +42,8 @@ interface Kept {
   byCodeAt?: number;
   /** Google is linked to the account, as the service last said */
   google?: boolean;
+  passkey?: boolean;
+  session?: api.CloudAccount['session'];
 }
 
 /** One hero changed both here and in the cloud since they last agreed: the player keeps one. */
@@ -99,6 +101,8 @@ export const cloudStatus = (): { status: Status; message: string; accountId: str
   ({ status, message, accountId: kept?.accountId ?? '', lastSync: kept?.lastSync ?? 0 });
 export const signedIn = (): boolean => kept !== null;
 export const linked = (): boolean => !!kept?.linked;
+export const cloudIdentity = (): Pick<Kept, 'google' | 'passkey' | 'session'> =>
+  ({ google: kept?.google, passkey: kept?.passkey, session: kept?.session });
 export const pendingConflicts = (): Conflict[] => pending;
 
 /** This device as the cloud names its writes: its system and browser. */
@@ -151,7 +155,7 @@ const partNames = (): string[] => [...CLASS_IDS.map(partOf), SHARED];
 function signedInAs(result: api.SignedIn): void {
   api.setToken(result.token);
   kept = { token: result.token, accountId: result.account.id, linked: false, base: {}, lastSync: 0,
-    google: result.account.google };
+    google: result.account.google, passkey: result.account.passkeys.length > 0, session: result.account.session };
   keep();
   setStatus('unlinked');
 }
@@ -183,12 +187,14 @@ export async function goToGoogle(purpose: 'signin' | 'link'): Promise<void> {
 }
 
 export async function unlinkGoogle(): Promise<void> {
+  const state = kept;
   await api.unlinkGoogle();
-  if (kept) { kept.google = false; keep(); }
+  if (state && kept === state) { state.google = false; keep(); }
 }
 export async function moveGoogle(code: string): Promise<void> {
-  await api.moveGoogle(code);
-  if (kept) { kept.google = true; keep(); }
+  const state = kept;
+  const result = await api.moveGoogle(code);
+  if (state && kept === state) { state.google = result.account.google; keep(); }
 }
 
 /** where this tab keeps the nonce its Google sign-in is bound to, until it comes home */
@@ -263,9 +269,31 @@ function forget(): void {
 }
 
 /** The server's account (its passkeys, its sites' saves). */
-export const fetchAccount = (): Promise<api.CloudAccount> => api.account();
+export async function fetchAccount(): Promise<api.CloudAccount> {
+  const state = kept;
+  const account = await api.account();
+  rememberAccount(state, account);
+  return account;
+}
+
+function rememberAccount(state: Kept | null, account: api.CloudAccount): void {
+  if (state && kept === state && account.id === state.accountId) {
+    const before = JSON.stringify(cloudIdentity());
+    state.google = account.google;
+    state.passkey = account.passkeys.length > 0;
+    state.session = account.session;
+    keep();
+    if (before !== JSON.stringify(cloudIdentity())) hooks?.changed();
+  }
+}
+/** Refresh when Save Slots opens as well as at boot; offline keeps the last confirmed identity. */
+export const refreshAccount = (): void => { if (kept) void fetchAccount().catch(() => { /* sync handles expiry */ }); };
 export const makeLinkCode = (): Promise<{ code: string; until: number; previewsOnly?: boolean }> => api.linkCode();
-export const addPasskey = async (): Promise<void> => { await api.makePasskey(); };
+export async function addPasskey(): Promise<void> {
+  const state = kept;
+  const result = await api.makePasskey();
+  rememberAccount(state, result.account);
+}
 
 /** The account and every save of it, gone from the server: this device keeps its slots. */
 export async function deleteAccount(): Promise<void> {
@@ -471,12 +499,7 @@ export function initCloud(h: CloudHooks): void {
   hooks = h;
   landing = landFromGoogle();
   // whether Google is linked, as the service says now (linked or unlinked on another device)
-  if (kept) void api.account().then((account) => {
-    if (!kept || kept.google === account.google) return;
-    kept.google = account.google;
-    keep();
-    hooks?.changed();
-  }).catch(() => { /* offline, or signed out: the sync says */ });
+  refreshAccount();
   // (each returns at once while signed out or slot 1 isn't the cloud save here)
   window.setTimeout(() => void syncNow(), 2_000);
   window.setInterval(() => { if (document.visibilityState === 'visible') void syncNow(); }, CHECK_MS);

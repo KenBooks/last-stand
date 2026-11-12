@@ -82,6 +82,7 @@ export interface CloudState {
   accountId: string;
   lastSync: number;
   linked: boolean;
+  identity: ReturnType<typeof cloud.cloudIdentity>;
   pending: number;
   token: string;
   dialog: { open: boolean; title: string; text: string; buttons: string[] };
@@ -98,6 +99,7 @@ export function cloudState(): CloudState {
   return {
     ...shown,
     linked: cloud.linked(),
+    identity: cloud.cloudIdentity(),
     pending: cloud.pendingConflicts().length,
     token: keptToken(),
     dialog: {

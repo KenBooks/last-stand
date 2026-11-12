@@ -137,6 +137,8 @@ async function link(run) {
   await shoot(run, a, 'choose');
   await a.click('#cloud-dialog .cd-slot[data-slot="2"]');
   const synced = await a.until((state) => state.linked && state.status === 'synced', 'synced slot 1 as the cloud save');
+  expect(problems, 'A authenticates with its passkey', synced.identity.session?.via, 'passkey');
+  expect(problems, 'A has a linked passkey', synced.identity.passkey, true);
   const slots = await a.slots();
   const wanted = '1: mage[A2-mage] warrior[A2-warrior] | 2: mage[A1-mage] | 3: empty';
   expect(problems, 'A\'s slots', slotsText(slots), wanted);
@@ -192,6 +194,7 @@ async function download(run) {
   await b.click('#cloud-dialog .dc-buttons .primary');
   const asked = await b.until((state) => state.dialog.open && state.dialog.title.includes('cloud save comes'),
     'was told the cloud save comes down');
+  expect(problems, 'B authenticates with a code', asked.identity.session?.via, 'code');
   if (!/slot 3\b[^.]*overwritten and lost/.test(asked.dialog.text)) {
     problems.push(`the dialog never names slot 3 as lost: "${asked.dialog.text}"`);
   }

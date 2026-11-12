@@ -253,11 +253,15 @@ async function touch({ account, session }, now = Date.now()) {
 }
 
 /** What the page shows of an account: no keys, no session digests. */
-function accountView(account, site) {
+function accountView(account, site, token) {
+  const hash = token && store.digest(token);
+  const session = hash && account.sessions.find((s) => s.site === site && s.hash === hash);
   return {
     id: account.id, created: account.created,
     passkeys: account.passkeys.map(({ id, rpId, created, used }) => ({ id, rpId, created, used })),
     google: Boolean(account.googles?.[site]),
+    ...(session?.via ? { session: { via: session.via,
+      ...(session.via === 'google' && session.email ? { email: session.email } : {}) } } : {}),
     sites: Object.entries(account.sites).map(([site, { updated, bytes }]) => ({ site, updated, bytes })),
   };
 }
@@ -297,7 +301,7 @@ async function passkeyVerify(req, res, origin, headers) {
     const token = store.addSession(changed, site);
     await store.keepAccount(changed);
     log('signed in', changed.id.slice(0, 6), site);
-    return answer(res, 200, { token, account: accountView(changed, site) }, headers);
+    return answer(res, 200, { token, account: accountView(changed, site, token) }, headers);
   });
 }
 
@@ -319,7 +323,7 @@ async function link(req, res, origin, headers) {
   }));
   if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
   log('signed in by code', entry.accountId.slice(0, 6), siteOf(origin));
-  return answer(res, 200, { token: result.token, account: accountView(result.changed, siteOf(origin)) }, headers);
+  return answer(res, 200, { token: result.token, account: accountView(result.changed, siteOf(origin), result.token) }, headers);
 }
 
 /** `POST /saves/auth/google { purpose, returnPath, nonce }`: the address to send the page to Google at. A sign-in
@@ -361,10 +365,10 @@ async function googleCallback(req, res) {
     res.end();
   };
   if (query.has('error') || !query.get('code')) return home('cloud-google-error=cancelled');
-  const sub = await google.subOf(settings.google, query.get('code'), entry.verifier);
-  if (!sub) return home('cloud-google-error=refused');
+  const identity = await google.identityOf(settings.google, query.get('code'), entry.verifier);
+  if (!identity) return home('cloud-google-error=refused');
   const { purpose, accountId, origin, nonce } = entry;
-  return home(`cloud-google=${google.landingCode({ purpose, accountId, sub, origin, nonce })}`);
+  return home(`cloud-google=${google.landingCode({ purpose, accountId, ...identity, origin, nonce })}`);
 }
 
 /** `POST /saves/auth/google/finish { code, nonce }`: the code Google's answer sent the page home with, from that page
@@ -412,10 +416,11 @@ async function googleFinish(req, res, origin, headers) {
       await store.keepAccount(account);
       log('account made by google', account.id.slice(0, 6));
     }
-    const result = await change(account.id, (changed) => ({ token: store.addSession(changed, site, 'google'), changed }));
+    const result = await change(account.id, (changed) => ({
+      token: store.addSession(changed, site, 'google', Date.now(), entry.email), changed }));
     if (result.gone) return answer(res, 401, 'no such code, or it expired', headers);
     log('signed in by google', account.id.slice(0, 6), site);
-    return answer(res, 200, { token: result.token, account: accountView(result.changed, site) }, headers);
+    return answer(res, 200, { token: result.token, account: accountView(result.changed, site, result.token) }, headers);
   });
 }
 
@@ -496,7 +501,7 @@ async function register(req, res, origin, site, response, headers) {
     const token = existing ? signedIn.token : store.addSession(changed, site);
     await store.keepAccount(changed);
     log(existing ? 'passkey added' : 'account made', changed.id.slice(0, 6), made.passkey.rpId);
-    return answer(res, existing ? 200 : 201, { token, account: accountView(changed, site) }, headers);
+    return answer(res, existing ? 200 : 201, { token, account: accountView(changed, site, token) }, headers);
   }));
 }
 
@@ -652,7 +657,7 @@ async function signedInRequest(req, res, path, origin, headers) {
     return copyProduction(res, account, entry.accountId, site, headers);
   }
   if (path === '/saves/google/move' && req.method === 'POST') return moveGoogle(req, res, signedIn, site, headers);
-  if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account, site), headers);
+  if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account, site, signedIn.token), headers);
   if (path === '/saves/signout' && req.method === 'POST') {
     await change(account.id, (changed) => {
       changed.sessions = changed.sessions.filter((s) => s.hash !== signedIn.session.hash);

@@ -129,9 +129,10 @@ export async function dropAccount(id) {
 
 /** A new session for the account, made from `site` by `via` (a passkey, a sign-in code, Google): its token (given once;
  *  only its digest is kept). */
-export function addSession(changed, site, via = 'passkey', now = Date.now()) {
+export function addSession(changed, site, via = 'passkey', now = Date.now(), email) {
   const token = randomBytes(32).toString('base64url');
-  changed.sessions.push({ hash: digest(token), site, via, created: now, used: now });
+  changed.sessions.push({ hash: digest(token), site, via, created: now, used: now,
+    ...(via === 'google' && email ? { email } : {}) });
   return token;
 }
 

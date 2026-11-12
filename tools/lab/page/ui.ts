@@ -34,6 +34,7 @@ import { closeDecision, DECISION_CANARY, decisionShown } from './uiDecision';
 import { closeSummary, openSummary, SUMMARY_CANARY, summaryPictures, summaryShown } from './uiSummary';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
+import { openCloudIdentity, closeCloudIdentity, cloudIdentityChecked, CLOUD_IDENTITY_CANARY } from './uiCloudIdentity';
 import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
@@ -66,7 +67,7 @@ import {
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
-  | 'behindProps'
+  | 'behindProps' | 'cloudIdentity'
   | 'logLobby' | 'perfAsk' | 'coop' | 'coopRename'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph' | 'perfParty'
@@ -898,6 +899,7 @@ const STEPS: Record<UiState, Steps> = {
   glow: { open: openGlow, close: closeGlow, check: glowShown, pictures: glowPictures },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
+  cloudIdentity: { open: openCloudIdentity, close: closeCloudIdentity, check: cloudIdentityChecked },
   heroes: {
     open: openHeroes, close: closeHeroes, check: heroesShown, closed: heroesClosed,
     pictures: async () => heroLabelPictures(),
@@ -1034,6 +1036,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(PERF_PARTY_CANARY.name));
     lines.push(`  canary: ${PERF_PARTY_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${PERF_PARTY_CANARY.what} went unseen`);
+  }
+  if (state === 'cloudIdentity') {
+    const caught = found.problems.some((problem) => problem.includes(CLOUD_IDENTITY_CANARY.name));
+    lines.push(`  canary: ${CLOUD_IDENTITY_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${CLOUD_IDENTITY_CANARY.what} went unseen`);
   }
   if (state === 'perfGraph') {
     const caught = found.problems.some((problem) => problem.includes(PERF_GRAPH_CANARY.name));

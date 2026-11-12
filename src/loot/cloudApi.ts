@@ -14,6 +14,8 @@ export interface CloudAccount {
   created: number;
   passkeys: { id: string; rpId: string; created: number; used: number }[];
   google: boolean;
+  /** This session's actual authentication, independent of the account's linked methods. */
+  session?: { via: 'google' | 'passkey' | 'code'; email?: string };
   sites: { site: string; updated: number; bytes: number }[];
 }
 
