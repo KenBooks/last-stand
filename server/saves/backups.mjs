@@ -142,13 +142,20 @@ async function folderId(drive, name) {
 
 /** The files in the folder: id, name and when each was made. */
 async function filesIn(drive, folder) {
-  const query = new URLSearchParams({
-    q: `${quoted(folder)} in parents and trashed = false`,
-    fields: 'files(id,name,createdTime)',
-    pageSize: '200',
-  });
-  const listed = await drive('GET', `/drive/v3/files?${query}`);
-  return listed.files ?? [];
+  const files = [];
+  let pageToken;
+  do {
+    const query = new URLSearchParams({
+      q: `${quoted(folder)} in parents and trashed = false`,
+      fields: 'nextPageToken,files(id,name,createdTime)',
+      pageSize: '200',
+    });
+    if (pageToken) query.set('pageToken', pageToken);
+    const listed = await drive('GET', `/drive/v3/files?${query}`);
+    files.push(...(listed.files ?? []));
+    pageToken = listed.nextPageToken;
+  } while (pageToken);
+  return files;
 }
 
 /** The file uploaded into the folder whole (multipart: its name and its bytes): its id, MD5 and size as Drive has them. */

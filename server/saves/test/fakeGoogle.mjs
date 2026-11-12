@@ -26,7 +26,12 @@ export async function fakeGoogle() {
     };
     if (url.pathname === '/token') return send(...token(new URLSearchParams(body.toString('utf8'))));
     if (req.headers.authorization !== 'Bearer drive-access') return send(401, { error: 'unauthenticated' });
-    if (url.pathname === '/drive/v3/files' && req.method === 'GET') return send(200, { files: listed(url) });
+    if (url.pathname === '/drive/v3/files' && req.method === 'GET') {
+      const all = listed(url);
+      const start = Number(url.searchParams.get('pageToken') ?? 0);
+      const end = start + Number(url.searchParams.get('pageSize') ?? 100);
+      return send(200, { files: all.slice(start, end), ...(end < all.length ? { nextPageToken: String(end) } : {}) });
+    }
     if (url.pathname === '/drive/v3/files' && req.method === 'POST') return send(200, { id: made(JSON.parse(body)) });
     if (url.pathname === '/upload/drive/v3/files' && req.method === 'POST') return send(200, uploaded(req, body));
     const id = /^\/drive\/v3\/files\/(.+)$/.exec(url.pathname)?.[1];

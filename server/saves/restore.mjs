@@ -14,6 +14,15 @@ const SAFE_PATH = /^(accounts\/[A-Za-z0-9_-]+\.json|saves\/[A-Za-z0-9_-]+\/[A-Za
 export async function restore(snapshotGz, root, { replace = false } = {}) {
   const snapshot = JSON.parse(gunzipSync(snapshotGz).toString('utf8'));
   if (snapshot?.version !== SNAPSHOT_VERSION) throw new Error(`not a snapshot of version ${SNAPSHOT_VERSION}`);
+  if (!snapshot.files || typeof snapshot.files !== 'object' || Array.isArray(snapshot.files)) {
+    throw new Error('snapshot has no files');
+  }
+  // Check the entire archive before --replace can remove a working data folder.
+  for (const [path, text] of Object.entries(snapshot.files)) {
+    if (!SAFE_PATH.test(path) || normalize(path).split(sep).includes('..') || typeof text !== 'string') {
+      throw new Error(`a file out of place: ${path}`);
+    }
+  }
   const held = await countAccounts(root);
   if (held && !replace) throw new Error(`${root} holds ${held} accounts already: --replace empties it first`);
   if (replace) {
@@ -23,8 +32,7 @@ export async function restore(snapshotGz, root, { replace = false } = {}) {
   await mkdir(join(root, 'accounts'), { recursive: true });
   await mkdir(join(root, 'saves'), { recursive: true });
   let written = 0;
-  for (const [path, text] of Object.entries(snapshot.files ?? {})) {
-    if (!SAFE_PATH.test(path) || normalize(path).split(sep).includes('..')) throw new Error(`a path out of place: ${path}`);
+  for (const [path, text] of Object.entries(snapshot.files)) {
     const file = join(root, path);
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, text);

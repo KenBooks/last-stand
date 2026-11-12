@@ -281,6 +281,10 @@ test('a backup uploads every account and save, checked by its MD5, drops those p
   await assert.rejects(restore(uploaded.bytes, RESTORED), /holds \d+ accounts already/);
   const snapshot = JSON.parse(gunzipSync(uploaded.bytes).toString('utf8'));
   assert.equal(snapshot.version, 1);
+  const before = readFileSync(join(RESTORED, 'accounts', accountFile));
+  snapshot.files['saves/bad/../../outside.json'] = '{}';
+  await assert.rejects(restore(gzipSync(JSON.stringify(snapshot)), RESTORED, { replace: true }), /file out of place/);
+  assert.deepEqual(readFileSync(join(RESTORED, 'accounts', accountFile)), before);
 });
 
 test('an upload whose MD5 Drive reports otherwise fails, and the health says so', async () => {
@@ -293,6 +297,14 @@ test('an upload whose MD5 Drive reports otherwise fails, and the health says so'
   } finally {
     google.lie = false;
   }
+});
+
+test('backup retention checks every Drive listing page', async () => {
+  const folder = google.folderNamed('Last Stand backups');
+  for (let n = 0; n < 205; n++) google.addFile(folder.id, `old-${n}.json.gz`, 20);
+  const result = await backups.runBackup(backups.backupSettingsFrom(settings()), DATA, Date.now() + 4 * 86_400_000);
+  assert.equal(result.deleted, 205);
+  assert.equal(google.childrenOf(folder.id).filter((file) => file.name.startsWith('old-')).length, 0);
 });
 
 test('with Google\'s client unset, its sign-in and the backups are off', async () => {
