@@ -248,8 +248,8 @@ function build(): Parts {
   }));
   straws.push(paint(skin(butt, 1, 1), rgb(0x9c8647), rng, 0.2));
   straws.push(fringe(rng, 170, 0.76, 0.24, 0.18, 2.85, [0.12, 0.3]));
-  straws.push(fringe(rng, 60, 1.445, 0.085, 0.075, 2.0, [0.06, 0.14]));
-  straws.push(sheaf(rng, 30, 0.03, [0.07, 0.15], 0.7).rotateX(1.25).translate(0, 1.38, 0.09));
+  straws.push(fringe(rng, 60, 1.455, 0.068, 0.06, 0.55, [0.05, 0.11]));
+  straws.push(sheaf(rng, 24, 0.025, [0.05, 0.1], 0.6).rotateX(0.75).translate(0, 1.43, 0.06));
 
   // the head: a stuffed sack tied at the neck, lumpy, its mouth ragged over the collar
   const sack = new THREE.LatheGeometry(SACK_PROFILE.map(([r, y]) => new THREE.Vector2(r, y)), 18).scale(1, 1, HEAD_DEEP);
@@ -278,7 +278,7 @@ function build(): Parts {
     if (i > 0) thread(new THREE.BoxGeometry(0.01, 0.042, 0.008), x0, smile(x0), Math.atan2(smile(x1) - smile(x0), 0.025) * 0.6);
   }
   // straw for hair under the hat
-  headStraws.push(fringe(rng, 70, 0.075, 0.15, 0.14, 2.3, [0.07, 0.15], 1.1));
+  headStraws.push(fringe(rng, 70, 0.13, 0.125, 0.115, 2.6, [0.06, 0.13], 1.1));
 
   // the hat: woven straw, its crown slumped to one side, its brim wavy and frayed, a red band round it; worn nearly level
   const hat: THREE.BufferGeometry[] = [], hatStraw: THREE.BufferGeometry[] = [];
@@ -297,7 +297,21 @@ function build(): Parts {
   shape.computeVertexNormals();
   hat.push(paint(shape, HAT, rng, 0.1));
   hat.push(paint(new THREE.CylinderGeometry(0.162, 0.171, 0.05, 20, 1, true).translate(0, 0.055, 0), BAND, rng, 0.06));
-  hatStraw.push(fringe(rng, 60, -0.03, BRIM * 0.97, BRIM * 0.97, 1.55, [0.02, 0.05]));
+  // frayed straws out of the brim's edge, rooted on the edge as it was cut (the lathe's first ring, each column's first
+  // point): on a round of their own, the wave and the bite in it left them hanging in the air off the brim
+  const rim = Array.from({ length: 21 }, (_, i) => new THREE.Vector3().fromBufferAttribute(hp, i * 9));
+  const inner = Array.from({ length: 21 }, (_, i) => new THREE.Vector3().fromBufferAttribute(hp, i * 9 + 1));
+  const from = new THREE.Vector3(), dir = new THREE.Vector3(), back = new THREE.Vector3();
+  for (let i = 0; i < 70; i++) {
+    const k = Math.floor(rng() * 20), t = rng();
+    from.lerpVectors(rim[k], rim[k + 1], t);
+    // (on along the brim's own slope there, from a little in from its edge, each a little off it)
+    back.lerpVectors(inner[k], inner[k + 1], t);
+    dir.subVectors(from, back).normalize();
+    from.addScaledVector(dir, -0.008);
+    dir.add(_dir.set((rng() - 0.5) * 0.5, (rng() - 0.5) * 0.15, (rng() - 0.5) * 0.5));
+    hatStraw.push(straw(rng, from, dir, 0.03 + rng() * 0.04));
+  }
   const worn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.13, 0, 0.05)).setPosition(0, 0.125, -0.02);
   for (const g of hat) headCloths.push(g.applyMatrix4(worn));
   for (const g of hatStraw) headStraws.push(g.applyMatrix4(worn));
