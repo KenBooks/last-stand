@@ -1,8 +1,12 @@
 // The saves service's calls (server/saves, cloud saves #504): passkeys through the browser's own prompt, the sign-in
-// code, the account, and this site's save in parts. Its host is the co-op relay's (`serverHttp`: `?server=` tries
-// another); the session is a bearer token kept on this device (`cloud.ts`). Every call fails as a `CloudError`, its
+// code, the account, and this site's save in parts. Its host is baked into the build, not a co-op `?server=` override;
+// the session is a bearer token kept on this device (`cloud.ts`). Every call fails as a `CloudError`, its
 // HTTP status 0 when the network didn't answer (offline: the game plays on and syncs later).
-import { serverHttp } from '../net/transport';
+import { cloudServerHttp } from './cloudServer';
+
+const SAVES_SERVER: string = import.meta.env.VITE_COOP_SERVER ?? 'wss://ls.wellscoped.dev';
+const savesHost = (): string => cloudServerHttp(SAVES_SERVER,
+  import.meta.env.DEV ? new URLSearchParams(location.search).get('server') : null);
 
 export class CloudError extends Error {
   constructor(readonly status: number, message: string, readonly body: unknown = null) { super(message); }
@@ -33,7 +37,7 @@ async function call(method: string, path: string, init: { json?: unknown; body?:
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   let answer: Response;
   try {
-    answer = await fetch(`${serverHttp()}/saves${path}`, {
+    answer = await fetch(`${savesHost()}/saves${path}`, {
       method, headers, cache: 'no-store', signal: init.signal
         ? AbortSignal.any([init.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
       body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
