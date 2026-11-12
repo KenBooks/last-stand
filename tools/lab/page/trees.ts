@@ -167,20 +167,23 @@ function afterSwitch(canary: boolean): { line: string; problems: string[] } {
   return { line, problems };
 }
 
-/** A wave started with an arrow standing in the floor: the arrows left (with `canary`, one stuck again). */
-function afterWaveStart(canary: boolean): { line: string; problems: string[] } {
+/** A wave started with arrows standing in the floor: they must begin dissolving and be gone by the end. */
+async function afterWaveStart(lab: Lab, canary: boolean): Promise<{ line: string; problems: string[] }> {
   stickAt(FLOOR_ARROW, DOWN, SINK.ground);
   const before = spentStats().all;
   emit('waveStarted', (G.run?.wave ?? 0) + 1);
+  const fading = spentStats().fading;
   if (canary) stickAt(FLOOR_ARROW, DOWN, SINK.ground);
+  await lab.step(70);
   const left = spentStats().all;
-  const line = `a wave started: ${before} arrows before, ${left} left`;
+  const line = `a wave started: ${before} arrows before, ${fading} dissolving, ${left} left after 70 frames`;
   const problems: string[] = [];
-  if (left) problems.push(`${line}: the last wave's arrows stay`);
+  if (fading < before) problems.push(`${line}: the last wave's arrows did not begin dissolving`);
+  if (left !== (canary ? 1 : 0)) problems.push(`${line}: the last wave's arrows stay`);
   return { line, problems };
 }
 
-/** `lab trees`: every tree in the play area a wooden prop an arrow stands in; none left after a biome switch or a wave's start. */
+/** `lab trees`: each in-arena tree is a wooden prop an arrow stands in; a biome switch clears arrows and a wave start dissolves them. */
 export async function trees(lab: Lab, options: TreesOptions): Promise<Report> {
   if (!G.player.cls.quiver) {
     const why = `the ${G.player.cls.id} shoots no arrows: run it with --class ranger`;
@@ -198,7 +201,7 @@ export async function trees(lab: Lab, options: TreesOptions): Promise<Report> {
   const switched = afterSwitch(options.canary);
   lines.push(switched.line);
   problems.push(...switched.problems);
-  const waved = afterWaveStart(options.canary);
+  const waved = await afterWaveStart(lab, options.canary);
   lines.push(waved.line);
   problems.push(...waved.problems);
   if (G.arena.biome !== was) G.arena.setBiome(was);
