@@ -209,19 +209,24 @@ test('a sign-in code takes the account to a preview, where a passkey of its own 
   assert.equal(onCommit.body.account.id, added.body.account.id);
 });
 
-test('each site keeps its own save; a preview copies production\'s, and never writes it', async () => {
+test('a separately signed-in preview copies production with a one-time production code', async () => {
   const device = authenticator();
   const token = await signUp(device);
   await put(token, 'hero.mage', { classId: 'mage', level: 9 }, 0);
   await put(token, 'shared', { tag: 'Ash' }, 0);
-  const { body: { code } } = await call('POST', '/saves/link-code', { token });
-  const preview = (await call('POST', '/saves/link', { origin: PREVIEW, json: { code } })).body.token;
+  const preview = await signUp(authenticator(), PREVIEW);
+  assert.notEqual((await call('GET', '/saves/account', { token })).body.id,
+    (await call('GET', '/saves/account', { origin: PREVIEW, token: preview })).body.id);
   assert.deepEqual((await call('GET', '/saves/save', { origin: PREVIEW, token: preview })).body.parts, {});
   // the preview's own write first: the copy must move its version on
   await put(preview, 'hero.mage', { classId: 'mage', level: 1 }, 0, PREVIEW);
   await put(preview, 'hero.ranger', { classId: 'ranger' }, 0, PREVIEW);
-  const copied = await call('POST', '/saves/copy-production', { origin: PREVIEW, token: preview });
+  assert.equal((await call('POST', '/saves/copy-code', { origin: PREVIEW, token: preview })).status, 403);
+  assert.equal((await call('POST', '/saves/copy-production', { origin: PREVIEW, token: preview })).status, 401);
+  const { body: { code } } = await call('POST', '/saves/copy-code', { token });
+  const copied = await call('POST', '/saves/copy-production', { origin: PREVIEW, token: preview, json: { code } });
   assert.equal(copied.status, 200, copied.body);
+  assert.equal((await call('POST', '/saves/copy-production', { origin: PREVIEW, token: preview, json: { code } })).status, 401);
   const parts = (await call('GET', '/saves/save', { origin: PREVIEW, token: preview })).body.parts;
   assert.deepEqual(Object.keys(parts).sort(), ['hero.mage', 'shared'], 'production\'s whole');
   assert.equal(parts['hero.mage'].version, 2, 'past the preview\'s own');
@@ -231,9 +236,9 @@ test('each site keeps its own save; a preview copies production\'s, and never wr
   await put(preview, 'hero.mage', { classId: 'mage', level: 10 }, 2, PREVIEW);
   const kept = await call('GET', '/saves/save/hero.mage', { token });
   assert.equal(JSON.parse(gunzipSync(kept.body)).level, 9);
-  assert.equal((await call('POST', '/saves/copy-production', { token })).status, 400);
+  assert.equal((await call('POST', '/saves/copy-production', { token, json: { code } })).status, 400);
   const sites = (await call('GET', '/saves/account', { token })).body.sites.map((s) => s.site).sort();
-  assert.deepEqual(sites, ['last-stand.cc', 'pr-5.ls.wellscoped.dev']);
+  assert.deepEqual(sites, ['last-stand.cc']);
 });
 
 test('preview saves are capped per account', async () => {

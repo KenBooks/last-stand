@@ -6,6 +6,8 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
 ## Gotchas
 
+- The save slots Account dropdown (`_saves.scss` `.sc-menu`) grows as sign-in methods and copy actions are added. Cap its height against the zoomed viewport and let its buttons scroll without shrinking, or the last account actions fall below a landscape phone's screen.
+
 - Hero-colour swatches are 40 actual css pixels on touch: divide their CSS dimensions by `--ui`, since their modal is zoomed. The twelve-colour Settings picker spans both grid columns. Short touch-screen co-op dialogs use the available viewport width to keep the palette and Host/Join in view; check `coopTouch` and `pauseSettings` in the lab.
 
 - Styles are SCSS in `src/ui/styles/`: one partial per area (`_hud.scss`, `_lobby.scss`, `_modals.scss`...), imported by `index.scss` in cascade order (later files override earlier ones; a moved rule can change what wins). Use the theme (`_theme.scss`: colours named by role, not by hue, so a theme change stays in that file; surfaces; `ui()` / `hud()` / `touch()` scale helpers) and the mixins (`_mixins.scss`: frame, gem, corner brackets, diamond rule, section heading) instead of copying values: plain colours as `var(--frame)`, translucent ones as `rgba($frame, .35)`. The loading screen's styles stay inline in `index.html`. UI scales via the `--ui` variable. Honour `prefers-reduced-motion` for decorative animation.

@@ -14,6 +14,7 @@ const DATA = join(ROOT, '.tmp', `saves-google-test-${process.pid}`);
 const RESTORED = `${DATA}-restored`;
 const PRODUCTION = 'https://last-stand.cc';
 const PREVIEW = 'https://pr-5.ls.wellscoped.dev';
+const OTHER_PREVIEW = 'https://pr-6.ls.wellscoped.dev';
 /** the tab's nonce a sign-in is bound to (the page keeps it in session storage) */
 const NONCE = 'this-tabs-nonce-0123456789';
 let saves, backups, server, base, google;
@@ -38,7 +39,7 @@ after(() => {
 /** The service's settings here: Google's and Drive's addresses the stand-in's, the first backup never on its own. */
 function settings(overrides = {}) {
   return {
-    DATA, ORIGINS: `${PRODUCTION},https://pr-*.ls.wellscoped.dev`, GITHUB_REPO: '', ACCOUNTS_PER_DAY: '100',
+    DATA, ORIGINS: `${PRODUCTION},https://pr-*.ls.wellscoped.dev`, GITHUB_REPO: '', ACCOUNTS_PER_DAY: '100', ASKS_PER_HOUR: '200',
     GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: CLIENT_SECRET, DRIVE_REFRESH_TOKEN: REFRESH_TOKEN,
     GOOGLE_AUTH_URL: `${google.url}/auth`, GOOGLE_TOKEN_URL: `${google.url}/token`, DRIVE_API: google.url,
     BACKUP_FIRST_MS: String(60 * 60_000), ...overrides,
@@ -131,11 +132,40 @@ test('a Google sign-in goes by Google with PKCE and the openid scope alone, and 
   assert.equal(finished.body.account.google, true);
   assert.deepEqual(finished.body.account.passkeys, []);
   assert.equal((await finish(PREVIEW, NONCE)).status, 401);
-  // its session is the preview's, and the same Google account signs in to the same account anywhere
+  // its session and Google binding belong to this preview alone
   assert.equal((await call('GET', '/saves/save', { origin: PREVIEW, token: finished.body.token })).status, 200);
   assert.equal((await call('GET', '/saves/save', { origin: PRODUCTION, token: finished.body.token })).status, 401);
-  const again = await signInWithGoogle('sub-preview');
+  const again = await signInWithGoogle('sub-preview', PREVIEW);
   assert.equal(again.body.account.id, finished.body.account.id);
+  const other = await signInWithGoogle('sub-preview', OTHER_PREVIEW);
+  assert.notEqual(other.body.account.id, finished.body.account.id);
+  const production = await signInWithGoogle('sub-preview');
+  assert.notEqual(production.body.account.id, finished.body.account.id);
+  assert.notEqual(production.body.account.id, other.body.account.id);
+});
+
+test('a preview Google sign-in does not reserve Google on a production passkey account', async () => {
+  const preview = await signInWithGoogle('sub-preview-then-link', PREVIEW);
+  const token = await signUp(authenticator());
+  const linked = await linkWithGoogle(token, 'sub-preview-then-link');
+  assert.equal(linked.status, 200);
+  const production = await signInWithGoogle('sub-preview-then-link');
+  assert.equal(production.body.account.id, linked.body.account.id);
+  assert.equal((await signInWithGoogle('sub-preview-then-link', PREVIEW)).body.account.id, preview.body.account.id);
+});
+
+test('an existing preview Google account keeps its preview binding after the site field is added', async () => {
+  const first = await signInWithGoogle('sub-old-preview', PREVIEW);
+  const store = await import('../store.mjs');
+  const account = structuredClone(store.account(first.body.account.id));
+  account.google = account.googles['pr-5.ls.wellscoped.dev']; // account files from before this change
+  delete account.googles;
+  await store.keepAccount(account);
+  await store.load(DATA);
+  assert.equal(store.account(account.id).googles['pr-5.ls.wellscoped.dev'].sub, 'sub-old-preview');
+  assert.equal((await signInWithGoogle('sub-old-preview', PREVIEW)).body.account.id, account.id);
+  const token = await signUp(authenticator());
+  assert.equal((await linkWithGoogle(token, 'sub-old-preview')).status, 200);
 });
 
 test('the state is good once, and Google\'s answer never sends the page anywhere the state didn\'t name', async () => {

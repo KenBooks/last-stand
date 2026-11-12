@@ -159,4 +159,5 @@ export async function writePart(name: string, value: unknown, base: number, devi
 }
 
 export const deleteSave = async (): Promise<void> => { await call('DELETE', '/save'); };
-export const copyProduction = async (): Promise<void> => { await call('POST', '/copy-production'); };
+export const copyCode = (): Promise<{ code: string; until: number }> => json(call('POST', '/copy-code'));
+export const copyProduction = async (code: string): Promise<void> => { await call('POST', '/copy-production', { json: { code } }); };
