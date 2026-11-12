@@ -145,6 +145,12 @@ leave the pause menu shut; the guest's chat must still
 show 7.5 s after its last line, be faded 11 s after it, and be back with the host's next line. `--pictures` pictures
 both screens as the long line has come and as the host's answer has.
 
+`ghosts` (`diesLost`): the host kills three dazed foes by the guest, and the lab's link drops every death report on
+its way to the guest, as a game in #579 lost them (its copies stood, still, with their bars, through the choice after
+the wave and on into the next). Each copy must go from the guest's screen within 1.6 s of the host's foe
+(`judgeGhosts`, unit-tested): a guest drops a copy the host's snapshots haven't named for a second, and any copy
+still standing as the host's wave ends (`src/net/AGENTS.md`). On main they never went.
+
 Last, each game says what every hero's update cost it a frame (`page/coopCost.ts`, `Player.update` timed by the
 browser's clock, lines that differ from run to run): its own hero's and a partner's copy's, in a run, in the lobby
 and in the hall of heroes (the hall's own heroes left out). On this machine a hero took 1.2 to 1.4 ms a frame in a

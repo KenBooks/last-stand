@@ -204,6 +204,9 @@ interface Scenario {
   /** the frames from the scenario's start in which the guest never hears of a foe's spawn, as a guest whose run
    *  started late (its fight warming as the host's began) heard of none */
   spawnsLost?: number;
+  /** likewise the frames in which the guest never hears of a foe's death, as the guest in #579 didn't (its copies
+   *  stood, still, through the choice after the wave and on into the next) */
+  diesLost?: number;
   /** the skill (its `impl`) the guest's hero must know to play it, or one of them: a class's own */
   skill?: string | string[];
   /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
@@ -211,6 +214,9 @@ interface Scenario {
   hostInput(frame: number): Frame;
   guestInput(frame: number): Frame;
 }
+
+/** the frame of `ghosts` (after it settled) the host kills its foes on */
+export const GHOSTS_KILLED_AT = 60;
 
 /** where the party's other heroes stand through every scenario, off its action (`--party`: the third and fourth) */
 const EXTRA_SPOTS: XZ[] = [[-22, 2], [-22, 6]];
@@ -541,6 +547,26 @@ const SCENARIOS: Record<string, Scenario> = {
     hostInput: (frame) => chatInput('host', frame),
     guestInput: (frame) => chatInput('guest', frame),
   },
+  ghosts: {
+    about: 'the host kills three dazed foes by the guest, whose game never hears of their deaths: its copies must go '
+      + 'as the host\'s snapshots no longer name them',
+    frames: 240,
+    host: [-4, 22],
+    guest: [12, 22],
+    foes: [
+      { type: 'mossback', at: [12, 19], dazed: true },
+      { type: 'thornling', at: [14, 20], dazed: true },
+      { type: 'mossback', at: [10, 20], dazed: true },
+    ],
+    diesLost: 1000,
+    pictures: [30, 170],
+    hostInput: (frame) => {
+      // (killed on the host alone, as its own hits would: its death reports dropped on the way to the guest)
+      if (frame === GHOSTS_KILLED_AT) for (const foe of G.enemies) if (foe.alive) foe.die();
+      return {};
+    },
+    guestInput: () => ({}),
+  },
   wave: {
     about: 'the host lets wave 4 come, its foes rising at the gates and fighting, both heroes standing by the dais; '
       + 'the guest hears of no spawn for its first 6 s, as a guest whose run started late',
@@ -637,13 +663,16 @@ interface Packet {
   data?: { x?: { k: string }[] };
 }
 
-/** The host's report with its spawns taken out, while the scenario has the guest lose them (`spawnsLost`). */
+/** The host's report with its spawns or its deaths taken out, while the scenario has the guest lose them
+ *  (`spawnsLost`, `diesLost`). */
 function loseSpawns(message: Arriving): void {
-  const lost = SCENARIOS[play.scenario]?.spawnsLost ?? 0;
-  if (play.role !== 'guest' || play.frame >= lost) return;
+  const scenario = SCENARIOS[play.scenario];
+  if (play.role !== 'guest' || !scenario) return;
   const packet = message.data as Packet;
   if (packet.ch !== 'w' || !packet.data?.x) return;
-  packet.data.x = packet.data.x.filter((event) => event.k !== 'spawn');
+  const lost = (kind: string, frames = 0) => play.frame < frames && kind;
+  const spawns = lost('spawn', scenario.spawnsLost), dies = lost('die', scenario.diesLost);
+  if (spawns || dies) packet.data.x = packet.data.x.filter((event) => event.k !== spawns && event.k !== dies);
 }
 
 /** Hands the game the messages that have arrived by the frame about to run, in the order they arrive. */

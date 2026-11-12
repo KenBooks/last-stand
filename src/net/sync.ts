@@ -89,6 +89,10 @@ const copied = new Set<number>();
 const asked = new Map<number, number>();
 /** how long a guest waits for the host to answer about a foe before asking again (ms) */
 const ASK_AGAIN_MS = 1000;
+/** guest: how many of the host's snapshots in a row each copy has been missing from (a snapshot names every foe
+ *  standing on the host), and how many make it a ghost: a foe the host no longer has, gone here too (`dropGhosts`) */
+const unseen = new Map<number, number>();
+const GHOST_SNAPSHOTS = 20;
 /** guest: where it asks the host about foes it never had word of (set by the session) */
 let askFoes: ((ids: number[]) => void) | null = null;
 export function setFoeAsk(fn: typeof askFoes): void { askFoes = fn; }
@@ -128,6 +132,7 @@ function forget(): void {
   outgoing = [];
   copied.clear();
   asked.clear();
+  unseen.clear();
 }
 
 /** Host: the spawn reports of the foes a guest asked about, those still standing (`foesAsked`). */
@@ -299,13 +304,16 @@ function apply(ev: WorldEvent): void {
     case 'die': {
       const e = G.enemies.find((x) => x.id === ev.id);
       if (e?.alive) e.die(flingFrom(ev.f));
-      tracks.delete(ev.id);
-      smoothers.delete(ev.id);
+      forgetCopy(ev.id);
       return;
     }
     case 'fx': (FX[ev.n] as (...a: number[]) => void)(...ev.a); return;
     case 'prop': { const p = G.arena.props[ev.i]; if (p) setPropLife(p, ev.l); return; }
-    case 'clear': G.run!.phase = 'cleared'; G.run!.votes.clear(); G.arena.setCalm(1); showCleared(); emit('waveCleared', G.run!.wave); return;
+    case 'clear':
+      // (the host's wave ends with none of its foes standing: a copy still up here is a ghost)
+      for (const e of G.enemies) if (e.net && e.alive) dropGhost(e);
+      G.run!.phase = 'cleared'; G.run!.votes.clear(); G.arena.setCalm(1); showCleared(); emit('waveCleared', G.run!.wave);
+      return;
     case 'next': G.run!.wave = ev.w; G.run!.phase = 'countdown'; startNextWave(); return;
     case 'loot': if (ev.s === G.player.slot) gainLoot({ ...ev.item, id: newItemId() }); return;
     case 'out': {
@@ -323,6 +331,37 @@ function apply(ev: WorldEvent): void {
     case 'down': { const p = bySlot(ev.s); if (p && !p.out) { if (p.alive) p.die(); p.goDown(); } return; }
     case 'raise': { const p = bySlot(ev.s); if (p) { p.raise(); creditRaise(p); } return; }
     case 'over': endRun(); return;
+  }
+}
+
+/** Guest: what it kept on a copy of foe `id`, let go as the copy goes. */
+function forgetCopy(id: number): void {
+  tracks.delete(id);
+  smoothers.delete(id);
+  unseen.delete(id);
+}
+
+/**
+ * Guest: a copy of a foe the host no longer has, gone here too, as a foe dies (the host's foes only ever leave by
+ * dying, and its kill or loot is the host's alone: a guest's `onEnemyKilled` counts nothing). Its death's report never
+ * came to this game, or came before the copy was made, and the copy stood where its last report left it for the rest
+ * of the run, its bar still up, through the choice after the wave and on into the next (from play, #579: "frozen
+ * enemies remain frozen after completing a wave").
+ */
+function dropGhost(e: Enemy): void {
+  e.die();
+  forgetCopy(e.id);
+}
+
+/** Guest: the copies missing from `GHOST_SNAPSHOTS` of the host's snapshots in a row (a second of them), dropped. */
+function dropGhosts(rows: (number | string)[][]): void {
+  const standing = new Set(rows.map((row) => row[0] as number));
+  for (const e of G.enemies) {
+    if (!e.net || !e.alive) continue;
+    if (standing.has(e.id)) { unseen.delete(e.id); continue; }
+    const missing = (unseen.get(e.id) ?? 0) + 1;
+    if (missing >= GHOST_SNAPSHOTS) dropGhost(e);
+    else unseen.set(e.id, missing);
   }
 }
 
@@ -348,6 +387,7 @@ function applySnapshot(s: Snapshot): void {
   const acked = s.a?.find(([slot]) => slot === G.player.slot)?.[1] ?? 0;
   pending = pending.filter((h) => h.seq > acked);
   askAboutUnknown(s.e);
+  dropGhosts(s.e);
   for (const [id, , , , life, act, t, dur, flags] of s.e as [number, number, number, number, number, string, number, number, number][]) {
     const e = G.enemies.find((q) => q.id === id);
     if (!e || !e.alive) continue;

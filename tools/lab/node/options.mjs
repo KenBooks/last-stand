@@ -301,7 +301,7 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
           + 'down, blink (a mage), rush and strike (a warrior), throws',
       },
