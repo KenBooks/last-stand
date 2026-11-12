@@ -54,8 +54,12 @@ services:
       PORT: "8080"
       DATA: /data
       # (the game's pages alone: not localhost or the shared github.io, as the other two take; every other setting
-      # has its default in saves.mjs, none is a secret, none needs Dokci's configuration)
+      # has its default in saves.mjs)
       ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev
+      # (Google's sign-in and the Drive backups: Dokci's configuration, never in the repo; unset, each is off)
+      GOOGLE_CLIENT_ID: ${LS_GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${LS_GOOGLE_CLIENT_SECRET:-}
+      DRIVE_REFRESH_TOKEN: ${LS_DRIVE_REFRESH_TOKEN:-}
     volumes:
       - saves-data:/data
     expose:

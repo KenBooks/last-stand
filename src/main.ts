@@ -32,8 +32,8 @@ import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hi
 import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, lobbyViewShift, renderMenu, markNew, clearOverlays, pauseTab } from './ui/menus';
 import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
-import { askConflicts, renderCloudBar } from './ui/cloudSaves';
-import { initCloud } from './loot/cloud';
+import { askConflicts, renderCloudBar, showGoogleLanding } from './ui/cloudSaves';
+import { googleLanding, initCloud } from './loot/cloud';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { hallOpen, prepareHeroSelection, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
@@ -274,6 +274,12 @@ async function boot() {
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
     const room = invitedRoom();
     if (room) joinInvited(room);
+    // back from Google's sign-in (loot/cloud.ts): the save slots screen, on to choosing the cloud save
+    void googleLanding().then((landing) => {
+      if (!landing || G.mode !== 'menu') return;
+      openSaves(true);
+      showGoogleLanding(landing);
+    });
   });
   runFrames(frame);
 }

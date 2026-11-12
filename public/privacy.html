@@ -34,10 +34,12 @@
     <ul>
       <li>an account id the server makes up at random;</li>
       <li>your passkeys' public keys (a passkey's private part never leaves your device);</li>
+      <li>if you sign in with Google or link it, Google's id for your Google account (a number), nothing else of it;</li>
       <li>the save of each site you sync (the game, and any test build you sign in on): your heroes, their gear, stash and records, skill loadouts, stash filters, your co-op name tag and colour, your volumes and portraits, which device last wrote each part, and when;</li>
       <li>the sessions you're signed in with (only a fingerprint of each, never the session itself).</li>
     </ul>
-    <p>It keeps no name, email address, picture or password. Signing in with Google, when it comes, keeps only Google's id for your account, never your name or email.</p>
+    <p>It keeps no name, email address, picture or password. Signing in with Google asks Google for the <code>openid</code> scope alone: Google tells the server only its id for your account, never your name, email or picture, and no Google script runs in the game.</p>
+    <p>The server's data is backed up nightly to the maintainer's own Google Drive, in a folder only the server's backups write to.</p>
     <p>The server is the game's own, run by the game's maintainer. Nothing is sold or shared, and nothing is used for advertising.</p>
   </section>
 

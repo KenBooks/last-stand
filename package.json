@@ -22,7 +22,9 @@
     "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
     "traces:build": "npm --prefix server/traces/web run build",
     "traces:test": "npm run traces:build && node --test \"server/traces/test/*.test.mjs\"",
-    "saves:test": "node --test \"server/saves/test/*.test.mjs\""
+    "saves:test": "node --test \"server/saves/test/*.test.mjs\"",
+    "saves:drive-token": "node server/saves/driveToken.mjs",
+    "saves:restore": "node server/saves/restore.mjs"
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",

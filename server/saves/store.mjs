@@ -1,6 +1,6 @@
 // What the saves service keeps (server/saves/AGENTS.md), as files on its volume: an account a file of its own
-// (`accounts/<id>.json`: its passkeys, its sessions' digests, which sites have a save), and each site's save a file
-// (`saves/<id>/<site>.json`: its parts, each gzipped JSON with a version). Every file is written whole to a temporary
+// (`accounts/<id>.json`: its passkeys, Google's id for it if linked, its sessions' digests, which sites have a save),
+// and each site's save a file (`saves/<id>/<site>.json`: its parts, each gzipped JSON with a version). Every file is written whole to a temporary
 // name and renamed over the old, so a crash never leaves half a save. The accounts are read into memory at a start
 // (they're small: a passkey is a public key); the saves are read when asked for.
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -11,6 +11,8 @@ import { join } from 'node:path';
 const accounts = new Map();
 /** a passkey's credential id -> its account's id */
 const byCredential = new Map();
+/** Google's id for an account (`sub`) -> its account's id */
+const byGoogle = new Map();
 /** a session token's digest -> its account's id */
 const bySession = new Map();
 /** id -> the promise its last change resolves to (each account's changes wait their turn) */
@@ -34,11 +36,13 @@ async function writeWhole(file, value) {
 function indexAccount(account) {
   for (const passkey of account.passkeys) byCredential.set(passkey.id, account.id);
   for (const session of account.sessions) bySession.set(session.hash, account.id);
+  if (account.google) byGoogle.set(account.google.sub, account.id);
 }
 
 function unindexAccount(account) {
   for (const passkey of account.passkeys) byCredential.delete(passkey.id);
   for (const session of account.sessions) bySession.delete(session.hash);
+  if (account.google) byGoogle.delete(account.google.sub);
 }
 
 /** Reads every account kept under `data` (a start). */
@@ -47,6 +51,7 @@ export async function load(data) {
   accounts.clear();
   byCredential.clear();
   bySession.clear();
+  byGoogle.clear();
   queues.clear();
   await mkdir(join(root, 'accounts'), { recursive: true });
   await mkdir(join(root, 'saves'), { recursive: true });
@@ -72,8 +77,11 @@ export function withAccount(id, change) {
 
 export const account = (id) => accounts.get(id) ?? null;
 export const accountOfCredential = (credentialId) => account(byCredential.get(credentialId));
+export const accountOfGoogle = (sub) => account(byGoogle.get(sub));
 export const accountOfSession = (token) => account(bySession.get(digest(token)));
 export const allAccounts = () => [...accounts.values()];
+/** Where the accounts and saves are kept (a backup's snapshot reads it). */
+export const dataRoot = () => root;
 
 /** A new account, with nothing in it yet (kept by `keepAccount`). */
 export function freshAccount(id = newId(), now = Date.now()) {
@@ -99,7 +107,7 @@ export async function dropAccount(id) {
   await rm(savesDir(id), { recursive: true, force: true });
 }
 
-/** A new session for the account, made from `site` by `via` (a passkey, a sign-in code): its token (given once;
+/** A new session for the account, made from `site` by `via` (a passkey, a sign-in code, Google): its token (given once;
  *  only its digest is kept). */
 export function addSession(changed, site, via = 'passkey', now = Date.now()) {
   const token = randomBytes(32).toString('base64url');
