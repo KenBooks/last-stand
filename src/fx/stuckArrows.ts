@@ -355,11 +355,13 @@ export function spentStats(): { all: number; fixed: number; inProp: number; body
   return n;
 }
 
-/** Every spent arrow gone at once: another biome's floor and props aren't where they lay. */
+/** Every spent arrow gone at once: another biome's floor and props aren't where they lay, and each wave starts on a clean arena. */
 export function clearSpent(): void {
   for (const l of lists) for (const s of [...l]) remove(s);
 }
 on('biomeChanged', clearSpent);
+// Every game, the host's and each guest's, hears its wave start (game/run.ts, net/sync.ts), at every quality level.
+on('waveStarted', clearSpent);
 
 /** Every spent arrow's middle and its point (for the probes: where they lie against the floor, the props and the wall). */
 export const spentPoints = (): { p: THREE.Vector3; tip: THREE.Vector3; mode: Mode; fading: boolean; on?: THREE.Object3D }[] =>
