@@ -50,8 +50,8 @@ const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
 /** his trousers' cut (models/trousers.ts): a fighter's hips and thighs under the hide, tucked into the boots under their fur */
 const TROUSERS: TrouserCut = {
-  top: 0.13, waistW: 0.132, waistD: 0.108, hipW: 0.188, front: 0.1, seat: 0.118, crotch: -0.115,
-  thigh: 0.088, knee: 0.064, calf: 0.058, ankle: 0.042, tuck: 0.1, folds: 0.004,
+  top: 0.13, waistW: 0.132, waistD: 0.108, hipW: 0.196, front: 0.104, seat: 0.122, crotch: -0.115,
+  thigh: 0.099, knee: 0.071, calf: 0.066, ankle: 0.044, tuck: 0.1, folds: 0.004,
 };
 interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
@@ -657,7 +657,7 @@ export function* warriorSteps(): ModelSteps {
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
     A.add(kg, engraved, kn, [0, -0.01, 0]);
-    for (const y of [0.05, -0.075]) A.add(belt(0.082, 0.07, y, 0.02, 0.006, 0, 14), leather, kn);
+    for (const y of [0.05, -0.075]) A.add(belt(0.085, 0.081, y, 0.02, 0.006, 0, 14), leather, kn);
     // the boot's shaft from below the knee to the ankle, and a fur cuff over its top
     S.add(scaleUV(lathe([[0.056, -0.42], [0.062, -0.37], [0.072, -0.27], [0.078, -0.16], [0.082, -0.11], [0.08, -0.1]], 18), 2, 1.5), leather, kn, [0, 0, 0.005], [0, 0, 0], [1, 1, 1.06]);
     S.add(furTufts(rng, 48, (i, o) => { const a = (i / 48) * Math.PI * 2; o.p.set(Math.sin(a) * 0.08, -0.105, Math.cos(a) * 0.085); o.d.set(Math.sin(a), 0.7, Math.cos(a)); }, 0.04, 0.01), furM, kn);
