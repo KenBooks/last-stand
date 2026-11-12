@@ -41,6 +41,13 @@ export class StaticHost {
     /** builds served in folders under the base (a PR preview's), by their folder's path under it */
     this.folders = new Map();
     this.notFoundPage = true;
+    /** how long a page (an .html file) is held back before it's answered (ms): a slow network's */
+    this.pageDelay = 0;
+  }
+
+  /** Holds every page back `ms` before answering it from now on (0: at once), as a slow network does. */
+  slowPages(ms) {
+    this.pageDelay = ms;
   }
 
   /** Serves the build in `root` at `folder` under the base too (`pr-preview/pr-1/aaaaaaa/`), until `unmount`. */
@@ -118,8 +125,13 @@ export class StaticHost {
       return;
     }
     const type = TYPES[extname(file)] ?? 'application/octet-stream';
-    response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length });
-    response.end(body);
+    const send = () => {
+      if (response.destroyed) return;
+      response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length });
+      response.end(body);
+    };
+    if (this.pageDelay && extname(file) === '.html') setTimeout(send, this.pageDelay);
+    else send();
   }
 
   answerMissing(response) {

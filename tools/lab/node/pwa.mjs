@@ -6,7 +6,9 @@
 // this tree's build (a plain reload must show a new deploy: the root AGENTS.md). (The owner, of a preview whose font
 // stylesheet was asked for with CORS: the old worker answered with the copy it kept from a request without, which
 // can't answer one with, the stylesheet failed and the lobby showed the system's fonts, wider: "increasing font size
-// had unintended side effects".)
+// had unintended side effects".) Then the next deploy met as #578 met it: its page slower than the worker waits (4 s),
+// so the worker serves this tree's cached page, and the page, the player not having touched it, must reload onto the
+// next build by itself (from play: "reloading or reopening the game does not always load the latest version").
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { launchBrowser } from './browser.mjs';
@@ -31,6 +33,13 @@ const POLL = 250;
 /** the page's font stylesheet's address as it's written, and as the canary breaks it */
 const FONT_SHEET = 'fonts.googleapis.com/css2?';
 const BROKEN_SHEET = 'fonts.googleapis.com/css2-lab-canary?';
+/** the next deploy's page held back this long (ms): past the worker's wait for the network (`PAGE_WAIT`, 4 s) */
+const SLOW_PAGE = 6000;
+/** how long a page untouched may take to reload onto the next deploy by itself (ms): the worker installed and taken
+ *  over, then the reload, its page held back again */
+const NEXT_WAIT = 90_000;
+/** the commit the next deploy says it is: this tree built again, another bundle and another worker's cache */
+const NEXT_SHA = 'feedface'.padEnd(40, '0');
 /** two builds of one PR's preview, visited in turn (each a worker of its own, its caches beside production's) */
 const PREVIEWS = ['pr-preview/pr-1/aaaaaaa/', 'pr-preview/pr-1/bbbbbbb/'];
 
@@ -103,8 +112,10 @@ async function buildAll(from) {
     await buildTree(REPO, dir, false, previewSha(folder));
     previews.set(folder, buildOf(`the preview at ${folder}`, dir));
   }
+  const nextDir = join(PWA_DIR, 'next');
+  await buildTree(REPO, nextDir, false, NEXT_SHA);
   const old = buildOf(`${from} (${exported.sha.slice(0, 7)})`, oldDir);
-  return { old, now: buildOf('this tree', newDir), previews };
+  return { old, now: buildOf('this tree', newDir), next: buildOf('the next deploy', nextDir), previews };
 }
 
 /** The cache the page's worker serves (run in the page): its answer to 'cache', null with no worker. */
@@ -177,6 +188,7 @@ async function waitForWorker(page, cache, what) {
 /** Which of the builds `value` (an entry script or a cache's name) is, by `key`, for a line. */
 function whichBuild(builds, key, value) {
   if (value === builds.now[key]) return 'this tree\'s';
+  if (builds.next && value === builds.next[key]) return 'the next deploy\'s';
   if (value === builds.old[key]) return 'the old';
   return value ? 'an unknown' : 'no';
 }
@@ -392,14 +404,65 @@ async function playLoads(builds, canary) {
   return { lines, problems };
 }
 
+/** The page's entry script now, or null while it's between pages (a reload under way). */
+async function entryNow(page) {
+  try {
+    return await page.evaluate(() => document.querySelector('script[type="module"][src]')?.getAttribute('src') ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The next deploy met as #578 met it, in a browser of its own: this tree visited and its worker installed, then the next
+ * deploy served with its page held back `SLOW_PAGE` (the worker gives up on the network after 4 s and serves this
+ * tree's cached page) and the page reloaded, nothing touched on it. It must reload onto the next build by itself once
+ * its worker has taken over. The canary marks the page as having just reloaded onto a new version (it does so at
+ * most once a minute), so it stays on this tree's build, which must be caught.
+ */
+async function nextDeploy(builds, canary) {
+  const host = new StaticHost(BASE);
+  host.serve(builds.now.dir);
+  const url = await host.start();
+  const browser = await launchBrowser();
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await context.newPage();
+    await page.goto(url);
+    await waitForWorker(page, builds.now.cache, 'this tree\'s worker, before the next deploy');
+    host.serve(builds.next.dir);
+    host.slowPages(SLOW_PAGE);
+    if (canary) await page.evaluate(() => sessionStorage.setItem('last-stand.updated-at', String(Date.now())));
+    const started = Date.now();
+    await page.reload({ timeout: NEXT_WAIT });
+    const first = await entryNow(page);
+    let entry = first;
+    while (entry !== builds.next.entry && Date.now() - started < NEXT_WAIT) {
+      await sleep(POLL);
+      entry = (await entryNow(page)) ?? entry;
+    }
+    const firstShown = whichBuild(builds, 'entry', first);
+    const reached = entry === builds.next.entry;
+    const line = `  the next deploy, its page ${SLOW_PAGE / 1000} s slow, the page untouched: first ${firstShown} build`
+      + ` (served from the worker's cache), ${reached ? `the next deploy's after ${seconds(started)}, by itself` : `still ${whichBuild(builds, 'entry', entry)} after ${seconds(started)}`}`;
+    const problems = reached ? [] : [`the page never reloaded onto the next deploy by itself (${whichBuild(builds, 'entry', entry)} build after ${NEXT_WAIT / 1000} s)`];
+    return { lines: [line], problems };
+  } finally {
+    await browser.close();
+    await host.close();
+  }
+}
+
 /** The canary's verdict: the stale page, the broken font stylesheet, the lost cache and the plain 404 each found. */
 function canaryVerdict(problems) {
   const stale = problems.some((problem) => problem.includes('not this tree'));
   const fonts = problems.some((problem) => problem.includes('the system\'s fonts'));
   const offline = problems.some((problem) => problem.startsWith('the app started offline'));
   const gone = problems.some((problem) => problem.startsWith('the app at a closed PR'));
+  const kept = problems.some((problem) => problem.startsWith('the page never reloaded onto the next deploy'));
   const caught = [
     ['stale page', stale],
+    ['old build kept on the next deploy', kept],
     ['broken font stylesheet', fonts],
     ['deleted production cache', offline],
     ['plain 404', gone],
@@ -418,6 +481,9 @@ export async function runPwa(options) {
     const builds = await buildAll(from);
     console.log(`built ${builds.old.name}, this tree and its previews (${seconds(started)})`);
     const { lines, problems } = await playLoads(builds, canary);
+    const next = await nextDeploy(builds, canary);
+    lines.push('the next deploy (#578):', ...next.lines);
+    problems.push(...next.problems);
     console.log([`from ${builds.old.name} to this tree:`, ...lines].join('\n'));
     const missed = canary ? canaryVerdict(problems) : { lines: [], missed: problems };
     if (missed.lines.length) console.log(missed.lines.join('\n'));
