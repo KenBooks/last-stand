@@ -22,6 +22,8 @@ export function installBootFullScreen(force = false): void {
 
   function gesture(event: Event): void {
     if (state.pending || state.entered || document.fullscreenElement) return;
+    // A fullscreen button handles its own click. Entering on pointerdown would make that click exit again.
+    if (event.target instanceof Element && event.target.closest('#btn-fullscreen, #btn-full')) return;
     if (event instanceof KeyboardEvent) {
       if (event.key === 'Escape') return;
     } else if (event instanceof PointerEvent) {
@@ -40,9 +42,8 @@ export function installBootFullScreen(force = false): void {
   }
 
   const off = document.cookie.split(';').some((part) => part.trim() === 'last-stand-auto-full-screen=off');
-  const installed = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
-    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  if (!document.fullscreenEnabled || off || installed) return;
+  // A standalone app can still enter HTML fullscreen; a fullscreen display-mode window is there already.
+  if (!document.fullscreenEnabled || off || matchMedia('(display-mode: fullscreen)').matches) return;
   if (!force && (navigator.webdriver || new URLSearchParams(location.search).get('fullscreen') === '0')) return;
   for (const type of events) window.addEventListener(type, gesture, true);
 }

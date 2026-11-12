@@ -1,7 +1,8 @@
 // `lab ui`'s automatic full screen (src/ui/autoFullScreen.ts, `autoFull`): the page asks for full screen at a player's
 // first gesture, and a prompt then offers to go back to the window for 10 s. The lab's browser refuses full screen
 // (`noCapture` in `node/browser.mjs`: it would take the window), so the page's request is stood in for by a spy of the
-// check's own, which counts each ask and takes or refuses it as a browser would. Checked: a finger's press asks
+// check's own, which counts each ask and takes or refuses it as a browser would. Checked: a manual Fullscreen control
+// owns its press and click without a second automatic ask; a finger's press asks
 // nothing and its lift asks, a mouse's press asks; refused, the next gesture asks again; taken, the prompt shows, within
 // the window, and is gone after its time; Back to window clicked keeps the choice in its cookie, and the page doesn't
 // ask on the next visit; the prompt stands over the loading screen (its first click asks too). Its canary loses the
@@ -74,6 +75,27 @@ function waitReal(ms: number): Promise<void> {
 /** The promise callbacks a request's answer runs, run. */
 const settle = (): Promise<void> => waitReal(0);
 
+/** A manual fullscreen control must not be preempted by the automatic capture listener on press. */
+async function manualControlOwnsPress(spy: FullScreenSpy, lines: string[], problems: string[]): Promise<void> {
+  for (const [id, type, pointerType] of [
+    ['btn-fullscreen', 'pointerdown', 'mouse'], ['btn-full', 'pointerup', 'touch'],
+  ] as const) {
+    const button = document.getElementById(id);
+    if (!button) { problems.push(`autoFull: no manual ${id} control`); continue; }
+    armAutoFullScreen(true);
+    const before = spy.asks;
+    button.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType }));
+    await settle();
+    const automatic = spy.asks - before;
+    button.click();
+    await settle();
+    const manual = spy.asks - before - automatic;
+    lines.push(`  ${id}: automatic press asks ${automatic}, button click asks ${manual}`);
+    if (automatic !== 0) problems.push(`autoFull: ${id} press asked automatically ${automatic} times`);
+    if (manual !== 1) problems.push(`autoFull: ${id} click asked ${manual} times`);
+  }
+}
+
 /** The loading screen's z-index, from its rule (`#loading` leaves the page once the game is shown). */
 function loadingZ(): number {
   const own = [...document.styleSheets].filter((sheet) => !sheet.href || sheet.href.startsWith(location.origin));
@@ -107,12 +129,13 @@ const spot = (): { x: number; y: number } => ({ x: innerWidth / 2, y: innerHeigh
 async function fingerAsks(lab: Lab, spy: FullScreenSpy, lines: string[], problems: string[]): Promise<void> {
   spy.taking = false;
   armAutoFullScreen(true);
+  const before = spy.asks;
   await lab.touchDown(spot());
   await settle();
-  const onPress = spy.asks;
+  const onPress = spy.asks - before;
   await lab.touchUp();
   await settle();
-  const onLift = spy.asks - onPress;
+  const onLift = spy.asks - before - onPress;
   lines.push(`  a finger: asked ${onPress} as it went down, ${onLift} as it lifted; refused, armed again ${autoFullArmed()}`);
   if (onPress !== 0) problems.push(`autoFull: a finger's press asked for full screen ${onPress} times`);
   if (onLift !== 1) problems.push(`autoFull: a finger's lift asked for full screen ${onLift} times`);
@@ -272,6 +295,7 @@ export async function autoFullChecked(lab: Lab, canary: boolean): Promise<FullFo
   const spy = new FullScreenSpy();
   try {
     removeCookie(AUTO_FULL_COOKIE);
+    await manualControlOwnsPress(spy, lines, problems);
     await fingerAsks(lab, spy, lines, problems);
     await mouseShowsPrompt(lab, spy, lines, problems);
     await backKept(lab, spy, canary, lines, problems);
