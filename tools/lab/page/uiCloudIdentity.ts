@@ -1,6 +1,6 @@
 // Save Slots' private identity display at the UI's screen sizes. Account snapshots are explicit fixtures here;
 // the real OAuth/session boundaries and persistence are checked by server/saves/test/google.test.mjs.
-import { cloudIdentityHTML } from '../../../src/ui/cloudSaves';
+import { CLOUD, cloudIdentityHTML } from '../../../src/ui/cloudSaves';
 import { openSaves } from '../../../src/ui/saves';
 
 const EMAIL = 'a.long.google.account.address.for.testing.wrapping@a.long.example.test';
@@ -17,13 +17,13 @@ export function openCloudIdentity(): void {
   };
   openSaves(true);
   const header = document.querySelector('#saves .sv-pane .sv-head')!;
-  header.insertAdjacentHTML('afterend', `<div class="sv-account">${cloudIdentityHTML({
+  header.insertAdjacentHTML('beforeend', `<div class="sv-cloud-info"><span class="sv-cloud-mark">${CLOUD}<span>Cloud</span></span><div class="sv-account">${cloudIdentityHTML({
     google: true, passkey: true, session: { via: 'google', email: EMAIL },
-  })}</div>`);
+  })}</div></div>`);
 }
 
 export function closeCloudIdentity(): void {
-  document.querySelector('#saves .sv-account')?.remove();
+  document.querySelector('#saves .sv-cloud-info')?.remove();
   openSaves(false);
   window.fetch = realFetch;
 }
@@ -61,6 +61,11 @@ export function cloudIdentityChecked(canary: boolean): { lines: string[]; proble
   if (!panel.textContent?.includes(EMAIL)) problems.push('cloudIdentity: email missing');
   if (!panel.querySelector('svg')?.checkVisibility()) problems.push('cloudIdentity: Google logo missing');
   const bounds = panel.getBoundingClientRect();
+  const header = panel.closest('.sv-head');
+  if (!header || bounds.right < header.getBoundingClientRect().right - 35) problems.push('cloudIdentity: identity is not at the right of the header');
+  const privacy = document.querySelector('#saves .sc-privacy')!.getBoundingClientRect();
+  const lastButton = document.querySelector('#saves .sc-code')!.getBoundingClientRect();
+  if (privacy.top >= lastButton.bottom || privacy.bottom <= lastButton.top) problems.push('cloudIdentity: Privacy is on a separate line from the buttons');
   const pane = panel.closest('.sv-pane')!.getBoundingClientRect();
   for (const node of panel.querySelectorAll<HTMLElement>('span, b, svg')) {
     const range = document.createRange();

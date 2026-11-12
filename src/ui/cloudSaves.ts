@@ -87,13 +87,13 @@ export function renderCloudBar(): void {
       ? '<button class="btn primary sc-in">Sign in with a passkey</button><button class="btn sc-new">New account</button>'
       : '<span class="sc-state">This browser can\'t use passkeys.</span>';
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
-      + `<span class="sc-state">Keep slot 1 on every device: sign in.</span>${passkeys}`
+      + `<span class="sc-state">Keep slot 1 on every device: sign in.</span><div class="sc-actions">${passkeys}`
       + `<button class="btn sc-google" hidden>${GOOGLE}<span>Sign in with Google</span></button>`
-      + `<button class="btn sc-code">Use a sign-in code</button>${privacy}</div>${note}`;
+      + `<span class="sc-tail"><button class="btn sc-code">Use a sign-in code</button>${privacy}</span></div></div>${note}`;
   } else if (status === 'unlinked') {
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Signed in (account ${accountId.slice(0, 6)}). Choose which save is your cloud save.</span>`
-      + `<button class="btn primary sc-link">Choose the cloud save</button><button class="btn sc-out">Sign out</button>${privacy}</div>${note}`;
+      + `<div class="sc-actions"><button class="btn primary sc-link">Choose the cloud save</button><span class="sc-tail"><button class="btn sc-out">Sign out</button>${privacy}</span></div></div>${note}`;
     bar.insertAdjacentHTML('beforeend', `<div class="sc-account">${cloudIdentityHTML()}</div>`);
   } else {
     const state = status === 'syncing' ? 'Syncing...' : status === 'offline' ? 'Offline' : status === 'error' ? 'Not synced'
@@ -113,8 +113,8 @@ export function renderCloudBar(): void {
     ].join('');
     bar.innerHTML = `<div class="sc-row"><span class="sc-icon on" aria-hidden="true">${CLOUD}</span>`
       + `<span class="sc-state">Slot 1 is your cloud save · account ${accountId.slice(0, 6)} · <b>${state}</b></span>`
-      + `<button class="btn sc-sync">Sync now</button><details class="sc-more"><summary class="btn">Account<span class="sc-chevron" aria-hidden="true"></span></summary>`
-      + `<div class="sc-menu">${more}</div></details>${privacy}</div>${note}`;
+      + `<div class="sc-actions"><button class="btn sc-sync">Sync now</button><span class="sc-tail"><details class="sc-more"><summary class="btn">Account<span class="sc-chevron" aria-hidden="true"></span></summary>`
+      + `<div class="sc-menu">${more}</div></details>${privacy}</span></div></div>${note}`;
   }
   bind(bar, '.sc-in', () => act(() => cloud.signInWithPasskey(), afterSignIn));
   bind(bar, '.sc-new', () => act(() => cloud.signUpWithPasskey(), afterSignIn));

@@ -114,8 +114,8 @@ function pane(n: number): HTMLElement {
   el.setAttribute('aria-label', `Save slot ${n}${inCloud ? ', the cloud save' : ''}`);
   el.innerHTML = `<header class="sv-head"><div class="sv-gem" aria-hidden="true">${NUMERALS[n]}</div>
       <div class="sv-name">Slot ${n}<span class="sv-status">${status}</span></div>`
-      + `${inCloud ? `<span class="sv-cloud-mark" title="The cloud save: kept for every device you sign in on">${CLOUD}<span>Cloud</span></span>` : ''}</header>
-    ${inCloud ? `<div class="sv-account">${cloudIdentityHTML()}</div>` : ''}
+      + `${inCloud ? `<div class="sv-cloud-info"><span class="sv-cloud-mark" title="The cloud save: kept for every device you sign in on">${CLOUD}<span>Cloud</span></span>
+        <div class="sv-account">${cloudIdentityHTML()}</div></div>` : ''}</header>
     ${totals ? `<div class="sv-totals">${totals}</div>` : ''}
     <div class="sv-body"></div>
     <footer class="sv-foot"><button class="btn primary sv-play">${play}</button>`
