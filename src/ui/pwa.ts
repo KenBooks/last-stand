@@ -1,6 +1,7 @@
 // Installable, offline game (PWA). Registers the service worker that scripts/pwa.ts builds, offers
-// the browser's install prompt from the lobby, and offers a reload once a new version took over.
-// Production builds only: the dev server has no worker.
+// the browser's install prompt from the lobby, and once a new version took over, reloads onto it by itself while the
+// player hasn't started playing (#578), else offers the reload in the lobby. Production builds only: the dev server has
+// no worker.
 import { G } from '../state';
 import { sfx } from '../core/audio';
 
@@ -9,23 +10,49 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 /** Chrome's install prompt event (not in the DOM typings). */
 interface InstallPrompt extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }
 
+/** whether the player has played yet: a key, a click or a touch on the page since it loaded (a reload onto a new version
+ *  then would cost them nothing; once they have, it waits for their say in the lobby) */
+let played = false;
+/** how long after one reload onto a new version another may come by itself (ms): never a loop */
+const RELOAD_APART_MS = 60_000;
+const RELOADED_KEY = 'last-stand.updated-at';
+
+/** Reloads onto the new version by itself if the player hasn't played yet and it didn't just do so; whether it did. */
+function reloadUnplayed(): boolean {
+  if (played) return false;
+  try {
+    const last = Number(sessionStorage.getItem(RELOADED_KEY)) || 0;
+    if (Date.now() - last < RELOAD_APART_MS) return false;
+    sessionStorage.setItem(RELOADED_KEY, String(Date.now()));
+  } catch { return false; }
+  location.reload();
+  return true;
+}
+
 export function initPwa(): void {
   initInstall();
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
+  const playing = () => { played = true; };
+  for (const type of ['keydown', 'pointerdown']) window.addEventListener(type, playing, { capture: true, once: true });
   const base = import.meta.env.BASE_URL;
   const sw = navigator.serviceWorker;
   let hadWorker = !!sw.controller;
   sw.addEventListener('controllerchange', () => {
-    // a new deploy's worker took over (it does at once): this page still runs the old build
-    if (hadWorker) { stale().then((old) => { if (old) offerUpdate(() => location.reload()); }); return; }
+    // a new deploy's worker took over (it does at once): this page still runs the old build. Not played yet (still
+    // loading, or the lobby untouched), it reloads onto the new one at once: from play, "reloading or reopening the
+    // game does not always load the latest version" (a slow network's page came from the old worker's cache after its
+    // 4 s wait, and a tab reopened from memory never loaded at all; the toast in the lobby waited for a click)
+    if (hadWorker) { stale().then((old) => { if (old && !reloadUnplayed()) offerUpdate(() => location.reload()); }); return; }
     // first install: the worker now sees requests, so fetch the fonts again to cache them for offline
     hadWorker = true;
     cacheFonts();
   });
   // updateViaCache 'none': update checks skip the HTTP cache (Pages sends max-age=600)
   sw.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' }).then((reg) => {
-    // a tab left open checks again when it comes back into view
+    // a tab left open checks again when it comes back into view, and so does one restored from the browser's memory
+    // (a page shown again from its back/forward cache, or an app reopened: no load, so no check of its own)
     document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) reg.update().catch(() => {}); });
   }).catch(() => { /* no worker (private mode, file://): the game still runs online */ });
 }
 
