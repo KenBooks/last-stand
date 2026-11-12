@@ -3,12 +3,14 @@
 // arrow shot at each one's trunk over the shoulder, from 7 m off it on a line clear of the other props, must stay
 // standing in that tree.
 // Then the arena is switched to another biome, and no arrow may be left: the floor and the props it lay in aren't
-// there. `--canary` plants both faults: the first tree made stone (its arrow glances off it) and an arrow stuck
-// again after the switch.
+// there. And again as a wave is won: every arrow dissolves then, as a killed foe's body does, still there half way
+// through and gone after, whatever the quality level. `--canary` plants the faults: the first tree made stone (its
+// arrow glances off it) and an arrow stuck again after the switch and after the dissolve.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
+import { emit } from '../../../src/events';
 import { WALL_R } from '../../../src/world/props';
 import type { Obstacle } from '../../../src/types';
 import { SINK, spentPoints, spentStats, stickAt } from '../../../src/fx/stuckArrows';
@@ -165,7 +167,29 @@ function afterSwitch(canary: boolean): { line: string; problems: string[] } {
   return { line, problems };
 }
 
-/** `lab trees`: every tree in the play area a wooden prop an arrow stands in; none left after a biome switch. */
+/** frames into the dissolve it's looked at half way (0.5 s) and after it (1.5 s: it takes 1.1) */
+const DISSOLVE_HALF = 30;
+const DISSOLVE_AFTER = 90;
+
+/** A wave won with an arrow standing in the floor: the arrows half way through their dissolve and after it (with
+ *  `canary`, one stuck again after it). */
+async function afterWaveWon(lab: Lab, canary: boolean): Promise<{ line: string; problems: string[] }> {
+  stickAt(FLOOR_ARROW, DOWN, SINK.ground);
+  const before = spentStats().all;
+  emit('waveCleared', G.run?.wave ?? 1);
+  await lab.step(DISSOLVE_HALF);
+  const half = spentStats().all;
+  await lab.step(DISSOLVE_AFTER - DISSOLVE_HALF);
+  if (canary) stickAt(FLOOR_ARROW, DOWN, SINK.ground);
+  const left = spentStats().all;
+  const line = `a wave won: ${before} arrows before, ${half} dissolving half way, ${left} left after`;
+  const problems: string[] = [];
+  if (half < before) problems.push(`${line}: the arrows went before they dissolved`);
+  if (left) problems.push(`${line}: the last wave's arrows stay`);
+  return { line, problems };
+}
+
+/** `lab trees`: each in-arena tree is a wooden prop an arrow stands in; a biome switch clears arrows and a won wave dissolves them. */
 export async function trees(lab: Lab, options: TreesOptions): Promise<Report> {
   if (!G.player.cls.quiver) {
     const why = `the ${G.player.cls.id} shoots no arrows: run it with --class ranger`;
@@ -183,11 +207,16 @@ export async function trees(lab: Lab, options: TreesOptions): Promise<Report> {
   const switched = afterSwitch(options.canary);
   lines.push(switched.line);
   problems.push(...switched.problems);
+  const waved = await afterWaveWon(lab, options.canary);
+  lines.push(waved.line);
+  problems.push(...waved.problems);
   if (G.arena.biome !== was) G.arena.setBiome(was);
   if (!options.canary) return { text: lines.join('\n'), problems };
-  const caught = ['isn\'t standing in it', 'left behind stay'].map((fault) => problems.some((p) => p.includes(fault)));
+  const faults = ['isn\'t standing in it', 'left behind stay', 'last wave\'s arrows stay'];
+  const caught = faults.map((fault) => problems.some((p) => p.includes(fault)));
   lines.push(`canary: an arrow glancing off a stone tree ${caught[0] ? 'found' : 'unseen'}, `
-    + `an arrow kept through the switch ${caught[1] ? 'found' : 'unseen'}`);
+    + `an arrow kept through the switch ${caught[1] ? 'found' : 'unseen'}, `
+    + `an arrow kept through a won wave's dissolve ${caught[2] ? 'found' : 'unseen'}`);
   const missed = caught.includes(false) ? ['canary: a planted fault went unseen'] : [];
   return { text: lines.join('\n'), problems: [...problems, ...missed] };
 }

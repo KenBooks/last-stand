@@ -305,7 +305,7 @@ function apply(ev: WorldEvent): void {
     }
     case 'fx': (FX[ev.n] as (...a: number[]) => void)(...ev.a); return;
     case 'prop': { const p = G.arena.props[ev.i]; if (p) setPropLife(p, ev.l); return; }
-    case 'clear': G.run!.phase = 'cleared'; G.run!.votes.clear(); G.arena.setCalm(1); showCleared(); return;
+    case 'clear': G.run!.phase = 'cleared'; G.run!.votes.clear(); G.arena.setCalm(1); showCleared(); emit('waveCleared', G.run!.wave); return;
     case 'next': G.run!.wave = ev.w; G.run!.phase = 'countdown'; startNextWave(); return;
     case 'loot': if (ev.s === G.player.slot) gainLoot({ ...ev.item, id: newItemId() }); return;
     case 'out': {
