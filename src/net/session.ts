@@ -19,7 +19,7 @@ import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGu
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { portraitOf, receivePortrait } from './portraits';
 import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
-import { colourOf, freeColour, ownColour, savedColour, setRoomColour } from './heroColour';
+import { changedColour, colourOf, freeColour, ownColour, saveColour, savedColour, setRoomColour, roomColoursOf } from './heroColour';
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, pingHeard, clearPings } from '../game/ping';
@@ -29,7 +29,7 @@ import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 29;
+const PROTOCOL = 30;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -91,6 +91,59 @@ let sendT = 0;
 let numbersT = 0;
 /** the local player's actions since the last send, in order */
 let actions: PlayerAction[] = [];
+/** Host allocations can arrive before another guest's hello; keep them by slot until its body exists. */
+let roomColours = new Map<number, HeroColourId>();
+let colourRequest = 0;
+let pendingColour: { id: HeroColourId | null; request: number } | null = null;
+
+/** Change solo immediately, or ask the host to reserve an available party colour without leaving the room. */
+export function chooseColour(id: HeroColourId | null): void {
+  if (id !== null && !colourOf(id)) return;
+  if (role.current === 'solo') {
+    saveColour(id);
+    G.player.setColour(ownColour());
+    hooks.changed();
+  } else if (role.current === 'host') {
+    const current = ownColour()!;
+    const next = changedColour([...session.peers.values()].map(p => p.colour), id, current);
+    if (id === null || next === id) saveColour(id);
+    wearRoomColour(next);
+    publishColours();
+    hooks.changed();
+  } else if (session.status === 'joined') {
+    pendingColour = { id, request: ++colourRequest };
+    send('ctl', { t: 'colour?', col: id ?? '', request: colourRequest }, session.hostId);
+  }
+}
+
+function publishColours(ack?: { slot: number; request: number }): void {
+  const list = [{ slot: G.player.slot, col: ownColour()! },
+    ...[...session.peers.values()].map(p => ({ slot: p.slot, col: p.colour! }))];
+  roomColours = new Map(list.map(p => [p.slot, p.col]));
+  send('ctl', { t: 'colours', list, ack });
+}
+
+function receiveColours(m: Record<string, unknown>): void {
+  const next = roomColoursOf(m.list, COOP.maxPlayers);
+  const mine = next?.get(G.player.slot);
+  if (!next || !mine) return;
+  roomColours = next;
+  wearRoomColour(mine);
+  for (const peer of session.peers.values()) {
+    const colour = next.get(peer.slot);
+    if (colour) {
+      peer.colour = colour;
+      if (peer.player) peer.player.setColour(colour);
+      else makePlayer(peer);
+    }
+  }
+  const ack = m.ack as { slot?: number; request?: number } | undefined;
+  if (pendingColour && ack?.slot === G.player.slot && ack.request === pendingColour.request) {
+    if (pendingColour.id === null || pendingColour.id === mine) saveColour(pendingColour.id);
+    pendingColour = null;
+  }
+  hooks.changed();
+}
 
 export function initSession(h: SessionHooks): void {
   hooks = h;
@@ -200,6 +253,8 @@ export function leaveRoom(): void {
   clearChat();
   for (const peer of session.peers.values()) dropPlayer(peer);
   session.peers.clear();
+  roomColours.clear();
+  pendingColour = null;
   session.status = 'off';
   session.hostId = '';
   session.biome = null;
@@ -301,6 +356,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
+    publishColours();
     hooks.changed();
     return;
   }
@@ -309,7 +365,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
   if (m.host) session.hostId = from;
   const known = session.peers.get(from);
   if (!known && slot >= 0) {
-    addPeer(from, slot, look, tag, colourOf(m.col));
+    addPeer(from, slot, look, tag, roomColours.get(slot) ?? (m.host ? colourOf(m.col) : null));
     // (greeted back once, as our own hello may have reached it before its link knew us, and been dropped: a guest
     // joining a room of three never knew one of the others)
     if (session.status === 'joined') send('hello', hello(), from);
@@ -320,14 +376,30 @@ function onHello(from: string, m: Record<string, unknown>): void {
     placeSpawns();
   }
   // (the colour the host gave it, said once it's in)
-  if (known && slot >= 0 && colourOf(m.col) !== known.colour) {
-    known.colour = colourOf(m.col);
+  if (known && slot >= 0 && roomColours.has(slot) && roomColours.get(slot) !== known.colour) {
+    known.colour = roomColours.get(slot)!;
     known.player?.setColour(known.colour);
   }
   hooks.changed();
 }
 
 function onControl(from: string, m: Record<string, unknown>): void {
+  if (m.t === 'colours') {
+    if (role.current === 'guest' && from === session.hostId) receiveColours(m);
+    return;
+  }
+  if (m.t === 'colour?') {
+    const peer = session.peers.get(from);
+    const wanted = colourOf(m.col);
+    if (role.current !== 'host' || !peer?.colour || (m.col !== '' && !wanted)
+      || !Number.isSafeInteger(m.request) || (m.request as number) < 1) return;
+    const taken = [ownColour(), ...[...session.peers.values()].filter(p => p !== peer).map(p => p.colour)];
+    peer.colour = changedColour(taken, wanted, peer.colour);
+    peer.player?.setColour(peer.colour);
+    publishColours({ slot: peer.slot, request: m.request as number });
+    hooks.changed();
+    return;
+  }
   if (m.t === 'bye') { peerLeft(from); return; }
   if (m.t === 'chat') {
     const by = session.peers.get(from)?.player;
@@ -529,6 +601,7 @@ function addPeer(id: string, slot: number, look: Look, tag: string, colour: Hero
 
 function makePlayer(peer: Peer): void {
   if (!peer.look || !CLASSES[peer.look.cls]) return;
+  if (role.current === 'guest' && !peer.colour) return; // wait for the host's allocation, not another guest's claim
   const p = new Player(peer.look.cls, peer.look.eq, false);
   p.slot = peer.slot;
   p.tag = peer.tag;
@@ -557,6 +630,7 @@ function peerLeft(id: string): void {
   if (peer.tag) chatNote(`${peer.tag} left`);
   dropPlayer(peer);
   session.peers.delete(id);
+  if (role.current === 'host') publishColours();
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }
   hooks.changed();
 }

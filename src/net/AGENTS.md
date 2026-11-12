@@ -1,5 +1,7 @@
 # `src/net`
 
+- **Live hero colours (#393, protocol 30):** twelve fixed palette IDs, one saved pick for the player across classes/slots. Settings and Play together share the picker. In a room only the host allocates colours: guests request `colour?`, the host reserves an unused colour and broadcasts a complete `colours` snapshot by slot. A taken live request keeps the current colour; it never evicts its owner. A matching request acknowledgement saves the accepted preference; an older acknowledgement cannot overwrite a newer pick. Guests apply only their host's snapshot, validate unique slots/colours, and retain allocations that arrive before another guest's hello. A peer body waits for its allocation rather than drawing an unassigned native colour. Hello cannot change an existing allocation. Join still substitutes a free colour when the desired one is taken. Any restores the original look solo and chooses an available colour in a party. Leaving restores the saved pick; disconnects release the room allocation. `lab coop --scenarios colours` exercises live changes and races without running combat; its canary introduces a duplicate.
+
 - Protocol 29 includes `tr` on enemy spawn reports and a battlefield biome event. The Training flag survives on guests; an explicit arena swap clears old foes/attacks before its replacement spawn reports play.
 
 Co-op.
@@ -30,16 +32,16 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
     `entities/models/dye.ts`; from the owner: "need to be able to specify character color, like red mage, blue mage, in coop or single
     player", "if not picked, color should be chosen at random, to be different from others who already joined").
     The pick is the player's, not a hero's: kept once in local storage (`last-stand.colour.v1`), whatever the class or
-    save slot, picked in the Play together dialog (`ui/colourPicker.ts`), worn at once out of a room, solo too; none
+    save slot, picked in Settings or Play together (`ui/colourPicker.ts`), worn at once out of a room, solo too; none
     picked (Any), the hero wears his own. **In a room the host's game hands the colours out**, as it hands out the slots,
     so two joiners can't take one: a guest's `hello` says its pick (`col`, '' for none), and the host gives it in the
     `welcome` (`col`): the pick if no one in the room wears it, else (or with none picked) one no one wears, at
     random. A pick already worn is never refused (a colour isn't worth turning a player away for, as a tag is): the
-    player gets a free one, and the dialog's room view shows which (`colourPickerHtml(true)`), its pick kept for next
+    player gets a free one, and the dialog's room view shows which, its pick kept for next
     time. The host's own is its pick or one at random as it opens the room. Every `hello` after carries the colour the
     room gave, so each game shows each partner in it (`Peer.colour`, `Player.setColour`, again on a class switch's
-    rebuild); leaving the room puts the pick back on (`wearRoomColour(null)`). Changing a pick in a room waits for
-    the next room. `npm run lab -- coop` (`--party 4`, `--canary`) judges every room's colours. (PROTOCOL 21.)
+    rebuild); leaving the room puts the pick back on (`wearRoomColour(null)`). Live changes use the host allocation
+    described above. `npm run lab -- coop` (`--party 4`, `--canary`) judges every room's colours. (Originally PROTOCOL 21.)
   - **A guest asks the host about a foe it never heard of** (`foes?` / `foes` on `ctl`, `foesAsked` and `foesTold` in `sync.ts`): a snapshot naming a foe it has no copy of and never had (its spawn lost: a guest whose run started late, its fight still warming as the host's began, heard of none of the first spawns) is asked for once a second until the host answers with the foe's spawn report as it stands now; its copy is made where the guest's timeline shows the foe then, already risen (made where the host has it now, it jumped 1.3 m back onto the timeline; made rising, standing still for its rise, 1.5 m after it). From play: "mobs missing in the first 10 sec... but they're firing". `npm run lab -- coop --scenarios wave` lets wave 4 come with the guest hearing of no spawn for its first 6 s: on main 6 of the host's foes were never on the guest's screen. (PROTOCOL 22.)
   - **The relay server** (`server/relay/AGENTS.md`): every game meets on it and every message goes through it, with no public relays and no fallback to them; with it down there's no co-op.
   - **The run's end and watching it:** every game goes back to the lobby by itself once the run is over for everyone, a summary shown before the end going with it (`game/AGENTS.md`'s run's end); out of the run a player watches the others (`game/spectate.ts`), all on its own game: nothing goes over the link. The host's `down` for a player already out is passed over (its word of a guest's fall came after the guest had left, and told it "You are down" through the rest of the run). `npm run lab -- coop` plays both.

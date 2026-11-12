@@ -1,5 +1,9 @@
 # `tools/lab/page`
 
+- `heropick` changes to Gold only after the alternate playable spare has been prepared, then picks it. Both the first cached switch and same-hero selection must keep that colour; the fixture restores the prior preference afterward. Its canary also removes the chosen dye and must catch that loss, separately from click-through and a missing spare. Exercise unfinished-hero navigation first. If a prebooted page already warmed every alternate, the fixture explicitly holds one hero's readiness at 50% for the guard check, through `chill`/`heroWarming` and a before-frame hook, then restores the previous shares/warm flag/visibility. Report that controlled state honestly: it checks the readiness guard and hidden model, not a cold GPU compile. Never depend on machine speed to provide an unfinished hero.
+
+- `uiPause.pauseColourChecked` checks all twelve solo colour swatches plus Any, actual 40 px touch targets, and a real Settings pick being selected/saved/worn. A touch fixture must tap: switching to mouse input changes touch sizing before its press lands. `coopPickColour` drives the live party picker, while its explicit request mode tests a competing request that became occupied in flight.
+
 - `heropick` must choose an alternate class on the first screen as soon as its readiness allows it, before any lobby background frames. Record `Player.built` immediately around the event, before advancing frames: the old check picked the current class and missed a whole playable-body build inside the first different-hero click. Keep the unfinished-hero guard and click-through checks too.
 
 - `uiFullScreen` also checks the `?keyboardLock=0` comparison with a lock-capable browser spy: no lock call, fullscreen remains available, and browser-owned Escape still opens pause. The lab never engages a real native keyboard hook; passing it cannot rule out a native Chrome input delay.

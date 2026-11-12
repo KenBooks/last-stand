@@ -9,11 +9,12 @@
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { hallFocus, hallHeroes, dropSpareHeroes } from '../../../src/game/hall';
-import { heroShare, isReadying, readyingLabel } from '../../../src/game/warm';
+import { heroShare, isReadying, readyingLabel, chill, heroWarming, isWarm, markWarm } from '../../../src/game/warm';
 import { hasSavedClass } from '../../../src/loot/profile';
 import { heroSelectEatsClicks, heroSelectOpen, openHeroSelect } from '../../../src/ui/heroSelect';
 import { realWait, type Lab, type PagePoint, type Report } from './lab';
 import { Player } from '../../../src/entities/player';
+import { ownColour, savedColour, saveColour } from '../../../src/net/heroColour';
 
 export interface HeroPickOptions {
   /** plant the fault the measure must catch: the click after a choosing tap let through to the lobby */
@@ -30,6 +31,7 @@ type Pointer = 'tap' | 'mouse';
 
 /** What one pick did. */
 interface Pick {
+  colour: string | null;
   /** Bodies completed in the picking event, before background frames run. */
   built: number;
   pointer: Pointer;
@@ -80,7 +82,7 @@ function clicksOutside(): { reached: () => string | null; stop: () => void } {
 }
 
 /** The hero in focus picked by `pointer`, and what came of it. */
-async function pick(lab: Lab, pointer: Pointer): Promise<Pick> {
+async function pick(lab: Lab, pointer: Pointer, loseColour = false): Promise<Pick> {
   if (!heroSelectOpen()) throw new Error('lab: heropick: the hero selection screen isn\'t open');
   const hero = hallHeroes()[hallFocus()].id;
   const at = heroInFocusAt();
@@ -89,10 +91,12 @@ async function pick(lab: Lab, pointer: Pointer): Promise<Pick> {
   if (pointer === 'tap') await lab.tap(at);
   else await lab.click(at);
   const built = Player.built - before;
+  if (loseColour) G.player.setColour(null);
   const under = nameOf(document.elementFromPoint(at.x, at.y));
   await lab.step(AFTER_FRAMES);
   clicks.stop();
   return {
+    colour: G.player.colour,
     built,
     pointer,
     hero,
@@ -117,6 +121,7 @@ function problemsOf(picked: Pick): string[] {
   if (!picked.lobbyShown) problems.push(`${said}: the lobby not shown`);
   if (picked.clicked) problems.push(`${said}: its click reached ${picked.clicked}`);
   if (picked.built) problems.push(`${said}: built ${picked.built} complete hero bodies inside the picking event`);
+  if (picked.colour !== 'gold') problems.push(`${said}: lost the chosen colour on the cached hero (${picked.colour})`);
   return problems;
 }
 
@@ -132,21 +137,41 @@ function lineOf(picked: Pick): string {
 /** Try both tab activation and Enter before an alternate hero's loading bar finishes. */
 async function coldNavigation(lab: Lab): Promise<string> {
   const initial = G.player.cls.id;
-  const cold = hallHeroes().find((hero) => heroShare(hero.player.cls.model) < 1);
-  if (!cold) throw new Error('lab: heropick: no unfinished alternate hero to exercise');
-  const tab = document.querySelector<HTMLButtonElement>(`#heroes .hs-tabs [data-c="${cold.id}"]`)!;
-  tab.click();
-  tab.click();
-  await lab.step(1, () => ({ keys: ['enter'] }));
-  if (!heroSelectOpen() || G.player.cls.id !== initial || hasSavedClass()) {
-    throw new Error('lab: heropick: an unfinished hero was chosen');
-  }
-  if (heroShare(cold.player.cls.model) < 1 && cold.player.obj.visible) {
-    throw new Error('lab: heropick: an unfinished hero entered the scene draw');
+  const unfinished = hallHeroes().find((hero) => heroShare(hero.player.cls.model) < 1);
+  const cold = unfinished ?? hallHeroes().find(hero => hero.id !== initial)!;
+  const wasWarm = isWarm('heroes');
+  const progress = hallHeroes().map(hero => [hero.player.cls.model, heroShare(hero.player.cls.model)] as const);
+  const visible = cold.player.obj.visible;
+  // Cached programs may finish before a prebooted page is used. Hold a real readiness state for the UI guard,
+  // rather than letting machine speed decide whether this part of the check runs.
+  const hold = (): void => {
+    chill('heroes');
+    for (const [model, share] of progress) heroWarming(model, model === cold.player.cls.model ? 0.5 : share);
+  };
+  if (!unfinished) { hold(); lab.beforeFrame.push(hold); }
+  try {
+    const tab = document.querySelector<HTMLButtonElement>(`#heroes .hs-tabs [data-c="${cold.id}"]`)!;
+    tab.click();
+    tab.click();
+    await lab.step(1, () => ({ keys: ['enter'] }));
+    if (!heroSelectOpen() || G.player.cls.id !== initial || hasSavedClass()) {
+      throw new Error('lab: heropick: an unfinished hero was chosen');
+    }
+    if (heroShare(cold.player.cls.model) < 1 && cold.player.obj.visible) {
+      throw new Error('lab: heropick: an unfinished hero entered the scene draw');
+    }
+  } finally {
+    if (!unfinished) {
+      lab.beforeFrame.splice(lab.beforeFrame.indexOf(hold), 1);
+      for (const [model, share] of progress) heroWarming(model, share);
+      if (wasWarm) markWarm('heroes');
+      cold.player.obj.visible = visible;
+    }
   }
   document.querySelector<HTMLButtonElement>(`#heroes .hs-tabs [data-c="${initial}"]`)!.click();
   await lab.step(AFTER_FRAMES);
-  return `unfinished ${cold.id}: tab navigation, repeated selection and Enter stayed responsive; no hero saved`;
+  const state = unfinished ? 'warming' : 'readiness held at 50%';
+  return `unfinished ${cold.id} (${state}): repeated tab and Enter blocked; no hero saved`;
 }
 
 /** Escape must reach pause/settings on a first visit, before any hero has been chosen. */
@@ -182,8 +207,8 @@ export async function heroPick(lab: Lab, options: HeroPickOptions): Promise<Repo
     throw new Error('lab: heropick: the page isn\'t a first visit on the hero selection screen (--first)');
   }
   const canary = Boolean(options.canary);
-  const paused = await pauseBeforeChoice(lab);
   const navigation = await coldNavigation(lab);
+  const paused = await pauseBeforeChoice(lab);
   const alternate = hallHeroes().find(hero => hero.id !== G.player.cls.id)!;
   // A first visit has no lobby frames in which to build a spare. Pick as soon as its own readiness permits it.
   for (let frames = 0; heroShare(alternate.player.cls.model) < 1; frames++) {
@@ -194,10 +219,13 @@ export async function heroPick(lab: Lab, options: HeroPickOptions): Promise<Repo
   document.querySelector<HTMLButtonElement>(`#heroes .hs-tabs [data-c="${alternate.id}"]`)!.click();
   await lab.step(AFTER_FRAMES);
   heroSelectEatsClicks(!canary);
+  const previousColour = savedColour();
+  saveColour('gold');
+  G.player.setColour(ownColour());
   const picks: Pick[] = [];
   try {
     if (canary) dropSpareHeroes();
-    picks.push(await pick(lab, 'tap'));
+    picks.push(await pick(lab, 'tap', canary));
     // (the mouse's pick on the screen as a first visit opens it again: the tap saved the hero, as a pick does)
     if (!canary) {
       openHeroSelect(G.player.cls.id, true);
@@ -206,9 +234,12 @@ export async function heroPick(lab: Lab, options: HeroPickOptions): Promise<Repo
     }
   } finally {
     heroSelectEatsClicks(true);
+    saveColour(previousColour);
+    G.player.setColour(ownColour());
   }
   const found = picks.flatMap(problemsOf);
-  const lines = [paused, navigation, ...picks.map(lineOf)];
+  const colours = picks.map(picked => picked.colour ?? 'original').join(', ');
+  const lines = [paused, navigation, ...picks.map(lineOf), `colour picked after spare preparation: Gold; worn: ${colours}`];
   if (!canary) {
     await lab.keyDown('KeyW');
     if (!input.down.has('w')) found.push('heropick: lobby keyboard did not receive W after choosing a hero');
@@ -223,6 +254,7 @@ export async function heroPick(lab: Lab, options: HeroPickOptions): Promise<Repo
   }
   if (!canary) return { text: lines.join('\n'), problems: found };
   const missed: string[] = [];
+  if (!found.some(problem => problem.includes('lost the chosen colour'))) missed.push('heropick: the lost-colour canary was missed');
   if (!found.some(problem => problem.includes('complete hero bodies'))) missed.push('heropick: the missing-spare canary was missed');
   if (!found.some(problem => problem.includes('its click reached'))) missed.push('heropick: the click-through canary was missed');
   lines.push(`canary: ${found.join('; ')}`);

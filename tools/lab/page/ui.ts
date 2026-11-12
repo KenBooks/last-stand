@@ -45,7 +45,7 @@ import {
 } from './uiHeroes';
 import {
   ABANDON_CANARY, PAUSE_CANARY, TAB_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
-  openPauseAbandon, openPauseVolume, pauseAbandonChecked, pauseShown, pauseTabKept, pauseVolumeChecked,
+  openPauseAbandon, openPauseVolume, pauseAbandonChecked, pauseShown, pauseTabKept, pauseVolumeChecked, pauseColourChecked,
   closePauseProfiled, openPauseProfiled, closeProfiling, openProfiling, profilingShown, PROFILING_CANARY,
 } from './uiPause';
 import { closePerfMini, openPerfMini, PERF_SIZE_CANARY, perfMiniChecked } from './uiPerfSize';
@@ -938,7 +938,8 @@ const STEPS: Record<UiState, Steps> = {
   perfAskBreak: { open: openPerfAskBreak, close: closePerfAsk, check: (canary) => perfAskShown('perfAskBreak', canary) },
   pause: { open: () => openPause('controls', canaryAsked), close: closePause, check: () => pauseShown('controls') },
   pauseSettings: {
-    open: () => openPause('settings', canaryAsked), close: closePause, check: () => pauseShown('settings'),
+    open: () => openPause('settings', canaryAsked), close: closePause,
+    check: (canary, lab) => canary ? pauseShown('settings') : pauseColourChecked(lab),
   },
   // (as a profile leaves it, its costliest parts and Send shown: the tab at its fullest)
   pausePerformance: {

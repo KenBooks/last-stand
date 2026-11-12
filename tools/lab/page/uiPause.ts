@@ -11,6 +11,11 @@ import type { Lab } from './lab';
 import { ABANDON_HOLD_MS, PAUSE_TAB_COOKIE, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
 import { audioContext, musicOutput, setVolumes } from '../../../src/core/audio';
 import { readCookie, removeCookie, writeCookie } from '../../../src/core/cookies';
+import { G } from '../../../src/state';
+import { heroColour } from '../../../src/data/heroColours';
+import { savedColour } from '../../../src/net/heroColour';
+import * as colourSession from '../../../src/net/session';
+import type { HeroColourId } from '../../../src/data/heroColours';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface PauseFound {
@@ -294,6 +299,37 @@ export function pauseShown(tab: PauseTab): PauseFound {
       + `${share(rect.width, innerWidth)}% of its width, ${scroll > ROUNDING_PX ? 'scrolling' : 'no scrolling'}`,
   ];
   return { lines, problems };
+}
+
+/** Single-player colour controls are reachable in Settings, saved and applied to the actual hero. */
+export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
+  const found = pauseShown('settings');
+  const picker = document.getElementById('hero-colour-settings');
+  if (!picker) return { ...found, problems: [...found.problems, 'settings: no solo colour picker in this tree'] };
+  const swatches = [...picker.querySelectorAll<HTMLButtonElement>('.cc-swatch')];
+  if (swatches.length !== 13) found.problems.push('settings: expected twelve colours and Any');
+  for (const button of swatches) {
+    const box = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    if (hit !== button) found.problems.push(`settings: ${button.title} swatch is not reachable`);
+    if (document.body.classList.contains('touch') && (box.width < 39.5 || box.height < 39.5)) {
+      found.problems.push(`settings: ${button.title} touch swatch is smaller than 40 px`);
+    }
+  }
+  const previous = savedColour();
+  try {
+    const teal = picker.querySelector<HTMLButtonElement>('[data-colour="teal"]')!;
+    if (document.body.classList.contains('touch')) await lab.tap(middleOf(teal));
+    else await lab.clickOn(teal);
+    if (savedColour() !== 'teal' || G.player.colour !== 'teal' || teal.getAttribute('aria-checked') !== 'true') {
+      found.problems.push('settings: solo colour was not applied, kept and selected');
+    }
+    if (!heroColour(G.player.colour)) found.problems.push('settings: no valid worn colour');
+    found.lines.push('  solo colour: twelve swatches and Any reachable; Teal clicked, saved and worn');
+  } finally {
+    (colourSession as { chooseColour?: (id: HeroColourId | null) => void }).chooseColour?.(previous);
+  }
+  return found;
 }
 
 /** the problem the kept tab's canary must raise */

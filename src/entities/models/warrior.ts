@@ -493,6 +493,14 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // (the surcoat's cloth and the shield's paint: his blue)
   const dye = new Dye('blue').cloth(cloth);
+  // Independent materials: tint the cuirass without colouring the lower body, fittings or weapons.
+  const cuirass = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap,
+    roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
+  const cuirassBack = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
+  dye.tint(cuirass, cuirassBack);
+  // Dye the torso wrap underneath its belts; the belts and legs keep their original leather.
+  const torsoLeather = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2), map: null });
+  dye.tintLike(cloth, torsoLeather);
   const mail = kit.std({ color: 0x8e949e, metalness: 0.85, roughness: 1, ...tex(mailMaps(), 1, 1.6) });
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
@@ -520,7 +528,7 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
   S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
-  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), leatherDark, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), torsoLeather, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), leather, j.spine);
   yield;
   // rivets along each band
@@ -541,8 +549,8 @@ export function* warriorSteps(): ModelSteps {
   // the breastplate, engraved across the front (projected straight on), and a plain back plate
   const bp = plate(breast, 28, 14, 0.008);
   projectUV(bp, steelRegion('chest'), (x, y) => [(x + 0.22) / 0.44, (y + 0.12) / 0.42]);
-  A.add(bp, engraved, j.chest);
-  A.add(plate(back, 20, 10, 0.008), plateM, j.chest);
+  A.add(bp, cuirass, j.chest);
+  A.add(plate(back, 20, 10, 0.008), cuirassBack, j.chest);
   A.add(edgeTube(breast, 'v1', 0.008, 28), plateM, j.chest);
   A.add(edgeTube(back, 'v1', 0.008, 20), plateM, j.chest);
   for (let k = 0; k <= 16; k++) {

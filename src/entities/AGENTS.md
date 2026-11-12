@@ -1,5 +1,7 @@
 # `src/entities`
 
+- A local playable spare must reapply `ownColour()` when `Player.unstowed` brings it back. Its constructor may have run before the player changed colour or joined/left a room; keeping its old dye made a cached class switch lose the current colour. Apply after gear/stat reset so skinned and item material copies are present. `lab heropick` changes the saved colour after the spare is prepared, then chooses it; its colour-loss canary must be detected.
+
 The things that move and fight.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.

@@ -25,6 +25,7 @@ import { perfHudSize, setPerfHudSize, type PerfHudSize } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, resolutionSetting, setQuality, setResolution } from '../core/quality';
+import { colourPickerHtml, bindColourPicker, refreshColourPickers } from './colourPicker';
 import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
 import { readCookie, writeCookie } from '../core/cookies';
 import { gearGlow, setGearGlow } from '../core/materials';
@@ -194,6 +195,8 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   initProfileTab();
   initRecordingTab();
+  $('#hero-colour-settings').innerHTML = colourPickerHtml();
+  bindColourPicker($('#hero-colour-settings'));
   const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   // held 2 s, never a click: a stray click or tap lost the run's spoils
@@ -1074,6 +1077,7 @@ export const ABANDON_HOLD_MS = 2000;
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
+    refreshColourPickers();
     pauseTab(keptPauseTab());
     renderControlsHelp();
     renderPerfOptions();

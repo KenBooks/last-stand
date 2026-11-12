@@ -10,13 +10,15 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
 import { hostRoom, joinRoom, session } from '../../../src/net/session';
+import * as colourSession from '../../../src/net/session';
+import type { HeroColourId } from '../../../src/data/heroColours';
 import * as netlog from '../../../src/net/netlog';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, RISE_TIME, type Enemy } from '../../../src/entities/enemy';
 import * as crowd from '../../../src/entities/models/crowd';
 import { Projectile } from '../../../src/combat/projectiles';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
-import { menuStowed, toggleMenuStowed } from '../../../src/ui/menus';
+import { menuStowed, toggleMenuStowed, pauseTab } from '../../../src/ui/menus';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
 import type { ActionState, SkillKey } from '../../../src/types';
@@ -773,6 +775,26 @@ function drawApart(): void {
 /** The canary: this page's hero dressed in `colour` behind the room's back (its partners never told). */
 export function coopWearColour(_lab: Lab, { colour }: { colour: string }): void {
   (G.player as unknown as { setColour(colour: string): void }).setColour(colour);
+}
+
+/** A live picker click, or a competing request whose swatch became occupied while it was in flight. */
+export async function coopPickColour(
+  lab: Lab, { colour, request = false }: { colour: HeroColourId | null; request?: boolean },
+): Promise<void> {
+  if (request) {
+    const choose = (colourSession as { chooseColour?: (id: HeroColourId | null) => void }).chooseColour;
+    if (!choose) throw new Error('lab: live colour changes are unavailable in this tree');
+    choose(colour);
+    return;
+  }
+  const root = G.mode === 'run' ? '#hero-colour-settings' : '#coop';
+  if (G.mode === 'run') {
+    if (!G.menuOpen) { await lab.press('Escape'); await lab.step(1); }
+    pauseTab('settings');
+  } else document.getElementById('btn-coop')!.click();
+  const swatch = document.querySelector<HTMLButtonElement>(`${root} .cc-swatch[data-colour="${colour ?? ''}"]`);
+  if (!swatch || swatch.disabled) throw new Error(`lab: colour ${colour} is unavailable in the live picker`);
+  swatch.click();
 }
 
 /** Joins the room again as `tag`: asked for another name tag, the player types one. */
