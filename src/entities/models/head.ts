@@ -181,7 +181,7 @@ function eyeMap(iris: [number, number, number], shade = 0): THREE.CanvasTexture 
 
 /** an eyeball facing +z with the cornea's bulge over the iris, planar uvs */
 function eyeGeometry(): THREE.BufferGeometry {
-  const R = EYE.r * HEAD_MM, g = new THREE.SphereGeometry(R, 24, 18).rotateX(Math.PI / 2), p = g.attributes.position, uv = g.attributes.uv;
+  const R = EYE.r * HEAD_MM, g = new THREE.SphereGeometry(R, lod(24, 24), lod(18, 18)).rotateX(Math.PI / 2), p = g.attributes.position, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), rr = Math.hypot(x, y) / R;
     // the cornea: a clear dome over the iris, standing ~1.5 mm proud
@@ -1323,7 +1323,7 @@ function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: TH
  */
 /** With the head's joint, the top of the neck follows the head (skinned; see Sculpt.skin) */
 export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, len: number, headJoint?: THREE.Object3D): void {
-  const F = FACES[who], C = F.neckCol, rings = C ? 32 : 24, segs = C ? lod(64, 24) : lod(28, 14), pos: number[] = [], posN: number[] = [], idx: number[] = [], share: number[] = [];
+  const F = FACES[who], C = F.neckCol, rings = C ? lod(32, 32) : lod(24, 24), segs = C ? lod(64, 24) : lod(28, 14), pos: number[] = [], posN: number[] = [], idx: number[] = [], share: number[] = [];
   for (let k = 0; k <= rings; k++) {
     const t = k / rings, y = lerp(-0.03, len + 0.012, t), yf = (y - len) / HEAD_MM;
     // wider at the base, set a little back at the top (under the skull), in mm

@@ -3,6 +3,8 @@
 import { COARSE_NAMED, sculptSide } from './hands';
 import { packHand, setHandsCoarse } from './handShape';
 
-setHandsCoarse(self.name.endsWith(COARSE_NAMED));
-const { packed, buffers } = packHand(sculptSide(parseInt(self.name, 10)));
-self.postMessage(packed, { transfer: buffers });
+// (a coarse hand waits for its simplifier to load: Very low's)
+void setHandsCoarse(self.name.endsWith(COARSE_NAMED)).finally(() => {
+  const { packed, buffers } = packHand(sculptSide(parseInt(self.name, 10)));
+  self.postMessage(packed, { transfer: buffers });
+});

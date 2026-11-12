@@ -160,5 +160,7 @@ export function frameParts(): ScenePart[] {
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),
+    // (the arrows left standing where they came down, fx/stuckArrows.ts: two instanced meshes, up to a thousand)
+    shownPart('the spent arrows', shownWhere((object) => Boolean(object.userData.spentArrows))),
   ];
 }

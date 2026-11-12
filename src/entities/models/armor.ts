@@ -11,9 +11,12 @@ import { tunable } from '../../core/tuning';
 
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
  *  use fewer hair locks and fur tufts and coarser curves below 1. */
-export { setHeroDetail, heroDetail, atHeroDetail } from './detail';
-import { lod } from './detail';
+export { setHeroDetail, heroDetail, atHeroDetail, finest } from './detail';
+import { lod, finest } from './detail';
 export { lod };
+/** `n` at every level down to Low's detail, and fewer below it (`lod(n, n)`): the gear's belts, plates, rims and studs,
+ *  which kept their full count at every level */
+const below = (n: number): number => lod(n, n);
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
 export const TILE = 0.3;
@@ -57,6 +60,7 @@ function grid(fn: SurfaceFn, nu: number, nv: number): THREE.Vector3[][] {
  * metres / TILE along u and v, unless `uv` gives them per grid point.
  */
 export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?: (u: number, v: number) => [number, number] | null, inside = new THREE.Vector3()): THREE.BufferGeometry {
+  nu = below(nu); nv = below(nv);
   const P = grid(fn, nu, nv);
   // arc length along the middle row and column, for the uvs
   const su: number[] = [0], sv: number[] = [0], mj = Math.round(nv / 2), mi = Math.round(nu / 2);
@@ -123,6 +127,7 @@ export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?:
 
 /** A round tube along one edge of a surface (a rolled rim): 'v0' the bottom, 'v1' the top, 'u0' / 'u1' the sides. */
 export function edgeTube(fn: SurfaceFn, edge: 'u0' | 'u1' | 'v0' | 'v1', r: number, n = 16, inset = 0): THREE.BufferGeometry {
+  n = below(n);
   const pts: THREE.Vector3[] = [];
   for (let k = 0; k <= n; k++) {
     const t = k / n;
@@ -140,7 +145,7 @@ export const RADIAL = (p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => o
  */
 export function strap(pts: THREE.Vector3[], w: number, t: number, closed = false, outward = RADIAL, n = 0): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts, closed);
-  const segs = n || Math.max(4, Math.ceil(curve.getLength() / 0.02));
+  const segs = below(n || Math.max(4, Math.ceil(curve.getLength() / 0.02)));
   const pos: number[] = [], uv: number[] = [];
   const S: THREE.Vector3[][] = [], L = curve.getLength() / TILE;
   const T = new THREE.Vector3(), O = new THREE.Vector3(), X = new THREE.Vector3(), p = new THREE.Vector3();
@@ -173,14 +178,18 @@ export function strap(pts: THREE.Vector3[], w: number, t: number, closed = false
 
 /** a loop of strap round an ellipse (rx by rz) at height y: a belt, a band round a limb */
 export function belt(rx: number, rz: number, y: number, w: number, t: number, tilt = 0, n = 24): THREE.BufferGeometry {
+  // (its band's segments are fewer below Low's detail: `strap`'s)
   const pts: THREE.Vector3[] = [];
   for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(a) * rx, y + Math.cos(a) * tilt, Math.cos(a) * rz)); }
   return strap(pts, w, t, true, RADIAL, n * 3);
 }
 
 /** Stitches along a seam: short dashes of thread through `pts` (a smooth curve), `len` long with `gap` between, standing
- *  on the cloth; one merged geometry. */
+ *  on the cloth; one merged geometry. None below Low's detail (a piece of no triangles, which `Sculpt` leaves out):
+ *  a millimetre's thread is never seen from the game's cameras, and the seams were the most of a hero's triangles
+ *  there, the ranger's 11,900 and the mage's 9,800 at Very low */
 export function stitches(pts: THREE.Vector3[], len = 0.0045, gap = 0.003, r = 0.0011, closed = false): THREE.BufferGeometry {
+  if (!finest()) return nothing();
   const c = new THREE.CatmullRomCurve3(pts, closed), L = c.getLength(), n = Math.max(1, Math.floor(L / (len + gap))), parts: THREE.BufferGeometry[] = [];
   const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), t = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
@@ -189,6 +198,15 @@ export function stitches(pts: THREE.Vector3[], len = 0.0045, gap = 0.003, r = 0.
     parts.push(new THREE.CylinderGeometry(r, r, len, 4, 1).applyQuaternion(q).translate(p.x, p.y, p.z));
   }
   return merge(parts);
+}
+
+/** A piece of no triangles, with the attributes a piece has (`Sculpt` leaves it out). */
+function nothing(): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([], 2));
+  return g;
 }
 
 /** A buckle: a flat rectangular frame with a pin, facing +Z. */
@@ -203,12 +221,12 @@ export function buckle(w: number, h: number, t = 0.006): THREE.BufferGeometry {
 }
 
 /** A stud: a small dome facing +Z. */
-export const stud = (r: number): THREE.BufferGeometry => new THREE.SphereGeometry(r, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
+export const stud = (r: number): THREE.BufferGeometry => new THREE.SphereGeometry(r, below(8), below(4), 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
 
 /** A medallion facing +Z: a raised rim round a slightly domed face, `t` thick. */
 export function disc(r: number, t: number, segs = 32): THREE.BufferGeometry {
   const prof: [number, number][] = [[0.001, -t * 0.5], [r, -t * 0.5], [r, t * 0.35], [r * 0.93, t * 0.5], [r * 0.86, t * 0.3], [r * 0.6, t * 0.45], [0.001, t * 0.6]];
-  return new THREE.LatheGeometry(prof.map(([a, b]) => new THREE.Vector2(a, b)), segs).rotateX(Math.PI / 2);
+  return new THREE.LatheGeometry(prof.map(([a, b]) => new THREE.Vector2(a, b)), below(segs)).rotateX(Math.PI / 2);
 }
 
 /** A cut gem facing +Z: a low crown over a pointed pavilion. */

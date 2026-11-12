@@ -84,6 +84,9 @@ function start(): void {
   const ms = meshes = [arrowLite(), arrowGeometry()].map((g, i) => {
     const m = new THREE.InstancedMesh(g, arrowMat, STUCK_MAX + HEADROOM);
     m.count = 0; m.frustumCulled = false; m.name = i ? 'spent arrows' : 'spent arrows (plain)';
+    // (the profiler's part of them, perf/sceneParts.ts: 1,000 of them in the forest's top view, the most kept, read
+    // nothing of a phone's 8.5 ms frame at Very low, `lab profile --device phone --level verylow --arrows 1000`)
+    m.userData.spentArrows = true;
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     G.scene.add(m);
     return m;

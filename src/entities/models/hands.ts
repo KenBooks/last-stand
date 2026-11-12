@@ -206,9 +206,10 @@ export const COARSE_NAMED = ' coarse';
  *  thread); a worker that fails leaves its side to the first hand built. Its side is its name, read as it starts: a
  *  message waits for the page's main thread to pass it on (core/textures.ts `preloadTextures`). */
 export async function preloadHands(coarse = false): Promise<void> {
-  // (the page's own sculpts too: a side whose worker fails, or built before it's done)
-  setHandsCoarse(coarse);
-  if (typeof Worker === 'undefined') return;
+  // (the page's own sculpts too: a side whose worker fails, or built before it's done; a coarse one is simplified once
+  // its simplifier has loaded, which this waits for too)
+  const simplifier = setHandsCoarse(coarse).catch(() => undefined);
+  if (typeof Worker === 'undefined') return simplifier;
   const side = (s: number) => new Promise<void>((resolve) => {
     let worker: Worker;
     try {
@@ -227,7 +228,7 @@ export async function preloadHands(coarse = false): Promise<void> {
       resolve();
     };
   });
-  await Promise.all([side(1), side(-1)]);
+  await Promise.all([side(1), side(-1), simplifier]);
 }
 
 /**

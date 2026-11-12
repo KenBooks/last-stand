@@ -17,6 +17,8 @@ import { standIn } from './light';
 import { WEBGPU } from '../../../src/core/webgpu';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { packTrace, sendTrace } from '../../../src/perf/upload';
+import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
+import { groundHeight } from '../../../src/world/ground';
 
 export interface ProfileCommand {
   biome: BiomeId;
@@ -30,6 +32,24 @@ export interface ProfileCommand {
   canary: boolean;
   /** the traces service its result is sent to (the lab's own: node/tracesService.mjs), none to send nothing */
   send?: string;
+  /** spent arrows stood in the ground round him first: what keeping them costs, its part `the spent arrows` */
+  arrows?: number;
+}
+
+/** how far round the hero the planted arrows stand (m): about what the top view shows round him */
+const ARROWS_REACH = 9;
+
+/** `count` spent arrows stood in the ground round the hero, spread evenly over a disc (a sunflower's spiral), leaning
+ *  as an arrow that came down from a shot does. */
+function plantArrows(lab: Lab, count: number): void {
+  const at = lab.player.pos;
+  for (let k = 0; k < count; k++) {
+    const r = ARROWS_REACH * Math.sqrt((k + 0.5) / count), a = k * 2.39996;
+    const x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r;
+    const tip = new THREE.Vector3(x, groundHeight(x, z), z);
+    const way = new THREE.Vector3(Math.cos(a * 3), -2, Math.sin(a * 3)).normalize();
+    stickAt(tip, way, SINK.ground);
+  }
 }
 
 /** the frame drawn twice must read at least this many times once */
@@ -247,6 +267,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
   const budget = quality.qualityBudget();
   if (command.level) quality.useQuality(command.level);
   await standIn(lab, { biome: command.biome, view: command.view, facing: 0, at: command.at, fresh: true });
+  if (command.arrows) plantArrows(lab, command.arrows);
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -279,6 +300,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     return { text: text.join('\n'), problems };
   } finally {
     lab.drawing = drawing;
+    if (command.arrows) clearSpent();
     if (command.level) quality.useQuality(level, budget);
   }
 }

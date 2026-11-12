@@ -837,6 +837,7 @@ export const COMMANDS = {
           rounds: options.rounds === undefined ? undefined : Math.round(options.rounds),
           canary: Boolean(options.canary),
           send: service.url,
+          arrows: options.arrows === undefined ? undefined : Math.round(options.arrows),
         };
         const result = await checkProfileSent(await side.command('profileHere', command), service);
         // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)
@@ -1481,7 +1482,7 @@ export const COMMANDS = {
       const reference = options.ref === undefined
         ? undefined
         : { url: pictureUrl(options.ref, 'turnaround --ref'), panels: panelsOf(options.panels) };
-      const command = { fixture: fixtureFrom(options), reference, canary: Boolean(options.canary) };
+      const command = { fixture: fixtureFrom(options), reference, canary: Boolean(options.canary), parts: Boolean(options.parts) };
       return side.command('turnaround', command);
     },
     finish(results, options, session) {
