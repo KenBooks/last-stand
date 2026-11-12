@@ -9,6 +9,7 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { buildTrousers, type TrouserCut } from './trousers';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { fitArm, solveArm, type ArmResult } from './armIK';
@@ -47,6 +48,11 @@ const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
+/** his trousers' cut (models/trousers.ts): a fighter's hips and thighs under the hide, tucked into the boots under their fur */
+const TROUSERS: TrouserCut = {
+  top: 0.13, waistW: 0.132, waistD: 0.108, hipW: 0.204, front: 0.106, seat: 0.138, crotch: -0.115,
+  thigh: 0.108, knee: 0.075, calf: 0.071, ankle: 0.045, tuck: 0.1, folds: 0.004,
+};
 interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
@@ -489,6 +495,9 @@ export function* warriorSteps(): ModelSteps {
   const brass = kit.std({ color: 0xb08a4a, metalness: 1, roughness: 0.38 });
   const leather = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const leatherDark = kit.std({ color: 0x2c1d14, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  // the trousers' hide: lighter than the straps over it and lit at its edges, so a leg's shape reads against the dark
+  // (in the straps' own near-black a leg was a flat silhouette, #520)
+  const hide = kit.rim({ color: 0x46342a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) }, 0x6e5a48, 0.3);
   const cloth = kit.rim({ color: 0x323c56, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x3a4a70, 0.35);
   yield;
   // (the surcoat's cloth and the shield's paint: his blue)
@@ -639,19 +648,21 @@ export function* warriorSteps(): ModelSteps {
 
   yield;
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
-  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
-    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), leatherDark, kn, an, 0.3, 0.41);
+  // (the trousers one piece a leg from the waist to the ankle, the seat and hips with them, models/trousers.ts: two
+  // round-topped tubes from the hip joints had no pelvis between them, and bare of the mail the world showed there)
+  buildTrousers(S, j, TROUSERS, hide, leatherDark);
+  yield;
+  for (const [kn, an] of [[j.kneeL, j.ankleL], [j.kneeR, j.ankleR]] as const) {
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
     A.add(kg, engraved, kn, [0, -0.01, 0]);
-    for (const y of [0.05, -0.075]) A.add(belt(0.082, 0.07, y, 0.02, 0.006, 0, 14), leather, kn);
+    for (const y of [0.05, -0.075]) A.add(belt(0.088, 0.086, y, 0.02, 0.006, 0, 14), leather, kn);
     // the boot's shaft from below the knee to the ankle, and a fur cuff over its top
-    S.add(scaleUV(lathe([[0.056, -0.42], [0.062, -0.37], [0.072, -0.27], [0.078, -0.16], [0.082, -0.11], [0.08, -0.1]], 18), 2, 1.5), leather, kn, [0, 0, 0.005], [0, 0, 0], [1, 1, 1.06]);
-    S.add(furTufts(rng, 48, (i, o) => { const a = (i / 48) * Math.PI * 2; o.p.set(Math.sin(a) * 0.08, -0.105, Math.cos(a) * 0.085); o.d.set(Math.sin(a), 0.7, Math.cos(a)); }, 0.04, 0.01), furM, kn);
+    S.add(scaleUV(lathe([[0.056, -0.42], [0.064, -0.37], [0.077, -0.27], [0.085, -0.16], [0.088, -0.11], [0.086, -0.1]], 18), 2, 1.5), leather, kn, [0, 0, 0.005], [0, 0, 0], [1, 1, 1.06]);
+    S.add(furTufts(rng, 48, (i, o) => { const a = (i / 48) * Math.PI * 2; o.p.set(Math.sin(a) * 0.086, -0.105, Math.cos(a) * 0.091); o.d.set(Math.sin(a), 0.7, Math.cos(a)); }, 0.04, 0.01), furM, kn);
     for (const y of [-0.23, -0.34]) {
-      const r = 0.08 + (y + 0.16) * 0.1;
+      const r = 0.087 + (y + 0.16) * 0.12;
       S.add(belt(r, r * 1.06, y, 0.02, 0.006, 0, 16), leatherDark, kn);
       S.add(buckle(0.026, 0.026, 0.005), plateM, kn, [r + 0.006, y, 0], [0, Math.PI / 2, 0]);
     }
@@ -689,10 +700,12 @@ export function* warriorSteps(): ModelSteps {
   // trousers at its sides and they came through it in every frame, standing too.
   const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    legBodies.add([th, O()], [kn, O()], 0.112 + GAP, 0.084 + GAP);
+    legBodies.add([th, O()], [kn, O()], 0.122 + GAP, 0.09 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.115 + GAP, 0.065 + GAP);
     yield;
   }
+  // (and the seat between the thighs' tops: the mail hangs clear of it behind)
+  legBodies.add([j.hips, new THREE.Vector3(0.06, -0.06, -0.03)], [j.hips, new THREE.Vector3(-0.06, -0.06, -0.03)], 0.108 + GAP);
   const capsL = handCapsules(handL);
   for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
   const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.058]);
