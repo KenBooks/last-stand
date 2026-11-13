@@ -7,7 +7,7 @@
 // at a size it hasn't been drawn at.
 import { G } from '../state';
 import {
-  CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
+  CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, RACK, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
   type Spot, type VillageObject,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -28,6 +28,9 @@ export const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
 /** the least gap between two names side by side, how far in a pointer stays from its name's corners, and the rounds
  *  names are pushed apart in (css px, at the reference layout's scale for the first two) */
 const NAME_GAP = 3, TAIL_IN = 3, NAME_ROUNDS = 12;
+/** the objects named beside their places (to the east), not over them: the rack's, which over it stood in one row with
+ *  the Sparring Shade's and the campfire's, the three pushed into strips across a phone's sheet */
+const NAMED_BESIDE = new Set(['rack']);
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */
@@ -85,6 +88,7 @@ export function initVillageMap(h: VillageMapHooks): void {
     const b = document.createElement('button');
     b.className = 'vm-name';
     b.dataset.use = o.use;
+    b.classList.toggle('beside', NAMED_BESIDE.has(o.id));
     if (o.biome) b.dataset.biome = o.biome;
     b.textContent = o.name;
     const [u, v] = toSheet(o.at[0], o.at[1]);
@@ -230,14 +234,19 @@ function layNames(): void {
   const all = [...sheet.querySelectorAll<HTMLElement>('.vm-name')];
   // (each measured at its own width, a widening of a size before let go)
   for (const el of all) el.style.width = '';
-  const names = all.map((el) => ({
-    el,
-    x: (parseFloat(el.style.left) / 100) * across,
-    y: (parseFloat(el.style.top) / 100) * down,
-    wide: el.offsetWidth,
-    tall: el.offsetHeight,
-    aside: 0,
-  }));
+  const names = all.map((el) => {
+    // (its own middle: a name's height over its place, or beside it, half its height off)
+    const beside = el.classList.contains('beside');
+    return {
+      el,
+      beside,
+      x: (parseFloat(el.style.left) / 100) * across + (beside ? (el.offsetHeight + el.offsetWidth) / 2 : 0),
+      y: (parseFloat(el.style.top) / 100) * down - (beside ? 0 : el.offsetHeight),
+      wide: el.offsetWidth,
+      tall: el.offsetHeight,
+      aside: 0,
+    };
+  });
   for (let round = 0; round < NAME_ROUNDS; round++) {
     for (const [i, a] of names.entries()) {
       for (const b of names.slice(i + 1)) {
@@ -256,7 +265,7 @@ function layNames(): void {
       name.aside = Math.min(most, Math.max(least, name.aside));
       // (widened as far as its pointer must reach under it: moved further than half its width on a narrow sheet, the
       // pointer stopped at its end, off its place)
-      name.wide = Math.max(name.wide, 2 * (Math.abs(name.aside) + TAIL_IN));
+      if (!name.beside) name.wide = Math.max(name.wide, 2 * (Math.abs(name.aside) + TAIL_IN));
     }
   }
   for (const { el, wide, aside } of names) {
@@ -501,6 +510,24 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
   }
   drawCampfire(g, ...at(CAMPFIRE[0], CAMPFIRE[1]), metre);
   drawBox(g, at, NOTICE.x, NOTICE.z, 1, 0.15, NOTICE.facing, '#8a6a4a');
+  drawRack(g, at, metre);
+}
+
+/** The weapons rack as a map draws one: its beam, and two swords crossed over it. */
+function drawRack(g: CanvasRenderingContext2D, at: At, metre: number): void {
+  drawBox(g, at, RACK.x, RACK.z, RACK.half, 0.2, RACK.facing, '#8a6a4a');
+  const [x, y] = at(RACK.x, RACK.z), s = metre * 1.1;
+  g.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    // a blade from its point up to its pommel, its guard across it
+    g.beginPath();
+    g.moveTo(x - side * s, y + s); g.lineTo(x + side * s, y - s);
+    g.moveTo(x + side * s * 0.25, y - s * 0.85); g.lineTo(x + side * s * 0.85, y - s * 0.25);
+    g.strokeStyle = INK;
+    g.lineWidth = Math.max(1.5, metre * 0.16);
+    g.stroke();
+  }
+  g.lineCap = 'butt';
 }
 
 /** The campfire as a map draws one: a ring of stones round two crossed logs, a flame rising over them. */

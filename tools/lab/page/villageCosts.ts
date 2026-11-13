@@ -76,6 +76,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   columnsStayGhosts: 4,
   hallFacesSteady: 50,
   startSpots: 4,
+  rackOpensDuel: 6,
   topKeepsHim: 2,
   staffAtNight: 1,
   dummyLabelsFade: 1,

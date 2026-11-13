@@ -3,7 +3,7 @@
 // mask and the trees all read one plan: grass and trees go wherever nothing's built or trodden.
 import * as THREE from 'three';
 import {
-  CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, PALISADE_LINE, ROADS, TERRACE, YARD, worldToYard,
+  CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, PALISADE_LINE, RACK, ROADS, TERRACE, YARD, worldToYard,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -179,6 +179,7 @@ export function builtAt(x: number, z: number, pad = 0): boolean {
   }
   if (Math.hypot(x - CAMPFIRE[0], z - CAMPFIRE[1]) < 3.8 + pad) return true;
   if (Math.hypot(x - NOTICE.x, z - NOTICE.z) < 1.6 + pad) return true;
+  if (Math.hypot(x - RACK.x, z - RACK.z) < 2.4 + pad) return true;
   if (roadLines.some((r) => toPolyline(x, z, r.line) < r.width / 2 + 0.8 + pad)) return true;
   return inWay(x, z, pad);
 }

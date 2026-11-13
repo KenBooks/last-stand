@@ -274,6 +274,26 @@
 .vc-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .vc-close { align-self: center; }
 
+/* the duel's menu, the weapons rack's page (ui/pvpMenu.ts): its sides face to face, who watches under them */
+#pvp-sides { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px 10px; align-items: start; }
+#pvp-sides.hidden, #pvp-go.hidden, #pvp-party.hidden { display: none; }
+.pvp-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border: 1px solid rgba($frame, .35); border-radius: 3px; background: rgba(255,255,255,.03); }
+.pvp-side[data-part="0"] { border-color: rgba(#d0603c, .6); }
+.pvp-side[data-part="1"] { border-color: rgba($ally, .6); }
+.pvp-watch { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: center; flex-wrap: wrap; padding: 6px 8px; }
+.pvp-versus { align-self: center; font: 700 15px var(--font-display); color: var(--ink-dim); }
+.pvp-list { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.pvp-watch .pvp-list { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+.pvp-player { max-width: 100%; padding: 5px 10px; font: 14px var(--font-body); color: var(--ink); cursor: $cursor-hand; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px; }
+.pvp-player:hover:not(:disabled) { color: #ffe7b0; border-color: var(--highlight); }
+.pvp-player:disabled { cursor: $cursor; }
+.pvp-none { font-size: 13px; font-style: italic; color: var(--ink-dim); }
+#pvp-note { margin: 0; font-size: 14px; color: #f0c88a; }
+#pvp-party { align-self: center; }
+/* (a finger's room on each choice) */
+body.touch .pvp-player, body.touch [data-page="pvp"] .seg button { min-height: calc(40px / var(--ui, 1)); }
+
 /* the pause menu's ways to what the village's objects open: in the lobby alone */
 .pb-links { margin: 4px 0 2px; }
 

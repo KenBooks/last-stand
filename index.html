@@ -531,6 +531,22 @@
         <div class="records"></div>
         <div class="vc-row"><button class="btn" id="btn-saves">Save slot 1</button><button class="btn danger" id="btn-reset">Reset profile</button></div>
       </div>
+      <div class="vc-page" data-page="pvp">
+        <div class="biome-row"><span class="br-label">Battleground</span><div class="seg" id="pvp-ground"></div></div>
+        <div class="biome-row"><span class="br-label">Fight</span>
+          <div class="seg" id="pvp-size"><button data-v="1">1 v 1</button><button data-v="2">2 v 2</button></div>
+        </div>
+        <div class="biome-row"><span class="br-label">First to</span><div class="seg" id="pvp-wins"></div></div>
+        <div id="pvp-sides">
+          <div class="pvp-side" data-part="0"><span class="br-label">Side one</span><div class="pvp-list"></div></div>
+          <div class="pvp-versus" aria-hidden="true">vs</div>
+          <div class="pvp-side" data-part="1"><span class="br-label">Side two</span><div class="pvp-list"></div></div>
+          <div class="pvp-side pvp-watch" data-part="watch"><span class="br-label">Watching</span><div class="pvp-list"></div></div>
+        </div>
+        <p id="pvp-note" role="status"></p>
+        <button class="btn primary big" id="pvp-go">Begin the duel</button>
+        <button class="btn primary" id="pvp-party">To the campfire</button>
+      </div>
       <button class="link vc-close">Leave</button>
     </div>
   </div>

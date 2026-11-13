@@ -6,7 +6,7 @@
 import type { BiomeId } from './biomes';
 
 /** What an object does when the hero uses it (game/village.ts `use`). */
-export type VillageUse = 'portal' | 'stash' | 'heroes' | 'coop' | 'chronicle' | 'help' | 'training';
+export type VillageUse = 'portal' | 'stash' | 'heroes' | 'coop' | 'chronicle' | 'help' | 'training' | 'pvp';
 
 /** An object of the village the hero walks to and uses: where it stands (its middle, x and z), how near he must be
  *  to use it (m, from that middle), where he stands to use it (x, z), the height its name hangs at (m), its name and
@@ -87,6 +87,14 @@ export const GHOST = (() => {
   const [x, z] = yardToWorld(YARD.gateAt - 3.5, -YARD.halfZ - 1.5);
   const [ox, oz] = yardToWorld(YARD.gateAt - 3.5, -YARD.halfZ - 2.5);
   return { x, z, facing: Math.atan2(ox - x, oz - z) };
+})();
+
+/** The weapons rack before the yard's fence, east of its gate, its back to the fence and its swords toward the square
+ *  (rad about y: 0 faces +z): where a party sets up a duel (from play: "Item you come up to to interact (open menu), is
+ *  a weapons rack"). */
+export const RACK = (() => {
+  const [x, z] = yardToWorld(0.6, -YARD.halfZ - 1.0);
+  return { x, z, facing: YARD.turn + Math.PI, half: 1.2 };
 })();
 
 /** where the yard's dummies stand */
@@ -225,6 +233,12 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
     id: 'ghost', use: 'training', at: [GHOST.x, GHOST.z], reach: 2.4,
     stand: [GHOST.x + Math.sin(GHOST.facing) * 1.5, GHOST.z + Math.cos(GHOST.facing) * 1.5], label: 2.0, tall: 2.0,
     name: 'Sparring Shade', verb: 'Enter the training grounds',
+  },
+  {
+    // (stood before its swords, on the square's side)
+    id: 'rack', use: 'pvp', at: [RACK.x, RACK.z], reach: 2.2,
+    stand: [RACK.x + Math.sin(RACK.facing) * 1.4, RACK.z + Math.cos(RACK.facing) * 1.4], label: 1.72, tall: 1.8,
+    name: 'Weapons Rack', verb: 'Set up a duel',
   },
   {
     id: 'notice', use: 'help', at: [NOTICE.x, NOTICE.z], reach: 2.4,

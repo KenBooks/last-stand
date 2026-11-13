@@ -30,6 +30,9 @@
   box-shadow: 0 ui(2px) ui(6px) rgba(40, 24, 8, .35); }
 .vm-name::after { content: ''; position: absolute; left: calc(50% + var(--tail, 0px)); top: 100%; translate: -50% 0; border: ui(5px) solid transparent;
   border-top-color: rgba(58, 42, 26, .7); }
+/* (a name beside its place, its pointer back to it: ui/villageMap.ts `NAMED_BESIDE`) */
+.vm-name.beside { translate: calc(#{ui(10px)} + var(--aside, 0px)) -50%; }
+.vm-name.beside::after { left: auto; right: 100%; top: 50%; translate: 0 -50%; border-top-color: transparent; border-right-color: rgba(58, 42, 26, .7); }
 .vm-name:hover, .vm-name:focus-visible { background: #fff3d6; color: #1a0f04; }
 .vm-name[data-biome="crypt"] { color: #5a1f86; }
 .vm-name[data-biome="forest"] { color: #1f6a32; }

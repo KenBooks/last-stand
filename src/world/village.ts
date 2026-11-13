@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import type { SightDoor, SightRoof, SightWall } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, exitPlace, portalPlace,
+  CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, RACK, STEP_RISE, TERRACE, YARD, exitPlace, portalPlace,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -51,6 +51,7 @@ import {
 } from './villagePlan';
 import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
 import { FENCE, STANDS_FREE, Wall } from './wall';
+import { buildWeaponsRack } from './weaponsRack';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -282,6 +283,9 @@ interface Mats {
   freeAshlar: THREE.Material; freeCoping: THREE.Material;
   /** the notice board's and the lectern's wood and brass: what stands free, as the lamps (`prop`) */
   freeTimber: THREE.Material; freePlanks: THREE.Material; freeBrass: THREE.Material;
+  /** the weapons rack's: pale oak (in the houses' dark timber, seen from the square on its shaded side, it was a black
+   *  frame lost against the yard's fence behind it) and its blades' bright steel, standing free */
+  rackTimber: THREE.MeshStandardMaterial; rackPlanks: THREE.MeshStandardMaterial; steel: THREE.Material;
   /** a lamp's plinth, thinned from the ground up */
   footAshlar: THREE.Material;
   plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
@@ -443,6 +447,10 @@ function makeMats(): Mats {
     freeTimber: undefined as unknown as THREE.Material,
     freePlanks: undefined as unknown as THREE.Material,
     freeBrass: undefined as unknown as THREE.Material,
+    rackTimber: undefined as unknown as THREE.MeshStandardMaterial,
+    rackPlanks: undefined as unknown as THREE.MeshStandardMaterial,
+    // (pale and half metal: all metal, a blade showed the sky's blue and no steel, a dark line from the square)
+    steel: new THREE.MeshStandardMaterial({ color: 0xc4c9d0, metalness: 0.4, roughness: 0.38 }),
     palisadeLogs: undefined as unknown as THREE.Material,
     palisadeTips: undefined as unknown as THREE.Material,
   };
@@ -465,6 +473,10 @@ function makeMats(): Mats {
   mats.freePlanks = mats.planks.clone();
   mats.freeBrass = mats.brass.clone();
   mats.boardRoof = mats.roof.clone();
+  mats.rackTimber = (mats.timber as THREE.MeshStandardMaterial).clone();
+  mats.rackTimber.color.set(0xd8b488);
+  mats.rackPlanks = (mats.planks as THREE.MeshStandardMaterial).clone();
+  mats.rackPlanks.color.set(0xf0d4a4);
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
   for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
     seeThrough(m, 'built');
@@ -474,7 +486,7 @@ function makeMats(): Mats {
   seeThrough(mats.roof, 'roof');
   const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper];
   const lectern = [mats.binding, mats.pagesLeft, mats.pagesRight, mats.pagesEdge, mats.ribbon, mats.wax, mats.freeBrass];
-  for (const m of [mats.column, mats.iron, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
+  for (const m of [mats.column, mats.iron, mats.steel, mats.rackTimber, mats.rackPlanks, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
     ...lectern]) {
     seeThrough(m, 'prop');
   }
@@ -734,6 +746,7 @@ export function buildVillage(scene: THREE.Group): Village {
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
+  stillBuilt(scene, () => buildWeaponsRack(scene, { timber: M.rackTimber, planks: M.rackPlanks, iron: M.iron, steel: M.steel, hilt: M.freeBrass, grip: M.binding }, obstacles));
   const stair = [-1, 1].map((s) => buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
   for (const { light } of stair) lights.push(light);
   // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim
@@ -1219,6 +1232,9 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 1.6);
   mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 3.4, 0.45);
   mask.clearCircle(NOTICE.x, NOTICE.z, 1.3, 0.4);
+  // (the rack's foot, and the ground before it trodden by who comes to it)
+  mask.clearRect(RACK.x - RACK.half - 0.2, RACK.z - 0.7, RACK.x + RACK.half + 0.2, RACK.z + 0.7, 0.3, RACK.facing);
+  mask.clearCircle(RACK.x + Math.sin(RACK.facing) * 1.2, RACK.z + Math.cos(RACK.facing) * 1.2, 1.3, 0.45);
   for (const s of [-1, 1]) mask.clearCircle(TERRACE.x + s * LAMPS.x, LAMPS.z, 0.5);
   for (const t of trees) mask.clearCircle(t.x, t.z, 0.9, 0.4);
   // the palisade's foot; the crypt's court, paved; the trodden path into the grove to its portal

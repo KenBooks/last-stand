@@ -13,6 +13,7 @@ import { on } from '../events';
 import { skipTraining } from '../game/training';
 import type { VillageObject } from '../data/village';
 import type { BiomeId } from '../data/biomes';
+import { renderPvp } from './pvpMenu';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -44,7 +45,7 @@ export function showVillageCard(o: VillageObject | null): void {
   const card = $('#vcard');
   card.classList.toggle('hidden', !o);
   if (!o) return;
-  const page = o.use === 'portal' || o.use === 'training' ? 'portal' : 'chronicle';
+  const page = o.use === 'portal' || o.use === 'training' ? 'portal' : o.use === 'pvp' ? 'pvp' : 'chronicle';
   $('.vc-grounds', card).classList.toggle('hidden', o.use !== 'training');
   card.dataset.page = page;
   card.querySelectorAll<HTMLElement>('.vc-page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== page));
@@ -57,6 +58,10 @@ export function showVillageCard(o: VillageObject | null): void {
     $('.vc-sub', card).textContent =
       'Any wave you have reached, its foes but shades: no harm, loot, score or progress.';
     renderLobbyOptions();
+  } else if (o.use === 'pvp') {
+    $('.vc-title', card).textContent = 'A Duel';
+    $('.vc-sub', card).textContent = 'Hero against hero, no foes between them.';
+    renderPvp();
   } else {
     $('.vc-title', card).textContent = o.name;
     $('.vc-sub', card).textContent = `${CLASSES[G.profile.classId].name} of save slot ${saveSlot()}`;

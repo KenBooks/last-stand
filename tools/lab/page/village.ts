@@ -81,6 +81,7 @@ import { doorConeOpens, heroSeenPastHall, noDotsBesideHall } from './villageHall
 import { ghostsOverHim } from './villageGhosts';
 import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';
+import { rackOpensDuel } from './villageRack';
 import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
@@ -214,6 +215,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     columnsStayGhosts: () => columnsStayGhosts(lab, options.canary),
     hallFacesSteady: () => hallFacesSteady(lab, options.canary),
     startSpots: () => startSpots(lab, options.canary),
+    rackOpensDuel: () => unposed(() => rackOpensDuel(lab, options.canary)),
     topKeepsHim: () => topKeepsHim(lab, options.canary),
     staffAtNight: () => staffAtNight(lab, options.canary),
     dummyLabelsFade: () => dummyLabelsFade(lab, options.canary),
