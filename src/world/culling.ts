@@ -194,6 +194,10 @@ const shown = (o: THREE.Object3D | null): boolean => {
   return true;
 };
 
+/** Whether `camera` draws an instanced mesh under `mesh` that shares its instances (a ghosts' count twin). */
+const twinSeen = (mesh: THREE.InstancedMesh, camera: THREE.Camera): boolean => mesh.children.some((child) =>
+  (child as THREE.InstancedMesh).instanceMatrix === mesh.instanceMatrix && camera.layers.test(child.layers));
+
 const _frustum = new THREE.Frustum(), _viewProjection = new THREE.Matrix4();
 /** Each culled mesh `camera` sees packed with its cells in that camera's view, or all of them while the mesh isn't
  *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. */
@@ -203,7 +207,9 @@ function cullFor(camera: THREE.Camera): void {
   for (const c of culled) {
     // (not for a pass that can't see it, the first person's arms: packed for their camera, packed again for the
     // world's the next frame)
-    if (!camera.layers.test(c.mesh.layers) || !shown(c.mesh.parent)) continue;
+    // (but for one that sees a twin under it, which draws its instances: the ghosts' count's, drawn before the scene,
+    // drew the palisade as the frame before had packed it, a frame late wherever the view had moved)
+    if (!(camera.layers.test(c.mesh.layers) || twinSeen(c.mesh, camera)) || !shown(c.mesh.parent)) continue;
     let changed = false;
     for (const cell of c.cells) {
       const inView = !c.mesh.frustumCulled

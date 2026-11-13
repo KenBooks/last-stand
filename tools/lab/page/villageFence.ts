@@ -45,8 +45,8 @@ const NOWHERE: PixelBox = { left: 1, bottom: 1, right: 0, top: 0 };
 /** A planted house's size (m) and where its middle stands from him: toward the camera and aside of the way to it. */
 interface Placed { wide: number; high: number; toCamera: number; aside: number }
 
-/** One stand's reading: what the houses' hole changed of the frame and what the fence's did. */
-interface Stand { cottage: number; houses: number; fence: number; picture: Pictured }
+/** One stand's reading: what the houses' hole changed of the frame, what the fence's did, and what drawing it again. */
+interface Stand { cottage: number; houses: number; fence: number; again: number; picture: Pictured }
 
 const _hit = wallHit();
 
@@ -83,8 +83,9 @@ function plantHouse(material: THREE.Material, placed: Placed): THREE.Mesh {
   return house;
 }
 
-/** The frame drawn as the game draws it, with the houses' hole shut, and with the fence's shut too. */
-function threeFrames(lab: Lab): { houses: number; fence: number } {
+/** The frame drawn as the game draws it, twice, then with the houses' hole shut, and with the fence's shut too. */
+function threeFrames(lab: Lab): { houses: number; fence: number; again: number } {
+  const first = drawFrame(lab);
   const game = drawFrame(lab);
   shutHole('built');
   const housesShut = drawFrame(lab);
@@ -93,6 +94,7 @@ function threeFrames(lab: Lab): { houses: number; fence: number } {
   return {
     houses: changedShare(game, housesShut, NOWHERE, false),
     fence: changedShare(housesShut, bothShut, NOWHERE, false),
+    again: changedShare(first, game, NOWHERE, false),
   };
 }
 
@@ -106,11 +108,11 @@ async function readStand(lab: Lab, index: number, material: THREE.Material): Pro
   if (!stood) return null;
   const house = plantHouse(material, HOUSE);
   try {
-    const { houses, fence } = threeFrames(lab);
+    const { houses, fence, again } = threeFrames(lab);
     const picture = await lab.screen(`by the palisade past cottage ${index}`, [
       `the houses' hole ${percent(houses)} of the frame, the fence's ${percent(fence)}`,
     ]);
-    return { cottage: index, houses, fence, picture };
+    return { cottage: index, houses, fence, again, picture };
   } finally {
     house.removeFromParent();
     house.geometry.dispose();
@@ -138,7 +140,7 @@ export async function housesBesideFence(lab: Lab, canary: boolean): Promise<Ligh
     const stands = await readStands(lab, material);
     const lines = stands.map((s) => `fence past cottage ${s.cottage}: the houses' hole changes ${percent(s.houses)} `
       + `of the frame (at most ${percent(MOST_HOUSES)}), the fence's ${percent(s.fence)} `
-      + `(at least ${percent(LEAST_FENCE)})`);
+      + `(at least ${percent(LEAST_FENCE)}); drawn again with nothing changed ${percent(s.again)}`);
     const moments = stands.map((s) => s.picture);
     const apart = stands.filter((s) => s.houses > MOST_HOUSES);
     if (canary) return { lines, problems: [], caught: apart.length > 0, moments };
@@ -147,6 +149,11 @@ export async function housesBesideFence(lab: Lab, canary: boolean): Promise<Ligh
       problems.push(`fence: ${stands.length} stands with the palisade hiding him (${STANDS} wanted)`);
     }
     for (const s of apart) problems.push(`fence past cottage ${s.cottage}: the house beside him came apart`);
+    // (the first frame drawn where he was just stood against the next: the ghosts' count drew the palisade's culled
+    // logs as the frame before had packed them, 4.07% of the frame)
+    for (const s of stands.filter((one) => one.again > MOST_HOUSES)) {
+      problems.push(`fence past cottage ${s.cottage}: drawn again with nothing changed, ${percent(s.again)} differs`);
+    }
     for (const s of stands.filter((one) => one.fence < LEAST_FENCE)) {
       problems.push(`fence past cottage ${s.cottage}: the palisade hiding him never opened`);
     }
