@@ -361,9 +361,9 @@ function kitNodes(node: N): void {
   const dissolve = read('u.uDissolve', 'float');
   const frozen = read('u.uFrozen', 'float');
   const char = read('u.uChar', 'float');
-  const { noise3 } = wgslNoise();
   const at = varying(positionGeometry);
-  const dn = noise3({ x: at.mul(7) }).mul(0.65).add(noise3({ x: at.mul(19) }).mul(0.35));
+  // (made only while the dissolve or the char reads it, as WebGL's patch does: a node's `select` makes both sides)
+  const dn = kitNoise()({ x: at, on: dissolve.max(char) });
   const near = clamp(pow(positionView.z.negate().div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1);
   const shown = vec4(materialColor);
   const frost = mix(shown.rgb, vec3(0.55, 0.8, 1.0), frozen.mul(0.75));
@@ -384,6 +384,19 @@ function kitNodes(node: N): void {
     .add(itemAura(read('aura', 'color'), at));
   hoodShaded(node, read('shade', 'vec4'), at);
   shineCapped(node, read('u.uShine', 'float'));
+}
+
+let kitNoiseFn: N | null = null;
+
+/** The kit's dissolve and char noise (`fxNoise` twice, core/materials.ts), 0 where `on` isn't above 0, made once. */
+function kitNoise(): N {
+  if (kitNoiseFn) return kitNoiseFn;
+  const { wgslFn } = tsl as any;
+  const { noise3 } = wgslNoise();
+  return kitNoiseFn = wgslFn(`fn kitNoise(x: vec3f, on: f32) -> f32 {
+    if (on <= 0.0) { return 0.0; }
+    return noise3(x * 7.0) * 0.65 + noise3(x * 19.0) * 0.35;
+  }`, [noise3]);
 }
 
 /** the glow's pattern (`AURA_GLSL` in core/materials.ts) in WGSL, line for line, made once */

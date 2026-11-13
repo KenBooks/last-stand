@@ -204,7 +204,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
             // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop
             totalEmissiveRadiance += uAura * uAuraLoop.w * auraTendrils(vFxPos, uAuraClock, uAuraShape, uAuraLoop);
           }
-          float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
+          // (the dissolve's and the char's noise, 16 hashes a pixel, made only while either reads it: a branch on
+          // the looks, not a define, so no program more; every body not dying skips it)
+          float dn = 0.0;
+          if (uDissolve > 0.0 || uChar > 0.0) dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
           if (uDissolve > 0.0 && dn < uDissolve) discard;
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
           totalEmissiveRadiance += uEdge * edge * 3.0;
