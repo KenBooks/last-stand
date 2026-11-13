@@ -30,11 +30,50 @@ const RINGS = [
  *  the middle of the view put their hand-overs in the frame, circles of blades coming and going as he walked (from play,
  *  "in top down, grass is visibly redrawing as I'm moving around"). Its blades stay where they are as it follows. */
 const ABOVE_RING = { cell: 0.15, radius: 70, segs: 2 };
+/** The ring from above with the camera near the ground, on the levels that don't spread the grass: the first ring's own
+ *  blades, whole, out to `radius` m, while the camera stands under `under` m (the lobby's zoom is 9 m up, a run's 26).
+ *  As many cells a side as the far one's, so its tiles are the same. From play, on High at the lobby's zoom: "top down
+ *  doesn't even look like grass", "this is high, looks terrible": a sheet two blades wide cut into four strands, all
+ *  leaning one way from one root, read as a fern's frond. */
+const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].cell / ABOVE_RING.cell), under: 30 };
+/** the thin blades of a tuft, on High: one card an instance, two triangles, its blades cut from it as it's shaded,
+ *  each fanning out from the crown, bending its own way, its own height (after solstice's grass, MIT: tufts of thin
+ *  blades folded along the midrib; from play, of ours on High, "looks terrible", and of its meadow, "this is really
+ *  good"). As geometry, three blades a tuft, High's frame over the shoulder was 3.6M triangles ("that's broken",
+ *  "we need below 1M tris on high"); cut as parallel strands of one sheet, hairs combed one way. */
+const TUFT = 8;
+/** a tuft's card's width against a whole blade's, and a blade's half width at its root as a share of the card's */
+const TUFT_CARD = 1.7;
+const TUFT_BLADE = 0.13;
+/** how far apart the tufts' cards stand against the blades' cells, each as many tufts wide: at a card a cell, the
+ *  cards lay many deep over every pixel, each pixel of each cut as it's shaded, and High's scene pass took 8.2 ms of a
+ *  4070 Ti's frame over the shoulder where main's took 5.4, with two thirds of main's triangles */
+const TUFT_SPREAD = 2;
+/** how far up a hand-over's band the last of a tuft's blades starts to rise, and how much of the band each takes to:
+ *  thin, a blade risen as fast as a strand a blade wide changed more of a band's light in a stride */
+const TUFT_RISE = 0.55;
+const TUFT_GROWS = 0.15;
+
+/** the tallest a blade stands over the ground (m), for a tile's box */
+const BLADES_TOP = 1.1;
+/** how far from its cell a blade's root may stand (m): pulled to its tuft's middle through the warp. A tile is tried
+ *  against the ring's band and the view with that to spare: tried by its cells alone, tiles half a metre wide at a
+ *  band's edge were left out with blades of theirs inside it, a strip of thin grass round the view that moved with it
+ *  (`lab village --only grassRingsGentle`: 13.2% of a band's light in a stride, at most 10%) */
+const ROOT_STRAYS = 1;
+/** how much taller the grass stands where it's drawn as tufts (from play, "can we make grass taller?") */
+const TUFT_TALLER = 1.35;
 /** the segments along each of its blades when they're spread (`setGrassSpread`): from above every blade is about as far
  *  off, seen from over it, and its bend hardly shows */
 const ABOVE_SPREAD_SEGS = 1;
-/** tiles a side over each ring's grid (the most drawn: the uniforms' array) */
-const TILES = 8;
+/** tiles a side over each ring's grid. On WebGL the tiles drawn are listed in a texture a ring (`uTileMap`), so they
+ *  can be many and small: listed in a uniform array, 8 a side was all a phone's programs had room for, the far rings'
+ *  tiles 9 to 21 m wide, and every blade of a tile that touched the view or the ring's band was sent to be dropped in
+ *  the vertex shader (from play, 1.5M triangles facing a cottage's wall; with tufts 3.6M: "that's broken"). WebGPU's
+ *  nodes still read the array (`meadowNodes.ts`), 8 a side. */
+const TILES = WEBGPU ? 8 : 32;
+/** the tiles a side of the blocks they're first tried by (a block out of the view or the ring skips its tiles) */
+const TILE_BLOCK = 4;
 /** how wide a blade is at its root, in its ring's cells, in the first ring; each ring out its blades wider again by its
  *  cells' size against the first's, so every ring covers as much of the ground: a ring of cells twice as wide has a
  *  quarter of the blades, and with blades only twice as wide it covered half the ground, the first ring a denser disc
@@ -228,45 +267,63 @@ export const MEADOW_AT_GLSL = /* glsl */ `
     return clamp(m + (cut - 0.5) * 0.5 * (1.0 - abs(m * 2.0 - 1.0)) * 2.0, 0.0, 1.0);
   }`;
 
-/** One blade: (t along it 0..1, side -1..1) at each point, a strip as indexed triangles. */
-function bladeGeometry(segs: number): THREE.InstancedBufferGeometry {
+/** `blades` blades an instance, a tuft's: (t along it 0..1, side -1..1, which blade) at each point, each a strip as
+ *  indexed triangles. */
+function bladeGeometry(segs: number, blades = 1): THREE.InstancedBufferGeometry {
   const geo = new THREE.InstancedBufferGeometry();
   const bv: number[] = [], index: number[] = [];
-  for (let s = 0; s < segs; s++) bv.push(s / segs, -1, s / segs, 1);
-  bv.push(1, 0);
-  for (let s = 0; s < segs; s++) {
-    const a = s * 2;
-    index.push(a, a + 1, a + 2);
-    if (s < segs - 1) index.push(a + 1, a + 3, a + 2);
+  for (let blade = 0; blade < blades; blade++) {
+    const first = bv.length / 3;
+    for (let s = 0; s < segs; s++) bv.push(s / segs, -1, blade, s / segs, 1, blade);
+    bv.push(1, 0, blade);
+    for (let s = 0; s < segs; s++) {
+      const a = first + s * 2;
+      index.push(a, a + 1, a + 2);
+      if (s < segs - 1) index.push(a + 1, a + 3, a + 2);
+    }
   }
-  geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 2));
+  geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 3));
   // (three draws as many points as `position` has)
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array((bv.length / 2) * 3), 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(bv.length), 3));
   geo.setIndex(index);
   // (set as each ring is drawn: none until then)
   geo.instanceCount = 0;
   return geo;
 }
 
+/** A tuft's card: a quad from the root (t 0) to the top (t 1), two triangles; its blades are cut from it as it's
+ *  shaded (`FRAGMENT_COLOUR`). */
+function cardGeometry(): THREE.InstancedBufferGeometry {
+  const geo = new THREE.InstancedBufferGeometry();
+  const bv = [0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0];
+  geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(bv.length), 3));
+  geo.setIndex([0, 1, 2, 1, 3, 2]);
+  geo.instanceCount = 0;
+  return geo;
+}
+
 const VERTEX_HEAD = /* glsl */ `
-  attribute vec2 bv;
+  attribute vec3 bv;
   uniform vec2 uOrigin;
   uniform float uCell;
   uniform float uWider;
   uniform float uCombed;
   uniform int uS;
-  uniform vec2 uTiles[${TILES * TILES}];
+  uniform sampler2D uTileMap;
   uniform vec2 uFocus;
   uniform vec2 uEye;
   uniform vec4 uBand;
   uniform float uByStrand;
   uniform float uStrandsBy;
+  uniform float uTuft;
   uniform float uTime;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
   varying vec2 vStrands;
   varying vec2 vGrowing;
+  varying float vTufted;
   uvec2 pcg2d(uvec2 v) {
     v = v * 1664525u + 1013904223u;
     v.x += v.y * 1664525u; v.y += v.x * 1664525u;
@@ -288,7 +345,7 @@ const VERTEX_BLADE = /* glsl */ `
   int perTile = uS * uS;
   int tile = gl_InstanceID / perTile;
   int within = gl_InstanceID - tile * perTile;
-  vec2 cellI = uOrigin + uTiles[tile] + vec2(float(within % uS), float(within / uS));
+  vec2 cellI = uOrigin + texelFetch(uTileMap, ivec2(tile, 0), 0).rg + vec2(float(within % uS), float(within / uS));
   uvec2 hA = pcg2d(uvec2(ivec2(cellI) + 65536));
   uvec2 hB = pcg2d(hA ^ uvec2(0x9e3779b9u, 0x85ebca6bu));
   vec4 h = vec4(hA, hB) / 4294967295.0;
@@ -320,13 +377,18 @@ const VERTEX_BLADE = /* glsl */ `
   // (the ring's band apart from that, by a share of the blade's own, and slowly: what stands still keeps its look; a
   // sheet of strands stands whole while its band is any, each strand rising by its own share as it's shaded: the sheet
   // grown from nothing, its strands rose together and spread out from its middle, a sheet to 84 cm wide at 20 m out)
-  float byStrand = uByStrand * uCombed * step(1.5, uWider);
+  // (a tuft's card too, in any ring: its blades come and go one by one)
+  float byStrand = uByStrand * uCombed * max(step(1.5, uWider), step(1.5, uTuft));
   float share = fract(h.z * 3.17) * ${(1 - BLADE_GROWS).toFixed(2)};
   on *= mix(smoothstep(share, share + ${BLADE_GROWS.toFixed(2)}, band), step(0.001, band), byStrand);
   vGrowing = vec2(band, byStrand);
-  float height = on * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
-  float width = on * uCell * uWider * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(h.z * 7.13));
-  float turn = h.w * 6.2832 + h.x * 3.0;
+  // (a tuft's blades, where the grass isn't spread: each its own way, lean, bend and height, from one crown)
+  float tufted = step(1.5, uTuft);
+  vec4 hk = h;
+  float height = on * mix(1.0, ${TUFT_TALLER.toFixed(2)}, step(1.5, uTuft)) * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
+  float width = on * uCell * uWider * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(hk.z * 7.13))
+    * mix(1.0, ${TUFT_CARD.toFixed(2)}, tufted);
+  float turn = hk.w * 6.2832 + hk.x * 3.0;
   vec2 lean2 = vec2(cos(turn), sin(turn));
   // (at the meadow's edge a blade leans away from it, into the grass: leaning out, they lay over the curbs' tops)
   float step = 0.35 / (2.0 * uMeadowHalf);
@@ -339,17 +401,18 @@ const VERTEX_BLADE = /* glsl */ `
   vec2 toCam = normalize(uEye - root + 1e-4);
   vec2 across0 = vec2(lean2.y, -lean2.x);
   vec2 facing = vec2(-toCam.y, toCam.x);
-  vec2 turned = normalize(mix(across0, facing * sign(dot(facing, across0) + 1e-4), (1.0 - abs(dot(toCam, lean2))) * 0.35));
+  vec2 turned = normalize(mix(across0, facing * sign(dot(facing, across0) + 1e-4), (1.0 - abs(dot(toCam, lean2))) * 0.35 * (1.0 - tufted)));
   vec3 across = vec3(turned.x, 0.0, turned.y);
   float t = bv.x, side = bv.y;
-  float tilt = 0.12 + fract(h.x * 13.1) * 0.35, bendK = 0.35 + fract(h.y * 7.7) * 0.7;
+  float tilt = 0.12 + fract(hk.x * 13.1) * 0.35, bendK = 0.35 + fract(hk.y * 7.7) * 0.7;
   float mid = tilt + bendK * t * 0.5, ang = tilt + bendK * t;
   // (past the first ring a blade stands for as many of the first ring's, a sheet cut into strands of their width as
   // it's shaded: untapered here, each strand tapered there; drawn whole, the far rings' blades were a lighter, coarser
   // carpet, four times as wide in the second, and its edge a circle round the view as it moved)
   float strands = uCombed * uWider * uWider * uStrandsBy;
-  float w = width * (strands > 1.5 ? 1.0 : 1.0 - pow(t, 2.5));
+  float w = width * (strands > 1.5 || tufted > 0.5 ? 1.0 : 1.0 - pow(t, 2.5));
   vStrands = vec2(strands, h.x);
+  vTufted = tufted;
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
   // the wind: gusts rolling across the meadow and a flutter a blade, bending by the square of t
   float roll = sin(uTime * 1.5 - root.x * 0.21 - root.y * 0.14) * 0.5 + 0.5;
@@ -361,18 +424,56 @@ const VERTEX_BLADE = /* glsl */ `
   vec3 objectNormal = normalize(mix(face, vec3(0.0, 1.0, 0.0), 0.55) + across * side * 0.45);
   vBlade = vec2(t, side);
   // spring greens, a tuft's own, some dry and gold
-  vec3 green = mix(vec3(0.075, 0.2, 0.03), vec3(0.17, 0.32, 0.045), fract(h.y * 3.7));
-  vec3 dry = vec3(0.36, 0.33, 0.1);
+  vec3 green = mix(vec3(0.088, 0.14, 0.027), vec3(0.185, 0.225, 0.043), fract(h.y * 3.7));
+  vec3 dry = vec3(0.34, 0.3, 0.11);
   vBladeColour = mix(green, dry, smoothstep(0.72, 1.0, tuft) * 0.7 + smoothstep(0.75, 0.95, patchy) * 0.25);`;
 
 const FRAGMENT_COLOUR = /* glsl */ `
   float along = vBlade.x, acrossB = abs(vBlade.y);
+  float foldB = vBlade.y, strandShade = 0.5;
 #ifdef COMBED
-  if (vStrands.x > 1.5) {
+  if (vTufted > 0.5) {
+    // (a far ring's sheet is as many tufts side by side as it is blades wide, each drawn as a first ring's: drawn as
+    // strands a blade wide, the grass changed its look where the rings hand over)
+    float tuftsAcross = max(1.0, floor(sqrt(vStrands.x) + 0.5));
+    float tuftAt = (vBlade.y * 0.5 + 0.5) * tuftsAcross;
+    float inTuft = fract(tuftAt) * 2.0 - 1.0;
+    // (no blade thinner than a pixel: thinner, far tufts broke into single pixels that came and went, "pixelated")
+    float pixel = fwidth(vBlade.y) * tuftsAcross * 0.75;
+    float seed = vStrands.y + floor(tuftAt) * 0.37;
+    float nearest = 2.0;
+    float which = 0.0;
+    for (int k = 0; k < ${TUFT}; k++) {
+      float fk = float(k);
+      float r1 = fract((fk + 1.0) * 0.6180340 + seed * 7.13);
+      float r2 = fract((fk + 1.0) * 0.7548777 + seed * 3.71);
+      // its own height (rising through a ring's hand-over by a share of its own); along it; its middle line, out from
+      // the crown and bent its own way; its half width, tapering
+      float tall = mix(0.5, 1.0, r1)
+        * mix(1.0, smoothstep(r2 * ${TUFT_RISE.toFixed(2)}, r2 * ${TUFT_RISE.toFixed(2)} + ${TUFT_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
+      float a = vBlade.x / max(tall, 0.01);
+      float middle = ((fk + 0.5) / ${TUFT}.0 * 2.0 - 1.0) * mix(0.12, 0.72, a) + (r2 - 0.5) * 1.0 * a * a
+        + (fract(r1 * 7.3) - 0.5) * 0.25 * a;
+      float halfWide = max(${TUFT_BLADE.toFixed(3)} * (1.0 - pow(min(a, 1.0), 2.2)), pixel);
+      float off = (inTuft - middle) / max(halfWide, 1e-4);
+      if (a <= 1.0 && abs(off) < abs(nearest)) {
+        nearest = off;
+        which = fk;
+        along = a;
+      }
+    }
+    if (abs(nearest) > 1.0) discard;
+    acrossB = abs(nearest);
+    foldB = nearest;
+    strandShade = fract(sin(which * 7.31 + seed * 41.7) * 9631.17);
+  } else if (vStrands.x > 1.5) {
     // a sheet's strands: which one this is across it, where across it, and its own height (cut short at random)
     float strandAt = (vBlade.y * 0.5 + 0.5) * vStrands.x;
     float strand = floor(strandAt);
-    acrossB = abs(fract(strandAt) * 2.0 - 1.0);
+    float signedB = fract(strandAt) * 2.0 - 1.0;
+    acrossB = abs(signedB);
+    foldB = signedB;
+    strandShade = fract(sin(strand * 7.31 + vStrands.y * 41.7) * 9631.17);
     float tall = 1.0 - ${STRAND_CUT.toFixed(2)} * fract(sin(strand * 12.9898 + vStrands.y * 78.233) * 43758.5453);
     // (all risen before the band's middle, as the blades they take over from go: risen across the whole of it, the
     // band stood thinner and coarser than the grass either side)
@@ -383,10 +484,12 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.3, 1.0, smoothstep(0.0, 0.55, along));
+  vec3 bladeColour = vBladeColour * mix(0.3, 1.0, smoothstep(0.0, 0.6, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.4, 0.36, 0.16), smoothstep(0.85, 1.0, along) * 0.35);
+  // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
+  bladeColour *= mix(1.0, mix(0.86, 1.1, step(0.0, foldB)) * mix(0.8, 1.12, strandShade), step(1.5, uTuft));
   vec4 diffuseColor = vec4(bladeColour, opacity);`;
 
 /** A ring's uniforms, set as it's drawn. */
@@ -397,12 +500,16 @@ interface RingUniforms extends MaskUniforms {
   uCombed: { value: number };
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
+  /** the tiles drawn, each its first cell from the grid's origin: a texel a tile (WebGL) */
+  uTileMap: { value: THREE.DataTexture };
   uFocus: { value: THREE.Vector2 };
   uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
   uByStrand: { value: number };
   /** a sheet's strands times as many as its width says (a cut ring's at a spread: each strand as wide as High's) */
   uStrandsBy: { value: number };
+  /** the thin blades each blade is drawn as, fanning from its root (1: the blade whole) */
+  uTuft: { value: number };
   uTime: { value: number };
 }
 
@@ -418,7 +525,7 @@ function bandOf(band: THREE.Vector4, k: number, share: number): void {
 const rings: RingUniforms[] = [];
 /** every ring's meshes, and the geometries of the one from above (a second of fewer segments, when spread) */
 const ringMeshes: THREE.Mesh[] = [];
-const aboveGeometries: { full?: THREE.InstancedBufferGeometry; spread?: THREE.InstancedBufferGeometry } = {};
+const aboveGeometries: Partial<Record<'full' | 'spread' | 'tufts', THREE.InstancedBufferGeometry>> = {};
 /** how far apart the blades stand against the rings' own cells, each as many times wider (a quality's `grassSpread`) */
 let spread = 1;
 
@@ -427,7 +534,22 @@ type Ring = { cell: number; radius: number; segs: number };
 /** How far apart a ring's blades stand at the spread, the one from above too, its sheets cut into as many more
  *  strands (`strandsBy`) and its blades of one segment. (By the square root alone from above, Low's grass there was
  *  still 6.8 ms of an S25 Edge's 33 ms frame, and from play, "ok but I want 60 fps": Low may look plainer than High.) */
-const spreadOf = (_ring: Ring): number => spread;
+const spreadOf = (_ring: Ring): number => spread * (tuftOf() > 1 ? TUFT_SPREAD : 1);
+
+/** The thin blades a blade is drawn as at the spread: a tuft's where the grass isn't spread, else the blade whole. */
+// (WebGL's alone: WebGPU's nodes draw the blades as they were, `meadowNodes.ts`)
+const tuftOf = (): number => (!WEBGPU && tufts && spread === 1 ? TUFT : 1);
+
+/** whether the level draws the grass as tufts (a quality's `grassTufts`) */
+let tufts = true;
+
+/** The first rings' blades (and the ring's from above, near the ground) drawn as tufts of `TUFT` blades or whole, as
+ *  they were: three times their vertices (over the shoulder on High, 2.1M triangles a frame to 3.6M, 1.6 ms more of
+ *  a desktop's GPU). Counts, uniforms and a geometry: a level switches it live. */
+export function setGrassTufts(on: boolean): void {
+  tufts = on;
+  setGrassSpread(spread);
+}
 
 /** A ring's cells a side a tile, at the spread: its square across in whole tiles (each as wide in metres at any
  *  spread: grown with the cells, the tiles listed past the view's edge shaded 67% of High's vertices from above). */
@@ -439,7 +561,7 @@ function cellsATile(ring: Ring): number {
  *  many more (left as many, each strand was twice as wide, and from above a sheet's dark root a comb: `grassOnLow`'s
  *  pictures); the first rings' blades are never cut, and stay whole. */
 function strandsBy(ring: Ring): number {
-  return ring.cell > RINGS[0].cell ? spreadOf(ring) ** 2 : 1;
+  return ring.cell > RINGS[0].cell || tuftOf() > 1 ? spreadOf(ring) ** 2 : 1;
 }
 
 /** The blades `by` times as far apart, each as many times wider, so they cover the ground as before with a square of
@@ -452,6 +574,7 @@ export function setGrassSpread(by: number): void {
     rings[k].uCell.value = ring.cell * spreadOf(ring);
     rings[k].uS.value = cellsATile(ring);
     rings[k].uStrandsBy.value = strandsBy(ring);
+    rings[k].uTuft.value = tuftOf();
   });
   const above = ringMeshes[RINGS.length];
   if (above) above.geometry = (spread > 1 ? aboveGeometries.spread : aboveGeometries.full)!;
@@ -495,14 +618,25 @@ function eyeOf(camera: THREE.Camera, above: boolean, out: THREE.Vector2): void {
 let fromAbove = false;
 let aboveHeld: boolean | null = null;
 
-/** Each frame: whether the view is from above, so the one ring (`ABOVE_RING`) is drawn in the rings' place. */
-export function meadowFromAbove(on: boolean): void {
+/** Each frame: whether the view is from above, so the one ring (`ABOVE_RING`) is drawn in the rings' place, and
+ *  where the hero stands, the rings' middle in the close views (none: the sight's end on the ground). */
+export function meadowFromAbove(on: boolean, him?: { x: number; z: number }): void {
   fromAbove = on;
+  roundHim = him ? (roundHim ?? new THREE.Vector2()).set(him.x, him.z) : null;
 }
+let roundHim: THREE.Vector2 | null = null;
 
 /** For a harness (tools/lab): the rings drawn as from above or not, whatever the view (null: as the view has them). */
 export function holdMeadowFromAbove(on: boolean | null): void {
   aboveHeld = on;
+}
+
+/** whether a harness has the ring from above drawn as from far up whatever the camera's height, as it was */
+let aboveFarHeld = false;
+
+/** For a harness (tools/lab): the ring from above as from far up, its sheets of strands, at any height. */
+export function holdAboveFar(held: boolean): void {
+  aboveFarHeld = held;
 }
 
 /** For a harness (tools/lab): the far rings' blades cut into strands (or drawn whole, each a wide blade, as they were). */
@@ -522,7 +656,7 @@ export function meadowHandOver(wide: boolean): void {
 /** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass;
  *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
  *  after the shading for the first ring's dense blades too, which never cut). */
-function bladeMaterial(u: RingUniforms, combed: boolean, ring: number): THREE.MeshStandardMaterial {
+function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
   if (WEBGPU) {
     bladeNodes(m, u, combed, {
@@ -541,7 +675,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: number): THREE.Me
       .replace('#include <beginnormal_vertex>', VERTEX_BLADE)
       .replace('#include <begin_vertex>', 'vec3 transformed = bladePos;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nuniform float uTuft;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       .replace('#include <normal_fragment_begin>',
@@ -551,12 +685,75 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: number): THREE.Me
   return m;
 }
 
+/** What hides the grass behind it, whole: a box on the ground, its middle, its turn about y (rad), its half sizes
+ *  and its height (m). A cottage's walls: over the shoulder and through the eyes they never thin. */
+export interface GrassOccluder { x: number; z: number; turn: number; halfW: number; halfD: number; high: number }
+const occluders: (GrassOccluder & { cos: number; sin: number })[] = [];
+/** whether a harness has every tile drawn whatever hides it, as it was */
+let occlusionHeld = false;
+
+/** The boxes no grass is drawn behind (from play, facing a cottage's wall: "we definitely should not render grass
+ *  behind cottages"): a tile wholly hidden by one from the camera is never listed. */
+export function setMeadowOccluders(list: readonly GrassOccluder[]): void {
+  occluders.length = 0;
+  for (const o of list) occluders.push({ ...o, cos: Math.cos(o.turn), sin: Math.sin(o.turn) });
+}
+
+/** For a harness (tools/lab): the tiles behind an occluder drawn all the same. */
+export function holdMeadowOcclusion(held: boolean): void {
+  occlusionHeld = held;
+}
+
+/** Whether the line from the eye (`ex`, `ey`, `ez`) to a point passes through `o`'s box, both in its own frame. */
+function throughBox(o: GrassOccluder, ex: number, ey: number, ez: number, px: number, py: number, pz: number): boolean {
+  let from = 0;
+  let to = 1;
+  for (let axis = 0; axis < 3; axis++) {
+    const start = axis === 0 ? ex : axis === 1 ? ey : ez;
+    const way = (axis === 0 ? px : axis === 1 ? py : pz) - start;
+    const low = axis === 0 ? -o.halfW : axis === 1 ? 0 : -o.halfD;
+    const top = axis === 0 ? o.halfW : axis === 1 ? o.high : o.halfD;
+    if (Math.abs(way) < 1e-9) {
+      if (start < low || start > top) return false;
+      continue;
+    }
+    const a = (low - start) / way;
+    const b = (top - start) / way;
+    from = Math.max(from, Math.min(a, b));
+    to = Math.min(to, Math.max(a, b));
+    if (from > to) return false;
+  }
+  return true;
+}
+
+/** Whether `box` is wholly hidden from `eye` by one occluder: the lines to its eight corners all pass through it. */
+function hiddenBehind(box: THREE.Box3, eye: THREE.Vector3): boolean {
+  if (occlusionHeld) return false;
+  for (const o of occluders) {
+    const ex = (eye.x - o.x) * o.cos - (eye.z - o.z) * o.sin;
+    const ez = (eye.x - o.x) * o.sin + (eye.z - o.z) * o.cos;
+    let hidden = true;
+    for (let corner = 0; corner < 8 && hidden; corner++) {
+      const x = (corner & 1 ? box.max.x : box.min.x) - o.x;
+      const z = (corner & 2 ? box.max.z : box.min.z) - o.z;
+      const y = corner & 4 ? box.max.y : box.min.y;
+      hidden = throughBox(o, ex, eye.y, ez, x * o.cos - z * o.sin, y, x * o.sin + z * o.cos);
+    }
+    if (hidden) return true;
+  }
+  return false;
+}
+
 const _forward = new THREE.Vector3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _box = new THREE.Box3();
 
 /** Where the camera looks on the ground: along its sight onto the floor, at most `FOCUS_MOST` m before it, and from
  *  a sight near level as far as one `FOCUS_STEEP` down would meet it (the camera's height over that). */
 export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2 {
+  // (in the close views, the hero: by the sight's end on the ground, the rings went round him with the camera, and
+  // the grass changed where they hand over, from play "grass visibly changes when I rotate the camera around the
+  // character")
+  if (roundHim && !(aboveHeld ?? fromAbove)) return out.copy(roundHim);
   camera.getWorldDirection(_forward);
   const p = camera.position;
   const along = Math.min(FOCUS_MOST, Math.max(p.y, 0) / Math.max(-_forward.y, FOCUS_STEEP));
@@ -590,13 +787,15 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uWider: { value: ring.cell / RINGS[0].cell },
       uCombed: { value: 1 },
       uS: { value: cellsATile(ring) },
-      uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
+      uTiles: { value: Array.from({ length: WEBGPU ? TILES * TILES : 1 }, () => new THREE.Vector2()) },
+      uTileMap: { value: new THREE.DataTexture(new Float32Array(TILES * TILES * 2), TILES * TILES, 1, THREE.RGFormat, THREE.FloatType) },
       uFocus: { value: new THREE.Vector2() },
       uEye: { value: new THREE.Vector2() },
       // (handed over from the ring inside; the first's inner edge never reached)
       uBand: { value: new THREE.Vector4() },
       uByStrand: { value: 1 },
       uStrandsBy: { value: strandsBy(ring) },
+      uTuft: { value: tuftOf() },
       uTime: time,
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
@@ -604,15 +803,20 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
     else bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
-    const full = bladeGeometry(ring.segs);
+    // (a sheet of strands is a card too, where its blade had two segments or more: its strands are cut as it's shaded)
+    const full = ring.cell > RINGS[0].cell && ring.segs >= 2 ? cardGeometry() : bladeGeometry(ring.segs);
     if (above) {
       aboveGeometries.full = full;
       aboveGeometries.spread = bladeGeometry(ABOVE_SPREAD_SEGS);
+      aboveGeometries.tufts = cardGeometry();
     }
-    const mesh = new THREE.Mesh(above && spread > 1 ? aboveGeometries.spread! : full,
-      bladeMaterial(u, ring.cell > RINGS[0].cell, k));
-    ringMeshes.push(mesh);
-    mesh.name = `meadow grass ${k + 1}`;
+    // (the first rings' blades in two meshes, one drawn: whole in a program with no discard where the grass is spread,
+    // which holds the depth test back to after the shading, and as tufts in the strands' where it isn't; neither
+    // hidden, as a hidden mesh compiles nothing, and a level's switch must compile none)
+    const near = !above && ring.cell === RINGS[0].cell;
+    const meshOf = (geometry: THREE.InstancedBufferGeometry, combed: boolean, tufted: boolean | null): THREE.Mesh => {
+    const mesh = new THREE.Mesh(geometry, bladeMaterial(u, combed, `${k}${combed ? '-combed' : ''}`));
+    mesh.name = `meadow grass ${k + 1}${tufted ? ' tufts' : ''}`;
     asGrass(mesh);
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
@@ -620,12 +824,29 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     mesh.onBeforeRender = (_renderer, _scene, camera) => {
       const geo = mesh.geometry as THREE.InstancedBufferGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
-      if ((aboveHeld ?? fromAbove) !== above) {
+      // (from above, near the ground: the first ring's blades in the far ring's tiles; uniforms alone)
+      const near = above && spread === 1 && !aboveFarHeld && camera.position.y < ABOVE_NEAR.under;
+      // (a mesh for the tufts and one for the rest, as a geometry swapped here is too late for this draw: three has
+      // taken the mesh's geometry by now, and the tiles listed for the new one were drawn by the old one's count)
+      const asTufts = tuftOf() > 1 && (!above || near);
+      if ((aboveHeld ?? fromAbove) !== above || (tufted !== null && tufted !== asTufts)) {
         geo.instanceCount = 0;
         return;
       }
       const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
       eyeOf(camera, above, u.uEye.value);
+      const reach = near ? ABOVE_NEAR.radius : ring.radius;
+      if (above) {
+        const ringCell = near ? ABOVE_NEAR.cell : ring.cell;
+        // (near the ground a card a cell, one tuft each: at the rings' spread the ground showed between them, from
+        // play "not dense enough")
+        const dense = false;
+        u.uCell.value = ringCell * (dense ? spread : spreadOf(ring));
+        u.uStrandsBy.value = dense ? 1 : strandsBy(ring);
+        u.uS.value = Math.ceil((Math.ceil((reach * 2) / u.uCell.value) + 1) / TILES);
+        u.uWider.value = ringCell / RINGS[0].cell;
+        u.uBand.value.set(-2, -1, reach - AT_ONCE, reach);
+      }
       const cell = u.uCell.value;
       const S = u.uS.value;
       const N = S * TILES;
@@ -634,26 +855,59 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       _frustum.setFromProjectionMatrix(_viewProj, camera.coordinateSystem);
       const w = S * cell;
+      const map = u.uTileMap.value.image.data as Float32Array;
       let listed = 0;
-      for (let ty = 0; ty < TILES; ty++) {
-        for (let tx = 0; tx < TILES; tx++) {
-          const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;
-          const near = Math.hypot(Math.max(x0 - focus.x, 0, focus.x - x0 - w), Math.max(z0 - focus.y, 0, focus.y - z0 - w));
-          if (near >= ring.radius) continue;
-          const far = Math.hypot(Math.max(focus.x - x0, x0 + w - focus.x), Math.max(focus.y - z0, z0 + w - focus.y));
-          if (far <= u.uBand.value.x) continue;
-          // (a blade leans and bends up to half a metre off its cell)
-          _box.min.set(x0 - 0.5, -0.1, z0 - 0.5);
-          _box.max.set(x0 + w + 0.5, 0.8, z0 + w + 0.5);
-          if (!_frustum.intersectsBox(_box)) continue;
-          // (from inside the hall of heroes, only what its doorway shows)
-          if (hiddenByHallDoor(_box)) continue;
-          if (anyGrass(x0, z0, x0 + w, z0 + w)) u.uTiles.value[listed++].set(tx * S, ty * S);
+      // whether a square of `tiles` tiles a side from tile (tx, ty) may show grass: in the ring's band and the view
+      // (its box left in `_box`)
+      const mayShow = (tx: number, ty: number, tiles: number): boolean => {
+        const side = w * tiles;
+        const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;
+        const nearest = Math.hypot(Math.max(x0 - focus.x, 0, focus.x - x0 - side), Math.max(z0 - focus.y, 0, focus.y - z0 - side));
+        if (nearest - ROOT_STRAYS >= reach) return false;
+        const far = Math.hypot(Math.max(focus.x - x0, x0 + side - focus.x), Math.max(focus.y - z0, z0 + side - focus.y));
+        if (far + ROOT_STRAYS <= u.uBand.value.x) return false;
+        // (and leans and bends up to half a metre past its root)
+        const spare = ROOT_STRAYS + 0.5;
+        _box.min.set(x0 - spare, -0.1, z0 - spare);
+        _box.max.set(x0 + side + spare, BLADES_TOP, z0 + side + spare);
+        return _frustum.intersectsBox(_box);
+      };
+      const block = TILES > TILE_BLOCK * 2 ? TILE_BLOCK : 1;
+      for (let by = 0; by < TILES; by += block) {
+        for (let bx = 0; bx < TILES; bx += block) {
+          if (block > 1 && !mayShow(bx, by, block)) continue;
+          for (let ty = by; ty < by + block; ty++) {
+            for (let tx = bx; tx < bx + block; tx++) {
+              if (!mayShow(tx, ty, 1)) continue;
+              // (from inside the hall of heroes, only what its doorway shows)
+              if (hiddenByHallDoor(_box)) continue;
+              // (nor behind a cottage: over the shoulder and through the eyes, where what's built never thins)
+              if (!above && hiddenBehind(_box, camera.position)) continue;
+              const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;
+              if (!anyGrass(x0, z0, x0 + w, z0 + w)) continue;
+              if (WEBGPU) u.uTiles.value[listed].set(tx * S, ty * S);
+              map[listed * 2] = tx * S;
+              map[listed * 2 + 1] = ty * S;
+              listed++;
+            }
+          }
         }
       }
+      u.uTileMap.value.needsUpdate = true;
       geo.instanceCount = listed * S * S;
     };
     group.add(mesh);
+    return mesh;
+    };
+    if (near) {
+      ringMeshes.push(meshOf(full, false, false));
+      meshOf(cardGeometry(), true, true);
+    } else if (above) {
+      ringMeshes.push(meshOf(spread > 1 ? aboveGeometries.spread! : full, true, false));
+      meshOf(aboveGeometries.tufts!, true, true);
+    } else {
+      ringMeshes.push(meshOf(full, true, null));
+    }
   });
   return group;
 }
@@ -682,7 +936,19 @@ export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: M
         }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         float swardV = swardN(vMeadowXZ * 0.15) * 0.6 + swardN(vMeadowXZ * 0.9 + 4.0) * 0.4;
-        vec3 sward = mix(vec3(0.05, 0.11, 0.025), vec3(0.11, 0.17, 0.04), swardV) * (0.8 + diffuseColor.g * 0.6);
+        vec3 sward = mix(vec3(0.05, 0.085, 0.022), vec3(0.11, 0.13, 0.034), swardV) * (0.8 + diffuseColor.g * 0.6);
+        // (short shoots and thatch between the tufts, as solstice's undergrowth: streaks a blade long, three ways
+        // round, between the sward's dark and the blades' green; faded where a pixel is wider than a shoot)
+        float shoots = 0.0;
+        for (int way = 0; way < 3; way++) {
+          float turnS = float(way) * 1.047 + 0.4;
+          vec2 across = vec2(cos(turnS), sin(turnS));
+          vec2 st = vec2(dot(vMeadowXZ, across), dot(vMeadowXZ, vec2(-across.y, across.x)));
+          shoots += smoothstep(0.55, 0.8, swardN(st * vec2(140.0, 14.0) + float(way) * 31.7));
+        }
+        float fine = 1.0 - smoothstep(0.015, 0.05, fwidth(vMeadowXZ.x) + fwidth(vMeadowXZ.y));
+        vec3 shootGreen = mix(vec3(0.085, 0.13, 0.026), vec3(0.17, 0.2, 0.04), swardN(vMeadowXZ * 2.3 + 9.0));
+        sward = mix(mix(sward, shootGreen, 0.45), mix(sward * 0.75, shootGreen, min(shoots, 1.0)), fine);
         diffuseColor.rgb = mix(diffuseColor.rgb, sward, smoothstep(0.1, 0.7, meadowAt(vMeadowXZ)));`);
   };
   m.customProgramCacheKey = () => 'meadow-ground';

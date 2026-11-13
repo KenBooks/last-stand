@@ -35,7 +35,7 @@ import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
-import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
+import { buildMeadow, meadowGround, MeadowMask, setMeadowOccluders, type MaskUniforms } from './meadow';
 import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
   gobletGeometry, keyholeGeometry, lockPlate, plateGeometry, quiltedLining, type LaidCoin,
@@ -181,6 +181,9 @@ export interface Village extends Biome {
   hallCutaway: readonly THREE.Object3D[];
   /** the meadow's grass (left undrawn from inside the hall, its doorway out of sight: game/village.ts) */
   meadow: THREE.Object3D;
+  /** what stands loose in the hall's room, wholly within its walls (left undrawn from outside it in the close views,
+   *  its doorway out of sight: game/village.ts) */
+  hallRoom: readonly THREE.Object3D[];
   /** the lights on the hall's dais (its first two, lit whenever the hero is inside) and its torches' flames (the
    *  nearest lit), by the pooled lights */
   hallTorches: readonly THREE.Vector3[];
@@ -682,13 +685,33 @@ export function buildVillage(scene: THREE.Group): Village {
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
   const meadow = buildMeadow(mask, maskTexture, updaters);
+  // (no grass drawn behind a cottage's walls: a hair inside them, and under their plate, the roof left out)
+  // (nor behind the terrace's block from below it, nor the hall on it: its door shows its room, its panes nothing)
+  const hallBack = HALL.wall - (HALL.half - HALL.inHalf);
+  setMeadowOccluders([
+    ...COTTAGES.map((c) => ({
+      x: c.x, z: c.z, turn: c.facing,
+      halfW: (COTTAGE.w / 2 - 0.1) * c.size, halfD: (COTTAGE.d / 2 - 0.1) * c.size, high: (COTTAGE.h - 0.1) * c.size,
+    })),
+    {
+      x: TERRACE.x, z: (TERRACE.front + TERRACE.back) / 2, turn: 0,
+      halfW: TERRACE.half - 0.1, halfD: (TERRACE.front - TERRACE.back) / 2 - 0.1, high: TERRACE.high - 0.05,
+    },
+    {
+      x: TERRACE.x, z: (HALL.door + hallBack) / 2, turn: 0,
+      halfW: HALL.half - 0.1, halfD: (HALL.door - hallBack) / 2 - 0.1, high: TERRACE.high + HALL.wallHigh - 0.3,
+    },
+  ]);
   scene.add(meadow);
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
   stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
   // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
   // hidden over the hero inside, are kept out of the merge)
   const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
-  for (const part of hall.cutaway) part.traverse((object) => { object.userData.noMerge = true; });
+  for (const part of hall.cutaway) {
+    part.traverse((object) => { object.userData.noMerge = true; });
+    part.userData.mergeWithin = true;
+  }
   const lid = buildChest(scene, M, obstacles);
   // (drawn over the sun's kept map each frame: each frame of its swing, redrawn whole, was 8 million triangles and 8 to 12
   // ms of the page, and the first turn of the view by the chest fell to 70 a second)
@@ -753,6 +776,7 @@ export function buildVillage(scene: THREE.Group): Village {
     sight: sightOfThePlace(),
     hallCutaway: hall.cutaway,
     meadow,
+    hallRoom: looseInHall(scene, hall.cutaway),
     hallTorches: [...hall.dais, ...hall.torches],
     porchTorches: hall.porch,
     stillLights: castingLights(scene),
@@ -2087,6 +2111,37 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
 }
 
 // --- the palisade, the cottages ------------------------------------------------------------------------
+
+/** What stands loose under `root` wholly within the hall's room, but `kept` (its roof and walls) and what holds a
+ *  light (hidden, its light would go with it, and every lit program compile again): a group not wholly within is
+ *  gone into, two deep. What's merged with the village's still meshes is drawn with them whatever. */
+function looseInHall(root: THREE.Object3D, kept: readonly THREE.Object3D[]): THREE.Object3D[] {
+  const found: THREE.Object3D[] = [];
+  const box = new THREE.Box3();
+  const X = TERRACE.x;
+  const holdsLight = (part: THREE.Object3D): boolean => {
+    let holds = false;
+    part.traverse((under) => { holds = holds || (under as THREE.Light).isLight === true; });
+    return holds;
+  };
+  const visit = (group: THREE.Object3D, deep: number): void => {
+    for (const child of group.children) {
+      if (kept.includes(child) || child.name.startsWith('village still')) continue;
+      box.setFromObject(child);
+      if (box.isEmpty()) continue;
+      const within = box.min.x > X - HALL.inHalf - 0.05 && box.max.x < X + HALL.inHalf + 0.05
+        && box.min.z > HALL.wall - 0.05 && box.max.z < HALL.inFront + 0.05 && box.min.y > TERRACE.high - 0.3;
+      if (within) {
+        if (!holdsLight(child)) found.push(child);
+      } else if (deep < 2 && !(child as THREE.Mesh).isMesh) {
+        visit(child, deep + 1);
+      }
+    }
+  };
+  root.updateMatrixWorld(true);
+  visit(root, 0);
+  return found;
+}
 
 /** the squares the palisade's logs are culled by (m) */
 const PALISADE_CELL = 8;

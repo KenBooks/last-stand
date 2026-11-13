@@ -47,15 +47,19 @@ export function wallingAligned(canary: boolean): LightsChecked {
   const front = G.arena.village.hallCutaway[1];
   front.updateMatrixWorld(true);
   const meshes = wallingOf(front);
-  const offsets = meshes.flatMap((m, i) => offsetsOf(m, canary && i === 0 ? CANARY_SHIFT : 0));
+  // (the blocks are drawn merged, one mesh: a block is the eight corners of its two faces along z, the first's
+  // front face shifted for the canary)
+  const offsets = meshes.flatMap((m) => offsetsOf(m, 0));
+  if (canary) for (const corner of offsets.slice(0, 4)) corner.u += CANARY_SHIFT;
+  const blocks = Math.round(offsets.length / 8);
   const first = offsets[0];
   let most = 0;
   for (const o of offsets) most = Math.max(most, roundApart(o.u, first.u), roundApart(o.v, first.v));
   const apart = (most * 100).toFixed(1);
-  const line = `hall's front wall: ${meshes.length} blocks of walling, their courses apart at most ${apart}% of a tile`
+  const line = `hall's front wall: ${blocks} blocks of walling, their courses apart at most ${apart}% of a tile`
     + ` (at most ${MOST_OFF * 100}%)`;
   const off = most > MOST_OFF;
-  if (meshes.length < 3) {
+  if (blocks < 3) {
     return { lines: [line], problems: [`${line}: not the wall's blocks`], caught: null, moments: [] };
   }
   if (canary) return { lines: [line], problems: [], caught: off, moments: [] };

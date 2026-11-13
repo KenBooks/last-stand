@@ -360,7 +360,7 @@ function hallInside(dt: number): void {
   // shows the room and a wall as a wall, from play "still seeing through walls from inside"; on the portico a hole round
   // him showed him alone, "need to show around him more")
   const view = viewMode();
-  meadowFromAbove(view === 'top');
+  meadowFromAbove(view === 'top', lobby ? p.pos : undefined);
   const under = lobby && p.obj.position.y > TERRACE.high - 0.1 && Math.abs(p.pos.x - TERRACE.x) < HALL.half
     && p.pos.z < HALL.door + PORTICO_DEEP;
   // (and wherever the hall stands between the camera and him: from behind it, a hole his own size showed him alone in
@@ -428,16 +428,70 @@ function hallInside(dt: number): void {
   // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
+  // (nor what stands loose in its room from outside it, in the close views with its doorway out of sight: its
+  // walls hide the room, whose torches, plinths, banners and columns were drawn all the same)
+  const roomSeen = !lobby || view === 'top' || inside || cameraInHall() || (doorwayOnScreen() && roomThroughDoor());
+  if (roomSeen !== roomShown) {
+    for (const part of village.hallRoom) part.visible = roomSeen;
+    roomShown = roomSeen;
+  }
   const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
   // (from above, the camera sees past the walls: while he can see a plinth, from play, "pedestals are empty from this
   // position, they should display heroes if character can see them from their cone of view")
-  const seen = inside || (byDoor && (view === 'top' ? aPlinthSeen() : doorwayOnScreen()));
+  const seen = inside || (byDoor && (view === 'top' ? aPlinthSeen() : doorwayOnScreen() && aPlinthThroughDoor()));
   standHeroes(lobby && seen && isWarm('heroes'), dt);
 }
+
+/** whether the hall's room's loose parts are shown (`hallInside`) */
+let roomShown = true;
 
 /** How much of the hall's floor just past its door he sees, by the rays round him (0 to 1). */
 function seesThroughDoor(): number {
   return Math.max(...DOOR_CONE.floorIn.map((inside) => seenShareAt(TERRACE.x, HALL.inFront - inside)));
+}
+
+/** the heights over the dais a hero on a plinth is sighted at (m), and how much wider and taller than the doorway
+ *  the sight may pass (m: the camera's matrices are the last frame's) */
+const PLINTH_SIGHTS = [0.4, 1.2, 2.1];
+const DOOR_SPARE = 0.4;
+
+/**
+ * Whether the camera sees a hero on any plinth through the hall's doorway, in the close views: the sight to him
+ * passes through the door's opening, and over the terrace's edge from below it. By the doorway on screen alone, the
+ * two heroes stood (270k triangles on High, each posed in turn) whenever he was within 12 m with the door's place in
+ * the frame, behind the terrace's wall or the hall's own (from play, 1.28M triangles facing the terrace's wall).
+ */
+function aPlinthThroughDoor(): boolean {
+  // (from beside or behind the hall, only with the camera within its walls)
+  if (G.camera.position.z <= HALL.door) return cameraInHall();
+  return HALL.plinths.some((across) => PLINTH_SIGHTS.some((up) =>
+    throughDoor(TERRACE.x + across, groundHeight(TERRACE.x + across, HALL.plinthZ) + up, HALL.plinthZ)));
+}
+
+/** Whether the camera, before the hall's front, sees the point (x, y, z) of its room through the doorway: the sight
+ *  crosses the door's plane within its opening, and passes over the terrace's edge from below it. */
+function throughDoor(x: number, y: number, z: number): boolean {
+  const eye = G.camera.position, y0 = TERRACE.high;
+  const atDoor = (HALL.door - eye.z) / (z - eye.z);
+  const doorX = eye.x + (x - eye.x) * atDoor, doorY = eye.y + (y - eye.y) * atDoor;
+  if (Math.abs(doorX - TERRACE.x) > HALL.doorHalf + DOOR_SPARE) return false;
+  if (doorY < y0 - DOOR_SPARE || doorY > y0 + HALL.doorHigh + DOOR_SPARE) return false;
+  if (eye.z <= TERRACE.front || eye.y >= y0) return true;
+  const atEdge = (TERRACE.front - eye.z) / (z - eye.z);
+  return eye.y + (y - eye.y) * atEdge > y0 - DOOR_SPARE;
+}
+
+/** the room's places a sight through the doorway is tried to: across it, along it, up it (m) */
+const ROOM_ACROSS = [-0.9, -0.45, 0, 0.45, 0.9];
+const ROOM_ALONG = [0.03, 0.2, 0.5, 0.97];
+const ROOM_UP = [0.2, 2, 4.5];
+
+/** Whether the camera sees into the hall's room through its doorway from before its front (from beside or behind
+ *  it, never: its walls and panes show nothing). */
+function roomThroughDoor(): boolean {
+  if (G.camera.position.z <= HALL.door) return false;
+  return ROOM_ACROSS.some((across) => ROOM_ALONG.some((along) => ROOM_UP.some((up) => throughDoor(
+    TERRACE.x + across * HALL.inHalf, TERRACE.high + up, HALL.inFront + (HALL.wall - HALL.inFront) * along))));
 }
 
 /** Whether he sees any plinth of the hall's, by the rays round him. */

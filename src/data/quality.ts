@@ -28,12 +28,16 @@ export interface QualityPreset {
    *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame; Very low's four times, a sixteenth: a laptop's
    *  integrated GPU drew 5 frames a second over the shoulder, the grass 296k of its 534k triangles) */
   grassSpread: number;
+  /** whether the grass's near blades are tufts of thin blades, each its own way (`setGrassTufts` in world/meadow.ts):
+   *  three times their vertices, High's alone */
+  grassTufts: boolean;
   /** the share of the village's lamps' reach, and whether they read the shadows' map of what stands round them
    *  (`setLampQuality` in core/lamps.ts) */
   lampReach: number;
   lampShadows: boolean;
   /** whether the village draws what moves into its kept shadow maps only on frames it moved
-   *  (`world/shadowsOnMove.ts`) */
+   *  (`world/shadowsOnMove.ts`): every level's now (a hero on High is 134k triangles a shadow pass, drawn again each
+   *  frame he stood still: from play, 1.28M triangles facing a wall, "our users are really struggling") */
   shadowsOnMove: boolean;
   /** the rounds a skirt's cloth is draped over the limbs a frame (`setDrapeRounds` in entities/models/armor.ts) */
   drapeRounds: number;
@@ -61,12 +65,12 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1 },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1 },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1 },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1 },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1 },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
