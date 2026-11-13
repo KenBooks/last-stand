@@ -221,6 +221,48 @@ export const HERO_HEADS = {
 /** A head's hair (`buildHead`'s options). */
 export interface HeadStyle { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean }
 
+// --- the hair's cards left off (Very low) ----------------------------------------------------------------------------
+
+/** Whether the hair's cards are drawn (`setHairCards`, the quality's `hairCards`): each is cut out of its strands'
+ *  texture, two-sided and laid over the others, what a phone's tiled GPU pays most for a pixel of a hero. */
+let cardsShown = true;
+
+/** A head's card meshes (locks, crop, beard's tufts) and its cap, whose colour stands in for the hair they'd show. */
+interface HairCards { cards: THREE.Mesh[]; cap: THREE.MeshStandardMaterial | null; under: THREE.Color; bare: THREE.Color }
+
+/** every head built, held weakly: a hero let go of is forgotten (each holds its own on its group, `userData`) */
+const hairHeads = new Set<WeakRef<HairCards>>();
+
+const hairShown = (m: THREE.Mesh): boolean => m.userData.hairShown ?? true;
+
+/** the bare cap's colour, of the cards' (`hk` times the hair's): their strands' texture shows it darker than itself */
+const BARE_CAP = 0.8;
+
+function showCards(h: HairCards): void {
+  for (const m of h.cards) m.visible = hairShown(m) && cardsShown;
+  // (a colour, a uniform's value: no program changes)
+  h.cap?.color.copy(cardsShown ? h.under : h.bare);
+}
+
+/** The hair's cards drawn or left off on every head, live: hidden meshes and a colour, so no program is made (every
+ *  hero's cards are compiled at load anyway, shown by the warm-up's `heroAllWorn`). */
+export function setHairCards(on: boolean): void {
+  cardsShown = on;
+  for (const ref of hairHeads) {
+    const h = ref.deref();
+    if (h) showCards(h);
+    else hairHeads.delete(ref);
+  }
+}
+
+/** Shows or hides a head's hair (under a helmet): a card stays hidden while the quality leaves the cards off. */
+export function showHair(meshes: readonly THREE.Mesh[], on: boolean): void {
+  for (const m of meshes) {
+    m.userData.hairShown = on;
+    m.visible = on && (!m.userData.hairCard || cardsShown);
+  }
+}
+
 /** A head's geometry: the skin, an eye (both share it), the lashes (none where the eyes are shaded), each ear (the
  *  left's first), and with hair its cap, the crop's tufts, the locks; and a full beard's volume and tufts. */
 export interface HeadShapes {
@@ -509,6 +551,19 @@ export function* headSteps(
   }
   // (named, so a probe or a tool can find them)
   for (const m of hair) m.name = 'hair';
+  // (the cards left off at Very low, `setHairCards`: the cap alone then, in about the hair's own colour as its strands
+  // show it, not the shadow between them)
+  const cardMeshes = [...hair, ...beards, ...(crop ? [crop] : [])].filter((m) => m.material === cards || (m.material as THREE.Material).alphaTest > 0);
+  for (const m of cardMeshes) m.userData.hairCard = true;
+  const capOf = hair.find((m) => !m.userData.hairCard)?.material as THREE.MeshStandardMaterial | undefined;
+  const bareK = hk * BARE_CAP;
+  const hairCards: HairCards = {
+    cards: cardMeshes, cap: capOf ?? null, under: capOf?.color.clone() ?? new THREE.Color(),
+    bare: new THREE.Color().setRGB(L.hair[0] * bareK, L.hair[1] * bareK, L.hair[2] * bareK, THREE.SRGBColorSpace),
+  };
+  head.userData.hairCards = hairCards;
+  hairHeads.add(new WeakRef(hairCards));
+  showCards(hairCards);
   // (each height's depth found once: stepped in through the field 0.25 mm at a time, a helmet's nasal asked it at every
   // point of its plate, 40,000 evaluations of the field a build)
   const depths = new Map<number, number>();

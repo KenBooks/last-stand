@@ -13,7 +13,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, grou
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCutSteps, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, showHair, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
@@ -1209,7 +1209,7 @@ export function* rangerSteps(): ModelSteps {
     // (the coat, its hem and the hat's felt: his green)
     dye: new Dye('green').cloth(coat, coatHem, felt),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
-    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; glows.set(gear); },
+    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; showHair(head.hair.slice(1), !gear.helm); glows.set(gear); },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },
   };
 }

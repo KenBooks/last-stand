@@ -17,7 +17,7 @@ import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, showHair } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
@@ -1133,7 +1133,7 @@ export function* warriorSteps(): ModelSteps {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    helm.visible = gear.helm; for (const m of head.hair) m.visible = !gear.helm;
+    helm.visible = gear.helm; showHair(head.hair, !gear.helm);
     for (const o of harness) o.visible = gear.chest;
     gloved = gear.hands;
     for (const o of gloves) o.visible = gloved;

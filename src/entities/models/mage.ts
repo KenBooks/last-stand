@@ -10,7 +10,7 @@ import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/e
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, showHair } from './head';
 import { EYE } from './face';
 import { buildHand, poseHand, strainHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
@@ -1459,7 +1459,7 @@ export function* mageSteps(): ModelSteps {
       hat.visible = gear.helm;
       // (the face in the hood's shade: lit as bare, it sat pasted into the opening)
       head.shade(gear.helm ? HOOD_SHADE : 0);
-      for (const m of [...head.hair, ...(head.crop ? [head.crop] : [])]) m.visible = !gear.helm;
+      showHair([...head.hair, ...(head.crop ? [head.crop] : [])], !gear.helm);
       // the robe or the tunic: the bell sleeves (cloth, put back on the arms when the robe is), the skirts
       if (gear.chest !== robed) {
         robed = gear.chest;

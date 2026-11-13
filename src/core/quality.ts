@@ -19,6 +19,7 @@ import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setGrassSpread, setGrassTufts } from '../world/meadow';
 import { setDrapeRounds } from '../entities/models/armor';
+import { setHairCards } from '../entities/models/head';
 import { setLampQuality } from './lamps';
 import { setShadowsOnMove } from '../world/shadowsOnMove';
 import { setHdrAllowed } from './hdr';
@@ -219,6 +220,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setSunShadowStill(p.stillSunShadow);
   setClutterShare(p.clutter);
   setLeafShare(p.leaves);
+  setHairCards(p.hairCards);
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);
