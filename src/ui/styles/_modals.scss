@@ -160,6 +160,8 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
 .opt-level output { width: 40px; text-align: right; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
 .hour-row .opt-level { width: 100%; }
 .hour-row .opt-level output { width: 72px; }
+/* the build and its status in one part of the box, a line each */
+.pb-build { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #pause .build-info { color: #7d7466; font-size: 12px; text-align: center; user-select: text; }
 // whether this is the newest build (ui/buildStatus.ts): quiet when it is, gold when a newer one is out
 #pause .build-status {
@@ -184,6 +186,9 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
   .pause-box .controls-help.diagrams { zoom: .6; gap: 8px; }
   .pb-opts .opt-row { margin: 1px 0 5px; gap: 4px; }
   .pb-top .btn { padding-top: 7px; padding-bottom: 7px; }
+  /* the build's status beside the build: a line of its own, it pushed the pages' cell 10 px under the box's foot on a
+     phone held sideways, and the Controls and Beta tabs scrolled (lab ui pause) */
+  .pb-build { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0 12px; }
 }
 /* narrow: the settings in one column */
 @media (max-width: 720px) {

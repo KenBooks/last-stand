@@ -203,6 +203,9 @@ const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.07, -0.16, 0.14), tipped: 
 const LANCE_SLIDE = 0.2;
 /** how long he takes to sink into the lance's brace once the portal is drawn (s) */
 const BRACE_TIME = 0.35;
+/** how long the free arm takes to drive its palm into the portal from where drawing it left the arm gathered (s): a
+ *  thrust, but not one frame's (taken at once, the hand went 21 cm and the elbow 12 in a frame, `lab hall`) */
+const THRUST_TIME = 0.1;
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75];
 
@@ -988,6 +991,10 @@ export function* mageSteps(): ModelSteps {
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
+  /** the free arm as drawing the portal last left it (its shoulder, elbow and wrist), and whether this channel drew
+   *  one: the thrust is eased in from it (`THRUST_TIME`) */
+  const gathered = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  let wasGathered = false;
   /** how far the staff is slid up through the fist, and how far it's wanted */
   let staffSlide = 0, staffSlideWant = 0;
   /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
@@ -1073,7 +1080,7 @@ export function* mageSteps(): ModelSteps {
     if (began && raw.name === 'point') recoil = 1;
     recoil = Math.max(0, recoil - dt * 6);
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
-    if (!a || a.name !== 'channel') openedAt = -1;
+    if (!a || a.name !== 'channel') { openedAt = -1; wasGathered = false; }
     // staff shots: the staff swings down level with the target and stays there while the shots keep
     // coming (a held button, or clicks), so each bolt leaves the crystal at a foe's chest; it rises
     // once they stop for a while. A spring, so it starts and stops moving gently (an ease that starts
@@ -1143,6 +1150,8 @@ export function* mageSteps(): ModelSteps {
           j.chest.rotation.y += -0.15 * up - 0.1 * gather; j.spine.rotation.x += 0.08 * up;
           j.neck.rotation.x += 0.1 * up;
           j.shoulderR.rotation.x += -0.5 * up; j.elbowR.rotation.x += -0.2 * up;
+          gathered[0].copy(j.shoulderL.quaternion); gathered[1].copy(j.elbowL.quaternion); gathered[2].copy(j.handL.quaternion);
+          wasGathered = true;
         } else {
           // the thrust: palm driven into the portal, a recoil as the lance bursts out, then braced
           if (openedAt < 0) openedAt = time;
@@ -1187,6 +1196,13 @@ export function* mageSteps(): ModelSteps {
             // metres, the model's scale left the arm 8% short of the reach asked, the elbow still bent 48 degrees)
             root.getWorldDirection(_fw).applyQuaternion(j.chest.getWorldQuaternion(_vr).invert());
             reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp.copy(j.shoulderL.position).addScaledVector(_fw, reach), POLE_L);
+          }
+          // (the thrust eased in from the arm as it was gathered: none for a channel met already open, a partner's)
+          if (wasGathered && ft < THRUST_TIME) {
+            const th0 = ft / THRUST_TIME, th = th0 * th0 * (3 - 2 * th0);
+            j.shoulderL.quaternion.copy(_vr.copy(gathered[0]).slerp(j.shoulderL.quaternion, th));
+            j.elbowL.quaternion.copy(_vr.copy(gathered[1]).slerp(j.elbowL.quaternion, th));
+            j.handL.quaternion.copy(_vr.copy(gathered[2]).slerp(j.handL.quaternion, th));
           }
         }
       } else if (a.name === 'drink' && !fp) {

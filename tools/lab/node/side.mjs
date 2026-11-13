@@ -68,6 +68,21 @@ export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false
 
 /** the cookie that keeps the village beta's choice (`src/core/beta.ts`) */
 const VILLAGE_COOKIE = 'last-stand-beta-village';
+/** production's saves service asked what it has on (src/loot/cloudApi.ts `serviceHealth`: the save slots screen and
+ *  Play together ask as they open), and the lab's answer in its place: no Google sign-in */
+const SAVES_HEALTH = 'https://ls.wellscoped.dev/saves/health';
+const NO_GOOGLE = { google: false };
+
+/**
+ * The lab's own answer to a page asking production's saves service for its health. The service refuses a page on
+ * localhost (CORS), which the browser logged as two errors of the page's in every command opening the save slots
+ * screen or Play together (`ui --states heroes,coop`), failing it; and a check has no business with production. A
+ * command with a service of its own (`cloud`, on another address) is asked there as before.
+ */
+function answerSavesHealth(route) {
+  const headers = { 'access-control-allow-origin': '*' };
+  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(NO_GOOGLE) });
+}
 
 /** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
 const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1' };
@@ -620,6 +635,7 @@ export class Side {
     const keptContext = kept ? takeKeptContext(this.browser) : null;
     const context = keptContext ?? await this.browser.newContext(CONTEXT_OPTIONS);
     for (const script of PAGE_SCRIPTS) await context.addInitScript(script);
+    await context.route(SAVES_HEALTH, answerSavesHealth);
     return context;
   }
 
