@@ -22,6 +22,22 @@ const below = (n: number): number => lod(n, n);
 let drapeRounds = 4;
 export function setDrapeRounds(rounds: number): void { drapeRounds = rounds; }
 
+/** A skirt at rest (#590): while the body under it has hardly moved since its cloth was last laid, it's laid again
+ *  only every `every` s, not every frame. A standing hero's cloth moves by his idle sway alone, under a millimetre a
+ *  thirtieth of a second, and laying it was 45% of his update, 0.5 ms a frame at 144 a second. Anything that moves
+ *  him lays it at once: `walk` (the share of his speed), `swing` (a thigh's swing since, radians), `moved` (the
+ *  furthest any limb's end has gone since, m). `?clothRest=0` lays it every frame, for A/B. */
+export const CLOTH_REST = {
+  on: typeof location === 'undefined' || !/[?&]clothRest=0/.test(location.search),
+  every: 1 / 30,
+  walk: 0.02,
+  swing: 0.004,
+  moved: 0.003,
+  /** how many updates left the cloth as it lay, and how many laid it, since the page loaded (`lab coat` reads them) */
+  rested: 0,
+  laid: 0,
+};
+
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
 export const TILE = 0.3;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
@@ -401,6 +417,8 @@ export class Skirt {
   private open: Float32Array;
   /** points round it in each row (the last a copy of the first, at the seam) */
   readonly cols: number;
+  /** as it was last laid: the thighs' swings, each limb's ends (x, y, z a point), and the time waited since (s) */
+  private laid = { fL: NaN, fR: NaN, ends: new Float32Array(0), waited: 0 };
 
   constructor(private o: SkirtOpts) {
     const radial = o.radial ?? 40, body = o.rows ?? 10, depth = o.depth ?? 0.85, trim = o.trim ?? 0;
@@ -447,7 +465,9 @@ export class Skirt {
   update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
-    const h = Math.min(dt, 0.05);
+    if (this.rests(fL, fR, move, dt, legs, hands)) return;
+    const h = Math.min(this.laid.waited, 0.05);
+    this.laid.waited = 0;
     for (let i = 0; i < this.cols; i++) {
       const a = this.ang[i], sx = Math.sin(a), cz = Math.cos(a);
       const wl = clamp(0.5 + sx * 0.9, 0, 1);
@@ -469,6 +489,36 @@ export class Skirt {
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
     p.needsUpdate = true;
     vertexNormals(this.geo);
+  }
+
+  /** Whether the cloth is left as it was last laid this frame (`CLOTH_REST`): nothing has moved the body under it
+   *  since, and it was laid within the last `every` s. Otherwise how it's laid now is kept, for the frames after. */
+  private rests(fL: number, fR: number, move: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): boolean {
+    const laid = this.laid, count = ((legs?.length ?? 0) + (hands?.length ?? 0)) * 6;
+    laid.waited += dt;
+    let still = CLOTH_REST.on && dt > 0 && move < CLOTH_REST.walk && laid.waited < CLOTH_REST.every && laid.ends.length === count
+      && Math.abs(fL - laid.fL) < CLOTH_REST.swing && Math.abs(fR - laid.fR) < CLOTH_REST.swing;
+    if (laid.ends.length !== count) laid.ends = new Float32Array(count);
+    const ends = laid.ends, most = CLOTH_REST.moved;
+    const far = (end: THREE.Vector3, k: number): boolean =>
+      Math.abs(end.x - ends[k]) > most || Math.abs(end.y - ends[k + 1]) > most || Math.abs(end.z - ends[k + 2]) > most;
+    const nl = legs?.length ?? 0, nh = hands?.length ?? 0;
+    for (let q = 0; still && q < nl + nh; q++) {
+      const body = q < nl ? legs![q] : hands![q - nl];
+      if (far(body.a, q * 6) || far(body.b, q * 6 + 3)) still = false;
+    }
+    if (still) {
+      CLOTH_REST.rested++;
+      return true;
+    }
+    CLOTH_REST.laid++;
+    for (let q = 0; q < nl + nh; q++) {
+      const body = q < nl ? legs![q] : hands![q - nl], k = q * 6;
+      ends[k] = body.a.x; ends[k + 1] = body.a.y; ends[k + 2] = body.a.z;
+      ends[k + 3] = body.b.x; ends[k + 4] = body.b.y; ends[k + 5] = body.b.z;
+    }
+    laid.fL = fL; laid.fR = fR;
+    return false;
   }
 
   /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,

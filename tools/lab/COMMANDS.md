@@ -894,7 +894,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
   space, a skirt's hung from the hips and a hood's from the head, so his sway is taken out, and each jerk, its move a frame
   changing by over 1 cm, with where on the cloth and the hand nearest (or, with none, the most any point's did);
-  `--frames` lists them; the canary kicks a point out 3 cm for a frame. He stands once at each of `--rates` (60 and
+  `--frames` lists them; the canary kicks a point out 3 cm for a frame. It also says how much of his standing the
+  cloth rested through (`CLOTH_REST` in `models/armor.ts`, #590: half of its updates at 60 Hz, 80% at 144, where
+  under half fails; the canary holds the rest off, which must read as none). He stands once at each of `--rates` (60 and
   144 Hz by default): the cloth steps at 1/60 s, so on a faster screen most frames step it none and some once, which
   a 60 Hz clock never shows. From play, "the hood is jerking when idle": held firmly and damped as the free cloth, it
   rang every 0.2 s, at 144 Hz on 34 frames, up to 1.2 cm, and at 60 Hz on none; damped critically, 0.1 cm at most. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
