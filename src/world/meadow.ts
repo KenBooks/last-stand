@@ -322,7 +322,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform float uStrandsBy;
   uniform float uTuft;
   uniform float uTime;
-  uniform float uShadowSwayed;
+  uniform float uWindWild;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
@@ -441,8 +441,8 @@ const VERTEX_BLADE = /* glsl */ `
   // (a tuft's card sways mostly in its own plane: pushed over across it, a card's face turned up to the camera and
   // away as each gust passed, a patch's light a third brighter and darker within a second, from play "very bright
   // becomes very dark and back")
-  vec2 swayWay = mix(windWay, turned * dot(windWay, turned) + lean2 * dot(windWay, lean2) * 0.2, tufted);
-  vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.3 + flutter + 0.02));
+  vec2 swayWay = mix(windWay, turned * dot(windWay, turned), tufted);
+  vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.1 + flutter * 0.6 + 0.015) * uWindWild);
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
@@ -532,7 +532,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.55, 1.12, smoothstep(0.0, 0.85, along));
+  vec3 bladeColour = vBladeColour * mix(0.68, 1.1, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   // (a blade in six straw, among a tuft's green)
   bladeColour = mix(bladeColour, vec3(0.24, 0.22, 0.085) * mix(0.6, 1.1, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.55 * step(1.5, uTuft));
@@ -730,13 +730,13 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
       .replace('#include <shadowmap_vertex>', `
         #ifdef USE_SHADOWMAP
           vec4 blownWorld = worldPosition;
-          worldPosition = modelMatrix * vec4(bladePos - wind * (1.0 - uShadowSwayed), 1.0);
+          worldPosition = modelMatrix * vec4(bladePos - wind, 1.0);
         #endif
         #include <shadowmap_vertex>
         #ifdef USE_SHADOWMAP
           worldPosition = blownWorld;
         #endif`);
-    shader.uniforms.uShadowSwayed = shadowSwayed;
+    shader.uniforms.uWindWild = windWild;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nuniform float uTuft;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
@@ -805,15 +805,18 @@ function throughBox(o: GrassOccluder, ex: number, ey: number, ez: number, px: nu
 /** how near an occluder's box the eye is taken to be within it (m): the boxes stand a hand inside their walls */
 const EYE_WITHIN = 0.5;
 
+/** how many times as hard the wind pushed a tuft before it was eased (`holdGrassWindWild`) */
+const WIND_WAS = 3;
 /** the share of the sun a tuft keeps in the sun's shadow */
 const GRASS_SUN_IN_SHADOW = 0.5;
 
-/** 1 while a harness has a blade take the sun's shadow where the wind pushed it, as it did; every ring's */
-const shadowSwayed = { value: 0 };
+/** how many times as hard the wind pushes the grass while a harness has it as it was (1 as it is); every ring's */
+const windWild = { value: 1 };
 
-/** For a harness (tools/lab): the grass's shadow taken where the wind has pushed each blade, as it was. */
-export function holdGrassShadowSwayed(held: boolean): void {
-  shadowSwayed.value = held ? 1 : 0;
+/** For a harness (tools/lab): the wind pushing the grass as hard as it did, a tuft's blades over by a third of
+ *  their height in a gust. */
+export function holdGrassWindWild(held: boolean): void {
+  windWild.value = held ? WIND_WAS : 1;
 }
 
 /** whether a harness has an occluder hide what's past it from an eye within it too, as it did */
@@ -1052,7 +1055,7 @@ export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: M
         vec3 shootGreen = mix(vec3(0.085, 0.13, 0.026), vec3(0.17, 0.2, 0.04), swardN(vMeadowXZ * 2.3 + 9.0));
         // (dark and plain under the grass: lighter than the blades and streaked, it showed between the tufts as a
         // woven carpet, a review of the pictures)
-        sward = mix(sward, shootGreen * 0.55, 0.35 * fine * min(shoots, 1.0)) * 0.8;
+        sward = mix(sward, shootGreen * 0.55, 0.35 * fine * min(shoots, 1.0)) * 1.15;
         diffuseColor.rgb = mix(diffuseColor.rgb, sward, smoothstep(0.1, 0.7, meadowAt(vMeadowXZ)));`);
   };
   m.customProgramCacheKey = () => 'meadow-ground';

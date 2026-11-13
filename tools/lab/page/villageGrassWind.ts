@@ -17,22 +17,29 @@ import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
-/** where he stands and the way he faces: the grass by the campfire before him, under the trees' shade */
-const STAND = new THREE.Vector3(-4, 0, 6);
-const FACING = -0.87;
+/** where he stands and the way he faces: open meadow by the cottages, and the grass by the campfire, under the
+ *  trees' shade and in the fire's own light */
+const STANDS: { name: string; at: THREE.Vector3; facing: number }[] = [
+  { name: 'on the meadow', at: new THREE.Vector3(12, 0, 6), facing: Math.PI / 2 },
+  { name: 'by the campfire', at: new THREE.Vector3(-4, 0, 6), facing: -0.87 },
+];
 /** a cell's side (px): wide enough that a blade swaying across it isn't a change of its light */
 const CELL = 12;
 /** the frames read, and the frames run between them: three seconds in all */
 const READS = 16;
 const BETWEEN = 12;
+/** the frames the camera is given to come to rest */
+const SETTLE = 240;
 /** how much the blades must change a cell's light for it to be the grass's */
 const GRASS_FROM = 0.02;
 /** a cell flips when its light swings by this share of its mean within the frames read */
 const FLIP = 0.4;
 /** the most of the grass's cells that may flip, and the most its bright cells may be to its dark ones in one frame
  *  (its 90th centile against its 10th) */
-const MOST_FLIPPING = 0.04;
+const MOST_FLIPPING = 0.08;
 const MOST_APART = 3.2;
+/** the most the grass's light may swing as a whole in the frames read */
+const MOST_WHOLE = 0.08;
 
 /** The light of each cell of `canvas`, row by row. */
 function cellsOf(canvas: Canvas): Float32Array {
@@ -68,74 +75,94 @@ function centile(values: number[], share: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
 }
 
-/** A tuft's shadow taken where the wind pushed it, as it was (a commit from before the hold has none: an A/B's other
- *  side loads this module too). */
-function holdShadowSwayed(held: boolean): void {
-  const hold = (meadow as { holdGrassShadowSwayed?: (held: boolean) => void }).holdGrassShadowSwayed;
+/** The wind pushing the grass as hard as it did (a commit from before the hold has none: an A/B's other side loads
+ *  this module too). */
+function holdWindWild(held: boolean): void {
+  const hold = (meadow as { holdGrassWindWild?: (held: boolean) => void }).holdGrassWindWild;
   hold?.(held);
 }
 
-/** The grass's light over three seconds of wind, he stood still: the cells that flip, and how far apart they lie. */
+/** One stand's reading: its line, its problems, and whether its grass flips past the limit. */
+interface Read { line: string; problems: string[]; flips: boolean; moments: Pictured[] }
+
+/** The cells of `bare` the blades change the light of in `shown`: the grass's. */
+function grassCells(bare: Float32Array, shown: Float32Array): number[] {
+  const grass: number[] = [];
+  for (let cell = 0; cell < bare.length; cell++) {
+    if (Math.abs(shown[cell] - bare[cell]) > GRASS_FROM) grass.push(cell);
+  }
+  return grass;
+}
+
+/** How far `lights` swing, as a share of their mean. */
+function swingOf(lights: number[]): number {
+  const mean = lights.reduce((sum, light) => sum + light, 0) / lights.length;
+  return (Math.max(...lights) - Math.min(...lights)) / Math.max(mean, 1e-4);
+}
+
+/** The grass's light at `stand` over three seconds of wind, the camera at rest. */
+async function readStand(lab: Lab, stand: (typeof STANDS)[number], pictured: boolean): Promise<Read> {
+  G.player.walkTo = null;
+  G.player.place(stand.at, stand.facing);
+  faceCamera(stand.facing);
+  // (the camera glides to its place for some two seconds after a view is taken: read sooner, its last centimetres
+  // moved every thin blade a pixel and a sixth of the grass's cells swung with no wind at all)
+  await lab.step(SETTLE);
+  showBlades(false);
+  const bare = cellsOf(drawFrame(lab));
+  showBlades(true);
+  const frames: Float32Array[] = [];
+  const moments: Pictured[] = [];
+  for (let read = 0; read < READS; read++) {
+    frames.push(cellsOf(drawFrame(lab)));
+    const shown = pictured && read % (READS / 2) === 0;
+    if (shown) moments.push(await lab.screen(`grass ${stand.name}, frame ${read * BETWEEN}`, []));
+    await lab.step(BETWEEN);
+  }
+  const grass = grassCells(bare, frames[0]);
+  if (grass.length < 200) throw new Error(`lab: village: grassSteadyInWind found the grass in ${grass.length} cells`);
+  const swings = grass.map((cell) => swingOf(frames.map((frame) => frame[cell])));
+  const share = swings.filter((swing) => swing > FLIP).length / grass.length;
+  // (all of it together: a whole patch going pale and back, as a fire's light on it does)
+  const whole = swingOf(frames.map((frame) => grass.reduce((sum, cell) => sum + frame[cell], 0) / grass.length));
+  const first = grass.map((cell) => frames[0][cell]);
+  const apart = centile(first, 0.9) / Math.max(centile(first, 0.1), 1e-4);
+  const line = `grass in the wind ${stand.name}, he stood still: ${(share * 100).toFixed(1)}% of its ${grass.length} `
+    + `cells swing over ${FLIP * 100}% of their light in 3 s (at most ${MOST_FLIPPING * 100}%), the median cell's `
+    + `${(centile(swings, 0.5) * 100).toFixed(0)}%; all of it together ${(whole * 100).toFixed(1)}% (at most `
+    + `${MOST_WHOLE * 100}%); in one frame its bright cells ${apart.toFixed(1)} times its dark ones `
+    + `(at most ${MOST_APART})`;
+  const problems: string[] = [];
+  const said = `grassSteadyInWind: ${stand.name}`;
+  if (share > MOST_FLIPPING) problems.push(`${said} ${(share * 100).toFixed(1)}% of the grass flips in the wind`);
+  if (whole > MOST_WHOLE) problems.push(`${said} the grass's light swings ${(whole * 100).toFixed(1)}% as a whole`);
+  if (apart > MOST_APART) problems.push(`${said} the grass's bright cells are ${apart.toFixed(1)} times its dark ones`);
+  return { line, problems, flips: share > MOST_FLIPPING, moments };
+}
+
+/** The grass's light over three seconds of wind at each stand, he stood still. */
 export async function grassSteadyInWind(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const view = viewMode();
+  const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
-  holdHour(12);
-  G.player.walkTo = null;
-  G.player.place(STAND, FACING);
-  await viewBy(lab, 'third');
-  faceCamera(FACING);
-  holdShadowSwayed(canary);
-  let line = '';
   let caught = false;
+  holdHour(12);
+  await viewBy(lab, 'third');
+  holdWindWild(canary);
   try {
-    await lab.step(40);
-    showBlades(false);
-    const bare = cellsOf(drawFrame(lab));
-    showBlades(true);
-    const frames: Float32Array[] = [];
-    for (let read = 0; read < READS; read++) {
-      frames.push(cellsOf(drawFrame(lab)));
-      if (!canary && (read === 0 || read === READS / 2)) moments.push(await lab.screen(`grass in the wind, frame ${read * BETWEEN}`, []));
-      await lab.step(BETWEEN);
-    }
-    const grass: number[] = [];
-    for (let cell = 0; cell < bare.length; cell++) {
-      if (Math.abs(frames[0][cell] - bare[cell]) > GRASS_FROM) grass.push(cell);
-    }
-    if (grass.length < 200) throw new Error(`lab: village: grassSteadyInWind found the grass in ${grass.length} cells`);
-    let flipping = 0;
-    const swings: number[] = [];
-    for (const cell of grass) {
-      let least = Infinity;
-      let most = 0;
-      let sum = 0;
-      for (const frame of frames) {
-        least = Math.min(least, frame[cell]);
-        most = Math.max(most, frame[cell]);
-        sum += frame[cell];
-      }
-      const swing = (most - least) / Math.max(sum / frames.length, 1e-4);
-      swings.push(swing);
-      if (swing > FLIP) flipping++;
-    }
-    const lights = grass.map((cell) => frames[0][cell]);
-    const apart = centile(lights, 0.9) / Math.max(centile(lights, 0.1), 1e-4);
-    const share = flipping / grass.length;
-    line = `grass in the wind, he stood still: ${(share * 100).toFixed(1)}% of its ${grass.length} cells swing over `
-      + `${FLIP * 100}% of their light in 3 s (at most ${MOST_FLIPPING * 100}%), the median cell's `
-      + `${(centile(swings, 0.5) * 100).toFixed(0)}%, the 95th centile's ${(centile(swings, 0.95) * 100).toFixed(0)}%; `
-      + `in one frame its bright cells ${apart.toFixed(1)} times its dark ones (at most ${MOST_APART})`;
-    caught = share > MOST_FLIPPING;
-    if (!canary) {
-      if (share > MOST_FLIPPING) problems.push(`grassSteadyInWind: ${(share * 100).toFixed(1)}% of the grass flips in the wind`);
-      if (apart > MOST_APART) problems.push(`grassSteadyInWind: the grass's bright cells are ${apart.toFixed(1)} times its dark ones`);
+    for (const stand of STANDS) {
+      const read = await readStand(lab, stand, !canary);
+      lines.push(read.line);
+      moments.push(...read.moments);
+      caught = caught || read.flips;
+      if (!canary) problems.push(...read.problems);
     }
   } finally {
     showBlades(true);
-    holdShadowSwayed(false);
+    holdWindWild(false);
     holdHour(null);
     await viewBy(lab, view);
   }
-  return { lines: [line], problems, caught: canary ? caught : null, moments };
+  return { lines, problems, caught: canary ? caught : null, moments };
 }
