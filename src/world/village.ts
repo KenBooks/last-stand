@@ -34,7 +34,7 @@ import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
-import { movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { movesInShadows, asGrass, asTree, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
@@ -682,7 +682,7 @@ export function buildVillage(scene: THREE.Group): Village {
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
   const meadow = buildMeadow(mask, maskTexture, updaters);
-  scene.add(meadow);
+  scene.add(...asGrass(meadow));
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
   stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
   // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
@@ -2630,11 +2630,11 @@ function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], sp
     });
     barks.castShadow = barks.receiveShadow = true;
     barks.name = `village trees' bark: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-    scene.add(...cullInCells(barks, eachInstance));
+    scene.add(...asTree(...cullInCells(barks, eachInstance)));
     for (const { mesh, name } of crowns) {
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.name = `village trees' leaves ${name}: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-      scene.add(...cullInCells(mesh, eachInstance));
+      scene.add(...asTree(...cullInCells(mesh, eachInstance)));
     }
   });
 }

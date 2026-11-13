@@ -766,6 +766,12 @@ export async function dev(lab: Lab, command: { canary: boolean }): Promise<Repor
   return devMode(lab, command);
 }
 
+/** The developer panel's frame parts out and back in the village, the Thornwood and the crypt: draws, pictures. */
+export async function devparts(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { devParts } = await import('./devParts');
+  return devParts(lab, command);
+}
+
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
 export function setup(lab: Lab, fixture: Fixture): Promise<Record<string, unknown>> {
   return lab.setup(fixture);

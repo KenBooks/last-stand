@@ -322,5 +322,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       sunDrawn = '';
     },
     drawStill,
+    /** The still shadows drawn again, the sun's too where it's the still world's: what casts them changed with no prop
+     *  broken or rolled (the developer mode's parts taken out of what's drawn, `src/dev/hide.ts`). */
+    stillShadowsChanged(): void {
+      stillDrawnAt.clear();
+      stillDrawn.place = null;
+      stillDrawn.sun = 'changed';
+      sunDrawn = '';
+      drawStill();
+    },
   };
 }

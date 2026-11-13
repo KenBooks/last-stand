@@ -1953,6 +1953,18 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  devparts: {
+    each(side, options) {
+      return side.command('devparts', { canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('devparts'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   eval: {
     each(side, options) {
       return side.evaluate(options._.join(' '));

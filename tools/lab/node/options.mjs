@@ -2133,6 +2133,15 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  devparts: {
+    help: 'the developer panel\'s frame parts (Trees, Grass and the rest) each unchecked and checked again in the '
+      + 'village, the Thornwood and the crypt: the frame\'s draws and triangles each way, a picture each way from a '
+      + 'free camera over the hero, the part\'s own draws none without it, no program made',
+    options: {
+      canary: { kind: 'switch', help: 'put the trees back behind the panel\'s back: their draws must be caught' },
+      ...COMMON_OPTIONS,
+    },
+  },
   beta: {
     help: 'the village beta opted into and out of, on a page of its own, by the browser\'s own clicks and loads: '
       + 'the pause menu\'s Beta tab and its Reload (the page loaded with ?village=1, the choice kept in its '

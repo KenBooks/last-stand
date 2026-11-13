@@ -9,7 +9,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -306,7 +306,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // through their gaps, the line he's kept behind as ragged as they are, his legs past their ranges stood against it)
   wall.add(bushes, false, 'foliage', bush.leafLumps);
   wall.add(rocks, true, 'wall', true);
-  for (const mesh of [bushes, bushCards, rocks]) scene.add(...cullInCells(mesh, THICKET_CELLS));
+  for (const mesh of [bushes, bushCards, rocks]) scene.add(...asGrass(...cullInCells(mesh, THICKET_CELLS)));
 
   // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
   // ez-tree, each instanced, and the ancient giants among them
@@ -354,7 +354,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
     // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
     for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
-    for (const mesh of [barks[k], leaves[k]]) scene.add(...cullInCells(mesh, eachInstance));
+    for (const mesh of [barks[k], leaves[k]]) scene.add(...asTree(...cullInCells(mesh, eachInstance)));
   });
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
@@ -465,7 +465,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     tuft.count = placed[kind];
     tuft.receiveShadow = true;
     tuft.name = `grass ${kind + 1}`;
-    scene.add(...cullInCells(tuft, FLOOR_CELLS));
+    scene.add(...asGrass(...cullInCells(tuft, FLOOR_CELLS)));
     asClutter(tuft);
   });
 
@@ -487,7 +487,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     si++;
   }
   caps.count = stems.count = si;
-  scene.add(caps, stems);
+  scene.add(...asGrass<THREE.Object3D>(caps, stems));
 
   // ferns: banks of them along the thicket, clumps round the stumps, logs and boulders
   const fernN = 300;
@@ -512,7 +512,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   ferns.count = fi;
   ferns.receiveShadow = true;
   ferns.name = 'ferns';
-  scene.add(...cullInCells(ferns, FLOOR_CELLS));
+  scene.add(...asGrass(...cullInCells(ferns, FLOOR_CELLS)));
   asClutter(ferns);
 
   // roots snaking out of the thicket across the floor, half sunk in it
@@ -569,7 +569,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   }
   pebbles.receiveShadow = true;
   pebbles.name = 'pebbles';
-  scene.add(pebbles);
+  scene.add(...asGrass(pebbles));
   asClutter(pebbles);
 
   // --- Young trees in the clearing: wood an arrow goes into ----------------------------
@@ -593,7 +593,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast, surfaces: bark.surfaces };
     breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
   });
-  for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  for (const m of asTree(sapBark, sapLeaves)) { m.castShadow = m.receiveShadow = true; scene.add(m); }
   sapBark.name = 'young trees\' bark';
   sapLeaves.name = 'young trees\' leaves';
   updaters.push(contactShadows(scene, obstacles));

@@ -293,6 +293,21 @@ export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Up
   };
 }
 
+/** `parts` marked as a tree's (its bark, its leaves, its roots, the copies casting their shadows): what the developer
+ *  panel's Trees takes out of what's drawn (`src/dev/hide.ts`). Returns them. */
+export function asTree<T extends THREE.Object3D>(...parts: T[]): T[] {
+  for (const part of parts) part.userData.tree = true;
+  return parts;
+}
+
+/** `parts` marked as the ground's grass, foliage or clutter (the meadow, tufts, ferns, weeds, the thicket, mushrooms,
+ *  pebbles, rocks, bones, skulls, the copies casting their shadows): what the developer panel's Grass takes out of
+ *  what's drawn (`src/dev/hide.ts`). Returns them. */
+export function asGrass<T extends THREE.Object3D>(...parts: T[]): T[] {
+  for (const part of parts) part.userData.grass = true;
+  return parts;
+}
+
 /** where a biome's small trees may stand: `n` of them `near` to `far` m from the middle, `apart` from each other */
 export interface TreeSpots { n: number; near: number; far: number; apart: number }
 /**

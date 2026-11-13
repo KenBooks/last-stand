@@ -19,6 +19,10 @@ export interface ScenePart {
   change: (on: boolean) => void;
   /** why it can't be timed here, where it can't (the report says so in its place) */
   untimed?: string;
+  /** what it shows or hides, where it's objects (`shownPart`): the developer panel takes them out by their layer as
+   *  its frames go on (`src/dev/hide.ts`), as the world sets their `visible` again, where the profiler's held frames
+   *  can hide them */
+  objects?: THREE.Object3D[];
 }
 
 /** Every object under the scene that `wanted` picks, shown now. */
@@ -34,6 +38,7 @@ export function shownWhere(wanted: (object: THREE.Object3D) => boolean): THREE.O
 export function shownPart(name: string, objects: THREE.Object3D[]): ScenePart {
   return {
     name: `${name} (${objects.length})`,
+    objects,
     change: (on) => {
       for (const object of objects) object.visible = on;
     },

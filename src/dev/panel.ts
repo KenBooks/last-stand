@@ -20,6 +20,7 @@ import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNe
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
+import { drawObjects, isGrass, isTree, markedObjects } from './hide';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -355,28 +356,54 @@ const taken = new Map<string, ScenePart>();
 /** A part's name without the count it's given (`the particles (3)`), which changes as the scene does. */
 const partKey = (name: string): string => name.replace(/ \(\d+\)$/, '');
 
+/** the profiler's part of everything cut out, which the panel gives as Trees and Grass apart: from the owner, "trees 1
+ *  check, grass 1 more checkbox ... should work in all environments, village, forest and crypt" */
+const CUT_OUT = "what's cut out: leaves, grass";
+
+/** A part of what the builders marked in every place (`markedObjects`), hidden or not now. */
+function markedPart(name: string, marked: (object: THREE.Object3D) => boolean): ScenePart {
+  const objects = markedObjects(marked);
+  return { name: `${name} (${objects.length})`, objects, change: (on) => drawObjects(objects, on) };
+}
+
+/** The panel's parts: the profiler's (`perf/sceneParts.ts`) but the plain colour's and what's cut out, the trees and
+ *  the grass in the latter's place. */
+export function panelParts(): ScenePart[] {
+  const parts = frameParts().filter((p) => partKey(p.name) !== PLAIN && !p.untimed);
+  const at = parts.findIndex((p) => partKey(p.name) === CUT_OUT);
+  parts.splice(at < 0 ? parts.length : at, at < 0 ? 0 : 1, markedPart('the trees', isTree), markedPart('the grass', isGrass));
+  return parts;
+}
+
+/** A part put in or taken out: a part of objects by their layer (`hide.ts`), as the world sets their `visible` again
+ *  (the culling, the village's meadow), the others as the profiler changes them. */
+const changePart = (part: ScenePart, on: boolean): void => {
+  if (part.objects) drawObjects(part.objects, on);
+  else part.change(on);
+};
+
 function renderParts(): void {
-  const keys = frameParts().filter((p) => partKey(p.name) !== PLAIN && !p.untimed).map((p) => partKey(p.name));
+  const keys = panelParts().map((p) => partKey(p.name));
   const labels: Record<string, string> = {
     "half the scene's pixels": 'Full resolution', 'the point lights where they reach': 'Point lights',
     'drawing the shadow maps': 'Shadow maps', 'the particles': 'Particles', 'the hero': 'Hero',
-    "what's cut out: leaves, grass": 'Leaves & grass', "what's blended: smoke, glows, effects": 'Smoke & effects',
-    "the fires' flames": 'Fire',
+    'the trees': 'Trees', 'the grass': 'Grass', "what's blended: smoke, glows, effects": 'Smoke & effects',
+    "the fires' flames": 'Fire', 'the spent arrows': 'Spent arrows',
   };
   $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked>${labels[k] ?? k}</label>`).join('');
 }
 
 function togglePart(key: string): void {
   const was = taken.get(key);
-  if (was) { was.change(true); taken.delete(key); return; }
-  const part = frameParts().find((p) => partKey(p.name) === key);
+  if (was) { changePart(was, true); taken.delete(key); return; }
+  const part = panelParts().find((p) => partKey(p.name) === key);
   if (!part) return;
-  part.change(false);
+  changePart(part, false);
   taken.set(key, part);
 }
 
 function putPartsBack(): void {
-  for (const part of taken.values()) part.change(true);
+  for (const part of taken.values()) changePart(part, true);
   taken.clear();
 }
 
