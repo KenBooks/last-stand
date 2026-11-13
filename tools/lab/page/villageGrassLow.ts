@@ -3,7 +3,9 @@
 // grass"). Low spreads the blades twice as far apart, each twice as wide (`grassSpread`, `setGrassSpread` in
 // meadow.ts): the vertices the grass's rings shade a frame are counted on each level, from the counts each ring lists
 // as it's drawn, and Low must shade at most a third of High's; the switch, there and back, must compile no program.
-// Each is pictured. `canary` leaves the blades as close as High's on Low, which must be found.
+// Very low spreads them four times as far (from play, a laptop's integrated GPU at 5 frames a second over the shoulder
+// with a sixteenth of its pixels drawn: the grass was 296k of the frame's 534k triangles) and must shade at most a
+// tenth of High's. Each is pictured. `canary` leaves the blades as close as High's on Low, which must be found.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -22,8 +24,13 @@ const FACING = Math.PI / 2;
 const SETTLE = 30;
 /** the most of High's vertices Low may shade */
 const MOST_OF_HIGH = 1 / 3;
+/** the most of High's vertices Very low may shade */
+const VERY_LOW_MOST = 1 / 10;
 /** the views read: the lobby's own, and over the shoulder */
 const VIEWS: ViewMode[] = ['top', 'third'];
+
+/** the levels read */
+type Level = 'high' | 'low' | 'verylow';
 
 /** A share as a whole percentage. */
 const percent = (share: number): string => `${(share * 100).toFixed(0)}%`;
@@ -41,10 +48,10 @@ function grassVertices(): number {
 }
 
 /** The frame drawn at `level`: the vertices the grass shaded, and the programs compiled for it. */
-async function drawnAt(lab: Lab, level: 'high' | 'low', canary: boolean): Promise<{ vertices: number; made: number }> {
+async function drawnAt(lab: Lab, level: Level, canary: boolean): Promise<{ vertices: number; made: number }> {
   const before = G.renderer.info.programs?.length ?? 0;
   useQuality(level);
-  if (canary && level === 'low') setGrassSpread(1);
+  if (canary && level !== 'high') setGrassSpread(1);
   await lab.step(SETTLE);
   drawFrame(lab);
   return { vertices: grassVertices(), made: (G.renderer.info.programs?.length ?? 0) - before };
@@ -68,15 +75,20 @@ export async function grassOnLow(lab: Lab, canary: boolean): Promise<LightsCheck
       if (!canary) moments.push(await lab.screen(`${view}: High`, []));
       const low = await drawnAt(lab, 'low', canary);
       if (!canary) moments.push(await lab.screen(`${view}: Low`, []));
+      const veryLow = await drawnAt(lab, 'verylow', canary);
+      if (!canary) moments.push(await lab.screen(`${view}: Very low`, []));
       const share = low.vertices / high.vertices;
-      const made = high.made + low.made;
-      const shaded = `${low.vertices} vertices on Low, ${high.vertices} on High (${percent(share)})`;
+      const veryShare = veryLow.vertices / high.vertices;
+      const made = high.made + low.made + veryLow.made;
+      const shaded = `${low.vertices} vertices on Low (${percent(share)}), ${veryLow.vertices} on Very low `
+        + `(${percent(veryShare)}), ${high.vertices} on High`;
       lines.push(`${view}: the grass shades ${shaded}, ${made} programs compiled by the switches`);
       if (!high.vertices) throw new Error(`lab: village: no grass drawn in the ${view} view`);
-      if (made) problems.push(`grassOnLow: ${made} programs compiled switching to Low and back in the ${view} view`);
-      if (share <= MOST_OF_HIGH) continue;
+      if (made) problems.push(`grassOnLow: ${made} programs compiled switching the level in the ${view} view`);
+      if (share <= MOST_OF_HIGH && veryShare <= VERY_LOW_MOST) continue;
       if (canary) caught = true;
-      else problems.push(`grassOnLow: Low shades ${percent(share)} of High's grass vertices in the ${view} view`);
+      else problems.push(`grassOnLow: Low shades ${percent(share)} of High's grass vertices in the ${view} view, `
+        + `Very low ${percent(veryShare)}`);
     }
   } finally {
     useQuality(was);

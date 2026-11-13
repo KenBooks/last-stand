@@ -9,7 +9,8 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { boomKeepsShoulder, boomStandsBehind, faceCamera } from '../../../src/core/renderer';
+import { boomKeepsShoulder, boomStandsBehind, faceCamera, lookBy } from '../../../src/core/renderer';
+import { CAMERA } from '../../../src/data/balance';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
 import { viewBy } from './villageHallCull';
@@ -31,7 +32,11 @@ const IN_THE_DOORWAY: readonly (readonly [number, number])[] = [
   [TERRACE.x - 0.8, HALL.inFront - 0.2],
   [TERRACE.x + 0.8, HALL.inFront - 0.2],
   [TERRACE.x, HALL.inFront - 1],
+  [TERRACE.x, HALL.door + 0.6],
 ];
+/** how far down he looks there (rad under the horizon): the view's own, at the fountain from the door, at his feet
+ *  (from play, in the hall's door looking down at the square: the camera inside him, his arms seen from within) */
+const LOOKS_DOWN = [CAMERA.third.pitch, 0.6, 1];
 /** the angles he's walked out along, and the frames given for the camera to settle */
 const WAYS = 8;
 const SETTLE = 60;
@@ -117,13 +122,21 @@ async function mostMoved(lab: Lab): Promise<number> {
   return most;
 }
 
-/** The camera read with him stood at `at`, turned to `facing`, pictured if close and `pictures`. */
+/** The view turned to look `down` rad under the horizon: up as far as it goes, then down from there. */
+function lookDown(down: number): void {
+  const { minPitch, maxPitch } = CAMERA.third;
+  lookBy(0, -(maxPitch - minPitch) / CAMERA.lookSpeed);
+  lookBy(0, (down - minPitch) / CAMERA.lookSpeed);
+}
+
+/** The camera read with him stood at `at`, turned to `facing`, looking `down`, pictured if close and `pictures`. */
 async function readSpot(lab: Lab, read: Read, at: THREE.Vector3, facing: number, label: string,
-  pictures: boolean): Promise<void> {
+  pictures: boolean, down: number = CAMERA.third.pitch): Promise<void> {
   const hit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
   G.player.walkTo = null;
   G.player.place(at, facing);
   faceCamera(facing);
+  lookDown(down);
   await lab.step(SETTLE);
   read.spots++;
   const moved = await mostMoved(lab);
@@ -166,7 +179,10 @@ async function readSpots(lab: Lab, pictures: boolean): Promise<Read> {
     const at = new THREE.Vector3(x, groundHeight(x, z), z);
     for (let way = 0; way < WAYS; way++) {
       const facing = (way / WAYS) * Math.PI * 2;
-      await readSpot(lab, read, at, facing, `in the doorway ${x.toFixed(1)},${z.toFixed(1)}, way ${way}`, pictures);
+      for (const down of LOOKS_DOWN) {
+        const label = `in the doorway ${x.toFixed(1)},${z.toFixed(1)}, way ${way}, down ${down}`;
+        await readSpot(lab, read, at, facing, label, pictures, down);
+      }
     }
   }
   return read;
