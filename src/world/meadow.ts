@@ -453,8 +453,8 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.082, 0.135, 0.024), vec3(0.13, 0.175, 0.03), fract(h.y * 3.7));
-  vec3 dry = vec3(0.26, 0.21, 0.085);
+  vec3 green = mix(vec3(0.062, 0.125, 0.024), vec3(0.098, 0.16, 0.03), fract(h.y * 3.7));
+  vec3 dry = vec3(0.2, 0.18, 0.075);
   vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.25 + smoothstep(0.8, 0.97, patchy) * 0.12);`;
 
 const FRAGMENT_COLOUR = /* glsl */ `
@@ -535,7 +535,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
   vec3 bladeColour = vBladeColour * mix(0.68, 1.1, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   // (a blade in six straw, among a tuft's green)
-  bladeColour = mix(bladeColour, vec3(0.24, 0.22, 0.085) * mix(0.6, 1.1, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.55 * step(1.5, uTuft));
+  bladeColour = mix(bladeColour, vec3(0.19, 0.185, 0.07) * mix(0.68, 1.05, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.4 * step(1.5, uTuft));
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
@@ -815,7 +815,7 @@ const EYE_WITHIN = 0.5;
 /** how many times as hard the wind pushed a tuft before it was eased (`holdGrassWindWild`) */
 const WIND_WAS = 3;
 /** the share of the sun a tuft keeps in the sun's shadow */
-const GRASS_SUN_IN_SHADOW = 0.5;
+const GRASS_SUN_IN_SHADOW = 0.6;
 
 /** how many times as hard the wind pushes the grass while a harness has it as it was (1 as it is); every ring's */
 const windWild = { value: 1 };
