@@ -2,6 +2,26 @@
 // and the functions it found busiest, by their own time and by the time spent in them and what they called, each at
 // its line in the source (the page runs the modules as Vite compiled them; sourceMaps.mjs traces them back).
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { OUT, REPO } from './paths.mjs';
+
+/** where a command's profile is kept whole */
+const KEPT = join(OUT, 'profile');
+
+/**
+ * `profile` kept whole as `out/profile/<command>-<side>.cpuprofile`, every sample with its time (the summary adds
+ * them up over the whole run, and a slow stretch of half a second is lost in it): DevTools' Performance panel loads
+ * the file. Returns its path from the repo.
+ */
+export function keepProfile(command, side, profile) {
+  mkdirSync(KEPT, { recursive: true });
+  const name = `${command}-${side}`.replace(/[^a-z0-9-]+/gi, '-');
+  const file = join(KEPT, `${name}.cpuprofile`);
+  writeFileSync(file, JSON.stringify(profile));
+  return relative(REPO, file);
+}
+
 /** the profiler's sampling interval, µs */
 const SAMPLING_US = 200;
 /** how many functions each list shows */

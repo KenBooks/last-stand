@@ -16,7 +16,7 @@ import { OUT, REPO } from './paths.mjs';
 import { priorityNow } from './priority.mjs';
 import { describePictureDifferences } from './pictures.mjs';
 import { probeFiles } from './probeFiles.mjs';
-import { profiled, scriptsIn, summarize } from './profile.mjs';
+import { keepProfile, profiled, scriptsIn, summarize } from './profile.mjs';
 import { layersDiffer, summarizeLayers } from './layers.mjs';
 import { placedTally, randomsDiffer, scriptsOfTally, summarizeRandoms, tallied } from './randoms.mjs';
 import { bootOf, bootText, CONTEXT_OPTIONS, LAB_BOOT, layered, Side } from './side.mjs';
@@ -183,6 +183,8 @@ export class LabSession {
         const sourceOf = await side.sourceLocator(scriptsIn(profile));
         const within = typeof options.profile === 'string' ? options.profile : null;
         notes.push(`${turn.name}: ${summarize(profile, sourceOf, within)}`);
+        // (kept whole too, its samples with their times: DevTools' Performance panel loads it)
+        notes.push(`${turn.name}: the profile whole: ${keepProfile(command, turn.name, profile)}`);
       } else {
         resultOf.set(turn, await runCommand());
       }
