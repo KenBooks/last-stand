@@ -9,6 +9,8 @@ import { groundHeight } from '../world/ground';
 import { col, debris, particles, smokePuff } from '../fx/particles';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
+import { qualityLevel } from '../core/quality';
+import { QUALITY } from '../data/quality';
 import type { Fling } from '../combat/fling';
 import type { Enemy } from './enemy';
 import type { XZ } from '../types';
@@ -115,6 +117,7 @@ export class Corpse {
     if (fling.style === 'frozen') u.uFrozen.value = 1;
     if (fling.style === 'burn') u.uEdge.value.setHex(EMBER).multiplyScalar(3);
     corpses.add(this);
+    if (this.ragdoll) fewerRagdolls();
   }
 
   /** whether it has begun to dissolve */
@@ -148,6 +151,12 @@ export class Corpse {
     if (k < 1 && Math.random() < 0.5) this.mote(col(u.uEdge.value.getHex(), 1.2));
     return k < 1;
   }
+
+  /** whether its ragdoll is still thrown about, not yet dissolving (`fewerRagdolls`) */
+  get thrown(): boolean { return !!this.ragdoll && this.fadeAt < 0 && !this.shattered; }
+
+  /** It begins to dissolve now, as it would have once it lay still (`fewerRagdolls`). */
+  dissolveNow(): void { if (this.fadeAt < 0) this.dissolve(FADE); }
 
   /** It begins to dissolve, over `over` s, casting no shadow from then (the shadow doesn't dissolve with it). */
   private dissolve(over: number): void {
@@ -240,4 +249,19 @@ export class Corpse {
   }
 
   dispose(): void { corpses.delete(this); }
+}
+
+/** Past the level's most ragdolls thrown at once (Very low's `ragdolls`), the longest fallen begins to dissolve. */
+function fewerRagdolls(): void {
+  const most = QUALITY[qualityLevel()].ragdolls;
+  if (most === Infinity) return;
+  let thrown = 0;
+  for (const c of corpses) if (c.thrown) thrown++;
+  // (the set keeps the order they fell in: the first is the longest fallen)
+  for (const c of corpses) {
+    if (thrown <= most) break;
+    if (!c.thrown) continue;
+    c.dissolveNow();
+    thrown--;
+  }
 }
