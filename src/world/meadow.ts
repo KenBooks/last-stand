@@ -43,10 +43,10 @@ const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].
  *  "we need below 1M tris on high"); cut as parallel strands of one sheet, hairs combed one way. */
 const TUFT = 14;
 /** the bins across a tuft's card, two blades rooted in each, and how far a half's blades fan out from its middle */
-const TUFT_BINS = 16;
+const TUFT_BINS = 14;
 const TUFT_FAN = 0.3;
 /** a tuft's card's width against a whole blade's, and a blade's half width at its root as a share of the card's */
-const TUFT_CARD = 2.5;
+const TUFT_CARD = 2.2;
 const TUFT_BLADE = 0.2;
 /** how far apart the tufts' cards stand against the blades' cells, each as many tufts wide: at a card a cell, the
  *  cards lay many deep over every pixel, each pixel of each cut as it's shaded, and High's scene pass took 8.2 ms of a
@@ -446,9 +446,9 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.07, 0.14, 0.028), vec3(0.115, 0.185, 0.036), fract(h.y * 3.7));
+  vec3 green = mix(vec3(0.082, 0.135, 0.024), vec3(0.13, 0.175, 0.03), fract(h.y * 3.7));
   vec3 dry = vec3(0.26, 0.21, 0.085);
-  vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.6 + smoothstep(0.8, 0.97, patchy) * 0.15);`;
+  vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.25 + smoothstep(0.8, 0.97, patchy) * 0.12);`;
 
 const FRAGMENT_COLOUR = /* glsl */ `
   float along = vBlade.x, acrossB = abs(vBlade.y);
@@ -471,7 +471,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
     float bin0 = floor(cameFrom * ${TUFT_BINS}.0);
     float nearest = 2.0;
     float which = 0.0;
-    for (int j = -3; j <= 3; j++) {
+    for (int j = -2; j <= 2; j++) {
       float bin = bin0 + float(j);
       if (bin < 0.0 || bin >= ${TUFT_BINS}.0) continue;
       for (int i = 0; i < 2; i++) {
@@ -487,7 +487,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
         float rootAt = mix(0.08, 0.92, (bin + r3) / ${TUFT_BINS}.0);
         float zone = (floor(rootAt * 2.0) + 0.5) * 0.5;
         float middle = rootAt + (rootAt - zone) * ${TUFT_FAN.toFixed(2)} * a
-          + ((r2 - 0.5) * 2.4 * a + (r3 - 0.5) * 3.2 * a * a) / ${TUFT_BINS}.0;
+          + ((r2 - 0.5) * 1.7 * a + (r3 - 0.5) * 2.2 * a * a) / ${TUFT_BINS}.0;
         // (as wide most of its length, then to a point)
         float halfWide = max(${TUFT_BLADE.toFixed(3)} / ${TUFT_BINS}.0 * (1.0 - pow(a, 3.0)), pixel);
         float off = (u - middle) / halfWide;
@@ -523,7 +523,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
   vec3 bladeColour = vBladeColour * mix(0.3, 1.3, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   // (a blade in six straw, among a tuft's green)
-  bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.1) * mix(0.45, 1.2, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.6 * step(1.5, uTuft));
+  bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.1) * mix(0.45, 1.2, smoothstep(0.0, 0.85, along)), step(0.78, strandShade) * 0.6 * step(1.5, uTuft));
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
