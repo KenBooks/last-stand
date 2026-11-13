@@ -6,6 +6,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
+import { WEBGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -16,8 +17,11 @@ import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
+import { setGrassSpread } from '../world/meadow';
+import { setDrapeRounds } from '../entities/models/armor';
+import { setLampQuality } from './lamps';
+import { setShadowsOnMove } from '../world/shadowsOnMove';
 import { setHdrAllowed } from './hdr';
-import { WEBGPU } from './webgpu';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
 import { setClutterShare } from '../world/culling';
@@ -203,9 +207,13 @@ function apply(l: QualityLevel, most = Infinity): void {
   shadow.radius = PENUMBRA * shadow.mapSize.x / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
+  setGrassSpread(p.grassSpread);
+  setLampQuality(p.lampReach, p.lampShadows);
+  setShadowsOnMove(p.shadowsOnMove);
+  setBloomShare(p.bloomShare);
+  setDrapeRounds(p.drapeRounds);
   setHdrAllowed(p.hdr);
   setSkullDetail(p.coarseProps);
-  setBloomShare(p.bloomShare);
   setShadowInTurns(p.shadowInTurns);
   setSunShadowStill(p.stillSunShadow);
   setClutterShare(p.clutter);

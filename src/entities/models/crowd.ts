@@ -11,7 +11,7 @@ import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
-import { CROWD_LAYER } from '../../core/layers';
+import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
 import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
@@ -44,6 +44,8 @@ interface Kind {
   data: Float32Array;
   uniforms: { uCrowd: { value: THREE.DataTexture }; uCrowdJoints: { value: number } };
   slots: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material>[];
+  /** how far a body's pieces reach from its root at its root's scale of 1 (its slots' spheres round it) */
+  reach: number;
 }
 
 /** A body's place in its crowd: the joints its row is made from, and the materials whose glow it reads. */
@@ -58,6 +60,7 @@ const kinds = new Map<string, Kind>();
 const seats = new Map<CrowdBody, Seat>();
 /** the smallest piece that casts a shadow at the quality (`QUALITY.minCasterRadius`, core/quality.ts) */
 const minCaster = { value: 0 };
+const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
 const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Matrix3();
 
 /** The kit material `material` is, or is a copy of (a skinned piece's: models/shapes.ts), or null. */
@@ -121,7 +124,7 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   const texture = rowsTexture(new Float32Array(row * 8), row / 4, 8);
   const kind: Kind = {
     inverses, jointFrom, slotFrom, pieces: pieces.length, seats: [], row, rows: 8, data: texture.image.data as Float32Array,
-    uniforms: { uCrowd: { value: texture }, uCrowdJoints: { value: inverses.length } }, slots: [],
+    uniforms: { uCrowd: { value: texture }, uCrowdJoints: { value: inverses.length } }, slots: [], reach: 0,
   };
   const rootScale = maxScale(model.root);
   parts.forEach((list, slot) => {
@@ -131,8 +134,14 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
       : crowdMaterial(base, kind, slot);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
+    // (drawn over the kept shadows, as the heroes are: `world/moonShadow.ts`)
+    mesh.layers.enable(HERO_SHADOW_LAYER);
     mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
+    // (culled by a sphere round its bodies, made each frame as their rows are: `writeRows`. Never culled, the
+    // village's training dummies drew into every face of the hall's shadowed lamps, 60 shadow draws a frame)
+    geometry.computeBoundingSphere();
+    const sphere = geometry.boundingSphere!;
+    kind.reach = Math.max(kind.reach, sphere.center.length() + sphere.radius);
     // (on WebGPU the shadow is drawn by the slot's own material, skinned by its position node)
     if (!WEBGPU) mesh.customDepthMaterial = depthMaterial(kind);
     mesh.visible = false;
@@ -172,9 +181,9 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
     _n.getNormalMatrix(place);
     if (!g.boundingSphere) g.computeBoundingSphere();
     const size = castsOf(mesh) ? g.boundingSphere!.radius * maxScale(mesh) / rootScale : 0;
+    placeAll(p, place, pos, at);
+    turnAll(nm, _n, nor, at);
     for (let i = 0; i < p.count; i++, at++) {
-      _v.fromBufferAttribute(p, i).applyMatrix4(place).toArray(pos, at * 3);
-      _v.fromBufferAttribute(nm, i).applyMatrix3(_n).normalize().toArray(nor, at * 3);
       if (t) { uv[at * 2] = t.getX(i); uv[at * 2 + 1] = t.getY(i); }
       for (let c = 0; c < colorSize; c++) color[at * colorSize + c] = g.attributes.color.getComponent(i, c);
       index[at * 2] = skin ? g.attributes.skinIndex.getX(i) : joint;
@@ -195,6 +204,36 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
   out.setAttribute('crowdCaster', new THREE.BufferAttribute(caster, 1));
   out.instanceCount = 0;
   return out;
+}
+
+/**
+ * Every point of `from` placed by `m` into `to` from vertex `at`, as `Vector3.applyMatrix4` places each, read off the
+ * array: read and written a vector at a time, the crowd's merge took 0.36 s of a boot's warm-up.
+ */
+function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix4,
+  to: Float32Array, at: number): void {
+  const e = m.elements;
+  for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
+    const x = from.getX(i), y = from.getY(i), z = from.getZ(i);
+    const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+    to[o] = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
+    to[o + 1] = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
+    to[o + 2] = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+  }
+}
+
+/** Every normal of `from` turned by `m` into `to` from vertex `at` and made a unit long, as `Vector3`'s would be. */
+function turnAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix3,
+  to: Float32Array, at: number): void {
+  const e = m.elements;
+  for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
+    const x = from.getX(i), y = from.getY(i), z = from.getZ(i);
+    const nx = e[0] * x + e[3] * y + e[6] * z, ny = e[1] * x + e[4] * y + e[7] * z, nz = e[2] * x + e[5] * y + e[8] * z;
+    const scale = 1 / (Math.sqrt(nx * nx + ny * ny + nz * nz) || 1);
+    to[o] = nx * scale;
+    to[o + 1] = ny * scale;
+    to[o + 2] = nz * scale;
+  }
 }
 
 /** `text` with `from` replaced by `to`; throws when it isn't there (a three.js update moved the chunk). */
@@ -361,7 +400,17 @@ function writeRows(): void {
     }
     if (!n) continue;
     if (n > kind.rows) grow(kind, n);
-    kind.seats.forEach((seat, i) => writeRow(kind, seat, i * kind.row));
+    _box.makeEmpty();
+    let scale = 0;
+    kind.seats.forEach((seat, i) => {
+      writeRow(kind, seat, i * kind.row);
+      for (const joint of seat.joints) _box.expandByPoint(_v.setFromMatrixPosition(joint.matrixWorld));
+      scale = Math.max(scale, seat.body.model.root.matrixWorld.getMaxScaleOnAxis());
+    });
+    // (each piece lies within its body's reach of a joint it hangs on, however its ragdoll lies)
+    _box.getBoundingSphere(_sphere);
+    _sphere.radius += kind.reach * scale;
+    for (const slot of kind.slots) slot.geometry.boundingSphere!.copy(_sphere);
     kind.uniforms.uCrowd.value.needsUpdate = true;
     // (its materials are still: their refresh sends no texture, core/webgpu.ts)
     if (WEBGPU) uploadTexture(kind.uniforms.uCrowd.value);

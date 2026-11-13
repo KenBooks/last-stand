@@ -1,5 +1,6 @@
 // The hero selection screen (ui/heroSelect.ts) over the hall of heroes (game/hall.ts): a cinematic shade over the
-// stage, the title and logo at the top left, the arrows and the heroes' names round the hero in focus, his card in a
+// stage, the title at the top left (the panels' lobby's logo beside it), the arrows and the heroes' names round the
+// hero in focus, his card in a
 // panel at the right (at the foot on an upright screen), the choice on him, Back at the bottom left. Nothing loops: the card fades in
 // once as the focus comes to it, and the shade is painted once.
 @use 'theme' as *;
@@ -20,12 +21,13 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
     radial-gradient(ellipse 34% 62% at var(--hx, 36%) 50%, transparent 45%, rgba(3,2,4,.7) 100%); }
 #heroes .hs-shade { --hx: calc((100% - var(--pw) - var(--gut) * 2) / 2); }
 
-/* ---------- the title and the logo ---------- */
+/* ---------- the title and the logo (the panels' lobby's: the village's hall has none) ---------- */
 .hs-top { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; gap: ui(18px); pointer-events: none; }
 .hs-logo { width: ui(150px); flex: none; }
 .hs-logo .logo-glow { opacity: .8; }
 .hs-heading { display: flex; flex-direction: column; gap: ui(3px); padding-left: ui(18px); border-left: 1px solid rgba($frame, .45); }
+#{$village} .hs-heading { padding-left: 0; border-left: none; }
 .hs-title { font: 700 ui(26px) var(--font-display); letter-spacing: ui(5px); text-transform: uppercase; color: var(--accent);
   text-shadow: 0 0 ui(14px) rgba($accent-glow, .35), $outline; }
 /* the save slot in play, which opens the save slots */

@@ -477,4 +477,4 @@ export interface Effect {
 
 /** A prop's footprint on the floor (a circle), and `h`: the height of its top. Everything walks round
  *  it; only a shot below its top hits it (projectiles fly level, so they pass over low cover). */
-export interface Obstacle { x: number; z: number; r: number; h: number; /** set on a breakable prop's circles: the prop they belong to (`world/destructible.ts`) */ prop?: import('./world/destructible').Prop }
+export interface Obstacle { x: number; z: number; r: number; h: number; /** what an arrow meets here where this isn't a breakable prop (the fountain's tiers and basin: `propSurface`) */ drawn?: readonly import('three').Object3D[]; /** how far round and how tall it stands to the eye where that isn't what stops a body and a shot (a fountain's tiers over its basin: `core/heroHidden.ts`) */ sight?: { r: number; h: number }; /** set on a breakable prop's circles: the prop they belong to (`world/destructible.ts`) */ prop?: import('./world/destructible').Prop }

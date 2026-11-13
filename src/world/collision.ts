@@ -1,5 +1,6 @@
 // Circle-vs-world collision: static obstacles and the arena's wall as it's drawn (`world/wall.ts`).
 import * as THREE from 'three';
+import { VILLAGE } from '../core/beta';
 import { G } from '../state';
 import { groundHeight } from './ground';
 import { state as props, type Prop } from './destructible';
@@ -34,8 +35,8 @@ export function resolveProps(pos: { x: number; z: number }, radius: number): voi
  *  pillars in the center area"). */
 export function propTopAt(x: number, z: number): number {
   let top = -Infinity;
-  // (the hall of heroes' stage stands where the biome's dais is, with none of its props)
-  if (!G.arena || G.arena.hallShown) return top;
+  // (with no village, the hall of heroes' stage stands where the biome's dais is, with none of its props)
+  if (!G.arena || (!VILLAGE && G.arena.hallShown)) return top;
   for (const o of G.arena.obstacles) {
     if (o.prop?.broken) continue;
     const dx = x - o.x, dz = z - o.z;
@@ -55,7 +56,7 @@ export function propTopAt(x: number, z: number): number {
  *  strike is not hitting obstacles if they are walls of the arena, it should stop on them same like destructible
  *  props"). */
 export function wallTopAt(x: number, z: number): number {
-  if (!G.arena || G.arena.hallShown) return -Infinity;
+  if (!G.arena || (!VILLAGE && G.arena.hallShown)) return -Infinity;
   const wall = G.arena.wall;
   if (Math.hypot(x, z) < wall.near) return -Infinity;
   return topOf(wallTile(wall, Math.floor(x / WALL_TILE), Math.floor(z / WALL_TILE)), x, z);

@@ -97,6 +97,8 @@
       #loading .ld-logo { width: min(calc(620 * var(--u)), 88vw, (100vh - calc(190 * var(--u))) * 2.12); width: min(calc(620 * var(--u)), 88vw, (100dvh - calc(190 * var(--u))) * 2.12); }
       #loading .ld-tip { position: relative; left: auto; bottom: auto; translate: none; margin-top: calc(4 * var(--u)); font-size: calc(15 * var(--u)); line-height: 1.3; min-height: 2.6em; }
     }
+    /* (held still while the chest is rehearsed under it: `stillLoading` in ui/loading.ts) */
+    #loading.still, #loading.still *, #loading.still *::after { animation-play-state: paused !important; }
     @media (prefers-reduced-motion: reduce) {
       #loading .ld-glow, #loading .logo-glow, #loading .ld-smoke, #loading .ld-bar::after { animation: none; }
       #loading .ld-ember { display: none; }
@@ -134,6 +136,7 @@
             <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="lit"/></feMerge>
           </filter>
       <filter id="logo-glow-blur" x="-30%" y="-40%" width="160%" height="180%"><feGaussianBlur stdDeviation="14"/></filter>
+      <g id="village-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="112" font-size="104" letter-spacing="4" textLength="670" lengthAdjust="spacingAndGlyphs">WARDENHOLLOW</text></g>
       <g id="logo-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text></g>
     </defs>
   </svg>
@@ -188,6 +191,13 @@
         <div class="sp-title">Unbanked spoils <b class="sp-count">0</b></div>
         <div class="sp-list"></div>
       </div>
+      <!-- the first visit's training (ui/training.ts): its steps, ticked as they're done, under the village's minimap -->
+      <div id="training" data-lobby="village" class="hidden" role="status">
+        <div class="tr-title">Training</div>
+        <ol class="tr-steps"></ol>
+        <div class="tr-finished">Training complete: the portals are open.</div>
+        <button class="link tr-skip">Skip training</button>
+      </div>
     </div>
 
     <div id="crosshair" class="hidden"></div>
@@ -231,6 +241,7 @@
     </div>
     <button id="btn-revive" class="hidden">Revive</button>
     <div id="hurt-vignette"></div>
+    <button id="btn-view" data-lobby="village" class="touch-only" aria-label="Change view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     <button id="btn-pause" class="touch-only" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
     <button id="btn-full" class="touch-only" aria-label="Full screen"><svg class="full-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="full-leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
   </div>
@@ -240,6 +251,12 @@
     <div id="touch-pad"></div>
     <div id="touch-stick"><div class="knob"></div></div>
     <div id="touch-skills"></div>
+    <!-- the village's (the lobby's alone): use what the hero is near, the inventory, the map -->
+    <div id="touch-village" data-lobby="village" class="hidden">
+      <button class="tv-use hidden"></button>
+      <button class="tv-bag" aria-label="Inventory">Bag</button>
+      <button class="tv-map" aria-label="Map">Map</button>
+    </div>
   </div>
 
   <!-- Phones held upright: the arena needs the width -->
@@ -253,14 +270,21 @@
   <div id="readying" role="status" aria-live="polite"><div class="rd-box"><div class="rd-sub">Readying the fight</div><div class="rd-bar"><div class="rd-fill"></div></div></div></div>
   <div id="menu" class="hidden" data-tab="hero">
     <!-- short screens (phones held sideways) show one panel at a time, picked here -->
-    <nav id="lobby-rail" class="panel" aria-label="Lobby">
+    <nav id="lobby-rail" class="panel" aria-label="Lobby" data-lobby="panels">
       <button data-lt="hero" class="active"><span class="ri">⚔</span>Hero</button>
       <button data-lt="gear"><span class="ri">⛨</span>Gear</button>
       <button data-lt="skills"><span class="ri">✦</span>Skills</button>
       <button id="rail-practice"><span class="ri">◎</span><span class="sh-hide">Practice</span><span class="sh-show">Back</span></button>
       <button id="rail-play" class="play"><span class="ri">▶</span>Play</button>
     </nav>
-    <div class="menu-left panel">
+    <!-- short screens (phones held sideways) show one panel of the inventory at a time, picked here -->
+    <nav id="lobby-rail" class="panel" aria-label="Inventory" data-lobby="village">
+      <button data-lt="gear" class="active"><span class="ri">⛨</span>Gear</button>
+      <button data-lt="skills"><span class="ri">✦</span>Skills</button>
+      <button id="rail-close"><span class="ri">✕</span>Close</button>
+    </nav>
+    <!-- the village's crest: its name (the loading screen's logo gathers into it), and a co-op room's bar under it -->
+    <div class="menu-left panel" data-lobby="panels">
       <!-- folds the panel away to the left, and back (the tab stays at the screen's edge) -->
       <button id="hero-fold" class="fold-tab" aria-expanded="true" title="Hide the hero panel" aria-label="Hide the hero panel"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M8.5 3l-6 7 6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Hero</span></button>
       <!-- the contents scroll inside the frame (a screen too short for them), so the tab can stand outside it -->
@@ -306,12 +330,21 @@
         </div>
       </div>
     </div>
+    <div class="menu-crest" data-lobby="village">
+      <div class="logo">
+        <div class="logo-art" role="img" aria-label="Wardenhollow">
+          <svg class="logo-glow" viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+          <svg viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+        </div>
+      </div>
+      <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
+    </div>
     <div class="menu-center">
-      <div class="stow-hint"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
+      <div class="stow-hint" data-lobby="panels"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
       <!-- the key bar; the skill book slides up over it only to remap (ui/loadoutEditor.ts) -->
       <div id="loadout" class="panel">
         <!-- folds the panel away to the bottom, and back (the tab stays at the screen's edge) -->
-        <button id="skills-fold" class="fold-tab" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
+        <button id="skills-fold" class="fold-tab" data-lobby="panels" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
         <div class="lo-book" id="lo-book">
           <div class="lo-head"><div class="lo-top"><span class="lo-title">Spellbook</span>
             <span class="lo-style"><span class="lo-style-name"></span><button class="link" id="btn-lo-reset">Reset to defaults</button></span></div>
@@ -327,7 +360,7 @@
     </div>
     <div class="menu-right panel">
       <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
-      <div class="fold-tabs fold-right">
+      <div class="fold-tabs fold-right" data-lobby="panels">
         <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
         <button id="attrs-fold" class="fold-tab fold-extra" title="Show attributes" aria-label="Show attributes"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Attributes</span></button>
       </div>
@@ -473,6 +506,42 @@
         <div id="stats"></div>
       </div>
     </div>
+    <!-- the card a village object opens (ui/villageCard.ts): a portal's starting wave and its way in, the chronicle's
+         save slots -->
+    <div id="vcard" data-lobby="village" class="panel hidden" role="dialog" aria-labelledby="vc-title">
+      <div class="vc-title" id="vc-title"></div>
+      <div class="vc-sub"></div>
+      <div class="vc-page" data-page="portal">
+        <div class="biome-row vc-grounds hidden"><span class="br-label">Battleground</span>
+          <div class="seg" id="opt-biome"></div>
+        </div>
+        <div class="biome-row"><span class="br-label">Starting wave</span>
+          <div class="seg" id="opt-wave">
+            <button data-d="-1000" aria-label="First wave">&laquo;</button><button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button><button data-d="1000" aria-label="Best wave">&raquo;</button>
+          </div>
+        </div>
+        <button class="btn primary big" id="btn-start">Enter</button>
+        <div class="vc-training hidden">
+          <p>Your training isn't finished. Walk the village first: its tracker says what's left.</p>
+          <button class="btn vc-skip">Skip training</button>
+        </div>
+      </div>
+      <div class="vc-page" data-page="chronicle">
+        <div class="records"></div>
+        <div class="vc-row"><button class="btn" id="btn-saves">Save slot 1</button><button class="btn danger" id="btn-reset">Reset profile</button></div>
+      </div>
+      <button class="link vc-close">Leave</button>
+    </div>
+  </div>
+
+  <!-- the village's map (ui/villageMap.ts): M in the lobby; its panels and names are filled in by it -->
+  <div id="vmap" data-lobby="village" class="hidden" aria-hidden="true" role="dialog" aria-label="Map of the village">
+    <div class="vm-sheet">
+      <div class="vm-panels"></div>
+      <div class="vm-names"></div>
+      <div class="vm-you"></div>
+      <button class="vm-close">Close · M</button>
+    </div>
   </div>
 
   <!-- save slots (ui/saves.ts): the three saves side by side, to play one or delete one -->
@@ -480,7 +549,7 @@
   <div id="heroes" class="hidden" role="dialog" aria-modal="true" aria-label="Choose your hero">
     <div class="hs-shade" aria-hidden="true"></div>
     <header class="hs-top">
-      <div class="hs-logo logo-art" role="img" aria-label="Last Stand">
+      <div class="hs-logo logo-art" data-lobby="panels" role="img" aria-label="Last Stand">
         <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
         <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
       </div>
@@ -564,6 +633,13 @@
     <button class="btn fp-back">Back to window</button>
   </div>
 
+  <!-- a beta is on (the village lobby): said as the game opens, with the way back (ui/beta.ts) -->
+  <div id="beta-notice" class="hidden" role="status">
+    <span><b>Beta</b> You're trying the village lobby.</span>
+    <button class="btn" id="btn-beta-back">Back to the old lobby</button>
+    <button class="btn bn-close" id="btn-beta-close" aria-label="Close" title="Close">✕</button>
+  </div>
+
   <!-- the game ran slowly: may a performance report be sent? (perf/consent.ts) -->
   <div id="perf-ask" class="hidden" role="dialog" aria-live="polite" aria-label="Performance report">
     <div class="pa-ask">
@@ -604,6 +680,7 @@
       <button class="tab active" data-pause-tab="controls" role="tab" aria-selected="true">Controls</button>
       <button class="tab" data-pause-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab" data-pause-tab="performance" role="tab" aria-selected="false">Performance</button>
+      <button class="tab" data-pause-tab="beta" role="tab" aria-selected="false">Beta</button>
     </div>
     <div class="pb-pages">
       <section class="pb-page" data-pause-page="controls" role="tabpanel">
@@ -691,8 +768,31 @@
           <ol class="profile-parts hidden"></ol>
           <button class="btn hidden" id="btn-profile-send">Send the report</button>
         </div>
+        <!-- the village's hour held for a look at it at any time (in the village alone: game/clock.ts), Auto its clock -->
+        <div class="opt-row hour-row"><label class="opt-level" title="The hour the village is lit for: Auto follows your clock"><span>Time of day</span><input type="range" id="opt-hour" min="-0.5" max="23.5" step="0.5"><output id="opt-hour-value"></output></label></div>
         </div>
       </section>
+      <!-- features to try before they're the game's (ui/beta.ts, core/beta.ts): switched here, taken up by a reload -->
+      <section class="pb-page pb-opts off" data-pause-page="beta" role="tabpanel">
+        <div class="pb-opt-col beta-col">
+          <div class="beta-lead">Features still being worked on. Try one, and switch it off again here at any time.</div>
+          <div class="opt-row quality-row"><span>Village lobby</span>
+            <div class="seg" id="opt-village"><button data-v="on">On</button><button data-v="off">Off</button></div>
+            <small id="beta-state"></small>
+          </div>
+          <div class="beta-note">The lobby as a village to walk: portals to the battlegrounds, the stash's chest, the hall
+            of heroes, a training yard. Off, the lobby is its panels over the battleground, as before. Your heroes and
+            saves are the same either way.</div>
+          <div id="beta-apply" class="hidden"><span></span><button class="btn primary" id="btn-beta-reload">Reload</button></div>
+        </div>
+      </section>
+    </div>
+    <!-- in the lobby: what the village's objects open, from here too -->
+    <div class="pb-links menu-links" data-lobby="village">
+      <button class="link" id="btn-hero">Change hero</button>
+      <button class="link" id="btn-coop">Play together</button>
+      <button class="link" id="btn-help">How to play</button>
+      <button class="link hidden" id="btn-install">Install</button>
     </div>
     <div class="build-info"></div>
   </div></div>
@@ -725,7 +825,10 @@
       <p><b class="gold">Play together</b> (in the lobby) opens a room for a friend. Each keeps their own spoils; a fallen hero can be raised by a teammate before bleeding out.</p>
     </div>
     </div>
-    <button class="btn primary" id="btn-help-close">Got it</button>
+    <div class="help-actions">
+      <button class="btn hidden" id="btn-help-restart">Restart training</button>
+      <button class="btn primary" id="btn-help-close">Got it</button>
+    </div>
   </div></div>
 
   <div id="tooltip" class="hidden"></div>
@@ -777,6 +880,21 @@
     <div class="ld-tip"></div>
   </div>
 
+  <!-- The lobby is the game's panels over the battleground, or the village (a beta the player opts into: the pause
+       menu's Beta tab, src/core/beta.ts): the address's `village` kept in a cookie, then the cookie. Each lobby's own
+       markup is marked `data-lobby`, and the other's is taken out here, so every id stays one element's. -->
+  <script>
+    (() => {
+      const asked = new URLSearchParams(location.search).get('village');
+      const kept = (document.cookie.match(/(?:^|; )last-stand-beta-village=([01])/) || [])[1];
+      if (asked === '1' || asked === '0') document.cookie = `last-stand-beta-village=${asked}; max-age=31536000; path=/; SameSite=Lax`;
+      const lobby = (asked === '1' || asked === '0' ? asked : kept) === '1' ? 'village' : 'panels';
+      document.documentElement.dataset.lobby = lobby;
+      for (const part of document.querySelectorAll('[data-lobby]')) {
+        if (part !== document.documentElement && part.dataset.lobby !== lobby) part.remove();
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -13,6 +13,8 @@ body.touch .touch-only { display: flex !important; }
   background: radial-gradient(circle at 40% 35%, #f3e1b0, #7a5a2a 70%); box-shadow: 0 0 14px rgba($highlight, .45); }
 /* the attack button in the corner, the other skills on an arc around it, the potion off to the left */
 #touch-skills { position: absolute; right: env(safe-area-inset-right, 0px); bottom: 0; width: 270px; height: 270px; scale: var(--touch, 1); transform-origin: right bottom; }
+/* (hidden, not gone: a finger pressing one as he walks out keeps it till it lifts) */
+body.unarmed #touch-skills { visibility: hidden; }
 #touch-skills .slot { position: absolute; width: 58px; height: 58px; border-radius: 50%; pointer-events: auto; touch-action: none; overflow: hidden; opacity: .92; }
 #touch-skills .slot .icon { font-size: 30px; }
 #touch-skills .slot .key { display: none; }
@@ -30,13 +32,22 @@ body.touch .touch-only { display: flex !important; }
 #btn-pause { position: absolute; top: 10px; left: $touch-edge; width: 44px; height: 44px; align-items: center; justify-content: center; z-index: 9;
   border-radius: 50%; border: 1px solid rgba($frame, .6); background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }
 #btn-pause svg { width: 20px; height: 20px; fill: currentColor; }
+/* the view (top-down, over the shoulder, through the eyes), right of the pause button: the village's alone, so its
+   corner is two buttons wide, its bars narrower beside them and the choice after a wave half a button aside */
+html[data-lobby="village"] { --touch-corner: 108px; --touch-bar: 190px; --touch-aside: 27px; }
+#btn-view { position: absolute; top: 10px; left: calc(#{$touch-edge} + 54px * var(--touch, 1)); width: 44px; height: 44px;
+  align-items: center; justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
+  background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1);
+  transform-origin: left top; }
+#btn-view svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 // (full screen an icon alone in the top right corner, round as the pause button: its arrows out, or in while the
-// page is full screen; none where the page can't go full screen; in a run beside the minimap, left of it)
+// page is full screen; none where the page can't go full screen; in a run, and in the village, which has a minimap
+// too, beside the minimap, left of it)
 #btn-full { position: absolute; top: 10px; right: $touch-edge; width: 44px; height: 44px; align-items: center;
   justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1);
   transform-origin: right top; touch-action: manipulation; }
-#hud:not(.lobby) #btn-full { right: calc(#{hud(12px)} + var(--mm-room) * var(--hud, 1) + 8px); }
+#hud:not(.lobby) #btn-full, #{$village} #btn-full { right: calc(#{hud(12px)} + var(--mm-room) * var(--hud, 1) + 8px); }
 #btn-full svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
   stroke-linejoin: round; }
 #btn-full .full-leave, #btn-full.on .full-enter { display: none; }
@@ -45,7 +56,9 @@ body.touch #btn-full.cant { display: none !important; }
 /* touch HUD: the hotbar gives way to the buttons, the bars move up out of the thumbs' way */
 body.touch #hotbar { display: none; }
 body.touch #bottombar { left: $touch-beside; top: 12px; bottom: auto; transform: none; flex-direction: column; align-items: stretch; gap: 4px; scale: var(--touch, 1); transform-origin: left top; }
-body.touch .bar { width: 220px; height: 24px; border-radius: 12px !important; border: 1px solid var(--frame-dark) !important; }
+// (the village's 190 px: beside the pause and view buttons, 220 left the choice after a wave no room between them on
+// a phone)
+body.touch .bar { width: var(--touch-bar, 220px); height: 24px; border-radius: 12px !important; border: 1px solid var(--frame-dark) !important; }
 body.touch .bar .txt { font-size: 13px; }
 body.touch .bar .bar-label { display: none; }
 body.touch #buffs { left: $touch-beside; top: touch(76px); bottom: auto; transform-origin: left top; }
@@ -55,12 +68,37 @@ body.touch #decision .k { display: none; }
    by --touch, so the room between them is over its own scale; clamp() of the room short times 1000 is 0 or the bars'
    whole height, a step */
 $choice-least: 460px;
-$choice-room: calc(100vw - 2 * (#{$touch-beside} + 230px * var(--touch, 1)));
+// (the room the bars, and 10 px after them, leave on both sides. In the village the bars stand beside the pause and
+// view buttons on the left and the right side keeps a button's room: the choice is centred in the room between, a
+// button's half right of the screen's middle, `--touch-aside`; centred on the screen, the view button's room on both
+// sides left it under the bars on a phone with the browser's bars)
+$choice-room: calc(100vw - 2 * (#{$touch-beside} + (var(--touch-bar, 220px) + 10px) * var(--touch, 1)) + 2 * var(--touch-aside, 0px) * var(--touch, 1));
 body.touch #decision { max-width: max(#{$choice-least}, calc(#{$choice-room} / var(--hud, 1)));
   top: calc(#{hud(10px)} + clamp(0px, (#{$choice-least} * var(--hud, 1) - #{$choice-room}) * 1000, 12px + 60px * var(--touch, 1))); }
+#{$village} body.touch #decision { left: calc(50% + var(--touch-aside) * var(--touch, 1)); }
 body.touch #decision .dc-buttons { flex-wrap: wrap; }
 /* its buttons a finger's height whatever the HUD's scale (an upright tablet's 0.55 left them 26 px tall) */
 body.touch #decision .dc-buttons .btn { min-height: calc(32px / var(--hud, 1)); }
 
 .mouse-only { display: inline; } .touch-inline { display: none; }
 body.touch .mouse-only { display: none; } body.touch .touch-inline { display: inline; }
+
+/* ---------- the village's touch buttons (the lobby's alone): in the top-right corner beside the minimap, Use naming what
+   it does ---------- */
+#touch-village { position: absolute; right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px); top: 8px; display: flex; gap: 10px;
+  align-items: center; justify-content: flex-end; scale: var(--touch, 1); transform-origin: right top;
+  pointer-events: none; }
+#touch-village.hidden, #touch-village .hidden { display: none; }
+// (full screen at the head of its row, beside the minimap, the row a button further in: put beside the minimap, it
+// lay over Map)
+body:has(#touch-village:not(.hidden)) #btn-full { top: 8px; right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px); }
+body:has(#touch-village:not(.hidden)) #touch-village {
+  right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px + 54px * var(--touch, 1)); }
+// (the village's panels open lie over the touch HUD's corner and have a Close of their own: its buttons are hidden
+// till they're put away; under them they took no tap, and beside a tablet's, pause put the panels away instead)
+#{$village} body.touch:has(#menu:not(.hidden):not(.stowed)) :is(#btn-pause, #btn-full, #btn-view) { display: none !important; }
+#touch-village button { pointer-events: auto; touch-action: manipulation; height: 48px; min-width: 56px; padding: 0 14px;
+  border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
+  font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
+// (full screen an icon alone, round: its arrows out, or in while the page is full screen)
+#touch-village .tv-use { border-color: var(--accent); box-shadow: 0 0 12px rgba($highlight, .45); color: #ffe7b0; }

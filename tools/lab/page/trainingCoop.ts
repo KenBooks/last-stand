@@ -2,9 +2,8 @@
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
-import { setBiomeSetting } from '../../../src/game/biome';
 import { saveProfile } from '../../../src/loot/profile';
-import { renderMenu } from '../../../src/ui/menus';
+import { renderMenu, selectTraining } from '../../../src/ui/menus';
 import { hurtPlayer, hitEnemy } from '../../../src/combat/damage';
 import { gainLoot } from '../../../src/game/run';
 
@@ -29,14 +28,16 @@ export async function trainingCoop(lab: Lab, command: TrainingStep): Promise<Rep
     G.profile.records.bestReached = { [biome]: command.host ? 4 : 1 };
     saveProfile(G.profile);
     saved = JSON.stringify(G.profile);
-    setBiomeSetting(biome);
+    G.arena.setBiome(biome);
     renderMenu();
-    if (command.host) element('#opt-training [data-training="true"]').click();
+    // (the ghost's choice, as its card makes it: talked to in `training`)
+    if (command.host) selectTraining(true);
   } else if (command.step === 'lobby') {
-    check(element('#opt-training [data-training="true"]').classList.contains('active'), 'host mode not shown');
+    check(element('#btn-start').textContent === 'Enter the Training Grounds' || !command.host,
+      'host mode not shown');
     check(element('.wv-val').textContent?.includes('Wave 4') === true, 'host reached wave not shown');
     if (!command.host) {
-      const choices = document.querySelectorAll<HTMLButtonElement>('#opt-training button, #opt-wave button');
+      const choices = document.querySelectorAll<HTMLButtonElement>('#opt-biome button, #opt-wave button');
       check([...choices].every((button) => button.disabled), 'guest can override the host selection');
     }
   } else if (command.step === 'fight' || command.step === 'canary') {

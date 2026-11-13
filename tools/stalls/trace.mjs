@@ -50,6 +50,17 @@ const WORK_US = 500;
  *  or two, and once it never came (Chrome's tracing off, no `tracingComplete`: a run waited 14 minutes) */
 const TRACE_END_MS = 60_000;
 
+/** how many of the categories the events Chrome sent came in are said, the most first */
+const SENT_SAID = 6;
+
+/** What Chrome sent, said: how many events in all and in the categories that sent the most. */
+function sentText(sent) {
+  const total = [...sent.values()].reduce((sum, count) => sum + count, 0);
+  const most = [...sent].sort((a, b) => b[1] - a[1]).slice(0, SENT_SAID);
+  const each = most.map(([category, count]) => `${(count / 1000).toFixed(0)}k ${category}`);
+  return `${(total / 1000).toFixed(0)}k events sent (${each.join(', ')})`;
+}
+
 /** A trace Chrome never ended: its measure is lost, and the browser can be traced again. */
 export class TraceLost extends Error {}
 
@@ -96,8 +107,10 @@ export async function startTrace(browser, options = {}) {
   const { js = false, angle = false, dawn = false, passes = false, paints = false } = options;
   const session = await browser.newBrowserCDPSession();
   const events = [];
+  const sent = new Map();
   session.on('Tracing.dataCollected', ({ value }) => {
     for (const event of value) {
+      sent.set(event.cat, (sent.get(event.cat) ?? 0) + 1);
       if (kept(event)) events.push(slim(event));
       const draw = passes ? drawOf(event) : null;
       if (draw) events.push(draw);
@@ -123,6 +136,7 @@ export async function startTrace(browser, options = {}) {
       const ended = await within(session.send('Tracing.end').then(() => complete), TRACE_END_MS);
       await session.detach().catch(() => {});
       if (!ended) throw new TraceLost(`Chrome never ended the trace (no tracingComplete in ${TRACE_END_MS} ms)`);
+      console.log(`stalls: the trace: ${sentText(sent)}; ${events.length} kept`);
       return events;
     },
   };

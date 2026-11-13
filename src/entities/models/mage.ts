@@ -295,9 +295,12 @@ export function* mageSteps(): ModelSteps {
   // white for a moment, the whole crystal flaring past the bloom, "staff still flickers at its brightest peak", 3.2
   // times its light, `lab hall --glow --lobby`; the hall's `HEAD` treats it more still)
   const GEM_GLOW = 0.4;
+  yield;
+  // (rough, its coat thin and rough, its highlight weak: polished, each facet as it turned mirrored a street lamp by night,
+  // 4 times as bright as its glow for a frame or two, "mage's staff flickers too bright at times"; `lab village --only staffAtNight`)
   const gem = kit.phys({
-    color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.55, metalness: 0,
-    clearcoat: 0.15, clearcoatRoughness: 0.55, specularIntensity: 0.3, flatShading: true,
+    color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.7, metalness: 0,
+    clearcoat: 0.1, clearcoatRoughness: 0.7, specularIntensity: 0.3, flatShading: true,
   });
   yield;
   // the grimoire's set stone: red, lit from within a little

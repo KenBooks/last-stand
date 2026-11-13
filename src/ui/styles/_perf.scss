@@ -15,7 +15,10 @@
 #diag.booting { display: none; }
 #diag > * { flex-shrink: 0; pointer-events: auto; }
 body.touch #diag { --top: #{touch(180px)}; }
-#perf { width: 212px; padding: 9px 11px 8px;
+// (a short screen's overlay scrolls within the screen, its Profile button high in it: on a phone held sideways its
+// last lines and the button lay under the screen's foot, "the perf panel doesn't fit")
+#diag > #perf { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+#perf { width: 212px; box-sizing: border-box; padding: 9px 11px 8px;
   font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; color: #cfe9d8; text-align: left;
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
   cursor: $cursor-hand; user-select: none; --pf: #7affb0; transition: border-color .3s; }
@@ -75,6 +78,8 @@ body.touch:has(#touch:not(.hidden)) #perf { pointer-events: none; }
   font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: #cfe9d8; text-align: left;
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
   will-change: transform; contain: content; }
+// (no wider than reaches the wave's badge, at the top's middle: on an upright tablet its 340 px lay over it)
+#blog { max-width: calc((50vw - #{hud(35px)} - 8px) / var(--ui, 1) - 10px); }
 .bl-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid rgba($frame, .25); }
 .bl-head span { margin-right: auto; font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-dim); }
 #blog.paused .bl-head span { color: var(--accent); }

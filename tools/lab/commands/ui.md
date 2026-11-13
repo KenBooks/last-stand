@@ -9,8 +9,8 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
+readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,pauseLobby,betaNotice,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
+run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,pauseBeta,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
@@ -65,7 +65,8 @@ shows it (`ui/readying.ts`, 40% along: within the window, its label on one line,
 the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies the heroes and every label the
 bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
 which a class pick once said, and it must be found; a tree from before it can't keep them cold, and says so), the
-lobby's battleground button on clicked with the mouse and a key pressed after it as the browser gets them (where the
+crypt's portal card (the hero put at its stand and the portal used) left by its Leave clicked with the mouse and a
+key pressed after it as the browser gets them, the hero put back after (where the
 focus went and whether the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
 view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
 by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
@@ -87,7 +88,7 @@ opened with the light; the moment after the stash weapon's is pictured, card and
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
-timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`) and its Settings tab (`pauseSettings`) and its Performance tab with a profile listed and its Send button (`pausePerformance`), the profiler at work (`profiling`: every panel hidden, its pane at the top inside the window with Cancel in it; its canary leaves the pause menu shown), each fitting the window without scrolling, the box inside
+timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`) and its Settings tab (`pauseSettings`, with no time of day in a run's; `pauseLobby` the village's, `page/uiHour.ts`: its time of day shown within the window, the slider moved to 21:30 holding the hour and saying so, and its first step, Auto, giving the clock back; `--canary` leaves the hour held at Auto, which must be found), its Beta tab (`pauseBeta`: fitting the window without scrolling as the others must, the same canary; what its switch and Reload do is `lab beta`'s), the beta's notice as the game's opening shows it (`betaNotice`, `page/uiBeta.ts`: inside the window, both its buttons inside it and found by the mouse at their middles; none in the lobby without the village; `--canary` makes it twice the window's width, which must be found past the window) and its Performance tab with a profile listed and its Send button (`pausePerformance`), the profiler at work (`profiling`: every panel hidden, its pane at the top inside the window with Cancel in it; its canary leaves the pause menu shown), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
 `--canary` makes a row of the tab shown twice the window's height, which must make it scroll at any zoom: 600 css px went unseen at 1024x700 and on a tablet, #468), the performance overlay's sizes
 (`perfMini`, `page/uiPerfSize.ts`: the overlay shown whole, then Mini pressed in the pause menu's Performance stats
@@ -155,3 +156,15 @@ not yet warm, one 40% of the way (from play, "we can only load currently selecte
 others, show some loading bars on those heroes"): the lobby's own hero standing, each cold one off his plinth with a bar
 on his tab, the choice on a cold one saying "Readying the Mage 40%" and choosing nothing; then the heroes warmed, every
 one standing and no bar left. Its canary leaves a cold hero's tab without its bar.
+
+`villageHud`, `villageHudTouch` (`page/uiVillageHud.ts`, from play: "move training checklist to the right below minimap,
+and yes, we need a minimap in wardenhollow too"): the village's minimap with the training's tracker under it, the hero
+in the training yard, by mouse and on touch: each within the window, the tracker under the minimap (beside it on a
+short screen, where under it hid three skill buttons), and none over the touch controls beside and below them. Check on a phone's `--screen` too. `--canary` makes the tracker
+as tall as the window.
+
+`villageMap` (`page/uiVillageMap.ts`, from play: "need to fix the map, there is overlap"): the village's map laid flat,
+no name over another, each within the sheet, each pointer's tip at its place on the map however far its name was moved
+aside; walked with it open, its opacity at most 0.5, and 0.99 at least standing and once he stops (from play, "make map
+semi-transparent if user opens a map and attempts to walk"), the hero checked to have walked. Check on a phone's
+`--screen` too. `--canary` lays one name on another and walks again with the map held opaque.

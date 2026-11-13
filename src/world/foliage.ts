@@ -29,6 +29,14 @@ function paintLeaf(g: CanvasRenderingContext2D, x: number, y: number, a: number,
  * neutral green, so each tree's instance colour sets its hue; darker leaves at the back of the pile.
  */
 export function leafClusterTexture(seed = 7): THREE.CanvasTexture {
+  let painted = clusters.get(seed);
+  if (!painted) clusters.set(seed, painted = paintCluster(seed));
+  return painted;
+}
+/** each cluster painted, by its seed (the forest's and the village's trees share it) */
+const clusters = new Map<number, THREE.CanvasTexture>();
+
+function paintCluster(seed: number): THREE.CanvasTexture {
   const S = 512, c = canvas(S), g = ctx2d(c), r = mulberry(seed);
   const leaves: [number, number, number, number, number][] = [];
   for (let i = 0; i < 220; i++) {

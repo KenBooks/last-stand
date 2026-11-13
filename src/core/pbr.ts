@@ -433,6 +433,40 @@ function wood(): PBRData {
   }, 3);
 }
 
+/** how many boards across a tile of `boards` */
+const BOARDS = 6;
+
+/**
+ * Oak cut into boards side by side (the stash's chest), sdf-harness's wood with its boards: v along the grain, each
+ * board its own grain and shade, a dark line where two meet.
+ */
+function boards(): PBRData {
+  const R = WOOD_RINGS, waver = latticeFbm(R, R / 4, 83), pores = latticeNoise(R * 10, R / 2, 85);
+  return buildPBR(256, (u, v, o) => {
+    const at = u * BOARDS, board = Math.floor(at), across = at - board;
+    const own = hash3(board, 3, 7), joint = 1 - smoothstep(0, 0.045, Math.min(across, 1 - across));
+    const ring = fract(u * R + 0.6 * waver(u, v) + own * 5), pore = pores(u, v);
+    const late = smoothstep(0.55, 0.85, ring) * (0.75 + 0.25 * pore);
+    const k = (0.72 + own * 0.42) * (1 - joint * 0.6);
+    o.h = (late * 0.5 + pore * 0.2 + 0.3) * (1 - joint);
+    o.r = mix(OAK[0], OAK_LATE[0], late) * k; o.g = mix(OAK[1], OAK_LATE[1], late) * k; o.b = mix(OAK[2], OAK_LATE[2], late) * k;
+    o.rough = clamp(0.62 + late * 0.12 + (1 - pore) * 0.08, 0, 1);
+  }, 3);
+}
+
+/** Hammered iron (the chest's straps), sdf-harness's hammered metal: shallow dents side by side, each its own shade. */
+function hammered(): PBRData {
+  const dents = latticeCells(16, 16, 0.9, 87);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(256, (u, v, o) => {
+    dents(u, v, cell);
+    const shade = 0.17 + 0.07 * cell.id;
+    o.h = smoothstep(0, 0.75, cell.f1);
+    o.r = shade; o.g = shade; o.b = shade * 1.06;
+    o.rough = clamp(0.42 + 0.2 * cell.id, 0, 1);
+  }, 2);
+}
+
 /** Coarse burlap weave. */
 function burlap(): PBRData {
   const fbm = makeFbm(91, 4, 4);
@@ -968,7 +1002,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, soil, bark, leather, oiled, skin, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, boards, hammered, burlap, forestFloor, soil, bark, leather, oiled, skin, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -1002,5 +1036,5 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []], ['soil', []],
   ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['limestone', [11]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
-  ['leather', []], ['oiled', []], ['skin', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
+  ['boards', []], ['hammered', []], ['leather', []], ['oiled', []], ['skin', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

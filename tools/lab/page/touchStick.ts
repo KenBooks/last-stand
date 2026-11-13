@@ -44,6 +44,9 @@ const WALL_ROOM = 3;
 /** with --canary: the furthest push's finger slid back to this far out (css px) before it's read, a slower push
  *  further out that the measure must catch */
 const CANARY_BACK = 20;
+/** the most a push's walk may rise or fall (m): further, it left the level ground its speed is read on (from the
+ *  set-ups' spot the walk stepped down off the dais's ground and was read at 6.69 of 7 m/s) */
+const LEVEL_SLACK = 0.02;
 
 /** What one push gave. */
 interface Push {
@@ -55,6 +58,9 @@ interface Push {
   knob: number;
   /** the hero's speed once it was held (m/s) */
   speed: number;
+  /** where he was then (m), and how far he had risen or fallen since setting off */
+  end: [number, number];
+  climb: number;
   /** the canary's: its finger slid back */
   planted: boolean;
   /** his room to the wall as it was read (m) */
@@ -124,6 +130,7 @@ async function padStart(lab: Lab): Promise<PagePoint> {
 /** One push: the hero set up afresh, the finger put down at `start`, slid `out` px right and held; then lifted. */
 async function pushOut(lab: Lab, fixture: Fixture, start: PagePoint, out: number, planted: boolean): Promise<Push> {
   await lab.setup(fixture);
+  const startY = lab.player.pos.y;
   const knob = element('#touch-stick .knob');
   await lab.touchDown(start);
   const end = { x: start.x + out, y: start.y };
@@ -136,6 +143,8 @@ async function pushOut(lab: Lab, fixture: Fixture, start: PagePoint, out: number
     push: Math.hypot(input.stick.x, input.stick.y),
     knob: Math.hypot(knobAt.x - start.x, knobAt.y - start.y),
     speed: Math.hypot(lab.player.vel.x, lab.player.vel.z),
+    end: [lab.player.pos.x, lab.player.pos.z],
+    climb: lab.player.pos.y - startY,
     planted,
     room: G.arena.wall.roomOut(lab.player.pos.x, lab.player.pos.z, lab.player.radius),
   };
@@ -192,8 +201,9 @@ async function wallCanary(lab: Lab, fixture: Fixture, start: PagePoint, outs: nu
 function pushLine(push: Push, full: number): string {
   const out = `${push.out} px out`.padStart(11);
   const canary = push.planted ? ` (canary: slid back to ${CANARY_BACK} px)` : '';
+  const end = push.end.map((metres) => metres.toFixed(1)).join(', ');
   return `${out}: push ${push.push.toFixed(2)}, knob ${push.knob.toFixed(1)} px out, `
-    + `${push.speed.toFixed(2)} of ${full} m/s${canary}`;
+    + `${push.speed.toFixed(2)} of ${full} m/s, at ${end}${canary}`;
 }
 
 /**
@@ -220,6 +230,9 @@ export async function touchStick(lab: Lab, options: TouchOptions): Promise<Repor
     + `the hero walked in from ${fixture.at?.map((metres) => metres.toFixed(1)).join(', ')}`];
   for (const push of pushes) {
     lines.push(pushLine(push, full));
+    if (Math.abs(push.climb) > LEVEL_SLACK) {
+      problems.push(`lab: touch: ${push.out} px out walked off level ground (${push.climb.toFixed(2)} m)`);
+    }
     const faults = faultsOf(push, measured.filter((other) => other.out < push.out), travel, full);
     if (!push.planted) {
       problems.push(...faults);

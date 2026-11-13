@@ -3,6 +3,10 @@
 // the scene's target itself (`SCENE_READ`), run on plain single-sample targets, since multisampled post targets cost
 // a resolve per pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
+import { lightTheLamps } from './lamps';
+import { SIGHT, SIGHT_GLSL, aimSight } from './sight';
+import { VILLAGE } from './beta';
+import { lightTheLampsOnWebGPU } from './lampNodes';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -14,12 +18,14 @@ import {
 import { G } from '../state';
 import { sunShadowStill } from '../world/props';
 import { CAMERA } from '../data/balance';
+import { countGhostLayers } from './ghostLayers';
 import { clamp, damp } from '../util';
-import { updateSeeThrough } from './seeThrough';
+import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
+import { builtOpening, fenceOpened, holeOpening, propsHideHim, propsOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
-import { ARMS_LAYER, WARM_LAYER } from './layers';
+import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
 import { takePorts } from './shaderPorts';
 import { BOUNDS_TEST, declarePointBounds } from './lightBounds';
 import type { WebGPURenderer } from 'three/webgpu';
@@ -117,12 +123,21 @@ export function bloomPixels(): number {
 }
 /**
  * The scene's target as a pass reads it: a NaN or Inf pixel made black and the rest held to 0..64 (bloom would smear
- * a bad pixel into black rectangles). Read by each pass that reads
+ * a bad pixel into black rectangles), and what he can't see in the fog (core/sight.ts). Read by each pass that reads
  * the scene, bloom's bright pass, the area's first grid and the grade: a pass of its own made it into a target of the
  * frame's size, and bloom was added over that in another, two passes over every pixel (from play, an S25 Edge's post
  * chain 9.4 ms of its 33 ms frame at full res).
  */
-const SCENE_READ = /* glsl */`
+const SCENE_READ = VILLAGE ? /* glsl */`
+  ${SIGHT_GLSL}
+  vec4 sceneAt(sampler2D scene, vec2 uv) {
+    vec4 c = texture2D(scene, uv);
+    bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
+    c = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
+    // (a thinned roof's alpha: how much of the pixel is what is under it, tellsItsShare)
+    return vec4(seenColour(c.rgb, uv, min(c.a, 1.0)), max(c.a, 1.0));
+  }` : /* glsl */`
+  // (with no village there is no fog of what he can't see: the read cleans the pixel alone)
   vec4 sceneAt(sampler2D scene, vec2 uv) {
     vec4 c = texture2D(scene, uv);
     bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
@@ -138,7 +153,7 @@ const GradeShader = {
     uVignette: { value: 1.05 },
     uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as THREE.Texture | null },
     tGlare: { value: null as THREE.Texture | null },
-    tBloom: { value: null as THREE.Texture | null },
+    tBloom: { value: null as THREE.Texture | null }, tSightDepth: { value: null as THREE.Texture | null },
     tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
     uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
     uCap: { value: HI_CAP - HI_KNEE },
@@ -235,6 +250,7 @@ class AreaPass extends Pass {
     uniforms: {
       tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() },
       uFirst: { value: 0 }, tBloom: { value: null as THREE.Texture | null },
+      tSightDepth: { value: null as THREE.Texture | null },
     },
     vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     // 8x8 bilinear taps spread over the output texel: a box average of its footprint
@@ -321,6 +337,12 @@ function bloomLevelsAt(share: number): number[] {
 const brightTaps = (share: number): number => Math.min(BRIGHT_TAPS_MOST, Math.max(1, Math.round(1 / share)));
 
 let areaPass: AreaPass;
+/** A pass's uniforms given the sight's (shared, set each frame: a pass copies what it's made with) and the scene's
+ *  depth, which `SCENE_READ` reads. */
+function sharesTheSight(uniforms: Record<string, THREE.IUniform>): void {
+  Object.assign(uniforms, SIGHT);
+  uniforms.tSightDepth = { value: sceneRT.depthTexture };
+}
 let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 /** the post chain's materials: those its passes draw into its targets with, and the grade's, drawn to the screen */
 let passMaterials: { intoTargets: THREE.ShaderMaterial[]; toScreen: THREE.ShaderMaterial[] } = { intoTargets: [], toScreen: [] };
@@ -361,6 +383,8 @@ export function passTriangle(): THREE.BufferGeometry {
 export const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 const rig = {
+  /** the floor the view from above looks at, eased as he climbs */
+  floor: 0,
   zoom: 1,
   targetZoom: 1,
   shake: 0,
@@ -409,6 +433,9 @@ function lightThePasses(scene: THREE.Scene): void {
     if (!(o as THREE.Light).isLight) return;
     o.layers.enable(ARMS_LAYER);
     o.layers.enable(WARM_LAYER);
+    // (the count of ghosts too: three keys even an unlit program by the lights in view, and one counted with none
+    // was a program of its own, made at its first draw)
+    o.layers.enable(GHOST_COUNT_LAYER);
   };
   scene.traverse(onPasses);
   scene.addEventListener('childadded', ({ child }) => child.traverse(onPasses));
@@ -707,16 +734,20 @@ function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
 export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) {
   loopPointLights();
   shadeEnvironment();
+  // (the village's lamps in every lit shader, and its lights' soft falloff: the village's alone, core/beta.ts)
+  if (VILLAGE) lightTheLamps();
   if (WEBGPU) drawOverScene(drawArmsOverPass);
   const renderer = gl = WEBGPU ? await makeWebGPURenderer(hdrAllowed)
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   if (WEBGPU) {
     takePorts(renderer as unknown as WebGPURenderer);
     // (`?envShadow=0` leaves the environment unshadowed, to compare)
+    if (VILLAGE) lightTheLampsOnWebGPU();
     if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   }
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (VILLAGE) renderer.setTransparentSort(blendedBuiltFirst as never);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -742,8 +773,10 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
 
   const size = sceneSize(new THREE.Vector2());
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  // (read back by what he can see: core/sight.ts)
+  if (VILLAGE) sceneRT.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType);
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
-  // Every pass reads the scene's target itself (`SCENE_READ`), cleaned as it reads it: the composer's own
+  // Every pass reads the scene's target itself (`SCENE_READ`), cleaned and fogged as it reads it: the composer's own
   // buffers are read by none
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0, 0.9);
   // each blur level's weight, tightest to widest (radius 0: used as they are). The widest levels spread a
@@ -752,6 +785,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   bloom.materialHighPassFilter.fragmentShader = BRIGHT_FROM_SCENE;
   bloom.materialHighPassFilter.uniforms.uTexel = { value: new THREE.Vector2(1 / size.x, 1 / size.y) };
   bloom.materialHighPassFilter.uniforms.uTaps = { value: brightTaps(bloomShare) };
+  sharesTheSight(bloom.materialHighPassFilter.uniforms);
   // (its composite is added by the grade and the area, not blended over a copy of the frame: three draws no
   // material that isn't visible)
   bloom.blendMaterial.visible = false;
@@ -773,6 +807,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   // after bloom: the eye adapts to all the light that reaches it, halos included
   const area = new AreaPass();
   areaPass = area;
+  sharesTheSight(area.material.uniforms);
   area.material.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
   const areaFrom = area.render.bind(area);
   area.render = (renderer, write) => areaFrom(renderer, write, sceneRT);
@@ -780,6 +815,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   grade = new ShaderPass(GradeShader, 'none');
   grade.uniforms.tDiffuse.value = sceneRT.texture;
   grade.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
+  sharesTheSight(grade.uniforms);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
   // (set on the pass: it copies the uniforms it's made with, a texture's settings too, and the copy never saw the mask painted)
   grade.uniforms.tBlood.value = bloodMask;
@@ -848,10 +884,11 @@ const SHARE_STEP = 1 / 256;
  * The canvas's pixels per css px: the screen's own. What is rendered is counted in the screen's pixels, never by the
  * OS's scaling (a 4K screen at 300% is a window of 1280x720 css px, at 100% of 3840x2160: both render the same).
  */
-const canvasRatio = (): number => window.devicePixelRatio || 1;
-/** The screen's pixels under the window: the canvas's. */
+const screenRatio = (): number => window.devicePixelRatio || 1;
+const canvasRatio = screenRatio;
+/** The screen's pixels under the window. */
 export function screenPixels(): number {
-  const ratio = canvasRatio();
+  const ratio = screenRatio();
   return Math.floor(window.innerWidth * ratio) * Math.floor(window.innerHeight * ratio);
 }
 /** The most pixels the scene renders now: the screen's, within the quality's and Auto's budget. */
@@ -880,7 +917,7 @@ export function setResolutionShare(share: number): void {
   if (applySceneRatio()) fitSceneTarget();
 }
 /** The scene's pixels per css px (the last pass scales it up to the canvas). */
-export const sceneRatio = (): number => canvasRatio() * sceneShare();
+export const sceneRatio = (): number => screenRatio() * sceneShare();
 /** The scene's render size in pixels (the canvas's at the scene's own ratio). */
 export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
   const r = sceneRatio();
@@ -1002,6 +1039,10 @@ export const viewSettled = (): boolean => rig.blend >= 1;
 export const cameraYaw = (): number => rig.yaw;
 /** the top-down view's zoom as drawn (1 the game's own, under it nearer) */
 export const cameraZoom = (): number => rig.zoom;
+/** The camera turned at once to look the way `facing` goes (a hero's heading), in every view: back from a run, out of
+ *  its portal, the view kept the yaw it had and the hero looked back into the portal ("should be facing away from portal
+ *  and overlooking the village"). */
+export function faceCamera(facing: number): void { rig.yaw = rig.targetYaw = rig.topYaw = facing + Math.PI; }
 
 /** The camera rig as it is, and a function that puts it back: tools/lab pictures the game from its other views and
  *  leaves the game's own as it found it (the aim follows the camera). */
@@ -1043,7 +1084,7 @@ export function stageCamera(shot: Shot | null, cut = false): void {
     stage.look.copy(cut ? shot.look : _look.set(0, 0, -1).applyQuaternion(cam.quaternion).multiplyScalar(6).add(cam.position));
     stage.fov = cut ? shot.fov : cam.fov;
   }
-  if (!shot && stage.shot) {
+  if (!shot && stage.shot && !cut) {
     rig.fromPos.copy(cam.position); rig.fromQuat.copy(cam.quaternion); rig.fromFov = cam.fov;
     rig.blend = 0;
     rig.fromView = rig.view;
@@ -1065,8 +1106,136 @@ function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
   cam.updateMatrixWorld();
 }
 
-/** `height`: the character's, for the close views' shoulder and eye level. */
-export function updateCamera(dt: number, focus: THREE.Vector3, height: number): void {
+const _boomAt = new THREE.Vector3();
+const _boomFrom = new THREE.Vector3();
+const _boomHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
+/** how far the camera's boom is, clear of what's built (m), that far when it comes off a wall, how far it stands off a wall
+ *  (m), how close it comes to the shoulder (m), and how fast it goes out again */
+let boomNow = 0;
+const BOOM_OFF = 0.2;
+const BOOM_LEAST = 0.45;
+const BOOM_OUT = 3;
+let boomThrough = false;
+/** the boom under which the camera goes over his head as it comes in (m), how far over at its closest (m), and the
+ *  near plane there: at the shoulder's side a hand's breadth off him, what it left in the frame was a slice of his back,
+ *  cut by the near plane (from play, "if you stopped moving cam through walls, make sure it looks good at all angles") */
+const BOOM_OVER_HEAD = 1.4;
+const BOOM_RISE = 0.34;
+/** how far short of a wall the camera stops at the last (m): past the near plane at its closest */
+const CAMERA_OFF_WALL = 0.16;
+/** how much wider the view is at its closest (degrees): at the third view's own, his head filled the frame's foot, a
+ *  mass of hair on a backdrop with slivers of shoulder, and hid the way ahead (a review of each spot's picture) */
+const BOOM_WIDER = 18;
+const BOOM_NEAR = 0.12;
+let boomOverHead = true;
+/** For a harness (tools/lab): the camera left at his shoulder however close it comes, as it was. */
+export function boomKeepsShoulder(on: boolean): void { boomOverHead = !on; }
+/** How far over his head the camera is for the boom it has now, 0 to 1. */
+function overHead(): number {
+  if (!boomOverHead || boomNow <= 0) return 0;
+  const share = clamp((BOOM_OVER_HEAD - boomNow) / (BOOM_OVER_HEAD - BOOM_LEAST), 0, 1);
+  return share * share * (3 - 2 * share);
+}
+
+/** For a harness (tools/lab): the boom let stand behind what's built, as it did. */
+export function boomStandsBehind(on: boolean): void { boomThrough = on; }
+
+/** `pivot` brought back toward (x, z) short of a wall between: beside a wall or a column the shoulder he looks over stood
+ *  through it, and the boom, read from there, never met it. */
+function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (!wall || !wall.cast(_boomAt.set(x, pivot.y, z), pivot, _boomHit)) return;
+  const reach = Math.max(0, _boomHit.point.distanceTo(_boomAt) - BOOM_OFF);
+  pivot.sub(_boomAt).setLength(reach).add(_boomAt);
+}
+
+/** The boom back from `pivot` along the view, short of the first wall the line to the camera meets in the village. */
+function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt: number): number {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  // (the village's alone: elsewhere the boom is at its length at once)
+  if (!VILLAGE) return (boomNow = rig.boom);
+  let most = rig.boom;
+  if (wall && wall.cast(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -rig.boom), _boomHit)) {
+    most = Math.max(BOOM_LEAST, _boomHit.point.distanceTo(pivot) - BOOM_OFF);
+  }
+  // (and short of what stands between the camera and him: read from the shoulder alone, a wall's corner passed beside it
+  // and hid him, the camera at its full length)
+  if (wall && wall.cast(_boomFrom.set(x, chest, z), _boomAt.copy(pivot).addScaledVector(_fwd, -most), _boomHit)) {
+    most = Math.max(BOOM_LEAST, most * _boomHit.t - BOOM_OFF);
+  }
+  // (in at once, out by a spring: a post passed behind him sent it in and out)
+  boomNow = Math.min(most, damp(Math.max(boomNow, BOOM_LEAST), most, BOOM_OUT, dt));
+  return boomNow;
+}
+
+/** The camera brought back on his side of a wall it stands past: the boom's least, pressed against a wall, put it inside
+ *  the wall, whose far side then showed through (from play, "still seeing through walls from inside"). */
+function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number): void {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (!wall || !wall.cast(_boomFrom.set(x, chest, z), camera, _boomHit)) return;
+  const reach = Math.max(0, _boomHit.point.distanceTo(_boomFrom) - CAMERA_OFF_WALL);
+  camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
+}
+
+/** how close to a wall beside it the camera may stand (m), how far it looks for one, and the near plane as far as it
+ *  goes (m) */
+const SIDE_ROOM = 0.2;
+const SIDE_REACH = 0.4;
+const FAR_NEAR = 0.5;
+/** the share of the way to the far near plane a wall is kept off at, along a line through its corners */
+const NEAR_HELD = BOOM_NEAR / (FAR_NEAR * 0.85) + 0.02;
+/** the plane's corners and middle, in the frame's own -1 to 1 */
+const NEAR_POINTS: readonly (readonly [number, number])[] = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]];
+const _nearRight = new THREE.Vector3(), _nearUp = new THREE.Vector3(), _nearWay = new THREE.Vector3();
+let farNearKept = false;
+/** For a harness (tools/lab): the near plane left as far as it was, by a wall beside the camera. */
+export function farNearAtWalls(on: boolean): void { farNearKept = on; }
+
+/**
+ * The camera moved off a wall beside it, and the near plane the frame may have there: at 0.5 m, a wall running along
+ * the view beside the camera was cut away by the plane, and what's behind it showed on the wall's far side (from play,
+ * "I should not able to see through walls like this").
+ */
+/** the way the camera looks, for the order of what blends */
+const _sortToward = new THREE.Vector3();
+
+function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): number {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (!wall || farNearKept) return FAR_NEAR;
+  _nearRight.set(cy, 0, -sy);
+  // (either side, and an eave over it)
+  for (const way of [1, -1, 0]) {
+    _nearWay.copy(_nearRight).multiplyScalar(way);
+    if (way === 0) _nearWay.set(0, 1, 0);
+    if (!wall.cast(camera, _boomAt.copy(camera).addScaledVector(_nearWay, SIDE_REACH), _boomHit)) continue;
+    camera.addScaledVector(_nearWay, Math.min(0, _boomHit.t * SIDE_REACH - SIDE_ROOM));
+  }
+  _nearUp.crossVectors(_nearRight, _fwd);
+  const high = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  const wide = high * G.camera.aspect;
+  let share = 1;
+  for (const [x, y] of NEAR_POINTS) {
+    _nearWay.copy(_fwd).addScaledVector(_nearRight, x * wide).addScaledVector(_nearUp, y * high).multiplyScalar(FAR_NEAR);
+    if (!wall.cast(camera, _boomAt.copy(camera).add(_nearWay), _boomHit)) continue;
+    // (off what slopes over it, an eave, as the plane comes no nearer than BOOM_NEAR)
+    camera.addScaledVector(_boomHit.normal, Math.max(0, NEAR_HELD - _boomHit.t) * _nearWay.length());
+    share = Math.min(share, Math.max(_boomHit.t, NEAR_HELD));
+  }
+  return share < 1 ? Math.max(BOOM_NEAR, FAR_NEAR * share * 0.85) : FAR_NEAR;
+}
+
+/** whether a harness holds the view from above on the village's ground, as it was */
+let topOnGround = false;
+
+/** For a harness (tools/lab): the view from above looking at the ground whatever floor he stands on. */
+export function holdTopOnGround(held: boolean): void {
+  topOnGround = held;
+}
+
+/** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
+ *  body's height, `obj.position.y`: the player's `pos.y` is always 0, and over it, through the eyes up the village's
+ *  stair, the eyes stayed at the square's level, "in 1st person cannot walk up the stairs"). */
+export function updateCamera(dt: number, focus: THREE.Vector3, height: number, floor = 0): void {
   const cam = G.camera;
   shift.x = damp(shift.x, shift.tx, 6, dt);
   shift.y = damp(shift.y, shift.ty, 6, dt);
@@ -1079,6 +1248,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   rig.focus.x = damp(rig.focus.x, focus.x, CAMERA.follow, dt);
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);
   rig.focus.y = 0;
+  rig.floor = damp(rig.floor, topOnGround ? 0 : floor, CAMERA.follow, dt);
   rig.yaw = damp(rig.yaw, rig.targetYaw, 18, dt);
   let fov: number = CAMERA.fov, near = 0.5;
   if (rig.view === 'top') {
@@ -1088,8 +1258,10 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     const pitch = CAMERA.closePitch + (CAMERA.pitch - CAMERA.closePitch) * k;
     const lookY = 0.6 + (1 - k) * 0.7;
     const r = Math.cos(pitch) * d;
-    cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
-    _look.set(rig.focus.x, lookY, rig.focus.z);
+    // (from the floor he stands on: from the ground whatever it was, zoomed in he rose up the frame as he climbed to the
+    // terrace, "this one is not (head cut off), and I didn't do anything, just climbed up")
+    cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, rig.floor + Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
+    _look.set(rig.focus.x, rig.floor + lookY, rig.focus.z);
     cam.lookAt(_look);
   } else {
     // close views sit right on the character: no follow lag, or the aim would swim
@@ -1098,14 +1270,27 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     if (rig.view === 'third') {
       fov = CAMERA.third.fov;
       rig.boom = damp(rig.boom, rig.targetBoom, 6, dt);
-      // the shoulder the camera looks over, then back along the view. It never closes in on the
-      // character: props and walls in the way dissolve instead (core/seeThrough.ts)
-      _pivot.set(focus.x + cy * CAMERA.third.side, height * 0.82, focus.z - sy * CAMERA.third.side);
-      cam.position.copy(_pivot).addScaledVector(_fwd, -rig.boom);
-      cam.position.y = Math.max(0.4, cam.position.y);
+      // the shoulder the camera looks over, then back along the view. Props in the way dissolve (core/seeThrough.ts);
+      // in the village it stands on his side of what's built behind him: dissolved, a palisade left him in a small window
+      // of black, "being behind obstacle - this is not useful... I should see more"
+      // (the boom read from his shoulder as it stands with the camera out: read from where the camera's nearness had
+      // moved it, the boom changed where it stands, which changed the boom, and in the doorway it jerked 0.65 m a frame,
+      // "camera starts to jerk back and forth, never settling")
+      _pivot.set(focus.x + cy * CAMERA.third.side, floor + height * 0.82, focus.z - sy * CAMERA.third.side);
+      shoulderClear(_pivot, focus.x, focus.z);
+      const boom = boomClear(_pivot, focus.x, floor + height * 0.7, focus.z, dt);
+      const over = overHead();
+      _pivot.x += (focus.x - _pivot.x) * over;
+      _pivot.z += (focus.z - _pivot.z) * over;
+      _pivot.y += BOOM_RISE * over;
+      cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
+      cameraClear(cam.position, focus.x, floor + height * 0.7, focus.z);
+      near = Math.min(0.5 + (BOOM_NEAR - 0.5) * over, nearClear(cam.position, sy, cy, fov + BOOM_WIDER * over));
+      fov += BOOM_WIDER * over;
+      cam.position.y = Math.max(floor + 0.4, cam.position.y);
     } else {
       fov = CAMERA.first.fov; near = 0.08;
-      cam.position.set(focus.x - sy * 0.12, height * 0.9, focus.z - cy * 0.12);
+      cam.position.set(focus.x - sy * 0.12, floor + height * 0.9, focus.z - cy * 0.12);
     }
     cam.lookAt(_look.copy(cam.position).add(_fwd));
   }
@@ -1116,7 +1301,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     // aim at the character all the way (turning to it early), and settle into the new view's own
     // framing (over the shoulder, through the eyes) only over the last stretch
     _quat.copy(cam.quaternion);
-    cam.lookAt(focus.x, height * 0.55, focus.z);
+    cam.lookAt(focus.x, floor + height * 0.55, focus.z);
     _quat2.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
     // (into the eyes the character's direction swings wildly as the camera closes on it, so the settling
     // follows the distance closed, not the clock)
@@ -1126,10 +1311,18 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     near = 0.5 + (near - 0.5) * e;
   }
   // props dissolve where they hide the character, from above and over the shoulder (through the eyes nothing is
-  // between), fading in and out with the glide to and from the eyes
+  // between), fading in and out with the glide to and from the eyes. Over his head nothing stands between either, and the
+  // short cone from the eye down to him widens into the wall beside the camera: pressed into a corner, it opened a patch
+  // of it onto the outside
   const e = ease(rig.blend);
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
-  updateSeeThrough(focus.x, height * 0.6, focus.z, 1 - share('first'), share('top'));
+  const props = (1 - share('first')) * (1 - share('third') * overHead());
+  if (VILLAGE) {
+    holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
+    updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, propsOpening(),
+      builtOpening(), fenceOpened(), propsHideHim());
+    sortBlendedFrom(cam.position, cam.getWorldDirection(_sortToward));
+  } else updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'));
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
@@ -1154,6 +1347,15 @@ export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {} };
 
+/** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
+ *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
+ *  (`npm run lab -- perf --village --profile=render`). A part shown again is made again in that frame's render. */
+function matricesOfShownOnly(scene: THREE.Scene): void {
+  // (the scene itself never moves: its matrix made again each frame marked every object under it changed)
+  scene.matrixAutoUpdate = false;
+  for (const part of scene.children) part.matrixWorldAutoUpdate = part.visible;
+}
+
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
@@ -1174,13 +1376,22 @@ export function render(): void {
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   sunShadowInTurns();
+  aimSight(G.camera);
   if (WEBGPU) {
     renderWebGPU();
     overFrame.draw();
     return;
   }
+  // (its depth read back from above alone: in every other view no pixel reads it)
+  sceneRT.resolveDepthBuffer = VILLAGE && SIGHT.uSightOn.value > 0;
+  // (the ghosts over each pixel, for each to keep less where they lie one over another: what blends thins in the
+  // village alone)
+  const ghosts = G.arena.place === 'village' && !G.arena.hallShown && rig.view !== 'first';
+  if (ghosts) gpuMarks.mark('ghosts');
+  countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
+  if (VILLAGE) matricesOfShownOnly(G.scene);
   gl.render(G.scene, G.camera);
   if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();

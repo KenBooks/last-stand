@@ -3,10 +3,14 @@
 // takes the port in its place as it builds the material there (its library's `fromMaterial`, `takePorts`). The
 // material stays the one the game holds and drives: the port reads its uniforms by reference (`uniformsOf`), and the
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
+import { HALL, TERRACE } from '../data/village';
 import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
-import type { SeeThrough } from './seeThrough';
+import {
+  BLEND_GONE, HOLE_UNDER, MIDDLE_ATTRIBUTE, PALE, PLACED_BY_MIDDLE, SIGHT_CONE, overShaft, type SeeThrough,
+} from './seeThrough';
+import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT } from './sight';
 import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -109,36 +113,104 @@ function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<strin
   return node;
 }
 
+/** what thins whole reaching all of it, for a kind that gives no reach */
+const ALL_THE_WAY = new THREE.Vector2(1e5, 1e6);
+/** no room to thin for, for a kind that gives none */
+const EVERYWHERE = new THREE.Vector4(-1e5, -1e5, 1e5, 1e5);
+/** no door to see through, for a kind that gives none */
+const NO_DOOR = new THREE.Vector4();
+
+/** A kind's see-through values as nodes. */
+export interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N; room: N; door: N; doorOn: N }
+
 /** How much of a fragment at `world` to drop where it stands between the camera and the hero, as `seeFade()` has it
  *  (core/seeThrough.ts), by the hole and floor `see` reads (each a node of the `SeeThrough`'s values) */
-export function seeFade(world: N, see: { focus: N; k: N; minY: N }): N {
+export function seeFade(world: N, see: SeeNodes, mid: N = placeOf()): N {
   const { wgslFn, cameraPosition } = tsl as any;
-  return wgslFn(`fn seeFade(wp: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32) -> f32 {
-    if (k.z <= 0.0 || wp.y <= minY) { return 0.0; }
+  return wgslFn(`fn seeFade(wp: vec3f, mid: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32, across: f32,
+    whole: f32, ramp: f32, reach: vec2f, room: vec4f, door: vec4f, doorOn: f32) -> f32 {
+    if (wp.y <= minY) { return 0.0; }
+    var cone = 0.0;
+    let down = eye.y - wp.y;
+    if (doorOn != 0.0 && down > 0.01) {
+      let shape = smoothstep(-0.02, 0.02, min(wp.x - room.x, room.z - wp.x));
+      if (doorOn > 0.0) {
+        cone = doorOn * shape;
+      } else if (eye.z > door.y && wp.z < door.y) {
+        let at = eye + (wp - eye) * (door.y - eye.z) / (wp.z - eye.z);
+        let offMiddle = abs(at.x - ${TERRACE.x.toFixed(2)});
+        let meetsWall = at.y < ${(TERRACE.high + HALL.wallHigh).toFixed(2)} && offMiddle < ${HALL.half.toFixed(2)};
+        let inDoor = at.y < ${(TERRACE.high + HALL.doorHigh).toFixed(2)} && offMiddle < ${HALL.doorHalf.toFixed(2)};
+        if (meetsWall && !inDoor) { cone = 1.0 - shape; }
+      }
+      if (doorOn < 0.0 && wp.z >= door.y && mid.z > door.y && eye.y - focus.y > 0.01) {
+        let midHidden = eye.xz + (mid.xz - eye.xz) * (eye.y - (minY - 0.12)) / (eye.y - focus.y);
+        let midInHall = min(min(midHidden.x - room.x, room.z - midHidden.x),
+          min(midHidden.y - room.y, room.w - midHidden.y));
+        cone = min(-doorOn * 1.5, 1.0) * smoothstep(0.0, 0.3, midInHall);
+      }
+    }
+    if (k.z <= 0.0 && whole <= 0.0) { return cone; }
     let ca = focus - eye;
     let l = length(ca);
     let dir = ca / l;
     let cp = wp - eye;
     let along = dot(cp, dir);
-    if (along <= 0.0 || along >= l - k.w) { return 0.0; }
-    return (1.0 - smoothstep(k.x, k.y, length(cp - dir * along))) * k.z;
-  }`)({ wp: world, eye: cameraPosition, ...see });
+    let flat = length(ca.xz);
+    let on = select(wp.xz, mid.xz, reach.x < ${PLACED_BY_MIDDLE.toFixed(1)});
+    let past = select(along - l, dot(wp.xz - focus.xz, ca.xz) / max(flat, 1e-6), flat > 0.01);
+    if (along <= 0.0 || past >= -k.w) { return cone; }
+    let off = cp - dir * along;
+    let level = vec3f(-dir.z, 0.0, dir.x);
+    let levelLength = length(level);
+    let side = select(vec3f(1.0, 0.0, 0.0), level / max(levelLength, 1e-6), levelLength > 1e-3);
+    let aside = dot(off, side);
+    let r = length(off + side * aside * (across - 1.0)) / max(along / l, 0.05);
+    let floorOff = select(r, abs(dot(on - focus.xz, vec2f(-ca.z, ca.x))) / max(flat, 1e-6), flat > 0.01);
+    let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, floorOff));
+    let feetY = minY - ${SIGHT_CONE.floorClear.toFixed(2)};
+    let toFeet = focus.xz - eye.xz;
+    let feetFlat = dot(toFeet, toFeet);
+    let onLine = select(along / l, dot(cp.xz, toFeet) / max(feetFlat, 1e-6), feetFlat > 1e-4);
+    let lineY = eye.y + (feetY - eye.y) * onLine;
+    let atHim = smoothstep(lineY - ${HOLE_UNDER.from.toFixed(2)}, lineY - ${HOLE_UNDER.to.toFixed(2)}, wp.y);
+    return max(max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned), cone);
+  }`)({ wp: world, mid, eye: cameraPosition, ...see });
+}
+
+/** The drawn object's place in the world. */
+function placeOf(): N {
+  const { modelWorldMatrix, vec4 } = tsl as any;
+  return modelWorldMatrix.mul(vec4(0, 0, 0, 1)).xyz;
+}
+
+/** The middle a fragment of `see`'s kind is placed by: its part's, kept as an attribute through a merge, where it thins
+ *  by its middle (`thinsByMiddle` in seeThrough.ts), else its object's place. */
+function middleOf(see: SeeThrough): N {
+  return see.reach ? (tsl as any).attribute(MIDDLE_ATTRIBUTE, 'vec3') : placeOf();
 }
 
 /** The share of a raw shader's light kept as its prop dissolves (`seeThroughFade`'s `1.0 - seeFade()`), at the
  *  mesh's own place before any displacement, as its GLSL reads it; `see` its `uSee*` uniforms as nodes. */
-export function seeKept(see: { focus: N; k: N; minY: N }): N {
+export function seeKept(see: SeeNodes): N {
   const { modelWorldMatrix, positionGeometry, varying, vec4 } = tsl as any;
   return seeFade(varying(modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz), see).oneMinus();
 }
 
 /** `uniforms`' `seeThroughFade` values as nodes, each read off its object (one for every material of a kind) */
-export function seeUniforms(uniforms: Record<string, { value: unknown }>): { focus: N; k: N; minY: N } {
+export function seeUniforms(uniforms: Record<string, { value: unknown }>): SeeNodes {
   const { reference } = tsl as any;
   return {
     focus: reference('value', 'vec3', uniforms.uSeeFocus),
     k: reference('value', 'vec4', uniforms.uSeeK),
     minY: reference('value', 'float', uniforms.uSeeMinY),
+    across: reference('value', 'float', uniforms.uSeeAcross),
+    whole: reference('value', 'float', uniforms.uSeeWhole),
+    ramp: reference('value', 'float', uniforms.uSeeRamp),
+    reach: reference('value', 'vec2', uniforms.uSeeReach),
+    room: reference('value', 'vec4', uniforms.uSeeRoom),
+    door: reference('value', 'vec4', uniforms.uSeeDoor),
+    doorOn: reference('value', 'float', uniforms.uSeeDoorOn),
   };
 }
 
@@ -146,9 +218,11 @@ export function seeUniforms(uniforms: Record<string, { value: unknown }>): { foc
  *  pixels as large as its fade is dropped there, by the same dither. Its values read off the material drawn, as
  *  every material of the kind shares the build. */
 function seeMask(of: SeeThrough): N {
-  const { positionWorld, screenCoordinate, fract, dot, vec2 } = tsl as any;
-  const dither = fract(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))).mul(52.9829189));
-  return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of)));
+  const { abs, floor, mod, positionWorld, screenCoordinate } = tsl as any;
+  const bit = mod(floor(screenCoordinate.xy), 2);
+  const two = mod(floor(screenCoordinate.xy.mul(0.5)), 2);
+  const dither = abs(bit.x.sub(bit.y)).mul(8).add(bit.y.mul(4)).add(abs(two.x.sub(two.y)).mul(2)).add(two.y).add(0.5).div(16);
+  return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of), middleOf(of)));
 }
 
 /** `material`'s see-through mask given it as a property of its own, as the GPU-driven drawing makes its draws' materials
@@ -156,19 +230,103 @@ function seeMask(of: SeeThrough): N {
  *  hero). */
 function maskOwn(material: THREE.Material): void {
   const see = (material as { seeThrough?: SeeThrough }).seeThrough;
-  if (see) (material as N).maskNode ??= seeMask(see);
+  if (see) thinBy(material as N, see);
 }
 
-/** each kind's see-through uniforms, by its hole (`SeeThrough.k`: one a kind) */
-const seeKinds = new WeakMap<object, { focus: N; k: N; minY: N }>();
+/** How `material` thins, as its kind does: by a blend (`opacityNode`), which drops what's nearly gone, or a pattern. */
+function thinBy(material: N, see: SeeThrough): void {
+  if (material.maskNode) return;
+  if (see.wholeOnly) {
+    const still = see.stillWhole ?? 0.15;
+    const stillNode = typeof still === 'number' ? still
+      : (tsl as any).uniform(still.value).setGroup((tsl as any).renderGroup).onRenderUpdate(() => still.value);
+    // (a column of the portico keeps all its depth, as `wholeDepthMaterial` has it)
+    const porticoKept = see.reach ? middleOf(see).z.greaterThan(seeOfKind(see).door.y) : (tsl as any).bool(false);
+    material.maskNode = thinned(see).lessThanEqual(stillNode).or(porticoKept);
+    return;
+  }
+  if (!see.blended) {
+    material.maskNode = seeMask(see);
+    return;
+  }
+  const left = thinned(see).oneMinus();
+  material.opacityNode = see.pale ? paleLess(material, left) : left;
+  material.maskNode = left.greaterThanEqual(BLEND_GONE);
+}
+
+/** How far a fragment of `see`'s kind thins: before him (`seeFade`), and where it hides the floor he sees if its kind
+ *  thins by that too (`seeSightCone`). */
+function thinned(see: SeeThrough): N {
+  const { max, positionWorld, select, vec3 } = tsl as any;
+  const nodes = seeOfKind(see);
+  const mid = middleOf(see);
+  const before = seeFade(positionWorld, nodes, mid);
+  if (!see.sight) return before;
+  // (a column by the floor its middle hides at his height, as `seeSightCone` in seeThrough.ts has it)
+  const by = select(nodes.reach.x.lessThan(PLACED_BY_MIDDLE), vec3(mid.x, nodes.focus.y, mid.z), positionWorld);
+  return max(before, seeSightCone(by, see));
+}
+
+/** how far the hall's walls thin where they hide the floor he sees, and where he stands, as nodes (made once) */
+let sightNodes: { on: N; from: N; door: N; doorOn: N } | undefined;
+
+/**
+ * How far a fragment at `world` thins where it hides the floor he sees, as `seeSightCone` in seeThrough.ts has it: the
+ * floor it hides along the view, at his floor's height, and how far the fog's rays say he sees along it.
+ */
+function seeSightCone(world: N, see: SeeThrough): N {
+  const { atan, cameraPosition, dot, length, max, mix, renderGroup, select, smoothstep, texture, uniform, vec2 } = tsl as any;
+  sightNodes ??= {
+    on: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT_CONE.on.value),
+    from: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightFrom.value),
+    door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoor.value),
+    doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoorOn.value),
+  };
+  // (a kind with a cone of its own, the walls aside of him that stay off with him in the hall)
+  const kindOn = see.sightOn;
+  const on = kindOn ? uniform(0).setGroup(renderGroup).onRenderUpdate(() => kindOn.value) : sightNodes.on;
+  const share = on.abs().mul(see.sightShare ?? 1);
+  // (under none, what stands out past the door's line alone: the portico's columns, not the room's)
+  const outsideOnly = on.lessThan(0).and(world.z.lessThan(seeOfKind(see).door.y));
+  const down = cameraPosition.y.sub(world.y);
+  const floorDown = cameraPosition.y.sub(seeOfKind(see).minY.sub(SIGHT_CONE.floorClear));
+  const hidden = cameraPosition.xz.add(world.xz.sub(cameraPosition.xz).mul(floorDown).div(down.max(0.01)));
+  const { from, to: upTo } = SIGHT_CONE.short;
+  // (how far a row's rays see a place `to` off their middle, by each ray's reach as cast, as `seeSeenFrom`)
+  const seenFrom = (to: N, row: number): N => {
+    const away = length(to);
+    // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
+    const toSafe = select(away.lessThan(0.3), vec2(1, 0), to);
+    const ray = texture(SIGHT.tSight.value, vec2(atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5), row));
+    const seen = (reach: N): N => smoothstep(reach.sub(from), reach.sub(upTo), away).oneMinus();
+    return select(away.lessThan(0.3), 1, seen(ray.a));
+  };
+  // (by his rays, or past the door he sees through by the door's, as `seeSeenAt`)
+  const fromDoor = hidden.sub(sightNodes.door.xy);
+  const pastDoor = smoothstep(0, DOOR_SOFT, dot(fromDoor, sightNodes.door.zw)).mul(sightNodes.doorOn);
+  const seenHere = max(seenFrom(hidden.sub(sightNodes.from), HIS_ROW), seenFrom(fromDoor, DOOR_ROW).mul(pastDoor));
+  const cone = share.mul(seenHere);
+  return select(on.equal(0).or(outsideOnly).or(down.lessThanEqual(0.01)), 0, cone);
+}
+
+/** What's left of a pale surface as it thins (`PALE` in seeThrough.ts): less of it, by its albedo's luminance. */
+function paleLess(material: N, left: N): N {
+  const albedo = material.colorNode ?? (tsl as any).materialColor;
+  const light = (tsl as any).luminance(albedo.rgb);
+  const paleness = overShaft(material) ? 1 : (tsl as any).smoothstep(PALE.from, PALE.to, light);
+  return left.mul(left.oneMinus().mul(PALE.most).mul(paleness).oneMinus());
+}
+
+/** each kind's see-through uniforms, by its values (one object a kind: `seeThrough`'s kinds share holes) */
+const seeKinds = new WeakMap<object, SeeNodes>();
 
 /**
  * A kind's see-through values as uniforms set once a render, shared by its every material (each kind a build of its
  * own, as a uniform node keys the build it's in). Read off each material drawn (`materialReference`), every prop's
  * uniforms were refreshed at every draw, still or not: on WebGPU, about 35 µs of the frame's JS a prop.
  */
-function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
-  const made = seeKinds.get(of.k);
+function seeOfKind(of: SeeThrough): SeeNodes {
+  const made = seeKinds.get(of);
   if (made) return made;
   const { uniform, renderGroup } = tsl as any;
   // (in the render's group: a still prop's refresh sends only what's shared, and in the object's these stayed at the
@@ -177,8 +335,15 @@ function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
     focus: uniform(new THREE.Vector3()).setGroup(renderGroup).onRenderUpdate(() => of.focus.value),
     k: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.k.value),
     minY: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.minY.value),
+    across: uniform(1).setGroup(renderGroup).onRenderUpdate(() => of.across.value),
+    whole: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.whole.value),
+    ramp: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.ramp.value),
+    reach: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => of.reach?.value ?? ALL_THE_WAY),
+    room: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.room?.value ?? EVERYWHERE),
+    door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.door?.value ?? NO_DOOR),
+    doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.doorOn?.value ?? 0),
   };
-  seeKinds.set(of.k, nodes);
+  seeKinds.set(of, nodes);
   return nodes;
 }
 
@@ -368,7 +533,7 @@ export function takePorts(renderer: WebGPURenderer): void {
       const own = (material as Partial<OwnLooks>).webgpuLooks;
       // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
       if (converted && !(material as N).isNodeMaterial) {
-        if (see) (converted as N).maskNode = seeMask(see);
+        if (see) thinBy(converted as N, see);
         // (a hair card: `bothSidesOut` in models/head.ts, its normal the surface's, not turned over for a back face)
         if ((material as { litBothSides?: boolean }).litBothSides) (converted as N).normalNode = (tsl as any).normalViewGeometry;
         // (an effect's plain material: `nearGlow`'s GLSL patch is WebGL's alone. Its node reads nothing of the frame's

@@ -1,6 +1,7 @@
 // Procedural textures: cobblestone, ashlar, flagstones, marble, slate, forest floor, bark, grunge, rune circles, decals.
 // Everything is generated on the CPU once at startup (no external art assets).
 import * as THREE from 'three';
+import { VILLAGE } from './beta';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 
@@ -52,6 +53,8 @@ const keyOfCanvas = new WeakMap<HTMLCanvasElement, string>();
 const coming = new Map<string, { job: Job; arrive: () => void; arrived: Promise<void> }>();
 /** a map to make: its recipe and what it's made with */
 export type Job = (typeof PRELOAD)[number];
+/** the maps the village alone draws in */
+const VILLAGE_MAPS = new Set<RecipeName>(['boards', 'hammered']);
 
 const make = ([name, args]: Job): PBRData => (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
 
@@ -124,6 +127,10 @@ export const limestone = (seed: number): PBRCanvases => pbrCanvases('limestone',
 export const moss = (seed: number): PBRCanvases => pbrCanvases('moss', seed);
 export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
+/** Oak boards side by side, a dark line where they meet, along v (the stash's chest). */
+export const boards = (): PBRCanvases => pbrCanvases('boards');
+/** Hammered iron, shallow dents side by side (the stash's chest's straps). */
+export const hammered = (): PBRCanvases => pbrCanvases('hammered');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
 export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
 /** Bare earth: clumpy soil and grit, no litter (where the crypt's dead trees grow). */
@@ -176,7 +183,8 @@ function inTheLobbysOrder(hero: string): Job[] {
   const face = (job: Job): boolean => job[0] === 'face';
   const own = (job: Job): boolean => face(job) && job[1][0] === hero;
   const steel = PRELOAD.filter((job) => job[0] === 'steel');
-  const rest = PRELOAD.filter((job) => job[0] !== 'steel' && !face(job));
+  // (the village's own maps, its chest's, made ahead only where it's the lobby: core/beta.ts)
+  const rest = PRELOAD.filter((job) => job[0] !== 'steel' && !face(job) && (VILLAGE || !VILLAGE_MAPS.has(job[0])));
   return [...steel, ...PRELOAD.filter(own), ...rest, ...PRELOAD.filter((job) => face(job) && !own(job))];
 }
 

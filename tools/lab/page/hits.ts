@@ -14,6 +14,7 @@ import { G } from '../../../src/state';
 import { hitEnemy } from '../../../src/combat/damage';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import { FACING, SPOT, STANDS, foesAt, placesFor, type Stand } from './death';
+import { clearLane, laneClear, type LaneSize } from './lanes';
 
 export interface HitsOptions {
   fixture: Fixture;
@@ -152,6 +153,28 @@ function lateBlow(frame: number, cast: Cast): boolean {
 
 const PLANTINGS: Record<Plant, Planting> = { harmless: keepFromHarm, late: lateBlow };
 
+/** the way before the hero kept clear of props (m): as far as the foes stand and a bolt's splits fly on, and either
+ *  side as far as they stand off it */
+const CAST_LANE: LaneSize = { long: 9, wide: 2 };
+
+/** The run set up as `fixture` says, the hero moved to the nearest clear lane where the set-up's props stand in his
+ *  way and the fixture didn't say where he stands: the crypt's columns are rolled with each run, and one stood between
+ *  him and the foes at the lab's spot in some, the log's bolts striking nothing there (`lab log --class mage`). */
+async function clearSetup(lab: Lab, fixture: Fixture): Promise<Fixture> {
+  const set = fixtureOf(fixture);
+  await lab.setup(set);
+  const at = set.at as [number, number];
+  const facing = set.facing as number;
+  if (fixture.at || laneClear(at, facing, CAST_LANE)) return set;
+  const lane = clearLane(at, facing, CAST_LANE);
+  const moved = { ...set, at: lane.at, facing: fixture.facing ?? lane.facing };
+  await lab.setup(moved);
+  if (!laneClear(lane.at, moved.facing, CAST_LANE)) {
+    throw new Error(`lab: no lane clear of props for the cast near ${at.join(',')} in the ${G.arena.place}`);
+  }
+  return moved;
+}
+
 /** `wanted` cast at its foes (each with `lives` of life) on a fresh set-up as `fixture` says, its key held as long as
  *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted), and
  *  for `lasting` s from the press at least (an effect that strikes on after it: a zone's ticks). */
@@ -160,8 +183,7 @@ export async function castAt(
   lives = LIVING, lasting = 0,
 ): Promise<Cast> {
   G.arena.restoreProps();
-  const set = fixtureOf(fixture);
-  await lab.setup(set);
+  const set = await clearSetup(lab, fixture);
   bindKnown(wanted);
   const skill = skillNamed(wanted);
   const hold = holding(skill);

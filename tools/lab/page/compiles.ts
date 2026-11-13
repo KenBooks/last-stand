@@ -13,6 +13,7 @@
 // chunk, its ring, its burst and pool, the vine and its coils: entities/throws.ts), which no first wave brings.
 // `--canary` draws a material of a kind nothing else is before the hero, which must come out as compiled, and puts a
 // light in the scene that the count must find.
+import { changeHeroLink } from './uiHeroes';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -355,7 +356,7 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
   if (G.player.cls.id === id) throw new Error(`lab: compiles: the hero is a ${id} already (--class picks the boot's)`);
   const from = G.player.cls.id;
   const start = window.__labClock.realNow();
-  const change = document.getElementById('btn-hero');
+  const change = await changeHeroLink(lab);
   let hall: { count: number; lines: string[] } | null = null;
   if (change) {
     await lab.clickOn(change);

@@ -32,6 +32,12 @@
 /* keyboard: the left of a real one, staggered rows; lit keys show what they do (ui/menus.ts keyboardDiagram) */
 .kb { --u: 52px; display: flex; flex-direction: column; gap: 4px; align-self: stretch;
   -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent); mask-image: linear-gradient(90deg, #000 90%, transparent); }
+/* (the village's has more of each row, I and M in their places: keys as narrow as I in its place needs, within its
+   column (the pause menu's: a container), 9.5 keys and their gaps to it and the faded edge after; the rows cut by
+   the box there) */
+#{$village} .kb { --u: min(46px, (100cqw - 58px) / 9.5); overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kb-row { display: flex; gap: 4px; }
 .kb-row:first-child .kb-key { height: 34px; }
 .kb-key { position: relative; flex: none; width: calc(var(--u) * var(--w, 1) + 4px * (var(--w, 1) - 1)); height: 54px; box-sizing: border-box; border-radius: 5px;
@@ -83,6 +89,8 @@
 #item-sheet .is-card { display: flex; justify-content: center; text-align: left; flex: 0 1 auto; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain; }
 #item-sheet .dc-buttons { flex: none; }
+/* (a finger's height whatever the UI's scale: zoomed with the box, they were 26 css px on a phone of a high ratio) */
+body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1)); }
 #item-sheet .tt-cards { flex-wrap: wrap; justify-content: center; }
 /* a short screen (a phone held sideways): the room across it taken, wider cards in smaller text */
 @media (max-height: 520px) {
@@ -117,6 +125,8 @@
 /* both pages share one cell, so the box keeps the taller page's height on either tab */
 .pb-pages { display: grid; text-align: left; min-height: 0; }
 .pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; }
+/* (the village's keyboard is sized by its column) */
+#{$village} .pb-page { container-type: inline-size; }
 .pb-page.off { visibility: hidden; }
 .pause-box .controls-help { gap: 4px 14px; font-size: 14px; width: fit-content; margin: 0 auto; }
 .pb-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-content: start; }
@@ -136,17 +146,29 @@
 .recording-controls .btn { padding: 6px 10px; font-size: 14px; }
 body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
 .profile-row .btn { padding: 6px 10px; font-size: 14px; }
+/* Send the report beside Profile this spot, not under the parts: on a phone held sideways (844x390) a row of its own
+   there took the page 23 px past the menu, which scrolled */
+.pb-opts .profile-row { display: grid; grid-template-columns: auto auto 1fr; justify-items: start; }
+.profile-row > * { grid-column: 1 / -1; }
+.profile-row > #btn-profile { grid-column: 1; grid-row: 2; }
+.profile-row > #btn-profile-send { grid-column: 2; grid-row: 2; }
 .profile-parts { margin: 0; padding-left: 18px; font-size: 12px; font-variant-numeric: lining-nums tabular-nums; }
 .profile-parts li { margin: 1px 0; }
 .opt-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
 .opt-level > span { width: 76px; }
 .opt-row .opt-level input { flex: 1; width: auto; min-width: 0; height: 16px; }
 .opt-level output { width: 40px; text-align: right; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
+.hour-row .opt-level { width: 100%; }
+.hour-row .opt-level output { width: 72px; }
 #pause .build-info { color: #7d7466; font-size: 12px; text-align: center; user-select: text; }
 /* How to play: the diagrams beside the rules (one column when narrow, or with the touch list) */
 #help .modal-box:has(.diagrams) { width: 960px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); }
 .help-cols:has(.diagrams) { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
 @media (max-width: 720px) { .help-cols:has(.diagrams) { grid-template-columns: 1fr; } }
+/* the village's: its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the
+   right"), the notice board's Restart training beside it; the panels' lobby keeps it in the box's middle */
+#{$village} .help-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+#{$village} #btn-help-close { display: block; }
 /* short screens (phones held sideways): everything tighter so it fits without scrolling */
 @media (max-height: 520px) {
   .pause-box { padding: 10px 22px 10px; gap: 6px; }

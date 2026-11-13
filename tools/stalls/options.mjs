@@ -1,6 +1,8 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
+import { readFileSync } from 'node:fs';
 import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
+import { STOPS } from './villageWalks.mjs';
 import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { AUTOPLAY } from './autoplay.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
@@ -9,7 +11,7 @@ import { LISTED_LEAST, LISTED_MS, LOBBY_LISTED_MS } from './analyze.mjs';
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
   'headed', 'touch', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'film-boot', 'cold-return',
-  'warm-behind', 'change-hero', 'stale-wind',
+  'warm-behind', 'change-hero', 'return', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -51,6 +53,9 @@ const HELP = {
     + `${Object.keys(VARIANTS).join(', ')} (base)`],
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
     + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
+  return: ['', 'the page loaded again before the scenario, as a player back on a build they have played: its caches '
+    + 'and the saved hero kept, the fight and the other heroes warmed behind the lobby rather than under the loading '
+    + 'screen'],
   view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top; `
     + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
@@ -60,6 +65,8 @@ const HELP = {
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default; ${BOOT}: chosen `
     + 'on its first visit\'s hero screen)'],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
+  stops: ['a,b', `walks: the places walked to in turn, by the map's names (${STOPS.join(', ')} by default): `
+    + 'a stall\'s place told from what came before it'],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
@@ -156,6 +163,15 @@ function sizeOf(written, name) {
  * The command line read and checked: the URLs (none: this tree built and served), the scenario, its length in
  * seconds, the variants, and the switches. Throws, saying what was wrong.
  */
+/**
+ * `--before`'s expression: as given, or from a file with `@path` (a walk of its own, `walks/`, written to be read: a
+ * script of many lines given on the command line came to the page cut at its first line).
+ */
+function beforeOf(given) {
+  if (!given) return null;
+  return given.startsWith('@') ? readFileSync(given.slice(1), 'utf8') : given;
+}
+
 /** how long `--cast` holds its key before the picture, unless it says (ms) */
 const CAST_MS = 600;
 
@@ -180,6 +196,7 @@ export function readOptions(argv) {
     hero: written.hero ?? null,
     cast: written.cast === undefined ? null : castOf(written.cast),
     stash: Number(written.stash ?? 0),
+    stops: written.stops ? written.stops.split(',').filter(Boolean) : null,
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
     pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
     scale: Number(written.scale ?? 1),
@@ -204,11 +221,12 @@ export function readOptions(argv) {
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
-    before: written.before ?? null,
+    before: beforeOf(written.before),
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
     warmBehind: written['warm-behind'] === true,
     changeHero: written['change-hero'] === true,
+    returning: written.return === true,
     film: written.film === true || written['film-logo'] === true || written['film-boot'] === true,
     filmBoot: written['film-boot'] === true,
     filmLogo: written['film-logo'] === true,
@@ -247,6 +265,11 @@ export function readOptions(argv) {
     const levels = QUALITIES.join(', ');
     throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
   }
+  const stranger = options.stops?.find((stop) => !STOPS.includes(stop));
+  if (stranger !== undefined) {
+    throw new Error(`stalls: no place ${stranger} to walk to (${[...new Set(STOPS)].join(', ')})`);
+  }
+  if (options.stops && options.scenario !== 'walks') throw new Error('stalls: --stops is the walks scenario\'s');
   if (options.resize && options.scenario !== BOOT) throw new Error(`stalls: --resize is the ${BOOT} scenario's`);
   if (options.builds && options.scenario !== BOOT) throw new Error(`stalls: --builds is the ${BOOT} scenario's`);
   if (!(Number.isInteger(options.trips) && options.trips >= 1)) {

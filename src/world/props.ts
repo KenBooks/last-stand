@@ -1,7 +1,10 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
-import { seeThroughFade } from '../core/seeThrough';
+import { VILLAGE } from '../core/beta';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { HERO_SHADOW_LAYER } from '../core/layers';
+import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
 import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
 import { membraneMaterial, spillMaterial } from './portalNodes';
@@ -105,6 +108,59 @@ let sunStill = false;
  */
 export function setSunShadowStill(on: boolean): void { sunStill = on; }
 export const sunShadowStill = (): boolean => sunStill;
+/** `object` and all under it standing still for good: their matrices made once, never again each frame (three makes
+ *  every object's again as it renders, still or not: the village's cottages, lamps and walls were most of its 860). */
+export function standStill(object: THREE.Object3D): void {
+  object.updateMatrixWorld(true);
+  object.traverse((part) => { part.matrixAutoUpdate = false; });
+  object.matrixWorldAutoUpdate = false;
+}
+
+/** pooled lights casting still shadows while they're lit at a lamp (`lampShadow`), and how often one has been
+ *  asked to be drawn again (`drawLampShadows`) */
+const lampShadows = new Set<THREE.PointLight>();
+let lampsAsked = 0;
+
+/**
+ * `light`, a pooled light lit at a lamp the hero walks past (the village's, `game/village.ts`), casting the still
+ * shadows of what stands round it as a biome's warmest lights do, or no longer (`on`). Drawn every frame of all round
+ * it, the hero too, two lamps' twelve faces were 6 ms of a frame's GPU on a desktop at midnight (`npm run lab -- perf
+ * --village --hour 0`: 8.5 ms of shadows against 2.2 at noon), where the goal is a steady 144 frames a second.
+ */
+export function lampShadow(light: THREE.PointLight, on: boolean): void {
+  light.castShadow = on;
+  if (!on) {
+    lampShadows.delete(light);
+    light.shadow.intensity = 1;
+    return;
+  }
+  light.shadow.mapSize.set(STILL_SHADOW.size, STILL_SHADOW.size);
+  light.shadow.camera.near = STILL_SHADOW.near;
+  light.shadow.bias = STILL_SHADOW.bias;
+  light.shadow.radius = STILL_SHADOW.radius;
+  light.shadow.autoUpdate = false;
+  lampShadows.add(light);
+}
+
+/** what moves that isn't a body: kept out of what's drawn still, and drawn over it each frame as the heroes are */
+const movers: THREE.Object3D[] = [];
+/** `group`, which moves, drawn over the kept shadow maps each frame. */
+export function movesInShadows(group: THREE.Object3D): void {
+  movers.push(group);
+  group.traverse((part) => part.layers.enable(HERO_SHADOW_LAYER));
+}
+/** What moves that isn't a body, drawn over the kept shadow maps (`movesInShadows`). */
+export const shadowMovers = (): readonly THREE.Object3D[] => movers;
+/** The lamps' still shadows asked to be drawn again (one moved to another lamp), with the next frame's still ones. */
+export function drawLampShadows(): void {
+  lampsAsked++;
+}
+
+/** The pooled lights casting the lamps' still shadows now (`lampShadow`). */
+export const lampShadowLights = (): ReadonlySet<THREE.PointLight> => lampShadows;
+
+/** How often the lamps' still shadows have been asked to be drawn again (`drawLampShadows`). */
+export const lampShadowsAsked = (): number => lampsAsked;
 
 /** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
 let stillTarget: THREE.WebGLRenderTarget | null = null;
@@ -147,8 +203,8 @@ function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE
  */
 export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   shown: THREE.Group, kept: THREE.LightShadow): void {
-  const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
-  if (!lights.length && !sunStill) return;
+  const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id)).concat([...lampShadows]);
+  if (!lights.length && kept.autoUpdate && !sunStill) return;
   // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
   // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
   // up 260 to 300 ms)
@@ -156,9 +212,17 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const hidden: THREE.Object3D[] = [];
   const uncast: THREE.Object3D[] = [];
   hideBodies(scene, shown, hidden, uncast);
+  for (const mover of movers) {
+    if (mover.visible) {
+      mover.visible = false;
+      hidden.push(mover);
+    }
+  }
   const keptAuto = kept.autoUpdate;
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
+  // (held, the moon's is drawn here of what stands still too, and kept: `moonShadow.ts`)
+  if (!keptAuto) kept.needsUpdate = true;
   kept.autoUpdate = false;
   // (the sun's too where it's the still world's alone: drawn here, the bodies hidden, and by no frame after)
   if (sunStill) kept.needsUpdate = true;
@@ -388,13 +452,16 @@ export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours
 }
 
 // Box whose UVs are scaled by world size so textures don't stretch.
-export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.BufferGeometry {
+// `grained`: a map's v laid along each face's longer side, as a beam's grain runs along it.
+export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained = false): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv, n = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) {
     const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
     const sw = ax > 0.5 ? d : w, sh = ay > 0.5 ? d : h;
-    uv.setXY(i, uv.getX(i) * sw * texel, uv.getY(i) * sh * texel);
+    const a = uv.getX(i) * sw * texel, b = uv.getY(i) * sh * texel;
+    if (grained && sw > sh) uv.setXY(i, b, a);
+    else uv.setXY(i, a, b);
   }
   return g;
 }
@@ -407,10 +474,14 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.B
  * Returns the portal for the gate at `angle`.
  */
 /** a portal's light (each gate's one of its biome's point lights): how bright, how far it reaches (m), how far out in
- *  front of the membrane and how high it stands, and how much more as foes come through (`pulse`) */
-const PORTAL_LIGHT = { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
+ *  front of the membrane and how high it stands (over any head: at 2 m, a hand's breadth from a face beside the gate, it
+ *  blew it out white, "blinding light on face"), and how much more as foes come through (`pulse`) */
+const PORTAL_LIGHT = VILLAGE ? { intensity: 12, reach: 11, out: 1.2, up: 3.4, pulse: 1.2 }
+  // (with no village, as it was before it: core/beta.ts)
+  : { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
 
-export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false): { mesh: THREE.Mesh; portal: Portal } {
+export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
+  place?: GatePlace): { mesh: THREE.Mesh; portal: Portal } {
   const uniforms = {
     uTime: { value: 0 }, uPower: { value: 0.4 }, uArch: { value: arch ? 1 : 0 },
     uA: { value: new THREE.Color(...colors.a) }, uB: { value: new THREE.Color(...colors.b) }, uCore: { value: new THREE.Color(...colors.core) },
@@ -489,7 +560,15 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
   const dir = new THREE.Vector3(-Math.cos(angle), 0, -Math.sin(angle));
   // the membrane's centre in the world, and the direction along it
-  const cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
+  let cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
+  if (place) {
+    dir.set(Math.sin(place.facing), 0, Math.cos(place.facing));
+    pos.set(place.x + dir.x * 3.3, 0, place.z + dir.z * 3.3);
+    cx = place.x + dir.x * 0.1;
+    cz = place.z + dir.z * 0.1;
+    sx = Math.cos(place.facing);
+    sz = -Math.sin(place.facing);
+  }
   const coreCol = new THREE.Color(...colors.core), edgeCol = new THREE.Color(...colors.b), mistCol = new THREE.Color(...colors.a);
   const due = runPhase({ pulse: 0, acc: 0 });
   updaters.push((dt, t) => {
@@ -592,11 +671,19 @@ export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3)
 }
 
 /** Place a gate group on the boundary at `angle`, its local +Z facing the arena center. */
-export function placeGate(g: THREE.Object3D, angle: number): void {
+export function placeGate(g: THREE.Object3D, angle: number, place?: GatePlace): void {
+  if (place) {
+    g.position.set(place.x, 0, place.z);
+    g.rotation.y = place.facing;
+    return;
+  }
   const r = WALL_R + 0.8;
   g.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
   g.lookAt(0, 0, 0);
 }
+
+/** A gate stood anywhere (the village's): its middle, and the way its front faces (rad about y: 0 faces +z). */
+export interface GatePlace { x: number; z: number; facing: number }
 
 /** A biome's environment's colours: its sky's, and its one soft panel's. */
 export interface EnvColours { sky: RGB; panel: RGB }
@@ -773,6 +860,66 @@ export function bakeStaticShadows(group: THREE.Group): void {
     inShadowsOnly(caster);
     caster.name = `${group.name} static shadow caster`;
     group.add(caster);
+  }
+}
+
+/** Whether `mesh` can be drawn merged with others of its material (`mergeStill`): a plain mesh standing still, one
+ *  material, nothing run round its draw. */
+function mergeable(mesh: THREE.Mesh): boolean {
+  if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
+  if (Array.isArray(mesh.material) || mesh.userData.noMerge) return false;
+  if (Object.keys(mesh.geometry.morphAttributes).length) return false;
+  return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender;
+}
+
+/** What sets a geometry's merge apart: its material, its attributes, whether it's indexed. */
+function mergeKey(mesh: THREE.Mesh): string {
+  const geometry = mesh.geometry;
+  const attributes = Object.keys(geometry.attributes).sort().join(',');
+  const material = mesh.material as THREE.Material;
+  return `${material.uuid}|${attributes}|${geometry.index ? 'indexed' : 'flat'}|${mesh.receiveShadow}|${mesh.castShadow}`;
+}
+
+/**
+ * Every mesh standing still under `root` (`standStill`) drawn as one with the others of its material: a draw each,
+ * the village's cottages, walls and lamps were most of its 257 draws a frame, and three's work for each (its program,
+ * its uniforms) most of the render's 7 ms on the CPU (`npm run lab -- perf --village --profile=render`). The wall and
+ * the baked shadow caster keep copies of their own, so the originals go; their shadows are the caster's
+ * (`bakeStaticShadows`, run first).
+ */
+export function mergeStill(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  // (what thins by its own middle keeps it through the merge: merged, each column stood at the origin, and thinned
+  // nowhere, core/seeThrough.ts `keepMiddle`)
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.isMesh && thinsByMiddle(mesh.material)) keepMiddle(mesh);
+  });
+  const groups = new Map<string, THREE.Mesh[]>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mergeable(mesh)) return;
+    const key = mergeKey(mesh);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(mesh);
+  });
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) continue;
+    const parts = meshes.map((mesh) => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+    const merged = mergeGeometries(parts);
+    for (const part of parts) part.dispose();
+    if (!merged) continue;
+    const first = meshes[0];
+    const one = new THREE.Mesh(merged, first.material);
+    one.name = `${root.name} still: ${(first.material as THREE.Material).name || first.name || 'merged'}`;
+    one.receiveShadow = first.receiveShadow;
+    one.castShadow = first.castShadow;
+    one.renderOrder = first.renderOrder;
+    one.layers.mask = first.layers.mask;
+    root.add(one);
+    one.updateMatrixWorld(true);
+    one.matrixAutoUpdate = false;
+    for (const mesh of meshes) mesh.removeFromParent();
   }
 }
 

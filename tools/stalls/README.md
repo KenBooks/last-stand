@@ -19,6 +19,7 @@ npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=w
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
 npm run stalls -- --scenario latency --url "this?vsync=1,this?vsync=0" --window 2560x1440 --scale 2  # input lag
 npm run stalls -- --scenario latency --cpu-slowdown 4 --url "this?vsync=0&frameWaits&ahead=1,this?vsync=0&frameWaits&ahead=99"  # its frames' waits
+npm run stalls -- --scenario walks --listed 100  # a first visit's village walked place to place by its map
 npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
 npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby
 npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hovering with the stash's glow held still
@@ -28,6 +29,7 @@ npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
 npm run stalls -- --scenario resolution --seconds 12 --js --listed 50  # twelve resolution changes, Escape resumes after each
+npm run stalls -- --scenario hall --seconds 12 --listed 60 --js --return  # into the hall of heroes, a hero chosen there
 npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
@@ -82,6 +84,22 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `fight`: the warrior through a wave and its choice into the next. Steel Tempest is held with the mouse circling
     and the left button down, now and then another skill, and Continue after a few seconds.
   - `lobby`: standing, then walking round the lobby.
+  - `walks` (`villageWalks.mjs`): the village walked from place to place as a player goes about it, on a first
+    visit (from the owner: "make sure to test walks to various areas, ensure no freezes"): its training skipped, then
+    the map opened with M and a place's name clicked, the hero walking there of himself and using it, its card or
+    screen put away (Esc, or the hall's Back) and the next picked: the yard, the hall of heroes, the chest, both
+    portals, the chronicle, the campfire, the notice board, the yard. Each walk and each stay is a phase of its own
+    (`to <place>`, `at <place>`), so a freeze says where it came. Its notes say how long each walk took, and a map
+    that never opened, a place never reached or an Esc that closed nothing. The page is loaded with `?walkPace=3`
+    unless `--url` says otherwise (`WALK_PACE` in `src/entities/player.ts`: he walks of himself three times as
+    fast), so its walks take 45 s where they took a minute and a half. A slow game's prompt (`#perf-ask`) that lies
+    over the map's names is answered Not now, before a click or when it came up over one. `--stops a,b` walks to
+    those places in that order (the map's names: `stash,chronicle,heroes,coop`), so a stall's place is told from
+    what came before it: the map's freeze came with the first folding away outside the yard, not after the hall. A
+    freeze may come in one walk and not the next: judge a change over two walks or more. Its first runs
+    found the map's first opening held Chrome's GPU process
+    4 s, the chest's panels 1.3 s, the practice bar's cooldowns 1.1 s and the prompt 0.8 s, each a first raster
+    (`src/ui/AGENTS.md`).
   - `renderer`: the pause menu's renderer switch, on a page of its own: the plain address on WebGL, its button loading
     the WebGPU address, the plain address on WebGL again with an old cookie saying WebGPU. Its notes say `WRONG` where not.
   - `firing`: shooting at the lobby's dummies with the left button, a shot about every half a second (`--hero ranger`).
@@ -99,12 +117,16 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
   - `pause`: the pause menu opened and closed with Esc twice, the screen pictured every 150 ms for 1.5 s after each
     press (`out/end-N-pause-<press>-<n>.png`), and how long the menu took to show or go said for each.
+  - `choosing`: a hero chosen on the hero selection screen three times, each opening and each choice a phase of its own.
   - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").
   - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
     choice a phase of its own, and how long each took to bring the lobby back said ("changing hero is a little
     slow": WebGPU's 306 to 331 ms, WebGL's 213 to 270, the hero's build most of both).
+  - `hall`: the hero sent to the village's hall of heroes by its map, through its door and down its length to the
+    dais, its screen opening as he gets there, and another hero chosen on it, each a phase of its own: the first
+    time of each, as a player meets them.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it
@@ -114,7 +136,10 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     by default). Its steps are the loading screen's, read off it as it's drawn (`page.mjs` `bootRecording`), so
     a build without marks of its own is timed alike: the document fetched, `Loading…` (the scripts fetched and
     run), each label `loadingStep` shows, the loop started (the bar full, waiting for smooth frames), the logo
-    blown away, the lobby revealed. `--cpu-slowdown N` slows the page's CPU as a phone's (any scenario).
+    blown away, the lobby revealed; on a first visit, the hero chosen on the screen it opens on (`--hero`, or the
+    one in focus), a step of its own watched as long again before anything else is pressed (from play, a phone's
+    "insane slowdown when choosing a hero upon first entry"). `--cpu-slowdown N` slows the page's CPU as a phone's
+    (any scenario).
     `--stall-blow ms` holds the page up once in the logo blow's first frames, as a fast machine stalled by the GPU
     busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
     warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till
@@ -347,6 +372,8 @@ worst frame was 50 and 67 ms.
 | `scenarios.mjs` | What the player does |
 | `boot.mjs` | The boot: a first visit and a return in a fresh Chrome, each traced |
 | `variants.mjs` | Changes tried on the page before its scripts |
+| `villageWalks.mjs` | The `walks` scenario: the village walked place to place by its map |
+| `steps.mjs` | How long each step of a run took, said as it goes (`stepClock`) |
 | `page.mjs` | What runs in the page: the recording, and the states the scenarios wait for |
 | `trace.mjs` | The browser's trace, its events filtered as they stream in |
 | `within.mjs` | Waiting on the browser with a limit |

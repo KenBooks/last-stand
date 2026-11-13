@@ -48,19 +48,43 @@ const screenOf = (): HTMLElement | null => document.getElementById('heroes');
 /** whether `element` is laid out and visible (the screen is fixed: it has no `offsetParent`) */
 const shown = (element: Element | null): boolean => !!element?.checkVisibility({ visibilityProperty: true });
 
+/** the most presses of Esc a player makes for the pause menu: one putting away the village's panels, one pausing */
+const ESC_PRESSES = 2;
+
+/**
+ * The lobby's Change hero where a player finds it: in the village, the pause menu's, opened by Esc (the first press
+ * putting away what an object opened, if anything); before it, the lobby's own link, shown as it is. Null in a tree
+ * without one.
+ */
+export async function changeHeroLink(lab: Lab): Promise<HTMLElement | null> {
+  const button = document.getElementById('btn-hero');
+  for (let press = 0; button && !shown(button) && press < ESC_PRESSES; press++) {
+    await lab.step(1, () => ({ keys: ['escape'] }));
+    // (the game hears a press on the frame it begins: the next frame lets it go)
+    await lab.step(1);
+  }
+  if (button && !shown(button)) throw new Error('lab: ui: Esc showed no Change hero');
+  return button;
+}
+
 /** Change hero clicked with the mouse, and the camera's flight and the hero's showcase played out. */
 export async function openHeroes(lab: Lab): Promise<void> {
-  const button = document.getElementById('btn-hero');
+  const button = await changeHeroLink(lab);
   opened = { before: G.player.cls.id, screen: !!button && !!screenOf() };
   if (!button) return;
   await lab.clickOn(button);
   await lab.step(SETTLE_FRAMES);
 }
 
-/** The screen closed by Esc, as a player goes back to the lobby. */
+/** The screen closed by its Back, as a player goes back to the lobby (Esc opens the pause menu over it: it closed
+ *  the screen once, and this pressed it and found the screen still up). */
 export async function closeHeroes(lab: Lab): Promise<void> {
-  if (!opened?.screen || !shown(screenOf())) return;
-  await lab.step(1, () => ({ keys: ['escape'] }));
+  const screen = screenOf();
+  if (!opened?.screen || !shown(screen)) return;
+  const back = screen?.querySelector<HTMLElement>('.hs-back');
+  if (!back) throw new Error('lab: ui: heroes: the screen has no Back');
+  await lab.clickOn(back);
+  await lab.step(1);
 }
 
 /** The heroes the hall shows: the scene's heroes drawn (the lobby's own is hidden while it's up), by class. */
@@ -604,9 +628,9 @@ export const heroesCanaryCaught = (problems: string[]): boolean =>
 export function heroesClosed(): Found {
   if (!opened?.screen) return { lines: [], problems: [] };
   const problems: string[] = [];
-  if (shown(screenOf())) problems.push('heroes: Esc left the screen up');
+  if (shown(screenOf())) problems.push('heroes: Back left the screen up');
   if (!G.player.obj.visible) problems.push('heroes: the lobby\'s hero stayed hidden');
   if (!shown(document.getElementById('menu'))) problems.push('heroes: the lobby\'s panels never came back');
   const back = problems.length ? 'not all of the lobby back' : 'the lobby back with its hero';
-  return { lines: [`  closed by Esc: ${back}`], problems };
+  return { lines: [`  closed by Back: ${back}`], problems };
 }

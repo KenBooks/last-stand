@@ -4,12 +4,15 @@
 // tumbling to lie on the floor. Two instanced meshes hold them: the whole arrow within NEAR of the camera, the plain
 // one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
 // frame. Purely visual: every game keeps its own, from the arrows it sees.
+import { thinsByBlending } from '../core/seeThrough';
 import * as THREE from 'three';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
 import { groundHeight } from '../world/arena';
+import { pavedAt } from '../world/villagePlan';
+import { basinTop, FOUNTAIN } from '../world/fountain';
 import { BIOMES } from '../data/biomes';
 import { sfx } from '../core/audio';
 import { col, particles } from './particles';
@@ -278,13 +281,15 @@ function fall(s: Spent, dt: number): void {
     const vn = push > 1e-6 ? v.dot(_n.divideScalar(push)) : 0;
     if (vn < 0) v.addScaledVector(_n, -(1 + restitution(BOUNCE, BOUNCE_V, -vn)) * vn);
   }
-  const g = groundHeight(s.p.x, s.p.z) + LIE_H;
+  const g = Math.max(groundHeight(s.p.x, s.p.z), G.arena.place === 'village' ? basinTop(s.p.x, s.p.z) : 0) + LIE_H;
   if (s.p.y > g) return;
   s.p.y = g;
   if (Math.hypot(v.x, v.y, v.z) < SETTLE_V) {
     // lying along the floor the way it points, rolled a little onto its vanes
     _d.copy(FWD).applyQuaternion(s.q).setY(0);
     if (_d.lengthSq() < 1e-6) _d.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    // (along the fountain's rim: across it, half an arrow hung in the air over the water, a review)
+    if (G.arena.place === 'village' && basinTop(s.p.x, s.p.z) === FOUNTAIN.high) _d.set(-s.p.z, 0, s.p.x);
     s.q.setFromUnitVectors(FWD, _d.normalize()).multiply(_q.setFromAxisAngle(FWD, rand(-0.6, 0.6)));
     s.tip.copy(s.p);
     s.mode = 'fixed'; s.v = s.w = undefined;
@@ -321,7 +326,7 @@ function solid(o: THREE.Object3D): boolean {
   const m = o as THREE.Mesh;
   if (!m.isMesh || o.userData.noStick) return false;
   const mt = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
-  return mt.blending === THREE.NormalBlending && !(mt.transparent && mt.opacity < 0.9) && shown(o);
+  return (thinsByBlending(mt) || (mt.blending === THREE.NormalBlending && !(mt.transparent && mt.opacity < 0.9))) && shown(o);
 }
 /** The nearest solid surface the ray meets on `root`'s rigid meshes (each on the joint it moves with). The skinned ones,
  *  which bend across the joints, are left out: a ray costs 1 to 9 ms against them, every vertex moved by its bones first,
@@ -373,10 +378,11 @@ export function stickIn(root: THREE.Object3D, from: THREE.Vector3, dir: THREE.Ve
  * what it draws (the circle is rounder than the prop): it's met where the circle has it.
  */
 export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 | null {
-  if (!o.prop) return null;
+  if (!o.prop && !o.drawn) return null;
   ray.set(_p.copy(at).addScaledVector(dir, -PROP_REACH), dir); ray.far = PROP_REACH * 2;
   _hits.length = 0;
-  o.prop.raycast(ray, _hits);
+  if (o.prop) o.prop.raycast(ray, _hits);
+  else ray.intersectObjects(o.drawn as THREE.Object3D[], false, _hits);
   let best: THREE.Intersection | null = null;
   for (const h of _hits) if (!best || h.distance < best.distance) best = h;
   if (!best) return null;
@@ -387,7 +393,11 @@ export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, 
 }
 
 /** What the floor is made of under a point: the dais is stone, the rest is the biome's. */
-export const floorIsStone = (x: number, z: number): boolean => groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone';
+export const floorIsStone = (x: number, z: number): boolean => (G.arena.place === 'village'
+  // (the village's biome is whichever run was last chosen: in the crypt's, arrows skittered off the yard's grass, "ranger
+  // arrows should stick in ground in training area")
+  ? groundHeight(x, z) > 0 || pavedAt(x, z)
+  : groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone');
 /** What a prop is made of: stone unless it's wood, a cap or embers (which an arrow goes into). */
 export const propIsStone = (o: Obstacle): boolean => (o.prop?.kind ?? 'stone') === 'stone';
 

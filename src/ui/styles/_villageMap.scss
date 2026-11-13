@@ -1,0 +1,46 @@
+// The village's map (ui/villageMap.ts): parchment over the village, unfolding out of its panels as a folded map does.
+// Its panels are turned by the game's frames (transforms alone, each on a layer of its own); its names and the hero's
+// mark come once it lies flat.
+@use 'theme' as *;
+
+#vmap { position: fixed; inset: 0; z-index: 32; display: grid; place-items: center; pointer-events: auto;
+  background: rgba(10, 8, 6, calc(0.55 * var(--vm-open, 0))); }
+#vmap.hidden { display: none; }
+/* (rehearsed over the loading screen, unseen: ui/villageMap.ts layOutMapAhead) */
+#vmap.ahead { z-index: 101; opacity: .004; }
+#vmap.ahead, #vmap.ahead .vm-names { pointer-events: none; }
+/* the sheet: the map's shape (its world's 78 by 63 m), as large as the window leaves room for */
+.vm-sheet { position: relative; width: min(94vw, calc(88vh * 78 / 63)); aspect-ratio: 78 / 63; }
+.vm-panels { position: absolute; inset: 0; }
+/* (a pixel over the next, so no seam shows where a panel falls on a fraction of one) */
+.vm-panel { position: absolute; top: 0; left: 0; width: calc(25% + 1px); height: 100%; transform-origin: 0 50%; will-change: transform; }
+.vm-panel canvas { display: block; width: 100%; height: 100%; }
+.vm-shade { position: absolute; inset: 0; background: #1a120a; opacity: 0; pointer-events: none; }
+/* its names and the hero's mark, over the flat sheet alone: faded in, gone at once as it folds (faded out over the
+   folding panels, the compositor's drawing of them took a first visit's GPU process 0.4 to 1.3 s for a program of its
+   own, `npm run stalls -- --scenario walks`) */
+.vm-names, .vm-you { opacity: 0; pointer-events: none; }
+#vmap.flat .vm-names, #vmap.flat .vm-you { opacity: 1; transition: opacity .25s; }
+#vmap.flat .vm-names { pointer-events: auto; }
+.vm-names { position: absolute; inset: 0; }
+/* (moved aside from its neighbours by ui/villageMap.ts `layNames`, its pointer kept at its place) */
+.vm-name { position: absolute; translate: calc(-50% + var(--aside, 0px)) calc(-100% - #{ui(10px)}); padding: ui(3px) ui(9px); white-space: nowrap; min-width: ui(84px); text-align: center; box-sizing: border-box;
+  font: 700 ui(13px) var(--font-display); letter-spacing: .04em; color: #3a2a1a; cursor: $cursor-hand;
+  background: rgba(240, 226, 196, .9); border: 1px solid rgba(58, 42, 26, .7); border-radius: ui(3px);
+  box-shadow: 0 ui(2px) ui(6px) rgba(40, 24, 8, .35); }
+.vm-name::after { content: ''; position: absolute; left: calc(50% + var(--tail, 0px)); top: 100%; translate: -50% 0; border: ui(5px) solid transparent;
+  border-top-color: rgba(58, 42, 26, .7); }
+.vm-name:hover, .vm-name:focus-visible { background: #fff3d6; color: #1a0f04; }
+.vm-name[data-biome="crypt"] { color: #5a1f86; }
+.vm-name[data-biome="forest"] { color: #1f6a32; }
+/* the hero: an arrow the way he faces */
+.vm-you { position: absolute; left: 0; top: 0; width: ui(22px); height: ui(22px); margin: ui(-11px) 0 0 ui(-11px);
+  will-change: transform; }
+.vm-you::before { content: ''; position: absolute; inset: 0; background: #b0201a; clip-path: polygon(50% 0, 92% 100%, 50% 74%, 8% 100%);
+  filter: drop-shadow(0 0 2px #fff); }
+.vm-close { position: absolute; right: ui(14px); top: ui(12px); z-index: 1; font: 700 ui(13px) var(--font-display);
+  color: #3a2a1a; background: rgba(240, 226, 196, .9); border: 1px solid rgba(58, 42, 26, .7); padding: ui(4px) ui(10px);
+  cursor: $cursor-hand; opacity: calc(var(--vm-open, 0) * 1); }
+@media (prefers-reduced-motion: reduce) {
+  .vm-names, .vm-you { transition: none; }
+}

@@ -423,7 +423,7 @@ async function uploaded(renderer: THREE.WebGLRenderer, textures: Set<THREE.Textu
  * fight warmed behind the lobby held it up 250 ms at a time asking, its programs read back from the cache meanwhile).
  * Asked every `poll`.
  */
-async function commandsDone(renderer: THREE.WebGLRenderer, poll: Step): Promise<void> {
+export async function commandsDone(renderer: THREE.WebGLRenderer, poll: Step): Promise<void> {
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   if (!fence) return;
@@ -550,8 +550,10 @@ export interface WarmUp {
 
 /** What a warm-up shows in place of what (`WarmUp.swap`), and on WebGPU the scene's look it's shown with (`look`:
  *  put on, returning its undoing): there a pipeline is keyed by the scene's environment and fog too, so the hall of
- *  heroes compiled in the biome's look was built again in its own at its first frames (a first visit's 6 s hold). */
-export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void }
+ *  heroes compiled in the biome's look was built again in its own at its first frames (a first visit's 6 s hold).
+ *  `alone`, put on as it's drawn and returning its undoing, leaves it the casting lights it will have when shown: every
+ *  lit program is made for two, and more in the draw made them all afresh inside it. */
+export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void; alone?: () => () => void }
 
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
@@ -715,10 +717,12 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   how.show?.();
   // once: the shadow pass of a render sees the light setup of the one before, and shadow depth
   // programs are keyed by light counts, but the compile above set the scene's lights up
+  const notAlone = swap?.alone?.();
   if (swap) { swap.show.visible = true; swap.hide.visible = false; }
   const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
   drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
   if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+  notAlone?.();
   how.hide?.();
   const drawMs = performance.now() - at;
   renderer.setRenderTarget(prev);

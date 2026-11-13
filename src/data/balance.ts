@@ -68,6 +68,10 @@ export const BLOCK = { recovery: 0.7, arc: 1.4, guardBreak: 1.5 };
 /** Co-op: party size, reviving a downed teammate, and how much more the arena throws at a party. */
 export const COOP = {
   maxPlayers: 4,
+  /** the longest the host's countdown holds for a guest still readying its run (s): from play, "readying the fight for
+   *  slower device takes forever, and first wave already launched, we should display waiting for player instead.. and
+   *  dont deploy the wave" */
+  waitForGuests: 120,
   /** seconds a downed player lasts before bleeding out (the clock stops while a teammate raises them), and a
    *  teammate's hold (E) to raise them */
   bleedOut: 25,

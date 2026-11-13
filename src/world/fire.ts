@@ -10,6 +10,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
+import { inTheFog } from '../core/sight';
 import type { Updater } from './props';
 import { runPhase } from './runPhase';
 import { WEBGPU } from '../core/webgpu';
@@ -587,6 +588,9 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const due = runPhase({ embers: 0, smoke: 0 });
   updaters.push((dt, t) => {
     emberTime.value = t;
+    // (what he can't see plays out nothing, from play, "fire should not animate when in fog of war": its flames held at
+    // the moment they had, none of the loop decoded for it, no embers or smoke)
+    if (inTheFog(inWorld.x, inWorld.z)) return;
     const puff = puffAt(t, seed);
     flames.uniforms.uPuff.value = 1 + (puff - 1) * PUFF_SHOWS;
     // (every fire at one moment of the loop, so the GPU holds two frames of it, each fire turned its own way and puffing

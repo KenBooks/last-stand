@@ -186,7 +186,8 @@ export function sendWorld(send: (m: WorldMessage) => void, snapshot: boolean): v
 function snap(): Snapshot {
   const r = G.run!;
   return {
-    r: [r.wave, PHASES.indexOf(r.phase), r2(r.timer), r2(r.waveTime), Math.round(r.score), r.multiplier, r.kills, r.remaining],
+    r: [r.wave, PHASES.indexOf(r.phase), r2(r.timer), r2(r.waveTime), Math.round(r.score), r.multiplier, r.kills, r.remaining,
+      r.held ? 1 : 0],
     v: [...r.votes],
     p: G.players.filter((p) => !p.away).map((p) => [p.slot, r2(p.bleed), r2(p.revive)]),
     e: G.enemies.filter((e) => e.deadT < 0).map((e) => [
@@ -373,8 +374,8 @@ const pendingOn = (id: number): number => pending.reduce((sum, h) => (h.id === i
 
 function applySnapshot(s: Snapshot): void {
   const r = G.run!;
-  const [wave, phase, timer, waveTime, score, mult, kills, remaining] = s.r;
-  Object.assign(r, { wave, timer, waveTime, score, multiplier: mult, kills, remaining });
+  const [wave, phase, timer, waveTime, score, mult, kills, remaining, held] = s.r;
+  Object.assign(r, { wave, timer, waveTime, score, multiplier: mult, kills, remaining, held: held === 1 });
   // the wave starts when the host's countdown runs out (the other turns of the run come as events)
   if (PHASES[phase] === 'fighting' && r.phase === 'countdown') { r.phase = 'fighting'; sfx.waveStart(); emit('waveStarted', r.wave); }
   r.votes = new Set(s.v);

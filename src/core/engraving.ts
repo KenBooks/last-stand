@@ -4,6 +4,7 @@
 // engraved band catches the light like the real thing. Made once, shared by every hero.
 import * as THREE from 'three';
 import { albedoPixels, ctx2d, readCtx2d, steel } from './textures';
+import { deriveMaps, steelTint, type BasePixels, type DerivedPixels, type Tint } from './engravingMaps';
 import { clamp, mulberry } from '../util';
 
 type Ctx = CanvasRenderingContext2D;
@@ -135,49 +136,28 @@ function drawKnee(c: Ctx, size: number): void {
 }
 
 /** a height canvas (`readCtx2d`'s) → the three maps, with `base` (a neutral albedo's pixels) under the ornament */
-function derive(hc: HTMLCanvasElement, base: ImageData | null, tint: (h: number, groove: number, i: number) => [number, number, number, number]) {
+function derive(hc: HTMLCanvasElement, base: BasePixels | null, tint: Tint) {
   const w = hc.width, h = hc.height, src = readCtx2d(hc).getImageData(0, 0, w, h).data;
-  // a light blur, so the grooves have sloped walls (the normal needs a gradient to catch light)
-  const H = new Float32Array(w * h), B = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) H[i] = src[i * 4] / 255;
-  for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      let s = 0;
-      for (let d = -1; d <= 1; d++) s += H[y * w + clamp(x + d, 0, w - 1)];
-      B[y * w + x] = s / 3;
-    }
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      let s = 0;
-      for (let d = -1; d <= 1; d++) s += B[clamp(y + d, 0, h - 1) * w + x];
-      H[y * w + x] = s / 3;
-    }
-  }
-  const bd = base?.data ?? null, bs = base?.width ?? 1;
-  const alb = new ImageData(w, h), nor = new ImageData(w, h), rou = new ImageData(w, h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x, hv = H[i];
-    const dx = (H[y * w + clamp(x + 1, 0, w - 1)] - H[y * w + clamp(x - 1, 0, w - 1)]) * 3;
-    const dy = (H[clamp(y + 1, 0, h - 1) * w + x] - H[clamp(y - 1, 0, h - 1) * w + x]) * 3;
-    const l = Math.hypot(dx, dy, 1);
-    nor.data[i * 4] = (-dx / l * 0.5 + 0.5) * 255; nor.data[i * 4 + 1] = (dy / l * 0.5 + 0.5) * 255; nor.data[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255; nor.data[i * 4 + 3] = 255;
-    const b = bd ? bd[((y % bs) * bs + (x % bs)) * 4] / 255 : 1;
-    const [r, g, bb, ro] = tint(hv, clamp((0.5 - hv) * 2, 0, 1), b);
-    alb.data[i * 4] = r * 255; alb.data[i * 4 + 1] = g * 255; alb.data[i * 4 + 2] = bb * 255; alb.data[i * 4 + 3] = 255;
-    rou.data[i * 4] = rou.data[i * 4 + 1] = rou.data[i * 4 + 2] = ro * 255; rou.data[i * 4 + 3] = 255;
-  }
-  const mk = (d: ImageData, srgb: boolean) => {
-    const c = document.createElement('canvas'); c.width = w; c.height = h; ctx2d(c).putImageData(d, 0, 0);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8;
-    return t;
-  };
-  return { map: mk(alb, true), normalMap: mk(nor, false), roughnessMap: mk(rou, false) };
+  return mapsOf(deriveMaps(src, w, h, base, tint), w, h);
 }
 
-let steelMaps: ReturnType<typeof derive> | null = null;
-/** the engraved steel atlas (see REGIONS): neutral, tinted by the material's colour */
-export function engravedSteel(): ReturnType<typeof derive> {
-  if (steelMaps) return steelMaps;
+/** The three maps as textures, from their pixels. */
+function mapsOf(pixels: DerivedPixels, w: number, h: number) {
+  const mk = (data: Uint8ClampedArray, srgb: boolean) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    ctx2d(c).putImageData(new ImageData(data as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.anisotropy = 8;
+    return t;
+  };
+  return { map: mk(pixels.albedo, true), normalMap: mk(pixels.normal, false), roughnessMap: mk(pixels.roughness, false) };
+}
+
+/** The engraved steel atlas's heights, drawn (cheap: the strokes; the maps from them are what costs). */
+function steelHeights(): HTMLCanvasElement {
   const hc = document.createElement('canvas'); hc.width = hc.height = ATLAS;
   const c = readCtx2d(hc);
   c.fillStyle = '#808080'; c.fillRect(0, 0, ATLAS, ATLAS);
@@ -188,12 +168,54 @@ export function engravedSteel(): ReturnType<typeof derive> {
   at('chest', drawChest);
   at('disc', (c, w) => drawDisc(c, w, 3));
   at('knee', (c, w) => drawKnee(c, w));
-  // grime settles in the grooves, the raised bands are polished bright
-  steelMaps = derive(hc, albedoPixels(steel()), (hv, g, b) => {
-    const k = clamp(b * (1 - g * 0.75) + Math.max(0, hv - 0.5) * 0.35, 0, 1);
-    return [k, k, k, clamp(0.34 + g * 0.5 - Math.max(0, hv - 0.5) * 0.3 + (1 - b) * 0.3, 0.1, 1)];
-  });
+  return hc;
+}
+
+let steelMaps: ReturnType<typeof derive> | null = null;
+let steelFromWorker = false;
+/** Whether the engraved steel's maps came from the worker (a harness's). */
+export const engravingFromWorker = (): boolean => steelFromWorker;
+/** the engraved steel atlas (see REGIONS): neutral, tinted by the material's colour; the maps a worker made as the
+ *  game loaded (`preloadEngraving`), or made here */
+export function engravedSteel(): ReturnType<typeof derive> {
+  // (grime settles in the grooves, the raised bands are polished bright: `steelTint`)
+  steelMaps ??= derive(steelHeights(), albedoPixels(steel()), steelTint);
   return steelMaps;
+}
+
+/**
+ * The engraved steel's maps derived in a worker as the game loads, once the steel's own map has come (its albedo
+ * lies under the ornament): 1.35 s of the first hero's build on a CPU slowed six times, the loading screen frozen
+ * ("phone has freezes during loading for like 1-2sec"). A worker that fails leaves them to the first build.
+ */
+export async function preloadEngraving(): Promise<void> {
+  if (steelMaps || typeof Worker === 'undefined') return;
+  const heights = readCtx2d(steelHeights()).getImageData(0, 0, ATLAS, ATLAS).data;
+  const albedo = albedoPixels(steel());
+  const base = albedo ? { data: albedo.data.slice(), width: albedo.width } : null;
+  const pixels = await new Promise<DerivedPixels | null>((resolve) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./engraving.worker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      resolve(null);
+      return;
+    }
+    worker.onmessage = (e: MessageEvent<DerivedPixels>) => {
+      worker.terminate();
+      resolve(e.data);
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      resolve(null);
+    };
+    const transfer = [heights.buffer as ArrayBuffer, ...(base ? [base.data.buffer as ArrayBuffer] : [])];
+    worker.postMessage({ heights, size: ATLAS, base }, { transfer });
+  });
+  if (pixels && !steelMaps) {
+    steelMaps = mapsOf(pixels, ATLAS, ATLAS);
+    steelFromWorker = true;
+  }
 }
 
 /**

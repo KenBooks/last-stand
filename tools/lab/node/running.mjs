@@ -22,6 +22,7 @@ export function isAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
+    // EPERM: it's there, under another account (a lent PC's service starting its jobs as their own user).
     return error.code === 'EPERM';
   }
 }

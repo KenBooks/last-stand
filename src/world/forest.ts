@@ -2,13 +2,14 @@
 // standing over the forest beyond, with four root-arch spawn gates, a mossy stone dais ringed by
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
 import * as THREE from 'three';
+import { VILLAGE } from '../core/beta';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -17,7 +18,7 @@ import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
-import { buildFire, emberMat, type FireLog } from './fire';
+import { buildFire, emberMat, type FireLog, type FireSpec } from './fire';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
@@ -48,6 +49,17 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
+/** a bonfire's light (a point light's, in candela): enough for a warm pool round it, on a village's ground by night too */
+// (these are a light's under the village's soft falloff, `lightTheLamps`: with no village, core/beta.ts, the lights
+// fall by three's own square and a bonfire is as it was before it)
+export const BONFIRE_LIGHT = VILLAGE ? 110 : 12;
+/** how soft close to its light is (m squared, in its decay, as `LAMP_SOFT` is a lamp's): with a lamp's, a hand beside the
+ *  fire, nearer its light than the ground is, burned white by day with the sun on it too (from play, "fire blinding skin
+ *  issue again"; `lab village --only heroBesideFire`) */
+const BONFIRE_SOFT = VILLAGE ? 24 : 0;
+const BONFIRE_LIGHT_UP = VILLAGE ? 1.2 : 1.3;
+const BONFIRE_COLOUR = VILLAGE ? 0xff9a48 : 0xff7a30;
+const BONFIRE_REACH = VILLAGE ? 16 : 13;
 /** the bonfires' places, by the wall on the diagonal */
 const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WALL_R - 2.4), Math.sin(a) * (WALL_R - 2.4)]);
 /** a fire clears the ground round it (m): nothing lies within its ring of stones, and a fern's roots stand clear of
@@ -868,11 +880,11 @@ const CANOPY_Y = 24;
  * 8.5), so the repeat makes it about 0.4 m at the foot, the oak photo's plates their own size (a giant's 0.6 m: old
  * bark's plates are coarser), and narrower round thinner branches.
  */
-interface TreeGrow extends Grow {
+export interface TreeGrow extends Grow {
   bark: number;
 }
 
-const TREE_KINDS: TreeGrow[] = [
+export const TREE_KINDS: TreeGrow[] = [
   { preset: 'Oak Medium', seed: 4021, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2, bark: 6 },
   { preset: 'Ash Medium', seed: 717, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2, bark: 7 },
   { preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2, bark: 5 },
@@ -888,6 +900,23 @@ const BARK_REPEATS = {
   stumps: [4, 3], log: [7, 11], roots: [3, 22], gateArch: [8, 17], gateVine: [3, 17], gateRoots: [3, 4], bonfire: [1, 2],
 } as const satisfies Record<string, Repeat>;
 
+/** A root gate's materials as the Thornwood's own are made (the village's gate: the same programs and looks). */
+export function rootGateMats(): GateMats {
+  const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
+    seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
+  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({
+    map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048,
+  }), 'foliage');
+  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
+  const ivyMat = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
+  const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
+  for (const m of [ivyMat, hangMat]) seeThrough(m, 'prop');
+  return {
+    canopyMat, coreMat, hangMat, ivyMat,
+    archMat: barkAt(BARK_REPEATS.gateArch), vineMat: barkAt(BARK_REPEATS.gateVine), rootMat: barkAt(BARK_REPEATS.gateRoots),
+  };
+}
+
 /** Points along the curve `taperTube` lays a tube round (by its length, `steps` of them), each with its radius. */
 function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps: number): [number, number, number, number][] {
   const curve = new THREE.CatmullRomCurve3(pts), at = new THREE.Vector3();
@@ -897,13 +926,16 @@ function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps:
   });
 }
 
-interface GateMats {
+export interface GateMats {
   canopyMat: THREE.Material; coreMat: THREE.Material; hangMat: THREE.Material; ivyMat: THREE.Material;
   /** the bark of its arch's roots, of the vines round them and of the roots splaying from their feet */
   archMat: THREE.Material; vineMat: THREE.Material; rootMat: THREE.Material;
 }
 
-function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number, updaters: Updater[]): Portal {
+/** A gate of the Thornwood's: two twisted roots meeting overhead round its portal's membrane, a crown of leaves on
+ *  them (`place`: stood there, not in the thicket at `angle`: the village's). */
+export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number,
+  updaters: Updater[], place?: GatePlace): Portal {
   const g = new THREE.Group();
   const half = GATE_W / 2 + 0.45;
   const hang: THREE.BufferGeometry[] = [], ivy: THREE.BufferGeometry[] = [];
@@ -960,8 +992,8 @@ function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat
     g.add(m);
   }
 
-  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true);
-  placeGate(g, angle);
+  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true, place);
+  placeGate(g, angle, place);
   scene.add(g);
   wall.add(g, false);
   return portal;
@@ -1035,7 +1067,8 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   });
 }
 
-function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[]): void {
+export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[],
+  casts = true): FireSpec {
   // (the ring's stones merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the sun's shadow)
   const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 9; i++) {
@@ -1073,14 +1106,19 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
     mesh.castShadow = true;
     scene.add(mesh);
   }
-  const light = new THREE.PointLight(0xff7a30, 12, 13, 2);
-  light.position.set(x, 1.3, z);
-  staticShadow(light);
+  // (from play, "there is no light from fire": at 18, under the village's lamps, it added 14 levels of red to what it lit)
+  // (soft close to, as the lamps are: by the square alone, a hero beside it burned white, "blinding reflections from fire",
+  // and the ring's stones peach)
+  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, BONFIRE_REACH, 2 + BONFIRE_SOFT);
+  light.position.set(x, BONFIRE_LIGHT_UP, z);
+  if (casts) staticShadow(light);
   scene.add(light);
-  buildFire(scene, {
-    at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: 12,
+  const fire: FireSpec = {
+    at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: BONFIRE_LIGHT,
     smoke: 6, smokeColour: 0x8a8580, embers: 10, logs: logs.ends,
-  }, updaters);
+  };
+  buildFire(scene, fire, updaters);
+  return fire;
 }
 
 /** A bonfire's logs, their bark's geometry and their char's, in the world's frame. */

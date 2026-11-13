@@ -48,7 +48,9 @@ export function openPause(tab: PauseTab, canary: boolean): void {
   showPause(true);
   pauseTab(tab);
   if (!canary) return;
-  const ownRow = document.querySelector<HTMLElement>(`#pause [data-pause-page="${tab}"] .opt-row`);
+  // (the Beta tab's page has no row of options: its lead stands for one)
+  const page = `#pause [data-pause-page="${tab}"]`;
+  const ownRow = document.querySelector<HTMLElement>(`${page} .opt-row, ${page} .beta-lead`);
   planted = ownRow ?? document.querySelector<HTMLElement>('#pause .pb-opts .opt-row');
   if (planted) planted.style.minHeight = `${(CANARY_WINDOWS * innerHeight) / boxScale()}px`;
 }
@@ -273,8 +275,23 @@ function middleOf(element: Element): { x: number; y: number } {
 
 const share = (part: number, whole: number): string => ((100 * part) / whole).toFixed(1);
 
-/** The tab shown, the box's height as a share of the window's, and whether it scrolls or leaves the window. */
+/** developer mode's help on the Controls page (src/dev: previews and dev builds alone, the lab's among them), 240 px
+ *  no player's menu has: set aside while the menu is measured, or every tab scrolls here by it */
+const DEV_ONLY = '#pause .dv-help';
+
+/** The tab shown, the box's height as a share of the window's, and whether it scrolls or leaves the window: the menu
+ *  as production has it, developer mode's help set aside. */
 export function pauseShown(tab: PauseTab): PauseFound {
+  const devOnly = [...document.querySelectorAll<HTMLElement>(DEV_ONLY)];
+  for (const part of devOnly) part.style.display = 'none';
+  try {
+    return playersPauseShown(tab);
+  } finally {
+    for (const part of devOnly) part.style.display = '';
+  }
+}
+
+function playersPauseShown(tab: PauseTab): PauseFound {
   const box = document.querySelector<HTMLElement>('#pause .pause-box');
   if (!box) return { lines: [], problems: [`pause, ${tab}: no pause menu`] };
   const problems: string[] = [];
@@ -282,7 +299,11 @@ export function pauseShown(tab: PauseTab): PauseFound {
   if (active !== tab) problems.push(`pause, ${tab}: the ${active ?? 'no'} tab is shown`);
   const shown = document.querySelector<HTMLElement>(`[data-pause-page="${tab}"]`);
   if (!shown || shown.classList.contains('off')) problems.push(`pause, ${tab}: its page is hidden`);
-  const scroll = box.scrollHeight - box.clientHeight;
+  // (the pages scroll in a cell of their own, the box round it never: read alone, the box hid a page too tall,
+  // and the canary's row went unseen)
+  const pages = box.querySelector<HTMLElement>('.pb-pages');
+  const inPages = pages ? pages.scrollHeight - pages.clientHeight : 0;
+  const scroll = Math.max(box.scrollHeight - box.clientHeight, inPages);
   if (scroll > ROUNDING_PX) problems.push(`pause, ${tab}: the menu scrolls (${scroll} px more than it shows)`);
   const rect = box.getBoundingClientRect();
   const outside = rect.top < 0 || rect.left < 0 || rect.bottom > innerHeight || rect.right > innerWidth;

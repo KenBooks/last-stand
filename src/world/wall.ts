@@ -6,13 +6,14 @@
 // it (an instanced mesh's culling moves its instances), sorted by the slices of the ring they cross. What bounds the
 // floor is read once, with rays out from the middle at a body's heights: the nearest surface along each slice, a
 // line round the ring a body's circle is kept off.
+import { thinsByBlending } from '../core/seeThrough';
 import * as THREE from 'three';
 import { TAU } from '../util';
 import { faceAt, pastWall } from './edge';
 import { WALL_R } from './props';
 import { entersHull, hullOf } from './hull';
 import { entersOutline, outlineOf, pushOff, type Outline } from './outline';
-import type { BiomeId } from '../data/biomes';
+import type { PlaceId } from '../data/biomes';
 
 /** the ring's slices (a quarter of a degree, 12 cm apart at the wall: at half a degree, the hero stood 8 cm into a
  *  buttress's corner) */
@@ -39,9 +40,19 @@ export interface WallHit {
   normal: THREE.Vector3;
   t: number;
   stone: boolean;
+  /** the name of the mesh it met (`FENCE`: a fence) */
+  name: string;
 }
 
-export const wallHit = (): WallHit => ({ point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false });
+export const wallHit = (): WallHit => ({ point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' });
+
+/** The name of a fence's meshes (the village's palisade): hiding the hero, it opens its own hole alone, not the
+ *  houses' beside it (`core/heroHidden.ts`). */
+export const FENCE = 'fence';
+
+/** The name of a mesh in the wall that stands free (the notice board): hiding the hero, it thins as the props do, not as
+ *  what's built. */
+export const STANDS_FREE = 'standsFree';
 
 /** A part of the wall: its geometry where it stands, the sphere round it there, what it's made of and what it is;
  *  met by its convex hull's planes (`hull`, in its own frame: `inverse` takes the world there), else its triangles. */
@@ -93,7 +104,9 @@ const angleOf = (bin: number): number => ((bin + 0.5) / BINS) * TAU;
 /** Whether a material draws a surface: opaque (cut out only for foliage, its leaf cards), seen from outside. */
 function drawsSurface(material: THREE.Material | THREE.Material[], use: WallUse): boolean {
   const m = Array.isArray(material) ? material[0] : material;
-  if (m.transparent || m.side === THREE.BackSide || m.blending !== THREE.NormalBlending) return false;
+  // (what thins by blending stands as solid as ever: taken for glass, from play, "can walk through buildings too")
+  const thinned = thinsByBlending(m);
+  if (m.side === THREE.BackSide || (!thinned && (m.transparent || m.blending !== THREE.NormalBlending))) return false;
   return use === 'foliage' || m.alphaTest === 0;
 }
 
@@ -123,7 +136,7 @@ export class Wall {
   private least = Infinity;
   private casts = 0;
 
-  constructor(private readonly biome: BiomeId) {}
+  constructor(private readonly biome: PlaceId) {}
 
   /** `geometry` placed by `matrix` (in the arena's frame) as a part of the wall (met by `hull`'s planes if given). */
   addGeometry(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, stone: boolean, use: WallUse = 'wall',
@@ -453,6 +466,7 @@ export class Wall {
     hit.point.copy(met.point);
     hit.t = met.distance / length;
     hit.stone = met.part.stone;
+    hit.name = met.part.name;
     hit.normal.copy(met.normal);
     if (hit.normal.dot(_d) > 0) hit.normal.negate();
     return true;

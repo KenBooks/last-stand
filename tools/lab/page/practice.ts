@@ -1,17 +1,23 @@
 // Casting in the lobby and in the runs it starts (tools/lab `practice`): each skill on a key with a cooldown cast, then
-// cast again as soon as the hero is free, in each way the lobby is and in runs started from it. Where the lobby shows,
-// casting is free: both casts made. In practice (its panels stowed, or each folded on a screen that shows them side by
-// side) and in a run, the second is refused while the first cools, the HUD counts it down on its key and the cast's
-// energy is spent. A run begun while the lobby was practice (a co-op guest's, as its host starts) kept the lobby's free
-// casting through the whole run. With a canary, that run again with free casting planted, which must be caught.
+// cast again as soon as the hero is free, in each way the lobby is and in runs started from it. The lobby is the
+// village, and its skills cast in the training yard alone: every lobby case is cast there, and one on the square,
+// where nothing may cast. Where the lobby shows (the inventory open, I), casting is free: both casts made. In practice
+// (the inventory put away) and in a run, the second is refused while the first cools, the HUD counts it down on its
+// key and the cast's energy is spent. A run is started at the crypt's portal. A run begun while the lobby was
+// practice (a co-op guest's, as its host starts) kept the lobby's free casting through the whole run. With a canary,
+// that run again with free casting planted, which must be caught.
 import * as THREE from 'three';
+import { pressHeld } from './holdPress';
 import type { Lab, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { KnownSkill, Player } from '../../../src/entities/player';
 import { G } from '../../../src/state';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
-import { lobbyPractice, menuStowed } from '../../../src/ui/menus';
+import { menuStowed } from '../../../src/ui/menus';
+import { YARD, yardToWorld } from '../../../src/data/village';
+import { goUse, villageObject } from '../../../src/game/village';
+import { groundHeight } from '../../../src/world/ground';
 import { holdFor, pressing } from './cast';
 
 export interface PracticeOptions {
@@ -19,8 +25,8 @@ export interface PracticeOptions {
   canary: boolean;
 }
 
-/** How a case casts: free (the lobby's), or with a run's costs and cooldowns. */
-type Casting = 'free' | 'counted';
+/** How a case casts: free (the lobby's), with a run's costs and cooldowns, or not at all (outside the yard). */
+type Casting = 'free' | 'counted' | 'none';
 
 /** A skill on a key cast twice in a case: the casts it made, and what the HUD showed once the first was made. */
 interface Twice {
@@ -48,14 +54,8 @@ const RISE_FRAMES = 120;
 const AHEAD = 5;
 /** the farthest a foe stands to be cast at (m) */
 const NEAR = 12;
-/** the fold tabs, each putting one of the lobby's panels away */
-const FOLDS = ['#hero-fold', '#gear-fold', '#skills-fold'];
 
 const byId = (id: string): HTMLElement => document.getElementById(id)!;
-const shown = (element: Element): boolean => getComputedStyle(element).display !== 'none';
-
-/** Whether the screen shows the lobby's panels one at a time (a phone's), its rail beside them. */
-const onePanel = (): boolean => shown(byId('lobby-rail'));
 
 /** The skills on keys that have a cooldown worth casting twice for, each once (a skill on two keys shares one). */
 function skillsToCast(hero: Player): { key: SkillKey; skill: KnownSkill }[] {
@@ -157,7 +157,9 @@ function judge(twice: Twice, casting: Casting): { line: string; problems: string
   if (countdown) parts.push(`its key counting ${countdown}`);
   if (energy) parts.push(`energy ${energy[0]} -> ${energy[1]}`);
   const problems: string[] = [];
-  if (made === 0) problems.push(`${def.impl} was never cast`);
+  if (casting === 'none') {
+    if (made > 0) problems.push(`${def.impl} was cast outside the yard`);
+  } else if (made === 0) problems.push(`${def.impl} was never cast`);
   else if (casting === 'free' && made < 2) problems.push(`${def.impl} wasn't cast again at once (free casting)`);
   else if (casting === 'counted') {
     if (made > 1) problems.push(`${def.impl} was cast again at once (its cooldown ignored)`);
@@ -168,26 +170,34 @@ function judge(twice: Twice, casting: Casting): { line: string; problems: string
   return { line: parts.join(', '), problems };
 }
 
-/** Every skill cast twice in a case named `name`, judged as casting there is: its line and its problems. */
-async function playCase(lab: Lab, name: string, casting: Casting): Promise<Report> {
+/** The hero put where a case casts in the village (the yard, by default), turned to its dummies, and let settle. */
+async function standIn(lab: Lab, spot: [number, number] = yardToWorld(0, -2)): Promise<void> {
+  lab.player.walkTo = null;
+  lab.player.place(new THREE.Vector3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), YARD.turn);
+  await lab.step(LOBBY_FRAMES);
+}
+
+/** Every skill cast twice in a case named `name`, judged as casting there is: its line and its problems; in the
+ *  village, each from `spot` (a blink carries the hero off it). */
+async function playCase(lab: Lab, name: string, casting: Casting, spot?: [number, number]): Promise<Report> {
   const hud = casting === 'counted';
   const skills = skillsToCast(lab.player);
   if (!skills.length) throw new Error(`lab: practice: the ${lab.player.cls.id} has no skill on a key with a cooldown`);
   const judged: { line: string; problems: string[] }[] = [];
   for (const { key, skill } of skills) {
+    if (G.mode === 'menu') await standIn(lab, spot);
     const twice = await castTwice(lab, key, skill.def, hud);
     judged.push(judge(twice, casting));
   }
   const problems = judged.flatMap((each) => each.problems.map((problem) => `${name}: ${problem}`));
-  const how = casting === 'free' ? 'free casting' : 'a run\'s costs and cooldowns';
+  const how = { free: 'free casting', counted: 'a run\'s costs and cooldowns', none: 'no casting' }[casting];
   return { text: `${name} (wanted: ${how}): ${judged.map((each) => each.line).join('; ')}`, problems };
 }
 
-/** The lobby stowed or brought back by the control the screen shows: the rail's Practice, or the hint over the arena
- *  (Space's). */
+/** The lobby stowed or brought back as the village does it: the inventory put away or opened by I. */
 async function toggleStowed(lab: Lab, stowed: boolean): Promise<void> {
-  const control = onePanel() ? byId('rail-practice') : document.querySelector('.stow-hint')!;
-  await lab.clickOn(control);
+  if (menuStowed() === stowed) return;
+  await lab.step(1, () => ({ keys: ['i'] }));
   await lab.step(LOBBY_FRAMES);
   if (menuStowed() !== stowed) throw new Error(`lab: practice: the lobby was never ${stowed ? 'stowed' : 'shown'}`);
 }
@@ -219,20 +229,6 @@ async function hiddenStart(lab: Lab): Promise<string[]> {
   return started;
 }
 
-/** Every panel of the lobby folded away, or unfolded, by its tab. */
-async function toggleFolds(lab: Lab, folded: boolean): Promise<void> {
-  for (const selector of FOLDS) {
-    const tab = document.querySelector(selector)!;
-    const expanded = () => tab.getAttribute('aria-expanded') === 'true';
-    if (expanded() !== folded) throw new Error(`lab: practice: ${selector} was ${folded ? 'folded' : 'open'} already`);
-    await lab.clickOn(tab);
-    await lab.step(1);
-    if (expanded() === folded) throw new Error(`lab: practice: ${selector} never took its click`);
-  }
-  await lab.step(LOBBY_FRAMES);
-  if (lobbyPractice() !== folded) throw new Error(`lab: practice: folding never ${folded ? 'made' : 'ended'} practice`);
-}
-
 /** The run held in its countdown (no foe comes), its dummy kept: a frame's hook. */
 function holdTheRun(): void {
   const run = G.run;
@@ -258,20 +254,19 @@ async function enterRun(lab: Lab, start: () => Promise<void>): Promise<() => voi
 async function leaveRun(lab: Lab, unhold: () => void): Promise<void> {
   unhold();
   await lab.step(1, () => ({ keys: ['escape'] }));
-  // (Abandon run is held 2 s to act, by the browser's clock: its hold made none here, where leaving is no measure)
-  const abandon = byId('btn-abandon');
-  const hold = abandon.dataset.holdMs;
-  abandon.dataset.holdMs = '0';
-  await lab.clickOn(abandon);
-  if (hold === undefined) delete abandon.dataset.holdMs;
-  else abandon.dataset.holdMs = hold;
+  await pressHeld(byId('btn-abandon'));
   await lab.until(() => G.mode === 'menu', RUN_FRAMES, 'practice: the run never gave way to the lobby');
   await lab.step(LOBBY_FRAMES);
+  await standIn(lab);
 }
 
-/** The lobby's start where the screen shows it: the rail's Play, or Enter the Arena. */
+/** The crypt's portal used where the hero stands for it, and its card's Enter clicked. */
 async function startShown(lab: Lab): Promise<void> {
-  await lab.clickOn(byId(onePanel() ? 'rail-play' : 'btn-start'));
+  const portal = villageObject('crypt')!;
+  await standIn(lab, portal.stand);
+  goUse(portal);
+  await lab.step(LOBBY_FRAMES);
+  await lab.clickOn(byId('btn-start'));
 }
 
 /**
@@ -307,6 +302,7 @@ export async function practice(lab: Lab, options: PracticeOptions): Promise<Repo
     lines.push(report.text);
     problems.push(...report.problems);
   };
+  await toggleStowed(lab, false);
   add(await playCase(lab, 'the lobby', 'free'));
   await toggleStowed(lab, true);
   add(await playCase(lab, 'practice', 'counted'));
@@ -315,12 +311,9 @@ export async function practice(lab: Lab, options: PracticeOptions): Promise<Repo
   if (started.length) problems.push(`the stowed lobby's Enter the Arena started a run by ${started.join(' and by ')}`);
   await toggleStowed(lab, false);
   add(await playCase(lab, 'the lobby again, after practice', 'free'));
-  if (onePanel()) lines.push('every panel folded: not played (this screen shows one panel at a time)');
-  else {
-    await toggleFolds(lab, true);
-    add(await playCase(lab, 'every panel folded', 'counted'));
-    await toggleFolds(lab, false);
-  }
+  await toggleStowed(lab, true);
+  add(await playCase(lab, 'on the square, out of the yard', 'none', [0, 4.5]));
+  await toggleStowed(lab, false);
   add(await runCase(lab, 'a run started from the lobby', () => startShown(lab)));
   const guests = 'a run begun in practice, as a co-op guest\'s is when its host starts';
   add(await runCase(lab, guests, () => startInPractice(lab)));

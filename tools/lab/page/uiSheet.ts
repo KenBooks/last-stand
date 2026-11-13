@@ -12,6 +12,7 @@
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
 import * as menus from '../../../src/ui/menus';
+import { panelsBack, showPanels } from './lobbyPanels';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, Slot } from '../../../src/types';
 import { middleOf, realWait } from './lab';
@@ -58,15 +59,23 @@ async function tap(lab: Lab, at: { x: number; y: number }): Promise<void> {
   await lab.step(TAP_FRAMES);
 }
 
-/** The page put in touch mode by a tap on the world, and the rail turned to the gear on a short screen. */
+/**
+ * The page put in touch mode by a tap on the world, then the chest's panels shown and the rail turned to the gear on a
+ * short screen. The world is tapped first: after the skills' tooltips, an upright tablet's chest panel lay under the
+ * spot, and the tap opened a stash item's sheet, which the item's own tap then closed on its backdrop.
+ */
 async function touchGear(lab: Lab): Promise<void> {
   const world = { x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y };
   if (!document.body.classList.contains('touch')) await tap(lab, world);
   if (!document.body.classList.contains('touch')) throw new Error('lab: ui: the tap left the page out of touch mode');
+  showPanels('chest');
   railTurned = !document.getElementById('stash')?.checkVisibility();
   const gearTab = document.querySelector<HTMLElement>('#lobby-rail [data-lt="gear"]');
   if (railTurned && gearTab) await tap(lab, middleOf(gearTab));
-  if (!document.getElementById('stash')?.checkVisibility()) throw new Error('lab: ui: the stash isn\'t shown');
+  if (!document.getElementById('stash')?.checkVisibility()) throw new Error("lab: ui: the stash isn't shown");
+  if (!document.getElementById('item-sheet')!.classList.contains('hidden')) {
+    throw new Error('lab: ui: a sheet was open before the item was tapped');
+  }
 }
 
 /** The hero's own stash and worn item back, the rail turned back to the hero, the mouse moved (mouse mode again). */
@@ -80,6 +89,7 @@ async function restore(lab: Lab): Promise<void> {
   menus.renderMenu();
   if (railTurned) document.querySelector<HTMLElement>('#lobby-rail [data-lt="hero"]')?.click();
   railTurned = false;
+  panelsBack();
   await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   await lab.mouseTo({ x: innerWidth / 2 + 1, y: innerHeight / 2 });
   if (document.body.classList.contains('touch')) throw new Error('lab: ui: the mouse left the page in touch mode');
@@ -108,10 +118,20 @@ export async function openSheetTouch(lab: Lab): Promise<void> {
   await touchGear(lab);
   const item = document.querySelector<HTMLElement>(`#stash .sitem[data-slot="${slot}"]`);
   if (!item) throw new Error('lab: ui: no stash item to tap');
-  await tap(lab, middleOf(item));
+  const at = middleOf(item);
+  await tap(lab, at);
   if (document.getElementById('item-sheet')!.classList.contains('hidden')) {
-    throw new Error('lab: ui: the tap opened no sheet');
+    const under = named(document.elementFromPoint(at.x, at.y));
+    throw new Error(`lab: ui: the tap opened no sheet (under the finger: ${under})`);
   }
+}
+
+/** `element` named for an error: its tag, its id or its classes, and the id of what it's in. */
+function named(element: Element | null): string {
+  if (!element) return 'nothing';
+  const own = element.id ? `#${element.id}` : `.${[...element.classList].join('.')}`;
+  const within = element.parentElement?.closest('[id]');
+  return `${element.tagName.toLowerCase()}${own}${within ? ` in #${within.id}` : ''}`;
 }
 
 /** The sheet put away, and the hero's own gear back. */

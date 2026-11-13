@@ -246,7 +246,7 @@ async function pauseRound(
   const head = [...document.querySelectorAll('#blog .bl-head > *')].map((part) => part.textContent).join(' | ');
   log.pauseBattleLog(false);
   const problems: string[] = [];
-  if (!cast.hits.length) problems.push(`${what}: struck nothing`);
+  if (!cast.hits.length) problems.push(`${what}: struck nothing (${whereStood(cast)})`);
   if (listed) problems.push(`${what}: ${listed} of its ${cast.hits.length} hits listed while paused`);
   if (!head.includes('paused') || !head.includes('Resume')) {
     problems.push(`${what}: the panel's head reads "${head}"`);
@@ -254,6 +254,15 @@ async function pauseRound(
   const again = await castRound(lab, log, fixture, basic, false);
   const lines = [`  ${what}: ${counted(cast.hits.length, 'hit')} landed, ${listed} listed; its head "${head}"`];
   return { lines: [...lines, ...again.lines], problems: [...problems, ...again.problems] };
+}
+
+/** Where the hero and a cast's foes stood as it ended, and in which place: what a cast that struck nothing needs
+ *  said to be looked into. */
+function whereStood(cast: Cast): string {
+  const at = (pos: THREE.Vector3): string => `${pos.x.toFixed(1)},${pos.z.toFixed(1)}`;
+  const foes = cast.foes.map((foe) => `${at(foe.pos)}${foe.alive ? '' : ' dead'}`).join('; ');
+  const hero = `the hero at ${at(G.player.pos)} facing ${G.player.facing.toFixed(2)}`;
+  return `in the ${G.arena.place}, ${hero}, foes at ${foes}`;
 }
 
 /** The blows the hero takes from now on, as he took them, until `stop` is called. */

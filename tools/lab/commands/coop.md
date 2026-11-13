@@ -26,7 +26,11 @@ charge cast over it 0.35 s from its blow; `throws`: a Cinder Brute 15.5 m off an
 throwing at the guest, which stands, walking only while a vine holds it, the host far off: the Brute's first chunk
 lands in the settling, and from there it throws again before it walks into slamming range), each one's input frame
 by frame from what its own screen shows. The guest
-practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it), as a player does, and a
+practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it, in the village's training yard,
+where alone a hero is armed), as a player does, and readies the run the host starts slowly: its fight's programs kept
+cold for 6 s past the host's start, longer than the countdown, the host's countdown must hold ("Waiting for players")
+and no wave come until the guest is in, then go on (from play, "readying the fight for slower device takes forever, and
+first wave already launched"; `--canary` tells the host no guest readies, and its wave must be found coming); and a
 game whose hero casts freely in the run the host starts is a problem (on main the guest's did, no costs or
 cooldowns through the whole run: `practice` measures the casts).
 What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the

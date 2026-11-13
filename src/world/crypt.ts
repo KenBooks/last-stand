@@ -14,7 +14,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief, reliefContext } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -665,8 +665,9 @@ const BANNER_CLOTH = 2.65;
 export function bannerGeo(rng: () => number): THREE.BufferGeometry {
   const s = new THREE.Shape(), len = 1.9 + rng() * 0.5;
   s.moveTo(-0.45, 0); s.lineTo(0.45, 0); s.lineTo(0.45, -len + 0.25);
-  // ragged tails
-  for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.28); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
+  // ragged tails, each tip below the notches either side of it (a tip drawn above them crossed the outline over
+  // itself, and its triangles, turned over, showed black: "black jagged spikes" under every banner)
+  for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.12); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
   s.lineTo(-0.45, 0);
   const g = new THREE.ShapeGeometry(s, 1);
   // hang slightly away from the wall towards the bottom; its cloth across it and down from its top (`bannerCloth`)
@@ -1056,7 +1057,10 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
   });
 }
 
-function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[]): Portal {
+/** A gate of the crypt's: two pillars, an arch and a lintel, a raised portcullis, its portal's membrane (`place`:
+ *  stood there, not in the wall at `angle`: the village's). */
+export function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[],
+  place?: GatePlace): Portal {
   const g = new THREE.Group();
   const pillarGeo = boxWithUV(1.3, 5.2, 1.9, 0.35);
   for (const s of [-1, 1]) {
@@ -1081,8 +1085,8 @@ function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THRE
   bars.castShadow = true;
   g.add(bars);
 
-  const { portal } = portalMembrane(g, angle, { a: [0.5, 0.05, 0.9], b: [1.0, 0.25, 0.35], core: [1.0, 0.6, 1.0] }, updaters);
-  placeGate(g, angle);
+  const { portal } = portalMembrane(g, angle, { a: [0.5, 0.05, 0.9], b: [1.0, 0.25, 0.35], core: [1.0, 0.6, 1.0] }, updaters, false, place);
+  placeGate(g, angle, place);
   scene.add(g);
   wall.add(g, true);
   return portal;
@@ -1224,10 +1228,11 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
 }
 
 /** A brazier on two stepped slabs, its fire's light casting the still shadows; `y0` the floor it stands on (the hall
- *  of heroes' stage: world/heroHall.ts). */
-export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1): void {
+ *  of heroes' stage: world/heroHall.ts), `slabs` how wide its slabs are against the crypt's (the village's hall's dais
+ *  leaves less room). */
+export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): void {
   // two stepped slabs lift the fire
-  for (const [w, y] of [[2.4, 0.14], [1.7, 0.4]]) {
+  for (const [w, y] of [[2.4 * slabs, 0.14], [1.7 * slabs, 0.4]]) {
     const step = new THREE.Mesh(boxWithUV(w, 0.28, w, 0.5), stone);
     step.position.set(x, y0 + y, z); step.rotation.y = Math.PI / 2 - a;   // square to the wall
     step.castShadow = step.receiveShadow = true;

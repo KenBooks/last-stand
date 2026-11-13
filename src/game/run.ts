@@ -27,7 +27,7 @@ import { clearFloaters, floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
 import { schedule, clearTimers } from '../core/timers';
 import { on, emit } from '../events';
-import { isCoop, isGuest, nearestPlayer } from '../net/role';
+import { isCoop, isGuest, isHost, nearestPlayer, readying } from '../net/role';
 import { creditRaise, resetMine } from './stats';
 import { rand, randInt, shuffle, weighted } from '../util';
 import type { EnemyId } from '../data/enemies';
@@ -58,6 +58,8 @@ export interface RunState {
   phase: RunPhase;
   /** countdown seconds left (phase 'countdown') */
   timer: number;
+  /** the countdown held for guests still readying the run (the host's; a guest's from its reports) */
+  held: boolean;
   waveTime: number;
   /** the local player's unbanked spoils */
   bag: Item[];
@@ -149,7 +151,7 @@ export function startRun(wave = 1, training = false): void {
     p.reset();
   }
   G.run = {
-    training, wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
+    training, wave, phase: 'countdown', timer: RUN.countdown, held: false, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
     queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
     pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
@@ -348,7 +350,10 @@ export function updateRun(dt: number): void {
   if (r.phase !== 'over') updateDowned(dt);
 
   if (r.phase === 'countdown') {
-    r.timer -= dt;
+    // (held while a guest readies the run: its device may take long over the fight's programs, and the wave came
+    // without it; never longer than `COOP.waitForGuests`)
+    r.held = isHost() && readying.guests.length > 0 && G.time - r.started < COOP.waitForGuests;
+    if (!r.held) r.timer -= dt;
     if (r.timer <= 0) startWave();
   } else if (r.phase === 'fighting') {
     r.waveTime += dt;

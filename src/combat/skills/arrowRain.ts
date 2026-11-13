@@ -20,7 +20,7 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW } from '../../entities/models/bow';
 import { clamp, rand, smooth } from '../../util';
-import { arrowBlow, arrowMat, arrowMesh, intoGround, intoProp, intoFoe, FWD, streakGeo, streakMat } from './ranger';
+import { arrowBlow, arrowMat, arrowMesh, intoGround, intoProp, intoFoe, intoWater, inWater, FWD, streakGeo, streakMat } from './ranger';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -192,6 +192,12 @@ const skill: ChannelSkill<RainState> = {
               intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
               sfx.boltHit();
+              sh.arrows.splice(i, 1);
+              continue;
+            }
+            if (inWater(_a)) {
+              intoWater(_a, vel);
+              if (Math.random() < 0.3) sfx.thud();
               sh.arrows.splice(i, 1);
               continue;
             }

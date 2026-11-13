@@ -13,6 +13,8 @@ import { hostRoom, joinRoom, session } from '../../../src/net/session';
 import * as colourSession from '../../../src/net/session';
 import type { HeroColourId } from '../../../src/data/heroColours';
 import * as netlog from '../../../src/net/netlog';
+import * as netRole from '../../../src/net/role';
+import * as warm from '../../../src/game/warm';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, RISE_TIME, type Enemy } from '../../../src/entities/enemy';
 import * as crowd from '../../../src/entities/models/crowd';
@@ -26,7 +28,7 @@ import type { Frame, Lab } from './lab';
 import { watchHeroCost } from './coopCost';
 export { coopHeroCost } from './coopCost';
 
-import { lobbyCastInput, watchHall, watchTags } from './coopLobby';
+import { lobbyCastInput, practiseInTheYard, watchHall, watchTags } from './coopLobby';
 import { endInput, watchOut } from './coopEnd';
 import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
 import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coopChat';
@@ -171,6 +173,9 @@ export interface CoopState {
   phase: string;
   runOver: boolean;
   summary: boolean;
+  /** whether its countdown is held for a guest readying the run, and its seconds (none out of a run) */
+  held: boolean;
+  timer: number | null;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -833,9 +838,10 @@ export async function coopRejoin(_lab: Lab, { code, tag }: { code: string; tag: 
 }
 
 /** The guest practising on the lobby's dummies while it waits for its host, as a player does: its lobby stowed, as
- *  Space and a phone's Practice stow it. */
+ *  Space and a phone's Practice stow it, and in the village in its training yard, where the dummies stand (anywhere
+ *  else a hero isn't armed, and its lobby never became practice). */
 export function coopPractise(): void {
-  toggleMenuStowed(true);
+  practiseInTheYard();
 }
 
 /** The host starts the run (its guest comes along). */
@@ -865,6 +871,8 @@ function stateNow(): CoopState {
     phase: G.run?.phase ?? '',
     runOver: !G.run || G.run.phase === 'over',
     summary: !document.getElementById('summary')?.classList.contains('hidden'),
+    held: (G.run as { held?: boolean } | null)?.held === true,
+    timer: G.run ? G.run.timer : null,
   };
 }
 
@@ -887,6 +895,34 @@ export function coopHoldRun(lab: Lab): void {
   play.scenario = '';
   if (!lab.beforeFrame.includes(holdTheRun)) lab.beforeFrame.push(holdTheRun);
 }
+/** The guest's fight's programs kept cold (`chill`), so the run the host starts waits for them under its loading
+ *  bar, as a slow device's does (from play, "readying the fight for slower device takes forever, and first wave
+ *  already launched"). */
+export function coopSlowToReady(): void {
+  warm.chill('fight');
+}
+
+/** The guest's fight's programs warm: the run it waited for begins. */
+export function coopReady(): void {
+  warm.markWarm('fight');
+}
+
+/** The canary: the host told no guest is readying, every frame, so its countdown never holds. */
+export function coopForgetReadying(lab: Lab): void {
+  // (an older tree, whose host never waits, has none to tell)
+  const readying = (netRole as { readying?: { guests: string[] } }).readying;
+  const forget = (): void => { if (readying) readying.guests = []; };
+  if (!lab.beforeFrame.includes(forget)) lab.beforeFrame.push(forget);
+  forgetting = forget;
+}
+
+/** The canary's hook taken off again. */
+export function coopRememberReadying(lab: Lab): void {
+  const at = forgetting ? lab.beforeFrame.indexOf(forgetting) : -1;
+  if (at >= 0) lab.beforeFrame.splice(at, 1);
+  forgetting = null;
+}
+let forgetting: (() => void) | null = null;
 
 /** The run's countdown held (no wave comes) and every hero kept from falling. */
 function holdTheRun(): void {

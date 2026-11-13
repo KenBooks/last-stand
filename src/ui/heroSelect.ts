@@ -7,6 +7,7 @@
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
+import { VILLAGE } from '../core/beta';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { wasPressed } from '../core/input';
@@ -212,7 +213,7 @@ export function openHeroSelect(focusId: string, firstVisit = false): void {
   if (heroSelectOpen()) return;
   first = firstVisit;
   hideTooltip();
-  openHall(focusId, first);
+  openHall(focusId);
   const box = $('#heroes');
   box.classList.toggle('first', first);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
@@ -230,7 +231,7 @@ export function heroSelectSlotSwitched(focusId: string): void {
   if (!heroSelectOpen()) return;
   hideTooltip();
   closeHall();
-  openHall(focusId, true);
+  openHall(focusId);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
   for (const h of hallHeroes()) $(`.hs-card[data-c="${h.id}"] .hs-records`).innerHTML = records(h.profile);
   shown();
@@ -340,6 +341,8 @@ function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', o
 function focusOn(i: number): void {
   if (!hallOpen()) return;
   hideTooltip();
+  // (the camera glides along the row to him: cut there at once, from play "we lost camera animation when selecting
+  // characters"; the hall's opening and its leaving stay at once)
   focusHall(i);
   shown();
 }
@@ -420,6 +423,13 @@ function tapAt(x: number, y: number): void {
 
 /** The screen's selection keys while open and unpaused; main.ts handles Escape above it. */
 export function heroSelectKeys(): void {
+  // (E leaves the village's hall as Back does, from play, "in hall of heroes pressing E should cancel back, same
+  // like other E interactions"; a first visit has nothing to go back to)
+  if (VILLAGE && !first && wasPressed('e')) {
+    sfx.click();
+    closeHeroSelect();
+    return;
+  }
   if (wasPressed('arrowleft') || wasPressed('a')) step(-1);
   if (wasPressed('arrowright') || wasPressed('d')) step(1);
   // 1, 2, 3...: each hero in the row's order (the number row's or the numpad's)

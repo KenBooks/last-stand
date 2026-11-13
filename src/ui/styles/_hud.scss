@@ -6,7 +6,13 @@
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 #hud button { pointer-events: auto; }
 /* the lobby's practice (its panels hidden): the run's skill bar alone, nothing of a run's */
-#hud.lobby :is(#target, #minimap-wrap, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive) {
+#{$panels} #hud.lobby :is(#target, #minimap-wrap, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive) {
+  display: none;
+}
+/* the village: its minimap alone (the training under it, as a run's objectives lie), and in its practice the run's
+   skill bar; nothing else of a run's */
+#{$village} #hud.lobby:not(.practice) > :not(#minimap-wrap) { display: none; }
+#{$village} #hud.lobby :is(#target, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive, .objectives, #spoils) {
   display: none;
 }
 

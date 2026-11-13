@@ -2,7 +2,7 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow|heroes] [--seconds 45]
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow|heroes|choosing] [--seconds 45]
 //   [--listed 300] [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior]
 //   [--stash 40] [--item-ms 100] [--press-ms 200] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
 //   [--links] [--passes] [--paints] (--help: what each does)
@@ -28,6 +28,8 @@ import { sourcesOf } from './sourceMap.mjs';
 import { startTrace, TraceLost } from './trace.mjs';
 import { within } from './within.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
+import { stepClock } from './steps.mjs';
+import { WALKS_QUERY } from './villageWalks.mjs';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
@@ -121,6 +123,10 @@ async function setUpLobby(page, options) {
     await page.waitForTimeout(HERO_BUILT_MS);
   }
   if (options.stash > 0) await fillStash(page, options.stash);
+  if (options.returning) {
+    await page.reload({ waitUntil: 'load' });
+    await waitLoaded(page);
+  }
   await chooseView(page, options.view);
 }
 
@@ -170,14 +176,16 @@ async function readOff(page, expression, picture) {
 
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
-async function playTraced(browser, page, options, picture) {
+async function playTraced(browser, page, options, picture, clock = stepClock(options.scenario)) {
   const { js, angle, dawn, passes, paints } = options;
   const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
   await page.evaluate(recordFromNow);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, { ...options, picture });
+  clock.lap(`the ${options.scenario} played`);
   const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();
+  clock.lap('the trace taken');
   const before = options.before ? await page.evaluate(options.before) : undefined;
   if (before !== undefined) notes.push(`--before gave ${JSON.stringify(before)}`);
   await page.screenshot({ path: picture });
@@ -185,6 +193,7 @@ async function playTraced(browser, page, options, picture) {
   if (options.read) notes.push(await readOff(page, options.read, picture));
   const painted = paints ? await paintedNames(page, events) : new Map();
   const findings = analyze(record, events, MARK, options.listed, options.sourceOf, painted, options.jsUnder);
+  clock.lap('the trace analyzed');
   return { notes, findings };
 }
 
@@ -246,12 +255,16 @@ async function thaw(game) {
 /** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed, and a
  *  picture of the screen at its end (`picture`). */
 async function measure(url, variant, options, picture) {
+  const clock = stepClock(`${options.nameOf(url)} ${variant}`);
   const chrome = await chromeFor(options);
+  clock.lap('Chrome started');
   try {
     const context = await gameContext(chrome.browser, variant);
     const { page, errors } = await openGame(context, url, options);
+    clock.lap('the game booted to its lobby');
     await setUpLobby(page, options);
-    const { notes, findings } = await playTraced(chrome.browser, page, options, picture);
+    clock.lap('the lobby set up');
+    const { notes, findings } = await playTraced(chrome.browser, page, options, picture, clock);
     return { name: `${options.nameOf(url)} ${variant}`, notes: [...notes, ...errorNotes(errors)], findings };
   } finally {
     await chrome.close();
@@ -331,8 +344,10 @@ async function main() {
     console.log(`${text}\n\n(written to ${join(OUT, 'report.txt')})`);
     return;
   }
-  const asked = options.urls.length ? options.urls : [THIS_TREE];
+  const asked = options.urls.length ? options.urls : [THIS_TREE + (options.scenario === 'walks' ? WALKS_QUERY : '')];
+  const building = stepClock('the build');
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });
+  building.lap(`${asked.length === 1 ? 'built and served' : 'every tree built and served'}`);
   const urls = asked.map(served.urlOf);
   if (options.scenario === AUTOPLAY) {
     const texts = [];

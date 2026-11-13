@@ -1,6 +1,10 @@
 // The lab's picture sheet as one image (tools/lab): a row a moment, a column a view, each row's notes beside it.
 // With an A/B, each moment's row from the other commit sits above this tree's.
 
+import { rm, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 const TILE_WIDTH = 340;
 const TILE_HEIGHT = 560;
 /** a picture of the whole frame (`lab.screen`, the view through the eyes) is as wide as it shows at the row's height,
@@ -58,6 +62,22 @@ const STACK_STYLE = `
 `;
 
 /**
+ * `html` pictured whole into `file`: loaded from a file beside it, as sent over the DevTools protocol a sheet of many
+ * pictures, each inline, was one message too long and closed the browser ("Target page, context or browser has been
+ * closed", "setting frame content").
+ */
+async function pictureOf(page, html, file) {
+  const held = `${file}.html`;
+  await writeFile(held, html);
+  try {
+    await page.goto(pathToFileURL(resolve(held)).href);
+    await page.screenshot({ path: file, fullPage: true });
+  } finally {
+    await rm(held, { force: true });
+  }
+}
+
+/**
  * Writes `pictures` to `file` one above another, each at its own size under its caption (an A/B's sides of a picture
  * that's read whole: a film's strip of frames, scaled to a sheet's row, was too small to read).
  */
@@ -69,8 +89,7 @@ export async function writeStack(browser, pictures, file) {
   });
   const page = await browser.newPage({ viewport: { width, height: 100 } });
   try {
-    await page.setContent(`<!doctype html><style>${STACK_STYLE}</style>${figures.join('')}`);
-    await page.screenshot({ path: file, fullPage: true });
+    await pictureOf(page, `<!doctype html><style>${STACK_STYLE}</style>${figures.join('')}`, file);
   } finally {
     await page.close();
   }
@@ -94,8 +113,7 @@ export async function writeSheet(browser, runs, viewCount, file) {
   }
   const page = await browser.newPage({ viewport: { width, height: TILE_HEIGHT + GAP } });
   try {
-    await page.setContent(`<!doctype html><style>${STYLE}</style>${rows.join('')}`);
-    await page.screenshot({ path: file, fullPage: true });
+    await pictureOf(page, `<!doctype html><style>${STYLE}</style>${rows.join('')}`, file);
   } finally {
     await page.close();
   }

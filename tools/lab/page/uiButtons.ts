@@ -46,7 +46,10 @@ function spyFullScreen(): void {
   const root = document.documentElement;
   if (Object.hasOwn(root, 'requestFullscreen')) return;
   const refuse = root.requestFullscreen.bind(root);
+  // (one the full screen's own check can stand its spy in for, later in the same run: fixed in place, `ui` whole
+  // stopped at `autoFull` with "Cannot redefine property")
   Object.defineProperty(root, 'requestFullscreen', {
+    configurable: true,
     value: (options?: FullscreenOptions) => {
       fullAsked++;
       return refuse(options);

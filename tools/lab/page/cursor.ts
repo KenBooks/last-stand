@@ -39,6 +39,10 @@ const ALT: Held = { code: 'AltLeft', name: 'altleft', label: 'Alt' };
 const CTRL: Held = { code: 'ControlLeft', name: 'controlleft', label: 'Ctrl' };
 /** how far the mouse moves for mouse look to turn the view (css px) */
 const LOOK_MOVE = 60;
+/** the most a hop of the held move to Pause goes (css px): the game takes a move under the lock of over 200 px
+ *  and six times the one before it for the browser's own jump and turns nothing by it (#318), so gone to in
+ *  one move, the canary's view never turned under Ctrl and its plant went unseen */
+const HOP = 100;
 /** a turn of the view smaller than this is none (rad) */
 const STILL = 1e-6;
 /** the blows listed for the log's lines to scroll, each this long after the last (s: past the log's join gap, so
@@ -101,6 +105,18 @@ function clipAround(point: PagePoint): Clip {
 }
 
 /** The middle of the window, where the crosshair is and the drawn cursor starts. */
+/** The points of a move from `from` to `to` in hops of `HOP` at the most, `to` the last. */
+function hopsTo(from: PagePoint, to: PagePoint): PagePoint[] {
+  const count = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / HOP));
+  const hops: PagePoint[] = [];
+  for (let hop = 1; hop <= count; hop++) {
+    const share = hop / count;
+    hops.push({ x: Math.round(from.x + (to.x - from.x) * share), y: Math.round(from.y + (to.y - from.y) * share) });
+  }
+  hops[count - 1] = to;
+  return hops;
+}
+
 function centre(): PagePoint {
   return { x: innerWidth / 2, y: innerHeight / 2 };
 }
@@ -190,8 +206,10 @@ async function round(lab: Lab, log: BattleLog, view: ViewMode, held: Held): Prom
   await step();
   const pause = middleOf(shown('#blog [data-bl="pause"]'));
   yaw = cameraYaw();
-  await lab.mouseTo(pause);
-  await step();
+  for (const hop of hopsTo(middle, pause)) {
+    await lab.mouseTo(hop);
+    await step();
+  }
   const heldTurn = turnFrom(yaw);
   const overPause = drawnCursor();
   const moments = [await lab.screen(`${view}: ${held.label} held over the log's Pause`, [], clipAround(pause))];
@@ -294,7 +312,40 @@ function canaryProblems(problems: string[]): string[] {
   if (!problems.some((problem) => problem.includes('didn\'t pause it'))) {
     missed.push('the canary\'s click on Pause going to the world went unseen');
   }
+  if (!problems.some((problem) => problem.includes(STACKED))) {
+    missed.push('the canary\'s layer planted over the cursor went unseen');
+  }
   return missed;
+}
+
+/** the page's covers: over everything, the cursor too, with nothing of the game shown under them to click (the loading
+ *  screen, an upright phone's "turn your phone") */
+const COVERS = ['loading', 'rotate'];
+/** what the layers' problem says, which the canary's planted layer must raise */
+const STACKED = 'stacked over the cursor';
+
+/** An element as a report names it. */
+const named = (element: Element): string => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`;
+
+/**
+ * The page's layers that would be drawn over the cursor (from play, of the beta's notice: "mouse appears under it,
+ * need to be on top, otherwise cannot click"): every element whose z-index is the cursor's or more, shown now or
+ * not, the covers aside. With the canary, a layer planted over it, which must be found.
+ */
+function layersOverCursor(canary: boolean): { lines: string[]; problems: string[] } {
+  const drawn = document.getElementById('alt-cursor');
+  if (!drawn) return { lines: [], problems: ['no cursor element on the page'] };
+  const planted = canary ? document.body.appendChild(document.createElement('div')) : null;
+  if (planted) planted.style.cssText = 'position: fixed; z-index: 100000;';
+  const own = Number(getComputedStyle(drawn).zIndex);
+  const over = [...document.querySelectorAll('body *')].filter((element) => {
+    if (element === drawn || COVERS.includes(element.id)) return false;
+    return Number(getComputedStyle(element).zIndex) >= own;
+  });
+  planted?.remove();
+  const real = over.filter((element) => element !== planted);
+  const lines = [`the cursor's layer (z-index ${own}): ${real.length} of the page's layers over it`];
+  return { lines, problems: over.map((element) => `${named(element)} is ${STACKED}`) };
 }
 
 /** `lab cursor`: the cursor drawn over mouse look while Alt is held, in each close view. */
@@ -321,6 +372,9 @@ export async function cursor(lab: Lab, options: CursorOptions): Promise<Report> 
   await lab.setup({ ...options.fixture, view: 'top' });
   lab.pointerLock(false);
   log.setBattleLog(false, false);
+  const layers = layersOverCursor(options.canary);
+  lines.push(...layers.lines);
+  problems.push(...layers.problems);
   lines.push(...problems.map((problem) => `! ${problem}`));
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const missed = canaryProblems(problems);

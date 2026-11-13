@@ -25,10 +25,11 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps', 'cloudIdentity',
-  'logLobby', 'perfAsk', 'coop', 'coopRename',
+  'logLobby', 'perfAsk', 'pauseLobby', 'betaNotice', 'coop', 'coopRename',
+  'villageMap', 'villageHud', 'villageHudTouch',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
   'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
-  'pausePerformance', 'profiling', 'pauseVolume',
+  'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
   'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -117,11 +118,23 @@ const COMMON_OPTIONS = {
       + 'for, the fight\'s and the other heroes\' programs cold until something needs them (the lab\'s own boot asks '
       + 'for them at once and waits)',
   },
+  renderer: {
+    kind: 'choice',
+    choices: ['webgl', 'webgpu', 'webgpu-gl'],
+    usage: 'webgl|webgpu|webgpu-gl',
+    help: 'the renderer the page boots on, by its address as the pause menu opens it (`?renderer=webgpu`: '
+      + 'WebGPURenderer; webgpu-gl its WebGL 2 backend; WebGL, the game\'s default, by default)',
+  },
   first: {
     kind: 'switch',
     help: 'the page booted as a player\'s first visit: no saved hero, so the game boots its default one (--class '
       + 'it) and opens on the hero selection screen, cold as --cold leaves it (programs --first: what its first '
       + 'frames compile at a draw)',
+  },
+  panels: {
+    kind: 'switch',
+    help: 'the page booted with the lobby as it is without the village beta (its panels over the battleground: '
+      + 'src/core/beta.ts); by default the lab boots the village, which its lobby\'s commands measure',
   },
   renderer: {
     kind: 'choice',
@@ -135,6 +148,14 @@ const COMMON_OPTIONS = {
     usage: 'WxH[@ratio]',
     help: 'the page put on a screen of this size (css px) and pixel ratio once it has booted, as a window moved onto '
       + 'another monitor is (1280x720@3: a 4K screen at 300%; 1920x1080@1 by default)',
+  },
+  renderers: {
+    kind: 'list',
+    choices: ['webgl', 'webgpu', 'webgpu-gl'],
+    usage: 'webgl,webgpu',
+    help: 'this tree booted on two renderers, one after the other, compared as --ab compares two commits: the lines '
+      + 'and the pictures that differ (webgl,webgpu: what the WebGPU trial draws otherwise; its pictures must be '
+      + 'the page\'s own, `lab.screen`, as WebGPU\'s canvas can\'t be read back by WebGL\'s readPixels)',
   },
   screens: {
     kind: 'screens',
@@ -316,8 +337,8 @@ export const COMMANDS = {
       },
       canary: {
         kind: 'switch',
-        help: 'the guest\'s game dresses its hero in the host\'s colour once in the room: the colours\' judge must '
-          + 'catch it',
+        help: 'plant the faults the start must catch: the guest\'s game dresses its hero in the host\'s '
+          + 'colour once in the room, and the host is told no guest readies the run',
       },
       ...COMMON_OPTIONS,
     },
@@ -391,10 +412,10 @@ export const COMMANDS = {
           + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
           + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
           + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
-          + 'the heroes), clicked (a battleground\'s button clicked and a '
-          + 'key pressed after it: '
-          + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
-          + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
+          + 'the heroes), clicked (the crypt\'s portal card left by its Leave clicked and a key pressed after it: '
+          + 'where the focus went), views (the lobby\'s camera switched through its views from the training yard: '
+          + 'the labels over the dummies against their anchors), '
+          + 'behindProps (a column planted between the camera and each dummy\'s label: '
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, perfMini (the performance overlay\'s Mini pressed in the pause menu: the frame rate '
@@ -405,7 +426,8 @@ export const COMMANDS = {
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
-          + 'panels), '
+          + 'panels), pauseLobby (the pause menu in the village: its time of day shown, holding the hour it is '
+          + 'moved to and giving the clock back at Auto; none in the pause menu of a run), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
           + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
@@ -595,12 +617,36 @@ export const COMMANDS = {
       + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
       + '--quality low@518400 --throttle 4; --class mage)',
     argument: 'skills',
+    mayOmit: true,
     options: {
       biome: {
         kind: 'choice',
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (forest by default)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
+          + '--facing where he stands)',
+      },
+      parts: {
+        kind: 'switch',
+        help: 'after the phases, the biggest draws timed on the GPU, each drawn and hidden in turns',
+      },
+      spin: {
+        kind: 'switch',
+        help: 'with --village, the view turned right round on the spot three times, each turn a phase',
+      },
+      fly: {
+        kind: 'switch',
+        help: 'with --village, the dev tool\'s free camera flown over it: round it high, round it low and '
+          + 'across it, each a phase, with where its dearest frames were',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit)',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
       at: SETUP_OPTIONS.at,
@@ -1311,6 +1357,12 @@ export const COMMANDS = {
         help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
           + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
       },
+      of: {
+        kind: 'text',
+        usage: 'user',
+        help: 'with --cost, every program a user uses listed alone, the longest first, with its kind and what '
+          + 'it was made for (a scene\'s top-level object, as "by what uses them" names it: village, forest)',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -1412,6 +1464,38 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  village: {
+    help: "the lobby's village as a player walks it: every object usable from its stand, casting in the yard alone, "
+      + "no walk out past the palisade or along a way out, the stair up to the hall, the first visit's training ticked "
+      + "step by step with the portal shut till it's done or skipped, and no program compiled as the hour changes",
+    options: {
+      canary: {
+        kind: 'switch',
+        help: "a fault planted for each check (an object's stand moved, the yard read outside it, a hero put past the "
+          + 'palisade, the stair walked at beside it, the notice board left unread, a new material at noon): all '
+          + 'must be found',
+      },
+      only: {
+        kind: 'text',
+        usage: 'names',
+        help: 'only the checks whose names have any of these in them (lampsAlike,hallWalls): the whole takes minutes',
+      },
+      shard: {
+        kind: 'text',
+        usage: 'k/n',
+        help: 'the k-th of n shards of the checks asked for, every n-th from the k-th (lab check --commands village '
+          + 'runs them side by side)',
+      },
+      times: { kind: 'switch', help: 'each check\'s time by the browser\'s clock, in lines after the rest' },
+      since: {
+        kind: 'text',
+        usage: 'ref',
+        help: 'only the checks the files changed since this ref can touch (origin/main; node/villageSince.mjs says '
+          + 'which): while working on a change; the whole suite before a push (lab check --commands village)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   columns: {
     help: 'the crypt\'s broken columns roll after roll: each mesh welded, an edge one triangle uses above the '
       + 'shaft\'s foot is a hole; the break\'s face inside the flutes no steeper than 75 degrees',
@@ -1489,6 +1573,16 @@ export const COMMANDS = {
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (as the page has it by default)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit, two casting shadows)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '
+          + 'hero stands there, the square by default)',
       },
       canary: {
         kind: 'switch',
@@ -1889,6 +1983,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  parity: {
+    help: 'the same scenes pictured as the player sees them, to compare what two renderers draw (--renderers '
+      + 'webgl,webgpu): each biome\'s arena, then the village at noon and midnight from its places, from above and '
+      + 'over the shoulder; the A/B\'s verdict and the pictures side by side say what differs (tools/lab/out/parity)',
+    options: {
+      scenes: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the scenes whose names have any of these in them (crypt, forest, square, hallDoor, hallInside, yard, '
+          + 'campfire, cottage; every one by default)',
+      },
+      hours: { kind: 'list', usage: 'h,h', help: 'the hours the village is pictured at (12,0 by default)' },
+      ...COMMON_OPTIONS,
+    },
+  },
   coat: {
     help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
       + 'stands at idle in his head item and body armour, frame '
@@ -2021,6 +2130,24 @@ export const COMMANDS = {
     help: 'developer panel tabs, flight speed, frame inclusion, labels, opacity, five viewport layouts, frozen training starts, continuous refills, reset and slow first-person entry',
     options: {
       canary: { kind: 'switch', help: 'plant a drained resource and require its detection' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  beta: {
+    help: 'the village beta opted into and out of, on a page of its own, by the browser\'s own clicks and loads: '
+      + 'the pause menu\'s Beta tab and its Reload (the page loaded with ?village=1, the choice kept in its '
+      + 'cookie), the notice as the game opens, the next visit with no parameter, the notice\'s Back to the old '
+      + 'lobby; then a co-op room of this command\'s page asked from the other lobby: refused, told which lobby '
+      + 'it is in, the switch offered, clicked (the page loaded in the room\'s lobby as an invite to it) and the '
+      + 'room joined; --panels hosts the room in the lobby without the village',
+    options: {
+      ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
+      jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults it must catch: the notice put away before it\'s read, the cookie lost before the '
+          + 'next visit, and the lobby the room refused the game for forgotten (no switch offered)',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -2225,10 +2352,30 @@ export const COMMANDS = {
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'swing', 'rush', 'hits', 'log'],
-        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, swing, rush, hits, log by default)',
+        choices: [
+          'gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'swing', 'rush', 'hits', 'log', 'village',
+        ],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, swing, rush, hits, log by default; '
+          + 'village: the village\'s checks in shards side by side, 8 unless --shards says, only when named)',
       },
-      jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
+      jobs: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many sessions side by side (a core in three, at most 8; asked for, as many as said: 16 on a '
+          + 'PC lent whole)',
+      },
+      shards: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many shards the village\'s checks run in (8 by default, at most 24), each about as long as '
+          + 'the others by the checks\' measured times',
+      },
+      share: {
+        kind: 'text',
+        usage: 'k/n',
+        help: 'this PC\'s share of the jobs, every n-th from the k-th: one check on two PCs at once, 1/2 here '
+          + 'and 2/2 on the lent one',
+      },
       starts: {
         kind: 'number',
         usage: 'n',
@@ -2440,9 +2587,19 @@ function checkTogether(options) {
   if (options.insets && !options.screen && !options.screens) {
     throw labError('--insets are a screen\'s: give its --screen (or --screens)');
   }
+  checkRenderers(options);
   if (!options.screens) return;
   if (options.ab) throw labError('--screens compares this tree on two screens: it takes no --ab');
   if (options.screen) throw labError('--screens names both screens: it takes no --screen');
+}
+
+/** Throws at `--renderers` given other than two, or with another way of comparing or a renderer of its own. */
+function checkRenderers(options) {
+  if (!options.renderers) return;
+  if (options.renderers.length !== 2) throw labError('--renderers: two of them, webgl,webgpu');
+  for (const other of ['ab', 'screens', 'renderer']) {
+    if (options[other]) throw labError(`--renderers compares this tree on two renderers: it takes no --${other}`);
+  }
 }
 
 /** whether an option's kind takes the argument after it as its value (`--count 3`; `--ab` and `--profile` don't) */

@@ -6,7 +6,7 @@
 // it to (`emberNodes`).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
-import { seeFade, seeUniforms } from '../core/shaderPorts';
+import { seeFade, seeUniforms, type SeeNodes } from '../core/shaderPorts';
 import type { FLAME_LOOK, KEPT, KEPT_SIZE } from './fireBake';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -387,7 +387,7 @@ function logsHit(uniforms: FlameUniforms, centre: N): N {
 
 /** The share of the flames' light kept as their prop dissolves: one for all of them, the fade at five points along
  *  the view through their middle averaged (fire.ts's `kept`). */
-function evenFade(see: { focus: N; k: N; minY: N }, read: (name: keyof FlameUniforms, type: string) => N): N {
+function evenFade(see: SeeNodes, read: (name: keyof FlameUniforms, type: string) => N): N {
   const { cameraPosition, float, vec3 } = tsl as any;
   const middle = read('uCentre', 'vec3').add(vec3(0, read('uHeight', 'float').mul(0.5), 0));
   const across = middle.sub(cameraPosition).normalize().mul(read('uBox', 'vec3').x);

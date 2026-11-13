@@ -183,6 +183,44 @@ function readCanvas(box?: CanvasBox): Canvas {
   return { pixels: channelsOf(bytes), width, height, hdr: false };
 }
 
+/** A frame as read back, before its bytes are made channels: what a measure of thousands of frames keeps of each
+ *  (`villageHallEntry.ts`: making every frame's 8 MB of bytes floats was a quarter of its time). `pixels` in an HDR
+ *  frame, which is read as floats. */
+export interface RawFrame {
+  bytes: Uint8Array | null;
+  pixels: Float32Array | null;
+  width: number;
+  height: number;
+}
+
+/** The frame drawn now by the game's own camera and read back whole, its bytes as they came. */
+export function drawRaw(lab: Lab): RawFrame {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    renderer.render();
+  } finally {
+    lab.drawing = drawing;
+  }
+  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
+  if (gl.drawingBufferFormat === gl.RGBA16F) {
+    const { pixels, width, height } = readCanvas();
+    return { bytes: null, pixels, width, height };
+  }
+  G.renderer.setRenderTarget(null);
+  const { width, height } = canvasSize();
+  const bytes = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  return { bytes, pixels: null, width, height };
+}
+
+/** A raw frame as a canvas's pixels, as `drawFrame` gives them. */
+export function canvasOf(raw: RawFrame): Canvas {
+  const { width, height } = raw;
+  if (raw.pixels) return { pixels: raw.pixels, width, height, hdr: true };
+  return { pixels: channelsOf(raw.bytes!), width, height, hdr: false };
+}
+
 /** The frame drawn now by the game's own camera, as the player sees it; returns its pixels, or those of `box`. */
 export function drawFrame(lab: Lab, box?: CanvasBox): Canvas {
   const drawing = lab.drawing;
