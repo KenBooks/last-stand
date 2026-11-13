@@ -520,10 +520,10 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.3, 1.3, smoothstep(0.0, 0.85, along));
+  vec3 bladeColour = vBladeColour * mix(0.55, 1.12, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   // (a blade in six straw, among a tuft's green)
-  bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.1) * mix(0.45, 1.2, smoothstep(0.0, 0.85, along)), step(0.78, strandShade) * 0.6 * step(1.5, uTuft));
+  bladeColour = mix(bladeColour, vec3(0.24, 0.22, 0.085) * mix(0.6, 1.1, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.55 * step(1.5, uTuft));
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
