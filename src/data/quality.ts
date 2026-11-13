@@ -68,15 +68,18 @@ export interface QualityPreset {
    *  strands' texture, two-sided and laid over each other, what a phone's tiled GPU pays most for a pixel of a hero;
    *  off, the cap under them alone, in the hair's colour */
   hairCards: boolean;
+  /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
+   *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
+  poseEvery: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true },
+  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true, poseEvery: 1 },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true, poseEvery: 1 },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1, leaves: 1, hairCards: true, poseEvery: 1 },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34, leaves: 0.5, hairCards: false },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34, leaves: 0.5, hairCards: false, poseEvery: 2 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];

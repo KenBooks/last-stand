@@ -24,7 +24,8 @@ import { sfx } from '../core/audio';
 import { SHINE } from '../core/materials';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
-import { applyShadowDetail } from '../core/quality';
+import { applyShadowDetail, qualityLevel } from '../core/quality';
+import { QUALITY } from '../data/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { farDetail, type FarDetail } from './models/farDetail';
 import { drawAsOne, type OneDraw } from './models/drawAsOne';
@@ -198,7 +199,10 @@ export class Player {
   colour: HeroColourId | null = null;
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
-  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };
+  /** the time since he was last posed, and the frames counted to his next (a partner's at Very low: `poseEvery`) */
+  private poseOwed = 0;
+  private poseTurn = 0;
+  readonly remote: RemoteState ={ x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -1230,14 +1234,22 @@ export class Player {
     // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
     if (this.local && !this.dash && this.steered) legs?.intend(this.goal, this.facesWay);
-    this.model.animate({
-      t, dt, phase: this.phase, move, moveDir: dir, lean, action,
-      hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
-      charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
-      nocked: this.nocked,
-      strike: action?.name === 'chop' ? this.struckAhead() : null,
-      look: (weight) => this.lookAtFoe(dt, dead, this.standsIdle(move, action), weight),
-    });
+    // (Very low: a co-op partner posed one frame in `poseEvery`, the time between given to that one; where he stands
+    // and faces above every frame. The local hero and the hall's are posed every frame)
+    const every = this.local ? 1 : QUALITY[qualityLevel()].poseEvery;
+    this.poseOwed += dt;
+    if (!(every > 1 && G.players.includes(this) && ++this.poseTurn % every)) {
+      const owed = this.poseOwed;
+      this.poseOwed = 0;
+      this.model.animate({
+        t, dt: owed, phase: this.phase, move, moveDir: dir, lean, action,
+        hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
+        charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
+        nocked: this.nocked,
+        strike: action?.name === 'chop' ? this.struckAhead() : null,
+        look: (weight) => this.lookAtFoe(owed, dead, this.standsIdle(move, action), weight),
+      });
+    }
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;

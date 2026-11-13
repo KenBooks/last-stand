@@ -39,6 +39,8 @@ const _frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THRE
 let _frustumAt = -1;
 /** The view's frustum taken again at its next use, as a run starts (its stamp is the game's clock: `forgetFields`). */
 export function forgetFrustum(): void { _frustumAt = -1; }
+/** the foes made so far: each one's turn to be posed (`Enemy.poseTurn`) */
+let poseTurns = 0;
 function inView(x: number, y: number, z: number, r: number): boolean {
   if (_frustumAt !== G.time) {
     _frustumAt = G.time;
@@ -193,6 +195,11 @@ export class Enemy {
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
   private look: LookAt | null = null;
+  /** in view and within the leg IK's range, as last posed (`animate`) */
+  private seenNear = true;
+  /** the time since it was last posed, and its turn to be (Very low's `poseEvery`): every foe's its own */
+  private poseOwed = 0;
+  private poseTurn = poseTurns++;
   readonly height: number;
   /** how far its body reaches, drawn (models/hulls.ts): where the aim looks for it */
   readonly reach: Reach;
@@ -605,11 +612,19 @@ export class Enemy {
     this.model.root.rotation.set(this.tossed ? tipOf(this.tossed) : 0, this.facing, 0, 'YXZ');
     // the leg IK only where its feet are seen: in view and (on Low) near the player
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
-    if (legs) {
-      const h = this.height, me = G.player, range = QUALITY[qualityLevel()].ikRange;
-      legs.active = inView(this.pos.x, this.obj.position.y + h * 0.5, this.pos.z, h)
+    const q = QUALITY[qualityLevel()];
+    if (legs || q.poseEvery > 1) {
+      const h = this.height, me = G.player, range = q.ikRange;
+      this.seenNear = inView(this.pos.x, this.obj.position.y + h * 0.5, this.pos.z, h)
         && (range === Infinity || !me || (me.pos.x - this.pos.x) ** 2 + (me.pos.z - this.pos.z) ** 2 < range * range);
+      if (legs) legs.active = this.seenNear;
     }
+    // (Very low: a living foe out of view or past the IK's range posed one frame in `poseEvery`, the time between given
+    // to that one; its place and facing above every frame. Its turn counted from its own, so the foes take turns)
+    this.poseOwed += dt;
+    if (q.poseEvery > 1 && this.alive && !this.tossed && !this.spawning && !this.seenNear && ++this.poseTurn % q.poseEvery) return;
+    dt = this.poseOwed;
+    this.poseOwed = 0;
     this.model.animate({
       t, dt, phase: this.phase, move,
       // (from the data, so a co-op guest's copy has it too)
