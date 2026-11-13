@@ -42,9 +42,12 @@ const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].
  *  good"). As geometry, three blades a tuft, High's frame over the shoulder was 3.6M triangles ("that's broken",
  *  "we need below 1M tris on high"); cut as parallel strands of one sheet, hairs combed one way. */
 const TUFT = 14;
+/** the bins across a tuft's card, two blades rooted in each, and how far a half's blades fan out from its middle */
+const TUFT_BINS = 16;
+const TUFT_FAN = 1.1;
 /** a tuft's card's width against a whole blade's, and a blade's half width at its root as a share of the card's */
-const TUFT_CARD = 1.7;
-const TUFT_BLADE = 0.06;
+const TUFT_CARD = 2.5;
+const TUFT_BLADE = 0.2;
 /** how far apart the tufts' cards stand against the blades' cells, each as many tufts wide: at a card a cell, the
  *  cards lay many deep over every pixel, each pixel of each cut as it's shaded, and High's scene pass took 8.2 ms of a
  *  4070 Ti's frame over the shoulder where main's took 5.4, with two thirds of main's triangles */
@@ -440,7 +443,7 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.046, 0.118, 0.03), vec3(0.074, 0.15, 0.036), fract(h.y * 3.7));
+  vec3 green = mix(vec3(0.07, 0.14, 0.028), vec3(0.115, 0.185, 0.036), fract(h.y * 3.7));
   vec3 dry = vec3(0.26, 0.21, 0.085);
   vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.6 + smoothstep(0.8, 0.97, patchy) * 0.15);`;
 
@@ -449,33 +452,47 @@ const FRAGMENT_COLOUR = /* glsl */ `
   float foldB = vBlade.y, strandShade = 0.5;
 #ifdef COMBED
   if (vTufted > 0.5) {
-    // (a far ring's sheet is as many tufts side by side as it is blades wide, each drawn as a first ring's: drawn as
-    // strands a blade wide, the grass changed its look where the rings hand over)
+    // (a card is as many cards of the first ring side by side as it is wide: a far ring's sheet is drawn as theirs)
     float tuftsAcross = max(1.0, floor(sqrt(vStrands.x) + 0.5));
-    float tuftAt = (vBlade.y * 0.5 + 0.5) * tuftsAcross;
-    float inTuft = fract(tuftAt) * 2.0 - 1.0;
+    float units = max(1.0, floor(tuftsAcross * 0.5 + 0.5));
+    float unitAt = (vBlade.y * 0.5 + 0.5) * units;
+    float u = fract(unitAt);
+    float seed = vStrands.y + floor(unitAt) * 0.37;
     // (no blade thinner than a pixel: thinner, far tufts broke into single pixels that came and went, "pixelated")
-    float pixel = fwidth(vBlade.y) * tuftsAcross * 0.75;
-    float seed = vStrands.y + floor(tuftAt) * 0.37;
+    float pixel = fwidth(vBlade.y) * 0.5 * units * 0.75;
+    // thin blades rooted all across the card, two a bin, each near upright with a lean and a curve of its own, those
+    // of each half fanning a little from its middle (a tuft): only the bins a blade here could have come from are
+    // tried. Fanned from one crown, a few wide blades, a tuft was a wedge of paint strokes (a review of the pictures)
+    float fromZone = (floor(u * 2.0) + 0.5) * 0.5;
+    float cameFrom = fromZone + (u - fromZone) / (1.0 + ${TUFT_FAN.toFixed(2)} * min(vBlade.x / 0.75, 1.0));
+    float bin0 = floor(cameFrom * ${TUFT_BINS}.0);
     float nearest = 2.0;
     float which = 0.0;
-    for (int k = 0; k < ${TUFT}; k++) {
-      float fk = float(k);
-      float r1 = fract((fk + 1.0) * 0.6180340 + seed * 7.13);
-      float r2 = fract((fk + 1.0) * 0.7548777 + seed * 3.71);
-      // its own height (rising through a ring's hand-over by a share of its own); along it; its middle line, out from
-      // the crown and bent its own way; its half width, tapering
-      float tall = mix(0.5, 1.0, r1)
-        * mix(1.0, smoothstep(r2 * ${TUFT_RISE.toFixed(2)}, r2 * ${TUFT_RISE.toFixed(2)} + ${TUFT_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
-      float a = vBlade.x / max(tall, 0.01);
-      float middle = ((fk + 0.5) / ${TUFT}.0 * 2.0 - 1.0) * mix(0.12, 0.72, a) + ((r2 - 0.5) * 1.3 + (fract(seed * 5.3) - 0.5) * 0.9) * a * a
-        + (fract(r1 * 7.3) - 0.5) * 0.25 * a;
-      float halfWide = max(${TUFT_BLADE.toFixed(3)} * (1.0 - pow(min(a, 1.0), 2.2)), pixel);
-      float off = (inTuft - middle) / max(halfWide, 1e-4);
-      if (a <= 1.0 && abs(off) < abs(nearest)) {
-        nearest = off;
-        which = fk;
-        along = a;
+    for (int j = -2; j <= 2; j++) {
+      float bin = bin0 + float(j);
+      if (bin < 0.0 || bin >= ${TUFT_BINS}.0) continue;
+      for (int i = 0; i < 2; i++) {
+        float id = bin * 2.0 + float(i);
+        float r1 = fract(sin(id * 12.9898 + seed * 78.233) * 43758.5453);
+        float r2 = fract(r1 * 7.31 + id * 0.618);
+        float r3 = fract(r2 * 5.13 + id * 0.37);
+        // its own height (rising through a ring's hand-over by a share of its own), and where along it this is
+        float tall = mix(0.4, 1.0, r1)
+          * mix(1.0, smoothstep(r2 * ${TUFT_RISE.toFixed(2)}, r2 * ${TUFT_RISE.toFixed(2)} + ${TUFT_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
+        float a = vBlade.x / max(tall, 0.01);
+        if (a > 1.0) continue;
+        float rootAt = mix(0.08, 0.92, (bin + r3) / ${TUFT_BINS}.0);
+        float zone = (floor(rootAt * 2.0) + 0.5) * 0.5;
+        float middle = rootAt + (rootAt - zone) * ${TUFT_FAN.toFixed(2)} * a
+          + ((r2 - 0.5) * 1.8 * a + (r3 - 0.5) * 2.6 * a * a) / ${TUFT_BINS}.0;
+        // (as wide most of its length, then to a point)
+        float halfWide = max(${TUFT_BLADE.toFixed(3)} / ${TUFT_BINS}.0 * (1.0 - pow(a, 3.0)), pixel);
+        float off = (u - middle) / halfWide;
+        if (abs(off) < abs(nearest)) {
+          nearest = off;
+          which = id;
+          along = a;
+        }
       }
     }
     if (abs(nearest) > 1.0) discard;
@@ -500,7 +517,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.28, 1.12, smoothstep(0.0, 0.8, along));
+  vec3 bladeColour = vBladeColour * mix(0.3, 1.3, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
@@ -985,7 +1002,9 @@ export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: M
         }
         float fine = 1.0 - smoothstep(0.015, 0.05, fwidth(vMeadowXZ.x) + fwidth(vMeadowXZ.y));
         vec3 shootGreen = mix(vec3(0.085, 0.13, 0.026), vec3(0.17, 0.2, 0.04), swardN(vMeadowXZ * 2.3 + 9.0));
-        sward = mix(mix(sward, shootGreen, 0.45), mix(sward * 0.75, shootGreen, min(shoots, 1.0)), fine);
+        // (dark and plain under the grass: lighter than the blades and streaked, it showed between the tufts as a
+        // woven carpet, a review of the pictures)
+        sward = mix(sward, shootGreen * 0.55, 0.35 * fine * min(shoots, 1.0)) * 0.6;
         diffuseColor.rgb = mix(diffuseColor.rgb, sward, smoothstep(0.1, 0.7, meadowAt(vMeadowXZ)));`);
   };
   m.customProgramCacheKey = () => 'meadow-ground';
