@@ -324,6 +324,7 @@ Some of what that takes:
   every boot. Frames run back to back, with nothing landing between them (an A/B's side on a commit from before the
   heroes' capes were taken off steps its capes in the frame, on the main thread, `stepCapesHere`: in the game they
   stepped in a worker, whose results landed a frame or two late, and a commit's pictures against itself differed).
+- **No page of the lab's asks production's saves service** (`answerSavesHealth` in `node/side.mjs`): the save slots screen and Play together ask it for its health as they open, it refuses a page on localhost (CORS), and the browser's two errors failed every command opening either (`ui --states heroes,coop`). The lab answers that call itself (no Google sign-in); `cloud` asks its own service on another address.
 - **Set-ups check themselves** (`Lab.setup`, the `Fixture`): the run held in its countdown (no foes and none coming),
   the hero placed, stopped and settled, an arrow nocked if asked, the view made as the player makes it (V pressed: the
   game sets the camera's view from its own every frame, and set on the camera alone it was top-down again a frame
