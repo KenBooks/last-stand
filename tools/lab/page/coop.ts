@@ -21,6 +21,7 @@ import * as crowd from '../../../src/entities/models/crowd';
 import { Projectile } from '../../../src/combat/projectiles';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { menuStowed, toggleMenuStowed, pauseTab } from '../../../src/ui/menus';
+import { openFromLobby } from './uiCoop';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
 import type { ActionState, SkillKey } from '../../../src/types';
@@ -825,7 +826,7 @@ export async function coopPickColour(
   if (G.mode === 'run') {
     if (!G.menuOpen) { await lab.press('Escape'); await lab.step(1); }
     pauseTab('settings');
-  } else document.getElementById('btn-coop')!.click();
+  } else openFromLobby();
   const swatch = document.querySelector<HTMLButtonElement>(`${root} .cc-swatch[data-colour="${colour ?? ''}"]`);
   if (!swatch || swatch.disabled) throw new Error(`lab: colour ${colour} is unavailable in the live picker`);
   swatch.click();

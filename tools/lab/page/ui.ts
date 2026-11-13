@@ -48,7 +48,7 @@ import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 import {
-  changeHeroLink, closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, heroLabelPictures, openHeroes,
+  askForHeroes, closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, heroLabelPictures, openHeroes,
 } from './uiHeroes';
 import {
   ABANDON_CANARY, PAUSE_CANARY, TAB_CANARY, VOLUME_CANARY, closePause, closePauseAbandon, closePauseVolume, openPause,
@@ -68,6 +68,7 @@ import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouc
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
 import { autoFullChecked, autoFullPictures, ESC_CANARY, FULL_CANARY } from './uiFullScreen';
 import { BETA_NOTICE_CANARY, betaNoticeHere, betaNoticeShown, closeBetaNotice, openBetaNotice } from './uiBeta';
+import { showHelp } from '../../../src/ui/menus';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
@@ -215,9 +216,11 @@ function openTooltip(): void {
   showTooltipAt(itemTooltip(weapon)(), { clientX: innerWidth * TOOLTIP_AT.x, clientY: innerHeight * TOOLTIP_AT.y });
 }
 
-/** How to play, opened from the lobby's link. */
+/** How to play, opened from the panels' link, or as the village's notice board opens it. */
 function openHelp(): void {
-  document.getElementById('btn-help')!.click();
+  const link = document.getElementById('btn-help');
+  if (link) link.click();
+  else showHelp(true);
 }
 
 function closeHelp(): void {
@@ -322,11 +325,10 @@ let askedCold = false;
  */
 async function openReadyingHeroes(lab: Lab): Promise<void> {
   const chill = chillOf();
-  if (!chill || !document.getElementById('btn-hero')) return;
-  const button = (await changeHeroLink(lab))!;
+  if (!chill || !document.getElementById('heroes')) return;
   chill('heroes');
   askedCold = true;
-  await lab.clickOn(button);
+  await askForHeroes(lab);
 }
 
 /**
@@ -1184,7 +1186,7 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: "Readying the fight" for Change hero ${said ? 'caught' : 'went unseen'}`);
     if (!said) missed.push(`${state}: the canary's "Readying the fight" for Change hero went unseen`);
   }
-  if (state === 'heroes' && document.getElementById('btn-hero')) {
+  if (state === 'heroes' && document.getElementById('heroes')) {
     const caught = heroesCanaryCaught(found.problems);
     const planted = 'Back over the heroes\' names, a card\'s traits moved, the choice off the hero, a glow by the '
       + 'hidden hero\'s hand, an item of his draggable and the save slot letting a click through';

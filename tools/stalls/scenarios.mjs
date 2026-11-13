@@ -131,15 +131,25 @@ const HEROES_MS = 10_000;
 /** Whether the hero selection screen has gone. (Run in the page.) */
 const heroesGone = () => !document.getElementById('heroes').checkVisibility();
 
-/** The lobby's Change hero clicked, in the pause menu Esc opens where the lobby is a village, and the screen waited
- *  for. */
+/** how long the village's hero is given to walk to the hall's dais from anywhere in it (ms) */
+const HALL_WALK_MS = 30_000;
+
+/** The hero selection screen opened from the lobby and waited for: the panels' Change hero clicked, or, where the
+ *  lobby is a village, which has no such link, its hall of heroes picked on the map (M, its name clicked: he walks
+ *  to its dais the first time, and uses it where he stands after). */
 async function openHeroes(page) {
-  const shown = () => document.getElementById('btn-hero').checkVisibility();
-  if (!(await page.evaluate(shown))) await page.keyboard.press('Escape');
-  await page.waitForFunction(shown, null, { timeout: HEROES_MS });
-  await page.click('#btn-hero');
-  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+  if (await page.$('#btn-hero')) {
+    await page.click('#btn-hero');
+    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    return;
+  }
+  await tap(page, 'm');
+  await page.click('.vm-name[data-use="heroes"]');
+  await page.waitForFunction(heroesShown, null, { timeout: HALL_WALK_MS, polling: 100 });
 }
+
+/** Whether the tree has a hero selection screen. */
+const hasHeroes = async (page) => !!(await page.$('#heroes'));
 
 /** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
  *  clicked, then Enter), or by the lobby's class buttons in a tree from before it. */
@@ -335,7 +345,7 @@ const HERO_TRIPS = 3;
  * opening (its heroes perhaps warmed for it) is read apart from the ones after.
  */
 async function heroes(page, ms) {
-  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: opened nothing'];
+  if (!(await hasHeroes(page))) return ['no hero selection screen in this tree: opened nothing'];
   const world = await worldBox(page);
   await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
   await page.evaluate(markPhase, 'away');
@@ -363,7 +373,7 @@ const SWITCHES = ['warrior', 'ranger', 'mage'];
  * to the lobby a while after. Its notes say how long each choice took to bring the lobby back, by the page's clock.
  */
 async function switchHero(page, ms) {
-  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: switched nothing'];
+  if (!(await hasHeroes(page))) return ['no hero selection screen in this tree: switched nothing'];
   const world = await worldBox(page);
   await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
   await page.evaluate(markPhase, 'away');
@@ -371,8 +381,7 @@ async function switchHero(page, ms) {
   const each = (ms * 4) / 5 / SWITCHES.length;
   const notes = [];
   for (const hero of SWITCHES) {
-    await page.click('#btn-hero');
-    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await openHeroes(page);
     await page.evaluate(focusHero, hero);
     await page.waitForTimeout(500);
     await page.evaluate(markPhase, `to the ${hero}`);
@@ -516,7 +525,7 @@ async function rendererSwitch(page, ms, { picture }) {
  * its own.
  */
 async function choosing(page, ms) {
-  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: chose nothing'];
+  if (!(await hasHeroes(page))) return ['no hero selection screen in this tree: chose nothing'];
   await page.evaluate(markPhase, 'away');
   await page.waitForTimeout(ms / 5);
   const half = (ms * 4) / 5 / HERO_TRIPS / 2;
@@ -532,9 +541,6 @@ async function choosing(page, ms) {
   }
   return [`the lobby, then a hero chosen on the hero selection screen ${HERO_TRIPS} times`];
 }
-
-/** how long `hall` gives him to walk to the hall's dais from anywhere in the village (ms) */
-const HALL_WALK_MS = 30_000;
 
 /**
  * The hero sent to the hall of heroes' dais by the village's map (M, its name clicked), through its door and down its

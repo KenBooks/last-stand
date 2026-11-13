@@ -278,7 +278,9 @@ export function startIfCold() {
 export function changeHero() {
   window.__stalls.startPressed = performance.now();
   window.__stalls.pressedWhat = 'Change hero';
-  document.getElementById('btn-hero').click();
+  // (the panels' link; the village has none, and its hall of heroes is picked on the map, walked to and used)
+  const link = document.getElementById('btn-hero') ?? document.querySelector('.vm-name[data-use="heroes"]');
+  link.click();
 }
 
 /** Records when the hall of heroes showed after Change hero (`heroesShownAt`, the page's clock): its loading bar's end. */

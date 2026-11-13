@@ -13,7 +13,7 @@
 // chunk, its ring, its burst and pool, the vine and its coils: entities/throws.ts), which no first wave brings.
 // `--canary` draws a material of a kind nothing else is before the hero, which must come out as compiled, and puts a
 // light in the scene that the count must find.
-import { changeHeroLink } from './uiHeroes';
+import { askForHeroes } from './uiHeroes';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -356,10 +356,8 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
   if (G.player.cls.id === id) throw new Error(`lab: compiles: the hero is a ${id} already (--class picks the boot's)`);
   const from = G.player.cls.id;
   const start = window.__labClock.realNow();
-  const change = await changeHeroLink(lab);
   let hall: { count: number; lines: string[] } | null = null;
-  if (change) {
-    await lab.clickOn(change);
+  if (await askForHeroes(lab)) {
     const screen = document.getElementById('heroes')!;
     await stepUntil(lab, () => !screen.classList.contains('hidden'), 'the hero selection screen');
     // (its heroes warm by then: anything compiled from here is the screen's own, late)
@@ -382,7 +380,7 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
   }
   await stepUntil(lab, () => G.player.cls.id === id, `the switch to ${id}`);
   const waited = (window.__labClock.realNow() - start) / 1000;
-  const how = change ? 'on the hero selection screen, every hero shown' : 'in the lobby';
+  const how = hall ? 'on the hero selection screen, every hero shown' : 'in the lobby';
   const text = [`switched from the ${from} to the ${id} ${how} (${waited.toFixed(1)} s)`];
   if (hall) {
     text.push(`  the hero selection screen: ${hall.count} programs compiled`);

@@ -706,7 +706,7 @@ function abandon() {
   playerOut(G.player, 'dead');
 }
 
-/** The lobby's "Change hero": the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
+/** The panels' "Change hero", the village's hall of heroes used: the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
 let preparingHeroes = false;
 async function changeHero() {
   if (G.mode !== 'menu' || heroSelectOpen() || preparingHeroes) return;

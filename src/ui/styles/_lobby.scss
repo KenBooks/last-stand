@@ -50,7 +50,7 @@
 /* the name and Change hero on one row at every size (the class buttons that stood there, wrapped, took a line each at
    most zooms, as the text's width rounds) */
 .cc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-/* (the panels' alone: the village's Change hero is a link in the pause menu) */
+/* (the panels' alone: the village's way to another hero is its hall of heroes) */
 #{$panels} #btn-hero { flex: none; font-size: 14px; padding: 6px 12px; }
 .cc-name { font-family: var(--font-display); font-size: 28px; color: var(--cc, #9fffd0); text-shadow: 0 0 10px color-mix(in srgb, var(--cc, #9fffd0) 35%, transparent); }
 .cc-tag { color: var(--ink-dim); font-size: 16px; margin-bottom: 12px; }

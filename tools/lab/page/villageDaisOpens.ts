@@ -1,7 +1,7 @@
 // `lab village`'s hall of heroes opened at its dais by E (from play, "choose hero in hall freezes for like 10sec", its
 // report's one frame of 7.3 s with 8 programs compiled, numPointLightShadows 2 -> 4): E is heard in the village's own
 // update, after the lamps have been placed for the frame, so that frame was drawn with the room's two casting lights
-// and the two pooled ones casting at the dais's. The pause menu's Change hero opens it between frames, and never showed
+// and the two pooled ones casting at the dais's. The pause menu's Change hero (it had one then) opened it between frames, and never showed
 // it. Then, in the hall, a piece of the hero in focus hidden and the shadow map drawn once, which makes his shadow cast
 // as one again round its draw: from play, "as I enter hall of heroes ... it lags", its trace's one program compiled
 // late the mage's shadow cast as one in its own basic material, left shown by the draw that made it and drawn in the

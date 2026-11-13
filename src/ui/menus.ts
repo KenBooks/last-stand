@@ -288,13 +288,9 @@ export function initMenus(h: MenuHooks): void {
   initVolumeOptions();
   initRendererOptions();
   initBeta();
-  // (the village's is the pause menu's: the hall of heroes' way in from anywhere in the lobby)
-  $('#btn-hero').onclick = () => {
-    sfx.click();
-    if (VILLAGE) hooks.resume();
-    changeHero();
-  };
   if (!VILLAGE) {
+    // (the panels' alone: the village's way in is its hall of heroes, walked to or picked on the map)
+    $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
     // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
     // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
     // onto a line of their own, and the ranger's tagline took two lines)
@@ -338,7 +334,6 @@ export function initMenus(h: MenuHooks): void {
   });
   if (VILLAGE) {
     $('#rail-close').onclick = () => { sfx.click(); openPanels(null); };
-    $('#btn-help').onclick = () => { sfx.click(); hooks.resume(); showHelp(); };
   } else {
     $('#rail-practice').onclick = () => { sfx.click(); toggleMenuStowed(); };
     $('#rail-play').onclick = () => { if (isGuest()) return; sfx.click(); hooks.start(); };
@@ -1343,8 +1338,8 @@ export function showPause(v: boolean): void {
     renderHourOption();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
-    // (the village's links are the lobby's: a run has no hero to change nor room to open, and on a phone held
-    // sideways their row took 38 px of the pages' cell; the lobby without the village has them on its own panel)
+    // (the village's Install is the lobby's: on a phone held sideways its row took 38 px of the pages' cell in a run;
+    // the lobby without the village has it on its own panel)
     document.querySelector('#pause .pb-links')?.classList.toggle('hidden', G.mode === 'run');
     // (short beside the title: what it costs is its tooltip)
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run' : 'Abandon run';
