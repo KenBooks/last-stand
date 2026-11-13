@@ -421,7 +421,9 @@ const VERTEX_BLADE = /* glsl */ `
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
-  vec3 objectNormal = normalize(mix(face, vec3(0.0, 1.0, 0.0), 0.55) + across * side * 0.45);
+  // (a tuft's card is lit as the ground under it, nearly: by its own face a whole tuft stood pale and the next one
+  // near black, as each card faced the sun or away, "shading on grass doesn't look right")
+  vec3 objectNormal = normalize(mix(face, vec3(0.0, 1.0, 0.0), mix(0.55, 0.9, tufted)) + across * side * 0.45 * (1.0 - tufted));
   vBlade = vec2(t, side);
   // spring greens, a tuft's own, some dry and gold
   vec3 green = mix(vec3(0.088, 0.14, 0.027), vec3(0.185, 0.225, 0.043), fract(h.y * 3.7));

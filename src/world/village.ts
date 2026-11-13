@@ -797,6 +797,7 @@ export function buildVillage(scene: THREE.Group): Village {
       campfire.intensity = BONFIRE_LIGHT * CAMPFIRE_LIGHT.by
         * (CAMPFIRE_BY_DAY + (1 - CAMPFIRE_BY_DAY) * (1 - dayness(hour)));
       M.skyPane.emissiveIntensity = SKY_PANE.night + (SKY_PANE.day - SKY_PANE.night) * dayness(hour);
+      for (const [from, twin] of glowTwins) twin.emissiveIntensity = from.emissiveIntensity;
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
       fountainLight(dayness(hour));
@@ -1579,6 +1580,11 @@ function torchLook(): TorchLook {
   };
 }
 
+/** the glowing materials `fadesWhole` made copies of, each with its copy: a copy glows as what it was made from does by
+ *  the hour (left as built, the hall's windows' panes stood black at noon: from play, "why windows so dark? its
+ *  daylight outside") */
+const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = [];
+
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
 function fadesWhole(group: THREE.Object3D, kind: FadesWhole): void {
@@ -1587,7 +1593,11 @@ function fadesWhole(group: THREE.Object3D, kind: FadesWhole): void {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const was = mesh.material as THREE.Material;
-    if (!fading.has(was)) fading.set(was, seeThrough(was.clone(), kind));
+    if (!fading.has(was)) {
+      const twin = seeThrough(was.clone(), kind);
+      fading.set(was, twin);
+      if ((was as THREE.MeshStandardMaterial).emissiveMap) glowTwins.push([was as THREE.MeshStandardMaterial, twin as THREE.MeshStandardMaterial]);
+    }
     mesh.material = fading.get(was)!;
   });
 }
