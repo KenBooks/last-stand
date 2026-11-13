@@ -95,9 +95,8 @@ async function readHour(lab: Lab, hour: number, canary: boolean): Promise<{ cull
   setHallCull('off');
   const whole = countedFrame(lab);
   setHallCull('door');
-  return {
-    culled: culled.draws, whole: whole.draws, changed: changedShare(culled.canvas, whole.canvas), grass: grassVertices(),
-  };
+  const changed = changedShare(culled.canvas, whole.canvas);
+  return { culled: culled.draws, whole: whole.draws, changed, grass: grassVertices() };
 }
 
 /** The frame out of the hall's door culled by the doorway against drawn whole, at midnight and noon. */
