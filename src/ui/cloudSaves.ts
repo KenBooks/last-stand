@@ -12,7 +12,7 @@ import { SAVE_SLOTS } from '../loot/saveSlots';
 import { slotHeroes } from '../loot/cloud';
 import { readHero, type Entries } from '../loot/slotData';
 import { sfx } from '../core/audio';
-import { isTouch } from './touch';
+import { aboveKeyboard } from './aboveKeyboard';
 import { leaveFullScreen, suspendAutoFullScreen } from './autoFullScreen';
 import { fullScreenTrip } from './fullScreenTrip';
 import type { Profile } from '../types';
@@ -314,41 +314,12 @@ function askCode(): void {
     { label: 'Cancel' },
   ]);
   const field = $<HTMLInputElement>('#cloud-dialog .cd-code');
-  aboveKeyboard(field);
+  aboveKeyboard($('#cloud-dialog'), field);
   field.focus();
   field.onkeydown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
     if (e.key === 'Enter') { e.preventDefault(); ($('#cloud-dialog .dc-buttons .primary') as HTMLElement).click(); }
   };
-}
-
-/** Once `field` has the focus on a touch screen, the dialog keeps to the part of the screen a keyboard leaves until it
- *  closes: at its top (in full screen a phone's keyboard lies over the page and may shrink nothing), and no taller
- *  than the visual viewport, which the keyboard shrinks otherwise. It stays there when the field loses the focus: a
- *  tap on Sign in takes the focus first, and the dialog moving back under the finger made the tap miss. A mouse's
- *  dialog stays centred. */
-function aboveKeyboard(field: HTMLInputElement): void {
-  const box = $('#cloud-dialog');
-  const seen = window.visualViewport;
-  const fit = (): void => {
-    if (box.classList.contains('hidden') || !box.contains(field)) { stop(); return; }
-    box.style.setProperty('--seen-top', `${seen?.offsetTop ?? 0}px`);
-    box.style.setProperty('--seen', `${seen?.height ?? innerHeight}px`);
-    if (document.activeElement === field) field.scrollIntoView({ block: 'nearest' });
-  };
-  const start = (): void => {
-    if (!isTouch()) return;
-    box.classList.add('typing');
-    seen?.addEventListener('resize', fit);
-    seen?.addEventListener('scroll', fit);
-    fit();
-  };
-  const stop = (): void => {
-    box.classList.remove('typing');
-    seen?.removeEventListener('resize', fit);
-    seen?.removeEventListener('scroll', fit);
-  };
-  field.addEventListener('focus', start);
 }
 
 async function showCode(): Promise<void> {
@@ -483,7 +454,7 @@ function confirmCopy(): void {
     { label: 'Cancel' },
   ]);
   const field = $<HTMLInputElement>('#cloud-dialog .cd-code');
-  aboveKeyboard(field);
+  aboveKeyboard($('#cloud-dialog'), field);
   field.focus();
   field.onkeydown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }

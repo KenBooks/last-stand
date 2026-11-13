@@ -9,9 +9,17 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,pauseLobby,betaNotice,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
+readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,pauseLobby,betaNotice,coop,coopRename,bugReport,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
 run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,pauseBeta,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
-decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
+decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
+`page/uiBugReport.ts`: `bugReport` opens it from the lobby's pause menu by a click on Report a bug and makes a report
+as a player does, `bugReportTouch` opens it over a run by a tap: the form within the window and not scrolling, every
+kind and control found at its middle, the picture of the game taken and not blank, an empty form's Copy report
+refused, a kind pressed the one marked, a key pressed in the field kept from the game, the report shown whole holding
+what was typed and where the player was, Open on GitHub opening the repo's new-issue page with the kind's labels,
+Done giving the game back, what's typed kept through Esc; on touch each kind 36 css px tall, each button 40 and each
+field's text 16 at least; the clipboard and the new tab are stood in for, so nothing leaves the page; `--canary`
+makes the form's box twice the window's height, which must be found; the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
 a room, the room's code and Join each found at its middle; asked to rename, the taken tag marked, named in the

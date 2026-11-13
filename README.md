@@ -74,6 +74,10 @@ There are **three save slots** (the lobby's *Save slot* link; the chronicle, in 
 
 **Cloud saves** (optional): sign in on the save slots screen with a passkey, with Google, or with a sign-in code from a device already signed in, choose which save goes to the cloud, and it keeps the same heroes on every device you sign in on. It keeps playing offline and syncs when back online; a hero played on two devices while out of sync asks which copy to keep. No account is needed to play. What is kept, and how to delete it: [privacy](public/privacy.html).
 
+### Report a bug
+
+**Report a bug**, at the foot of the pause menu (`Esc`), opens a short form: pick what it's about (gameplay, looks, speed, sound, controls, playing together, menus, saves, a crash, an idea), say what happened, and a picture of the game as it was goes along unless you untick it. The game adds where you were, its version and your device's make, never your name tag, a room's code or your saves, and shows you the whole report first. Nothing leaves your device until you press **Copy report** or **Open on GitHub**, which opens a new issue here with the report filled in.
+
 ### Install and play offline
 
 Last Stand is an installable web app. Use the **Install** link in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.

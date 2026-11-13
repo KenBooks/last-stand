@@ -65,6 +65,7 @@ import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { recorder } from './perf/recorder';
 import { traceNow } from './perf/upload';
+import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
@@ -295,6 +296,8 @@ async function boot() {
   initSync();
   initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
+  initBugReport(reportClosed);
+  for (const link of document.querySelectorAll<HTMLElement>('.report-link')) link.onclick = () => { sfx.click(); openReport(); };
   // (each look held till it's drawn: replaced after a frame, checking's still held the campfire 0.2 s)
   const drawn = drawnBy(renderer);
   if (VILLAGE) {
@@ -699,6 +702,32 @@ function openPause(open: boolean) {
 
 function resume() { openPause(false); }
 
+/** whether the bug report's form was opened with no pause menu under it (a link outside the menu, a harness): it then
+ *  holds the game as the menu would, and lets it go as it closes */
+let reportAlone = false;
+
+/** The bug report's form (ui/bugReport.ts) over whatever is up: solo the game stops under it, in co-op it goes on and
+ *  the hero stands idle, as with the pause menu. */
+function openReport() {
+  if (bugReportOpen()) return;
+  reportAlone = !G.menuOpen;
+  if (reportAlone) {
+    G.menuOpen = true;
+    G.paused = !isCoop();
+    G.player.idle = hallOpen() || isCoop();
+  }
+  openBugReport();
+}
+
+/** The form closed: back to the pause menu under it, or to the game if it was opened alone. */
+function reportClosed() {
+  if (reportAlone) {
+    G.menuOpen = G.paused = false;
+    G.player.idle = hallOpen();
+  }
+  reportAlone = false;
+}
+
 /** Abandon from the pause menu: solo back to the lobby; in co-op out of the run (spoils lost), watching the rest. */
 function abandon() {
   openPause(false);
@@ -834,6 +863,8 @@ const dialogOpen = (): boolean => coopOpen() || helpOpen();
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  // the bug report's form takes the keys: Esc closes it, back to what it was opened over
+  if (bugReportOpen()) { if (wasPressed('escape')) closeBugReport(); return; }
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
   // screen too, which opens it
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
@@ -1110,6 +1141,7 @@ function frame(timestamp: number): void {
   clearOverlays();
   const t1 = perfClock.now();
   render();
+  bugReportAfterRender();
   perfSplit(t1 - t0, perfClock.now() - t1);
   pinPrograms(G.renderer, compileContext);
   endInputFrame();

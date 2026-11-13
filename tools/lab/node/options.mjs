@@ -28,13 +28,13 @@ export const README_SHOTS = ['village', 'campfire', 'hall', 'stash', 'forest', '
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps', 'cloudIdentity',
-  'logLobby', 'perfAsk', 'pauseLobby', 'betaNotice', 'coop', 'coopRename',
+  'logLobby', 'perfAsk', 'pauseLobby', 'betaNotice', 'coop', 'coopRename', 'bugReport',
   'villageMap', 'villageHud', 'villageHudTouch',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
   'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
   'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
-  'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
+  'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch', 'bugReportTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -442,7 +442,10 @@ export const COMMANDS = {
           + 'beside the worn one\'s: its buttons within the window and the sheet), litTouch (a worn item pressed long: '
           + 'the stash items that fit its slot lit until a tap elsewhere), buttonsTouch and buttonsRunTouch '
           + '(every touch button shown in the lobby, its practice and a run: nothing over its middle, and a '
-          + 'finger\'s tap there does what it\'s for; the canary lays a clear sheet over the pause button)',
+          + 'finger\'s tap there does what it\'s for; the canary lays a clear sheet over the pause button), '
+          + 'bugReport and bugReportTouch (the bug report\'s form opened from the pause menu, by the mouse in the '
+          + 'lobby and a finger over a run: within the window, each control found, a report made of it; the canary '
+          + 'makes its box twice the window\'s height)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {
