@@ -1,4 +1,4 @@
-import { defineConfig, transformWithOxc } from 'vite';
+import { defineConfig, transformWithOxc, type Plugin } from 'vite';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -50,6 +50,25 @@ function buildInfo(): { ref: string; time: string } {
   const pr = process.env.BUILD_PR ? `PR #${process.env.BUILD_PR} · ` : '';
   return { ref: `${pr}${sha ? sha.slice(0, 7) : 'local'}`, time: new Date().toISOString() };
 }
+const BUILD = buildInfo();
+
+/** `version.json` beside the page, the build as `__BUILD__` has it: the pause menu reads it from the host to say whether
+ *  it runs the newest build (src/ui/buildStatus.ts, #587). The dev server answers it too, with its own. */
+function buildVersion(): Plugin {
+  const source = JSON.stringify(BUILD);
+  return {
+    name: 'last-stand-version',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url?.split('?')[0].endsWith('/version.json')) return next();
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(source);
+      });
+    },
+    generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source }); },
+  };
+}
 
 /** three's builds: its core and WebGL renderer, which every page loads, and its WebGPU renderer and node language,
  *  which only `?renderer=webgpu` does (core/webgpu.ts; its addons go with whatever imports them) */
@@ -58,14 +77,14 @@ const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
-  plugins: [bootFullScreen(), ezTreeTextures(), threeCompileSlice(), pwa()],
+  plugins: [bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
   // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
   // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)
   optimizeDeps: { exclude: ['ez-tree'] },
   // (`__DEV_TOOLS__`: the developer mode, src/dev, built in. Only a PR preview's Docker build sets BUILD_PREVIEW
   // (server/game-preview/Dockerfile); production's build doesn't, and its bundle has none of the mode)
-  define: { __BUILD__: JSON.stringify(buildInfo()), __DEV_TOOLS__: JSON.stringify(process.env.BUILD_PREVIEW === '1') },
+  define: { __BUILD__: JSON.stringify(BUILD), __DEV_TOOLS__: JSON.stringify(process.env.BUILD_PREVIEW === '1') },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

@@ -51,6 +51,7 @@ import { initProfileTab } from './profileTab';
 import { initRecordingTab } from './recordingTab';
 import { recorder } from '../perf/recorder';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
+import { showBuildStatus } from './buildStatus';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -1325,6 +1326,7 @@ function renderHourOption(): void {
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
+    showBuildStatus($('#pause .build-status'));
     refreshColourPickers();
     pauseTab(keptPauseTab());
     renderControlsHelp();

@@ -161,6 +161,12 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
 .hour-row .opt-level { width: 100%; }
 .hour-row .opt-level output { width: 72px; }
 #pause .build-info { color: #7d7466; font-size: 12px; text-align: center; user-select: text; }
+// whether this is the newest build (ui/buildStatus.ts): quiet when it is, gold when a newer one is out
+#pause .build-status {
+  color: #7d7466; font-size: 12px; text-align: center;
+  &[data-status='latest'] { color: #8fae7c; }
+  &[data-status='newer'] { color: $highlight; }
+}
 /* How to play: the diagrams beside the rules (one column when narrow, or with the touch list) */
 #help .modal-box:has(.diagrams) { width: 960px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); }
 .help-cols:has(.diagrams) { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }

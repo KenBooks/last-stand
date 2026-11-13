@@ -12,6 +12,8 @@ import type { Plugin, Rollup } from 'vite';
 
 // Pages' page for a missing path (public/404.html): never the game's, so never precached
 const NOT_FOUND = '404.html';
+// the build the host serves now (vite.config.ts `buildVersion`): read past every cache, never precached
+const VERSION = 'version.json';
 const ICONS: [file: string, size: number][] = [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]];
 
 export function pwa(): Plugin {
@@ -31,7 +33,7 @@ export function pwa(): Plugin {
       }
       const webgpuOnly = webgpuOnlyChunks(bundle);
       const files = [...new Set([...Object.keys(bundle), ...ICONS.map(([f]) => f), ...readdirSync(publicDir)])]
-        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && !webgpuOnly.has(f) && !f.startsWith('assets/portrait-')).sort();
+        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && f !== VERSION && !webgpuOnly.has(f) && !f.startsWith('assets/portrait-')).sort();
       const html = bundle['index.html'];
       const version = createHash('sha256').update(files.join('\n')).update(html && 'source' in html ? html.source : '').digest('hex').slice(0, 12);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker(version, files) });
