@@ -43,7 +43,7 @@ const MOST_WHOLE = 0.08;
 /** the frames read one after another for the flicker, and the most of the grass's light that may change from one
  *  frame to the next */
 const FLICKER_FRAMES = 8;
-const MOST_FLICKER = 0.05;
+const MOST_FLICKER = 0.03;
 
 /** The light of each cell of `canvas`, row by row. */
 function cellsOf(canvas: Canvas): Float32Array {

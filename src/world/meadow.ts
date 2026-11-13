@@ -441,16 +441,16 @@ const VERTEX_BLADE = /* glsl */ `
   vec2 downwind = vec2(0.83, 0.55);
   float veer = (noise2(root * 0.035 + uTime * 0.03) - 0.5) * 2.4;
   vec2 windWay = vec2(downwind.x * cos(veer) - downwind.y * sin(veer), downwind.x * sin(veer) + downwind.y * cos(veer));
-  float gust = noise2(root * 0.11 - downwind * uTime * 0.55) * 0.65 + noise2(root * 0.37 - downwind * uTime * 1.1) * 0.35;
+  float gust = noise2(root * 0.11 - downwind * uTime * 0.3) * 0.65 + noise2(root * 0.37 - downwind * uTime * 0.5) * 0.35;
   float blowing = smoothstep(0.42, 0.78, gust);
   // (a tuft's card barely flutters: each on a beat of its own, a card's bright blades and the dark between them
   // changed places a pixel at a time about once a second, a quarter of the grass's light swinging as he stood still)
-  float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing) * mix(1.0, 0.25, tufted);
+  float flutter = sin(uTime * mix(5.1, 1.7, tufted) + h.y * 6.2832) * (0.04 + 0.16 * blowing) * mix(1.0, 0.25, tufted);
   // (a tuft's card sways mostly in its own plane: pushed over across it, a card's face turned up to the camera and
   // away as each gust passed, a patch's light a third brighter and darker within a second, from play "very bright
   // becomes very dark and back")
   vec2 swayWay = mix(windWay, turned * dot(windWay, turned), tufted);
-  vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.1 + flutter * 0.6 + 0.015) * uWindWild);
+  vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.1 + flutter * 0.5 + 0.015) * uWindWild);
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
@@ -461,12 +461,16 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.062, 0.125, 0.024), vec3(0.098, 0.16, 0.03), fract(h.y * 3.7));
+  vec3 green = mix(vec3(0.07, 0.127, 0.024), vec3(0.108, 0.162, 0.03), fract(h.y * 3.7));
   vec3 dry = vec3(0.2, 0.18, 0.075);
   vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.25 + smoothstep(0.8, 0.97, patchy) * 0.12);`;
 
 const FRAGMENT_COLOUR = /* glsl */ `
   float along = vBlade.x, acrossB = abs(vBlade.y);
+  // (a card's own number, rounded: it comes the same from each of the card's corners, but not to the last bit once
+  // the card moves, and the hashes below made another tuft of each such bit, every blade elsewhere from frame to
+  // frame in any wind at all, from play "grass is flickering now, I just stand idle, and it flickers")
+  float cardSeed = mix(floor(vStrands.y * 1024.0 + 0.5) / 1024.0, vStrands.y, uDropByPixel);
   float foldB = vBlade.y, strandShade = 0.5;
 #ifdef COMBED
   if (vTufted > 0.5) {
@@ -475,7 +479,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
     float units = max(1.0, floor(tuftsAcross * 0.5 + 0.5));
     float unitAt = (vBlade.y * 0.5 + 0.5) * units;
     float u = fract(unitAt);
-    float seed = vStrands.y + floor(unitAt) * 0.37;
+    float seed = cardSeed + floor(unitAt) * 0.37;
     // (no blade thinner than a pixel: thinner, far tufts broke into single pixels that came and went, "pixelated")
     float pixel = fwidth(vBlade.y) * 0.5 * units * 0.75;
     // thin blades rooted all across the card, two a bin, each near upright with a lean and a curve of its own, those
@@ -530,11 +534,11 @@ const FRAGMENT_COLOUR = /* glsl */ `
     float signedB = fract(strandAt) * 2.0 - 1.0;
     acrossB = abs(signedB);
     foldB = signedB;
-    strandShade = fract(sin(strand * 7.31 + vStrands.y * 41.7) * 9631.17);
-    float tall = 1.0 - ${STRAND_CUT.toFixed(2)} * fract(sin(strand * 12.9898 + vStrands.y * 78.233) * 43758.5453);
+    strandShade = fract(sin(strand * 7.31 + cardSeed * 41.7) * 9631.17);
+    float tall = 1.0 - ${STRAND_CUT.toFixed(2)} * fract(sin(strand * 12.9898 + cardSeed * 78.233) * 43758.5453);
     // (all risen before the band's middle, as the blades they take over from go: risen across the whole of it, the
     // band stood thinner and coarser than the grass either side)
-    float risesAt = fract(sin(strand * 39.346 + vStrands.y * 11.135) * 24634.6345) * ${STRANDS_RISE.toFixed(2)};
+    float risesAt = fract(sin(strand * 39.346 + cardSeed * 11.135) * 24634.6345) * ${STRANDS_RISE.toFixed(2)};
     tall *= mix(1.0, smoothstep(risesAt, risesAt + ${BLADE_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
     if (tall < 0.01) discard;
     along = vBlade.x / tall;
@@ -749,7 +753,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     shader.uniforms.uViewHigh = viewHigh;
     shader.uniforms.uDropByPixel = dropByPixel;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nuniform float uTuft;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nuniform float uTuft;\nuniform float uDropByPixel;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,
