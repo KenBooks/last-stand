@@ -748,6 +748,13 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
       .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
         ' directLight.color *= shadowSeen;',
         ` shadowSeen = mix( ${GRASS_SUN_IN_SHADOW.toFixed(2)} * step( 1.5, uTuft ), 1.0, shadowSeen ); directLight.color *= shadowSeen;`))
+      // (a tuft's blades are matte: lit as a surface facing up and seen at a shallow angle, each took the sky's
+      // reflection as a pale sheen, the lit grass a washed yellow beside the dark green of the shaded, from play
+      // "still not there")
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        float bladeSheen = 1.0 - step( 1.5, uTuft );
+        reflectedLight.directSpecular *= bladeSheen;
+        reflectedLight.indirectSpecular *= bladeSheen;`)
       .replace('#include <normal_fragment_begin>',
         THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
           // (and the lit side is the one turned up, whichever way the card is wound: a tuft's cards were lit on one
