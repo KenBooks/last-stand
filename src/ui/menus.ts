@@ -760,24 +760,24 @@ function renderStart(): void {
   start.textContent = guest ? (partnerInRun() ? 'The host is in a run' : `The host starts the run${host}`)
     : busy ? 'Your partner is still in a run' : grounds ? 'Enter the Training Grounds' : `Enter ${BIOMES[G.arena.biome].title}`;
   start.title = grounds ? 'Replay any wave reached. No damage, loot, score or progress.' : '';
-  // (the ghost's card picks the battleground; a portal's is its own)
+  // (the archery target's card picks the battleground; a portal's is its own)
   const biome = guest ? session.biome : G.arena.biome;
   document.querySelectorAll<HTMLButtonElement>('#opt-biome button').forEach((b) => {
     b.classList.toggle('active', b.dataset.b === biome);
     b.disabled = guest;
   });
   // (a first visit's training unfinished: a portal's card warns, offers to skip it, and lets no one in until then; the
-  // training grounds stake nothing, so the ghost lets him in)
+  // training grounds stake nothing, so the target lets him in)
   const training = !guest && !grounds && trainingPending();
   start.classList.toggle('hidden', training);
   $('#vcard .vc-training').classList.toggle('hidden', !training);
 }
 
-// The training grounds (the ghost by the village's yard, game/village.ts; the panels' lobby's Game mode): a wave
+// The training grounds (the archery target by the village's yard, world/archeryTarget.ts; the panels' lobby's Game mode): a wave
 // reached replayed with nothing at stake. A co-op guest's is the host's.
 let grounds = false;
 export const trainingSelected = (): boolean => isGuest() ? session.training : grounds;
-/** The training grounds chosen (the ghost's card) or not (a portal's). */
+/** The training grounds chosen (the archery target's card) or not (a portal's). */
 export function selectTraining(on: boolean): void {
   if (on === grounds || isGuest()) return;
   grounds = on;

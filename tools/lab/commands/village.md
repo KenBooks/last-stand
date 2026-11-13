@@ -13,7 +13,7 @@ approach it, and close when I move away"): shut far off and in the hall's door b
 he has walked off; `--canary` keeps him far off where it should be open.
 
 `village`: the lobby's village as a player walks it (`page/village.ts`; `src/game/village.ts`), the run left for
-the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the ghost by the yard's gate, the
+the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the archery target by the yard's gate, the
 notice board) used from where the hero stands to use it, and what it opens shown; the notice board and the
 chronicle used by E, put away by their own button and used by E again where he stands, and put away by E itself
 (`page/villageUseAgain.ts`: from play, "when I press got it, I cannot press E again until I move away", the notice

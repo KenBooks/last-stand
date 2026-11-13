@@ -79,11 +79,10 @@ export function worldToYard(x: number, z: number): Spot {
   return [dx * c - dz * s, dx * s + dz * c];
 }
 
-/** The ghost by the yard's gate, outside its fence (a foe of a first wave as the training grounds show one, game/ghost.ts):
- *  where it stands and the way it faces (rad about y: 0 faces +z), out of the yard toward the road that comes to the
- *  gate. Talked to, it opens the training grounds (from play: "lets add a ghost enemy near training place in village
- *  for that... it will be a random low level enemy, talk to him and enter the new training grounds"). */
-export const GHOST = (() => {
+/** The archery target by the yard's gate, outside its fence (world/archeryTarget.ts): where it stands and the way its
+ *  face turns (rad about y: 0 faces +z), out of the yard toward the road that comes to the gate. Used, it opens the
+ *  training grounds (it was a ghost of a first wave's foe; from play, the owner's picture of a target on an easel). */
+export const TARGET = (() => {
   const [x, z] = yardToWorld(YARD.gateAt - 3.5, -YARD.halfZ - 1.5);
   const [ox, oz] = yardToWorld(YARD.gateAt - 3.5, -YARD.halfZ - 2.5);
   return { x, z, facing: Math.atan2(ox - x, oz - z) };
@@ -222,9 +221,9 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
   },
   {
     // (stood before it, on the road's side)
-    id: 'ghost', use: 'training', at: [GHOST.x, GHOST.z], reach: 2.4,
-    stand: [GHOST.x + Math.sin(GHOST.facing) * 1.5, GHOST.z + Math.cos(GHOST.facing) * 1.5], label: 2.0, tall: 2.0,
-    name: 'Sparring Shade', verb: 'Enter the training grounds',
+    id: 'target', use: 'training', at: [TARGET.x, TARGET.z], reach: 2.4,
+    stand: [TARGET.x + Math.sin(TARGET.facing) * 1.5, TARGET.z + Math.cos(TARGET.facing) * 1.5], label: 1.3, tall: 2.0,
+    name: 'Archery target', verb: 'Enter the training grounds',
   },
   {
     id: 'notice', use: 'help', at: [NOTICE.x, NOTICE.z], reach: 2.4,
@@ -237,7 +236,7 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
  *  `dawn` and `dusk` are when the sun is on the horizon. */
 export const DAY = { dawn: 6.5, dusk: 19.5 };
 
-/** The hours the village is the Thornwood's (its lobby music, the ghost by the yard a forest foe); the crypt's the
+/** The hours the village is the Thornwood's (its lobby music, and the training grounds' card opens on it); the crypt's the
  *  rest, the dusk and the night (from play: "for ghost, during daytime should be a forest mob, during night should be
  *  a crypt mob"). */
 export const FOREST_HOURS = { from: 7.5, to: 18.5 };

@@ -37,7 +37,6 @@ import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, show
 import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels, pauseTab } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
-import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
 import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
@@ -341,7 +340,6 @@ async function boot() {
   // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
   if (firstVisit) await loadingStep('Readying the hall', 0.6);
   await warmLobby(firstVisit);
-  if (VILLAGE) ghostsWarmed();
   const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
     void loadingLeft.then(() => want('heroes'));
@@ -484,7 +482,7 @@ function enterMenu(keepSummary = false) {
   buildNextRunAhead();
 }
 
-/** The training yard's dummies (the lobby's only foes), and the ghost by its gate (built once, with the village). */
+/** The training yard's dummies (the lobby's only foes). */
 function spawnDummies() {
   clearEnemies();
   if (!VILLAGE) {
@@ -492,7 +490,6 @@ function spawnDummies() {
     return;
   }
   for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
-  standGhost(G.arena.groupOf('village'));
 }
 
 // --- the village ------------------------------------------------------------------
@@ -516,8 +513,8 @@ function useObject(o: VillageObject): void {
       showVillageCard(o);
       return;
     case 'training':
-      // (the training grounds: the battleground's choice on its card, the ghost's own first)
-      if (!isGuest()) { G.arena.setBiome(ghostBiome()); sendLobbyChoice(); }
+      // (the training grounds: the battleground's choice on its card, the hour's first)
+      if (!isGuest()) { G.arena.setBiome(biomeOfHour(hourNow())); sendLobbyChoice(); }
       selectTraining(true);
       openPanels(null);
       showVillageCard(o);
@@ -945,7 +942,6 @@ function update(dt: number): void {
   if (VILLAGE) {
     // (the village: what the hero is near and walks to, and whether he may cast there)
     updateVillage(dt);
-    updateGhost(G.time, dt);
     // (the village's ground a hero can stand on, for his walks to a spot, made behind it once it shows: game/village.ts
     // goTo; in the boot's task it was 120 to 176 ms of a return's loading)
     if (revealed && villageActive()) prepareWalks(HERO_RADIUS);

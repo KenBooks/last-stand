@@ -1,5 +1,5 @@
 // The card a village object opens (`#vcard`, game/village.ts uses the objects): a portal's, its battleground's name, its
-// starting wave and its way in (Enter, `#btn-start`); the ghost's, the training grounds' (the portal's page with the
+// starting wave and its way in (Enter, `#btn-start`); the archery target's, the training grounds' (the portal's page with the
 // battleground's choice over it); the chronicle's, the save slots and the profile's reset. It stands
 // at the foot of the screen over the village, and goes as the hero walks off (or Leave, Esc).
 import { G } from '../state';

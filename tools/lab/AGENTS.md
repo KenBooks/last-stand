@@ -394,7 +394,7 @@ lists Chrome's layers at each picture, and where the sides' differ.
 - `npm run lab -- carry --ab=HEAD` and `sheet --ab=HEAD`: a commit against itself must agree, line for line and pixel
   for pixel; anything else is a cause of runs that differ, to be found and removed as above.
 
-- `training`: Training grounds (#405): attempted-wave persistence/migration, the village's ghost talked to and its card's battleground and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage and a solid ghost.
+- `training`: Training grounds (#405): attempted-wave persistence/migration, the village's archery target used and its card's battleground (the hour's) and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage, a hidden target and a card on the wrong battleground.
 
 - A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.
 

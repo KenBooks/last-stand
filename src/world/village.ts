@@ -50,6 +50,7 @@ import {
   withinVillage,
 } from './villagePlan';
 import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
+import { buildArcheryTarget } from './archeryTarget';
 import { FENCE, STANDS_FREE, Wall } from './wall';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
@@ -711,6 +712,7 @@ export function buildVillage(scene: THREE.Group): Village {
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
+  stillBuilt(scene, () => buildArcheryTarget(scene, obstacles));
   const stair = [-1, 1].map((s) => buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
   for (const { light } of stair) lights.push(light);
   // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim
