@@ -9,7 +9,7 @@
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { session } from '../../../src/net/session';
-import { renderCoop } from '../../../src/ui/coop';
+import { openCoop, renderCoop } from '../../../src/ui/coop';
 import type { Player } from '../../../src/entities/player';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
@@ -45,10 +45,17 @@ const wornNow = (): number => dyed(G.player).model.dye?.shown ?? 0;
 /** the problem the canary must raise */
 export const COOP_CANARY = { name: 'Open a room lies past', what: 'Open a room moved off the window\'s foot' };
 
-/** The dialog opened as its button opens it, the co-op server found up (the lab's link: `?net=local`). */
+/** The dialog opened from the lobby: the panels' link clicked, or as the village's campfire opens it. */
+export function openFromLobby(): void {
+  const link = document.getElementById('btn-coop');
+  if (link) link.click();
+  else openCoop(true);
+}
+
+/** The dialog opened as the lobby opens it, the co-op server found up (the lab's link: `?net=local`). */
 export async function openCoopDialog(lab: Lab): Promise<void> {
   history.replaceState(null, '', `${location.pathname}?net=local`);
-  document.getElementById('btn-coop')!.click();
+  openFromLobby();
   // (the server's check is a promise, answered at once for the local link)
   await new Promise((resolve) => setTimeout(resolve, 0));
   await lab.step(1);

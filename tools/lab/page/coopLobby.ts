@@ -15,6 +15,7 @@ import { project } from '../../../src/ui/floaters';
 import * as coopUi from '../../../src/ui/coop';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { ABANDON_HOLD_MS, showPause, toggleMenuStowed } from '../../../src/ui/menus';
+import { askForHeroes } from './uiHeroes';
 import { realWait, type Frame, type Lab } from './lab';
 
 /** how much longer than its hold Leave the run is held (ms): its timer runs on the browser's clock */
@@ -147,12 +148,9 @@ export function watchHall(): void {
   if (partners.some((p) => p.casting || p.channel)) hallSeen.casting++;
 }
 
-/** The hall of heroes opened as a player opens it (Change hero clicked: in the village, the pause menu's). */
+/** The hall of heroes opened from the lobby (`askForHeroes` in uiHeroes.ts). */
 export async function coopOpenHall(lab: Lab): Promise<void> {
-  const button = document.getElementById('btn-hero');
-  if (button && !button.checkVisibility()) showPause(true);
-  if (!button) throw new Error('lab: coop: no Change hero button in the lobby');
-  await lab.clickOn(button);
+  if (!(await askForHeroes(lab))) throw new Error('lab: coop: no way to the hall of heroes from the lobby');
 }
 
 /** The hall left by its Back button. */

@@ -3,7 +3,7 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
-import { reloadWithVillage } from '../core/beta';
+import { reloadWithVillage, VILLAGE } from '../core/beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
 import { serverUp, SERVER_DOWN } from '../net/transport';
@@ -63,7 +63,8 @@ let tagNote = '';
 export const touchReviving = (): boolean => touchRevive;
 
 export function initCoop(): void {
-  $('#btn-coop').onclick = () => { sfx.click(); openCoop(true); };
+  // (the panels' link: the village's way in is its campfire)
+  if (!VILLAGE) $('#btn-coop').onclick = () => { sfx.click(); openCoop(true); };
   $('#btn-coop-close').onclick = () => { sfx.click(); openCoop(false); };
   $('#coop').onclick = (e) => { if (e.target === $('#coop')) openCoop(false); };
   const rv = $('#btn-revive');
@@ -296,7 +297,7 @@ function renderBar(): void {
     : others.length ? `With ${others.map(nameOf).join(', ')}` : 'Waiting for a friend…';
   bar.innerHTML = `<span class="cb-room">Room <b>${esc(session.code)}</b></span><span class="cb-who">${esc(text)}</span>`;
   bar.onclick = () => { sfx.click(); openCoop(true); };
-  $('#btn-coop').textContent = isCoop() ? 'Room' : 'Play together';
+  if (!VILLAGE) $('#btn-coop').textContent = isCoop() ? 'Room' : 'Play together';
 }
 
 // --- name tags over the heroes ----------------------------------------------------------------

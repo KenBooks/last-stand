@@ -15,11 +15,17 @@
 import { G } from '../../../src/state';
 import { CLASSES } from '../../../src/data/classes';
 import { col, particles } from '../../../src/fx/particles';
-import type { Lab, Pictured } from './lab';
+import * as menus from '../../../src/ui/menus';
+import { realWait, type Lab, type Pictured } from './lab';
 import type * as THREE from 'three';
 
 /** frames run after Change hero is clicked: the camera's flight in, the hero's showcase over (s at 60 a second) */
 const SETTLE_FRAMES = 300;
+/** the most frames the screen is waited for once asked for, and the wait between them by the page's own time (ms): it
+ *  opens once its heroes are prepared, on the browser's clock and its workers' replies (a mouse's click gave it that
+ *  time; asked for without one, it wasn't up yet as its parts were clicked) */
+const OPEN_FRAMES = 600;
+const OPEN_WAIT_MS = 5;
 /** frames run after another hero is clicked: the camera on its way to him */
 const FOCUS_FRAMES = 30;
 /** the least height of the hero in focus on the screen, a share of the window's (he's who the screen is about) */
@@ -48,31 +54,39 @@ const screenOf = (): HTMLElement | null => document.getElementById('heroes');
 /** whether `element` is laid out and visible (the screen is fixed: it has no `offsetParent`) */
 const shown = (element: Element | null): boolean => !!element?.checkVisibility({ visibilityProperty: true });
 
-/** the most presses of Esc a player makes for the pause menu: one putting away the village's panels, one pausing */
-const ESC_PRESSES = 2;
+/** What the lobby's Change hero asks (src/ui/menus.ts), or none in a tree from before it. */
+const changeHero = (): (() => void) | undefined => (menus as { changeHero?: () => void }).changeHero;
 
 /**
- * The lobby's Change hero where a player finds it: in the village, the pause menu's, opened by Esc (the first press
- * putting away what an object opened, if anything); before it, the lobby's own link, shown as it is. Null in a tree
- * without one.
+ * The hero selection screen asked for from the lobby: the panels' Change hero clicked with the mouse where it shows;
+ * in the village, which has no such link (its way in is the hall's dais, used by E there in `lab village`), what the
+ * dais asks, with the hero left where he stands, so the screen opens on his own class; a pause menu left up is
+ * resumed first, as the game asks nothing while paused (the link that stood in it resumed too). Whether anything was
+ * asked.
  */
-export async function changeHeroLink(lab: Lab): Promise<HTMLElement | null> {
+export async function askForHeroes(lab: Lab): Promise<boolean> {
   const button = document.getElementById('btn-hero');
-  for (let press = 0; button && !shown(button) && press < ESC_PRESSES; press++) {
-    await lab.step(1, () => ({ keys: ['escape'] }));
-    // (the game hears a press on the frame it begins: the next frame lets it go)
-    await lab.step(1);
+  if (button && shown(button)) {
+    await lab.clickOn(button);
+    return true;
   }
-  if (button && !shown(button)) throw new Error('lab: ui: Esc showed no Change hero');
-  return button;
+  const ask = changeHero();
+  if (!ask) return false;
+  if (shown(document.getElementById('pause'))) document.getElementById('btn-resume')!.click();
+  ask();
+  return true;
 }
 
-/** Change hero clicked with the mouse, and the camera's flight and the hero's showcase played out. */
+/** The screen asked for, and the camera's flight and the hero's showcase played out. */
 export async function openHeroes(lab: Lab): Promise<void> {
-  const button = await changeHeroLink(lab);
-  opened = { before: G.player.cls.id, screen: !!button && !!screenOf() };
-  if (!button) return;
-  await lab.clickOn(button);
+  const before = G.player.cls.id;
+  const asked = await askForHeroes(lab);
+  opened = { before, screen: asked && !!screenOf() };
+  if (!asked) return;
+  for (let frame = 0; frame < OPEN_FRAMES && screenOf() && !shown(screenOf()); frame++) {
+    await lab.step(1);
+    if (!shown(screenOf())) await realWait(OPEN_WAIT_MS);
+  }
   await lab.step(SETTLE_FRAMES);
 }
 

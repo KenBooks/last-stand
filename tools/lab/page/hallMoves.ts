@@ -119,19 +119,19 @@ async function holdDown(lab: Lab, element: Element, ms: number): Promise<void> {
   await lab.mouseUp(at);
 }
 
-/** The hall opened from the lobby (Change hero: in the village's pause menu, Esc first; an older tree's lobby shows
- *  it, `changeHeroLink` missing there), waited for until it's up. */
+/** The hall opened from the lobby (`askForHeroes` in uiHeroes.ts: the panels' Change hero, or what the village's dais
+ *  asks), waited for until it's up. */
 export async function openHall(lab: Lab): Promise<boolean> {
-  const link = (heroesUi as { changeHeroLink?: (lab: Lab) => Promise<HTMLElement | null> }).changeHeroLink;
-  const button = link ? await link(lab) : document.getElementById('btn-hero');
-  if (!button) return false;
-  await lab.clickOn(button);
+  if (!(await heroesUi.askForHeroes(lab))) return false;
   // Preparing a new geometry detail waits on real worker replies as well as the game's parked frames.
   for (let frame = 0; frame < OPEN_FRAMES && !hall.hallOpen(); frame++) {
     await lab.step(1);
     if (!hall.hallOpen()) await realWait(5);
   }
-  if (!hall.hallOpen()) throw new Error('lab: hall: the hall never opened after its worker preparation');
+  if (!hall.hallOpen()) {
+    const state = `mode ${G.mode}, paused ${G.paused}, menu open ${G.menuOpen}`;
+    throw new Error(`lab: hall: the hall never opened after its worker preparation (${state})`);
+  }
   return true;
 }
 
