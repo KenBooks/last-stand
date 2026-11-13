@@ -405,6 +405,10 @@ const VERTEX_BLADE = /* glsl */ `
   vec3 across = vec3(turned.x, 0.0, turned.y);
   float t = bv.x, side = bv.y;
   float tilt = 0.12 + fract(hk.x * 13.1) * 0.35, bendK = 0.35 + fract(hk.y * 7.7) * 0.7;
+  // (a tuft's card stands nearly upright, its blades each arcing their own way within it: leant over whole as a
+  // blade is, every tuft's blades lay one way, "our grass goes 45 degrees... his is not strictly 45, its more random")
+  tilt *= mix(1.0, 0.4, tufted);
+  bendK *= mix(1.0, 0.45, tufted);
   float mid = tilt + bendK * t * 0.5, ang = tilt + bendK * t;
   // (past the first ring a blade stands for as many of the first ring's, a sheet cut into strands of their width as
   // it's shaded: untapered here, each strand tapered there; drawn whole, the far rings' blades were a lighter, coarser
@@ -415,9 +419,17 @@ const VERTEX_BLADE = /* glsl */ `
   vTufted = tufted;
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
   // the wind: gusts rolling across the meadow and a flutter a blade, bending by the square of t
-  float roll = sin(uTime * 1.5 - root.x * 0.21 - root.y * 0.14) * 0.5 + 0.5;
-  float flutter = sin(uTime * 5.1 + h.y * 6.2832) * 0.25;
-  vec3 wind = vec3(0.83, 0.0, 0.55) * (t * t * height * (roll * 0.5 + flutter * 0.3 + 0.1));
+  // (in gusts: patches of moving air a few metres across that travel downwind, the grass near upright between
+  // them, the wind's own way wandering slowly over the meadow; one steady wave pushing every blade the same way
+  // all the time read as grass combed at 45 degrees, "we should randomize wind too, but make it logical... like
+  // wind gusts")
+  vec2 downwind = vec2(0.83, 0.55);
+  float veer = (noise2(root * 0.035 + uTime * 0.03) - 0.5) * 2.4;
+  vec2 windWay = vec2(downwind.x * cos(veer) - downwind.y * sin(veer), downwind.x * sin(veer) + downwind.y * cos(veer));
+  float gust = noise2(root * 0.11 - downwind * uTime * 0.55) * 0.65 + noise2(root * 0.37 - downwind * uTime * 1.1) * 0.35;
+  float blowing = smoothstep(0.42, 0.78, gust);
+  float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing);
+  vec3 wind = vec3(windWay.x, 0.0, windWay.y) * (t * t * height * (blowing * 0.55 + flutter + 0.03));
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
