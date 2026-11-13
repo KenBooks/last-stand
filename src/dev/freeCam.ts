@@ -87,6 +87,13 @@ export function freeCamToHero(): void {
   state.pitch = -Math.PI / 4;
 }
 
+/** Put at `pos` looking `yaw` round and `pitch` up (rad): a harness's flight (tools/lab's `perf --village --fly`). */
+export function placeFreeCam(pos: THREE.Vector3, yaw: number, pitch: number): void {
+  state.pos.copy(pos);
+  state.yaw = yaw;
+  state.pitch = THREE.MathUtils.clamp(pitch, -PITCH_MOST, PITCH_MOST);
+}
+
 /** A frame of flight (`dt`: the browser's own, so it flies with the game frozen), the camera put where it is. */
 export function applyFreeCam(dt: number): void {
   if (!state.on) return;

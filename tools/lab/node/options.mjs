@@ -638,6 +638,11 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'with --village, the view turned right round on the spot three times, each turn a phase',
       },
+      fly: {
+        kind: 'switch',
+        help: 'with --village, the dev tool\'s free camera flown over it: round it high, round it low and '
+          + 'across it, each a phase, with where its dearest frames were',
+      },
       hour: {
         kind: 'number',
         usage: 'h',

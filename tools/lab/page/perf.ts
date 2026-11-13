@@ -36,6 +36,8 @@ import { goTo, villageObject } from '../../../src/game/village';
 import { HALL, TERRACE, inHall } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
 import { viewBy } from './villageHallCull';
+import { endFlight, flewFrom, flightLegs, flyTo, takeFlight, whereFlown, type Flown, type Leg } from './perfFly';
+import { PLANTED, plantOverVillage } from './perfFly';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -71,6 +73,8 @@ export interface PerfOptions {
   hour?: number;
   /** with `village`, the view turned right round on the spot three times instead */
   spin?: boolean;
+  /** with `village`, the dev tool's free camera flown over it instead (`perfFly.ts`) */
+  fly?: boolean;
   /** the device played (lab/node/devices.mjs): its screen drawn here at `gpu` times its pixels */
   device?: Device;
 }
@@ -578,6 +582,78 @@ async function spinPhases(lab: Lab, facing: number): Promise<{ phases: Phase[]; 
   return { phases, lines };
 }
 
+/** how many of a leg's dearest frames are said, by the page's render and by the triangles drawn */
+const DEAREST = 3;
+/** the flights flown, one after the other */
+const FLIGHTS = ['first flight', 'second flight'];
+
+/** A leg's frames at their dearest by `pick`, each with where the camera was. */
+function dearest(phase: Phase, flown: Flown[], pick: (frame: Timed) => number, said: (v: number) => string): string {
+  const order = phase.frames.map((_, at) => at).sort((a, b) => pick(phase.frames[b]) - pick(phase.frames[a]));
+  return order.slice(0, DEAREST).map((at) => `${said(pick(phase.frames[at]))} at ${whereFlown(flown[at])}`)
+    .join('; ');
+}
+
+/** A flight's phases, its own lines and what it found wrong. */
+interface Flight { phases: Phase[]; lines: string[]; problems: string[] }
+
+/**
+ * The dev tool's free camera flown over the village from the top view, as F9 takes it, each leg a phase: with
+ * where each leg's dearest frames were. Throws if a frame wasn't drawn from where the flight put the camera.
+ */
+async function flyPhases(lab: Lab, canary: boolean): Promise<Flight> {
+  const phases: Phase[] = [];
+  const lines: string[] = [];
+  const problems: string[] = [];
+  /** a leg flown and timed, each frame checked to have been drawn from where the flight put the camera */
+  const fly = async (leg: Leg): Promise<{ phase: Phase; flown: Flown[] }> => {
+    const flown: Flown[] = [];
+    const phase = await timePhase(lab, leg.name, leg.frames, (f) => {
+      if (f > 0 && !flewFrom(flown[f - 1])) throw new Error(`lab: perf: ${leg.name}: frame ${f - 1} wasn't flown`);
+      flown.push(leg.at(f));
+      flyTo(flown[f]);
+      return {};
+    });
+    return { phase, flown };
+  };
+  const drawsOf = (phase: Phase): number => spreadOf(phase.frames.map((frame) => frame.draws)).median;
+  await viewBy(lab, 'top');
+  takeFlight();
+  try {
+    // (flown twice: the first flight meets what no frame has drawn yet, the second is the village as it stays)
+    const legs = FLIGHTS.flatMap((flight) => flightLegs().map((leg) => ({ ...leg, name: `${flight}: ${leg.name}` })));
+    for (const leg of legs) {
+      const before = { ...G.renderer.info.memory };
+      const waiting = notYetOnTheGpu();
+      const { phase, flown } = await fly(leg);
+      phases.push(phase);
+      const { geometries, textures } = G.renderer.info.memory;
+      lines.push(`${leg.name} made ${geometries - before.geometries} geometries and `
+        + `${textures - before.textures} textures for the GPU; ${cameOnTheGpu(waiting)}; its dearest frames:`);
+      lines.push(`  by the render: ${dearest(phase, flown, (frame) => frame.render, (v) => `${v.toFixed(1)} ms`)}`);
+      const millions = (v: number): string => `${(v / 1e6).toFixed(2)}M triangles`;
+      lines.push(`  by the triangles: ${dearest(phase, flown, (frame) => frame.triangles, millions)}`);
+      lines.push(`  by the draws: ${dearest(phase, flown, (frame) => frame.draws, (v) => `${v} draws`)}`);
+    }
+    if (canary) {
+      // (boxes planted over the middle, a draw each, in view all the way round from high up)
+      const high = flightLegs()[0];
+      const clean = drawsOf(phases[phases.length - flightLegs().length]);
+      const unplant = plantOverVillage();
+      try {
+        const planted = drawsOf((await fly({ ...high, name: `canary: ${high.name}` })).phase);
+        lines.push(`canary: ${PLANTED} boxes planted over the village: ${planted} draws a frame, ${clean} without`);
+        if (planted - clean < PLANTED) problems.push(`canary missed: ${PLANTED} planted boxes went uncounted`);
+      } finally {
+        unplant();
+      }
+    }
+  } finally {
+    endFlight();
+  }
+  return { phases, lines, problems };
+}
+
 /** The hero stood in the hall of heroes turned to its door, the square beyond it in view over his shoulder (from
  *  above its roof is cut away, and all of the village shows). */
 async function lookingOut(lab: Lab): Promise<Phase> {
@@ -684,10 +760,12 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
     const where = options.village ? `the village${hour}` : options.biome;
     lines.push(`${where}, ${options.lobby ? 'the lobby' : `the ${options.view} view`}, ${cpu}`);
-    const spun = options.village && options.spin
+    const spun: { phases: Phase[]; lines: string[]; problems?: string[] } | null = options.village && options.spin
       ? await spinPhases(lab, options.facing * Math.PI / 180)
+      : options.village && options.fly ? await flyPhases(lab, options.canary)
       : null;
     if (spun) lines.push(...spun.lines);
+    problems.push(...(spun?.problems ?? []));
     const { phases, uncast } = options.parts ? { phases: [], uncast: [] }
       : spun ? { phases: spun.phases, uncast: [] }
       : options.village ? { phases: await villagePhases(lab), uncast: [] }
@@ -711,7 +789,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
       lines.push(...parts.lines);
       problems.push(...parts.problems);
     }
-    if (options.canary) {
+    if (options.canary && !options.fly) {
       const canary = await canaryRound(lab, aim);
       lines.push(...canary.lines);
       problems.push(...canary.problems);

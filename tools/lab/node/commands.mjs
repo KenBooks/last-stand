@@ -728,6 +728,8 @@ export const COMMANDS = {
       if (options.device) playAsDevice(options);
       if (!options.village && options._.length === 0) throw labError('perf needs its skills (or --village)');
       if (options.spin && !options.village) throw labError('perf --spin: with --village');
+      if (options.fly && !options.village) throw labError('perf --fly: with --village');
+      if (options.fly && options.spin) throw labError('perf --fly: without --spin');
     },
     each(side, options) {
       const device = options.device ? DEVICES[options.device] : undefined;
@@ -757,6 +759,7 @@ export const COMMANDS = {
         parts: Boolean(options.parts),
         hour: options.hour,
         spin: Boolean(options.spin),
+        fly: Boolean(options.fly),
       };
       return side.command('perf', command);
     },
