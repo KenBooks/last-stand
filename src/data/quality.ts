@@ -25,7 +25,8 @@ export interface QualityPreset {
   relief: number;
   /** how far apart the grass's blades stand, against High's, each as many times wider (`setGrassSpread` in
    *  world/meadow.ts): twice, a quarter of the blades cover the ground as before, a quarter of the vertices shaded
-   *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame) */
+   *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame; Very low's four times, a sixteenth: a laptop's
+   *  integrated GPU drew 5 frames a second over the shoulder, the grass 296k of its 534k triangles) */
   grassSpread: number;
   /** the share of the village's lamps' reach, and whether they read the shadows' map of what stands round them
    *  (`setLampQuality` in core/lamps.ts) */
@@ -65,7 +66,7 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
   low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1 },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
