@@ -797,7 +797,62 @@
     <!-- the build and whether it's the newest: a line each, one line on a short screen -->
     <div class="pb-build">
       <div class="build-info"></div>
-      <div class="build-status"></div>
+      <!-- the status, and beside it the way to report a bug in this build (ui/bugReport.ts) -->
+      <div class="pb-build-line">
+        <div class="build-status"></div>
+        <button class="link report-link" id="btn-report">Report a bug</button>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- the bug report's form (ui/bugReport.ts, styles/_bugReport.scss): after the pause menu, so over it -->
+  <div id="bug-report" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="br-title"><div class="modal-box br-box">
+    <div class="sm-title" id="br-title">Report a bug</div>
+    <form class="br-form" autocomplete="off" novalidate>
+      <div class="br-cols">
+        <div class="br-col">
+          <div class="br-label" id="br-kind-label">What is it about?</div>
+          <div class="br-kinds" role="radiogroup" aria-labelledby="br-kind-label"></div>
+          <div class="br-hint" aria-live="polite"></div>
+          <div class="br-shot">
+            <div class="br-shot-frame"><img alt="The game as it was when you opened this form"></div>
+            <div class="br-shot-side">
+              <label class="br-check"><input type="checkbox" id="br-shot-on" checked> Include this picture</label>
+              <small class="br-shot-note"></small>
+            </div>
+          </div>
+        </div>
+        <div class="br-col">
+          <label class="br-label" for="br-text">What happened? <small class="br-count"></small></label>
+          <textarea id="br-text" rows="4" enterkeyhint="done" placeholder="What you were doing, and what the game did"></textarea>
+          <label class="br-label" for="br-expected">What did you expect? <small>optional</small></label>
+          <input id="br-expected" type="text" enterkeyhint="done" placeholder="What should have happened instead">
+          <details class="br-sent"><summary>See everything in the report</summary><pre></pre></details>
+        </div>
+      </div>
+      <div class="br-privacy">The game adds where you were, its version and your device's make, so the bug can be found. Never your name tag, a room's code or your saves. Nothing leaves this device until you press a button below.</div>
+      <div class="br-note" role="status"></div>
+      <div class="br-actions">
+        <button type="button" class="btn" id="br-cancel">Cancel</button>
+        <button type="button" class="btn" id="br-copy">Copy report</button>
+        <button type="button" class="btn primary" id="br-github">Open on GitHub</button>
+      </div>
+    </form>
+    <div class="br-done hidden" role="status">
+      <div class="br-done-title"></div>
+      <p class="br-done-text"></p>
+      <div class="br-done-shot hidden">
+        <div class="br-shot-frame"><img alt="The picture that goes with your report"></div>
+        <div class="br-shot-side">
+          <small class="br-done-shot-note"></small>
+          <div class="br-done-shot-actions">
+            <button type="button" class="btn" id="br-shot-copy">Copy picture</button>
+            <a class="btn" id="br-shot-save">Save picture</a>
+          </div>
+        </div>
+      </div>
+      <p class="br-thanks">Thank you: reports like yours are how the game gets better.</p>
+      <div class="br-actions"><button type="button" class="btn primary" id="br-close">Done</button></div>
     </div>
   </div></div>
 

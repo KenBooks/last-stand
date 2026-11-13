@@ -69,6 +69,9 @@ import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } 
 import { autoFullChecked, autoFullPictures, ESC_CANARY, FULL_CANARY } from './uiFullScreen';
 import { BETA_NOTICE_CANARY, betaNoticeHere, betaNoticeShown, closeBetaNotice, openBetaNotice } from './uiBeta';
 import { showHelp } from '../../../src/ui/menus';
+import {
+  BUG_REPORT_CANARY, bugReportChecked, bugReportPictures, closeBugReportState, openBugReport, openBugReportTouch,
+} from './uiBugReport';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
@@ -85,7 +88,7 @@ const joinFound = (a: { lines: string[]; problems: string[] }, b: { lines: strin
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps' | 'cloudIdentity'
-  | 'logLobby' | 'perfAsk' | 'pauseLobby' | 'betaNotice' | 'coop' | 'coopRename'
+  | 'logLobby' | 'perfAsk' | 'pauseLobby' | 'betaNotice' | 'coop' | 'coopRename' | 'bugReport'
   | 'villageMap' | 'villageHud' | 'villageHudTouch'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'coopTouch' | 'autoFull'
   | 'run' | 'scores' | 'perf' | 'perfMini' | 'perfGraph' | 'perfParty'
@@ -93,7 +96,7 @@ export type UiState =
   | 'pauseVolume'
   | 'pauseTabKept'
   | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
-  | 'perfAskTouch' | 'buttonsRunTouch';
+  | 'perfAskTouch' | 'buttonsRunTouch' | 'bugReportTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -108,7 +111,7 @@ const RUN_STATES: UiState[] = [
   'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
   'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
   'pauseTabKept', 'pauseAbandon', 'summary',
-  'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
+  'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch', 'bugReportTouch',
 ];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
@@ -1009,6 +1012,10 @@ const STEPS: Record<UiState, Steps> = {
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
   coop: { open: openCoopPicked, close: closeCoopDialog, check: (canary) => coopShown('coop', canary) },
   coopRename: { open: openCoopRename, close: closeCoopDialog, check: (canary) => coopShown('coopRename', canary) },
+  bugReport: {
+    open: (lab) => openBugReport(lab, canaryAsked), close: closeBugReportState,
+    check: (canary, lab) => bugReportChecked('bugReport', lab, canary), pictures: async () => bugReportPictures(),
+  },
   pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
   betaNotice: { open: openBetaNotice, close: closeBetaNotice, check: betaNoticeShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
@@ -1072,6 +1079,10 @@ const STEPS: Record<UiState, Steps> = {
   decisionTouch: { open: openDecisionTouch, close: closeDecisionTouch, check: decisionTouchShown },
   perfAskTouch: { open: openPerfAskTouch, close: closePerfAsk, check: (canary) => perfAskShown('perfAskTouch', canary) },
   buttonsRunTouch: { open: openButtonsTouch, close: () => undefined, check: runButtonsShown },
+  bugReportTouch: {
+    open: (lab) => openBugReportTouch(lab, canaryAsked), close: closeBugReportState,
+    check: (canary, lab) => bugReportChecked('bugReportTouch', lab, canary), pictures: async () => bugReportPictures(),
+  },
 };
 
 /** whether this page's run is set up for the run's states (each command's page is booted for it: false at first) */
@@ -1216,6 +1227,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));
     lines.push(`  canary: ${DECISION_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${DECISION_CANARY.what} went unseen`);
+  }
+  if (state === 'bugReport' || state === 'bugReportTouch') {
+    const caught = found.problems.some((problem) => problem.includes(BUG_REPORT_CANARY.name));
+    lines.push(`  canary: ${BUG_REPORT_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${BUG_REPORT_CANARY.what} went unseen`);
   }
   if (state === 'coop' || state === 'coopRename' || state === 'coopTouch') {
     const caught = found.problems.some((problem) => problem.includes(COOP_CANARY.name));

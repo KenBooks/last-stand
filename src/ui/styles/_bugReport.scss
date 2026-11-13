@@ -1,0 +1,106 @@
+// The bug report's form (ui/bugReport.ts): what it's about and the picture on the left, what happened on the right,
+// one column on a narrow window. Its box is a modal's, zoomed by --ui, so what a finger presses or a phone types into
+// is sized in real css px over --ui: buttons a finger's height, and fields' text 16 px at least (under that a phone
+// zooms the page into the field).
+@use 'theme' as *;
+
+/** a field's or a button's real size on touch, whatever the box's zoom */
+@function real($v) { @return calc(#{$v} / var(--ui, 1)); }
+
+.br-box { width: 820px; text-align: left; gap: 10px; }
+.br-box .sm-title { text-align: center; font-size: 26px; }
+.br-form, .br-done { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.br-form.hidden, .br-done.hidden { display: none; }
+.br-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 22px; }
+.br-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.br-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-family: var(--font-display); font-size: 15px; color: var(--accent); }
+.br-label small { font-family: var(--font-body); font-size: 12px; color: var(--ink-dim); font-variant-numeric: lining-nums tabular-nums; }
+
+// the kinds: one chosen, as a row of radio buttons
+.br-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.br-kind { padding: 6px 4px; font: 600 14px var(--font-body); line-height: 1.15; color: var(--ink); cursor: $cursor-hand;
+  background: $well; border: 1px solid rgba($frame, .45); border-radius: 3px; }
+.br-kind:hover { border-color: var(--frame); color: #fff; }
+.br-kind.on { background: $well-lit; border-color: var(--highlight); color: var(--highlight); box-shadow: inset 0 0 0 1px rgba($highlight, .35); }
+.br-hint { min-height: 2.5em; font-size: 13px; line-height: 1.25; color: var(--ink-dim); }
+
+// the picture taken as the form opened, and whether it goes along
+.br-shot, .br-done-shot { display: flex; align-items: center; gap: 10px; }
+.br-done-shot.hidden { display: none; }
+// (its frame keeps its place before the picture comes, a frame after the form opens: nothing moves as it does)
+.br-shot-frame { flex: none; width: 150px; height: 86px; border: 1px solid rgba($frame, .55); background: #000; }
+.br-shot-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.br-shot-frame img:not([src]) { display: none; }
+.br-shot.off img { opacity: .3; }
+.br-shot .br-shot-side small { min-height: 2.5em; }
+.br-shot-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; }
+.br-shot-side small { font-size: 12px; line-height: 1.25; color: var(--ink-dim); }
+.br-check { display: flex; align-items: center; gap: 6px; cursor: $cursor-hand; }
+
+// the fields
+.br-box textarea, .br-box input[type='text'] { width: 100%; box-sizing: border-box; padding: 7px 9px; font: 15px/1.3 var(--font-body);
+  color: #ffe7b0; background: #0a0909; border: 1px solid rgba($frame, .55); border-radius: 3px; user-select: text; }
+.br-box textarea { resize: none; min-height: 92px; }
+.br-box :is(textarea, input[type='text']):focus { outline: none; border-color: var(--highlight); }
+.br-box ::placeholder { color: #6f6657; }
+
+// the report whole, as it will leave: text alone, wrapped
+.br-sent { font-size: 13px; color: var(--ink-dim); }
+.br-sent summary { cursor: $cursor-hand; text-decoration: underline; }
+.br-sent summary:hover { color: var(--ink); }
+.br-sent pre { margin: 6px 0 0; max-height: 150px; overflow: auto; padding: 6px 8px; font: 12px/1.35 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); background: #0a0909; border: 1px solid rgba($frame, .3); user-select: text; }
+
+.br-privacy { font-size: 12px; line-height: 1.3; color: var(--ink-dim); }
+.br-note { min-height: 1.3em; font-size: 14px; color: var(--highlight); text-align: center; }
+.br-note.bad { color: var(--danger); }
+.br-note:empty { display: none; }
+.br-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.br-actions #br-cancel { margin-right: auto; }
+
+// the last page: what was done, and the picture to add by hand
+.br-done { align-items: center; text-align: center; }
+.br-done-title { font-family: var(--font-display); font-size: 20px; color: var(--highlight); }
+.br-done p { margin: 0; max-width: 560px; font-size: 15px; line-height: 1.35; }
+.br-thanks { color: var(--ink-dim); }
+.br-done-shot { text-align: left; max-width: 560px; }
+.br-done-shot-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.br-done-shot-actions .btn { padding: 6px 12px; font-size: 14px; text-decoration: none; }
+.br-done .br-actions { align-self: stretch; justify-content: center; }
+
+// the pause menu's foot: the build's status and the way to report a bug in it, on one line
+.pb-build-line { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0 14px; }
+.pb-build-line .link { padding: 0 4px; font-size: 13px; }
+
+// touch: a finger's height for what's pressed, and fields a phone doesn't zoom into
+body.touch {
+  .br-kind { min-height: real(36px); }
+  .br-actions .btn, .br-done-shot-actions .btn { min-height: real(40px); }
+  .br-box textarea, .br-box input[type='text'] { font-size: max(15px, #{real(16px)}); }
+  .br-check input { width: real(20px); height: real(20px); }
+  .br-sent summary { padding: real(6px) 0; }
+  .pb-build-line .link { padding: real(8px) real(10px); }
+}
+
+// a narrow window: one column
+@media (max-width: 720px) {
+  .br-cols { grid-template-columns: minmax(0, 1fr); }
+}
+// a short screen (a phone held sideways): tighter, the kinds four across, the picture smaller
+@media (max-height: 520px) {
+  .br-box { padding: 12px 18px; gap: 6px; }
+  .br-box .sm-title { font-size: 20px; }
+  .br-form, .br-done { gap: 6px; }
+  .br-kinds { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .br-hint { min-height: 1.25em; }
+  .br-shot .br-shot-frame { width: 110px; height: 63px; }
+  .br-shot .br-shot-side small { min-height: 1.25em; }
+  .br-box textarea { min-height: 70px; }
+}
+// typed into on a phone: the form at the top of what the keyboard leaves (ui/aboveKeyboard.ts)
+#bug-report.typing { align-items: flex-start; top: var(--seen-top, 0px); bottom: auto; height: var(--seen, 50vh); padding-top: 6px; }
+#bug-report.typing .modal-box { max-height: calc((var(--seen, 50vh) - 12px) / var(--ui, 1)); }
+// the pause menu it was opened over is put out of sight under it (two boxes one over another read as a muddle), kept
+// as it is to come back to
+body:has(#bug-report:not(.hidden)) #pause { visibility: hidden; }

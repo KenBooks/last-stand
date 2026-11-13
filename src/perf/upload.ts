@@ -34,7 +34,8 @@ function page(): string {
   return location.pathname + (kept.length ? '?' + new URLSearchParams(kept).toString() : '');
 }
 
-function device(): Record<string, number | string | boolean> {
+/** The device as a trace's header has it (a bug report's too: ui/bugReportText.ts). */
+export function device(): Record<string, number | string | boolean> {
   const nav = navigator as Navigator & { deviceMemory?: number };
   return {
     ua: navigator.userAgent,
@@ -52,7 +53,8 @@ function device(): Record<string, number | string | boolean> {
   };
 }
 
-function settings(): Record<string, number | string | boolean> {
+/** How the game is set to draw now, as a trace's header has it (a bug report's too). */
+export function settings(): Record<string, number | string | boolean> {
   const level = qualityLevel();
   const scene = sceneSize(new THREE.Vector2());
   return {
