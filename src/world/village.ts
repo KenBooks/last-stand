@@ -43,7 +43,7 @@ import {
 import { growTree, type TreeKind, thinnedLeaves } from './ezTrees';
 import { TREE_KINDS } from './forest';
 import { leafClusterTexture } from './foliage';
-import { cullInCells, eachInstance } from './culling';
+import { cullInCells, eachInstance, gridCell } from './culling';
 import { buildFountain, type FountainLight } from './fountain';
 import {
   COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, solidAt,
@@ -2088,6 +2088,9 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
 
 // --- the palisade, the cottages ------------------------------------------------------------------------
 
+/** the squares the palisade's logs are culled by (m) */
+const PALISADE_CELL = 8;
+
 /** The palisade along its winding line: sharpened logs side by side, open at each way out's gap (the wall: walked up
  *  to and flown into). */
 function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => number): void {
@@ -2111,13 +2114,15 @@ function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => nu
     m.compose(at.set(p.x, h, p.z), q, s.set(1, 1, 1));
     tips.setMatrixAt(i, m);
   }
+  wall.add(logs, false);
   for (const mesh of [logs, tips]) {
     mesh.castShadow = mesh.receiveShadow = true;
-    scene.add(mesh);
     // (a ring round the village: by its middle, the village's, it drew before the cottages past it)
     sortByNearest(mesh);
+    // (and three culls an instanced mesh whole, by the sphere round the ring: from above on the square all 44k of its
+    // triangles were drawn outside the view, a quarter of Very low's frame; the wall has its own copy by now)
+    scene.add(...cullInCells(mesh, gridCell(PALISADE_CELL)));
   }
-  wall.add(logs, false);
 }
 
 /** A cottage where `c` says, its door the way it faces, `size` its scale: a stone footing, lime walls
