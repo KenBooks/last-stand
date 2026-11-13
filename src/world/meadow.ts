@@ -426,9 +426,11 @@ const VERTEX_BLADE = /* glsl */ `
   vec3 objectNormal = normalize(mix(face, vec3(0.0, 1.0, 0.0), mix(0.55, 0.9, tufted)) + across * side * 0.45 * (1.0 - tufted));
   vBlade = vec2(t, side);
   // spring greens, a tuft's own, some dry and gold
-  vec3 green = mix(vec3(0.088, 0.14, 0.027), vec3(0.185, 0.225, 0.043), fract(h.y * 3.7));
-  vec3 dry = vec3(0.34, 0.3, 0.11);
-  vBladeColour = mix(green, dry, smoothstep(0.72, 1.0, tuft) * 0.7 + smoothstep(0.75, 0.95, patchy) * 0.25);`;
+  // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
+  // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
+  vec3 green = mix(vec3(0.06, 0.115, 0.02), vec3(0.115, 0.165, 0.03), fract(h.y * 3.7));
+  vec3 dry = vec3(0.26, 0.21, 0.085);
+  vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.6 + smoothstep(0.8, 0.97, patchy) * 0.15);`;
 
 const FRAGMENT_COLOUR = /* glsl */ `
   float along = vBlade.x, acrossB = abs(vBlade.y);
@@ -486,10 +488,10 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.3, 1.0, smoothstep(0.0, 0.6, along));
+  vec3 bladeColour = vBladeColour * mix(0.48, 1.0, smoothstep(0.0, 0.6, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
-  bladeColour = mix(bladeColour, vec3(0.4, 0.36, 0.16), smoothstep(0.85, 1.0, along) * 0.35);
+  bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
   bladeColour *= mix(1.0, mix(0.86, 1.1, step(0.0, foldB)) * mix(0.8, 1.12, strandShade), step(1.5, uTuft));
   vec4 diffuseColor = vec4(bladeColour, opacity);`;
