@@ -9,7 +9,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, asLeaves, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -168,18 +168,18 @@ export const buildForest: BiomeBuilder = (scene) => {
     seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
   // foliage: leaf cards cut out of painted textures round darker cores; instance colours set each plant's hue
   const clusterTex = leafClusterTexture();
-  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage');
+  const canopyMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage'));
   // (a plain colour read as a bare green ball under the cards: the moss's relief alone, its colour the instance's)
   const { map: _mossColour, ...mossRelief } = pbrMaterialMaps(moss(5), [8, 4], 1.5);
   const coreMat = seeThrough(new THREE.MeshStandardMaterial({ ...mossRelief, color: 0x8a9a80, roughness: 0.95 }), 'foliage');
   // the same for single meshes, which have no instance colour: the tint is in the material
-  const archCanopy = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage');
+  const archCanopy = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage'));
   const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
   // (low, beside the hero: a hole as narrow as a prop's, or the ferns round him went wherever he stood)
-  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop');
+  const fernMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop'));
   const oneLeaf = leafTexture();
-  const litterMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 });
-  const ivyMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
+  const litterMat = asLeaves(new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 }));
+  const ivyMat = asLeaves(new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
   // moss: cushions and tufts, a tile half a metre (a grunge tinted green read as a flat painted top), and a sheen,
   // sdf-harness's substrate layer for fuzz, pale at grazing angles as moss's fronds catch the light
   const mossLayer = { sheen: 1, sheenColor: new THREE.Color(0x5a7040), sheenRoughness: 0.6, roughness: 1 };
@@ -354,7 +354,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
     // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
     for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
-    for (const mesh of [barks[k], leaves[k]]) scene.add(...cullInCells(mesh, eachInstance));
+    for (const mesh of [barks[k], leaves[k]]) scene.add(...asTree(...cullInCells(mesh, eachInstance)));
   });
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
@@ -465,7 +465,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     tuft.count = placed[kind];
     tuft.receiveShadow = true;
     tuft.name = `grass ${kind + 1}`;
-    scene.add(...cullInCells(tuft, FLOOR_CELLS));
+    scene.add(...asGrass(...cullInCells(tuft, FLOOR_CELLS)));
     asClutter(tuft);
   });
 
@@ -593,7 +593,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast, surfaces: bark.surfaces };
     breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
   });
-  for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  for (const m of asTree(sapBark, sapLeaves)) { m.castShadow = m.receiveShadow = true; scene.add(m); }
   sapBark.name = 'young trees\' bark';
   sapLeaves.name = 'young trees\' leaves';
   updaters.push(contactShadows(scene, obstacles));
@@ -904,11 +904,11 @@ const BARK_REPEATS = {
 export function rootGateMats(): GateMats {
   const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
     seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
-  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({
+  const canopyMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({
     map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048,
-  }), 'foliage');
+  }), 'foliage'));
   const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
-  const ivyMat = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
+  const ivyMat = asLeaves(new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
   const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
   for (const m of [ivyMat, hangMat]) seeThrough(m, 'prop');
   return {

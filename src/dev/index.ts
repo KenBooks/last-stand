@@ -24,8 +24,6 @@ export interface DevHooks {
   gearChanged(): void;
   /** the top view, so the free camera's start and end look from where the game's does */
   topView(): void;
-  /** the pause menu open on its Performance tab (Profile this spot, the overlay's size) */
-  openPerformance(): void;
   /** `fn` once the fight's programs are warm (at once if they are): a foe of another biome compiles nothing */
   whenFightWarm(fn: () => void): void;
 }

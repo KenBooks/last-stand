@@ -322,5 +322,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       sunDrawn = '';
     },
     drawStill,
+    /** The still shadows drawn again now, the sun's too where it's the still world's: what casts them changed with no
+     *  prop broken or rolled (the developer mode's trees taken out of what's drawn, `src/dev/trees.ts`). The village's
+     *  are drawn again by its next update. */
+    stillShadowsChanged(): void {
+      stillDrawnAt.clear();
+      stillDrawn.place = null;
+      sunDrawn = '';
+      drawStill();
+    },
   };
 }

@@ -9,7 +9,7 @@ import type { BiomeId } from '../data/biomes';
 import { ashlar, pbrMaterialMaps, rock } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
 import { mulberry, TAU } from '../util';
-import { boulderGeo, boxWithUV, setInstance, type Portal, type Updater } from './props';
+import { asLeaves, boulderGeo, boxWithUV, setInstance, type Portal, type Updater } from './props';
 import { buildGate } from './crypt';
 import { buildRootGate, rootGateMats } from './forest';
 import { fernClumpGeo, fernTexture } from './foliage';
@@ -255,7 +255,7 @@ export function buildForestWay(scene: THREE.Object3D, wall: Wall, updaters: Upda
   rocks.castShadow = rocks.receiveShadow = true;
   g.add(rocks);
   // ferns under the trees, either side of the path and round the gate
-  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop');
+  const fernMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop'));
   const ferns = new THREE.InstancedMesh(fernClumpGeo(rng), fernMat, 40);
   for (let k = 0; k < 40; k++) {
     const s = k % 2 ? 1 : -1, z = 0.4 - rng() * (WAY.forest.out + 1);

@@ -5,8 +5,10 @@ import { hurtPlayer } from '../../../src/combat/damage';
 import { cameraYaw, overFrame, viewMode, viewSettled } from '../../../src/core/renderer';
 import { HIDDEN_LAYER } from '../../../src/core/layers';
 import { cheats, time } from '../../../src/dev/index';
-import { refreshPanel, togglePanel } from '../../../src/dev/panel';
+import { panelProfile, refreshPanel, togglePanel } from '../../../src/dev/panel';
 import { freeCamOn, freeCamSpeed } from '../../../src/dev/freeCam';
+import { markedShown, type Mark } from '../../../src/dev/marked';
+import { materialsOf } from '../../../src/perf/sceneParts';
 import { touchMode } from './uiTouch';
 import { showPause, pauseTab } from '../../../src/ui/menus';
 import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
@@ -22,6 +24,50 @@ const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   if (!found) throw new Error(`dev: missing ${selector}`);
   return found;
 };
+
+/** each marked checkbox's mark and its part's key */
+const MARKED_PARTS: [Mark, string][] = [['tree', 'the trees'], ['leaves', 'the leaves'], ['grass', 'the grass']];
+
+/** Everything in the scene bearing `mark`, as the switch finds it (`src/dev/marked.ts`). */
+function bearing(mark: Mark): THREE.Object3D[] {
+  const found: THREE.Object3D[] = [];
+  G.scene.traverse((part) => {
+    if (bears(part, mark)) found.push(part);
+  });
+  return found;
+}
+
+/** Whether `part` bears `mark`: leaves by their material, the rest by their own. */
+function bears(part: THREE.Object3D, mark: Mark): boolean {
+  if (mark !== 'leaves') return Boolean(part.userData[mark]);
+  const mesh = part as THREE.Mesh;
+  return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.userData.leaves);
+}
+
+/** Counts the draws of `parts` (a mesh's hooks run as it's drawn, in the frame and the shadow maps; their own hooks
+ *  still run) until `stop`, which puts the hooks back and says the count. */
+function countDraws(parts: THREE.Object3D[]): { stop: () => number } {
+  let draws = 0;
+  const kept = parts.map((part) => [part.onBeforeRender, part.onBeforeShadow] as const);
+  parts.forEach((part, i) => {
+    const [render, shadow] = kept[i];
+    part.onBeforeRender = (...args) => {
+      draws++;
+      render.apply(part, args);
+    };
+    part.onBeforeShadow = (...args) => {
+      draws++;
+      shadow.apply(part, args);
+    };
+  });
+  const stop = (): number => {
+    parts.forEach((part, i) => {
+      [part.onBeforeRender, part.onBeforeShadow] = kept[i];
+    });
+    return draws;
+  };
+  return { stop };
+}
 
 export async function devMode(lab: Lab, options: { canary: boolean }): Promise<Report> {
   const problems: string[] = [], lines: string[] = [], moments: Pictured[] = [];
@@ -97,7 +143,70 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   check(overFrame.draw !== draw, 'World labels did nothing outside flight');
   await action('labels');
   check(overFrame.draw === draw, 'World labels did not restore their draw');
-  await chooseBiome(BIOME_IDS.find((id) => id !== G.arena.biome)!);
+  // Trees, Leaves and Grass: out of what's drawn everywhere at once, held through a biome change, no program made.
+  const programs = (): number => G.renderer.info.programs?.length ?? 0;
+  const markedCosts: string[] = [];
+  for (const [mark, key] of MARKED_PARTS) {
+    const marked = bearing(mark);
+    const box = `[data-part="${key}"]`;
+    /** what bears the mark out of what's drawn, and the checkbox saying so */
+    const allOut = (): boolean => marked.every((part) => part.layers.mask === 1 << HIDDEN_LAYER);
+    /** the screen pictured as `label`, and the draws of what bears the mark in its frame and its shadow maps */
+    const drawsOf = async (label: string): Promise<number> => {
+      const counter = countDraws(marked);
+      await lab.step(2);
+      moments.push(await lab.screen(label));
+      return counter.stop();
+    };
+    /** the checkbox clicked in the place shown: the marked draws with it and without (some with it where `seen`: the
+     *  crypt has no leaves), the programs unchanged */
+    const clickBox = async (label: string, seen: boolean): Promise<void> => {
+      const on = markedShown(mark);
+      const had = programs();
+      const place = G.arena.biome;
+      const before = await drawsOf(`dev-${mark}-${place}-${on ? 'on' : 'off'}`);
+      await click(box);
+      const after = await drawsOf(`dev-${mark}-${place}-${on ? 'off' : 'on'}`);
+      const what = `${label}: ${key}`;
+      check(markedShown(mark) === !on && allOut() === on, `${what}: the checkbox did not ${on ? 'take out' : 'put back'} all of it`);
+      check(element<HTMLInputElement>(box).checked === !on, `${what}: the checkbox did not show its state`);
+      const [drawn, hidden] = on ? [before, after] : [after, before];
+      check((drawn > 0 || !seen) && hidden === 0, `${what}: its draws did not go with the checkbox (${drawn} with it, ${hidden} without)`);
+      check(programs() === had, `${what}: the checkbox made programs (${had} to ${programs()})`);
+      markedCosts.push(`${key} in ${place} ${drawn} draws a frame with it, ${hidden} without`);
+    };
+    const startsDrawn = marked.length > 0 && markedShown(mark) && !marked.some((part) => part.layers.isEnabled(HIDDEN_LAYER));
+    check(startsDrawn, `${key}: nothing marked, or it did not start drawn (${marked.length} marked)`);
+    await clickBox('lobby', true);
+    if (options.canary) {
+      const kept = marked[0].layers.mask;
+      marked[0].layers.set(0);
+      check(!allOut(), `canary: ${key} left drawn was not detected`);
+      marked[0].layers.mask = kept;
+    }
+    const lobbyBiome = G.arena.biome;
+    await chooseBiome(BIOME_IDS.find((id) => id !== lobbyBiome)!);
+    check(!markedShown(mark) && allOut(), `a biome change put ${key} back`);
+    await clickBox('after a biome change', false);
+    await chooseBiome(lobbyBiome);
+  }
+  lines.push(`Trees, leaves, grass: ${markedCosts.join('; ')}; no program made`);
+
+  // Profile this spot: each checkbox's part timed in the panel, the pause menu left closed.
+  panelProfile.clock = window.__labClock.realNow;
+  panelProfile.nextFrame = window.__labClock.realFrame;
+  panelProfile.turns = { rounds: 1, frames: 1, settle: 1 };
+  await action('profile');
+  const profiled = (): boolean => element('[data-act=profile]').textContent === 'Profile this spot';
+  for (let i = 0; !profiled() && i < 600; i++) await realWait(20);
+  check(profiled(), 'Profile this spot did not finish');
+  const times = [...document.querySelectorAll<HTMLElement>('[data-ms]')];
+  const timed = times.filter((ms) => / ms$/.test(ms.textContent ?? ''));
+  check(times.length >= 11 && timed.length === times.length, `Profile this spot timed ${timed.length} of ${times.length} parts`);
+  check(!G.menuOpen, 'Profile this spot opened the pause menu');
+  check(parts.every((part) => part.checked && !part.disabled), 'Profile this spot left a part out or a checkbox disabled');
+  moments.push(await lab.screen('dev-profiled', [], '#dev-panel .dv-parts'));
+  lines.push(`Profile this spot: ${timed.length} parts timed in the panel, pause menu closed`);
 
   // The checkbox must apply to +1 and elite batches even with no run at all.
   const spawn = async (count: number) => {

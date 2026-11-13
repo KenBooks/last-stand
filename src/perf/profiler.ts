@@ -72,6 +72,8 @@ export interface ProfileProgress {
 /** What a profile is asked: its turns, a canary (the frame drawn twice, as a part), and where it says how far it is. */
 export interface ProfileOptions {
   turns?: ProfileTurns;
+  /** the parts timed, in place of the frame's and the lit shading's (the developer panel's checkboxes) */
+  parts?: ScenePart[];
   /** a part that draws the frame twice: it must read about twice the frame */
   canary?: boolean;
   /** told after each frame how far the profile is */
@@ -227,7 +229,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     return waitForGpu().then(once);
   };
   // (the lit shading's own parts after the frame's: each changes the lit pipelines, made once, `shadingParts.ts`)
-  const all = [...frameParts(), ...shadingParts()];
+  const all = options.parts ?? [...frameParts(), ...shadingParts()];
   const parts = all.filter((part) => !part.untimed);
   const untimed = all.filter((part) => part.untimed).map((part) => ({ name: part.name, why: part.untimed! }));
   if (options.canary) parts.push({ name: CANARY_PART, change: (on) => { twice = on; } });

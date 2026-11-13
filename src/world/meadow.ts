@@ -13,7 +13,7 @@ import { WEBGPU } from '../core/webgpu';
 import { bladeNodes, swardColorNode } from './meadowNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
-import type { Updater } from './props';
+import { asGrass, type Updater } from './props';
 import { hiddenByHallDoor } from './hallPortal';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
@@ -613,6 +613,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       bladeMaterial(u, ring.cell > RINGS[0].cell, k));
     ringMeshes.push(mesh);
     mesh.name = `meadow grass ${k + 1}`;
+    asGrass(mesh);
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
