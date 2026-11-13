@@ -908,7 +908,7 @@ export const COMMANDS = {
             frame: Boolean(frame),
             hero: Boolean(hero),
           };
-          const command = { biome, view, level, rounds, ...switches };
+          const command = { biome, view, level, rounds, rarity: options.rarity, ...switches };
           reports.push(await side.command('sceneCost', command));
         }
       }

@@ -161,6 +161,39 @@ export function setClutterShare(share: number): void {
   thin();
 }
 
+/** the share of a canopy's leaf cards drawn (`setLeafShare`) */
+let leafShare = 1;
+/** the canopies whose cards a quality level thins, and each's indices as built */
+const leafCards = new Map<THREE.BufferGeometry, number>();
+/** the indices a leaf card takes (two triangles) */
+const CARD_INDICES = 6;
+
+/** A canopy's leaf cards (`canopyGeo` in world/foliage.ts, a card of each blob in turn) thinned by a quality level:
+ *  the first of them drawn, every blob alike. */
+export function thinLeaves(cards: THREE.BufferGeometry): void {
+  leafCards.set(cards, cards.index ? cards.index.count : cards.attributes.position.count);
+  drawLeaves(cards);
+}
+
+/** `cards` drawn as far as the share of them. */
+function drawLeaves(cards: THREE.BufferGeometry): void {
+  const whole = leafCards.get(cards)!;
+  const shown = Math.max(1, Math.round((whole / CARD_INDICES) * leafShare)) * CARD_INDICES;
+  cards.setDrawRange(0, leafShare >= 1 ? Infinity : shown);
+}
+
+/**
+ * The share of the thicket's leaf cards drawn (the quality level's: Very low's half), live: a draw range alone, on both
+ * renderers. Each is cut out over what's behind it and lit, and they overlap: at a phone's pixels the thicket's leaves
+ * were 10.3 ms of the forest's 39 ms scene pass at Very low, a quarter of it (`lab scenecost --level verylow --screen
+ * 832x384@3.75 --each`, an AMD integrated GPU).
+ */
+export function setLeafShare(share: number): void {
+  if (share === leafShare) return;
+  leafShare = share;
+  for (const cards of leafCards.keys()) drawLeaves(cards);
+}
+
 /** `attribute` sent to the GPU as far as `length` floats into it. */
 function sendUpTo(attribute: THREE.BufferAttribute, length: number): void {
   attribute.clearUpdateRanges();
