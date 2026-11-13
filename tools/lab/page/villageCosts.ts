@@ -48,6 +48,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   sightBlacksOut: 15,
   portalReturn: 11,
   grassOnLow: 4,
+  grassSteadyInWind: 4,
   lampsOnLow: 4,
   bloomOnLow: 11,
   shadowsOnMove: 10,

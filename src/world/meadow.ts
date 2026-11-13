@@ -322,6 +322,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform float uStrandsBy;
   uniform float uTuft;
   uniform float uTime;
+  uniform float uShadowSwayed;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
@@ -434,7 +435,9 @@ const VERTEX_BLADE = /* glsl */ `
   vec2 windWay = vec2(downwind.x * cos(veer) - downwind.y * sin(veer), downwind.x * sin(veer) + downwind.y * cos(veer));
   float gust = noise2(root * 0.11 - downwind * uTime * 0.55) * 0.65 + noise2(root * 0.37 - downwind * uTime * 1.1) * 0.35;
   float blowing = smoothstep(0.42, 0.78, gust);
-  float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing);
+  // (a tuft's card barely flutters: each on a beat of its own, a card's bright blades and the dark between them
+  // changed places a pixel at a time about once a second, a quarter of the grass's light swinging as he stood still)
+  float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing) * mix(1.0, 0.25, tufted);
   // (a tuft's card sways mostly in its own plane: pushed over across it, a card's face turned up to the camera and
   // away as each gust passed, a patch's light a third brighter and darker within a second, from play "very bright
   // becomes very dark and back")
@@ -720,11 +723,31 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERTEX_HEAD}`)
       .replace('#include <beginnormal_vertex>', VERTEX_BLADE)
-      .replace('#include <begin_vertex>', 'vec3 transformed = bladePos;');
+      .replace('#include <begin_vertex>', 'vec3 transformed = bladePos;')
+      // (the sun's shadow is taken where a blade stands unblown: taken where the wind had pushed it, a tuft at a
+      // shadow's edge, and under the trees' leaves every tuft is, went from lit to shaded and back as it swayed,
+      // from play "grass shading flipping between dark/bright ... happens in idle (from wind)")
+      .replace('#include <shadowmap_vertex>', `
+        #ifdef USE_SHADOWMAP
+          vec4 blownWorld = worldPosition;
+          worldPosition = modelMatrix * vec4(bladePos - wind * (1.0 - uShadowSwayed), 1.0);
+        #endif
+        #include <shadowmap_vertex>
+        #ifdef USE_SHADOWMAP
+          worldPosition = blownWorld;
+        #endif`);
+    shader.uniforms.uShadowSwayed = shadowSwayed;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nuniform float uTuft;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
+      // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,
+      // under the trees' dappled shade one tuft stood three times as bright as the next, and swaying across each other
+      // in the wind they read as flipping, from play "some grass is very dark and some is very bright, if you compare
+      // with reference, there is no such thing there"; `lab village --only grassSteadyInWind`)
+      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+        ' directLight.color *= shadowSeen;',
+        ` shadowSeen = mix( ${GRASS_SUN_IN_SHADOW.toFixed(2)} * step( 1.5, uTuft ), 1.0, shadowSeen ); directLight.color *= shadowSeen;`))
       .replace('#include <normal_fragment_begin>',
         THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
           // (and the lit side is the one turned up, whichever way the card is wound: a tuft's cards were lit on one
@@ -781,6 +804,17 @@ function throughBox(o: GrassOccluder, ex: number, ey: number, ez: number, px: nu
 
 /** how near an occluder's box the eye is taken to be within it (m): the boxes stand a hand inside their walls */
 const EYE_WITHIN = 0.5;
+
+/** the share of the sun a tuft keeps in the sun's shadow */
+const GRASS_SUN_IN_SHADOW = 0.5;
+
+/** 1 while a harness has a blade take the sun's shadow where the wind pushed it, as it did; every ring's */
+const shadowSwayed = { value: 0 };
+
+/** For a harness (tools/lab): the grass's shadow taken where the wind has pushed each blade, as it was. */
+export function holdGrassShadowSwayed(held: boolean): void {
+  shadowSwayed.value = held ? 1 : 0;
+}
 
 /** whether a harness has an occluder hide what's past it from an eye within it too, as it did */
 let eyeWithinHeld = false;

@@ -186,6 +186,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     portalReturn: () => portalReturn(lab, options.canary),
     // (loaded as it runs: a commit an A/B compares that has no grass spread never loads it)
     grassOnLow: async () => (await import('./villageGrassLow')).grassOnLow(lab, options.canary),
+    grassSteadyInWind: async () => (await import('./villageGrassWind')).grassSteadyInWind(lab, options.canary),
     lampsOnLow: async () => (await import('./villageLampsLow')).lampsOnLow(lab, options.canary),
     bloomOnLow: async () => (await import('./villageBloomLow')).bloomOnLow(lab, options.canary),
     shadowsOnMove: async () => (await import('./villageShadowsOnMove')).shadowsOnMove(lab, options.canary),
