@@ -329,6 +329,9 @@ const VERTEX_HEAD = /* glsl */ `
   varying vec2 vStrands;
   varying vec2 vGrowing;
   varying float vTufted;
+  varying float vDrop;
+  uniform float uViewHigh;
+  uniform float uDropByPixel;
   uvec2 pcg2d(uvec2 v) {
     v = v * 1664525u + 1013904223u;
     v.x += v.y * 1664525u; v.y += v.x * 1664525u;
@@ -422,6 +425,11 @@ const VERTEX_BLADE = /* glsl */ `
   float w = width * (strands > 1.5 || tufted > 0.5 ? 1.0 : 1.0 - pow(t, 2.5));
   vStrands = vec2(strands, h.x);
   vTufted = tufted;
+  // (a pixel's width across the card where the tuft is rooted, the same at its every corner and from frame to frame:
+  // which of its blades are left out far off goes by this. By each pixel's own measure, which moves a hair as the
+  // wind does, blades came and went between frames, from play "grass is flickering now, I just stand idle")
+  float pixelWide = length(cameraPosition - vec3(root.x, 0.0, root.y)) * 2.0 / (projectionMatrix[1][1] * uViewHigh);
+  vDrop = mix(0.75 * pixelWide / max(width, 1e-4), 1e3, uDropByPixel);
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
   // (a tuft's card bent along its middle, by a share of its own, opening a little wider at its top)
   local += lean * ((1.0 - abs(side)) * w * (fract(hk.z * 3.9) - 0.5) * 0.9 * tufted * (1.0 + 0.6 * t));
@@ -500,7 +508,8 @@ const FRAGMENT_COLOUR = /* glsl */ `
         // (a blade thinner than a pixel is drawn a pixel wide, and as many fewer of them: every one widened, a far
         // tuft was near solid, all bright tips and straw, where the same tuft close to shows the dark between its
         // blades, from play "grass shading moves on approach, very bright becomes very dark and back")
-        if (thin < pixel && fract(r3 * 9.71 + r1 * 3.3) > thin / pixel) continue;
+        float dropPixel = vDrop > 500.0 ? pixel : vDrop * units;
+        if (thin < dropPixel && fract(r3 * 9.71 + r1 * 3.3) > thin / dropPixel) continue;
         float halfWide = max(thin, pixel);
         float off = (u - middle) / halfWide;
         if (abs(off) < abs(nearest)) {
@@ -737,8 +746,10 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
           worldPosition = blownWorld;
         #endif`);
     shader.uniforms.uWindWild = windWild;
+    shader.uniforms.uViewHigh = viewHigh;
+    shader.uniforms.uDropByPixel = dropByPixel;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nuniform float uTuft;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nuniform float uTuft;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,
@@ -816,6 +827,16 @@ const EYE_WITHIN = 0.5;
 const WIND_WAS = 3;
 /** the share of the sun a tuft keeps in the sun's shadow */
 const GRASS_SUN_IN_SHADOW = 0.6;
+
+/** the height of what's drawn into (px), every ring's, set as a ring is drawn */
+const viewHigh = { value: 1080 };
+/** 1 while a harness has a far tuft's blades left out by each pixel's own width, as they were */
+const dropByPixel = { value: 0 };
+
+/** For a harness (tools/lab): a far tuft's blades left out by each pixel's own measure, as they were. */
+export function holdGrassDropByPixel(held: boolean): void {
+  dropByPixel.value = held ? 1 : 0;
+}
 
 /** how many times as hard the wind pushes the grass while a harness has it as it was (1 as it is); every ring's */
 const windWild = { value: 1 };
@@ -933,7 +954,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
-    mesh.onBeforeRender = (_renderer, _scene, camera) => {
+    mesh.onBeforeRender = (renderer, _scene, camera) => {
+      viewHigh.value = renderer.getRenderTarget()?.height ?? renderer.domElement.height;
       const geo = mesh.geometry as THREE.InstancedBufferGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
       // (from above, near the ground: the first ring's blades in the far ring's tiles; uniforms alone)

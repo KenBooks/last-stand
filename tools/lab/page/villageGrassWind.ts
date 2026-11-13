@@ -40,6 +40,10 @@ const MOST_FLIPPING = 0.08;
 const MOST_APART = 3.2;
 /** the most the grass's light may swing as a whole in the frames read */
 const MOST_WHOLE = 0.08;
+/** the frames read one after another for the flicker, and the most of the grass's light that may change from one
+ *  frame to the next */
+const FLICKER_FRAMES = 8;
+const MOST_FLICKER = 0.05;
 
 /** The light of each cell of `canvas`, row by row. */
 function cellsOf(canvas: Canvas): Float32Array {
@@ -78,8 +82,38 @@ function centile(values: number[], share: number): number {
 /** The wind pushing the grass as hard as it did (a commit from before the hold has none: an A/B's other side loads
  *  this module too). */
 function holdWindWild(held: boolean): void {
-  const hold = (meadow as { holdGrassWindWild?: (held: boolean) => void }).holdGrassWindWild;
-  hold?.(held);
+  const holds = meadow as { holdGrassWindWild?: (held: boolean) => void; holdGrassDropByPixel?: (held: boolean) => void };
+  holds.holdGrassWindWild?.(held);
+  holds.holdGrassDropByPixel?.(held);
+}
+
+/** How much of the grass's light changes from one frame to the next, pixel by pixel (every other one), over
+ *  `FLICKER_FRAMES` frames one after another: the mean change in the grass's cells as a share of their light. A
+ *  blade that comes and goes between frames shows here and not in a cell's light, which hardly moves. */
+async function flickerOf(lab: Lab, grass: number[]): Promise<number> {
+  let last = drawFrame(lab);
+  const across = Math.floor(last.width / CELL);
+  let changed = 0;
+  let light = 0;
+  for (let frame = 0; frame < FLICKER_FRAMES; frame++) {
+    await lab.step(1);
+    const next = drawFrame(lab);
+    for (const cell of grass) {
+      const left = (cell % across) * CELL;
+      const bottom = Math.floor(cell / across) * CELL;
+      for (let y = bottom; y < bottom + CELL; y += 2) {
+        for (let x = left; x < left + CELL; x += 2) {
+          const at = (y * last.width + x) * 4;
+          const was = 0.2126 * last.pixels[at] + 0.7152 * last.pixels[at + 1] + 0.0722 * last.pixels[at + 2];
+          const is = 0.2126 * next.pixels[at] + 0.7152 * next.pixels[at + 1] + 0.0722 * next.pixels[at + 2];
+          changed += Math.abs(is - was);
+          light += is;
+        }
+      }
+    }
+    last = next;
+  }
+  return changed / Math.max(light, 1e-6);
 }
 
 /** One stand's reading: its line, its problems, and whether its grass flips past the limit. */
@@ -125,19 +159,26 @@ async function readStand(lab: Lab, stand: (typeof STANDS)[number], pictured: boo
   const share = swings.filter((swing) => swing > FLIP).length / grass.length;
   // (all of it together: a whole patch going pale and back, as a fire's light on it does)
   const whole = swingOf(frames.map((frame) => grass.reduce((sum, cell) => sum + frame[cell], 0) / grass.length));
+  // (against the same cells with the blades hidden: the grade's film grain changes every pixel every frame)
+  showBlades(false);
+  const grain = await flickerOf(lab, grass);
+  showBlades(true);
+  const flicker = Math.max(0, await flickerOf(lab, grass) - grain);
   const first = grass.map((cell) => frames[0][cell]);
   const apart = centile(first, 0.9) / Math.max(centile(first, 0.1), 1e-4);
   const line = `grass in the wind ${stand.name}, he stood still: ${(share * 100).toFixed(1)}% of its ${grass.length} `
     + `cells swing over ${FLIP * 100}% of their light in 3 s (at most ${MOST_FLIPPING * 100}%), the median cell's `
     + `${(centile(swings, 0.5) * 100).toFixed(0)}%; all of it together ${(whole * 100).toFixed(1)}% (at most `
     + `${MOST_WHOLE * 100}%); in one frame its bright cells ${apart.toFixed(1)} times its dark ones `
-    + `(at most ${MOST_APART})`;
+    + `(at most ${MOST_APART}); from one frame to the next ${(flicker * 100).toFixed(1)}% of its light changes over the grain's ${(grain * 100).toFixed(1)}% `
+    + `(at most ${MOST_FLICKER * 100}%)`;
   const problems: string[] = [];
   const said = `grassSteadyInWind: ${stand.name}`;
   if (share > MOST_FLIPPING) problems.push(`${said} ${(share * 100).toFixed(1)}% of the grass flips in the wind`);
   if (whole > MOST_WHOLE) problems.push(`${said} the grass's light swings ${(whole * 100).toFixed(1)}% as a whole`);
   if (apart > MOST_APART) problems.push(`${said} the grass's bright cells are ${apart.toFixed(1)} times its dark ones`);
-  return { line, problems, flips: share > MOST_FLIPPING, moments };
+  if (flicker > MOST_FLICKER) problems.push(`${said} the grass flickers: ${(flicker * 100).toFixed(1)}% a frame`);
+  return { line, problems, flips: share > MOST_FLIPPING || flicker > MOST_FLICKER, moments };
 }
 
 /** The grass's light over three seconds of wind at each stand, he stood still. */
