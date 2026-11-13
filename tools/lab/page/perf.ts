@@ -728,10 +728,18 @@ async function measuring(lab: Lab, options: PerfOptions): Promise<() => Promise<
 export async function perf(lab: Lab, options: PerfOptions): Promise<Report> {
   if (!timeable()) throw new Error('lab: perf: this game\'s perf overlay can\'t be timed by the browser\'s clock');
   const backToQuality = atQuality(options);
+  let failed = false;
   try {
     return await perfAtQuality(lab, options);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await backToQuality(lab);
+    // (the measure's own error said, not the set-up's after it: `--parts` over the shoulder threw, and the hero's
+    // set-up again, which found the view it had left, was all the run said)
+    await backToQuality(lab).catch((error: unknown) => {
+      if (!failed) throw error;
+    });
   }
 }
 
@@ -784,7 +792,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     problems.push(...read.problems);
     if (options.parts) {
       const { partCosts } = await import('./perfParts');
-      if (options.village) await inVillage(lab, options.at ?? VILLAGE_SPOT, options.facing * Math.PI / 180);
+      // (in the village already, by the set-up: left for it again, Esc over the shoulder put the view back on top)
       const parts = await partCosts(lab, true);
       lines.push(...parts.lines);
       problems.push(...parts.problems);
