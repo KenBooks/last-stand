@@ -8,7 +8,7 @@ import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type Vil
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { VILLAGE } from './core/beta';
-import { hideBetaNotice, showBetaNotice } from './ui/beta';
+import { betaNoticeWhile, hideBetaNotice, oweBetaNotice } from './ui/beta';
 import { InputDelivery } from './core/inputDelivery';
 import { keyDeliveryDelay } from './core/keyDelivery';
 import { updateMusic, type MusicWanted } from './core/music';
@@ -381,7 +381,7 @@ async function boot() {
   updateCamera(0, G.player.pos, G.player.model.height, floorUnder(G.player));
   loadingDone(() => {
     revealed = true;
-    showBetaNotice();
+    oweBetaNotice();
     recorder.revealed(!navigator.serviceWorker?.controller);
     if (WEBGPU) pipelinesAtOnceFromNow();
     setTimeout(() => checkPrograms(renderer));
@@ -391,6 +391,8 @@ async function boot() {
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
     const room = invitedRoom();
     if (room) joinInvited(room);
+    // (after the invite's dialog: the beta's notice waits a screen out)
+    betaNoticeWhile(villageClear());
     // back from Google's sign-in (loot/cloud.ts): the save slots screen, on to choosing the cloud save
     void googleLanding().then((landing) => {
       if (!landing || G.mode !== 'menu') return;
@@ -498,6 +500,10 @@ function spawnDummies() {
 const villageActive = (): boolean =>
   revealed && G.mode === 'menu' && !G.menuOpen && !heroSelectOpen() && !savesOpen() && !villageMapOpen()
   && G.arena.place === 'village';
+/** Whether the village is all there is to see: nothing opened over it, a panel, a card or a dialog either, and no
+ *  room's bar at its top (where the beta's notice stands: over a room of four's bar it hid the room's code). */
+const villageClear = (): boolean =>
+  villageActive() && !hallOpen() && !panelsOpen() && !villageCardOf() && !dialogOpen() && !isCoop();
 
 /** A village object used (game/village.ts): what it opens. */
 function useObject(o: VillageObject): void {
@@ -947,6 +953,7 @@ function update(dt: number): void {
     const villageOut = villageActive() && !panelsOpen() && !villageCardOf();
     updateTrainingTracker(dt, villageOut);
     updateVillageMinimap(dt, villageOut);
+    betaNoticeWhile(villageClear());
     updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
     // (its own stage: in the player's, a report from the hall of heroes couldn't tell the lamps and the dais's heroes
     // from the hero's own pose)

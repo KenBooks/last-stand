@@ -3,16 +3,20 @@
 // without it: the pause menu's Beta tab says Off, its switch offers Reload, and Reload loads the page again with
 // `?village=1`, in the village, the choice kept in its cookie; there a notice says so as the game opens; the next
 // visit, with no parameter, opens the village too; the notice's Back to the old lobby loads the lobby without it, kept
-// likewise. Then co-op: a room is in its host's lobby, so the command's own page opens one and the visitor, in the
-// other lobby, must be refused, told which lobby the room is in and offered the switch, whose click loads it again in
-// the room's lobby as an invite to that room, which it then joins. `--canary` plants a fault for each part: the notice
-// put away before it's read, the cookie lost before the next visit, the lobby the room refused it for forgotten.
+// likewise; left alone the notice goes by itself, and pointed at it stays. Then co-op: a room is in its host's
+// lobby, so the command's own page opens one and the visitor, in the other lobby, must be refused, told which lobby
+// the room is in and offered the switch, whose click loads it again in the room's lobby as an invite to that room,
+// which it then joins. `--canary` plants a fault for each part: the notice kept by the pointer past its time, put
+// away before it's read, the cookie lost before the next visit, the lobby the room refused it for forgotten.
 import { labError } from './errors.mjs';
 import { callPage, DEFAULT_JITTER, DEFAULT_PING, JOIN_FRAMES, judgeRoom, Pair, PARTY_TAGS } from './coop.mjs';
 import { bootAddress, LAB_BOOT } from './side.mjs';
 
 /** how long a click is given to start the page's load (ms) */
 const LOAD_STARTS_MS = 15000;
+/** how long the notice is given to go by itself (ms; the game's is 20 s, src/ui/beta.ts), and how often it's read */
+const NOTICE_GOES_MS = 26000;
+const NOTICE_READ_MS = 500;
 /** the visitor's errors, as a partner's are said */
 const PREFIX = 'partner: ';
 /** what the Beta tab and the dialog say, by whether the village is meant */
@@ -81,15 +85,16 @@ class Visitor {
   }
 
   /** The page's state read and held to `village` (the lobby, the game's own reading, the cookie if `kept`) and to the
-   *  notice shown with the village alone; `when` says the step in the lines. Returns the state. */
-  async stands(village, when, kept = true) {
+   *  notice shown with the village alone (`noticed`: or not, under a screen); `when` says the step in the lines.
+   *  Returns the state. */
+  async stands(village, when, kept = true, noticed = village) {
     const state = await callBeta(this.page, 'betaState');
     const notice = state.notice ? 'the notice shown' : 'no notice';
     this.lines.push(`${when}: the ${state.lobby} lobby, cookie ${state.cookie ?? 'none'}, ${notice}`);
     this.expect(state.lobby === LOBBIES[village], `${when}: the page loaded the ${state.lobby} lobby`);
     this.expect(state.village === village, `${when}: the game reads the village ${state.village ? 'on' : 'off'}`);
     if (kept) this.expect(state.cookie === (village ? '1' : '0'), `${when}: the cookie keeps ${state.cookie}`);
-    this.expect(state.notice === village, `${when}: ${notice}`);
+    this.expect(state.notice === noticed, `${when}: ${notice}`);
     this.problems.push(...state.noticeProblems.map((problem) => `${when}: ${problem}`));
     return state;
   }
@@ -125,7 +130,49 @@ async function optIn(visitor) {
   visitor.lines.push(`Reload loaded the page with village=${asked}`);
   visitor.expect(asked === '1', `Reload loaded ${address}, without village=1`);
   await visitor.stands(true, 'after Reload');
+  await screenPutsAway(visitor);
   await visitor.tabStands(true, true, 'in the village');
+}
+
+/** The village's frames run under the notice, then a screen opened over it: the notice must outlast the village's
+ *  own frames and go with the screen. */
+async function screenPutsAway(visitor) {
+  await visitor.side.installLab(visitor.page);
+  const { alone, under } = await callBeta(visitor.page, 'betaScreenOver');
+  const stayed = alone ? 'stays' : 'is gone';
+  const went = under ? 'still shown' : 'put away';
+  visitor.lines.push(`the notice through the village's frames ${stayed}; the inventory opened over it: ${went}`);
+  visitor.expect(alone, 'the notice is gone after frames of the village with nothing over it');
+  visitor.expect(!under, 'the notice is still shown with the inventory open over the village');
+}
+
+/** Whether the notice is gone from the page within its time, by the browser's own clock (its timer's). */
+async function noticeGone(visitor) {
+  const until = Date.now() + NOTICE_GOES_MS;
+  while (Date.now() < until) {
+    const state = await callBeta(visitor.page, 'betaState');
+    if (!state.notice) return true;
+    await new Promise((resolve) => setTimeout(resolve, NOTICE_READ_MS));
+  }
+  return false;
+}
+
+/** The notice left alone, the mouse away from it: gone by itself within its time. */
+async function noticeGoes(visitor) {
+  await visitor.page.mouse.move(2, visitor.page.viewportSize().height - 2);
+  const gone = await noticeGone(visitor);
+  visitor.lines.push(`the notice left alone: ${gone ? 'gone by itself' : 'still shown'}`);
+  visitor.expect(gone, `the notice left alone is still shown after ${NOTICE_GOES_MS / 1000} s`);
+}
+
+/** The notice pointed at, which keeps it: it must be found still shown past its time. */
+async function noticeHeldCanary(visitor) {
+  // (a visit of its own: the screen opened over the last one's put its notice away)
+  await visitor.visit();
+  const at = await callBeta(visitor.page, 'betaPoint', { selector: '#btn-beta-close' });
+  if (!at) throw labError('beta: the Close of the notice is not shown where a mouse finds it');
+  await visitor.page.mouse.move(at.x, at.y);
+  canaryCaught(visitor, !(await noticeGone(visitor)), 'notice kept by the pointer');
 }
 
 /** The notice put away before it's read: the page in the village must be found without it. */
@@ -141,6 +188,9 @@ async function nextVisit(visitor, canary) {
   if (!canary) {
     await visitor.visit();
     await visitor.stands(true, 'the next visit, no parameter');
+    await noticeGoes(visitor);
+    await visitor.visit();
+    await visitor.stands(true, 'the visit after it');
     return;
   }
   await callBeta(visitor.page, 'betaLoseCookie');
@@ -197,7 +247,8 @@ async function switchAndJoin(visitor, host, link, code, hostVillage) {
   visitor.lines.push(`the switch loaded the page with village=${asked.village}, as an invite to ${room}`);
   visitor.expect(asked.village === (hostVillage ? '1' : '0'), `the switch loaded ${address}: not the room's lobby`);
   visitor.expect(asked.room === code, `the switch loaded ${address}: not as an invite to room ${code}`);
-  await visitor.stands(hostVillage, 'after the switch');
+  // (the invite's dialog is over the village as it opens: its notice waits it out)
+  await visitor.stands(hostVillage, 'after the switch, under the dialog', true, false);
   const invited = await callBeta(visitor.page, 'betaInvited');
   const field = invited.code === code ? 'the code of the room' : 'another code or none';
   visitor.lines.push(`the invite: the dialog ${invited.dialog ? 'shown' : 'not shown'}, ${field} in its field`);
@@ -224,6 +275,7 @@ export async function runBeta(side, options) {
   const visitor = new Visitor(side, page);
   try {
     await optIn(visitor);
+    if (canary) await noticeHeldCanary(visitor);
     if (canary) await noticeCanary(visitor);
     await nextVisit(visitor, canary);
     if (!canary) await optOut(visitor);

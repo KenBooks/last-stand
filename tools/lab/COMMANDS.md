@@ -351,18 +351,22 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   own (`node/beta.mjs`, `page/beta.ts`; `Side.bootBy` waits a load out as a boot's): the Beta tab says Off now
   and offers nothing; its switch clicked On, it offers "Reload to open the village"; Reload loads the page with
   `village=1`, in the village (the page's own script's lobby, the game's `VILLAGE` and the cookie agreeing), the
-  notice shown inside the window with both its buttons found by the mouse, the tab saying On now; the next visit,
-  no parameter on the address, opens the village by the cookie; the notice's Back to the old lobby loads
+  notice shown inside the window with both its buttons found by the mouse, still shown after frames of the village
+  alone and put away by the inventory opened over it (any screen's way, `villageClear` in `main.ts`), the tab
+  saying On now; the next visit, no parameter on the address, opens the village by the cookie, and its notice,
+  left alone with the mouse away, must be gone by itself within 26 s of the browser's clock (the game's 20 s);
+  the page loaded once more, the notice's Back to the old lobby loads
   `village=0`, no notice there, and the visit after it stays. Then the visitor, in the lobby the host isn't in,
   asks to join the host's room over the lab's link (`coop`'s, `--ping`, `--jitter`): it must be refused, told
   which lobby the room is in, and offered the switch in its dialog; the switch's click must load the page in the
-  room's lobby with `room=` the room's code, the dialog open on that code as the page loads (an invite's), and
-  the room joined after, each game with the other in a slot of its own. `--panels` boots the host without the
-  village, the visitor crossing to the village before it asks. `--canary` plants three faults, each of which
-  must be caught, and stops before the switch: the notice put away before it's read, the cookie lost before the
+  room's lobby with `room=` the room's code, the dialog open on that code as the page loads (an invite's, the
+  village's notice waiting it out: none shown), and the room joined after, each game with the other in a slot of
+  its own. `--panels` boots the host without the village, the visitor crossing to the village before it asks.
+  `--canary` plants four faults, each of which must be caught, and stops before the switch: the notice kept by
+  the pointer on it past its time (still shown), the notice put away before it's read, the cookie lost before the
   next visit (found in the lobby without the village), and the lobby the room refused the game for forgotten
-  (no switch offered). About 80 s: the visitor's page loads six times. Not measured: the notice going by itself
-  after 20 s, and a join through the real relay (the invite's own join waits for a name tag here).
+  (no switch offered). About 100 s: the visitor's page loads seven times. Not measured: a join through the real
+  relay (the invite's own join waits for a name tag here).
 - `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
   second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
   or charge under way), from full energy. In the lobby as it shows, and shown again after practice, casting is free:

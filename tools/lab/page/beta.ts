@@ -5,7 +5,7 @@
 // into the page wouldn't outlive.
 import { VILLAGE } from '../../../src/core/beta';
 import { readCookie } from '../../../src/core/cookies';
-import { pauseTab, showPause } from '../../../src/ui/menus';
+import { openPanels, pauseTab, showPause } from '../../../src/ui/menus';
 import { openCoop, renderCoop } from '../../../src/ui/coop';
 import { session } from '../../../src/net/session';
 import { pauseShown } from './uiPause';
@@ -94,6 +94,30 @@ export function betaTab(): BetaTab {
     offer: element('#beta-apply span')?.textContent ?? '',
     problems: pauseShown('beta').problems,
   };
+}
+
+/** The notice through frames of the village alone, then through frames with a screen opened over it. */
+export interface BetaScreenOver {
+  /** shown still after the frames with nothing over the village */
+  alone: boolean;
+  /** shown still after the frames with the inventory open */
+  under: boolean;
+}
+
+/** how many frames each is given */
+const SCREEN_FRAMES = 3;
+
+/** The village's frames run with nothing over it, then with the inventory opened (and put away again): the notice
+ *  must outlast the first and go with the second, as with any screen over the village (`villageClear`, main.ts). */
+export async function betaScreenOver(lab: Lab): Promise<BetaScreenOver> {
+  const shown = (): boolean => !element('#beta-notice')!.classList.contains('hidden');
+  await lab.step(SCREEN_FRAMES);
+  const alone = shown();
+  openPanels('inventory');
+  await lab.step(SCREEN_FRAMES);
+  const under = shown();
+  openPanels(null);
+  return { alone, under };
 }
 
 /** The canary's: the notice put away before it's read, which must be found missing. */

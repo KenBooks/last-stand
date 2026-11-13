@@ -112,6 +112,22 @@ async function checkServer(): Promise<void> {
   renderCoop();
 }
 
+/** an invite's join asked without the dialog (a name tag was kept) and not yet answered: refused, the dialog opens
+ *  to say why, with the way on (another name tag, the room's lobby) */
+let invitedJoin = false;
+
+/** An invite's own join answered: joined, nothing to say; refused (the name tag taken, the room in the other lobby,
+ *  gone or full), the dialog opened on it, where it went unsaid before: the game just stood in its lobby. Returns
+ *  whether it opened the dialog (which renders it). */
+function invitedRefused(): boolean {
+  // (off: still readying, the join not yet asked)
+  if (!invitedJoin || session.status === 'joining' || session.status === 'off') return false;
+  invitedJoin = false;
+  if (session.status !== 'failed' || coopOpen()) return false;
+  openCoop(true);
+  return true;
+}
+
 /**
  * An invite link: straight into the friend's room as the name tag kept from last time, or with none kept, the room
  * dialog asking for one, the room's code filled in.
@@ -119,6 +135,7 @@ async function checkServer(): Promise<void> {
 export function joinInvited(code: string): void {
   const tag = savedTag();
   if (!tagProblem(tag)) {
+    invitedJoin = true;
     join(code, tag);
     return;
   }
@@ -169,6 +186,7 @@ export function openCoop(open: boolean): void {
 
 /** The room dialog and the lobby's room bar, for the session as it stands. */
 export function renderCoop(): void {
+  if (invitedRefused()) return;
   renderLobbyOptions();
   renderBar();
   const body = $('#coop .coop-body');

@@ -172,6 +172,13 @@ export const inviteLink = (): string => {
   return u.toString();
 };
 
+/** This page's address without an invite's room. */
+function addressWithoutRoom(): string {
+  const address = new URL(location.href);
+  address.searchParams.delete('room');
+  return `${address.pathname}${address.search}`;
+}
+
 /** A room code from the address bar (an invite link), if any. */
 export function invitedRoom(): string | null {
   const c = new URLSearchParams(location.search).get('room');
@@ -281,8 +288,9 @@ export function leaveRoom(): void {
   setHostOffset(null);
   // (the panels' lobby back on its own battleground: a guest stood on the host's)
   if (!VILLAGE) showBiomeSetting();
-  // an invite link in the address bar would join again on reload
-  if (invitedRoom()) history.replaceState(null, '', location.pathname);
+  // an invite link in the address bar would join again on reload (the room alone taken off it: the rest is how
+  // this game was opened, the relay tried by `?server=` among it, which the dialog's check of the server reads)
+  if (invitedRoom()) history.replaceState(null, '', addressWithoutRoom());
   hooks?.changed();
 }
 
