@@ -90,6 +90,8 @@
 #{$panels} #opt-biome button { font-size: 15px; padding: 6px 14px; }
 #{$panels} #opt-biome .dice { display: flex; align-items: center; padding: 4px 10px; }
 #{$panels} #opt-biome .dice svg { width: 20px; height: 20px; }
+/* (on Random, a battleground the starting wave isn't unlocked in: out of the dice's roll) */
+#opt-biome button.unrolled { opacity: .4; text-decoration: line-through; }
 #opt-wave button { font-size: 18px; line-height: 1; padding: 5px 12px; }
 /* (the village's card has four of them, the first and the best wave's too) */
 #{$village} #opt-wave button { padding: 5px 10px; }

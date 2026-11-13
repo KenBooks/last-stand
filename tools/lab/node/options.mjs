@@ -2133,6 +2133,15 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  bank: {
+    help: 'a bank on Random in the panels\' lobby (#558): a hero with nothing banked enters, clears two waves and '
+      + 'banks; the wave in the save under the battleground rolled, offered as the starting wave (and once read back '
+      + 'from the save), Random rolling only where it is unlocked, the other battleground still at its first wave',
+    options: {
+      canary: { kind: 'switch', help: 'take the bank\'s record out of the save and verify it is found' },
+      ...COMMON_OPTIONS,
+    },
+  },
   dev: {
     help: 'developer panel tabs, flight speed, frame inclusion, labels, opacity, five viewport layouts, frozen training starts, continuous refills, reset and slow first-person entry',
     options: {

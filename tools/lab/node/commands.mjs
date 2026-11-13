@@ -1942,6 +1942,17 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  bank: {
+    // (Random is the panels' lobby's: the page boots it, whatever was asked)
+    check(options) { options.panels = true; },
+    each: (side, options) => side.command('bank', { canary: Boolean(options.canary) }),
+    // (its moment written: the lobby after the bank, the starting wave it offers)
+    finish: (results, options, session) => textWithMoments(results, session.outFor('bank'), session.browser),
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   dev: {
     each(side, options) {
       return side.command('dev', { canary: Boolean(options.canary) });
