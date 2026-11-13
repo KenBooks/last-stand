@@ -399,6 +399,9 @@ export interface Model {
   height: number;
   /** cast origin (staff tip / orb) */
   tip?: THREE.Object3D;
+  /** the weapon's own tip where `tip` isn't on it (a bow's upper limb's: its `tip` is the nocked arrow's middle, where
+   *  the shot leaves, which stays where the last arrow left the string until the next is laid on it) */
+  weaponTip?: THREE.Object3D;
   /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
   readonly offTip?: THREE.Object3D | null;
   /** a two-hander's lower grip, where the other hand holds it (none for any other weapon) */

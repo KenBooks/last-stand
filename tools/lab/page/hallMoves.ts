@@ -28,6 +28,8 @@ export interface HallOptions {
   weapon?: string;
   /** list every frame a point jerked */
   frames?: boolean;
+  /** list every point on each frame from the first of these to the second */
+  trace?: number[];
   canary?: boolean;
 }
 
@@ -176,7 +178,8 @@ async function leaveMidShowcase(lab: Lab, canary: boolean): Promise<Leaving> {
 
 /** Where point `name` of `model` is, in his own frame. */
 function placeOf(model: Model, name: PointName, out: THREE.Vector3): THREE.Vector3 {
-  const object = name === 'tip' ? model.tip : model.joints?.[name];
+  // (the weapon's own tip: a bow's `tip` is where its shot leaves, the arrow's middle, there or not)
+  const object = name === 'tip' ? model.weaponTip ?? model.tip : model.joints?.[name];
   if (!object) return out.set(0, 0, 0);
   object.getWorldPosition(out);
   return model.root.worldToLocal(out);
@@ -212,6 +215,13 @@ function follow(
   return jerk;
 }
 
+/** A point on a traced frame: where it is in his own frame (cm), its move and its jerk. */
+function traced(point: Followed, jerk: number): string {
+  const [now, last] = point.places;
+  const at = [now.x, now.y, now.z].map((metres) => (metres * 100).toFixed(0)).join(' ');
+  return `${point.name} at ${at}, moved ${cm(now.distanceTo(last))}, jerk ${cm(jerk)}`;
+}
+
 /** Runs `lab hall`. */
 export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report> {
   await lab.setup({ at: [14, 17], facing: 0, gear: options.gear, weapon: options.weapon });
@@ -236,6 +246,8 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
   let frame = 0;
   let shownAt = -1;
   let canaryJerk: number | null = null;
+  const [traceFrom, traceTo] = options.trace ?? [1, 0];
+  const trace: string[] = [];
   await lab.step(FRAMES, undefined, () => {
     if (shownAt < 0 && hero.cast) shownAt = frame;
     const planted = !!options.canary && frame === CANARY_FRAME;
@@ -250,18 +262,22 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
     const armBar = flying ? JERK_FLYING : JERK_FROM;
     // (and as the weapon flies, no less than the arms': its blow coming to rest on the floor stops it hard)
     const tipBar = Math.max(flying ? JERK_FLYING : TIP_FROM, TIP_SHARE * Math.max(tipMoves[0], tipMoves[1]));
+    const parts: string[] = [];
     for (const point of points) {
       const named = { frame, since, acting };
       const bar = point === tip ? tipBar : armBar;
       const jerk = follow(point, placeOf(model, point.name, now), named, judged, bar, !!options.frames);
       if (planted && point.name === 'handR') canaryJerk = jerk;
+      parts.push(traced(point, jerk));
     }
+    if (frame >= traceFrom && frame <= traceTo) trace.push(`  frame ${frame} (${since}, ${acting}): ${parts.join('; ')}`);
     if (planted) model.joints!.shoulderR.rotateX(-CANARY_TURN);
     frame++;
   });
   model.animate = animate;
   if (shownAt < 0) throw new Error('lab: hall: the hero never showed off his skill');
   const report = reportOf(hero.id, hero.player.gear.weapon, shownAt, points, canaryJerk);
+  if (trace.length) report.text += `\ntraced, frames ${traceFrom} to ${traceTo}:\n${trace.join('\n')}`;
   const leaving = leavingReport(await leaveMidShowcase(lab, !!options.canary));
   return { text: `${report.text}\n${leaving.text}`, problems: [...report.problems, ...leaving.problems] };
 }

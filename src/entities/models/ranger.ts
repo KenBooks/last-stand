@@ -119,6 +119,10 @@ const STOW_PUMP = 0.05;
  *  in line behind the arrow at its height, the elbow needs 57 degrees (rolled up to 34, every elbow in line left the
  *  forearm's turn 6 to 10 degrees past its end) */
 const HOOK_TILT = -1, HOOK_ROLL = 0.4;
+/** the roll's room fades from all of it to none between these shares of the hand's way onto the string: all or nothing
+ *  at half way, the hand's turn and the elbow with it jumped as the hand left the string for the quiver (the elbow
+ *  14 cm in a frame, `lab hall`) */
+const ROLL_FADE = [0.5, 0.8];
 /** what each degree of the draw wrist's bend costs, once the draw has begun (armIK's `wristW`; a misplaced bracket
  *  there counted it as 1, whatever it was set to, and the draw was tuned so) */
 const DRAW_WRIST = 1;
@@ -132,6 +136,13 @@ const ELBOW_V = 3;
  *  past it as far as the ranges need: the solver's `maxMove`): free, as the hand swung up over the shoulder its elbow
  *  whipped round 23 cm in a frame, and at a walking shot's follow-through it flipped round its circle for a frame, 42 cm */
 const FETCH_V = 8, RELOAD_V = 6;
+/** how fast the bow arm comes back in at its shoulder once the string is clear of the thigh (rad a second) */
+const OFF_THIGH_BACK = 2;
+/** and how fast that speed may change (the rig's units a second, a second: 5 cm a frame, a frame, at 60): capped by
+ *  its speed alone, the elbow swung round its circle at the cap, turning its way by up to 17 cm a frame, or stopped
+ *  dead from it (`lab hall`). No more: at 230 and 290 it went past its ranges' slack mid-swing and was thrown on, 16 cm
+ *  a frame; at this it lags the hand going over the shoulder by a frame, the forearm upright beside the head */
+const ELBOW_ACC = 180;
 /** where the draw elbow goes with the string taken before the chest (the chest's frame): out to the right, a little up
  *  and forward */
 const SET_POLE = V(-1, 0.15, 0.2).normalize();
@@ -615,9 +626,17 @@ export function* rangerSteps(): ModelSteps {
     return [[bow.group, new THREE.Vector3().lerpVectors(a, b, i <= LIMB_PTS ? i / LIMB_PTS : i / LIMB_PTS - 1)], 0.018];
   });
   const stringAndArrowPts = [...stringPts, ...arrowPts, ...limbPts], stringAndLimbPts = [...stringPts, ...limbPts];
+  /** how far the bow arm is swung out at its shoulder to keep the string off the thigh, as last held (rad) */
+  let offThigh = 0;
   const stringOffThigh = () => {
     stringPts.forEach(([[, p]], i) => (i <= STRING_PTS ? p.lerpVectors(bow.tipU, bow.nock, i / STRING_PTS) : p.lerpVectors(bow.nock, bow.tipL, i / STRING_PTS - 1)));
+    const posed = j.shoulderL.rotation.z;
     armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts);
+    // (swung out as far as it needs at once, and let back no faster than `OFF_THIGH_BACK`: let go as the bow coming
+    // in for a shot cleared the thigh, the arm it had held 10 cm out jumped onto its place in a frame, the bow's tip 24 cm)
+    const need = j.shoulderL.rotation.z - posed;
+    offThigh = Math.max(need, offThigh - OFF_THIGH_BACK * dtNow);
+    if (offThigh > need) { j.shoulderL.rotation.z = posed + offThigh; j.shoulderL.updateMatrixWorld(true); }
   };
   j.handL.add(bow.group);
   yield;
@@ -634,6 +653,8 @@ export function* rangerSteps(): ModelSteps {
   yield;
   // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
+  // (the bow's upper limb's tip, as it bends: the weapon's own, for what follows the weapon and not the shot)
+  const limbTip = joint(bow.group);
   const flask = buildFlask(kit); flask.name = 'flask'; j.handR.add(flask);
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
@@ -704,7 +725,9 @@ export function* rangerSteps(): ModelSteps {
     _e.copy(_d).sub(_c).normalize();
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
-    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0 });
+    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0,
+      // (the bow arm's elbow swung, not jumped, as the bow comes in from the side: free, it went 17 cm in a frame)
+      maxMove: dtNow ? FETCH_V * dtNow : undefined, maxJerk: dtNow ? ELBOW_ACC * dtNow * dtNow : undefined });
     updateJoints(root);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -751,7 +774,8 @@ export function* rangerSteps(): ModelSteps {
     // itself, the solver looked only near where the elbow was)
     if (tilt) _q2.premultiply(_qt.setFromAxisAngle(_rx.set(0, -1, 0).applyQuaternion(_q2), tilt));
     solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, wristW: drawK > 0 ? DRAW_WRIST : 0, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
-      roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(1, 0, 0).applyQuaternion(_q2), range: HOOK_ROLL, at } : undefined, glide: w > 0.5 && HOOK_ROLL ? 1 - Math.exp(-GLIDE * dtNow) : undefined });
+      roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(1, 0, 0).applyQuaternion(_q2), range: HOOK_ROLL * smooth(clamp((w - ROLL_FADE[0]) / (ROLL_FADE[1] - ROLL_FADE[0]), 0, 1)), at } : undefined, glide: w > 0.5 && HOOK_ROLL ? 1 - Math.exp(-GLIDE * dtNow) : undefined,
+      maxJerk: dt && v ? ELBOW_ACC * dt * dt : undefined });
     updateJoints(root);
   };
 
@@ -1017,6 +1041,7 @@ export function* rangerSteps(): ModelSteps {
     bow.nockArrows(hasBow ? Math.min(strung, n) : 0);
     const nocked = bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)];
     tip.position.copy(nocked.position);
+    limbTip.position.copy(bow.tipU);
     arrowHead.position.set(0, 0, ARROW / 2 - HEAD_MIDDLE).applyQuaternion(nocked.quaternion).add(nocked.position);
     updateJoints(root);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
@@ -1180,7 +1205,7 @@ export function* rangerSteps(): ModelSteps {
     sets.bend();
   }
   return {
-    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, arrowHead, height: 2,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, weaponTip: limbTip, palm, arrowHead, height: 2,
     // (the coat, its hem and the hat's felt: his green)
     dye: new Dye('green').cloth(coat, coatHem, felt),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
