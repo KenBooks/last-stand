@@ -933,6 +933,32 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  glowcost: {
+    check(options) {
+      if (!(options.rounds >= 1)) throw labError(`glowcost --rounds: ${options.rounds} is not a count of rounds`);
+    },
+    async each(side, options) {
+      // (the hall leaves the run for the lobby: last, whatever the order asked)
+      const scenes = [...options.scenes].sort((a, b) => (a === 'hall') - (b === 'hall'));
+      const reports = [];
+      for (const scene of scenes) {
+        const { biome, level, rounds, rarity } = options;
+        const command = { scene, biome, level, rounds, rarity, canary: Boolean(options.canary), cpu: options.cpu };
+        reports.push(await side.command('glowCost', command));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments ?? []),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('glowcost'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   envcost: {
     check(options) {
       if (!(options.rounds >= 1)) throw labError(`envcost --rounds: ${options.rounds} is not a count of rounds`);

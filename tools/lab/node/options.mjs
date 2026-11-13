@@ -889,6 +889,40 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  glowcost: {
+    help: 'what the worn gear\'s rarity glow takes of a frame: the same frame drawn with it and, in turns within one '
+      + 'page, off by the setting, on plain gear and with its code out of the programs, the whole frame timed by the '
+      + 'GPU\'s timer and three\'s work by the browser\'s clock, each side proven by its pixels',
+    options: {
+      scenes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first', 'party', 'hall', 'fight'],
+        default: 'top,third,first',
+        help: 'the scenes: the hero alone in a view (top, third, first), a party of four close up, the hall of '
+          + 'heroes, a fight (the biome\'s foes round him)',
+      },
+      biome: { kind: 'choice', usage: 'biome', choices: ['crypt', 'forest'], default: 'crypt', help: 'the biome' },
+      level: {
+        kind: 'choice',
+        usage: 'level',
+        choices: ['high', 'medium', 'low', 'verylow'],
+        default: 'high',
+        help: 'the quality level drawn at (with --boot of the same level, the heroes built at its detail too)',
+      },
+      rarity: { ...SETUP_OPTIONS.rarity, default: 'legendary' },
+      rounds: { kind: 'number', usage: 'n', default: '12', help: 'the rounds of turns, each of 6 frames a side' },
+      cpu: {
+        kind: 'number',
+        usage: 'n',
+        default: '0',
+        help: 'three\'s work on the frame timed on the CPU too, slowed this many times (1: as it is, 4: a mid-range '
+          + 'phone, 6: a low-end one; 0: not timed), on a screen the GPU keeps up with',
+      },
+      canary: { kind: 'switch', help: 'draw the frame twice: it must read at least 1.6 times once' },
+      ...COMMON_OPTIONS,
+    },
+  },
   envcost: {
     help: 'what the environment\'s lookups take of the GPU: the frame drawn with the scene\'s environment and '
       + 'without it, in turns within one page (a run\'s load is both sides\'), the hero standing in each biome and '

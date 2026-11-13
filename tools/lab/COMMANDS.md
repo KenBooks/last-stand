@@ -249,6 +249,32 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   phone's screen (`--screen 832x384@3.75`) on an AMD integrated GPU the forest's thicket leaves were a quarter of its
   scene pass (`--each`), and the point lights' shadows and the environment taken off by a uniform's value saved
   nothing there, as only what the program is built of read.
+- `glowcost`: what the worn gear's rarity glow takes of a frame (`page/glowCost.ts`; `ITEM_GLOW` in
+  `core/materials.ts`; from play: "we also need to disable clothing shader effect, for rarity -- measure how much it
+  would impact the performance"). The heroes of a scene are dressed in `--rarity` (legendary) and the same frame is
+  drawn with the glow and, in turns within one page (`page/gpuTurns.ts`, `--rounds` of 6 frames a side), each way
+  without it: off by the setting (its strength a uniform at 0: its strands are still worked out a pixel), on plain
+  gear (each glowing material's colour black, as `ItemGlows.set` leaves it: the code passed over a pixel), and gone
+  (its lines taken out of every program that has them, in copies of the scene's materials made here alone, each
+  running its original's hook as the original and keyed by that hook's source too). The whole frame is timed, the
+  post chain with it, by the GPU's timer, with a change of nothing beside them (the noise). Each scene proves its
+  sides: the glow must change pixels, every way without it must draw the same frame as the one with its code gone
+  (where and by how much it differs is said), and no mesh may still draw with the glow's code once it's taken out.
+  `--scenes`: `top`, `third`, `first` (the hero alone), `party` (three partners of the other classes stood before him,
+  over the shoulder), `fight` (28 of the biome's foes round him, top-down), `hall` (the hall of heroes; run last, as
+  it leaves the run). `--level` with `--boot` of the same level; `--cpu n` times three's work on the frame by the
+  browser's clock too, the CPU slowed `n` times, against plain gear and against plain gear drawn in the kit's own
+  materials (the glow's copies, `kitCopy`, are materials of their own whether an item glows or not); `--canary` the
+  frame drawn twice, 1.6 times once at least. Run it with the GPU loaded (`--screen 1920x1080@2`): at 1080p on a
+  desktop card the frame read 5 to 13 ms from pair to pair, its clock idling. Two scenes of 20 rounds take about
+  100 s. On an RTX 3060 at 3840x2160 (the mage): top-down and a fight nothing told from the noise (±0.1 to 0.2 ms);
+  over the shoulder 0.3 to 0.4 ms of 11.5 (2 to 4%); through the eyes 0.5 to 0.7 of 10 (5 to 7%) at High, of 7 at Low
+  (8 to 10%); a party of four 0.4 of 13.5 at High, 0.4 to 0.8 of 7.5 at Very low; the hall 0.7 to 1.2 of 18 at High,
+  0.5 to 0.7 of 14 at Low and 13 at Very low. The setting off saved nothing in any scene (-0.2 to +0.2 ms, within
+  the noise), and plain gear as much as the code gone, within the noise. The CPU slowed 4 times read no difference
+  for the copies (±1 to 2 ms on a 25 ms frame). No level leaves the glow out. What it got wrong on the way: a hero
+  dressed again each turn (`setGear`) had his staff and coat built anew, out of every swap; two swaps of materials
+  put back in the wrong order left the glow on a dozen meshes "without" it; copies keyed alike shared one program.
 - `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
   and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
   without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's

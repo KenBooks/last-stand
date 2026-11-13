@@ -23,6 +23,7 @@ import type { LightOptions } from './light';
 import type { FireOptions } from './fire';
 import type { EnvCostOptions } from './envCost';
 import type { SceneCostOptions } from './sceneCost';
+import type { GlowCostOptions } from './glowCost';
 import type { ProfileCommand } from './profile';
 import type { PassesCommand } from './gpuPasses';
 import type { HazeOptions } from './haze';
@@ -411,6 +412,12 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
 export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Report> {
   const { sceneCost: sceneCostRound } = await import('./sceneCost');
   return sceneCostRound(lab, command);
+}
+
+/** `lab glowcost`, one scene: what the worn gear's rarity glow takes of the frame, each way of having none. */
+export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Report> {
+  const { glowCost: glowCostRound } = await import('./glowCost');
+  return glowCostRound(lab, command);
 }
 
 /** `lab envcost`, one scenario: what the environment's lookups take of the frame on the GPU, with it and without in
