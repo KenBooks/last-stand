@@ -728,12 +728,27 @@ function throughBox(o: GrassOccluder, ex: number, ey: number, ez: number, px: nu
   return true;
 }
 
+/** how near an occluder's box the eye is taken to be within it (m): the boxes stand a hand inside their walls */
+const EYE_WITHIN = 0.5;
+
+/** whether a harness has an occluder hide what's past it from an eye within it too, as it did */
+let eyeWithinHeld = false;
+
+/** For a harness (tools/lab): the grass hidden from an eye within an occluder, as it was. */
+export function holdEyeWithinOccluders(held: boolean): void {
+  eyeWithinHeld = held;
+}
+
 /** Whether `box` is wholly hidden from `eye` by one occluder: the lines to its eight corners all pass through it. */
 function hiddenBehind(box: THREE.Box3, eye: THREE.Vector3): boolean {
   if (occlusionHeld) return false;
   for (const o of occluders) {
     const ex = (eye.x - o.x) * o.cos - (eye.z - o.z) * o.sin;
     const ez = (eye.x - o.x) * o.sin + (eye.z - o.z) * o.cos;
+    // (an eye within it sees out of it, through its door: every line from inside a box passes through the box, and
+    // from the hall no grass was listed at all, "grass is gone, from here, or anywhere in hall of heroes")
+    const within = Math.abs(ex) < o.halfW + EYE_WITHIN && Math.abs(ez) < o.halfD + EYE_WITHIN && eye.y < o.high + EYE_WITHIN;
+    if (within && !eyeWithinHeld) continue;
     let hidden = true;
     for (let corner = 0; corner < 8 && hidden; corner++) {
       const x = (corner & 1 ? box.max.x : box.min.x) - o.x;

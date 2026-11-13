@@ -15,6 +15,7 @@ import { qualityLevel, useQuality } from '../../../src/core/quality';
 import { setGrassSpread } from '../../../src/world/meadow';
 import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
+import { grassVertices } from './grassCount';
 import type { LightsChecked } from './villageLights';
 
 /** where he stands and the way he faces: open meadow ahead, the cottages off to the side */
@@ -35,18 +36,6 @@ type Level = 'high' | 'low' | 'verylow';
 
 /** A share as a whole percentage. */
 const percent = (share: number): string => `${(share * 100).toFixed(0)}%`;
-
-/** The vertices the meadow's rings shade in the frame just drawn: each ring's blades listed times a blade's points. */
-function grassVertices(): number {
-  let vertices = 0;
-  G.arena.village!.meadow.traverse((part) => {
-    const mesh = part as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    const geometry = mesh.geometry as THREE.InstancedBufferGeometry;
-    vertices += geometry.instanceCount * geometry.attributes.position.count;
-  });
-  return vertices;
-}
 
 /** The frame drawn at `level`: the vertices the grass shaded, and the programs compiled for it. */
 async function drawnAt(lab: Lab, level: Level, canary: boolean): Promise<{ vertices: number; made: number }> {
