@@ -8,7 +8,11 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   jump, a stop or a start in a frame), 40 cm while the weapon flies (its tip 25 cm a frame or more, this frame or the
   two before: a blow speeding down and coming to rest), the tip's by its speed (0.7 of its larger move, at least
   20 cm: its arc turns its way by about its speed squared over its reach). `--gear` and `--weapon` put the weapon in
-  his profile, which the hall dresses him from; `--frames` lists each jerk with its action and its moves; the canary
+  his profile, which the hall dresses him from; `--frames` lists each jerk with its action and its moves, and
+  `--trace from,to` every point on each of those frames (where it is in his own frame, its move and its jerk: a
+  jerk's frames and those round it, which found the ranger's bow arm held off its place by the thigh's guard, #612);
+  the weapon's tip is its own where the model has one (`Model.weaponTip`: a bow's upper limb's, its `tip` being the
+  arrow's middle, there or not); the canary
   turns his right shoulder for a frame. From play: "warrior arms jerk in various poses after he finishes power
   strike, in char selection screen". The hall's heroes are remote copies beside the lobby's own hero, hidden but
   still posed, which `range` never saw: the warriors shared the way back's state (`DRAWN_*`, `BACK_*` at the module's

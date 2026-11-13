@@ -1908,6 +1908,13 @@ export const COMMANDS = {
       + 'own); --gear and --weapon put the weapon in his hand there',
     options: {
       frames: { kind: 'switch', help: 'list every frame a point jerked, with its action and its moves' },
+      trace: {
+        kind: 'numbers',
+        count: 2,
+        usage: 'from,to',
+        help: 'list every point on each of these frames (as --frames numbers them): where it is in his own frame '
+          + '(cm: right, up, forward), its move and its jerk, to see a jerk\'s frames and those round it',
+      },
       glow: {
         kind: 'switch',
         help: 'the light round the weapon\'s tip instead (the mage\'s staff\'s crystal) frame by frame: its near '

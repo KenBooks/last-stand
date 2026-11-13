@@ -55,6 +55,10 @@ export interface ArmGoal {
   /** the farthest the elbow may move from where it was last solved (the rig's units): further, it goes that far round its
    *  circle towards where it would be, so a change of side is a swing, not a jump */
   maxMove?: number;
+  /** with `maxMove`: the most the elbow's swing round its circle may change by from its last solve's (the rig's units),
+   *  and it slows as it nears where it would be: its speed capped alone, it set off, turned its way and stopped at the
+   *  cap in a frame. `maxMove` is then the swing's cap, not the elbow's whole move's */
+  maxJerk?: number;
   /** with `roll` or `slant`: how much of the way from the last solve's turn about the handle and slant on it to the best
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
@@ -90,9 +94,15 @@ const X = new THREE.Vector3(1, 0, 0);
 const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<THREE.Object3D, [number, number]>(), lastS = new WeakMap<THREE.Object3D, number>();
 /** and its turn about a handle (`glide` only) */
 const lastR = new WeakMap<THREE.Object3D, number>();
+/** and how far its elbow swung round its circle in its last solve (`maxJerk` only; its shoulder's parent's frame) */
+const lastMove = new WeakMap<THREE.Object3D, THREE.Vector3>();
+const _mv = new THREE.Vector3(), _e0 = new THREE.Vector3();
 const _wy = new THREE.Vector3();
 /** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
 const REACH_SLACK = 2;
+/** and one swinging within `maxJerk`: for the few frames its swing takes (at 2 degrees it gave way at once, and the
+ *  elbow went forward 13 cm a frame, stopped and came back as the hand passed over the shoulder to the quiver) */
+const SWING_SLACK = 12;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
 const vertex = (lo: number, mid: number, hi: number): number => { const c = lo - 2 * mid + hi; return c > 1e-9 ? Math.max(-0.5, Math.min(0.5, (lo - hi) / (2 * c))) : 0; };
 const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new THREE.Vector3(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
@@ -314,22 +324,35 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   if (g.maxMove && prev) {
     _rad.copy(prev).sub(_S).addScaledVector(_n, -a);
     const phiP = Math.atan2(_rad.dot(_u2), _rad.dot(_u1));
-    if (_E.distanceTo(prev) > g.maxMove) {
-      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over();
+    // (with `maxJerk`, its swing round the circle alone is held, from where the circle now has last solve's elbow: its
+    // speed to what it can stop from within the swing left, and its change from the last solve's; what the hand's own
+    // move carries the elbow is the hand's)
+    const jerk = g.maxJerk ?? 0, was = jerk ? lastMove.get(sh) : undefined;
+    let cap = g.maxMove;
+    if (jerk) {
+      at(phiP); _e0.copy(_E); at(best, true);
+      const left = _E.distanceTo(_e0);
+      cap = Math.min(cap, Math.max(jerk, Math.sqrt(jerk * jerk / 4 + 2 * jerk * left) - jerk / 2));
+    } else _e0.copy(prev);
+    const far = (): boolean => _E.distanceTo(_e0) > cap || (!!was && _mv.copy(_E).sub(_e0).distanceTo(was) > jerk);
+    if (far()) {
+      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over(), slack = jerk ? SWING_SLACK : REACH_SLACK;
       let lo = 0, hi = 1;
-      for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (_E.distanceTo(prev) > g.maxMove) hi = mid; else lo = mid; }
+      for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (far()) hi = mid; else lo = mid; }
       // (further, past the cap, as far as the ranges need: held back, an elbow swinging up over the shoulder for the quiver
       // took the shoulder 200 degrees past its range)
       at(phiP + d * lo);
-      if (over() > ob + REACH_SLACK) {
+      if (over() > ob + slack) {
         let l = lo, h = 1;
-        for (let i = 0; i < 12; i++) { const mid = (l + h) / 2; at(phiP + d * mid); if (over() > ob + REACH_SLACK) l = mid; else h = mid; }
+        for (let i = 0; i < 12; i++) { const mid = (l + h) / 2; at(phiP + d * mid); if (over() > ob + slack) l = mid; else h = mid; }
         lo = h;
       }
       best = phiP + d * lo;
       at(best, true);
     }
+    if (jerk) (was ?? lastMove.set(sh, new THREE.Vector3()).get(sh)!).copy(_E).sub(_e0);
   }
+  if (!g.maxJerk || !g.maxMove || !prev) lastMove.delete(sh);
   // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
   if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
   else if (pg) pg.splice(0, 2, 0, 0);

@@ -1641,6 +1641,7 @@ export const COMMANDS = {
         gear: options.gear,
         weapon: options.weapon,
         frames: Boolean(options.frames),
+        trace: options.trace,
         canary: Boolean(options.canary),
         glow: Boolean(options.glow),
         lobby: Boolean(options.lobby),
