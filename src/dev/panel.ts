@@ -20,6 +20,7 @@ import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNe
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
+import { setTreesShown, treesShown } from './trees';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -65,7 +66,7 @@ export function initPanel(h: DevHooks): void {
     <div class="dv-row"><button data-act="reset">Reset to loaded scene</button></div>
     <details open><summary>Time &amp; camera</summary>
       <div class="dv-row dv-speed-row" aria-label="Simulation speed">${SPEEDS.map((s) => `<button data-speed="${s}" class="dv-tog">${s}×</button>`).join('')}<button data-act="freeze" class="dv-tog dv-freeze">Freeze</button><button data-act="step" title="One frame forward while frozen (.)">Step</button></div>
-      <div class="dv-row dv-camera-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button></div>
+      <div class="dv-row dv-camera-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button><button data-act="trees" class="dv-tog" title="Every tree drawn, with its shadow, or none (they still block)">Trees</button></div>
       <div class="dv-note dv-fly-speed"></div>
     </details>
     <details open><summary>Run</summary>
@@ -229,6 +230,7 @@ function onClick(e: MouseEvent): void {
     case 'hero': freeCamToHero(); break;
     case 'labels': setFreeCamLabels(!freeCamLabels()); break;
     case 'clean': document.body.classList.toggle('dev-clean'); break;
+    case 'trees': setTreesShown(!treesShown()); break;
     case 'start': {
       const wave = Math.max(1, Math.min(999, Math.round(Number($<HTMLInputElement>('[data-in=wave]').value) || 1)));
       startWave(wave, $<HTMLSelectElement>('[data-in=biome]').value as BiomeId, $<HTMLInputElement>('[data-in=training]').checked);
@@ -389,7 +391,7 @@ export function refreshPanel(): void {
   const programs = info.programs?.length ?? 0;
   const state = [
     time.frozen, time.scale, freeCamOn(), freeCamLabels(), cheats.god, cheats.free, G.player.cls.id, perfHudSize(),
-    document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode,
+    document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode, treesShown(),
   ].join('|');
   const stats = perfHudStats();
   const number = (n: number | undefined, digits = 1): string => n !== undefined && Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -413,6 +415,7 @@ export function refreshPanel(): void {
   lit('[data-act=fly]', freeCamOn());
   lit('[data-act=labels]', freeCamLabels());
   lit('[data-act=clean]', document.body.classList.contains('dev-clean'));
+  lit('[data-act=trees]', treesShown());
   lit('[data-act=god]', cheats.god);
   lit('[data-act=free]', cheats.free);
   panel.querySelectorAll<HTMLElement>('[data-speed]').forEach((b) => b.classList.toggle('on', !time.frozen && Number(b.dataset.speed) === time.scale));

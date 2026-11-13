@@ -60,7 +60,7 @@ body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:h
 #dev-panel .dv-freeze { color: #8fd8ff; border-color: #4e88aa;
   &.on { color: #c9f4ff; border-color: #8fd8ff; background: linear-gradient(#19435a, #102b3b); }
 }
-.dv-camera-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, .75fr); gap: 4px;
+.dv-camera-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
   button { padding-inline: 3px !important; min-width: 0; white-space: nowrap; }
 }
 .dv-profile { margin-left: auto; }

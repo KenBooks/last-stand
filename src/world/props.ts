@@ -293,6 +293,13 @@ export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Up
   };
 }
 
+/** `parts` marked as a tree's (its bark, its leaves, its roots, the copies casting their shadows): what the developer
+ *  mode's Trees switch takes out of what's drawn (`src/dev/trees.ts`). Returns them. */
+export function asTree<T extends THREE.Object3D>(...parts: T[]): T[] {
+  for (const part of parts) part.userData.tree = true;
+  return parts;
+}
+
 /** where a biome's small trees may stand: `n` of them `near` to `far` m from the middle, `apart` from each other */
 export interface TreeSpots { n: number; near: number; far: number; apart: number }
 /**

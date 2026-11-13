@@ -14,7 +14,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief, reliefContext } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -551,7 +551,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   for (const mesh of [smallTrees, feet]) mesh.castShadow = mesh.receiveShadow = true;
   smallTrees.name = 'small dead trees';
   feet.name = 'small dead roots';
-  scene.add(smallTrees, feet);
+  scene.add(...asTree(smallTrees, feet));
   updaters.push(contactShadows(scene, obstacles));
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
@@ -1053,7 +1053,7 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     mesh.castShadow = true;
     mesh.name = `dead trees: ${DEAD_TREES[k].preset}`;
     // (a tree a cell, as the forest's: drawn whole, 101k of their 113k triangles in the top view lay outside it)
-    scene.add(...cullInCells(mesh, eachInstance));
+    scene.add(...asTree(...cullInCells(mesh, eachInstance)));
   });
 }
 

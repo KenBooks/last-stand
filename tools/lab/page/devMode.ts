@@ -7,6 +7,7 @@ import { HIDDEN_LAYER } from '../../../src/core/layers';
 import { cheats, time } from '../../../src/dev/index';
 import { refreshPanel, togglePanel } from '../../../src/dev/panel';
 import { freeCamOn, freeCamSpeed } from '../../../src/dev/freeCam';
+import { treesShown } from '../../../src/dev/trees';
 import { touchMode } from './uiTouch';
 import { showPause, pauseTab } from '../../../src/ui/menus';
 import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
@@ -97,7 +98,47 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   check(overFrame.draw !== draw, 'World labels did nothing outside flight');
   await action('labels');
   check(overFrame.draw === draw, 'World labels did not restore their draw');
+  // Trees: out of what's drawn in every biome at once, held through a biome change, and no program made either way.
+  const trees: THREE.Object3D[] = [];
+  G.scene.traverse((part) => { if (part.userData.tree) trees.push(part); });
+  const treesOut = (): boolean => trees.every((tree) => tree.layers.mask === 1 << HIDDEN_LAYER);
+  /** The screen pictured as `label`, and how many draws of a tree its frame made, in the frame and in the shadow
+   *  maps (a mesh's hooks run as it's drawn; the lab's stepped frames draw nothing, a picture's does). */
+  const treeDraws = async (label: string): Promise<number> => {
+    let draws = 0;
+    const kept = trees.map((tree) => [tree.onBeforeRender, tree.onBeforeShadow] as const);
+    for (const tree of trees) tree.onBeforeRender = tree.onBeforeShadow = () => { draws++; };
+    await lab.step(2);
+    moments.push(await lab.screen(label));
+    trees.forEach((tree, i) => { [tree.onBeforeRender, tree.onBeforeShadow] = kept[i]; });
+    return draws;
+  };
+  const programs = (): number => G.renderer.info.programs?.length ?? 0;
+  const treeCosts: string[] = [];
+  /** the switch thrown in the biome shown: a tree's draws with the trees and without, and the programs unchanged */
+  const throwTrees = async (label: string): Promise<void> => {
+    const on = treesShown(), had = programs();
+    const before = await treeDraws(`dev-trees-${G.arena.biome}-${on ? 'on' : 'off'}`);
+    await action('trees');
+    const after = await treeDraws(`dev-trees-${G.arena.biome}-${on ? 'off' : 'on'}`);
+    check(treesShown() === !on && treesOut() === on, `${label}: the Trees switch did not ${on ? 'take out' : 'put back'} every tree`);
+    check(element('[data-act=trees]').classList.contains('on') === !on, `${label}: the Trees button did not show its state`);
+    const [withTrees, without] = on ? [before, after] : [after, before];
+    check(withTrees > 0 && without === 0, `${label}: the trees' draws did not go with the switch (${withTrees} with them, ${without} without)`);
+    check(programs() === had, `${label}: switching the trees made programs (${had} to ${programs()})`);
+    treeCosts.push(`${G.arena.biome} ${withTrees} draws of a tree a frame with them, ${without} without`);
+  };
+  check(trees.length >= 6 && treesShown() && trees.every((tree) => tree.layers.mask === 1), 'the trees did not start drawn');
+  await throwTrees('lobby');
+  if (options.canary) {
+    trees[0].layers.set(0);
+    check(!treesOut(), 'canary: a tree left drawn was not detected');
+    trees[0].layers.set(HIDDEN_LAYER);
+  }
   await chooseBiome(BIOME_IDS.find((id) => id !== G.arena.biome)!);
+  check(!treesShown() && treesOut(), 'a biome change put the trees back');
+  await throwTrees('after a biome change');
+  lines.push(`Trees switch: ${treeCosts.join('; ')}; no program made`);
 
   // The checkbox must apply to +1 and elite batches even with no run at all.
   const spawn = async (count: number) => {
