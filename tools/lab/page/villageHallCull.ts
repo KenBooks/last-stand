@@ -11,7 +11,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { setHallCull } from '../../../src/world/hallPortal';
-import { holdEyeWithinOccluders } from '../../../src/world/meadow';
+import * as meadow from '../../../src/world/meadow';
 import { drawFrame, type Canvas } from './light';
 import { grassVertices } from './grassCount';
 import type { LightsChecked } from './villageLights';
@@ -83,6 +83,13 @@ async function inHallLookingOut(lab: Lab): Promise<void> {
   await viewBy(lab, 'third');
   faceCamera(0);
   await lab.step(SETTLE);
+}
+
+/** The grass hidden from an eye within an occluder, as it was (a commit from before it has no such hold: an A/B's
+ *  other side loads this module too, and a name it lacks would stop every command loading there). */
+function holdEyeWithinOccluders(held: boolean): void {
+  const hold = (meadow as { holdEyeWithinOccluders?: (held: boolean) => void }).holdEyeWithinOccluders;
+  hold?.(held);
 }
 
 /** One hour's frames culled (or, the canary, culled whole) and not: their draws, and the share of pixels changed. */

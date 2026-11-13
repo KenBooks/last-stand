@@ -44,7 +44,7 @@ const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].
 const TUFT = 14;
 /** the bins across a tuft's card, two blades rooted in each, and how far a half's blades fan out from its middle */
 const TUFT_BINS = 16;
-const TUFT_FAN = 1.1;
+const TUFT_FAN = 0.3;
 /** a tuft's card's width against a whole blade's, and a blade's half width at its root as a share of the card's */
 const TUFT_CARD = 2.5;
 const TUFT_BLADE = 0.2;
@@ -58,14 +58,14 @@ const TUFT_RISE = 0.55;
 const TUFT_GROWS = 0.15;
 
 /** the tallest a blade stands over the ground (m), for a tile's box */
-const BLADES_TOP = 1.1;
+const BLADES_TOP = 1.3;
 /** how far from its cell a blade's root may stand (m): pulled to its tuft's middle through the warp. A tile is tried
  *  against the ring's band and the view with that to spare: tried by its cells alone, tiles half a metre wide at a
  *  band's edge were left out with blades of theirs inside it, a strip of thin grass round the view that moved with it
  *  (`lab village --only grassRingsGentle`: 13.2% of a band's light in a stride, at most 10%) */
 const ROOT_STRAYS = 1;
 /** how much taller the grass stands where it's drawn as tufts (from play, "can we make grass taller?") */
-const TUFT_TALLER = 1.5;
+const TUFT_TALLER = 1.75;
 /** the segments along each of its blades when they're spread (`setGrassSpread`): from above every blade is about as far
  *  off, seen from over it, and its bend hardly shows */
 const ABOVE_SPREAD_SEGS = 1;
@@ -298,10 +298,11 @@ function bladeGeometry(segs: number, blades = 1): THREE.InstancedBufferGeometry 
  *  shaded (`FRAGMENT_COLOUR`). */
 function cardGeometry(): THREE.InstancedBufferGeometry {
   const geo = new THREE.InstancedBufferGeometry();
-  const bv = [0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0];
+  // (three columns: the card is bent along its middle, a V from above, so a tuft has some depth and isn't a flat fan)
+  const bv = [0, -1, 0, 0, 0, 0, 0, 1, 0, 1, -1, 0, 1, 0, 0, 1, 1, 0];
   geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 3));
   geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(bv.length), 3));
-  geo.setIndex([0, 1, 2, 1, 3, 2]);
+  geo.setIndex([0, 1, 3, 1, 4, 3, 1, 2, 4, 2, 5, 4]);
   geo.instanceCount = 0;
   return geo;
 }
@@ -421,6 +422,8 @@ const VERTEX_BLADE = /* glsl */ `
   vStrands = vec2(strands, h.x);
   vTufted = tufted;
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
+  // (a tuft's card bent along its middle, by a share of its own, opening a little wider at its top)
+  local += lean * ((1.0 - abs(side)) * w * (fract(hk.z * 3.9) - 0.5) * 0.9 * tufted * (1.0 + 0.6 * t));
   // the wind: gusts rolling across the meadow and a flutter a blade, bending by the square of t
   // (in gusts: patches of moving air a few metres across that travel downwind, the grass near upright between
   // them, the wind's own way wandering slowly over the meadow; one steady wave pushing every blade the same way
@@ -432,7 +435,7 @@ const VERTEX_BLADE = /* glsl */ `
   float gust = noise2(root * 0.11 - downwind * uTime * 0.55) * 0.65 + noise2(root * 0.37 - downwind * uTime * 1.1) * 0.35;
   float blowing = smoothstep(0.42, 0.78, gust);
   float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing);
-  vec3 wind = vec3(windWay.x, 0.0, windWay.y) * (t * t * height * (blowing * 0.55 + flutter + 0.03));
+  vec3 wind = vec3(windWay.x, 0.0, windWay.y) * (t * t * height * (blowing * 0.3 + flutter + 0.02));
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
@@ -468,7 +471,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
     float bin0 = floor(cameFrom * ${TUFT_BINS}.0);
     float nearest = 2.0;
     float which = 0.0;
-    for (int j = -2; j <= 2; j++) {
+    for (int j = -3; j <= 3; j++) {
       float bin = bin0 + float(j);
       if (bin < 0.0 || bin >= ${TUFT_BINS}.0) continue;
       for (int i = 0; i < 2; i++) {
@@ -484,7 +487,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
         float rootAt = mix(0.08, 0.92, (bin + r3) / ${TUFT_BINS}.0);
         float zone = (floor(rootAt * 2.0) + 0.5) * 0.5;
         float middle = rootAt + (rootAt - zone) * ${TUFT_FAN.toFixed(2)} * a
-          + ((r2 - 0.5) * 1.8 * a + (r3 - 0.5) * 2.6 * a * a) / ${TUFT_BINS}.0;
+          + ((r2 - 0.5) * 2.4 * a + (r3 - 0.5) * 3.2 * a * a) / ${TUFT_BINS}.0;
         // (as wide most of its length, then to a point)
         float halfWide = max(${TUFT_BLADE.toFixed(3)} / ${TUFT_BINS}.0 * (1.0 - pow(a, 3.0)), pixel);
         float off = (u - middle) / halfWide;
@@ -519,6 +522,8 @@ const FRAGMENT_COLOUR = /* glsl */ `
 #endif
   vec3 bladeColour = vBladeColour * mix(0.3, 1.3, smoothstep(0.0, 0.85, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
+  // (a blade in six straw, among a tuft's green)
+  bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.1) * mix(0.45, 1.2, smoothstep(0.0, 0.85, along)), step(0.84, strandShade) * 0.6 * step(1.5, uTuft));
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
@@ -1004,7 +1009,7 @@ export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: M
         vec3 shootGreen = mix(vec3(0.085, 0.13, 0.026), vec3(0.17, 0.2, 0.04), swardN(vMeadowXZ * 2.3 + 9.0));
         // (dark and plain under the grass: lighter than the blades and streaked, it showed between the tufts as a
         // woven carpet, a review of the pictures)
-        sward = mix(sward, shootGreen * 0.55, 0.35 * fine * min(shoots, 1.0)) * 0.6;
+        sward = mix(sward, shootGreen * 0.55, 0.35 * fine * min(shoots, 1.0)) * 0.8;
         diffuseColor.rgb = mix(diffuseColor.rgb, sward, smoothstep(0.1, 0.7, meadowAt(vMeadowXZ)));`);
   };
   m.customProgramCacheKey = () => 'meadow-ground';
