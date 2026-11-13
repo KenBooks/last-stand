@@ -34,7 +34,7 @@ import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
-import { movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { asLeaves, asTree, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
@@ -2597,9 +2597,9 @@ function treeSpots(rng: () => number): TreeSpot[] {
  *  obstacle round its trunk's foot, and every trunk is met by what flies. */
 function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], spots: readonly TreeSpot[]): void {
   const kinds: TreeKind[] = VILLAGE_KINDS.map((k) => growTree(TREE_KINDS[k]));
-  const leafMat = seeThrough(new THREE.MeshStandardMaterial({
+  const leafMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({
     map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8,
-  }), 'foliage');
+  }), 'foliage'));
   const mx = new THREE.Matrix4();
   kinds.forEach((kind, k) => {
     const mine = spots.filter((s) => s.kind === k);
@@ -2630,11 +2630,11 @@ function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], sp
     });
     barks.castShadow = barks.receiveShadow = true;
     barks.name = `village trees' bark: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-    scene.add(...cullInCells(barks, eachInstance));
+    scene.add(...asTree(...cullInCells(barks, eachInstance)));
     for (const { mesh, name } of crowns) {
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.name = `village trees' leaves ${name}: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-      scene.add(...cullInCells(mesh, eachInstance));
+      scene.add(...asTree(...cullInCells(mesh, eachInstance)));
     }
   });
 }

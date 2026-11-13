@@ -60,7 +60,7 @@ body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:h
 #dev-panel .dv-freeze { color: #8fd8ff; border-color: #4e88aa;
   &.on { color: #c9f4ff; border-color: #8fd8ff; background: linear-gradient(#19435a, #102b3b); }
 }
-.dv-camera-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
+.dv-camera-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, .75fr); gap: 4px;
   button { padding-inline: 3px !important; min-width: 0; white-space: nowrap; }
 }
 .dv-profile { margin-left: auto; }
@@ -87,7 +87,11 @@ body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:h
 .dv-stats strong, .dv-perf-info strong { color: #f6fff9; font-weight: 700; }
 .dv-stats strong:first-child, .dv-perf-info span:nth-child(2) strong { color: #b5f3cc; }
 .dv-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin: 4px 0; }
-.dv-part { text-align: left; min-width: 0; input { flex: none; } }
+.dv-part { text-align: left; min-width: 0; input { flex: none; }
+  .dv-part-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  // (a part's time from Profile this spot, at the cell's right end)
+  .dv-ms { margin-left: auto; padding-left: 4px; flex: none; color: $ink-dim; font-variant-numeric: tabular-nums; white-space: nowrap; &:empty { display: none; } }
+}
 .dv-mode-label { align-self: center; padding: 3px 16px; border: 1px solid $accent; color: $highlight;
   background: rgba($accent, .12); font: 700 14px $font-display; letter-spacing: 2px; text-transform: uppercase; }
 #pause .build-info::before { content: 'DEV MODE · '; color: $highlight; font-weight: 700; }

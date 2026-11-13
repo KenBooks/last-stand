@@ -35,7 +35,7 @@ import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerO
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
-import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels, pauseTab } from './ui/menus';
+import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
@@ -444,7 +444,6 @@ async function loadDevMode(): Promise<void> {
     },
     gearChanged: () => { profileChanged(); if (G.mode === 'menu') renderMenu(); },
     topView: () => { view = 'top'; },
-    openPerformance: () => { if (!G.menuOpen) openPause(true); pauseTab('performance'); },
     whenFightWarm: (fn) => fightWarm(fn),
   });
 }

@@ -1,8 +1,8 @@
 // The developer mode's panel (F8, or the DEV tab at the screen's edge on touch): the time (freeze, a step, its speed),
 // the free camera, a wave in any biome, foes spawned, the hero (god mode, a refill, his class), any gear, and what the
 // frame costs (the scene's draws and programs, its parts taken out live with the performance overlay showing the
-// difference, the pause menu's Profile this spot from where the camera is). Its own page pieces, made here, so a
-// production build's page has none of them.
+// difference, each part's milliseconds timed by Profile this spot from where the camera is). Its own page pieces,
+// made here, so a production build's page has none of them.
 import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -15,12 +15,13 @@ import { spawnEnemy } from '../entities/spawner';
 import { basesFor } from '../loot/items';
 import { observePerfHud, perfHudStats, setPerfHudSize, perfHudSize, type PerfHudSize } from '../ui/perfHud';
 import { frameParts, type ScenePart } from '../perf/sceneParts';
+import { profile, ProfileCancelled, type ProfileOptions } from '../perf/profiler';
 import { freeCamOn, freeCamSpeed, freeCamLabels, freeCamToHero, holdFreeCam, setFreeCamLabels, speedFreeCam, turnFreeCam } from './freeCam';
 import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNew, weaponStyles } from './gear';
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
-import { setTreesShown, treesShown } from './trees';
+import { setMarkedShown, type Mark } from './marked';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -66,7 +67,7 @@ export function initPanel(h: DevHooks): void {
     <div class="dv-row"><button data-act="reset">Reset to loaded scene</button></div>
     <details open><summary>Time &amp; camera</summary>
       <div class="dv-row dv-speed-row" aria-label="Simulation speed">${SPEEDS.map((s) => `<button data-speed="${s}" class="dv-tog">${s}×</button>`).join('')}<button data-act="freeze" class="dv-tog dv-freeze">Freeze</button><button data-act="step" title="One frame forward while frozen (.)">Step</button></div>
-      <div class="dv-row dv-camera-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button><button data-act="trees" class="dv-tog" title="Every tree drawn, with its shadow, or none (they still block)">Trees</button></div>
+      <div class="dv-row dv-camera-row"><button data-act="fly" class="dv-tog">Free camera</button><button data-act="hero">Back to hero</button><button data-act="labels" class="dv-tog">World labels</button><button data-act="clean" class="dv-tog">Hide UI</button></div>
       <div class="dv-note dv-fly-speed"></div>
     </details>
     <details open><summary>Run</summary>
@@ -88,7 +89,7 @@ export function initPanel(h: DevHooks): void {
       <div class="dv-note dv-gear-note"></div>
     </details>
     <details open><summary class="dv-perf-head"><span>Performance</span><span class="dv-stats"><strong data-v="fps">—</strong> FPS · <strong data-v="frame">—</strong> ms</span></summary>
-      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}<button class="dv-profile" data-act="profile" title="The pause menu's profiler, from where the camera is now">Profile this spot</button></div>
+      <div class="dv-row dv-label">Overlay ${PERF_SIZES.map((s) => `<button data-perf="${s}" class="dv-tog">${s}</button>`).join('')}<button class="dv-profile" data-act="profile" title="Times each part below from where the camera is now: the frame with it less the frame without">Profile this spot</button></div>
       <div class="dv-perf-info">
         <span>CPU <strong data-v="cpu">—</strong> ms</span><span>GPU <strong data-v="gpu">—</strong> ms</span><span>p95 <strong data-v="p95">—</strong> ms</span>
         <span>1% low <strong data-v="low">—</strong></span><span>Draws <strong data-v="draws">—</strong></span><span>Tris <strong data-v="tris">—</strong></span>
@@ -96,6 +97,7 @@ export function initPanel(h: DevHooks): void {
       </div>
       <div class="dv-parts"></div>
       <div class="dv-row"><button data-act="parts">Check all</button></div>
+      <div class="dv-note dv-prof-note"></div>
     </details><div class="dv-scroll-cue" aria-hidden="true">Scroll for more ↓</div>`;
   document.body.append(panel);
   tabs = document.createElement('div');
@@ -230,7 +232,6 @@ function onClick(e: MouseEvent): void {
     case 'hero': freeCamToHero(); break;
     case 'labels': setFreeCamLabels(!freeCamLabels()); break;
     case 'clean': document.body.classList.toggle('dev-clean'); break;
-    case 'trees': setTreesShown(!treesShown()); break;
     case 'start': {
       const wave = Math.max(1, Math.min(999, Math.round(Number($<HTMLInputElement>('[data-in=wave]').value) || 1)));
       startWave(wave, $<HTMLSelectElement>('[data-in=biome]').value as BiomeId, $<HTMLInputElement>('[data-in=training]').checked);
@@ -251,9 +252,9 @@ function onClick(e: MouseEvent): void {
     case 'empty': emptyStash(); gearChanged(); break;
     case 'wear': wearNew(slot(), base(), rarity()); gearChanged(); break;
     case 'stash': say(stashNew(slot(), base(), rarity()) ? 'Put in the stash' : 'The stash is full'); gearChanged(); break;
-    case 'profile': putPartsBack(); hooks.openPerformance(); break;
+    case 'profile': void profileSpot(); break;
     case 'parts':
-      if (taken.size) putPartsBack();
+      if (taken.size) putPartsBack(true);
       else panel.querySelectorAll<HTMLInputElement>('[data-part]').forEach((part) => togglePart(part.dataset.part!));
       break;
   }
@@ -357,29 +358,97 @@ const taken = new Map<string, ScenePart>();
 /** A part's name without the count it's given (`the particles (3)`), which changes as the scene does. */
 const partKey = (name: string): string => name.replace(/ \(\d+\)$/, '');
 
+/** the profiler's part of what's cut out, which the panel has as Trees, Leaves and Grass in its place: each by a mark
+ *  of its own (`marked.ts`: the grass isn't cut out, and a tree's bark is no leaf), hidden by layer, as a culled
+ *  mesh's `visible` is the culling's own */
+const CUT_OUT = "what's cut out: leaves, grass";
+/** the marked parts, by their keys */
+const MARKED: [string, Mark][] = [['the trees', 'tree'], ['the leaves', 'leaves'], ['the grass', 'grass']];
+const markOf = (key: string): Mark | undefined => MARKED.find(([name]) => name === key)?.[1];
+
+/** The parts the panel takes out and times, in its order: the profiler's, the trees, leaves and grass in the place of
+ *  what's cut out. */
+function panelParts(): ScenePart[] {
+  const marked = MARKED.map(([name, mark]): ScenePart => ({ name, change: (on) => setMarkedShown(mark, on) }));
+  return frameParts()
+    .filter((p) => partKey(p.name) !== PLAIN && !p.untimed)
+    .flatMap((p) => (partKey(p.name) === CUT_OUT ? marked : [p]));
+}
+
 function renderParts(): void {
-  const keys = frameParts().filter((p) => partKey(p.name) !== PLAIN && !p.untimed).map((p) => partKey(p.name));
+  const keys = panelParts().map((p) => partKey(p.name));
   const labels: Record<string, string> = {
     "half the scene's pixels": 'Full resolution', 'the point lights where they reach': 'Point lights',
     'drawing the shadow maps': 'Shadow maps', 'the particles': 'Particles', 'the hero': 'Hero',
-    "what's cut out: leaves, grass": 'Leaves & grass', "what's blended: smoke, glows, effects": 'Smoke & effects',
-    "the fires' flames": 'Fire',
+    'the trees': 'Trees', 'the leaves': 'Leaves', 'the grass': 'Grass',
+    "what's blended: smoke, glows, effects": 'Smoke & effects', "the fires' flames": 'Fire',
+    'the spent arrows': 'Arrows on ground',
   };
-  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked>${labels[k] ?? k}</label>`).join('');
+  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked><span class="dv-part-name">${labels[k] ?? k}</span><span class="dv-ms" data-ms="${k}"></span></label>`).join('');
 }
 
 function togglePart(key: string): void {
   const was = taken.get(key);
   if (was) { was.change(true); taken.delete(key); return; }
-  const part = frameParts().find((p) => partKey(p.name) === key);
+  const part = panelParts().find((p) => partKey(p.name) === key);
   if (!part) return;
   part.change(false);
   taken.set(key, part);
 }
 
-function putPartsBack(): void {
-  for (const part of taken.values()) part.change(true);
-  taken.clear();
+/** The parts taken out put back; the trees, leaves and grass held (through a biome change, a run's start and Reset:
+ *  their marks are the same everywhere) but when `all` are. */
+function putPartsBack(all = false): void {
+  for (const [key, part] of taken) {
+    if (!all && markOf(key)) continue;
+    part.change(true);
+    taken.delete(key);
+  }
+}
+
+// --- each part timed (Profile this spot) ---------------------------------------------------------------------------
+/** whether the panel's profile is running, and whether it was asked to stop (its button again) */
+let profiling = false;
+let stopProfiling = false;
+/** what a harness sets of the panel's profile: its clock and frames (the lab's page clock stands still), its turns */
+export const panelProfile: Pick<ProfileOptions, 'clock' | 'nextFrame' | 'turns'> = {};
+
+/** Each part timed where the camera is, every part in, then each taken out and put back in turns (the profiler's,
+ *  `perf/profiler.ts`, the game's frames held meanwhile): its milliseconds shown beside its checkbox, the frame with
+ *  it less the frame without. Here, not in the pause menu: nothing is sent. */
+async function profileSpot(): Promise<void> {
+  if (profiling) {
+    stopProfiling = true;
+    return;
+  }
+  profiling = true;
+  stopProfiling = false;
+  putPartsBack(true);
+  const button = $('[data-act=profile]');
+  const note = $('.dv-prof-note');
+  const shownMs = panel.querySelectorAll<HTMLElement>('[data-ms]');
+  shownMs.forEach((ms) => { ms.textContent = ''; });
+  note.textContent = '';
+  refreshPanel();
+  try {
+    const found = await profile({
+      ...panelProfile, parts: panelParts(), cancelled: () => stopProfiling,
+      onProgress: (at) => { button.textContent = `Stop (${Math.floor((100 * at.done) / at.total)}%)`; },
+    });
+    const takes = new Map(found.parts.map((cost) => [partKey(cost.name), cost.on - cost.off]));
+    shownMs.forEach((ms) => {
+      const part = takes.get(ms.dataset.ms!);
+      ms.textContent = part === undefined ? '' : `${part.toFixed(1)} ms`;
+    });
+    note.textContent = `The frame here: ${found.frame.toFixed(1)} ms drawn. Beside each part, the frame with it less without.`;
+  } catch (error) {
+    if (!(error instanceof ProfileCancelled)) throw error;
+    note.textContent = 'Profiling stopped.';
+  } finally {
+    profiling = false;
+    button.textContent = 'Profile this spot';
+    refreshPanel();
+  }
 }
 
 // --- what it shows -------------------------------------------------------------------------------------------------
@@ -391,7 +460,7 @@ export function refreshPanel(): void {
   const programs = info.programs?.length ?? 0;
   const state = [
     time.frozen, time.scale, freeCamOn(), freeCamLabels(), cheats.god, cheats.free, G.player.cls.id, perfHudSize(),
-    document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode, treesShown(),
+    document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode, profiling,
   ].join('|');
   const stats = perfHudStats();
   const number = (n: number | undefined, digits = 1): string => n !== undefined && Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -415,7 +484,6 @@ export function refreshPanel(): void {
   lit('[data-act=fly]', freeCamOn());
   lit('[data-act=labels]', freeCamLabels());
   lit('[data-act=clean]', document.body.classList.contains('dev-clean'));
-  lit('[data-act=trees]', treesShown());
   lit('[data-act=god]', cheats.god);
   lit('[data-act=free]', cheats.free);
   panel.querySelectorAll<HTMLElement>('[data-speed]').forEach((b) => b.classList.toggle('on', !time.frozen && Number(b.dataset.speed) === time.scale));
@@ -424,7 +492,11 @@ export function refreshPanel(): void {
     b.classList.toggle('on', b.dataset.class === G.player.cls.id);
     (b as HTMLButtonElement).disabled = G.mode !== 'menu';
   });
-  panel.querySelectorAll<HTMLInputElement>('[data-part]').forEach((b) => { b.checked = !taken.has(b.dataset.part!); });
+  panel.querySelectorAll<HTMLInputElement>('[data-part]').forEach((b) => {
+    b.checked = !taken.has(b.dataset.part!);
+    b.disabled = profiling;
+  });
+  $<HTMLButtonElement>('[data-act=parts]').disabled = profiling;
   $('[data-act=parts]').textContent = taken.size ? 'Check all' : 'Uncheck all';
   fly.querySelector('[data-fly=freeze]')!.classList.toggle('on', time.frozen);
   if (G.player.cls.id !== shownClass) { shownClass = G.player.cls.id; renderGear(); }

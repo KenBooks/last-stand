@@ -14,7 +14,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief, reliefContext } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -525,7 +525,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   weeds.count = wi;
   weeds.receiveShadow = true;
   weeds.name = 'weeds';
-  scene.add(weeds);
+  scene.add(...asGrass(weeds));
 
   // --- Small dead trees on the floor: wood an arrow goes into -------------------------
   // (after the weeds, which are placed round the obstacles; from streams of their own)

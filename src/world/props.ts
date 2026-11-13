@@ -294,10 +294,25 @@ export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Up
 }
 
 /** `parts` marked as a tree's (its bark, its leaves, its roots, the copies casting their shadows): what the developer
- *  mode's Trees switch takes out of what's drawn (`src/dev/trees.ts`). Returns them. */
+ *  mode's Trees checkbox takes out of what's drawn (`src/dev/marked.ts`). Returns them. */
 export function asTree<T extends THREE.Object3D>(...parts: T[]): T[] {
   for (const part of parts) part.userData.tree = true;
   return parts;
+}
+
+/** `parts` marked as grass (its blades, the copies `cullInCells` returns): what the developer mode's Grass checkbox
+ *  takes out of what's drawn (`src/dev/marked.ts`). Returns them. */
+export function asGrass<T extends THREE.Object3D>(...parts: T[]): T[] {
+  for (const part of parts) part.userData.grass = true;
+  return parts;
+}
+
+/** `material` marked as leaves' (leaf cards, fronds, fallen leaves, ivy): every mesh drawn in it is what the
+ *  developer mode's Leaves checkbox takes out of what's drawn (`src/dev/marked.ts`). A mark on the material, as a
+ *  tree's leaves are merged and culled into meshes of their own; its clones keep it. Returns it. */
+export function asLeaves<M extends THREE.Material>(material: M): M {
+  material.userData.leaves = true;
+  return material;
 }
 
 /** where a biome's small trees may stand: `n` of them `near` to `far` m from the middle, `apart` from each other */
