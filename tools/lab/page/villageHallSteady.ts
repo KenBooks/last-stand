@@ -18,6 +18,7 @@ import { aimSight } from '../../../src/core/sight';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { hallSills } from '../../../src/world/village';
 import { drawFrame, type Canvas } from './light';
+import { rayChunks } from './rayChunks';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -85,7 +86,8 @@ function stillMeshes(): THREE.Mesh[] {
     const manyPlaces = (mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as THREE.InstancedMesh).isInstancedMesh;
     if (mesh.isMesh && !manyPlaces) meshes.push(mesh);
   });
-  return meshes;
+  // (cut into chunks for the rays: sent at the merged meshes whole, 27 thousand of them took 55 s)
+  return rayChunks(meshes);
 }
 
 /** The places over the hall's floor, from its door to its dais, with a second surface in the top one's plane. */

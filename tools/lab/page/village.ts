@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { pressHeld } from './holdPress';
 import { inShard } from './shards';
 import { villageCost } from './villageCosts';
+import { unposed } from './unposed';
 import type { Lab, Pictured, Report } from './lab';
 import { untilInRealTime } from './villageWaits';
 import { G } from '../../../src/state';
@@ -148,16 +149,16 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     chestOpensNear: () => chestOpensNear(lab, options.canary),
     candleLightsNear: () => candleLightsNear(lab, options.canary),
     castingInYard: () => castingInYard(lab, options.canary),
-    boundsClosed: () => boundsClosed(lab, options.canary),
-    portalsHold: () => portalsHold(lab, options.canary),
+    boundsClosed: () => unposed(() => boundsClosed(lab, options.canary)),
+    portalsHold: () => unposed(() => portalsHold(lab, options.canary)),
     stairClimbed: () => stairClimbed(lab, options.canary),
-    hallWallsHold: () => hallWallsHold(lab, options.canary),
+    hallWallsHold: () => unposed(() => hallWallsHold(lab, options.canary)),
     hallFreesPointer: () => hallFreesPointer(lab, options.canary),
     grassSteady: () => grassSteady(lab, options.canary),
     grassRingsUnseen: () => grassRingsUnseen(lab, options.canary),
     grassRingsGentle: () => grassRingsGentle(lab, options.canary),
-    roundCottages: () => roundCottages(lab, options.canary),
-    walksAcross: () => walksAcross(lab, options.canary),
+    roundCottages: () => unposed(() => roundCottages(lab, options.canary)),
+    walksAcross: () => unposed(() => walksAcross(lab, options.canary)),
     lightsNotBlinding: () => lightsNotBlinding(lab, options.canary),
     lampsSteady: () => lampsSteady(lab, options.canary),
     lampsAlike: () => lampsAlike(lab, options.canary),
@@ -202,9 +203,9 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
     hallWallsOneByOne: () => hallWallsOneByOne(lab, options.canary),
     heroLitInHall: () => heroLitInHall(lab, options.canary),
-    roomColumnsStay: () => roomColumnsStay(lab, options.canary),
+    roomColumnsStay: () => unposed(() => roomColumnsStay(lab, options.canary)),
     heroesSeenFromAbove: () => heroesSeenFromAbove(lab, options.canary),
-    objectsWalkedShort: () => objectsWalkedShort(lab, options.canary),
+    objectsWalkedShort: () => unposed(() => objectsWalkedShort(lab, options.canary)),
     noDotsBesideHall: () => noDotsBesideHall(lab, options.canary),
     wallsPastHimWhole: () => wallsPastHimWhole(lab, options.canary),
     portalOverAll: () => portalOverAll(lab, options.canary),
@@ -215,7 +216,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     staffAtNight: () => staffAtNight(lab, options.canary),
     dummyLabelsFade: () => dummyLabelsFade(lab, options.canary),
     fountainStopsArrows: () => fountainStopsArrows(lab, options.canary),
-    cameraBeforeWalls: () => cameraBeforeWalls(lab, options.canary),
+    cameraBeforeWalls: () => unposed(() => cameraBeforeWalls(lab, options.canary)),
     hallFrontFades: () => hallFrontFades(lab, options.canary),
     firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),

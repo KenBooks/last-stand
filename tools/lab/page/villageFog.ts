@@ -6,6 +6,7 @@
 // plays no frame of its flames, one he can does (`canary` holds the fog off). `leavesInFog`: stood by the hall's
 // walls at noon, all but the door's cone unseen, little of the frame is left green (`canary` holds the fog off).
 import * as THREE from 'three';
+import { rayChunks } from './rayChunks';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE, COTTAGES, HALL, TERRACE, type Cottage } from '../../../src/data/village';
@@ -314,7 +315,8 @@ async function fogThroughRoof(lab: Lab, c: Cottage): Promise<{ taken: number; re
       }
     }
   }
-  const under = points.filter(overRoofAlone);
+  const meshes = shownMeshes();
+  const under = points.filter((point) => overRoofAlone(point, meshes));
   if (under.length === 0) return null;
   return { taken: fogTakesAt(lab, under), read: under.length };
 }
@@ -332,22 +334,23 @@ function fogTakesAt(lab: Lab, points: THREE.Vector3[]): number {
   }
 }
 
-/** Whether `object` and everything over it is shown: the hidden places' meshes are met by a ray too. */
-function shown(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
-    if (!at.visible) return false;
-  }
-  return true;
+/** Every mesh shown (it and everything over it), as chunks for rays (`rayChunks.ts`): sent at the scene whole, the
+ *  hidden places' meshes and all, the rays under the roofs took 73 s of this check's 78. */
+function shownMeshes(): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  G.scene.traverseVisible((object) => {
+    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+  });
+  return rayChunks(meshes);
 }
 
 /** Whether a ray from the eye to `point` meets a roof and nothing else short of it: through a wall's ghost too, the fog
  *  reads that wall, which keeps its depth. */
-function overRoofAlone(point: THREE.Vector3): boolean {
+function overRoofAlone(point: THREE.Vector3, meshes: THREE.Mesh[]): boolean {
   const from = G.camera.position;
   const way = point.clone().sub(from).normalize();
   const short = point.distanceTo(from) - GROUND_ITSELF;
-  const hits = new THREE.Raycaster(from, way, 0, short).intersectObject(G.scene, true);
-  const drawn = hits.filter((hit) => shown(hit.object) && (hit.object as THREE.Mesh).isMesh);
+  const drawn = new THREE.Raycaster(from, way, 0, short).intersectObjects(meshes, false);
   const isRoof = (hit: THREE.Intersection): boolean => {
     const { material } = hit.object as THREE.Mesh;
     return !Array.isArray(material) && material?.blending === THREE.CustomBlending;

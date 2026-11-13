@@ -13,7 +13,7 @@ import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer'
 import { fadeWhole, thinningLetGo } from '../../../src/core/seeThrough';
 import { aimSight, holdDoorsOff, holdSightOff, holdSightSharp } from '../../../src/core/sight';
 import { HALL, TERRACE } from '../../../src/data/village';
-import { drawFrame, type Canvas } from './light';
+import { canvasOf, drawRaw, type Canvas, type RawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import { tileOf } from './hallGlow';
 import type { LightsChecked } from './villageLights';
@@ -65,19 +65,24 @@ interface Walk extends Worst {
   without: string[];
 }
 
-/** `frame`'s mean light (green, as drawn) in each of its patches. */
-function patchLight(frame: Canvas): Float32Array {
-  const sums = new Float32Array(CELLS_ACROSS * CELLS_UP);
-  const counts = new Float32Array(CELLS_ACROSS * CELLS_UP);
+/** `frame`'s mean light (green, as drawn) in each of its patches, from its bytes as they were read (each a 255th). */
+function patchLight(frame: RawFrame): Float32Array {
+  const sums = new Float64Array(CELLS_ACROSS * CELLS_UP);
+  const counts = new Float64Array(CELLS_ACROSS * CELLS_UP);
+  const greens = frame.bytes ?? frame.pixels!;
+  const unit = frame.bytes ? 255 : 1;
+  // (each column's cell found once, not for every pixel)
+  const cellOf = new Int32Array(frame.width);
+  for (let x = 0; x < frame.width; x++) cellOf[x] = Math.floor((x / frame.width) * CELLS_ACROSS);
   for (let y = 0; y < frame.height; y++) {
     const row = Math.floor((y / frame.height) * CELLS_UP) * CELLS_ACROSS;
+    const from = y * frame.width * 4 + 1;
     for (let x = 0; x < frame.width; x++) {
-      const cell = row + Math.floor((x / frame.width) * CELLS_ACROSS);
-      sums[cell] += frame.pixels[(y * frame.width + x) * 4 + 1];
-      counts[cell]++;
+      sums[row + cellOf[x]] += greens[from + x * 4];
+      counts[row + cellOf[x]]++;
     }
   }
-  return sums.map((sum, cell) => sum / Math.max(1, counts[cell]));
+  return Float32Array.from(sums, (sum, cell) => sum / unit / Math.max(1, counts[cell]));
 }
 
 /** The patches whose light jumped by over `JUMP` one way from `a` to `b` and straight back from `b` to `c`. */
@@ -156,10 +161,10 @@ function holdCamera(held: HeldCamera): void {
 }
 
 /** The frame drawn now, `held` let go for its draw alone (the game sets the thinning again each frame). */
-function drawnWithout(lab: Lab, held?: Held): Canvas {
+function drawnWithout(lab: Lab, held?: Held): RawFrame {
   const putBack = held === 'thinning' ? thinningLetGo() : null;
   try {
-    return drawFrame(lab);
+    return drawRaw(lab);
   } finally {
     putBack?.();
   }
@@ -174,7 +179,7 @@ async function walkIn(lab: Lab, line: number, canary: boolean, held?: Held): Pro
   await lab.step(SETTLE);
   const camera = cameraNow();
   G.player.obj.visible = false;
-  const frames: Canvas[] = [];
+  const frames: RawFrame[] = [];
   const lights: Float32Array[] = [];
   let worst: Worst = { share: 0, step: 0, frames: [], marked: null, round: '' };
   let worstCells: number[] = [];
@@ -192,7 +197,9 @@ async function walkIn(lab: Lab, line: number, canary: boolean, held?: Held): Pro
       const cells = flickered(lights[step - 2], lights[step - 1], lights[step]);
       const share = cells.length / (CELLS_ACROSS * CELLS_UP);
       if (share <= worst.share) continue;
-      worst = { share, step: step - 1, frames: [...frames], marked: marked(frames[1], cells), round: '' };
+      // (the worst so far alone made a picture's pixels: every frame's, they were a quarter of the check's time)
+      const pictured = frames.map(canvasOf);
+      worst = { share, step: step - 1, frames: pictured, marked: marked(pictured[1], cells), round: '' };
       worstCells = cells;
     }
   } finally {
