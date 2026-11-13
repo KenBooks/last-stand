@@ -435,7 +435,11 @@ const VERTEX_BLADE = /* glsl */ `
   float gust = noise2(root * 0.11 - downwind * uTime * 0.55) * 0.65 + noise2(root * 0.37 - downwind * uTime * 1.1) * 0.35;
   float blowing = smoothstep(0.42, 0.78, gust);
   float flutter = sin(uTime * 5.1 + h.y * 6.2832) * (0.04 + 0.16 * blowing);
-  vec3 wind = vec3(windWay.x, 0.0, windWay.y) * (t * t * height * (blowing * 0.3 + flutter + 0.02));
+  // (a tuft's card sways mostly in its own plane: pushed over across it, a card's face turned up to the camera and
+  // away as each gust passed, a patch's light a third brighter and darker within a second, from play "very bright
+  // becomes very dark and back")
+  vec2 swayWay = mix(windWay, turned * dot(windWay, turned) + lean2 * dot(windWay, lean2) * 0.2, tufted);
+  vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.3 + flutter + 0.02));
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
@@ -489,7 +493,12 @@ const FRAGMENT_COLOUR = /* glsl */ `
         float middle = rootAt + (rootAt - zone) * ${TUFT_FAN.toFixed(2)} * a
           + ((r2 - 0.5) * 1.7 * a + (r3 - 0.5) * 2.2 * a * a) / ${TUFT_BINS}.0;
         // (as wide most of its length, then to a point)
-        float halfWide = max(${TUFT_BLADE.toFixed(3)} / ${TUFT_BINS}.0 * (1.0 - pow(a, 3.0)), pixel);
+        float thin = ${TUFT_BLADE.toFixed(3)} / ${TUFT_BINS}.0 * (1.0 - pow(a, 3.0));
+        // (a blade thinner than a pixel is drawn a pixel wide, and as many fewer of them: every one widened, a far
+        // tuft was near solid, all bright tips and straw, where the same tuft close to shows the dark between its
+        // blades, from play "grass shading moves on approach, very bright becomes very dark and back")
+        if (thin < pixel && fract(r3 * 9.71 + r1 * 3.3) > thin / pixel) continue;
+        float halfWide = max(thin, pixel);
         float off = (u - middle) / halfWide;
         if (abs(off) < abs(nearest)) {
           nearest = off;
