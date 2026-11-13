@@ -41,10 +41,10 @@ const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].
  *  blades folded along the midrib; from play, of ours on High, "looks terrible", and of its meadow, "this is really
  *  good"). As geometry, three blades a tuft, High's frame over the shoulder was 3.6M triangles ("that's broken",
  *  "we need below 1M tris on high"); cut as parallel strands of one sheet, hairs combed one way. */
-const TUFT = 8;
+const TUFT = 14;
 /** a tuft's card's width against a whole blade's, and a blade's half width at its root as a share of the card's */
 const TUFT_CARD = 1.7;
-const TUFT_BLADE = 0.13;
+const TUFT_BLADE = 0.06;
 /** how far apart the tufts' cards stand against the blades' cells, each as many tufts wide: at a card a cell, the
  *  cards lay many deep over every pixel, each pixel of each cut as it's shaded, and High's scene pass took 8.2 ms of a
  *  4070 Ti's frame over the shoulder where main's took 5.4, with two thirds of main's triangles */
@@ -62,7 +62,7 @@ const BLADES_TOP = 1.1;
  *  (`lab village --only grassRingsGentle`: 13.2% of a band's light in a stride, at most 10%) */
 const ROOT_STRAYS = 1;
 /** how much taller the grass stands where it's drawn as tufts (from play, "can we make grass taller?") */
-const TUFT_TALLER = 1.35;
+const TUFT_TALLER = 1.5;
 /** the segments along each of its blades when they're spread (`setGrassSpread`): from above every blade is about as far
  *  off, seen from over it, and its bend hardly shows */
 const ABOVE_SPREAD_SEGS = 1;
@@ -428,7 +428,7 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.074, 0.127, 0.022), vec3(0.104, 0.153, 0.028), fract(h.y * 3.7));
+  vec3 green = mix(vec3(0.046, 0.118, 0.03), vec3(0.074, 0.15, 0.036), fract(h.y * 3.7));
   vec3 dry = vec3(0.26, 0.21, 0.085);
   vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.6 + smoothstep(0.8, 0.97, patchy) * 0.15);`;
 
@@ -456,7 +456,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
       float tall = mix(0.5, 1.0, r1)
         * mix(1.0, smoothstep(r2 * ${TUFT_RISE.toFixed(2)}, r2 * ${TUFT_RISE.toFixed(2)} + ${TUFT_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
       float a = vBlade.x / max(tall, 0.01);
-      float middle = ((fk + 0.5) / ${TUFT}.0 * 2.0 - 1.0) * mix(0.12, 0.72, a) + (r2 - 0.5) * 1.0 * a * a
+      float middle = ((fk + 0.5) / ${TUFT}.0 * 2.0 - 1.0) * mix(0.12, 0.72, a) + ((r2 - 0.5) * 1.3 + (fract(seed * 5.3) - 0.5) * 0.9) * a * a
         + (fract(r1 * 7.3) - 0.5) * 0.25 * a;
       float halfWide = max(${TUFT_BLADE.toFixed(3)} * (1.0 - pow(min(a, 1.0), 2.2)), pixel);
       float off = (inTuft - middle) / max(halfWide, 1e-4);
@@ -488,12 +488,12 @@ const FRAGMENT_COLOUR = /* glsl */ `
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
 #endif
-  vec3 bladeColour = vBladeColour * mix(0.48, 1.0, smoothstep(0.0, 0.6, along));
+  vec3 bladeColour = vBladeColour * mix(0.28, 1.12, smoothstep(0.0, 0.8, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
-  bladeColour *= mix(1.0, mix(0.93, 1.05, step(0.0, foldB)) * mix(0.9, 1.07, strandShade), step(1.5, uTuft));
+  bladeColour *= mix(1.0, mix(0.9, 1.06, step(0.0, foldB)) * mix(0.8, 1.12, strandShade), step(1.5, uTuft));
   vec4 diffuseColor = vec4(bladeColour, opacity);`;
 
 /** A ring's uniforms, set as it's drawn. */
@@ -961,7 +961,7 @@ export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: M
         }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         float swardV = swardN(vMeadowXZ * 0.15) * 0.6 + swardN(vMeadowXZ * 0.9 + 4.0) * 0.4;
-        vec3 sward = mix(vec3(0.05, 0.085, 0.022), vec3(0.11, 0.13, 0.034), swardV) * (0.8 + diffuseColor.g * 0.6);
+        vec3 sward = mix(vec3(0.04, 0.085, 0.026), vec3(0.085, 0.13, 0.038), swardV) * (0.8 + diffuseColor.g * 0.6) * 0.55;
         // (short shoots and thatch between the tufts, as solstice's undergrowth: streaks a blade long, three ways
         // round, between the sward's dark and the blades' green; faded where a pixel is wider than a shoot)
         float shoots = 0.0;
