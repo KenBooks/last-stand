@@ -11,7 +11,8 @@
 // nothing (unseen), and skips 2 s as the cycle starts over (a join).
 import * as THREE from 'three';
 import { G } from '../../../src/state';
-import { ITEM_GLOW, tickItemGlow } from '../../../src/core/materials';
+import { gearGlow, ITEM_GLOW, tickItemGlow } from '../../../src/core/materials';
+import { qualityLevel, useQuality } from '../../../src/core/quality';
 import { RARITIES } from '../../../src/data/items';
 import type { HeroColourId } from '../../../src/data/heroColours';
 import type { Gear, GlowSlot, RarityId } from '../../../src/types';
@@ -291,6 +292,33 @@ function judgeSetting(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: s
   return `Gear glow setting: off ${pct(off.lit)} of the close-ups lit, on again ${pct(on.lit)}`;
 }
 
+/**
+ * The quality level's say, while the player has chosen nothing (the lab's boot keeps no cookie): at Very low every
+ * slot at `rarity` must glow not at all, and once On is pressed there, glow (from play: "turn off gear glow
+ * automatically at very low, could be toggled on in settings if user prefers it on"). The level is put back; the
+ * choice stays On, as the setting's check leaves it.
+ */
+function judgeLevel(lab: Lab, slots: GlowSlot[], rarity: RarityId, problems: string[]): string {
+  wearRarities(lab, allAt(slots, rarity));
+  const strength = ITEM_GLOW.strength;
+  const level = qualityLevel();
+  const before = gearGlow();
+  useQuality('verylow');
+  try {
+    const unchosen = glowNow(lab, strength);
+    ITEM_GLOW.strength = strength;
+    pressGearGlow('on');
+    const chosen = glowNow(lab, strength);
+    if (!before) problems.push(`Gear glow: off at ${level} before any choice`);
+    if (unchosen.lit > 0) problems.push(`Gear glow at Very low, nothing chosen: the gear glowed (${pct(unchosen.lit)} of the close-ups)`);
+    if (chosen.lit < SEEN_LEAST) problems.push(`Gear glow at Very low, turned on: the gear glowed ${pct(chosen.lit)} of the close-ups`);
+    return `Gear glow at Very low: ${pct(unchosen.lit)} of the close-ups lit with nothing chosen, ${pct(chosen.lit)} turned on`;
+  } finally {
+    useQuality(level);
+    ITEM_GLOW.strength = strength;
+  }
+}
+
 /** The hero with no glow and with every item at `rarity`, close up. */
 function pictures(lab: Lab, slots: GlowSlot[], rarity: RarityId): Pictured[] {
   wearRarities(lab, {});
@@ -319,6 +347,7 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
   }
   lines.push(judgeMotion(lab, slots, options.rarity, problems));
   lines.push(judgeLoop(lab, slots, options.rarity, problems));
+  lines.push(judgeLevel(lab, slots, options.rarity, problems));
   lines.push(judgeSetting(lab, slots, options.rarity, problems));
   const moments = options.pictures ? pictures(lab, slots, options.rarity) : [];
   const compiled = (G.renderer.info.programs ?? []).length - programs;

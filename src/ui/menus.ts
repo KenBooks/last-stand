@@ -258,7 +258,7 @@ export function initMenus(h: MenuHooks): void {
     renderHourOption();
   };
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
-    b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
+    b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); renderGearGlowOptions(); };
   });
   document.querySelectorAll<HTMLElement>('#opt-resolution button').forEach((b) => {
     b.onclick = () => {
@@ -1186,7 +1186,8 @@ function renderEyesPortalOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-eyes-portal button').forEach((b) => b.classList.toggle('active', b.dataset.g === on));
 }
 
-/** The Gear glow setting's buttons, the one in effect lit. */
+/** The Gear glow setting's buttons, the one in effect lit: the player's choice, else the quality level's (off at
+ *  Very low). */
 function renderGearGlowOptions(): void {
   const on = gearGlow() ? 'on' : 'off';
   document.querySelectorAll<HTMLElement>('#opt-gear-glow button').forEach((b) => b.classList.toggle('active', b.dataset.g === on));
@@ -1343,6 +1344,7 @@ export function showPause(v: boolean): void {
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
+    renderGearGlowOptions();
     renderTraceOptions();
     renderHdrOptions();
     renderRendererOptions();

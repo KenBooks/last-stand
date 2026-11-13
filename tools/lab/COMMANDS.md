@@ -253,7 +253,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `core/materials.ts`; from play: "we also need to disable clothing shader effect, for rarity -- measure how much it
   would impact the performance"). The heroes of a scene are dressed in `--rarity` (legendary) and the same frame is
   drawn with the glow and, in turns within one page (`page/gpuTurns.ts`, `--rounds` of 6 frames a side), each way
-  without it: off by the setting (its strength a uniform at 0: its strands are still worked out a pixel), on plain
+  without it: off by the setting (its strength a uniform at 0), on plain
   gear (each glowing material's colour black, as `ItemGlows.set` leaves it: the code passed over a pixel), and gone
   (its lines taken out of every program that has them, in copies of the scene's materials made here alone, each
   running its original's hook as the original and keyed by that hook's source too). The whole frame is timed, the
@@ -271,7 +271,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   over the shoulder 0.3 to 0.4 ms of 11.5 (2 to 4%); through the eyes 0.5 to 0.7 of 10 (5 to 7%) at High, of 7 at Low
   (8 to 10%); a party of four 0.4 of 13.5 at High, 0.4 to 0.8 of 7.5 at Very low; the hall 0.7 to 1.2 of 18 at High,
   0.5 to 0.7 of 14 at Low and 13 at Very low. The setting off saved nothing in any scene (-0.2 to +0.2 ms, within
-  the noise), and plain gear as much as the code gone, within the noise. The CPU slowed 4 times read no difference
+  the noise) while its strands were worked out and multiplied by 0, and plain gear as much as the code gone, within
+  the noise: since then the setting off passes them over a pixel, as plain gear does, and Very low has it off. The CPU slowed 4 times read no difference
   for the copies (±1 to 2 ms on a 25 ms frame). No level leaves the glow out. What it got wrong on the way: a hero
   dressed again each turn (`setGear`) had his staff and coat built anew, out of every swap; two swaps of materials
   put back in the wrong order left the glow on a dozen meshes "without" it; copies keyed alike shared one program.
@@ -294,6 +295,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   its budget (`BUDGET_KB` in `src/world/fireBake.ts`, which `lab:test` holds it to as well) or with any of the flame cut off outside the kept box.
 - `fire`: each biome's fire as the player meets it: in full in [`commands/fire.md`](commands/fire.md).
 - `glow`: each worn item's glow in its rarity's colour (`page/itemGlow.ts`, #404, `src/entities/models/AGENTS.md`).
+  At Very low with nothing chosen the gear must glow not at all, and glow once On is pressed there (`judgeLevel`:
+  the level's say, `QualityPreset.gearGlow`; main, where every level glowed, fails it).
   The hero (`--class`) wears every item his class shows, the warrior with a shield, dyed in a player's colour
   (`--colour`, green by default: a Rare item's green on it). Each slot's item alone is given the rarity
   (`--rarity`, rare by default), and the front and back close-ups drawn with its glow and with `ITEM_GLOW.strength`

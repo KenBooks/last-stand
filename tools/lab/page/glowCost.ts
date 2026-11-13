@@ -66,7 +66,7 @@ const CPU_TURNS = { rounds: 10, frames: 20 };
 /** the ways the frame is drawn: as players have it, and each way without the glow */
 type Way = 'on' | 'setting' | 'plain' | 'gone' | 'own';
 const WAYS: { way: Exclude<Way, 'on'>; name: string; gpu: boolean }[] = [
-  { way: 'setting', name: 'off by the setting (strength 0, still worked out)', gpu: true },
+  { way: 'setting', name: 'off by the setting (its strength 0)', gpu: true },
   { way: 'plain', name: 'on plain gear (its code passed over)', gpu: true },
   { way: 'gone', name: 'gone from the programs', gpu: true },
   // (the glow's copies are three's work on the CPU, `--cpu`: the GPU draws the same either way)
@@ -92,7 +92,7 @@ function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
 }
 
 /** the glow's lines in a kit material's fragment shader, as `core/materials.ts` writes them */
-const GLOW_CODE = /if \(dot\(uAura, uAura\) > 0\.0\) \{[\s\S]*?\n\s*\}/;
+const GLOW_CODE = /if \([^\n{]*dot\(uAura, uAura\) > 0\.0\) \{[\s\S]*?\n\s*\}/;
 
 /** what the renderer keeps of a material it has drawn: its program's fragment shader as compiled */
 interface Compiled {

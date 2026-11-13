@@ -59,25 +59,38 @@ export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AUR
 const wholeAtHalf = (cells: number): number => Math.max(2, 2 * Math.round(cells / 2));
 
 /** the setting (Settings' Gear glow, the cookie): on unless turned off ("opt in, enabled by default, but can be
- *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value: nothing compiles */
+ *  disabled in pause menu settings"); off, the glow's strength is 0, a uniform's value: nothing compiles, and a
+ *  pixel passes its strands over (worked out and multiplied by nothing, Off saved none of the 3 to 10% of the frame
+ *  the glow takes where gear fills the view: `npm run lab -- glowcost`). Until the player chooses, the quality
+ *  level decides (`QualityPreset.gearGlow`: off at Very low; from play, "turn off gear glow automatically at very
+ *  low, could be toggled on in settings if user prefers it on"). */
 const GLOW_COOKIE = 'last-stand-gear-glow';
 // Geometry workers import the material kit too; they have no page preferences or document.
-let gearGlowOn = typeof document === 'undefined' || readCookie(GLOW_COOKIE) !== 'off';
+const glowKept = typeof document === 'undefined' ? null : readCookie(GLOW_COOKIE);
+/** the player's own choice, null while none was made */
+let gearGlowChosen: boolean | null = glowKept === 'on' ? true : glowKept === 'off' ? false : null;
+/** what the quality level in effect has it at */
+let gearGlowByLevel = true;
 
-/** Whether worn gear glows in its rarity's colour (the setting). */
-export const gearGlow = (): boolean => gearGlowOn;
+/** Whether worn gear glows in its rarity's colour: the player's choice, else the quality level's. */
+export const gearGlow = (): boolean => gearGlowChosen ?? gearGlowByLevel;
 
-/** The setting: worn gear glowing or not, kept for the next visit. */
+/** The setting: worn gear glowing or not, kept for the next visit, whatever the quality level. */
 export function setGearGlow(on: boolean): void {
-  gearGlowOn = on;
+  gearGlowChosen = on;
   writeCookie(GLOW_COOKIE, on ? 'on' : 'off');
+}
+
+/** Whether worn gear glows at the quality level in effect, where the player hasn't chosen (core/quality.ts). */
+export function setGearGlowByLevel(on: boolean): void {
+  gearGlowByLevel = on;
 }
 
 /** The glow's clock moved to the game's (`G.time`, s), and its shape read, once a frame. */
 export function tickItemGlow(time: number): void {
   const { strength, face, across, up, centre, width, rise, turns, cycle } = ITEM_GLOW;
   AURA_SHAPE.value.set(across, up, centre, width);
-  AURA_LOOP.value.set(wholeAtHalf(rise), wholeAtHalf(turns), face, gearGlowOn ? strength : 0);
+  AURA_LOOP.value.set(wholeAtHalf(rise), wholeAtHalf(turns), face, gearGlow() ? strength : 0);
   AURA_CLOCK.value = (((time % cycle) + cycle) % cycle) / cycle;
 }
 
@@ -200,8 +213,9 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           totalEmissiveRadiance *= mix(1.0, nearGlow(), uNear);
           totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-          if (dot(uAura, uAura) > 0.0) {
-            // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop
+          if (uAuraLoop.w > 0.0 && dot(uAura, uAura) > 0.0) {
+            // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop; passed over
+            // with the setting off (its strength 0) as on plain gear
             totalEmissiveRadiance += uAura * uAuraLoop.w * auraTendrils(vFxPos, uAuraClock, uAuraShape, uAuraLoop);
           }
           float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;

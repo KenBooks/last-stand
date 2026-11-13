@@ -64,15 +64,18 @@ export interface QualityPreset {
   /** the share of the particles a burst, a puff of smoke or debris spawns (`setParticleShare` in fx/particles.ts):
    *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
   particles: number;
+  /** whether worn gear glows in its rarity's colour where the player hasn't chosen (Settings' Gear glow,
+   *  `setGearGlowByLevel` in core/materials.ts): 3 to 10% of the frame where glowing gear fills the view */
+  gearGlow: boolean;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1 },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1 },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1, leaves: 1 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true },
   // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
   // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34, leaves: 0.5 },
+  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34, leaves: 0.5, gearGlow: false },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];

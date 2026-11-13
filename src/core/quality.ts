@@ -25,6 +25,7 @@ import { setHdrAllowed } from './hdr';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
 import { setClutterShare, setLeafShare } from '../world/culling';
+import { setGearGlowByLevel } from './materials';
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
@@ -222,6 +223,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);
+  setGearGlowByLevel(p.gearGlow);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
