@@ -129,6 +129,19 @@ test('the village\'s checks in shards, a job each, for the ranger alone, and onl
   assert.equal(jobsOf({ commands: ['village'], classes: ['mage'] }).length, 0);
 });
 
+test('the village\'s shards as many as asked, and a PC\'s share of them', () => {
+  const jobs = jobsOf({ commands: ['village'], shards: 16 });
+  assert.equal(jobs.length, 16);
+  assert.equal(jobs[15].options.shard, '16/16');
+  const here = names(jobsOf({ commands: ['village'], shards: 16, share: '1/2' }));
+  const there = names(jobsOf({ commands: ['village'], shards: 16, share: '2/2' }));
+  assert.equal(here.length, 8);
+  assert.equal(there.length, 8);
+  assert.deepEqual([...here, ...there].sort(), names(jobs).sort());
+  assert.throws(() => jobsOf({ commands: ['village'], shards: 99 }), /--shards/);
+  assert.throws(() => jobsOf({ commands: ['village'], share: '3/2' }), /--share/);
+});
+
 test('a shard a run of the checks in their order, about as long as the others, the shards every check once', () => {
   const checks = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
   assert.deepEqual(inShard(checks, '2/3'), ['c', 'd', 'e']);

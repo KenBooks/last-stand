@@ -16,6 +16,7 @@ import { fogOneGrey, fogPastCottages } from './villageFogPast';
 import * as THREE from 'three';
 import { pressHeld } from './holdPress';
 import { inShard } from './shards';
+import { villageCost } from './villageCosts';
 import type { Lab, Pictured, Report } from './lab';
 import { untilInRealTime } from './villageWaits';
 import { G } from '../../../src/state';
@@ -247,7 +248,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
   if (!asked.length) throw new Error(`lab: village: no check called ${options.only}`);
   const checks: Checked[] = [];
   const times: string[] = [];
-  for (const name of inShard(asked, options.shard)) {
+  for (const name of inShard(asked, options.shard, villageCost)) {
     const started = realNow();
     checks.push(await all[name]());
     times.push(`  ${name}: ${((realNow() - started) / 1000).toFixed(1)} s`);

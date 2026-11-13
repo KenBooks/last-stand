@@ -65,19 +65,33 @@ function castingLights(): THREE.PointLight[] {
   return lights;
 }
 
-/** The ground's light round `at` drawn from straight over it, the point lights' shadows at `strength` (or as they
- *  are), the game's camera given back after. */
-function readOver(lab: Lab, at: THREE.Vector3, strength: number | null): number {
+/** The middle of `patches`. */
+function middleOf(patches: THREE.Vector3[]): THREE.Vector3 {
+  const middle = new THREE.Vector3();
+  for (const at of patches) middle.add(at);
+  return middle.divideScalar(Math.max(1, patches.length));
+}
+
+/**
+ * The ground's light round each of `patches`, all read from one frame drawn from straight over their middle (they
+ * lie within 3 m of it, well inside the view from `OVER`), the point lights' shadows at `strength` (or as they are),
+ * the game's camera given back after. A frame was drawn and read back for each patch: 120 by each lamp's stand,
+ * which made this check the village's longest, 309 s of the suite's 2259 on the lent PC.
+ */
+function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): number[] {
+  if (!patches.length) return [];
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
   const lights = castingLights();
   const strengths = lights.map((light) => light.shadow.intensity);
   if (strength !== null) for (const light of lights) light.shadow.intensity = strength;
-  camera.position.set(at.x + 0.01, at.y + OVER, at.z);
-  camera.lookAt(at);
+  const over = middleOf(patches);
+  camera.position.set(over.x + 0.01, over.y + OVER, over.z);
+  camera.lookAt(over);
   camera.updateMatrixWorld();
   try {
-    return lightRound(drawFrame(lab), at);
+    const canvas = drawFrame(lab);
+    return patches.map((at) => lightRound(canvas, at));
   } finally {
     lights.forEach((light, i) => {
       light.shadow.intensity = strengths[i];
@@ -103,12 +117,12 @@ function heroCasts(on: boolean, kept: Map<THREE.Object3D, boolean>): void {
   if (on) kept.clear();
 }
 
-/** The share of the ground's light round `at` the lamps' shadows take, read with them at their strength and held
- *  off. */
-function lampsTake(lab: Lab, at: THREE.Vector3): number {
-  const shadowed = readOver(lab, at, null);
-  const unshadowed = readOver(lab, at, 0);
-  return 1 - shadowed / Math.max(unshadowed, 1e-3);
+/** The share of the ground's light round each of `patches` the lamps' shadows take, read with them at their
+ *  strength and held off. */
+function lampsTake(lab: Lab, patches: THREE.Vector3[]): number[] {
+  const shadowed = readOver(lab, patches, null);
+  const unshadowed = readOver(lab, patches, 0);
+  return patches.map((_, i) => 1 - shadowed[i] / Math.max(unshadowed[i], 1e-3));
 }
 
 /** Whether (x, z) is paved: on the square or a road, `ON_ROAD` inside its edge. */
@@ -158,9 +172,9 @@ async function standBy(lab: Lab, spot: THREE.Vector3, lamp: THREE.Vector3): Prom
  *  take while he doesn't (what stands still there). */
 function mostHeTakes(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object3D, boolean>, canary: boolean): number {
   if (canary) heroCasts(false, casts);
-  const casting = patches.map((at) => lampsTake(lab, at));
+  const casting = lampsTake(lab, patches);
   heroCasts(false, casts);
-  const bare = patches.map((at) => lampsTake(lab, at));
+  const bare = lampsTake(lab, patches);
   heroCasts(true, casts);
   return Math.max(...casting.map((take, i) => take - bare[i]));
 }
@@ -190,9 +204,9 @@ function behindFromMoon(spot: THREE.Vector3): THREE.Vector3[] {
 function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object3D, boolean>,
   canary: boolean): number {
   if (canary) heroCasts(false, casts);
-  const casting = patches.map((at) => readOver(lab, at, 0));
+  const casting = readOver(lab, patches, 0);
   heroCasts(false, casts);
-  const bare = patches.map((at) => readOver(lab, at, 0));
+  const bare = readOver(lab, patches, 0);
   heroCasts(true, casts);
   return Math.max(...patches.map((_, i) => 1 - casting[i] / Math.max(bare[i], 1e-3)));
 }

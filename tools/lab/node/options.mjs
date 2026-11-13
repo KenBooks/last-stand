@@ -2351,9 +2351,26 @@ export const COMMANDS = {
           'gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'swing', 'rush', 'hits', 'log', 'village',
         ],
         help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, swing, rush, hits, log by default; '
-          + 'village: the village\'s checks in 8 shards side by side, only when named)',
+          + 'village: the village\'s checks in shards side by side, 8 unless --shards says, only when named)',
       },
-      jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
+      jobs: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many sessions side by side (a core in three, at most 8; asked for, as many as said: 16 on a '
+          + 'PC lent whole)',
+      },
+      shards: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many shards the village\'s checks run in (8 by default, at most 24), each about as long as '
+          + 'the others by the checks\' measured times',
+      },
+      share: {
+        kind: 'text',
+        usage: 'k/n',
+        help: 'this PC\'s share of the jobs, every n-th from the k-th: one check on two PCs at once, 1/2 here '
+          + 'and 2/2 on the lent one',
+      },
       starts: {
         kind: 'number',
         usage: 'n',
