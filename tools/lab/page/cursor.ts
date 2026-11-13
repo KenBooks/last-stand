@@ -39,6 +39,10 @@ const ALT: Held = { code: 'AltLeft', name: 'altleft', label: 'Alt' };
 const CTRL: Held = { code: 'ControlLeft', name: 'controlleft', label: 'Ctrl' };
 /** how far the mouse moves for mouse look to turn the view (css px) */
 const LOOK_MOVE = 60;
+/** the most a hop of the held move to Pause goes (css px): the game takes a move under the lock of over 200 px
+ *  and six times the one before it for the browser's own jump and turns nothing by it (#318), so gone to in
+ *  one move, the canary's view never turned under Ctrl and its plant went unseen */
+const HOP = 100;
 /** a turn of the view smaller than this is none (rad) */
 const STILL = 1e-6;
 /** the blows listed for the log's lines to scroll, each this long after the last (s: past the log's join gap, so
@@ -101,6 +105,18 @@ function clipAround(point: PagePoint): Clip {
 }
 
 /** The middle of the window, where the crosshair is and the drawn cursor starts. */
+/** The points of a move from `from` to `to` in hops of `HOP` at the most, `to` the last. */
+function hopsTo(from: PagePoint, to: PagePoint): PagePoint[] {
+  const count = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / HOP));
+  const hops: PagePoint[] = [];
+  for (let hop = 1; hop <= count; hop++) {
+    const share = hop / count;
+    hops.push({ x: Math.round(from.x + (to.x - from.x) * share), y: Math.round(from.y + (to.y - from.y) * share) });
+  }
+  hops[count - 1] = to;
+  return hops;
+}
+
 function centre(): PagePoint {
   return { x: innerWidth / 2, y: innerHeight / 2 };
 }
@@ -190,8 +206,10 @@ async function round(lab: Lab, log: BattleLog, view: ViewMode, held: Held): Prom
   await step();
   const pause = middleOf(shown('#blog [data-bl="pause"]'));
   yaw = cameraYaw();
-  await lab.mouseTo(pause);
-  await step();
+  for (const hop of hopsTo(middle, pause)) {
+    await lab.mouseTo(hop);
+    await step();
+  }
   const heldTurn = turnFrom(yaw);
   const overPause = drawnCursor();
   const moments = [await lab.screen(`${view}: ${held.label} held over the log's Pause`, [], clipAround(pause))];

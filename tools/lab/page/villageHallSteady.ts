@@ -39,27 +39,32 @@ const IN_FROM = 7;
 const SETTLE = 40;
 const NUDGE = 0.0005;
 const JUMP = 8 / 255;
-const MOST_JUMPED = 0.015;
+const MOST_JUMPED = 0.01;
+/** how far a channel jumps to count on the hall's walls: over the GPU's own rounding, a level. The walls are dim
+ *  at midnight (they were brighter when 5% of the frame jumped by `JUMP`): read on each surface again, their
+ *  sides flip 4.05% of the frame by over 2 levels and 0.56% by over 8, which went unseen; as it is, 0.21% */
+const WALL_JUMP = 2 / 255;
 
-/** The share of the pixels whose light jumped by more than `JUMP` between `a` and `b`. */
-function jumpedShare(a: Canvas, b: Canvas): number {
+/** The share of the pixels whose light jumped by more than `over` between `a` and `b`. */
+function jumpedShare(a: Canvas, b: Canvas, over = JUMP): number {
   let jumped = 0;
   for (let at = 0; at < a.pixels.length; at += 4) {
     const red = Math.abs(a.pixels[at] - b.pixels[at]);
     const green = Math.abs(a.pixels[at + 1] - b.pixels[at + 1]);
     const blue = Math.abs(a.pixels[at + 2] - b.pixels[at + 2]);
-    if (Math.max(red, green, blue) > JUMP) jumped++;
+    if (Math.max(red, green, blue) > over) jumped++;
   }
   return jumped / (a.pixels.length / 4);
 }
 
 /** The frame drawn, and drawn again with the camera moved `NUDGE` aside; the share of it that jumped. */
-function jumpedAsTheViewMoves(lab: Lab): number {
+function jumpedAsTheViewMoves(lab: Lab): { share: number; box: string } {
   const before = drawFrame(lab);
   G.camera.position.x += NUDGE;
   G.camera.updateMatrixWorld();
   try {
-    return jumpedShare(before, drawFrame(lab));
+    const after = drawFrame(lab);
+    return { share: jumpedShare(before, after, WALL_JUMP), box: jumpedBox(before, after) };
   } finally {
     G.camera.position.x -= NUDGE;
     G.camera.updateMatrixWorld();
@@ -382,12 +387,14 @@ export async function hallWallsSteady(lab: Lab, canary: boolean): Promise<Lights
     await lab.step(SETTLE);
     if (canary) readShelterOnSurface(true);
     const jumped = jumpedAsTheViewMoves(lab);
-    const line = `hall's walls as the view moves ${NUDGE * 1000} mm: ${(jumped * 100).toFixed(2)}% of the frame jumped `
-      + `(at most ${MOST_JUMPED * 100}%)`;
-    const flickered = jumped > MOST_JUMPED;
-    if (canary) return { lines: [line], problems: [], caught: flickered, moments: [] };
+    const line = `hall's walls as the view moves ${NUDGE * 1000} mm: ${(jumped.share * 100).toFixed(2)}% of the frame `
+      + `jumped (at most ${MOST_JUMPED * 100}%), its larger jumps within ${jumped.box} of the frame`;
+    const flickered = jumped.share > MOST_JUMPED;
+    // (the view pictured where a fault is, planted or found: what he looked at, beside its number)
+    const moments = canary || flickered ? [await lab.screen('the walls of the hall, the view moved', [line])] : [];
+    if (canary) return { lines: [line], problems: [], caught: flickered, moments };
     const problems = flickered ? [`${line}: the walls flicker`] : [];
-    return { lines: [line], problems, caught: null, moments: [] };
+    return { lines: [line], problems, caught: null, moments };
   } finally {
     if (canary) readShelterOnSurface(false);
     holdHour(null);

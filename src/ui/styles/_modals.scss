@@ -146,6 +146,12 @@ body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1));
 .recording-controls .btn { padding: 6px 10px; font-size: 14px; }
 body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
 .profile-row .btn { padding: 6px 10px; font-size: 14px; }
+/* Send the report beside Profile this spot, not under the parts: on a phone held sideways (844x390) a row of its own
+   there took the page 23 px past the menu, which scrolled */
+.pb-opts .profile-row { display: grid; grid-template-columns: auto auto 1fr; justify-items: start; }
+.profile-row > * { grid-column: 1 / -1; }
+.profile-row > #btn-profile { grid-column: 1; grid-row: 2; }
+.profile-row > #btn-profile-send { grid-column: 2; grid-row: 2; }
 .profile-parts { margin: 0; padding-left: 18px; font-size: 12px; font-variant-numeric: lining-nums tabular-nums; }
 .profile-parts li { margin: 1px 0; }
 .opt-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }

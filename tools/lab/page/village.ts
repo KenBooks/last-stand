@@ -261,7 +261,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
   if (!options.canary) return { text: lines.join('\n'), problems: checks.flatMap((c) => c.problems), moments };
   lines.push(`canaries: ${caught.filter(Boolean).length} of ${caught.length} caught`);
   const missed = caught.includes(false) ? ['canary: a planted fault went unseen'] : [];
-  return { text: lines.join('\n'), problems: missed };
+  return { text: lines.join('\n'), problems: missed, moments };
 }
 
 /** The run left by the pause menu, the lobby's village shown and taking the hero's input. */
