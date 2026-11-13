@@ -7,9 +7,50 @@
 // frame. It stands once at each frame rate (`rates`): the cloth steps at 1/60 s, so on a faster screen most frames
 // step it none and some once, which a 60 Hz clock never shows ("the hood is jerking when idle").
 import * as THREE from 'three';
+import * as armor from '../../../src/entities/models/armor';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { Lab, Report } from './lab';
+
+/** The cloth's rest (models/armor.ts `CLOTH_REST`, #590), or none in a tree from before it. */
+interface ClothRest { on: boolean; rested: number; laid: number }
+const clothRest = (): ClothRest | undefined => (armor as { CLOTH_REST?: ClothRest }).CLOTH_REST;
+/** the frame rate from which a standing hero's cloth must rest on most of its updates, and that share */
+const RESTS_FROM_HZ = 100;
+const RESTS_MOST = 0.5;
+/** the canary's frames with the rest held off */
+const REST_CANARY_FRAMES = 60;
+
+/** The share of the cloth's updates that left it as it lay, since `from`'s counts. */
+function restedShare(rest: ClothRest, from: { rested: number; laid: number }): number {
+  const rested = rest.rested - from.rested;
+  const all = rested + rest.laid - from.laid;
+  return all > 0 ? rested / all : 0;
+}
+
+/** How much of his standing the cloth rested through, into `report`: at a fast screen's rate, most of it. With the
+ *  canary the rest is held off for some frames more, which must read as none rested. */
+async function restReport(lab: Lab, rate: number, from: { rested: number; laid: number }, canary: boolean,
+  report: Report): Promise<void> {
+  const rest = clothRest();
+  if (!rest) return;
+  const share = restedShare(rest, from);
+  const lines = [`  the cloth rested through ${(share * 100).toFixed(0)}% of its updates`];
+  if (rate >= RESTS_FROM_HZ && share < RESTS_MOST) {
+    const said = `${(share * 100).toFixed(0)}% of its updates`;
+    report.problems.push(`coat: at ${rate} Hz his cloth rested through ${said} standing`);
+  }
+  if (canary) {
+    const held = { rested: rest.rested, laid: rest.laid };
+    rest.on = false;
+    await lab.step(REST_CANARY_FRAMES);
+    rest.on = true;
+    const caught = restedShare(rest, held) === 0;
+    lines.push(`canary, the cloth's rest held off: ${caught ? 'caught' : 'MISSED'}`);
+    if (!caught) report.problems.push('coat: the canary (the rest held off) was missed');
+  }
+  report.text += `\n${lines.join('\n')}`;
+}
 
 /** What `lab coat` takes. */
 export interface CoatOptions {
@@ -183,6 +224,8 @@ async function stand(lab: Lab, options: CoatOptions, rate: number): Promise<Repo
   const frames = Math.round((options.seconds ?? SECONDS) * rate);
   let frame = 0;
   let canaryJerk: number | null = null;
+  const rest = clothRest();
+  const restFrom = { rested: rest?.rested ?? 0, laid: rest?.laid ?? 0 };
   await lab.step(frames, undefined, () => {
     const planted = !!options.canary && frame === CANARY_FRAME;
     const kicked = skirts[0].geometry.attributes.position.array as Float32Array;
@@ -202,6 +245,7 @@ async function stand(lab: Lab, options: CoatOptions, rate: number): Promise<Repo
   });
   const report = reportOf(lab.player.cls.id, rate, frames, skirts, canaryJerk);
   facingReport(skirts, !!options.canary, report);
+  await restReport(lab, rate, restFrom, !!options.canary, report);
   return report;
 }
 
