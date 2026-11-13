@@ -18,7 +18,7 @@ import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { NECKLINE_BACK } from './tunic';
+import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
@@ -460,6 +460,26 @@ const OVERHEAD: Record<string, { lift: number; from: number; to: number; shake: 
 const bpRx = (y: number) => 0.148 + 0.034 * sm(-0.07, 0.12, y) - 0.024 * sm(0.17, 0.25, y);
 const bpRz = (y: number) => 0.128 + 0.026 * sm(-0.07, 0.1, y) - 0.028 * sm(0.16, 0.25, y);
 const BP_A = 1.75;
+/** the gambeson's cloth round each armhole and its sleeve's top, shared between the chest and the arm (tunic.ts) */
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
+const gauss = (x: number, at: number, wide: number): number => Math.exp(-(((x - at) / wide) ** 2));
+/** A fighter's arm in the gambeson's sleeve: its radius at `t` down the sleeve (0 the shoulder joint, 0.79 the elbow,
+ *  1 the sleeve's end on the forearm) and `phi` round it (0 the outside, a quarter turn the front), as a share of a
+ *  round tube's. The deltoid full over the outside and ending in a hollow where it runs into the arm, the biceps ahead
+ *  and the triceps behind, the arm narrowing above the elbow, the elbow's point behind and the forearm's muscle below
+ *  it. (A round tube with one swell was a sausage: "arms" were what was left to do after the legs, #520.) */
+function armShape(t: number, phi: number): number {
+  const out = Math.cos(phi), fore = Math.sin(phi);
+  const delt = 0.1 * gauss(t, 0.2, 0.14) * Math.max(0, out) - 0.05 * gauss(t, 0.42, 0.07) * Math.max(0, out);
+  const biceps = 0.11 * gauss(t, 0.44, 0.16) * Math.max(0, fore) ** 1.5, triceps = 0.1 * gauss(t, 0.36, 0.17) * Math.max(0, -fore) ** 1.5;
+  const above = -0.1 * gauss(t, 0.7, 0.08) * (0.6 + 0.4 * Math.abs(out)), point = 0.07 * gauss(t, 0.79, 0.045) * Math.max(0, -fore) ** 2;
+  const forearm = 0.08 * gauss(t, 0.93, 0.09) * (0.5 + 0.5 * Math.abs(out));
+  return 1 + delt + biceps + triceps + above + point + forearm;
+}
+/** the sleeve round that arm: its length from the shoulder joint over the elbow, and its radius at each end */
+const SLEEVE = { len: 0.38, r0: 0.076, r1: 0.063 };
+/** the sleeve's radius `h` below the shoulder joint, `phi` round the arm (m) */
+const sleeveR = (h: number, phi: number): number => lerp(SLEEVE.r0, SLEEVE.r1, h / SLEEVE.len) * armShape(h / SLEEVE.len, phi);
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.7;
 const bpTop = (a: number) => 0.235 - 0.03 * Math.cos(a) ** 2;
@@ -536,9 +556,30 @@ export function* warriorSteps(): ModelSteps {
 
   yield;
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
-  S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
-  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), torsoLeather, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  // (cut as the other heroes' tunics are, over the shoulders as a man's are, an armhole round each and the sleeve set
+  // into it, `SetInShoulders`: a round barrel with the arms' round-topped tubes stood beside it had no shoulders, and a
+  // raised arm came out of it as a tube stuck into the body)
+  const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48));
+  {
+    const [L, R] = yield* tunicCutSteps(sets.around, lod(22, 12));
+    // (its foot drawn in under the leather wrap round the waist, which is the spine's: hanging straight, it came out
+    // through the wrap in teeth on the side he leant to)
+    for (const g of [L, R]) {
+      const q = g.attributes.position;
+      for (let i = 0; i < q.count; i++) { const k = 1 - 0.3 * clamp((-0.02 - q.getY(i)) / 0.1, 0, 1) ** 2; q.setX(i, q.getX(i) * k); q.setZ(i, q.getZ(i) * k); }
+    }
+    yield;
+    S.skinChain(sets.withArm(R, -1), cloth, j.chest, sets.chainOf(-1));
+    yield;
+    S.skinChain(sets.withArm(L, 1), cloth, j.chest, sets.chainOf(1));
+  }
+  yield;
+  // (its top wider than the gambeson's foot inside it: as wide, the cloth came through it in teeth as the chest turned)
+  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.158, 0.2], [0.162, 0.26]], 24), 3, 1), torsoLeather, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.88]);
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), leather, j.spine);
+  // (a rolled edge round the wrap's top, standing off it: where the chest leans or turns on the spine the gambeson
+  // crosses the wrap's top a few mm under its surface, and showed through it there as a row of teeth)
+  S.add(belt(0.173, 0.153, 0.246, 0.032, 0.012), leather, j.spine);
   yield;
   // rivets along each band
   const studs: THREE.BufferGeometry[] = [];
@@ -585,8 +626,10 @@ export function* warriorSteps(): ModelSteps {
   yield;
   // --- fur collar round the neck and over the shoulder tops
   const collar = yield* furTuftsSteps(rng, 280, (i, o) => {
-    const a = rng() * Math.PI * 2, r = 0.55 + rng() * 0.45, sa = Math.sin(a), ca = Math.cos(a);
-    o.p.set(sa * (0.09 + 0.1 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.09 + 0.045 * r));
+    // (rooted on the gambeson's shoulders as they slope: on a ring round the old barrel's top, the tufts before and
+    // behind the neck stood in the air off shoulders that are thin front to back)
+    const a = rng() * Math.PI * 2, sa = Math.sin(a), ca = Math.cos(a);
+    onTunic(a, lerp(0.288, 0.243, rng()), 0.004, o.p);
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
   }, 0.06, 0.011);
   S.add(collar, furM, j.chest);
@@ -625,8 +668,10 @@ export function* warriorSteps(): ModelSteps {
   // plate, fingerless gloves (the hands item: without it the sleeves run on to the wrist, the hands bare)
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
-    S.skin(scaleUV(limb(0.38, 0.078, 0.064, 0.12, 0.24, 14), 2, 1), cloth, sh, el, 0.2, 0.32);
-    for (const y of [-0.13, -0.21]) S.add(belt(0.078, 0.078, y, 0.024, 0.006, 0, 14), leather, sh);
+    // (set into its armhole, and shaped as the arm in it: `armShape`)
+    S.skinChain(sets.sleeve(s, { ...SLEEVE, bulge: 0, at: 0.24, cap: lod(10, 6), tube: lod(18, 9), shape: armShape }), cloth, sh, [...sets.chainOf(s), el]);
+    // (the straps lying on the arm as it's shaped there: round rings stood off it where it's hollow)
+    for (const h of [0.13, 0.21]) S.add(strap(Array.from({ length: 16 }, (_, k) => { const phi = (k / 16) * Math.PI * 2, r = sleeveR(h, phi) + 0.001; return V(s * Math.cos(phi) * r, -h, Math.sin(phi) * r); }), 0.024, 0.006, true), leather, sh);
     H.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
     H.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
     // its top closed under the elbow's fur (through the eyes, with the fur hidden, it would show open)
@@ -638,8 +683,8 @@ export function* warriorSteps(): ModelSteps {
     H.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
     // bare: the gambeson's sleeve on down the forearm (its top inside the upper sleeve's end, which follows the
     // forearm), a turned-back cuff at the wrist, and the wrist into the palm
-    B.add(scaleUV(lathe([[0.05, -0.245], [0.052, -0.2], [0.057, -0.12], [0.061, -0.04], [0.06, 0]], 16), 2, 1), cloth, el);
-    B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
+    B.add(scaleUV(lathe([[0.045, -0.245], [0.048, -0.2], [0.057, -0.12], [0.0655, -0.045], [0.064, 0]], 16), 2, 1), cloth, el);
+    B.add(scaleUV(lathe([[0.044, -0.25], [0.051, -0.245], [0.053, -0.215], [0.05, -0.205]], 16), 2, 0.3), cloth, el);
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
     yield;
   }
@@ -708,7 +753,7 @@ export function* warriorSteps(): ModelSteps {
   legBodies.add([j.hips, new THREE.Vector3(0.06, -0.06, -0.03)], [j.hips, new THREE.Vector3(-0.06, -0.06, -0.03)], 0.108 + GAP);
   const capsL = handCapsules(handL);
   for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
-  const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.058]);
+  const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.053]);
   const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
   yield;
   // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
@@ -2558,6 +2603,8 @@ export function* warriorSteps(): ModelSteps {
     // the mail skirt swings with the legs, draped over them and the hands; the tassets on each side ride their own thigh
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
     for (const ta of tassets) ta.g.rotation.x = -(0.12 + Math.max(-0.05, ta.s > 0 ? fL : fR) * 0.75 + move * 0.05);
+    // (the cloth round each armhole part of the way with its arm, as posed)
+    sets.bend();
     root.updateMatrixWorld(true);
     placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld);
     // (through the eyes the body isn't drawn, nor its shadow: the mail swings undraped)
