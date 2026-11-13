@@ -428,7 +428,7 @@ const VERTEX_BLADE = /* glsl */ `
   // spring greens, a tuft's own, some dry and gold
   // (solstice's meadow's own: lush to fresh green, a tuft in ten dry; lighter and with a quarter of them straw, lit as
   // the ground is, the meadow read as a field of straw, "grass shading looks off, still")
-  vec3 green = mix(vec3(0.06, 0.115, 0.02), vec3(0.115, 0.165, 0.03), fract(h.y * 3.7));
+  vec3 green = mix(vec3(0.074, 0.127, 0.022), vec3(0.104, 0.153, 0.028), fract(h.y * 3.7));
   vec3 dry = vec3(0.26, 0.21, 0.085);
   vBladeColour = mix(green, dry, smoothstep(0.86, 1.0, tuft) * 0.6 + smoothstep(0.8, 0.97, patchy) * 0.15);`;
 
@@ -493,7 +493,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
   bladeColour = mix(bladeColour, vec3(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
   // (folded along its midrib: one half of the V faces the light more than the other; each blade of a tuft its own shade)
-  bladeColour *= mix(1.0, mix(0.86, 1.1, step(0.0, foldB)) * mix(0.8, 1.12, strandShade), step(1.5, uTuft));
+  bladeColour *= mix(1.0, mix(0.93, 1.05, step(0.0, foldB)) * mix(0.9, 1.07, strandShade), step(1.5, uTuft));
   vec4 diffuseColor = vec4(bladeColour, opacity);`;
 
 /** A ring's uniforms, set as it's drawn. */
@@ -683,7 +683,13 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       .replace('#include <normal_fragment_begin>',
-        THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
+        THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
+          // (and the lit side is the one turned up, whichever way the card is wound: a tuft's cards were lit on one
+          // face and dark on the other, half the tufts near black beside the rest, "so this looks right to you ?")
+          + `
+          vec3 upInView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          if (dot(normal, upInView) < 0.0) normal = -normal;
+          nonPerturbedNormal = normal;`);
   };
   m.customProgramCacheKey = () => (combed ? 'meadow-blades-combed' : 'meadow-blades');
   return m;
