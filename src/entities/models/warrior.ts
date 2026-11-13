@@ -461,7 +461,7 @@ const bpRx = (y: number) => 0.148 + 0.034 * sm(-0.07, 0.12, y) - 0.024 * sm(0.17
 const bpRz = (y: number) => 0.128 + 0.026 * sm(-0.07, 0.1, y) - 0.028 * sm(0.16, 0.25, y);
 const BP_A = 1.75;
 /** the gambeson's cloth round each armhole and its sleeve's top, shared between the chest and the arm (tunic.ts) */
-const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.2 };
 const gauss = (x: number, at: number, wide: number): number => Math.exp(-(((x - at) / wide) ** 2));
 /** A fighter's arm in the gambeson's sleeve: its radius at `t` down the sleeve (0 the shoulder joint, 0.79 the elbow,
  *  1 the sleeve's end on the forearm) and `phi` round it (0 the outside, a quarter turn the front), as a share of a
@@ -470,11 +470,29 @@ const gauss = (x: number, at: number, wide: number): number => Math.exp(-(((x - 
  *  it. (A round tube with one swell was a sausage: "arms" were what was left to do after the legs, #520.) */
 function armShape(t: number, phi: number): number {
   const out = Math.cos(phi), fore = Math.sin(phi);
-  const delt = 0.1 * gauss(t, 0.2, 0.14) * Math.max(0, out) - 0.05 * gauss(t, 0.42, 0.07) * Math.max(0, out);
+  // (no hollow under the deltoid: with one, the sleeve's top was a ball under a groove, "too many weird folds")
+  const delt = 0.05 * gauss(t, 0.3, 0.16) * Math.max(0, out);
   const biceps = 0.11 * gauss(t, 0.44, 0.16) * Math.max(0, fore) ** 1.5, triceps = 0.1 * gauss(t, 0.36, 0.17) * Math.max(0, -fore) ** 1.5;
   const above = -0.1 * gauss(t, 0.7, 0.08) * (0.6 + 0.4 * Math.abs(out)), point = 0.07 * gauss(t, 0.79, 0.045) * Math.max(0, -fore) ** 2;
   const forearm = 0.08 * gauss(t, 0.93, 0.09) * (0.5 + 0.5 * Math.abs(out));
   return 1 + delt + biceps + triceps + above + point + forearm;
+}
+/** A fighter's shoulders are deeper front to back than the shared tunic's: a point of the gambeson or of a sleeve's top
+ *  (the chest's frame, at rest) moved out ahead and behind over each shoulder, most over the joint and none by the neck,
+ *  under the armpit or down the arm. Both pieces are moved by the same rule, so the seam between them stays sewn. (At
+ *  the tunic's own depth, 10 cm where his sleeve is 15 across, the top of each shoulder was a thin ridge with a groove
+ *  under it where it met the arm: "shoulder is too thin in parts".) */
+const SHOULDER_DEPTH = 0.3, _dn = new THREE.Vector3();
+function deepen(g: THREE.BufferGeometry, dx = 0, dy = 0, dz = 0): THREE.BufferGeometry {
+  const q = g.attributes.position, n = g.attributes.normal;
+  for (let i = 0; i < q.count; i++) {
+    const x = q.getX(i) + dx, y = q.getY(i) + dy, z = q.getZ(i) + dz;
+    const k = 1 + SHOULDER_DEPTH * sm(0.1, 0.19, Math.abs(x)) * sm(0.08, 0.17, y) * (1 - sm(0.255, 0.295, y));
+    q.setZ(i, z * k - dz);
+    // (its normal as the stretched surface's, kept smooth: made again from the faces, the unindexed cloth was faceted)
+    _dn.fromBufferAttribute(n, i); _dn.z /= k; _dn.normalize(); n.setXYZ(i, _dn.x, _dn.y, _dn.z);
+  }
+  return g;
 }
 /** the sleeve round that arm: its length from the shoulder joint over the elbow, and its radius at each end */
 const SLEEVE = { len: 0.38, r0: 0.076, r1: 0.063 };
@@ -569,9 +587,9 @@ export function* warriorSteps(): ModelSteps {
       for (let i = 0; i < q.count; i++) { const k = 1 - 0.3 * clamp((-0.02 - q.getY(i)) / 0.1, 0, 1) ** 2; q.setX(i, q.getX(i) * k); q.setZ(i, q.getZ(i) * k); }
     }
     yield;
-    S.skinChain(sets.withArm(R, -1), cloth, j.chest, sets.chainOf(-1));
+    S.skinChain(deepen(sets.withArm(R, -1)), cloth, j.chest, sets.chainOf(-1));
     yield;
-    S.skinChain(sets.withArm(L, 1), cloth, j.chest, sets.chainOf(1));
+    S.skinChain(deepen(sets.withArm(L, 1)), cloth, j.chest, sets.chainOf(1));
   }
   yield;
   // (its top wider than the gambeson's foot inside it: as wide, the cloth came through it in teeth as the chest turned)
@@ -628,8 +646,17 @@ export function* warriorSteps(): ModelSteps {
   const collar = yield* furTuftsSteps(rng, 280, (i, o) => {
     // (rooted on the gambeson's shoulders as they slope: on a ring round the old barrel's top, the tufts before and
     // behind the neck stood in the air off shoulders that are thin front to back)
-    const a = rng() * Math.PI * 2, sa = Math.sin(a), ca = Math.cos(a);
-    onTunic(a, lerp(0.288, 0.243, rng()), 0.004, o.p);
+    // (and only on cloth that stays with the chest: rooted where the cloth round an armhole goes up with a raised arm,
+    // the cloth rose through the fur, "when he raises his arm the fur goes through")
+    let a = 0;
+    for (let tries = 0; tries < 12; tries++) {
+      a = rng() * Math.PI * 2;
+      onTunic(a, lerp(0.288, 0.243, rng()), 0.004, o.p);
+      if (Math.max(sets.share(o.p, 1), sets.share(o.p, -1)) < 0.08) break;
+      // (the last try nearer the neck, where none of it moves)
+      if (tries === 10) { onTunic(a, 0.286, 0.004, o.p); break; }
+    }
+    const sa = Math.sin(a), ca = Math.cos(a);
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
   }, 0.06, 0.011);
   S.add(collar, furM, j.chest);
@@ -669,7 +696,7 @@ export function* warriorSteps(): ModelSteps {
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
     // (set into its armhole, and shaped as the arm in it: `armShape`)
-    S.skinChain(sets.sleeve(s, { ...SLEEVE, bulge: 0, at: 0.24, cap: lod(10, 6), tube: lod(18, 9), shape: armShape }), cloth, sh, [...sets.chainOf(s), el]);
+    { const at = sets.restOf(s); S.skinChain(deepen(sets.sleeve(s, { ...SLEEVE, bulge: 0, at: 0.24, cap: lod(10, 6), tube: lod(18, 9), shape: armShape }), at.x, at.y, at.z), cloth, sh, [...sets.chainOf(s), el]); }
     // (the straps lying on the arm as it's shaped there: round rings stood off it where it's hollow)
     for (const h of [0.13, 0.21]) S.add(strap(Array.from({ length: 16 }, (_, k) => { const phi = (k / 16) * Math.PI * 2, r = sleeveR(h, phi) + 0.001; return V(s * Math.cos(phi) * r, -h, Math.sin(phi) * r); }), 0.024, 0.006, true), leather, sh);
     H.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
