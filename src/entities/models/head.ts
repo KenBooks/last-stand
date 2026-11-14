@@ -747,6 +747,11 @@ function hairTools(surface: Head['surface'], F: FaceShape, drop: number, temple:
   return { dirOf, hairEl, clear, pushOut };
 }
 
+/** where loose hair's locks down the back of the head end (the face's mm: 0 is about the chin's height), the lowest and
+ *  how far above it the rest end: at the collar, as the locks at his sides. (Ending between the mouth and the chin,
+ *  -40 to 0, the back was cut level above a bare neck, shorter than the sides: "it cut off too early".) */
+const BACK_END = -92, BACK_SPREAD = 42;
+
 function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
   const n = lod(460, 130), PART = 0.08, V = THREE.Vector3;
   const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
@@ -791,12 +796,12 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       const u = 0.22 + rng() * 0.3, pa = d0.angleTo(d1), pd = d.copy(d0).multiplyScalar(Math.sin((1 - u) * pa)).addScaledVector(d1, Math.sin(u * pa)).normalize();
       az0 = Math.atan2(pd.x, pd.z) + s * rng() * 0.2; el0 = Math.asin(clamp(pd.y, -1, 1));
       az1 = s * (Math.PI - 0.05 - rng() * 0.4); el1 = -0.05 + rng() * 0.25;
-      top = 14 + rng() * 8; yEnd = -40 + rng() * 40; w = 18 + rng() * 9;
+      top = 14 + rng() * 8; yEnd = BACK_END + rng() * BACK_SPREAD; w = 18 + rng() * 9;
     } else if (kind < 0.9) {
       // the back of the head, down to the nape (rooted below the crown: none meet at a point)
       az0 = s * (1.9 + rng() * 1.24); el0 = 0.3 + rng() * 0.65;
       az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.3); el1 = -0.05 + rng() * 0.2;
-      top = 12 + rng() * 8; yEnd = -40 + rng() * 40; w = 18 + rng() * 9;
+      top = 12 + rng() * 8; yEnd = BACK_END + rng() * BACK_SPREAD; w = 18 + rng() * 9;
     } else if (kind < 0.94) {
       // framing the forehead (more on his right, as the part leaves more hair that side): from the front of the hairline
       // out and down over the temple, beside the eye, curling away from the face
@@ -812,7 +817,7 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       // more of the sides and back (the deepest layers)
       az0 = s * (1.3 + rng() * 1.8); el0 = 0.25 + rng() * 0.5;
       az1 = s * Math.min(Math.PI, Math.abs(az0) + 0.2 + rng() * 0.3); el1 = 0.0 + rng() * 0.2;
-      top = 8 + rng() * 6; yEnd = -40 + rng() * 40; w = 18 + rng() * 8;
+      top = 8 + rng() * 6; yEnd = BACK_END + rng() * BACK_SPREAD; w = 18 + rng() * 8;
     }
     pts.length = 0;
     const N = 9, dm = new V();

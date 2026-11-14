@@ -159,15 +159,16 @@ export function* tunicCutSteps(
  * A sleeve set into side s's armhole: its top the armhole's edge on the tunic, over the shoulder from there (carrying on the
  * tunic's own slope across the seam outside, straight in under the arm) onto a tube round the arm `join` below the shoulder
  * joint `S` (the chest's frame), and on down as `limb` is (`len`, radius `r0` to `r1`, a `bulge` at `at`, a rounded end).
- * In the chest's frame, smooth-shaded all round; `capT` per vertex: 0 on the armhole's edge, 1 from the tube on; `seamY`:
+ * `shape`: the arm in the sleeve, the tube's radius at `t` down it (0 the joint, 1 its end) and `phi` round it (0 its
+ * outside, a quarter turn its front) as a share of the round one's (none: round). In the chest's frame, smooth-shaded all round; `capT` per vertex: 0 on the armhole's edge, 1 from the tube on; `seamY`:
  * the height of the point of the armhole's edge its column of the cap leaves from (the body's own point there).
  */
-export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: number; r1: number; bulge: number; at: number; join: number; joinIn?: number; full?: number; fullIn?: number; around?: number; cap?: number; tube?: number }): THREE.BufferGeometry {
+export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: number; r1: number; bulge: number; at: number; join: number; joinIn?: number; full?: number; fullIn?: number; around?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): THREE.BufferGeometry {
   const M = o.around ?? 32, NC = o.cap ?? 8, NT = o.tube ?? 14, NE = 4, full = o.full ?? 1.4;
   // (the tube's top ring lower under the arm, `joinIn` more: cut level, the cap's underside was a short flap folded in
   // under the armpit, stretched three times its length when the arm went up)
   const hj = (t: number) => o.join + (o.joinIn ?? 0) * (1 - Math.cos(t)) / 2;
-  const rad = (h: number) => { const t = h / o.len; return (o.r0 + (o.r1 - o.r0) * t) * (1 + o.bulge * Math.exp(-(((t - o.at) / 0.28) ** 2))); };
+  const rad = (h: number, phi = 0) => { const t = h / o.len; return (o.r0 + (o.r1 - o.r0) * t) * (1 + o.bulge * Math.exp(-(((t - o.at) / 0.28) ** 2))) * (o.shape?.(t, phi) ?? 1); };
   const rows: THREE.Vector3[][] = [], capT: number[] = [];
   const P0 = new THREE.Vector3(), P2 = new THREE.Vector3(), R = new THREE.Vector3(), m0 = new THREE.Vector3(), chord = new THREE.Vector3();
   const around = (h: number, phi: number, r: number) => new THREE.Vector3(S.x + s * Math.cos(phi) * r, S.y - h, S.z + Math.sin(phi) * r);
@@ -176,7 +177,7 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
   for (let i = 0; i < M; i++) {
     const t = i / M * H_TAU, [a, y] = armholeAt(s, t);
     onTunic(a, y, 0, P0); onTunic(s * Math.PI / 2 + (a - s * Math.PI / 2) * 0.9, ARMHOLE.y + (y - ARMHOLE.y) * 0.9, 0, P2);
-    R.copy(around(hj(t), t, rad(hj(t))));
+    R.copy(around(hj(t), t, rad(hj(t), t)));
     chord.subVectors(R, P0); const c = chord.length(); chord.divideScalar(c);
     // (all round on as the tunic runs, and under the arm turned over in the cap's first few centimetres down onto the arm: the
     // seam moves with the arm as the cloth either side of it does, so a fold at the seam stays one whatever the arm does,
@@ -193,7 +194,7 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
   for (let k = 0; k <= NC; k++) { rows.push(caps.map((col) => col[k])); capT.push(k / NC); }
   // (the tube below the cap with a third as many points round it: only the seam needs the armhole's)
   const MT = Math.max(8, Math.round(M / 3));
-  for (let r = 1; r <= NT; r++) { rows.push(Array.from({ length: MT }, (_, i) => { const t = i / MT * H_TAU, h = hj(t) + (o.len - hj(t)) * r / NT; return around(h, t, rad(h)); })); capT.push(1); }
+  for (let r = 1; r <= NT; r++) { rows.push(Array.from({ length: MT }, (_, i) => { const t = i / MT * H_TAU, h = hj(t) + (o.len - hj(t)) * r / NT; return around(h, t, rad(h, t)); })); capT.push(1); }
   for (let e = 1; e <= NE; e++) { const q = e / NE * Math.PI / 2; rows.push(Array.from({ length: MT }, (_, i) => around(o.len + Math.sin(q) * o.r1 * 0.8, i / MT * H_TAU, Math.max(1e-4, Math.cos(q) * o.r1)))); capT.push(1); }
   // smooth normals round it (closed round), each row to the next as quads, or zipped where their counts differ
   const nr = rows.length, start: number[] = [], flat: number[] = [], frac: number[] = [], rowOf: number[] = [];
@@ -248,8 +249,9 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
  *  off to none `reach` from it (`top` above `topY`, under a strap over the shoulder), and the sleeve's rising from it to the
  *  whole arm's at its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the
  *  body's and the sleeve's the same; `bulk`, how much the cloth between swells with the arm raised level (a share of its
- *  size about the joint, none hanging) */
-export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number };
+ *  size about the joint, none hanging); `over`, the seam's share cut above the joint too (`keep` of it lost, from `from`
+ *  above the joint, wholly `depth` on): the top of the shoulder stays the chest's and a raised arm leaves it whole */
+export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number; over?: { keep: number; from: number; depth: number } };
 const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** the cloth round the armhole under the shoulder joint: how much of the arm's share it keeps from going, wholly this far
@@ -304,7 +306,8 @@ export class SetInShoulders {
    *  further than the armhole it's sewn into, and the seam opened round the armpit and behind the shoulder, the forest
    *  seen through the coat at every draw) */
   private seamShare(y: number, s: number): number {
-    return this.K.seam * (1 - UNDER.keep * smooth(clamp((this.restOf(s).y - y) / UNDER.depth, 0, 1)));
+    const o = this.K.over, dy = y - this.restOf(s).y;
+    return this.K.seam * (1 - UNDER.keep * smooth(clamp(-dy / UNDER.depth, 0, 1))) * (o ? 1 - o.keep * smooth(clamp((dy - o.from) / o.depth, 0, 1)) : 1);
   }
 
   /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
@@ -318,7 +321,7 @@ export class SetInShoulders {
   /** side s's sleeve (`setInSleeve`, in the shoulder's frame), its `skinK` along the chain on to the elbow: from the
    *  seam's share at its edge (`seamShare`, the body's there) to the arm's wholly a little way down it, and over the elbow
    *  onto the forearm */
-  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number }): THREE.BufferGeometry {
+  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): THREE.BufferGeometry {
     const at = this.restOf(s);
     const g = setInSleeve(s, at, { ...o, join: this.K.join, joinIn: this.K.joinIn, around: this.around }).translate(-at.x, -at.y, -at.z);
     const p = g.attributes.position, c = g.attributes.capT, y = g.attributes.seamY, k = new Float32Array(p.count);
