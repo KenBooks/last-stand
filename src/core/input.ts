@@ -49,8 +49,22 @@ let lockWanted = false, lockTried = 0;
 /** how long after Esc is let go no lock is asked for (ms), and when it last was; a lab's switch */
 const AFTER_ESC = 400;
 let escapeLetGo = -Infinity, lockHeldOffByEsc = true;
-/** when the pointer lock was lost without being asked to (Esc): that same Esc mustn't also unpause */
-export let lockLostAt = -1;
+/** when the pointer lock was lost without the game letting go of it (Esc), and whether that Esc has been let go since:
+ *  that same Esc mustn't also unpause (`escapeSpentOnLock`) */
+let lockLostAt = -Infinity, lostEscLetGo = true;
+/** how long after a lost lock an Esc's keydown may still be the one that lost it (ms): a browser that hands the page
+ *  that keydown too sends it within a frame or two */
+const LOST_ESC_MS = 300;
+/** the game let go of the lock itself (`wantPointerLock(false)`): the browser's answer, however late, is no Esc */
+let letGo = false;
+/** the lock held as the browser last told the page (`pointerlockchange`): a browser clears `pointerLockElement` as it
+ *  lets the lock go and tells the page in an event after it, and a frame between the two that asked for the lock again
+ *  took it back unheard, the Esc that let it go never pausing (#554) */
+let heldAsHeard = false;
+/** For a harness (tools/lab `cursor`'s Esc): a lost lock and its Esc read as they were before #554, the canary's
+ *  double toggle. */
+let escAsBefore = false;
+export function readEscAsBefore(on: boolean): void { escAsBefore = on; }
 let onLockLost: () => void = () => {};
 export const pointerLocked = (): boolean => !!canvasEl && document.pointerLockElement === canvasEl;
 /** A move under the lock this large (css px) and this many times the one before it is the browser's own, not the hand's:
@@ -80,11 +94,16 @@ function requestLock(): void {
  */
 export function wantPointerLock(on: boolean): void {
   lockWanted = on;
-  if (!on) { if (pointerLocked()) document.exitPointerLock(); return; }
+  if (!on) {
+    if (pointerLocked()) { letGo = true; document.exitPointerLock(); }
+    return;
+  }
   // (not on the Esc that put a panel away: taken with it still down, the browser let the lock go again for that Esc, as
   // a player's letting go of it, and the pause menu opened over what he had just closed: from play, "exiting from how
   // to play should be possible with escape, it should not reopen another escape menu")
   if (lockHeldOffByEsc && (input.down.has('escape') || performance.now() - escapeLetGo < AFTER_ESC)) return;
+  // (lost, and not yet heard: the loss is the player's Esc, to be heard first)
+  if (heldAsHeard && !escAsBefore) return;
   if (!pointerLocked() && navigator.userActivation?.isActive && performance.now() - lockTried > 600) requestLock();
 }
 /** For a harness (tools/lab): the lock asked for even as Esc is down, as it was. */
@@ -210,8 +229,17 @@ const typing = (e: KeyboardEvent): boolean => e.target instanceof HTMLElement
 export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: string, delay: number) => void = () => {}): void {
   canvasEl = canvas;
   document.addEventListener('pointerlockchange', () => {
-    if (pointerLocked() || !lockWanted) return;
+    heldAsHeard = pointerLocked();
+    if (heldAsHeard) { letGo = false; return; }
+    // (the game's own letting go, answered by the browser's process a frame or more later: by then an Esc may have
+    // closed the pause menu it let go for, the lock wanted again, and read as lost then it opened the menu once more,
+    // #554)
+    const ours = letGo && !escAsBefore;
+    letGo = false;
+    if (ours || !lockWanted) return;
     lockLostAt = performance.now();
+    // (the Esc that lost it is down still, its keydown kept by the browser or not: its keyup is still to come)
+    lostEscLetGo = false;
     onLockLost();
   });
   window.addEventListener('keydown', (e) => {
@@ -221,14 +249,16 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
     keyboardTarget(editing ? `editing ${(e.target as HTMLElement).tagName.toLowerCase()}` : 'game', keyDeliveryDelay(e.timeStamp, performance.now()));
     if (editing) return;
     const k = keyName(e);
-    if (!input.down.has(k)) input.pressed.add(k);
+    // (a key held is pressed once: the keyboard's repeats aren't presses, though the first keydown never came, as a
+    // browser keeps the Esc that let the lock go and hands the page its repeats, #554)
+    if (!input.down.has(k) && (!e.repeat || escAsBefore)) input.pressed.add(k);
     input.down.add(k);
     if (k === 'space' || k === 'tab' || alt(k)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => {
     const k = keyName(e);
     input.down.delete(k);
-    if (k === 'escape') escapeLetGo = performance.now();
+    if (k === 'escape') { escapeLetGo = performance.now(); lostEscLetGo = true; }
     // (let go alone, Alt would take the keys to the browser's menu: typing in the chat too, where it shows the cursor)
     if (alt(k)) e.preventDefault();
   });
@@ -285,3 +315,17 @@ export function endInputFrame(): void {
 export const isDown = (k: string): boolean =>
   input.down.has(k) || input.touch.has(k) || (k === 'mouse0' && input.mouse.left) || (k === 'mouse2' && input.mouse.right);
 export const wasPressed = (k: string): boolean => input.pressed.has(k);
+
+/**
+ * Whether an Esc pressed now is the one that lost the pointer lock, which already did what Esc does (paused): a
+ * browser that hands the page that keydown too sends it within `LOST_ESC_MS`, before the key is let go. A second Esc,
+ * pressed after the first was let go, is the player's own however soon it comes: dropped for 300 ms after any lost
+ * lock, a quick second Esc left the pause menu open (#554).
+ */
+export function escapeSpentOnLock(): boolean {
+  if (performance.now() - lockLostAt >= LOST_ESC_MS) return false;
+  return escAsBefore || !lostEscLetGo;
+}
+
+/** Whether the player lost the pointer lock (an Esc, as the game hadn't let go of it) within the last `ms`. */
+export const lockLostWithin = (ms: number): boolean => !escAsBefore && performance.now() - lockLostAt < ms;

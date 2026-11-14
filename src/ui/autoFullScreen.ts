@@ -11,7 +11,7 @@
 // from play, "first escape removes full screen and second opens the menu" (`keepEsc`).
 import { readCookie, removeCookie, writeCookie } from '../core/cookies';
 import { sfx } from '../core/audio';
-import { input } from '../core/input';
+import { input, lockLostWithin } from '../core/input';
 
 /** the choice kept: 'off' once the player went back to the window from the prompt */
 export const AUTO_FULL_COOKIE = 'last-stand-auto-full-screen';
@@ -86,6 +86,8 @@ export function leaveFullScreen(): Promise<boolean> {
   return document.exitFullscreen().then(() => true, () => { leaving = false; return false; });
 }
 
+/** how long after the pointer lock was lost a full screen left is taken as left by the same Esc (ms) */
+const SAME_ESC_MS = 1500;
 /** the page asked to leave full screen (`leaveFullScreen`): the change that follows is no Esc */
 let leaving = false;
 /** Esc held for the game while in full screen (`keepEsc`) */
@@ -124,8 +126,10 @@ function keepEsc(): void {
   leaving = escKept = false;
   lockState = 'idle';
   keyboard()?.unlock();
-  // (the Esc held to leave was the game's already; one the browser took must still do what Esc does)
-  if (!asked && !held) input.pressed.add('escape');
+  // (the Esc held to leave was the game's already; one the browser took must still do what Esc does, unless it let the
+  // pointer lock go too, which paused already: the change of full screen comes once the window has resized, past
+  // 300 ms on some machines, and counted again it closed the pause menu that Esc had opened, #554)
+  if (!asked && !held && !lockLostWithin(SAME_ESC_MS)) input.pressed.add('escape');
 }
 
 /** The player went full screen by hand: the page may go on its own again on the next visits. */

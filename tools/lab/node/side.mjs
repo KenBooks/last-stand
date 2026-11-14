@@ -327,7 +327,9 @@ async function insetsOf(devtools, insets) {
  */
 async function keyOf(page, type, key) {
   const devtools = await devtoolsOf(page);
-  await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
+  // (`keyRepeat`: the keyboard's own repeat of a key held, a keydown the page sees with `repeat` set)
+  if (type === 'keyRepeat') await devtools.send('Input.dispatchKeyEvent', { type: 'keyDown', autoRepeat: true, ...keyFields(key) });
+  else await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
 }
 
 /** The DevTools protocol's fields for the key whose code is `code`: a letter's (`KeyW`), or a named key's. */

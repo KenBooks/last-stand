@@ -5,7 +5,7 @@ import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
-import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
+import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { VILLAGE } from './core/beta';
 import { betaNoticeWhile, hideBetaNotice, oweBetaNotice } from './ui/beta';
@@ -858,7 +858,7 @@ function handleGlobalKeys() {
     return;
   }
   // the Esc that released the mouse-look pointer already paused the game
-  if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
+  if (wasPressed('escape') && escapeSpentOnLock()) return;
   // (in the village, Esc puts away what an object opened before it pauses)
   if (VILLAGE && wasPressed('escape') && G.mode === 'menu' && !G.menuOpen && (panelsOpen() || villageCardOf())) {
     const card = villageCardOf();

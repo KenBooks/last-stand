@@ -138,12 +138,17 @@ function capesHere() {
  */
 export function noCapture() {
   window.__lockAttempts = 0;
-  const lock = { on: false, element: null, at: { x: 0, y: 0 } };
+  // (`late`: the browser's answers held back, `held` of them, till the lab gives them: a real one's come from its own
+  // process, a frame or more after the page asked)
+  const lock = { on: false, element: null, at: { x: 0, y: 0 }, late: false, held: 0 };
   window.__labLock = lock;
   // (where the mouse was at its last event of each kind, and at its last of any: a move's movement is from its kind's)
   const seen = {};
   let mouse = { x: 0, y: 0 };
-  const changed = () => queueMicrotask(() => document.dispatchEvent(new Event('pointerlockchange')));
+  const changed = () => {
+    if (lock.late) lock.held++;
+    else queueMicrotask(() => document.dispatchEvent(new Event('pointerlockchange')));
+  };
   const refuse = function () {
     window.__lockAttempts++;
     return Promise.resolve();

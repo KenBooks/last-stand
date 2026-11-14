@@ -1157,6 +1157,7 @@ export const COMMANDS = {
       const command = {
         fixture: fixtureFrom(options),
         views: options.views,
+        parts: options.parts,
         canary: Boolean(options.canary),
       };
       return side.command('cursor', command);

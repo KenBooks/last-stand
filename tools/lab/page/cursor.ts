@@ -16,14 +16,21 @@ import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
 import { hurtPlayer } from '../../../src/combat/damage';
 import { battleLog } from './battleLog';
+import { escToggles } from './pauseEsc';
 
 export interface CursorOptions {
   fixture: Fixture;
   /** the close views measured: over the shoulder, through the eyes */
   views: ViewMode[];
-  /** hold Ctrl instead of Alt, a key that frees nothing: the checks must catch what that leaves */
+  /** the parts run: the cursor over mouse look (`alt`), Esc and the pause menu (`esc`, `page/pauseEsc.ts`) */
+  parts: CursorPart[];
+  /** hold Ctrl instead of Alt, a key that frees nothing, and read Esc as before #554: the checks must catch what that
+   *  leaves */
   canary: boolean;
 }
+
+/** A part of `lab cursor`. */
+export type CursorPart = 'alt' | 'esc';
 
 type BattleLog = NonNullable<Awaited<ReturnType<typeof battleLog>>>;
 
@@ -348,10 +355,8 @@ function layersOverCursor(canary: boolean): { lines: string[]; problems: string[
   return { lines, problems: over.map((element) => `${named(element)} is ${STACKED}`) };
 }
 
-/** `lab cursor`: the cursor drawn over mouse look while Alt is held, in each close view. */
-export async function cursor(lab: Lab, options: CursorOptions): Promise<Report> {
-  const log = await battleLog();
-  if (!log) return { text: 'no battle log in this tree (its Pause is what the cursor clicks)', problems: [] };
+/** The Alt part's report: each close view's round, and the layers over the cursor. */
+async function altPart(lab: Lab, options: CursorOptions, log: BattleLog): Promise<Report> {
   const held = options.canary ? CTRL : ALT;
   const lines: string[] = [`held: ${held.code}`];
   const problems: string[] = [];
@@ -375,9 +380,38 @@ export async function cursor(lab: Lab, options: CursorOptions): Promise<Report> 
   const layers = layersOverCursor(options.canary);
   lines.push(...layers.lines);
   problems.push(...layers.problems);
+  return { text: lines.join('\n'), problems, moments };
+}
+
+/** `lab cursor`: the cursor drawn over mouse look while Alt is held, in each close view; and Esc and the pause menu. */
+export async function cursor(lab: Lab, options: CursorOptions): Promise<Report> {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const moments: Pictured[] = [];
+  const missed: string[] = [];
+  if (options.parts.includes('alt')) {
+    const log = await battleLog();
+    if (!log) return { text: 'no battle log in this tree (its Pause is what the cursor clicks)', problems: [] };
+    const alt = await altPart(lab, options, log);
+    lines.push(alt.text);
+    problems.push(...alt.problems);
+    moments.push(...(alt.moments ?? []));
+    if (options.canary) missed.push(...canaryProblems(alt.problems));
+  }
+  if (options.parts.includes('esc')) {
+    const setUp = async (view: ViewMode) => {
+      await lab.setup({ ...options.fixture, view });
+    };
+    const esc = await escToggles(lab, options.views, options.canary, setUp);
+    // (back in a run, top-down: the game lets go of the lock itself)
+    await lab.setup({ ...options.fixture, view: 'top' });
+    lab.pointerLock(false);
+    lines.push(...esc.lines);
+    problems.push(...esc.problems);
+    if (options.canary && !esc.problems.length) missed.push('the canary\'s Esc read as before #554 went unseen');
+  }
   lines.push(...problems.map((problem) => `! ${problem}`));
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
-  const missed = canaryProblems(problems);
   lines.push(`canary: ${missed.length ? missed.join('; ') : 'every plant caught'}`);
   return { text: lines.join('\n'), problems: missed, moments };
 }

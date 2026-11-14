@@ -1206,8 +1206,19 @@ export const COMMANDS = {
       + 'it\'s held), then Alt held: the mouse moved onto the battle log\'s Pause must leave the view still and draw '
       + 'the cursor there, lit; its click must pause the log and not attack; over the hotbar\'s slot its tooltip must '
       + 'show; the wheel over the log\'s lines must scroll them, not zoom; a click on the world must not attack; Alt '
-      + 'let go, the mouse turns the view again; the lock held and the run going on throughout',
+      + 'let go, the mouse turns the view again; the lock held and the run going on throughout. Then Esc (#554): '
+      + 'pressed again and again and quickly as each browser hands it over with the lock held (Chrome in a window, '
+      + 'in full screen with Esc locked, a browser handing the keydown over too, full screen left without the lock), '
+      + 'held and repeating, the lock\'s answers late: each press must toggle the pause menu once, in a run\'s views '
+      + 'and the lobby\'s, and nothing change it in the second after',
     options: {
+      parts: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['alt', 'esc'],
+        default: 'alt,esc',
+        help: 'the parts run: alt (the cursor over mouse look), esc (Esc and the pause menu)',
+      },
       views: {
         kind: 'list',
         usage: 'a,b',
@@ -1218,7 +1229,8 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'hold Ctrl instead, a key that frees nothing: the checks must find the view turning with the mouse and '
-          + 'the click on Pause landing on the world',
+          + 'the click on Pause landing on the world; and read Esc as before #554: a press must be found toggling the '
+          + 'pause menu twice or not at all',
       },
       at: SETUP_OPTIONS.at,
       facing: SETUP_OPTIONS.facing,

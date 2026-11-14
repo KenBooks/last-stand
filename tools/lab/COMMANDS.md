@@ -601,6 +601,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   found. On `origin/main` the view turned 1.62 rad as the mouse went to Pause, no cursor was drawn, the click
   attacked and the wheel zoomed. (The owner: "in 3rd and 1st person user cannot press on those battle log buttons".)
   About 2 s.
+  Then Esc and the pause menu (`page/pauseEsc.ts`, #554: "pressing Esc to close the pause menu sometimes opens it
+  again, or leaves it open"; `--parts alt,esc`, either alone). Esc is pressed in sequences, 2 or 3 presses 1, 2, 6
+  or 30 frames apart, and held 40 frames with the keyboard's repeats (`lab.keyRepeat`), as each browser hands it
+  over with the lock held, the page playing the browser's part: `windowed` (Chrome in a window: the lock let go by
+  the browser, `lab.browserLetsGoOfLock`, the keydown kept, its keyup and repeats handed over), `keyboardLock` (full
+  screen with Esc locked: the keydown handed over, the lock kept, and with the browser's answers to the game's own
+  letting go held 3 frames, `lab.lockAnswersLate`), `both` (the lock let go and the keydown handed over too) and
+  `fullScreen` (the lock let go and full screen left, its change heard 1 frame and 30 frames late). Each press must
+  toggle the menu once, and nothing change it in the second after the last, in a run in each close view and
+  top-down, and in the lobby over the shoulder. `--canary` reads Esc as the game did before (`readEscAsBefore` in
+  `src/core/input.ts`): the doubles must be found. As before the fix the run's third view toggled 13 of 23 sequences:
+  a second press within 300 ms of a lost lock dropped, the game's own letting go answered late reopening the menu, a
+  repeat read as a press, and a frame between the browser clearing the lock and telling the page taking the lock
+  back, its Esc never pausing; all 23 now. About 40 s a view.
 - `rush`: the foes Bull Rush sweeps up: in full in [`commands/rush.md`](commands/rush.md).
 - `evade`: the shooters getting out of the hero's attacks (`page/evade.ts`, `--class ranger`, `mage`, `warrior`):
   each foe that evades (`EnemyDef.evade`: the Sporecaller ducks into the ground, the Rift Witch blinks away) stood

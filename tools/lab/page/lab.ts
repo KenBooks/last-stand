@@ -68,7 +68,7 @@ declare global {
     __labMouse?: (type: MouseType, x: number, y: number, deltaY?: number, button?: MouseButton, buttons?: number) =>
       Promise<void>;
     /** the pointer lock the page plays in the lab's browser, while `on` (`tools/lab/node/browser.mjs` `noCapture`) */
-    __labLock?: { on: boolean };
+    __labLock?: { on: boolean; late: boolean; held: number };
     /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
     __labKey?: (type: KeyType, code: string) => Promise<void>;
     /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
@@ -91,8 +91,8 @@ export type MouseButton = 'left' | 'middle' | 'right';
 /** each button's bit in the mask of those held (the DOM's `buttons`) */
 const BUTTON_BITS: Record<MouseButton, number> = { left: 1, right: 2, middle: 4 };
 
-/** A key as the browser gets it: pressed or let go. */
-type KeyType = 'keyDown' | 'keyUp';
+/** A key as the browser gets it: pressed, repeated by the keyboard as it's held, or let go. */
+type KeyType = 'keyDown' | 'keyRepeat' | 'keyUp';
 
 /** A finger on the screen as the DevTools protocol takes it: where it is (css px) and which finger. */
 interface Finger {
@@ -141,6 +141,7 @@ const MOUSE_EVENTS: Record<MouseType, string[]> = {
 /** the key events a key makes, which say the page has handled it */
 const KEY_EVENTS: Record<KeyType, string[]> = {
   keyDown: ['keydown'],
+  keyRepeat: ['keydown'],
   keyUp: ['keyup'],
 };
 /** how long an input's event may take to reach the page, ms of the browser's own clock (2 s failed a click now and
@@ -972,6 +973,12 @@ export class Lab {
     await this.sendKey('keyDown', code);
   }
 
+  /** The key whose code is `code`, held, repeated as a keyboard repeats it (a keydown with `repeat` set). No frame
+   *  runs. */
+  async keyRepeat(code: string): Promise<void> {
+    await this.sendKey('keyRepeat', code);
+  }
+
   /** The key whose code is `code` let go, as a keyboard lets it go. No frame runs. */
   async keyUp(code: string): Promise<void> {
     await this.sendKey('keyUp', code);
@@ -988,6 +995,29 @@ export class Lab {
     if (!lock) throw new Error('lab: pointerLock: this page has no lock of its own (opened by an older lab)');
     lock.on = on;
     if (!on) document.exitPointerLock();
+  }
+
+  /**
+   * The pointer lock let go by the browser on the player's say (Esc), not the game's: the page hears it lost. The
+   * lab's lock is the page's own, so this is the same call the game makes; the game tells the two apart by what it
+   * asked for itself.
+   */
+  browserLetsGoOfLock(): void {
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /**
+   * The browser's answers about the lock held back while `late`, and given at once as it's set back (a real one's
+   * come from its own process, a frame or more after the page asked): what the game heard late.
+   */
+  lockAnswersLate(late: boolean): void {
+    const lock = window.__labLock;
+    if (!lock) throw new Error('lab: lockAnswersLate: this page has no lock of its own (opened by an older lab)');
+    lock.late = late;
+    if (late) return;
+    const held = lock.held;
+    lock.held = 0;
+    for (let answer = 0; answer < held; answer++) document.dispatchEvent(new Event('pointerlockchange'));
   }
 
   /**
