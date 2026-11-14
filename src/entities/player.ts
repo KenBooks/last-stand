@@ -26,6 +26,7 @@ import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
+import { farDetail, type FarDetail } from './models/farDetail';
 import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import { ownColour } from '../net/heroColour';
@@ -180,6 +181,8 @@ export class Player {
   readonly handLight: THREE.PointLight | null;
   /** his pieces' shadow, cast in one draw (`models/castAsOne.ts`) */
   readonly shadow: OneShadow;
+  /** his meshes drawn from fewer triangles seen from afar (`models/farDetail.ts`) */
+  readonly farDetail: FarDetail;
   /** his parts drawn as one mesh a material, on WebGPU (`models/drawAsOne.ts`) */
   readonly drawn: OneDraw;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
@@ -333,6 +336,7 @@ export class Player {
     this.drawn = drawAsOne(this.model);
     if (local) this.setColour(ownColour());
     this.shadow = castAsOne(this.model.root, this.obj);
+    this.farDetail = farDetail(this.model.root);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
 
     for (const def of this.cls.skills) {
@@ -371,6 +375,7 @@ export class Player {
     // The two local lights belong to the scene, shared with cached heroes. Removing them changes every shader's key.
     G.scene.remove(this.obj);
     this.shadow.dispose();
+    this.farDetail.dispose();
     this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
@@ -1102,6 +1107,8 @@ export class Player {
   }
 
   private animateBody(dt: number, t: number, speed: number): void {
+    // (fewer triangles of him from afar: from above, across the hall)
+    this.farDetail.update(G.camera.position.distanceTo(this.obj.position));
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;

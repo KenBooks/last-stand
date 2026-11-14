@@ -32,6 +32,8 @@ const ROUNDS = 12;
  *  him higher up stands in the doorway), and the most frames for the heroes to warm */
 const STAIR_UP = 2;
 const SQUARE_OUT = 4;
+/** where he stands before the fountain with the hall beyond it (x, z: `data/village.ts`'s place of that name) */
+const FROM_FOUNTAIN = [-0.6, 7.2];
 const WARM_FRAMES = 6000;
 const FRAMES_A_ROUND = 30;
 /** the frames a hero left in the row is read over */
@@ -74,9 +76,9 @@ function riseOfAnkles(hero: Player): number {
 export async function heroesSeenOnApproach(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const x = TERRACE.x;
   await viewBy(lab, 'third');
-  const looking = async (z: number, facing: number): Promise<number> => {
+  const looking = async (z: number, facing: number, at = x): Promise<number> => {
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+    G.player.place(new THREE.Vector3(at, groundHeight(at, z), z), facing);
     faceCamera(facing);
     await lab.until(() => isWarm('heroes'), WARM_FRAMES, 'village: the heroes warming as he nears them');
     await lab.step(SETTLE);
@@ -84,9 +86,16 @@ export async function heroesSeenOnApproach(lab: Lab, canary: boolean): Promise<L
   };
   const away = await looking(TERRACE.stairFoot + SQUARE_OUT, 0);
   const atDoor = canary ? away : await looking(TERRACE.stairFoot - STAIR_UP, Math.PI);
+  // (and from across the square, the door small in the view: from play, "why heroes disappear at this distance, then
+  // appear when I step in, should always be there")
+  const [farX, farZ] = FROM_FOUNTAIN;
+  const fromAfar = canary ? away : await looking(farZ, Math.PI, farX);
+  const off = Math.hypot(farX - x, farZ - HALL.door).toFixed(0);
   await viewBy(lab, 'top');
-  const line = `${atDoor} heroes stand on the dais looking at the door from the stair, ${away} looking away from it`;
-  const wrong = atDoor < CLASS_IDS.length - 1 || away > 0;
+  const line = `${atDoor} heroes stand on the dais looking at the door from the stair, ${fromAfar} from ${off} m off `
+    + `it, ${away} looking away from it`;
+  const all = CLASS_IDS.length - 1;
+  const wrong = atDoor < all || fromAfar < all || away > 0;
   if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
   return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
 }
