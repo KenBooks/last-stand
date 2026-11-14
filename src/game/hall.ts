@@ -146,9 +146,29 @@ function castShadows(p: Player, on: boolean): void {
   castersOf.set(p, casters);
 }
 
+/** the objects of each standing hero whose matrices are held as they are (`holdStill`) */
+const heldOf = new Map<Player, THREE.Object3D[]>();
+
+/** `p`'s matrices held as he stands, or made each frame again: a hero's 280 objects' were made again every
+ *  frame he stood there, posed or not. */
+function holdStill(p: Player, held: boolean): void {
+  const had = heldOf.get(p);
+  if (held === !!had) return;
+  if (had) {
+    for (const o of had) o.matrixAutoUpdate = true;
+    heldOf.delete(p);
+    return;
+  }
+  p.obj.updateMatrixWorld(true);
+  const objects: THREE.Object3D[] = [];
+  p.obj.traverse((o) => { if (o.matrixAutoUpdate) { objects.push(o); o.matrixAutoUpdate = false; } });
+  heldOf.set(p, objects);
+}
+
 /** Those standing in the village's hall taken down, their shadows back. */
 function standDown(): void {
   for (const p of standing) {
+    holdStill(p, false);
     G.scene.remove(p.obj);
     castShadows(p, true);
   }
@@ -204,8 +224,11 @@ export function openHall(focusId: string): void {
 /** The other classes' heroes standing on the plinths in the village's hall, each on his class's (the lobby's own
  *  class's empty: he's walking it), idle and glancing round, while `on` (the hero near it, their programs warm); taken
  *  out of the scene otherwise. They're built behind the lobby (`queueHallBehind`, game/behind.ts); one not built yet is finished here, one a
- *  frame at most (a hero built whole is 100 to 250 ms). */
-export function standHeroes(on: boolean, dt: number): void {
+ *  frame at most (a hero built whole is 100 to 250 ms). `still`: seen from too far to read a glance (from the
+ *  square, through the door), they stand as they are, neither posed nor their matrices made: stood for him from
+ *  however far, the two took 1.1 ms of a frame's update, and their 560 objects' matrices were made again each
+ *  frame (`npm run lab -- perf --village --at=-0.6,7.2 --facing 180 --view third`). */
+export function standHeroes(on: boolean, dt: number, still = false): void {
   if (hallOpen()) return;
   const want = on ? CLASS_IDS.filter((id) => id !== G.profile.classId) : [];
   // (those built so far kept while they're the ones wanted: the row is built a hero a frame)
@@ -228,6 +251,14 @@ export function standHeroes(on: boolean, dt: number): void {
   // (posed in turn, one a frame, each with the time since his last pose: posed every frame, the two heroes on the
   // dais took 3 to 6 ms of each frame's update in the hall, which dropped to 62 to 80 frames a second, from play "still
   // FPS drop when entering the hall"; at 144 a second each is still posed 72 times a second, and an idle stance hides it)
+  // (each told how far the camera is every frame, not at his turn alone: his detail is by it, `farDetail`)
+  for (const p of standing) p.farDetail.update(G.camera.position.distanceTo(p.obj.position));
+  for (const p of standing) holdStill(p, still);
+  if (still) {
+    for (const p of standing) waited.set(p, 0);
+    for (const p of standing) haloRound(p, dt);
+    return;
+  }
   for (const p of standing) waited.set(p, (waited.get(p) ?? 0) + dt);
   if (standing.length) {
     const p = standing[poseTurn++ % standing.length];

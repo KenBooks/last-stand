@@ -56,8 +56,8 @@ const LEAVE = 1.5;
 const LEVEL = 0.9;
 /** how near the hall the hero comes before its heroes are readied, if they aren't yet (m) */
 const HALL_NEAR = 22;
-/** how far out from the hall's door (m) its door's cone opens from above (`DOOR_CONE`). The dais's heroes stood only
- *  within it once: now wherever a plinth is seen (`hallInside`) */
+/** how far out from the hall's door (m) its door's cone opens from above (`DOOR_CONE`), and the dais's heroes are
+ *  posed: further off they stand still wherever a plinth is seen (`hallInside`, `standHeroes`) */
 const HALL_SEEN = 12;
 /** how far before the hall's door its portico reaches (m), where a camera looking in sees no grass but through it */
 const PORTICO_DEEP = 3;
@@ -440,7 +440,9 @@ function hallInside(dt: number): void {
   // heroes came as he stepped in, from play "why heroes disappear at this distance, then appear when I step in, should
   // always be there"; they cost what's seen of them now: posed in turns, casting nothing, coarse from afar)
   const seen = inside || (view === 'top' ? aPlinthSeen() : doorwayOnScreen() && aPlinthThroughDoor());
-  standHeroes(lobby && seen && isWarm('heroes'), dt);
+  // (still from the square: too far to read a glance, and posed there they cost as much as inside)
+  const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
+  standHeroes(lobby && seen && isWarm('heroes'), dt, !inside && !byDoor);
 }
 
 /** whether the hall's room's loose parts are shown (`hallInside`) */

@@ -84,18 +84,22 @@ export async function heroesSeenOnApproach(lab: Lab, canary: boolean): Promise<L
     await lab.step(SETTLE);
     return heroesStanding().length;
   };
+  // (held still: no object of theirs has its matrix made each frame)
+  const still = (): boolean => heroesStanding().every((hero) => !hero.obj.matrixAutoUpdate);
   const away = await looking(TERRACE.stairFoot + SQUARE_OUT, 0);
   const atDoor = canary ? away : await looking(TERRACE.stairFoot - STAIR_UP, Math.PI);
+  const stillAtDoor = atDoor > 0 && still();
   // (and from across the square, the door small in the view: from play, "why heroes disappear at this distance, then
   // appear when I step in, should always be there")
   const [farX, farZ] = FROM_FOUNTAIN;
   const fromAfar = canary ? away : await looking(farZ, Math.PI, farX);
+  const stillAfar = fromAfar > 0 && still();
   const off = Math.hypot(farX - x, farZ - HALL.door).toFixed(0);
   await viewBy(lab, 'top');
   const line = `${atDoor} heroes stand on the dais looking at the door from the stair, ${fromAfar} from ${off} m off `
-    + `it, ${away} looking away from it`;
+    + `it (held still there: ${stillAfar}; at the door: ${stillAtDoor}), ${away} looking away from it`;
   const all = CLASS_IDS.length - 1;
-  const wrong = atDoor < all || fromAfar < all || away > 0;
+  const wrong = atDoor < all || fromAfar < all || away > 0 || !stillAfar || stillAtDoor;
   if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
   return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
 }
