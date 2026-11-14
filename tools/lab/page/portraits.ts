@@ -7,6 +7,8 @@ import { role } from '../../../src/net/role';
 import { renderCoop, updateCoopHud } from '../../../src/ui/coop';
 import { portraitIds, portraitOf, savePortrait, receivePortrait } from '../../../src/net/portraits';
 import { portraitUrl } from '../../../src/ui/portraitArt';
+import { classOutline } from '../../../src/ui/classOutlines';
+import { CLASS_IDS } from '../../../src/data/classes/index';
 import { portraitHtml, syncPortrait } from '../../../src/ui/portraitPicker';
 import type { Player } from '../../../src/entities/player';
 
@@ -68,11 +70,15 @@ export async function portraits(lab: Lab, options: PortraitOptions): Promise<Rep
   check(listPicture.querySelectorAll('img').length === 1, 'partner picture did not render');
   receivePortrait(partner, null);
   syncPortrait(listPicture, partner);
-  check(listPicture.hidden && !listPicture.querySelector('img'), 'cleared portrait still made an image');
+  check(!listPicture.querySelector('img'), 'cleared portrait still made an image');
+  check(!listPicture.hidden && Boolean(listPicture.querySelector('svg.party-portrait.outline')),
+    'a player with no portrait showed no class outline');
+  const outlines = CLASS_IDS.map((id) => classOutline(id));
+  check(new Set(outlines).size === CLASS_IDS.length, 'two classes share an outline');
   await lab.clickOn(element('#coop .portrait-picker summary'));
   await realWait(0);
   await lab.clickOn(element('#coop .portrait-none[aria-label="No portrait"]'));
-  check(portraitOf(G.player) === null && portraitHtml(G.player) === '', 'None retained a portrait image');
+  check(portraitOf(G.player) === null && !portraitHtml(G.player).includes('<img'), 'None retained a portrait image');
   check(!document.querySelector('#coop summary img'), 'None retained a preview image');
   const previousRole = role.current;
   const life = G.player.life;
