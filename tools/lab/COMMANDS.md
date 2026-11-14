@@ -718,12 +718,21 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `conflict` (the mage changed on A and on B while B's link to the service was cut, `context.route` aborting: B,
   back online, is asked, the dialog saying its copy will be lost, keeps the cloud's; then the warrior so on A, whose
   dialog says its copy goes to slot 3, where it then is); `merge` (the warrior changed on A, the mage on B: each
-  syncs with no question and both devices and the service end with both changes). A's code is made by the game's
+  syncs with no question and both devices and the service end with both changes); `reboot` (#556: the hero B plays
+  changed on A while B was closed, B opened again as a returning player opens it on a slow device: its page reloaded
+  with its storage kept, `Device.reboot`, cold, the lobby shown with the fight's and the other heroes' programs still
+  to warm and none of the frames that warm them run yet; its first sync comes down with A's change, B's play saves its
+  hero from memory (`cloudPlay`) before the warm-up ends (`cloudWarmUp`), and B's hero in play, its slot 1 and then the
+  service must all hold A's change and B's; on main the lobby said "Readying slot 1", B played and saved the old copy
+  over the download, and the next sync put it over A's change in the service). A's code is made by the game's
   own call. Each moment (signed out, choosing, signed in, the Account menu, the code, the download, both conflicts) is
   pictured at 1024x700, 1920x1080, 820x1180 and a phone's 844x390@2 in touch mode (a finger's tap on a title) into
   `out/cloud/<moment>-<screen>.png`, the bar's parts and the dialog's held within the window and over no other
   (`cloudFit`). The browser's logged failures of calls made offline are the scenario's own, taken out of the
-  page's errors. `--canary` drops the mage's stash items from every copy of him B downloads: `download` must fail.
+  page's errors. Each device turns slow-game reports off as it starts (on a loaded machine its boot counted as slow,
+  and the prompt lay over the save slots screen, taking every click). `--canary` plays `link`, `download` and `reboot`
+  alone: it drops the mage's stash items from every copy of him B downloads (`download` must fail) and A's change from
+  the hero B plays just before its save after the reboot (`reboot` must fail).
   `--pictures=false`: the checks alone. About 2 minutes without `lab:serve` (a boot of 50 s), 1 with it.
 - `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
   costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).

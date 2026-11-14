@@ -368,6 +368,12 @@ function seededRandom() {
  */
 export function freshStorage() {
   try {
+    // (a device played again by a reload, as a player opens the game again: its storage kept this once, `lab cloud`'s
+    // `reboot`; the mark is the tab's own, so it never reaches another page)
+    if (sessionStorage.getItem('lab.keepStorage') === '1') {
+      sessionStorage.removeItem('lab.keepStorage');
+      return;
+    }
     localStorage.clear();
     localStorage.setItem('last-stand.logo-wind-slow', '2');
   } catch {

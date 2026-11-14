@@ -62,14 +62,18 @@ export interface Conflict {
 export type Status = 'signedOut' | 'unlinked' | 'syncing' | 'synced' | 'offline' | 'error';
 
 export interface CloudHooks {
-  /** slot 1 was changed under the game (a download): the hero in play is built again if it's slot 1's */
-  reloaded(): void;
+  /** slot 1 was changed under the game (a download): the hero in play is built again if it's slot 1's. `classes`: the
+   *  heroes whose copy came down (the hero in play among them: his copy in memory is the old one, #556) */
+  reloaded(classes: string[]): void;
   /** whether a download may be applied now (the lobby, not a run) */
   canApply(): boolean;
   /** heroes changed on both sides: the player chooses (the save slots screen asks) */
   conflicted(conflicts: Conflict[]): void;
   /** anything shown changed (status, account) */
   changed(): void;
+  /** resolves once the game has loaded: no sync before it (a download in its loading came down under a hero the game
+   *  couldn't build again till its warm-up was over, and his old copy was saved over it meanwhile, #556) */
+  loaded: Promise<void>;
 }
 
 let kept: Kept | null = load();
@@ -80,6 +84,10 @@ let timer = 0;
 let running: Promise<void> | null = null;
 let again = false;
 let pending: Conflict[] = [];
+/** resolves once the game has started the cloud's side and loaded (`initCloud`, `CloudHooks.loaded`): a sync asked
+ *  for before (a save in the loading touches it) waits for it */
+let resolveReady: () => void = () => {};
+const ready = new Promise<void>((resolve) => { resolveReady = resolve; });
 
 function load(): Kept | null {
   try {
@@ -362,7 +370,7 @@ export async function copyProduction(code: string): Promise<void> {
   state.base = base;
   state.lastSync = Date.now();
   keep();
-  hooks?.reloaded();
+  hooks?.reloaded([...CLASS_IDS]);
   setStatus('synced');
 }
 
@@ -431,6 +439,7 @@ export function syncNow(): Promise<void> {
 }
 
 async function sync(): Promise<void> {
+  await ready;
   if (!kept?.linked) return;
   setStatus('syncing');
   try {
@@ -460,6 +469,7 @@ async function syncParts(state: Kept): Promise<void> {
   const device = deviceName();
   const conflicts: Conflict[] = [];
   let downloaded = false;
+  const heroes: string[] = [];
   for (const name of partNames()) {
     const here = localPart(name);
     const base = state.base[name];
@@ -481,7 +491,11 @@ async function syncParts(state: Kept): Promise<void> {
     const cloudValue = theirs.value as Entries;
     if (!changedHere || canon(here) === canon(cloudValue)) {
       if (changedHere || hooks?.canApply() !== false) {
-        if (canon(here) !== canon(cloudValue)) { applyPart(name, cloudValue); downloaded = true; }
+        if (canon(here) !== canon(cloudValue)) {
+          applyPart(name, cloudValue);
+          downloaded = true;
+          if (name !== SHARED) heroes.push(name.slice(HERO.length));
+        }
         state.base[name] = { version: theirs.version, value: cloudValue };
       }
       continue;
@@ -495,7 +509,7 @@ async function syncParts(state: Kept): Promise<void> {
     conflicts.push({ classId: name.slice(HERO.length), here, cloud: cloudValue, base: base?.value ?? {},
       cloudVersion: theirs.version, cloudDevice: theirs.device, cloudUpdated: theirs.updated });
   }
-  if (downloaded) hooks?.reloaded();
+  if (downloaded) hooks?.reloaded(heroes);
   pending = conflicts;
   if (conflicts.length) hooks?.conflicted(conflicts);
 }
@@ -517,7 +531,7 @@ export async function resolve(conflict: Conflict, keepWhich: 'here' | 'cloud'): 
   } else {
     writeHero(conflict.classId, 1, conflict.cloud);
     kept.base[name] = { version: conflict.cloudVersion, value: conflict.cloud };
-    hooks?.reloaded();
+    hooks?.reloaded([conflict.classId]);
   }
   keep();
   pending = pending.filter((c) => c !== conflict);
@@ -528,6 +542,7 @@ export async function resolve(conflict: Conflict, keepWhich: 'here' | 'cloud'): 
 /** Starts the device's side: syncs at boot, after saves, now and then while in view, and when back online. */
 export function initCloud(h: CloudHooks): void {
   hooks = h;
+  void h.loaded.then(resolveReady);
   landing = landFromGoogle();
   // whether Google is linked, as the service says now (linked or unlinked on another device)
   refreshAccount();

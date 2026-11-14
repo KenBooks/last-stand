@@ -14,6 +14,7 @@ import { CLASS_ENTRY, readHero, writeSlot, type Entries } from '../../../src/loo
 import { loadProfile, peekProfile, saveProfile } from '../../../src/loot/profile';
 import { SAVE_SLOTS } from '../../../src/loot/saveSlots';
 import * as cloud from '../../../src/loot/cloud';
+import { isReadying, readyingLabel } from '../../../src/game/warm';
 import { G } from '../../../src/state';
 import type { Item, Profile } from '../../../src/types';
 
@@ -92,6 +93,55 @@ export function cloudAddItem({ classId, tag }: { classId: string; tag: string })
   profile.stash.push({ ...structuredClone(worn), id: tag });
   // (saveProfile writes the slot in play's: slot 1, which the lab's boot plays)
   saveProfile({ ...profile, classId });
+}
+
+/** The hero in play as the game holds him in memory: his class and his stash's tags (what a save of his writes). */
+export function cloudInPlay(): { classId: string; tags: string[] } {
+  return { classId: G.profile.classId, tags: G.profile.stash.map((item) => item.id) };
+}
+
+/** An item tagged `tag` added to the hero in play and saved as play saves him: from memory (a bank, gear taken off
+ *  the floor), not from his slot's stored copy. `drop` (a canary's) takes the item of that tag out of him first. */
+export function cloudPlay({ tag, drop = '' }: { tag: string; drop?: string }): void {
+  const worn = Object.values(G.profile.equipped).find((item): item is Item => Boolean(item));
+  if (!worn) throw new Error(`lab: cloud: the ${G.profile.classId} in play wears nothing to copy`);
+  if (drop) G.profile.stash = G.profile.stash.filter((item) => item.id !== drop);
+  G.profile.stash.push({ ...structuredClone(worn), id: tag });
+  saveProfile(G.profile);
+}
+
+/** the lab's clock as the page's scripts have it (tools/lab/node/browser.mjs `labClock`): its parked frames */
+interface ParkedClock { t: number; frame: number; queue: FrameRequestCallback[] }
+
+/** most frames a warm-up is given before it counts as stuck */
+const WARM_FRAMES = 20_000;
+/** the frames run at least, for an act a warm-up held to go ahead once it's over (`whenWarm`, in a promise's turn) */
+const SETTLE_FRAMES = 60;
+
+/**
+ * The lobby's frames run until nothing pressed waits for a warm-up (src/game/warm.ts `isReadying`: the fight's
+ * loading bar gone, what it held done), as a cold boot's lobby warms what's asked for a step a frame; the page's own
+ * tasks (its workers' answers) let in between. A returning player's game warms the other heroes only once something
+ * asks for them, so waiting for every need to be warm would wait for ever where nothing does. Returns the frames run.
+ */
+export async function cloudWarmUp(): Promise<number> {
+  const clock = (window as unknown as { __labClock: ParkedClock }).__labClock;
+  for (let frame = 0; frame < WARM_FRAMES; frame++) {
+    if (frame >= SETTLE_FRAMES && !isReadying()) return frame;
+    clock.t += clock.frame;
+    for (const callback of clock.queue.splice(0)) callback(clock.t);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`lab: cloud: "${readyingLabel()}" still waited after ${WARM_FRAMES} frames`);
+}
+
+/** Whether the lobby's fight loading bar says it readies something pressed (a slot's hero waiting for his programs). */
+export const cloudReadying = (): string => (isReadying() ? readyingLabel() : '');
+
+/** The next load of this tab keeps its storage (the lab's pages clear it as they start, `freshStorage`): the device
+ *  opened again as a player opens the game again. */
+export function cloudKeepStorage(): void {
+  sessionStorage.setItem('lab.keepStorage', '1');
 }
 
 /** What the device shows of the cloud: its state, the dialog's, and the game's mode (a download waits for the

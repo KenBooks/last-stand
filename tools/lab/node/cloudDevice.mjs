@@ -81,6 +81,10 @@ export class Device {
       const address = new URL(location.href);
       address.searchParams.set('server', server);
       history.replaceState(history.state, '', address);
+      // (slow-game reports off, as the pause menu turns them off: on a loaded machine the boot counted as slow and
+      // the prompt asking to send one lay over the save slots screen, taking every click; src/perf/consent.ts puts
+      // it away within a second of reading this)
+      localStorage.setItem('last-stand-perf-traces', JSON.stringify({ consent: 'off', refusals: 0, sent: [] }));
     }, serviceUrl);
   }
 
@@ -136,6 +140,19 @@ export class Device {
     const pattern = `${this.serviceUrl}/**`;
     if (cut) await this.context.route(pattern, (route) => route.abort('internetdisconnected'));
     else await this.context.unroute(pattern);
+  }
+
+  /**
+   * The game opened again on this device, as a returning player opens it: its page reloaded with its storage kept (its
+   * session, its slots, what it last synced) and its loading screen waited out through `side`'s boot, cold (the lab's
+   * own boot warms everything before it counts as booted; a player's lobby shows first, the fight's and the other
+   * heroes' programs warmed behind it, page/cloud.ts `cloudWarmUp`).
+   */
+  async reboot(side) {
+    await this.call('cloudKeepStorage');
+    const reload = () => this.page.reload({ waitUntil: 'domcontentloaded', timeout: 0 });
+    await side.bootBy(this.page, reload, `${this.name}: `, true);
+    await side.installLab(this.page);
   }
 
   /**

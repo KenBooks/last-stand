@@ -281,11 +281,12 @@ async function boot() {
   initSaves({ use: useSlot });
   // cloud saves (loot/cloud.ts): slot 1 kept for every device; a download rebuilds slot 1's hero in the lobby
   initCloud({
-    reloaded: () => { if (G.mode === 'menu' && saveSlot() === 1) useSlot(1); refreshSaves(); },
+    reloaded: (classes) => { if (G.mode === 'menu' && saveSlot() === 1) cloudCameDown(classes, useSlot); refreshSaves(); },
     canApply: () => G.mode === 'menu',
     conflicted: () => { if (G.mode === 'menu') { if (savesOpen()) askConflicts(); else openSaves(true); } },
     // (the bar alone: the panes drawn again would lose their scroll)
     changed: () => { if (savesOpen()) renderCloudBar(); },
+    loaded: loadingLeft,
   });
   initReadying();
   // (the fight's loading bar rastered under the loading screen too, hidden as the lobby is entered: ui/readying.ts)
@@ -753,6 +754,25 @@ function switchSaveSlot(n: number) {
   heroSelectSlotSwitched(id);   // switched from over the hero selection screen: its hall on the slot's heroes
   renderMenu();
   sendLobbyChoice();   // its records set the starting wave
+}
+
+/**
+ * Slot 1, played, changed under the game by the cloud (`classes`: the heroes whose copy came down). The hero in play,
+ * if his copy came down, is built again from it at once: his programs are the lobby's own, warm. Left to wait for the
+ * slot's switch (`useSlot`, which waits for the other heroes' programs and the fight's), the game played his old copy
+ * meanwhile, a slow device's warm-up long, and saved it over the download as he played (a bank, gear off the floor):
+ * the cloud's change was lost on this device and then in the cloud (#556). Another class to play (the class last
+ * played came down) still waits for its programs.
+ */
+function cloudCameDown(classes: string[], useSlot: (n: number) => void): void {
+  const playing = G.player.cls.id;
+  if (classes.includes(playing)) {
+    swapHero(playing);
+    heroSelectSlotSwitched(playing);
+    renderMenu();
+    sendLobbyChoice();
+  }
+  if (savedClass(playing) !== playing) useSlot(1);
 }
 
 /** The floor the camera follows `p` on: in the village the one he stands on (its terrace, a stair). */

@@ -2318,13 +2318,19 @@ export const COMMANDS = {
       + 'and dialogs against a saves service of the lab\'s own (server/saves): an account made and slot 2 chosen as the '
       + 'cloud save, a second device signed in by a code with every slot full (the slot lost named before anything '
       + 'changes), a hero changed on both while one was offline (asked, the cloud\'s kept, the other copy lost or '
-      + 'moved to a free slot as the dialog said), different heroes changed on each (no question, both kept); each '
+      + 'moved to a free slot as the dialog said), different heroes changed on each (no question, both kept), the '
+      + 'second device opened again cold with a change waiting in the cloud and its play saved before its warm-up '
+      + 'ends (the change kept in play, in its slot and in the service, #556); each '
       + 'device\'s slots and the service\'s save read back, and the bar and dialogs pictured within the window at '
       + 'desktops\', a tablet\'s and a phone\'s sizes (out/cloud)',
     options: {
       google: { kind: 'switch', help: 'Google window sign-in/link, cancel and redirect fallback alone (local replies)' },
       pictures: { kind: 'switch', help: 'picture the screen at each moment (=false: the checks alone)' },
-      canary: { kind: 'switch', help: 'the mage\'s stash item dropped from the second device\'s download: caught' },
+      canary: {
+        kind: 'switch',
+        help: 'the mage\'s stash item dropped from the second device\'s download, and the cloud\'s change from the '
+          + 'hero it plays after its reboot: each caught',
+      },
       ...COMMON_OPTIONS,
     },
   },

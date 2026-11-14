@@ -26,7 +26,10 @@ const PROFILE = (classId) => `last-stand.profile.${classId}.v1`;
 const CUT_LINK = 'net::ERR_INTERNET_DISCONNECTED';
 
 /** Each scenario's name, in the order they run (each builds on the ones before it). */
-export const CLOUD_SCENARIOS = ['link', 'download', 'conflict', 'merge'];
+export const CLOUD_SCENARIOS = ['link', 'download', 'conflict', 'merge', 'reboot'];
+
+/** The scenarios a canary run plays: the two it plants a fault in, and the one they build on. */
+const CANARY_SCENARIOS = ['link', 'download', 'reboot'];
 
 /** A device's slots as a line: `1: mage[A2-mage] warrior[A2-warrior] | 2: ... | 3: empty`. */
 export function slotsText(slots) {
@@ -72,7 +75,7 @@ export async function runCloud(side, { canary = false, pictures = true } = {}) {
     const b = new Device('B', partner, side.partnerContexts.at(-1));
     devices.push(b);
     for (const device of devices) await device.start(service.url);
-    const run = { a, b, service, canary, pictures, shots: [] };
+    const run = { side, a, b, service, canary, pictures, shots: [] };
     return await runScenarios(run);
   } finally {
     for (const device of devices) await device.offline(false).catch(() => {});
@@ -87,9 +90,11 @@ export async function runCloud(side, { canary = false, pictures = true } = {}) {
 async function runScenarios(run) {
   const lines = [];
   const problems = [];
-  const steps = { link, download, conflict, merge };
+  const steps = { link, download, conflict, merge, reboot };
   const results = {};
   for (const name of CLOUD_SCENARIOS) {
+    // (the canary plants a fault in the download and in the reboot: the scenarios between them need the download whole)
+    if (run.canary && !CANARY_SCENARIOS.includes(name)) continue;
     let result;
     try {
       result = await steps[name](run);
@@ -99,16 +104,23 @@ async function runScenarios(run) {
     results[name] = result;
     lines.push(`${name}: ${result.problems.length ? 'FAIL' : 'ok'}`, ...result.lines.map((line) => `  ${line}`));
     problems.push(...result.problems.map((problem) => `${name}: ${problem}`));
-    if (run.canary && name === 'download') break;
     if (result.problems.length && result.lines.length === 0) break;
   }
   lines.push('pictures (out/cloud):', ...run.shots.flatMap((shot) => shot.lines));
   problems.push(...run.shots.flatMap((shot) => shot.problems));
   if (!run.canary) return { text: lines.join('\n'), problems };
-  // (the canary's drop must fail the download, and is the only problem the command reports then)
-  const caught = results.download.problems.length > 0;
-  lines.push(`canary, the mage's stash item dropped from B's download: ${caught ? 'caught' : 'went unseen'}`);
-  return { text: lines.join('\n'), problems: caught ? [] : ['canary: an item dropped from a synced save went unseen'] };
+  // (each plant must fail its scenario, and a plant gone unseen is the only problem the command reports then)
+  const canaries = [
+    { name: 'download', what: 'the mage\'s stash item dropped from B\'s download' },
+    { name: 'reboot', what: 'A\'s change dropped from the hero B plays after its slow boot' },
+  ];
+  const missed = [];
+  for (const { name, what } of canaries) {
+    const caught = (results[name]?.problems.length ?? 0) > 0;
+    lines.push(`canary, ${what}: ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`canary: ${what} went unseen`);
+  }
+  return { text: lines.join('\n'), problems: missed };
 }
 
 /** The moment pictured on every screen, if pictures are asked for. */
@@ -287,4 +299,49 @@ async function merge(run) {
   expect(problems, 'B\'s slot 1', bOne, wanted);
   expect(problems, 'the service\'s save', kept, wanted);
   return { lines: [`A's slot 1: ${aOne}`, `B's slot 1: ${bOne}`, `the service: ${kept}`], problems };
+}
+
+/**
+ * `reboot` (#556): the hero B plays changed on A while B was closed; B opened again as a returning player's game opens
+ * on a slow device: cold, its lobby shown while the fight's and the other heroes' programs are still to warm, and
+ * none of the frames that warm them run yet (a slow device's warm-up takes that long). Its first sync comes down with
+ * A's change meanwhile, and B's play saves its hero (a bank, gear off the floor) before the warm-up is over. B must
+ * play the cloud's hero from the moment it's downloaded, and its save must keep A's change, in its slot and in the
+ * service. `--canary` drops A's change from the hero B plays just before that save: it must be caught.
+ */
+async function reboot(run) {
+  const { side, a, b, service } = run;
+  const problems = [];
+  const { classId } = await b.call('cloudInPlay');
+  await a.call('cloudAddItem', { classId, tag: 'A-away' });
+  await a.syncNow();
+  const before = (await b.state()).lastSync;
+  await b.reboot(side);
+  const synced = await b.until((state) => state.status !== 'syncing' && state.lastSync > before,
+    'synced after it was opened again');
+  const readying = await b.call('cloudReadying');
+  const downloaded = await b.call('cloudInPlay');
+  await b.call('cloudPlay', { tag: 'B-back', drop: run.canary ? 'A-away' : '' });
+  await b.call('cloudWarmUp');
+  const inPlay = await b.call('cloudInPlay');
+  const stored = (await b.slots())[1][classId] ?? [];
+  for (const tag of ['A-away', 'B-back']) {
+    if (!stored.includes(tag)) problems.push(`B's slot 1 ${classId} lacks ${tag}: [${stored.join(',')}]`);
+    if (!inPlay.tags.includes(tag)) problems.push(`B plays a ${classId} without ${tag}: [${inPlay.tags.join(',')}]`);
+  }
+  await openSaves(b);
+  await b.syncNow();
+  const save = heroesOfSave(await service.readSave((await a.state()).token));
+  const kept = [...(save[classId] ?? [])].sort();
+  for (const tag of ['A-away', 'B-back']) {
+    if (!kept.includes(tag)) problems.push(`the service's ${classId} lacks ${tag}: [${kept.join(',')}]`);
+  }
+  const lines = [
+    `B opened again cold, then ${synced.status}`
+      + `${readying ? `, the lobby "${readying}"` : ''}; B played ${classId}[${downloaded.tags.join(',')}] meanwhile`,
+    `B saved its play, then warmed: plays ${classId}[${inPlay.tags.join(',')}], `
+      + `its slot 1 holds [${stored.join(',')}]`,
+    `the service's ${classId}: [${kept.join(',')}]`,
+  ];
+  return { lines, problems };
 }
