@@ -10,9 +10,15 @@
 import * as THREE from 'three';
 import { aroundShadows, inShadowsOnly, outOfShadowsOnly } from '../../world/culling';
 import { SKIN_DEPTH } from './shapes';
+import { coarseIndex, holdShadowsWhole, shadowDetailVersion } from './shadowDetail';
 
 /** Whether the hero's pieces are cast as one (`?castAsOne=0`: each on its own; the lab's `shadows` flips it). */
-export const castingAsOne = { on: typeof location === 'undefined' || !/[?&]castAsOne=0/.test(location.search) };
+export const castingAsOne = {
+  on: typeof location === 'undefined' || !/[?&]castAsOne=0/.test(location.search),
+  /** for a harness: every triangle cast, as it was (`shadowDetail.ts`); set here, as a commit from before it has
+   *  this object and takes the property as nothing */
+  set whole(held: boolean) { holdShadowsWhole(held); },
+};
 
 /** One hero's shadow cast as one: its mesh, and how many pieces it casts. */
 export interface OneShadow {
@@ -58,11 +64,13 @@ function shownUnder(object: THREE.Object3D, root: THREE.Object3D): boolean {
 function mergedOf(pieces: THREE.Mesh[]): THREE.BufferGeometry {
   let vertices = 0;
   let corners = 0;
-  for (const piece of pieces) {
+  // (each piece's triangles as its shadow is cast from: fewer than it's drawn with, `shadowDetail.ts`)
+  const coarse = pieces.map((piece) => coarseIndex(piece.geometry));
+  pieces.forEach((piece, at) => {
     const geometry = piece.geometry;
     vertices += geometry.attributes.position.count;
-    corners += geometry.index ? geometry.index.count : geometry.attributes.position.count;
-  }
+    corners += coarse[at]?.length ?? (geometry.index ? geometry.index.count : geometry.attributes.position.count);
+  });
   const positions = new Float32Array(vertices * 3);
   // (the bones' indices as floats: integers read by a float attribute make ANGLE compile a shader at the first draw)
   const bones = new Float32Array(vertices * 4);
@@ -81,8 +89,9 @@ function mergedOf(pieces: THREE.Mesh[]): THREE.BufferGeometry {
       weights[(vertex + i) * 4] = 1;
     }
     const own = geometry.index;
-    const count = own ? own.count : position.count;
-    for (let i = 0; i < count; i++) index[corner + i] = vertex + (own ? own.getX(i) : i);
+    const fewer = coarse[bone];
+    const count = fewer ? fewer.length : own ? own.count : position.count;
+    for (let i = 0; i < count; i++) index[corner + i] = vertex + (fewer ? fewer[i] : own ? own.getX(i) : i);
     vertex += position.count;
     corner += count;
   });
@@ -92,6 +101,47 @@ function mergedOf(pieces: THREE.Mesh[]): THREE.BufferGeometry {
   merged.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4));
   merged.setIndex(new THREE.BufferAttribute(index, 1));
   return merged;
+}
+
+/** Whether `mesh` casts alone and can cast from fewer triangles: a mesh of one material that tests no alpha (a card
+ *  cut by its picture has no triangles to spare), with no morphs. */
+function castsCoarse(mesh: THREE.Mesh): boolean {
+  if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences?.length) return false;
+  if (Array.isArray(mesh.material) || mesh.material.alphaTest > 0 || mesh.userData.shadowTwin) return false;
+  return Boolean(mesh.userData.casts ?? mesh.castShadow);
+}
+
+/**
+ * A twin of `mesh` the shadow map alone draws, of `index`'s triangles over the mesh's own vertices (its attributes are
+ * the mesh's, so a cloth's moving points are its too), hung from it; a skinned one bound to the mesh's skeleton.
+ */
+function coarseTwin(mesh: THREE.Mesh, index: Uint32Array): THREE.Mesh {
+  const geometry = new THREE.BufferGeometry();
+  for (const name of Object.keys(mesh.geometry.attributes)) geometry.setAttribute(name, mesh.geometry.attributes[name]);
+  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.boundingSphere = mesh.geometry.boundingSphere;
+  geometry.boundingBox = mesh.geometry.boundingBox;
+  const skinned = mesh as THREE.SkinnedMesh;
+  let twin: THREE.Mesh;
+  if (skinned.isSkinnedMesh) {
+    const bound = new THREE.SkinnedMesh(geometry, mesh.material);
+    bound.bindMode = skinned.bindMode;
+    bound.bind(skinned.skeleton, skinned.bindMatrix);
+    twin = bound;
+  } else {
+    twin = new THREE.Mesh(geometry, mesh.material);
+  }
+  twin.name = 'shadow cast coarse';
+  twin.userData.shadowTwin = true;
+  twin.customDepthMaterial = mesh.customDepthMaterial;
+  twin.customDistanceMaterial = mesh.customDistanceMaterial;
+  twin.castShadow = true;
+  twin.receiveShadow = false;
+  twin.frustumCulled = mesh.frustumCulled;
+  twin.raycast = NOTHING;
+  mesh.add(twin);
+  inShadowsOnly(twin);
+  return twin;
 }
 
 /**
@@ -111,6 +161,29 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
   let pieces: THREE.Mesh[] = [];
   let mesh: THREE.SkinnedMesh | null = null;
   let made = 0;
+  /** the shadows' detail the mesh was made at (`shadowDetailVersion`): made again when it changes */
+  let detail = -1;
+  /** what casts alone and from fewer triangles, each with its twin (`coarseTwin`) */
+  const twins = new Map<THREE.Mesh, THREE.Mesh>();
+
+  const letTwinsGo = (): void => {
+    for (const twin of twins.values()) {
+      outOfShadowsOnly(twin);
+      twin.removeFromParent();
+    }
+    twins.clear();
+  };
+
+  /** A twin for each mesh under `root` that casts alone and has triangles to spare. */
+  const twin = (): void => {
+    letTwinsGo();
+    root.traverse((object) => {
+      const alone = object as THREE.Mesh;
+      if (!castsCoarse(alone) || pieces.includes(alone)) return;
+      const index = coarseIndex(alone.geometry);
+      if (index) twins.set(alone, coarseTwin(alone, index));
+    });
+  };
 
   const letGo = (): void => {
     if (!mesh) return;
@@ -128,7 +201,9 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     pieces = candidates.filter((_, i) => shown[i]);
     versions.clear();
     for (const piece of pieces) versions.set(piece, versionOf(piece));
+    detail = shadowDetailVersion();
     made++;
+    twin();
     if (!pieces.length) return;
     // (each piece its own bone, its inverse none: a vertex goes where the piece's world matrix puts it)
     const skeleton = new THREE.Skeleton(pieces as unknown as THREE.Bone[], pieces.map(() => new THREE.Matrix4()));
@@ -167,7 +242,7 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
       if (mesh) mesh.castShadow = castingAsOne.on;
       return NOTHING;
     }
-    let changed = reshaped();
+    let changed = reshaped() || detail !== shadowDetailVersion();
     candidates.forEach((piece, i) => {
       // (a piece the quality cuts from casting is left out as one hidden: `applyShadowDetail`)
       const now = piece.castShadow && shownUnder(piece, root);
@@ -175,7 +250,19 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
       shown[i] = now;
     });
     if (changed) make();
-    if (!mesh) return NOTHING;
+    // (each mesh cast alone gives way to its twin for the draw, on the layers it's on itself)
+    const stoodIn: THREE.Mesh[] = [];
+    for (const [alone, coarse] of twins) {
+      coarse.castShadow = alone.castShadow && shownUnder(alone, root);
+      coarse.layers.mask = alone.layers.mask;
+      if (!coarse.castShadow) continue;
+      alone.castShadow = false;
+      stoodIn.push(alone);
+    }
+    const giveBack = (): void => {
+      for (const alone of stoodIn) alone.castShadow = true;
+    };
+    if (!mesh) return giveBack;
     mesh.castShadow = true;
     // (each piece where its world matrix puts it, as drawn; one on a layer the camera doesn't see, the body through the
     // eyes, shrunk to its origin. Through its bone's inverse: three makes the bones' matrices again as it draws)
@@ -185,9 +272,10 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
       else inverses[bone].makeScale(0, 0, 0);
       piece.castShadow = false;
     });
-    return () => pieces.forEach((piece) => {
-      piece.castShadow = true;
-    });
+    return () => {
+      giveBack();
+      for (const piece of pieces) piece.castShadow = true;
+    };
   };
   const stop = aroundShadows(around);
 
@@ -197,6 +285,7 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     get made() { return made; },
     dispose() {
       stop();
+      letTwinsGo();
       letGo();
     },
   };
