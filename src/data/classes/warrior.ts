@@ -29,9 +29,9 @@ const warrior: ClassDef = {
     resist: 6,
   },
 
-  // Right click raises the shield; with a two-hander instead it spins (Steel Tempest), with a weapon in
+  // Right click raises the shield; with a two-hander instead it looses the crescent (Thunder Crescent), with a weapon in
   // each hand it strikes with both (Twin Fangs), and with a lone one-hander it is empty until the player
-  // binds something. The crescent takes a two-handed weapon. A key's default is the last skill listing it.
+  // binds something. A key's default is the last skill listing it.
   skills: [
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
@@ -66,7 +66,7 @@ const warrior: ClassDef = {
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'tempest', dual: 'twinFangs' },
+      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {

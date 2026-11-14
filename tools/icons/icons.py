@@ -9,11 +9,14 @@ from PIL import Image
 
 from export import export
 from fit import measure
+from keys import write_diagrams
 from sheet import sheet
 from skills import ROOT, class_skills
 
 # where the sheet goes unless told otherwise
 SHEET = ROOT / 'tools' / 'icons' / 'out' / 'sheet.png'
+# where the classes' key diagrams go: the README's pictures
+KEYS = ROOT / 'docs' / 'screenshots'
 
 
 def parse_tries(tries: list[str]) -> dict[str, Path]:
@@ -83,6 +86,17 @@ def run_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_keys(arguments: argparse.Namespace) -> int:
+    """`keys`: each class's default keys drawn as a diagram for the README."""
+    folder = Path(arguments.out) if arguments.out else KEYS
+    for path in write_diagrams(folder, list(chosen_classes(arguments.classes))):
+        with Image.open(path) as image:
+            size = f'{image.width}x{image.height}'
+        print(f'{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}: {size}, '
+              f'{path.stat().st_size / 1024:.0f} KB')
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     """The command line."""
     top = argparse.ArgumentParser(prog='npm run icons --', description=__doc__)
@@ -100,6 +114,10 @@ def parser() -> argparse.ArgumentParser:
     add_command.add_argument('impl', help="the skill's impl name (its icon's file name)")
     add_command.add_argument('picture', help='the painted original, on black')
     add_command.set_defaults(run=run_add)
+    keys_command = commands.add_parser('keys', help="each class's default keys as a diagram for the README")
+    keys_command.add_argument('--classes', help='the classes to draw, comma separated (default: every class)')
+    keys_command.add_argument('--out', help=f'the folder to write them in (default: {KEYS.relative_to(ROOT)})')
+    keys_command.set_defaults(run=run_keys)
     return top
 
 

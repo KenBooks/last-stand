@@ -11,6 +11,7 @@ import type { GaitOptions } from './gait';
 import type { StopsOptions } from './stops';
 import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
+import type { ReadmeOptions } from './readmeShots';
 import type { WindOptions } from './wind';
 import type { TouchOptions } from './touchStick';
 import type { TouchPadOptions } from './touchPad';
@@ -302,6 +303,12 @@ export async function form(lab: Lab, command: FormOptions): Promise<Report> {
 export async function ui(lab: Lab, command: UiOptions): Promise<Report> {
   const { ui: uiRound } = await import('./ui');
   return uiRound(lab, command);
+}
+
+/** `lab readme`: the README's pictures, each a moment of the game posed and pictured as the player sees it. */
+export async function readme(lab: Lab, command: ReadmeOptions): Promise<Report> {
+  const { readme: readmeShots } = await import('./readmeShots');
+  return readmeShots(lab, command);
 }
 
 /**

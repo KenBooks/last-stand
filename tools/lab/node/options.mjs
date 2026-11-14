@@ -21,6 +21,9 @@ const KINDS = [
   'switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 'ref', 'screen', 'screens', 'screenList',
 ];
 
+/** the README's pictures `readme` takes, in the order it takes them (page/readmeShots.ts `SHOTS`) */
+export const README_SHOTS = ['village', 'campfire', 'hall', 'stash', 'forest', 'crypt', 'choice', 'party', 'down'];
+
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
@@ -446,6 +449,21 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the system\'s cursor on the page\'s body in each state, old-style digits on it and the labels\' '
           + 'lining twin taken away (the skill tooltips made as tall as the window): each check must find its own',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  readme: {
+    help: 'the README\'s pictures (docs/screenshots), each a moment of the game posed and pictured as the player '
+      + 'sees it, its UI over the frame: the village, the party round its campfire, the hall of heroes, the stash, a '
+      + 'fight in each battleground, the choice after a wave, a party of four in a fight and one of them down '
+      + '(tools/lab/out/readme; --class the hero, --screen the picture\'s size)',
+    options: {
+      shots: { kind: 'list', usage: 'a,b', choices: README_SHOTS, help: 'the shots taken (every one by default)' },
+      after: {
+        kind: 'number',
+        usage: 'frames',
+        help: 'a fight pictured this many frames after its skill\'s press, in place of the shot\'s own',
       },
       ...COMMON_OPTIONS,
     },
