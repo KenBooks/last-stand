@@ -106,8 +106,7 @@ export function skillNamed(wanted: string): BoundSkill {
   throw new Error(`lab: cast: the ${G.player.cls.id} has no skill ${wanted}: ${known}`);
 }
 
-/** A skill the hero knows but hasn't on a key (Thunder Crescent, while the two-handed loadout has Steel Tempest on
- *  its key) put on its own key, as the player would bind it in the lobby. */
+/** A skill the hero knows but hasn't on a key (one a saved loadout left off its key) put on its own key, as the player would bind it in the lobby. */
 export function bindKnown(wanted: string): void {
   const hero = G.player;
   const name = wanted.toLowerCase();

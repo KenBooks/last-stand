@@ -70,6 +70,7 @@ NOTES = {
     'potion': 'Restore Health',
     'cleave': 'A wide sweep that restores Energy',
     'raiseShield': 'Block every blow from the front',
+    'crescent': 'Lightning torn along the ground',
     'twinFangs': 'Lunge and strike with both blades',
     'tempest': 'Spin, shredding all around you',
     'bullRush': 'Charge, sweeping foes along',

@@ -121,7 +121,7 @@ Robes and a crystal staff; arcane and elemental spells from range. A staff is at
 
 Plate armour; tougher, and fights up close: with a one-handed weapon and a shield, a weapon in each hand, or a two-handed weapon, and right click follows what is held. Shields **block**: each hit has the shield's Block Chance to be blocked, and holding right click raises the shield to block every hit from the front; a hit too big for it breaks the guard and staggers you. With a two-hander, Thunder Crescent can be bound to a key too.
 
-![The warrior's keys: left click Rending Cleave, right click Raise Shield, Steel Tempest or Twin Fangs by what is held, 1 Steel Tempest, 2 Bull Rush, 3 Power Strike, 4 Iron Bellow, Q Healing Draught](docs/screenshots/keys-warrior.png)
+![The warrior's keys: left click Rending Cleave, right click Raise Shield, Thunder Crescent or Twin Fangs by what is held, 1 Steel Tempest, 2 Bull Rush, 3 Power Strike, 4 Iron Bellow, Q Healing Draught](docs/screenshots/keys-warrior.png)
 
 ### The Ranger
 
