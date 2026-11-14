@@ -23,6 +23,7 @@ import { pastWall } from '../../world/edge';
 import { FOUNTAIN, inBasin } from '../../world/fountain';
 import { wallHit } from '../../world/wall';
 import { clamp, rand } from '../../util';
+import { tunable } from '../../core/tuning';
 import { FULL_DRAW } from '../../data/balance';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
@@ -66,6 +67,25 @@ export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: numbe
   const d = Math.max(NEAR, Math.hypot(target.x - from.x, target.z - from.z)), h = groundHeight(target.x, target.z) + target.y - from.y;
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
   return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), MIN_PITCH, MAX_PITCH);
+}
+
+/**
+ * Where the pose's shot is aimed from: the nocked arrow's middle as it stands at full draw aimed level, in the hero's
+ * frame (m: `ahead` of him, to his `side` as +x is to a hero facing +z, `up` from his feet), not the arrow as posed.
+ * The pose tips the arrow by the angle it's given, its middle swinging about a metre between the least and the most, so
+ * aimed from the arrow as posed at a point on a prop within a metre of it, each frame's angle moved the arrow to where
+ * the next frame's turned it back, and the bow and the trunk flickered between two poses (#317; `lab bowprop`, which
+ * holds these to the arrow at a level draw). The preview and the arrow loosed still aim from the arrow itself: read
+ * once a frame, they move nothing. `steady` 0 aims the pose from the arrow as posed again (the lab's canary).
+ */
+const SHOT_FROM = tunable('shotFrom', { ahead: 0.55, side: -0.1, up: 1.58, steady: 1 });
+
+/** The point the pose's shot is aimed from (`SHOT_FROM`); through the eyes, the arrow in view as before. */
+export function shotFrom(player: Player): THREE.Vector3 {
+  if (!SHOT_FROM.steady || player.eyes) return player.castPoint;
+  const facing = player.facing, sin = Math.sin(facing), cos = Math.cos(facing);
+  const { ahead, side, up } = SHOT_FROM;
+  return new THREE.Vector3(player.pos.x + ahead * sin + side * cos, player.obj.position.y + up, player.pos.z + ahead * cos - side * sin);
 }
 
 /** An arrow coming down at `tip` going `dir` at `vel`: into the ground, or off it if it's stone. */
@@ -312,7 +332,7 @@ const SHORT_DRAW = 'less drawn short';
 
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
-  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
+  pitch: (player, def, k, target) => launchPitch(shotFrom(player), target, arrowSpeed(def as BowDef, k)),
   hits(rawDef) {
     const def = rawDef as BowDef;
     const arrows = def.missiles > 1 ? `${def.missiles} arrows, ` : '';

@@ -103,6 +103,21 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.
+- `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (`page/bowProp.ts`, `--class ranger`;
+  `shotFrom` in `src/combat/skills/ranger.ts`). First the shot is drawn level ahead and the point the pose aims from
+  is held within 5 cm of the nocked arrow's middle. Then in each biome (`--biomes`), against one prop of each kind
+  (the one nearest the middle with room to stand at each distance), from 0.25 and 0.5 m off its circle, the shot is
+  drawn and held for 150 frames on a point on the prop from the top-down view, the mouse over it (in the close views
+  the crosshair's point within 5 m goes on along its ray, `AIM.near`, so the aim never sits on a prop beside him).
+  From the tenth frame on, the nocked arrow's middle, the bow's upper tip and the hero are read in the world every
+  frame, and a move over 1 cm that turns back on the frame before's is a reversal: more than 3 over the hold is a
+  flicker. A stand whose shot was never drawn, or whose aim never met the prop, is a problem too. Aimed from the arrow
+  as posed, the pose's angle moved the arrow to where the next frame's turned it back (#317): main turned back on 59
+  to 138 of the 140 frames against the crypt's stone and wood and the forest's stone and mushrooms, the arrow's
+  middle up to 1.07 m and the bow's tip 1.29 m in a frame, now none, 2 to 6 cm a frame at most. `--canary` aims the
+  pose from the arrow as posed again (`shotFrom.steady=0`), which must flicker; `--pictures` films four frames running
+  round the arrow's largest move in each biome's first stand (played again to it), the whole body from his right and
+  from above behind, each with the arrow's height (`tools/lab/out/bowprop`).
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
 - `ui`: the game's UI as the player sees it, in its states: in full in [`commands/ui.md`](commands/ui.md).

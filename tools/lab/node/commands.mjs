@@ -1232,6 +1232,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  bowprop: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        biomes: options.biomes,
+        pictures: Boolean(options.pictures),
+        canary: Boolean(options.canary),
+      };
+      return side.command('bowprop', command);
+    },
+    finish(results, options, session) {
+      return textWithSheetEach(results, session.outFor('bowprop'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   cursor: {
     each(side, options) {
       const command = {
