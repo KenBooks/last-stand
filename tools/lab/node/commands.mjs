@@ -611,6 +611,18 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  readme: {
+    each(side, options) {
+      return side.command('readme', { shots: options.shots, after: options.after });
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('readme'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   wind: {
     each(side, options) {
       const command = { resize: options.resize ?? [], canary: Boolean(options.canary) };

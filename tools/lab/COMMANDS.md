@@ -96,6 +96,21 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
 - `ui`: the game's UI as the player sees it, in its states: in full in [`commands/ui.md`](commands/ui.md).
+- `readme`: the README's pictures (`page/readmeShots.ts`, written to `out/readme/<shot>.png` at the screen's own
+  pixels: `--screen 1600x900@1`), each a moment posed and pictured by `lab.screen`, the page's UI over the frame:
+  `village` (the hero before the fountain at 17:30, over the shoulder), `campfire` (a party of four round it at
+  21:30), `hall` (the hero selection screen), `stash` (the chest's panels, a full set worn and 34 items of every
+  rarity), `forest` (over the shoulder, the hero's skill cast at seven of its foes), `crypt` (from above at the
+  game's close zoom, before the dais), `choice` (the choice after a wave, nine items in the bag by rarity), `party`
+  (four heroes in the Crypt, each in a colour, class and gear of its own) and `down` (one of them down, the local
+  hero holding E to raise him). `--shots a,b` takes some; `--class` is the local hero (the README's are the mage's,
+  and `forest` the warrior's: `--class warrior --shots forest`); `--after n` pictures a fight n frames after its
+  skill is let go, to choose a moment. The dev build's tab, the beta's notice and the close views' hint to click are
+  hidden. The partners are heroes built as a room builds them (`net/session.ts` `makePlayer`) and stood by their
+  reported state, the game's role set to host: one page and no room, so it shows how a party is drawn and says
+  nothing of the link (`coop` plays real rooms). A shot taken alone comes out a little otherwise than in the whole run (the same scene, its particles and the idle elsewhere: 5% of the crypt's pixels), as each follows on from those before it. It is for pictures, not a measure: its one problem is the partner
+  not down as `down` is taken. Copy the chosen pictures into `docs/screenshots` as JPEGs (quality 86: 150 to 460 KB
+  each at 1600x900; `docs/screenshots/AGENTS.md`).
 - `wind`: the loading screen's exit as it hands over to the lobby's logo (`page/wind.ts`, `src/ui/logoWind.ts`).
   The loading screen is put back over the lobby (index.html's, fetched) and its exit run on the lab's clock into the
   lobby logo, the window put on the screens `--resize` names one after another as the particles fly (on
