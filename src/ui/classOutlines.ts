@@ -1,6 +1,6 @@
 // A class's default picture: shown in a party card or list where its player has chosen no portrait, so every card
 // has a picture and the same layout. A painted bust in greys with no face (the mage's starred hood and staff, the
-// warrior's closed helm, the ranger's hood, quiver and bow), `portraits/<class>/default-<class>.webp`, small and
+// warrior's closed helm, the ranger's feathered cap and tall bow), `portraits/<class>/default-<class>.webp`, small and
 // inlined in the bundle: nothing is downloaded for it, and it shows offline. A class with none painted gets a plain
 // bust drawn in SVG.
 const pictures = import.meta.glob<string>('./portraits/*/default-*.webp', {
