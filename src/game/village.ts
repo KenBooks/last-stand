@@ -56,9 +56,8 @@ const LEAVE = 1.5;
 const LEVEL = 0.9;
 /** how near the hall the hero comes before its heroes are readied, if they aren't yet (m) */
 const HALL_NEAR = 22;
-/** how near the hall's door (m) the other heroes stand on its dais with the door in view, as inside it: from the stair
- *  the dais stood empty through the door ("on approach heroes are not there"). Stood from anywhere on the square, their
- *  builds' poses and draws took 5 ms of a frame's CPU and 400 draws (a perf report from play) */
+/** how far out from the hall's door (m) its door's cone opens from above (`DOOR_CONE`). The dais's heroes stood only
+ *  within it once: now wherever a plinth is seen (`hallInside`) */
 const HALL_SEEN = 12;
 /** how far before the hall's door its portico reaches (m), where a camera looking in sees no grass but through it */
 const PORTICO_DEEP = 3;
@@ -435,10 +434,12 @@ function hallInside(dt: number): void {
     for (const part of village.hallRoom) part.visible = roomSeen;
     roomShown = roomSeen;
   }
-  const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
   // (from above, the camera sees past the walls: while he can see a plinth, from play, "pedestals are empty from this
   // position, they should display heroes if character can see them from their cone of view")
-  const seen = inside || (byDoor && (view === 'top' ? aPlinthSeen() : doorwayOnScreen() && aPlinthThroughDoor()));
+  // (from however far: within 12 m of the door alone, the plinths stood empty through it from the fountain and the
+  // heroes came as he stepped in, from play "why heroes disappear at this distance, then appear when I step in, should
+  // always be there"; they cost what's seen of them now: posed in turns, casting nothing, coarse from afar)
+  const seen = inside || (view === 'top' ? aPlinthSeen() : doorwayOnScreen() && aPlinthThroughDoor());
   standHeroes(lobby && seen && isWarm('heroes'), dt);
 }
 
