@@ -10,6 +10,8 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { boomKeepsShoulder, boomStandsBehind, faceCamera, lookBy } from '../../../src/core/renderer';
+import { hideBodyNearCamera } from '../../../src/entities/viewModel';
+import { HIDDEN_LAYER } from '../../../src/core/layers';
 import { CAMERA } from '../../../src/data/balance';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
@@ -68,6 +70,7 @@ interface Read {
   spots: number;
   cutting: number;
   headOut: number;
+  headHidden: number;
   unsteady: string[];
   moments: Moment[];
 }
@@ -87,6 +90,16 @@ function clearOfNear(): number {
     least = Math.min(least, body.dot(look) - BODY_REACH - G.camera.near);
   }
   return least;
+}
+
+/** Whether any of his head's meshes is on the layer no camera draws: by the camera's nearness to his neck alone, over
+ *  his head by a wall his head and body went, his arms left, as a broken view through the eyes (#601). */
+function headHidden(): boolean {
+  let hidden = false;
+  G.player.model.joints!.neck.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh && object.layers.isEnabled(HIDDEN_LAYER)) hidden = true;
+  });
+  return hidden;
 }
 
 /** Whether his head is drawn inside the frame. */
@@ -156,6 +169,7 @@ async function readSpot(lab: Lab, read: Read, at: THREE.Vector3, facing: number,
   }
   if (clearOfNear() < 0) read.cutting++;
   if (!headInFrame()) read.headOut++;
+  if (headHidden()) read.headHidden++;
   const boom = G.camera.position.distanceTo(chest);
   if (pictures && (hidden || (boom < CLOSE && read.moments.length < MOST_PICTURES))) {
     read.moments.push(await lab.screen(label, [`boom ${boom.toFixed(2)} m`]));
@@ -164,7 +178,9 @@ async function readSpot(lab: Lab, read: Read, at: THREE.Vector3, facing: number,
 
 /** Every spot's camera read: by the walls each way out, and turned all round in the doorway. */
 async function readSpots(lab: Lab, pictures: boolean): Promise<Read> {
-  const read: Read = { behind: 0, behindAt: [], spots: 0, cutting: 0, headOut: 0, unsteady: [], moments: [] };
+  const read: Read = {
+    behind: 0, behindAt: [], spots: 0, cutting: 0, headOut: 0, headHidden: 0, unsteady: [], moments: [],
+  };
   for (const from of FROM) {
     for (let way = 0; way < WAYS; way++) {
       const angle = (way / WAYS) * Math.PI * 2;
@@ -193,6 +209,7 @@ export async function cameraBeforeWalls(lab: Lab, canary: boolean): Promise<Ligh
   await viewBy(lab, 'third');
   boomStandsBehind(false);
   boomKeepsShoulder(canary);
+  hideBodyNearCamera(canary);
   try {
     const read = await readSpots(lab, !canary);
     let { behind } = read;
@@ -200,18 +217,20 @@ export async function cameraBeforeWalls(lab: Lab, canary: boolean): Promise<Ligh
       boomStandsBehind(true);
       behind = (await readSpots(lab, false)).behind;
     }
-    const { spots, cutting, headOut, unsteady, moments } = read;
+    const { spots, cutting, headOut, headHidden: hidden, unsteady, moments } = read;
     if (spots < WAYS * 2) throw new Error(`lab: village: only ${spots} spots against a wall`);
     const line = `by the walls at ${spots} spots, over the shoulder: the camera behind one ${behind}, `
-      + `its near plane through him ${cutting}, his crown out of the frame ${headOut}, never settling `
+      + `its near plane through him ${cutting}, his crown out of the frame ${headOut}, his head hidden ${hidden}, `
+      + `never settling `
       + `${unsteady.length}${unsteady.length ? ` (${unsteady.slice(0, 4).join(', ')})` : ''}`
       + `${read.behindAt.length ? ` (behind one: ${read.behindAt.join(', ')})` : ''}`;
-    if (canary) return { lines: [line], problems: [], caught: behind > 0 && cutting > 0, moments: [] };
-    const problems = behind || cutting || headOut || unsteady.length ? [line] : [];
+    if (canary) return { lines: [line], problems: [], caught: behind > 0 && cutting > 0 && hidden > 0, moments: [] };
+    const problems = behind || cutting || headOut || hidden || unsteady.length ? [line] : [];
     return { lines: [line], problems, caught: null, moments };
   } finally {
     boomStandsBehind(false);
     boomKeepsShoulder(false);
+    hideBodyNearCamera(false);
     await viewBy(lab, 'top');
   }
 }
