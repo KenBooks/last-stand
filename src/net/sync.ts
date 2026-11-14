@@ -138,7 +138,7 @@ function forget(): void {
 /** Host: the spawn reports of the foes a guest asked about, those still standing (`foesAsked`). */
 export function foesAsked(ids: number[]): SpawnEvent[] {
   if (role.current !== 'host' || G.mode !== 'run') return [];
-  return G.enemies.filter((e) => e.alive && ids.includes(e.id)).map(spawnOf);
+  return G.enemies.filter((e) => e.alive && !e.standIn && ids.includes(e.id)).map(spawnOf);
 }
 
 /**
@@ -190,7 +190,7 @@ function snap(): Snapshot {
       r.held ? 1 : 0],
     v: [...r.votes],
     p: G.players.filter((p) => !p.away).map((p) => [p.slot, r2(p.bleed), r2(p.revive)]),
-    e: G.enemies.filter((e) => e.deadT < 0).map((e) => [
+    e: G.enemies.filter((e) => e.deadT < 0 && !e.standIn).map((e) => [
       e.id, r2(e.pos.x), r2(e.pos.z), r2(e.facing), Math.round(e.life),
       e.action?.name ?? '', r2(e.action?.t ?? 0), r2(e.action?.dur ?? 0),
       (e.frozen > 0 ? 1 : 0) | (e.chill > 0 ? 2 : 0) | (e.dazed > 0 ? 4 : 0) | (e.burning > 0 ? 8 : 0),

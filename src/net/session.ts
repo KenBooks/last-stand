@@ -25,13 +25,14 @@ import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, pingHeard, clearPings } from '../game/ping';
 import { showBiomeSetting } from '../game/biome';
+import { duelHits, duelQuit, duelSetup, duelWord, readSetup, setDuelNet, setupNow, takeSetup, type DuelSetup } from '../game/duel';
 
 import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 32;
+const PROTOCOL = 33;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -63,6 +64,8 @@ interface Peer {
 export interface SessionHooks {
   /** the host started a run: a guest starts its side of it */
   startRun(biome: BiomeId, wave: number, seed: number, training: boolean): void;
+  /** the host started a duel: a guest starts its side of it */
+  startDuel(setup: DuelSetup, seed: number): void;
   /** the host left, or the room broke up */
   hostGone(): void;
   /** anything the lobby shows changed (status, partner, roster) */
@@ -266,6 +269,8 @@ export function leaveRoom(): void {
   if (session.status === 'joined') clearGround();
   setGroundNet(null);
   setChatNet(null);
+  setDuelNet(null);
+  duelSetup.ready.clear();
   clearChat();
   for (const peer of session.peers.values()) dropPlayer(peer);
   session.peers.clear();
@@ -336,6 +341,18 @@ function wire(l: Link): void {
   setPingNet((m) => send('ctl', { t: 'ping', ...m }));
   // chat has no gameplay effect: every game sends its own to every other (net/chat.ts)
   setChatNet((text) => send('ctl', { t: 'chat', text }));
+  // a duel (game/duel.ts): the host's word of its turns to everyone, each game's hits to the hero they struck
+  setDuelNet({
+    round: (n, score) => send('ctl', { t: 'dround', n, score }),
+    fight: (n) => send('ctl', { t: 'dfight', n }),
+    won: (n, side, score) => send('ctl', { t: 'dwon', n, side, score }),
+    end: (side, score) => send('ctl', { t: 'dend', side, score }),
+    hits: (to, n, rows) => {
+      const peer = [...session.peers.values()].find((p) => p.player === to);
+      if (peer) send('ctl', { t: 'pvp', n, rows }, peer.id);
+    },
+    quit: () => sendControl({ t: 'dquit' }),
+  });
 }
 
 /** Who we are, to a game we meet: our slot is -1 until the host has given us one (another guest would take our 0 as
@@ -387,6 +404,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
+    send('ctl', { t: 'duel', setup: setupNow(), ready: [...duelSetup.ready] }, from);
     send('hello', hello(), from);
     publishColours();
     hooks.changed();
@@ -439,6 +457,12 @@ function onControl(from: string, m: Record<string, unknown>): void {
     return;
   }
   if (onGround(from, m)) return;
+  // a rival's hits on our hero in a duel, straight from its game (game/duel.ts works them out)
+  if (m.t === 'pvp') {
+    const by = session.peers.get(from)?.player;
+    if (by) duelHits(by, Number(m.n), m.rows);
+    return;
+  }
   if (m.t === 'ping') {
     const by = session.peers.get(from)?.player;
     if (by) pingHeard(by, m);
@@ -482,6 +506,18 @@ function onControl(from: string, m: Record<string, unknown>): void {
       if (G.mode === 'menu') G.arena.setBiome(session.biome);
       if (typeof m.tz === 'number') setHostOffset(m.tz);
       hooks.changed();
+    } else if (m.t === 'duel' && from === session.hostId) {
+      // (the duel as the host has set it up at the rack, and who is ready for it)
+      takeSetup(m.setup, m.ready);
+      hooks.changed();
+    } else if (m.t === 'dstart' && from === session.hostId && G.mode === 'menu') {
+      const setup = readSetup(m.setup);
+      if (!setup) return;
+      const host = session.peers.get(from);
+      if (host) host.inRun = true;
+      hooks.startDuel(setup, m.seed as number);
+    } else if (typeof m.t === 'string' && ['dround', 'dfight', 'dwon', 'dend'].includes(m.t) && from === session.hostId) {
+      duelWord(m);
     } else if (m.t === 'foes' && from === session.hostId) {
       foesTold(m.list as SpawnEvent[]);
     } else if (m.t === 'start' && G.mode === 'menu') {
@@ -504,7 +540,44 @@ function onControl(from: string, m: Record<string, unknown>): void {
     syncReadying();
     return;
   }
+  // host: a guest ready for the duel as set up (or no longer), told to everyone; a guest leaving a duel under way
+  if (m.t === 'dready') {
+    if (!peer) return;
+    if (m.on) duelSetup.ready.add(peer.slot); else duelSetup.ready.delete(peer.slot);
+    sendDuelSetup(false);
+    hooks.changed();
+    return;
+  }
+  if (m.t === 'dquit') { if (peer?.player) duelQuit(peer.player); return; }
   if (peer?.player) onGuestControl(peer.player, m);
+}
+
+/** The host's duel as set up at the rack, told to the guests; `changed`: it is another duel now, so everyone who was
+ *  ready for the last is asked again. */
+export function sendDuelSetup(changed = true): void {
+  if (role.current !== 'host') return;
+  if (changed) duelSetup.ready.clear();
+  send('ctl', { t: 'duel', setup: setupNow(), ready: [...duelSetup.ready] });
+}
+
+/** A guest: ready for the duel as set up, or not after all. */
+export function sendDuelReady(on: boolean): void {
+  if (on) duelSetup.ready.add(G.player.slot); else duelSetup.ready.delete(G.player.slot);
+  sendControl({ t: 'dready', on });
+}
+
+/** The host starts the duel: every guest in the lobby comes along, its props shaped by the same `seed`. */
+export function sendDuelStart(setup: DuelSetup, seed: number): void {
+  if (role.current !== 'host') return;
+  for (const peer of session.peers.values()) {
+    if (peer.inRun) continue;
+    send('ctl', { t: 'dstart', setup, seed }, peer.id);
+    peer.readying = true;
+  }
+  for (const peer of session.peers.values()) peer.inRun = true;
+  duelSetup.ready.clear();
+  syncAway();
+  syncReadying();
 }
 
 /** Items on the lobby floor: thrown, asked for (the host decides) and taken. Returns whether `m` was one. */
@@ -778,5 +851,6 @@ export function updateSession(dt: number, reviving: boolean): void {
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate
-  if (role.current === 'host' && G.mode === 'run') sendWorld((m) => send('w', m), due);
+  // (a duel has no foes to report: its props' wear alone goes out, with the fight's events)
+  if (role.current === 'host' && G.mode === 'run') sendWorld((m) => send('w', m), due && !G.run?.duel);
 }

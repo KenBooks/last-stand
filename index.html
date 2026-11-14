@@ -205,6 +205,13 @@
     <div id="look-hint" class="hidden">Click to look around</div>
 
     <div id="banner" class="hidden"><div class="b-title"></div><div class="b-sub"></div></div>
+    <!-- a duel (ui/duelHud.ts): the score either side of the round's badge, and the match's result -->
+    <div id="duel-score" class="hidden" role="status">
+      <span class="ds-a"></span><span class="ds-mid"><b class="ds-points"></b><i class="ds-note"></i></span><span class="ds-b"></span>
+    </div>
+    <div id="duel-result" class="hidden" role="status">
+      <div class="dr-title"></div><div class="dr-who"></div><div class="dr-score"></div><div class="dr-note"></div>
+    </div>
 
     <div id="buffs"></div>
     <div id="wavebadge" class="gem"><span class="gem-label">Wave</span><span class="gem-num">1</span></div>
@@ -532,11 +539,16 @@
         <div class="vc-row"><button class="btn" id="btn-saves">Save slot 1</button><button class="btn danger" id="btn-reset">Reset profile</button></div>
       </div>
       <div class="vc-page" data-page="pvp">
+        <div class="pvp-choices">
         <div class="biome-row"><span class="br-label">Battleground</span><div class="seg" id="pvp-ground"></div></div>
         <div class="biome-row"><span class="br-label">Fight</span>
           <div class="seg" id="pvp-size"><button data-v="1">1 v 1</button><button data-v="2">2 v 2</button></div>
         </div>
         <div class="biome-row"><span class="br-label">First to</span><div class="seg" id="pvp-wins"></div></div>
+        <div class="biome-row"><span class="br-label">Gear</span>
+          <div class="seg" id="pvp-gear"><button data-v="own">Own gear</button><button data-v="none">No gear</button></div>
+        </div>
+        </div>
         <div id="pvp-sides">
           <div class="pvp-side" data-part="0"><span class="br-label">Side one</span><div class="pvp-list"></div></div>
           <div class="pvp-versus" aria-hidden="true">vs</div>

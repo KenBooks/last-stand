@@ -84,6 +84,40 @@ export const COOP = {
   sendRate: 20,
 };
 
+/** A duel, hero against hero (game/duel.ts; #406). */
+export const PVP = {
+  /** the share of a skill's damage a hero takes from it: the skills are tuned for foes of many times a hero's life,
+   *  and at their full worth most killed a hero in a blow or two; the same for everyone, its damage over time too */
+  damage: 0.25,
+  /** the share of a freeze's, a daze's or a carry's time a hero is held for, and how long after it ends before he can
+   *  be held again (s), so one hero is never held from one hold into the next */
+  hold: 0.5,
+  holdRest: 2.5,
+  /** how fast a charge shoves a hero it meets (m/s, dying away as a knock does): shoved, never carried */
+  shove: 9,
+  /** a chilled hero's pace, as a chilled foe's */
+  chill: 0.6,
+  /** a round: the count before it (s), its longest (s: then the side with more of its life left takes it), the pause
+   *  after it (s), and how long a fall waits for the other side's before the round is judged (s: both down is a draw) */
+  countdown: 3,
+  roundTime: 120,
+  between: 3.5,
+  trade: 0.4,
+  /** how long the match's result stands before every game goes back to the village (s) */
+  result: 6,
+  /** where a side stands as a round begins: this far in from its gate (m), two of a side this far apart */
+  fromGate: 4,
+  apart: 2.2,
+  /** what a hit is held to where it lands, whatever its sender says: at most this share of the struck hero's life,
+   *  at most this many hits a second from one hero (a channel's ticks are the most a skill sends), and none from a
+   *  hero shown further than this from where the struck hero stands on his own screen (m: he blinked or dashed away) */
+  hitMost: 0.6,
+  hitsPerSecond: 40,
+  dodged: 5,
+  /** Healing Draughts a hero may drink in a round */
+  draughts: 1,
+};
+
 /** Co-op pings (game/ping.ts): what a player shows the party, and for how long. */
 export const PING = {
   /** how long a ping shows (s), fading in and out over its ends */

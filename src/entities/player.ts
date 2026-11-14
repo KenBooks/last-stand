@@ -10,7 +10,8 @@ import { buildModel, modelSteps } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
-import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
+import { BLOCK, COOP, FULL_DRAW, PVP } from '../data/balance';
+import { dazedStars } from '../fx/dazed';
 import { recorder } from '../perf/recorder';
 import { SCHOOLS } from '../data/schools';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout } from '../loot/loadout';
@@ -122,7 +123,9 @@ export type PlayerAction =
   /** a hit it took, as its own game judged it (shown on the others) */
   | { t: 'hurt'; r: HitResult }
   /** it fell (the host's run rules take it from there) */
-  | { t: 'died' };
+  | { t: 'died' }
+  /** held by a rival's skill in a duel (`Player.hold`): for how long (s), frozen (1) or dazed (0) */
+  | { t: 'held'; s: number; f: 0 | 1 };
 let actionSink: ((a: PlayerAction) => void) | null = null;
 /** Co-op: where the local player's casts are reported. */
 export function setActionSink(fn: ((a: PlayerAction) => void) | null): void { actionSink = fn; }
@@ -303,6 +306,22 @@ export class Player {
   shine = 0;
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
+  /** the gear his stats and his look were last made from (`recomputeStats`) */
+  equipped: Profile['equipped'] = {};
+  /** his gear's bonuses left out of his stats (a duel fought with no gear, game/duel.ts): what he holds and wears
+   *  stays on him, as his skills come from the weapon in his hands */
+  gearless = false;
+  /** shoved by a rival's blow in a duel (m/s, dying away as a foe's knock does) */
+  readonly knock = new THREE.Vector3();
+  /** in a duel, a rival's skills: chilled (slowed) until, and held (frozen or dazed: standing, casting nothing) until,
+   *  frozen or not, and no hold taking him again until `holdRest` (all game time) */
+  chilledUntil = -1;
+  heldUntil = -1;
+  heldFrozen = false;
+  holdRest = -1;
+  get held(): boolean { return this.heldUntil > G.time; }
+  /** between a duel's rounds and through its count: nothing is cast (as out of the village's yard, `armed`) */
+  truce = false;
 
   /** the heroes built so far (a build is 100 to 200 ms: `lab behind` counts those a hero's choice makes) */
   static built = 0;
@@ -416,7 +435,8 @@ export class Player {
 
   recomputeStats(equipped: Profile['equipped']): void {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
-    this.stats = computeStats(this.cls.base, equipped);
+    this.equipped = equipped;
+    this.stats = computeStats(this.cls.base, this.gearless ? {} : equipped);
     this.gear = gearOf(this.cls, equipped);
     this.fitToGear();
     this.model.setGear?.(this.gear);
@@ -472,6 +492,9 @@ export class Player {
     this.bleed = this.revive = this.rising = 0;
     this.out = null;
     this.guardUntil = -1;
+    this.knock.set(0, 0, 0);
+    this.chilledUntil = this.heldUntil = this.holdRest = this.rootedUntil = -1;
+    this.model.kit.u.uFrozen.value = 0;
     this.pos.copy(this.spawn);
     this.remote.x = this.spawn.x; this.remote.z = this.spawn.z;
     this.vel.set(0, 0, 0);
@@ -543,9 +566,9 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
-    if (this.idle || this.out) {
-      // the co-op pause menu, or out of the run (banked, he's still standing, unseen): stand still and let go of
-      // any channel
+    if (this.idle || this.out || this.held) {
+      // the co-op pause menu, out of the run (banked, he's still standing, unseen), or held by a rival's skill in a
+      // duel: stand still and let go of any channel
       this.goal.set(0, 0, 0);
       stepVelocity(this.vel, this.goal, dt);
       this.steered = true;
@@ -566,6 +589,7 @@ export class Player {
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     if (this.rooted) speed = 0;
+    if (this.chilledUntil > G.time) speed *= PVP.chill;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     let tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
@@ -595,7 +619,7 @@ export class Player {
       else this.holdWith(keys, held);
     }
     // (out of the village's yard nothing is cast: what was held is let go, what was aimed given up)
-    if (!this.armed) {
+    if (!this.armed || this.truce) {
       if (this.channel) this.stopChannel();
       this.endAim();
       this.queued = null;
@@ -756,6 +780,7 @@ export class Player {
     if (a.t === 'chh') { this.hands = a.h; return; }
     if (a.t === 'hurt') { this.applyHit(a.r); return; }
     if (a.t === 'died') { if (this.alive) this.die(); return; }
+    if (a.t === 'held') { this.heldUntil = G.time + a.s; this.heldFrozen = a.f === 1; return; }
     const s = this.known.get(a.s);
     // (a hidden partner's casts let go: away, banked or out of the hall of heroes, its spells were drawn all the same)
     if (!s || !this.alive || !this.obj.visible) return;
@@ -1007,8 +1032,9 @@ export class Player {
       else this.vel.set(d.vx, 0, d.vz);
       this.dashOn(d, dt);
     }
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
+    this.pos.x += (this.vel.x + this.knock.x) * dt;
+    this.pos.z += (this.vel.z + this.knock.z) * dt;
+    this.knock.multiplyScalar(Math.exp(-dt * 6));
     if (!d?.through || d.t >= d.dur) this.resolveWorld(dt);
     if (d) {
       d.step?.();
@@ -1109,6 +1135,11 @@ export class Player {
   private animateBody(dt: number, t: number, speed: number): void {
     // (fewer triangles of him from afar: from above, across the hall)
     this.farDetail.update(G.camera.position.distanceTo(this.obj.position));
+
+    // (held in a duel: frosted over while frozen, stars round his head while dazed, as a foe is)
+    const frozen = this.held && this.heldFrozen;
+    this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chilledUntil > t ? 0.35 : 0, 10, dt);
+    if (this.held && !this.heldFrozen) dazedStars(this.pos.x, this.obj.position.y + this.model.height + 0.25, this.pos.z, t, this.heldUntil - t);
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
@@ -1301,6 +1332,27 @@ export class Player {
     this.endAim();
     this.casting = null;
     this.queued = null;
+  }
+
+  /**
+   * Held by a rival's skill in a duel for `seconds` (a freeze, a daze, a charge's carry: game/duel.ts): standing where
+   * he is, what he was casting or channelling let go, casting nothing until it ends. His own game's alone, shown on
+   * the others from its report; never while a hold's rest runs (`PVP.holdRest`), so he isn't held from one into the
+   * next. Returns whether it held him.
+   */
+  hold(seconds: number, frozen: boolean): boolean {
+    if (!this.active || !this.local || seconds <= 0 || G.time < this.holdRest) return false;
+    this.heldUntil = G.time + seconds;
+    this.heldFrozen = frozen;
+    this.holdRest = this.heldUntil + PVP.holdRest;
+    this.stopChannel();
+    this.endAim();
+    this.casting = null;
+    this.queued = null;
+    this.dash = null;
+    this.vel.set(0, 0, 0);
+    actionSink?.({ t: 'held', s: round2(seconds), f: frozen ? 1 : 0 });
+    return true;
   }
 
   /** Let go by a vine (an arrow cut it, `throws.ts`). */

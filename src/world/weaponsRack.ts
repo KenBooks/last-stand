@@ -15,7 +15,10 @@ export interface RackMats {
 
 /** The rack's frame (m): its posts' place either side and their height, the beam the blades lean on (its foot, height
  *  and depth), the trough the tips stand in (its middle before the posts, its floor's top). */
-const FRAME = { post: 1.08, high: 1.5, beamFoot: 0.98, beamHigh: 0.2, beamDeep: 0.12, trough: 0.24, floor: 0.07 };
+const FRAME = { post: 1.08, high: 1.5, beamFoot: 0.72, beamHigh: 0.18, beamDeep: 0.12, trough: 0.24, floor: 0.07 };
+/** how far a blade's middle stands off the beam's top front edge, where it rests (m): half the thickest blade and a
+ *  little air, so no blade is in the wood */
+const REST_OFF = 0.012;
 
 /** A sword of the rack: where it stands along it (m), its blade (length, half width at the guard, thickness), how its
  *  blade runs (`wave`: a flame blade's bends, how far each swings; `curve`: how far a sabre's tip sweeps aside), its
@@ -156,8 +159,12 @@ export function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: 
   // the trough the points stand in: a plank on the skids, a lip along its front and its back
   timber(rack, post * 2 + 0.2, floor - 0.02, 0.3, 0, 0.12, trough, M.planks);
   for (const edge of [-0.15, 0.15]) timber(rack, post * 2 + 0.2, 0.05, 0.035, 0, 0.12 + floor - 0.02, trough + edge, M.timber);
-  // the swords: each on its point in the trough, leant back on the beam's face, an iron staple over its blade there
-  const tipY = 0.12 + floor - 0.02, restY = beamFoot + beamHigh / 2, restZ = 0.02 + beamDeep / 2 + 0.012;
+  // the swords: each on its point in the trough, leant back on the beam's top edge, an iron staple over its blade there
+  // (on the beam's top front edge: under it the blade stands off the beam's face, over it it's above the beam. Leant
+  // on the face's middle, each blade ran back into the beam's top edge, and a short sword's guard sat in the beam: the
+  // beam's top is under the shortest blade's guard)
+  const face = 0.02 + beamDeep / 2;
+  const tipY = 0.12 + floor - 0.02, restY = beamFoot + beamHigh, restZ = face + REST_OFF;
   const lean = -Math.atan2(trough - restZ, restY - tipY);
   for (const s of SWORDS) {
     const sword = buildSword(s, M);
@@ -167,8 +174,7 @@ export function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: 
     // (where its blade crosses the beam: aside by its roll, and a sabre's sweep there)
     const along = (restY - tipY) / s.blade;
     const crossX = s.x - Math.sin(s.roll) * (restY - tipY) + (s.curve ? s.curve * (1 - along) ** 2 : 0);
-    const staple = part(rack, new THREE.TorusGeometry(0.05, 0.006, 6, 12, Math.PI).rotateX(-Math.PI / 2), M.iron, crossX, restY, restZ - 0.012);
-    staple.scale.z = 0.7;
+    part(rack, new THREE.TorusGeometry(0.05, 0.006, 6, 12, Math.PI).rotateX(-Math.PI / 2), M.iron, crossX, restY - 0.05, face);
   }
   scene.add(rack);
   const cos = Math.cos(RACK.facing), sin = Math.sin(RACK.facing);

@@ -149,6 +149,17 @@ leave the pause menu shut; the guest's chat must still
 show 7.5 s after its last line, be faded 11 s after it, and be back with the host's next line. `--pictures` pictures
 both screens as the long line has come and as the host's answer has.
 
+`duel` (`node/coopDuel.mjs`, `page/coopDuel.ts`; #406), alone and between two games: the host sets a duel up in
+the weapons rack's menu by its own buttons (the Thornwood, first to 3, No gear) and the guest's menu must show the
+same, its button Ready and the host's Begin dead until it's pressed; begun, each game must have its one rival among its
+foes and no other foe, and no hero may cast through the count; then four rounds, in each the hero who is to lose it
+down to a little life on its own game and the other striking at it with its first skill where its own screen shows
+it: the struck hero down on both screens, the score the same on both and on the HUD, the guest's the match 3 : 1,
+"Victory" on its screen and "Defeat" on the host's, and both back in the village, each hero's most life as it was
+before the duel (less in it, with no gear). `--canary`: the struck hero's life put back every frame on its own game,
+so no round is won, which must be found. `--pictures`: both screens at the menu, the count, a fight, the result and
+back in the village (`out/coop/duel-*.png`).
+
 `ghosts` (`diesLost`): the host kills three dazed foes by the guest, and the lab's link drops every death report on
 its way to the guest, as a game in #579 lost them (its copies stood, still, with their bars, through the choice after
 the wave and on into the next). Each copy must go from the guest's screen within 1.6 s of the host's foe

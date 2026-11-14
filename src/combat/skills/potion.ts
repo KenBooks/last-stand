@@ -6,6 +6,8 @@ import { sfx } from '../../core/audio';
 import type { InstantSkill, Needs } from './types';
 import type { SkillDef } from '../../types';
 import { rand } from '../../util';
+import { G } from '../../state';
+import { PVP } from '../../data/balance';
 
 const _ahead = new THREE.Vector3();
 
@@ -15,6 +17,9 @@ const skill: InstantSkill = {
     const def = rawDef as Needs<'heal' | 'healPct'>;
     player.heal(def.heal + player.stats.maxLife * def.healPct);
     sfx.draught();
+    // (in a duel a hero has `PVP.draughts` a round: past them, the next one's wait is the round's; game/duel.ts)
+    const duel = G.run?.duel;
+    if (duel && player.local && ++duel.drunk >= PVP.draughts) player.cooldowns.set('potion', PVP.roundTime);
     // through the eyes a swirl round the body starts at the camera, where particles fade out: the motes
     // rise in a wider ring, where they're seen, and the light shines from ahead (Player.lightAhead)
     const eyes = player.eyes;

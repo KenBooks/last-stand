@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
+import { fightDuel } from './coopDuel.mjs';
 import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
 import { OUT } from './paths.mjs';
 
@@ -259,6 +260,23 @@ export class Pair {
       done = frame;
     }
     await this.run(frames - done, scenario);
+    return files;
+  }
+
+  /** Pictures the host's and the guest's screens as they stand, a frame drawn as the game draws it, into `PICTURES`
+   *  as `<name>-<role>.png`. Returns the files. */
+  async picture(name) {
+    mkdirSync(PICTURES, { recursive: true });
+    const pages = [['host', this.host], ['guest', this.guest]];
+    await Promise.all(pages.map(([, page]) => callPage(page, 'coopDrawing', { on: true })));
+    await this.turn(1);
+    const files = [];
+    for (const [role, page] of pages) {
+      const file = join(PICTURES, `${name}-${role}.png`);
+      await page.screenshot({ path: file });
+      files.push(file);
+    }
+    await Promise.all(pages.map(([, page]) => callPage(page, 'coopDrawing', { on: false })));
     return files;
   }
 
@@ -578,6 +596,9 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('colours') && scenarios.length !== 1) {
     throw labError('coop: colours runs alone, without combat');
   }
+  if (scenarios?.includes('duel') && (scenarios.length !== 1 || party !== 2)) {
+    throw labError('coop: duel runs alone, between two games');
+  }
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -591,6 +612,12 @@ export async function runCoop(side, options) {
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
     if (scenarios?.length === 1 && scenarios[0] === 'colours') {
       return await changeColours(pair, { ping, jitter }, lines, canary);
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'duel') {
+      // (a duel is a run of its own, set up at the weapons rack: node/coopDuel.mjs)
+      const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
+      problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures }));
+      return { text: lines.join('\n'), problems };
     }
     const start = await startTogether(pair, { ping, jitter }, lines, canary);
     const casting = start.free ? 'free casting' : 'a run\'s costs and cooldowns';

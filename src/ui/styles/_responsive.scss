@@ -58,6 +58,17 @@ body.touch .stow-hint kbd { display: none; }
 /* phones held sideways: a small minimap, no objectives or spoils list; the stash's title is at the
    top of the panel, so its filter opens downwards, over the stash */
 @media (max-height: 520px) {
+  /* the duel's menu holds more than a phone's height in one column: its choices beside its sides, its last line
+     and its button under both */
+  #vcard[data-page="pvp"] { width: 720px; }
+  #vcard[data-page="pvp"] .vc-sub { display: none; }
+  .vc-page[data-page="pvp"]:not(.hidden) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 6px 18px; align-items: center; }
+  .vc-page[data-page="pvp"] .pvp-choices { gap: 6px; }
+  /* (a player alone has no sides to show: the choices take the card's width) */
+  .vc-page[data-page="pvp"] .pvp-choices:has(+ #pvp-sides.hidden) { grid-column: 1 / -1; justify-self: center; width: 60%; }
+  .vc-page[data-page="pvp"] :is(#pvp-note, #pvp-go, #pvp-party) { grid-column: 1 / -1; justify-self: center; }
+  .vc-page[data-page="pvp"] #pvp-go { width: auto; font-size: 17px; padding: 8px 30px; }
+  .pvp-side { padding: 5px 8px; gap: 4px; }
   #stash-filter { top: calc(100% + 6px); bottom: auto; }
   #minimap-wrap .mm-title, #minimap-wrap .objectives { display: none; }
   /* the minimap at the corner, a thin line round it in place of the bezel and its dark ring */

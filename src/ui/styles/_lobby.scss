@@ -275,6 +275,7 @@
 .vc-close { align-self: center; }
 
 /* the duel's menu, the weapons rack's page (ui/pvpMenu.ts): its sides face to face, who watches under them */
+.pvp-choices { display: flex; flex-direction: column; gap: 12px; }
 #pvp-sides { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px 10px; align-items: start; }
 #pvp-sides.hidden, #pvp-go.hidden, #pvp-party.hidden { display: none; }
 .pvp-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border: 1px solid rgba($frame, .35); border-radius: 3px; background: rgba(255,255,255,.03); }
@@ -289,6 +290,7 @@
 .pvp-player:hover:not(:disabled) { color: #ffe7b0; border-color: var(--highlight); }
 .pvp-player:disabled { cursor: $cursor; }
 .pvp-none { font-size: 13px; font-style: italic; color: var(--ink-dim); }
+.pvp-player.ready::after { content: ' \2713'; color: #8fd08a; }
 #pvp-note { margin: 0; font-size: 14px; color: #f0c88a; }
 #pvp-party { align-self: center; }
 /* (a finger's room on each choice) */

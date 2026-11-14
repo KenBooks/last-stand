@@ -33,6 +33,8 @@ import { lobbyCastInput, practiseInTheYard, watchHall, watchTags } from './coopL
 import { endInput, watchOut } from './coopEnd';
 import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
 import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coopChat';
+import { duelInput, duelNow, type DuelNow } from './coopDuel';
+export { coopDuelGo, coopDuelMenu, coopDuelRound, coopDuelSetUp } from './coopDuel';
 export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
@@ -181,6 +183,9 @@ export interface CoopState {
   /** whether its countdown is held for a guest readying the run, and its seconds (none out of a run) */
   held: boolean;
   timer: number | null;
+  /** its own hero's most life, and the duel it's in (page/coopDuel.ts; none out of one) */
+  maxLife: number;
+  duel: DuelNow | null;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -935,6 +940,8 @@ function stateNow(): CoopState {
     summary: !document.getElementById('summary')?.classList.contains('hidden'),
     held: (G.run as { held?: boolean } | null)?.held === true,
     timer: G.run ? G.run.timer : null,
+    maxLife: G.player.stats.maxLife,
+    duel: duelNow(),
   };
 }
 
@@ -1047,6 +1054,8 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   const inputOf = (frame: number): Frame => {
     const end = endInput();
     if (end) return end;
+    const duel = duelInput(play.frame + frame);
+    if (duel) return duel;
     const lobby = lobbyCastInput(play.frame + frame);
     if (lobby) return lobby;
     // (the party's other heroes stand where they were put)

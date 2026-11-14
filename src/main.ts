@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G } from './state';
 import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
-import { CAMERA, LOBBY } from './data/balance';
+import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
@@ -40,6 +40,8 @@ import { cancelProfile, profiling } from './ui/profileTab';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
+import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
+import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
 import { seenShareAt } from './core/sight';
@@ -93,10 +95,10 @@ import { preloadEngraving } from './core/engraving';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
-import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
+import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun, sendDuelStart } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { updateChat } from './ui/chat';
-import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead } from './ui/coop';
+import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
@@ -263,6 +265,7 @@ async function boot() {
     updateHud();
   }
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
+  initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
@@ -273,7 +276,7 @@ async function boot() {
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
-    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); });
+    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
     // (how to play laid out under the loading screen: ui/menus.ts)
     layOutHelpAhead(true);
     initTrainingTracker();
@@ -296,7 +299,7 @@ async function boot() {
   // an item picked up off the lobby floor goes back in the stash, marked new
   initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
-  initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
+  initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
   initCoop();
   // (each look held till it's drawn: replaced after a frame, checking's still held the campfire 0.2 s)
   const drawn = drawnBy(renderer);
@@ -457,6 +460,9 @@ async function loadDevMode(): Promise<void> {
 /** the battleground of the portal the last run went through: the hero comes back out of it */
 let cameThrough: (typeof BIOME_IDS)[number] | null = null;
 
+/** the last run was a duel: the hero comes back by the weapons rack, not out of a portal */
+let fromDuel = false;
+
 /** The lobby. `keepSummary`: a co-op run's summary shown as it ended stays over it until closed (`checkRunOver`). */
 function enterMenu(keepSummary = false) {
   G.mode = 'menu';
@@ -474,8 +480,18 @@ function enterMenu(keepSummary = false) {
   G.arena.setCalm(1);
   syncAway();
   for (const p of G.players) p.reset();
-  // (back from a run, out of the portal it went through: its way into the village)
-  if (VILLAGE && cameThrough) {
+  updateDuelHud();
+  hideDuelResult();
+  // (back from a duel, by the weapons rack it was set up at, the party side by side before it)
+  const rack = VILLAGE && fromDuel ? villageObject('rack') : null;
+  fromDuel = false;
+  if (rack) {
+    const dx = rack.at[0] - rack.stand[0], dz = rack.at[1] - rack.stand[1], far = Math.hypot(dx, dz) || 1;
+    const aside = (G.player.slot - (COOP.maxPlayers - 1) / 2) * 0.9;
+    const facing = Math.atan2(dx, dz);
+    G.player.place(new THREE.Vector3(rack.stand[0] - (dz / far) * aside, 0, rack.stand[1] + (dx / far) * aside), facing);
+    faceCamera(facing);
+  } else if (VILLAGE && cameThrough) {
     const exit = G.arena.village.exits[cameThrough];
     G.player.place(exit.at, exit.facing);
     faceCamera(exit.facing);
@@ -593,6 +609,24 @@ function start() {
   beginRun(selectedWave(), seed, trainingSelected());
 }
 
+/** The host begins the duel as set up at the rack (ui/pvpMenu.ts): every game in the room goes to its battleground. */
+function startDuel() {
+  if (!isHost() || G.mode !== 'menu' || partnerInRun()) return;
+  const setup = setupNow();
+  const seed = nextSeed;
+  nextSeed = Math.floor(Math.random() * 2 ** 31);
+  G.arena.setBiome(setup.ground);
+  sendDuelStart(setup, seed);
+  beginRun(1, seed, false, setup);
+}
+
+/** A guest: the host began a duel. */
+function guestDuel(setup: DuelSetup, seed: number) {
+  G.arena.setBiome(setup.ground);
+  beginRun(1, seed, false, setup);
+  sendInRun();
+}
+
 /** A guest: the host started a run. */
 function guestStart(biome: BiomeId, wave: number, seed: number, training: boolean) {
   G.arena.setBiome(biome);
@@ -601,9 +635,10 @@ function guestStart(biome: BiomeId, wave: number, seed: number, training: boolea
   sendInRun();
 }
 
-function beginRun(wave: number, seed: number, training = false) {
+function beginRun(wave: number, seed: number, training = false, duel: DuelSetup | null = null) {
   hideBetaNotice();
   clearGround();   // what's left on the lobby floor is lost
+  fromDuel = !!duel;
   if (VILLAGE) {
     cameThrough = G.arena.biome;
     showVillageCard(null);
@@ -622,8 +657,9 @@ function beginRun(wave: number, seed: number, training = false) {
   syncAway();
   setZoom(1);
   G.arena.restoreProps();
-  startRun(wave, training);
+  startRun(wave, training, duel);
   renderSpoils();
+  updateDuelHud();
 }
 
 /** Whether the lobby is practice this frame: in the village's yard (where alone skills are cast) with its panels out
@@ -668,7 +704,9 @@ function summaryDone() {
 
 /** The host left mid-run: the guest keeps its spoils. */
 function hostGone() {
-  if (G.mode === 'run') hostLeft();
+  // (a duel is the host's to rule: without him it's over, back to the village)
+  if (G.mode === 'run' && G.run?.duel) toMenu();
+  else if (G.mode === 'run') hostLeft();
 }
 
 // --- choices -------------------------------------------------------------------------
@@ -705,6 +743,8 @@ function resume() { openPause(false); }
 /** Abandon from the pause menu: solo back to the lobby; in co-op out of the run (spoils lost), watching the rest. */
 function abandon() {
   openPause(false);
+  // (a duel left: a fighter's side gives the match up, game/duel.ts)
+  if (G.mode === 'run' && G.run?.duel) { quitDuel(); return; }
   if (!isCoop() || G.mode !== 'run' || !G.run || G.run.phase === 'over' || !G.player.inRun) { toMenu(); return; }
   if (isGuest()) sendControl({ t: 'abandon' });
   if (G.player.alive) G.player.die();
@@ -995,6 +1035,7 @@ function update(dt: number): void {
   updateNameTags();
   if (G.mode === 'run') {
     updateHud();
+    updateDuelHud();
     updateCoopHud();
     perfLap('hud');
   } else if (practising) {

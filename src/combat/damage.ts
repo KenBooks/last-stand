@@ -113,11 +113,12 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
-  dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });
+  // (a duel's rival is no foe of the host's: its hits go to the hero it stands for, entities/rival.ts)
+  if (!enemy.standIn) dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });
   logSink?.({ dealt: true, skill: opts.skill, foe: enemy, amount: dealt, type, crit, kill: !enemy.alive });
   countDealt(dealt, !enemy.alive);
-  // everyone sees their own numbers
-  if (!opts.unnumbered && (!opts.silent || crit)) damageNumber(enemy, dealt, crit, type);
+  // everyone sees their own numbers (a rival's is the struck hero's own, as his game worked the hit out)
+  if (!opts.unnumbered && (!opts.silent || crit) && !enemy.standIn) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
   return dealt;
 }
@@ -127,7 +128,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
 export function dazeEnemy(enemy: Enemy, seconds: number, by: Player): void {
   if (!enemy.alive || !dealsDamage(by)) return;
   enemy.daze(seconds);
-  dealtSink?.(enemy, { amount: 0, crit: false, type: 'arcane', daze: seconds });
+  if (!enemy.standIn) dealtSink?.(enemy, { amount: 0, crit: false, type: 'arcane', daze: seconds });
 }
 
 /** Carry a foe before a player's charge along `way` for `seconds` (`Enemy.carry`), judged as hits are: only by its
@@ -136,7 +137,7 @@ export function dazeEnemy(enemy: Enemy, seconds: number, by: Player): void {
 export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): void {
   if (!enemy.alive || !dealsDamage(by)) return;
   enemy.carry(by, way, seconds);
-  dealtSink?.(enemy, { amount: 0, crit: false, type: 'physical', carry: { seconds, way } });
+  if (!enemy.standIn) dealtSink?.(enemy, { amount: 0, crit: false, type: 'physical', carry: { seconds, way } });
 }
 
 /** Damage a player (after armor / resistance / ward), dealt `by` a foe's attack. Only its own game's: a partner's is
@@ -150,4 +151,15 @@ export function hurtPlayer(
   const r = p.takeDamage(amount * (1 - reduce / 100), type, from);
   if (r) logSink?.({ dealt: false, by, type, armor: amount * reduce / 100, r });
   return r?.taken ?? 0;
+}
+
+/** A rival's hit on the local hero in a duel (game/duel.ts), as his own game works it out: his armour or resistance,
+ *  then his block and ward (`Player.takeDamage`). Null: it didn't land (he's down, or guarded). */
+export function hurtByRival(p: Player, amount: number, type: DamageType, from: THREE.Vector3 | null): HitResult | null {
+  if (!p.active || !p.local) return null;
+  const s = p.stats;
+  const reduce = type === 'physical' ? s.armor : s.resist;
+  const r = p.takeDamage(amount * (1 - reduce / 100), type, from);
+  if (r) logSink?.({ dealt: false, by: null, type, armor: amount * reduce / 100, r });
+  return r;
 }

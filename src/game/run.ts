@@ -30,6 +30,7 @@ import { schedule, clearTimers } from '../core/timers';
 import { on, emit } from '../events';
 import { isCoop, isGuest, isHost, nearestPlayer, readying } from '../net/role';
 import { creditRaise, resetMine } from './stats';
+import { duelFall, enterDuel, leaveDuel, newDuel, updateDuel, type DuelSetup, type DuelState } from './duel';
 import { rand, randInt, shuffle, weighted } from '../util';
 import type { EnemyId } from '../data/enemies';
 import type { Enemy } from '../entities/enemy';
@@ -55,6 +56,8 @@ export type RunPhase = 'countdown' | 'fighting' | 'cleared' | 'over';
 export interface RunState {
   /** Rehearsal only: harmless foes, no rewards or saved records. */
   training: boolean;
+  /** a duel, hero against hero (game/duel.ts): no waves, no foes, nothing won or saved; its turns are its own */
+  duel: DuelState | null;
   wave: number;
   phase: RunPhase;
   /** countdown seconds left (phase 'countdown') */
@@ -145,20 +148,22 @@ function cleanupWorld(): void {
 
 /** Start at `wave`: banked waves in the arena, reached waves in Training grounds.
  *  A co-op guest starts its side of the host's run the same way, and then follows it. */
-export function startRun(wave = 1, training = false): void {
+export function startRun(wave = 1, training = false, duel: DuelSetup | null = null): void {
   cleanupWorld();
   resetMine();
+  if (duel) {
+    G.run = { ...blankRun(1, false), duel: newDuel(duel), phase: 'fighting' };
+    // (its heroes as the duel has them, with or without their gear's worth, before they're made whole)
+    enterDuel(G.run.duel!);
+    for (const p of G.players) p.reset();
+    G.arena.setCalm(0);
+    return;
+  }
   for (const p of G.players) {
     if (p.local) p.recomputeStats(G.profile.equipped);
     p.reset();
   }
-  G.run = {
-    training, wave, phase: 'countdown', timer: RUN.countdown, held: false, waveTime: 0,
-    bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
-    queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
-    pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
-    started: G.time, tallied: false,
-  };
+  G.run = blankRun(wave, training);
   if (!training) {
     G.profile.records.runs++;
     rememberReached();
@@ -170,11 +175,21 @@ export function startRun(wave = 1, training = false): void {
     : wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
 }
 
+/** A run at its start. */
+const blankRun = (wave: number, training: boolean): RunState => ({
+  training, duel: null, wave, phase: 'countdown', timer: RUN.countdown, held: false, waveTime: 0,
+  bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
+  queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
+  pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
+  started: G.time, tallied: false,
+});
+
 export function abandonRun(): void {
   const r = G.run;
   if (!r) return;
-  // abandoned from the pause menu: its time and kills still count
-  if (!r.training && !r.tallied) { tally(r); saveProfile(G.profile); }
+  // abandoned from the pause menu: its time and kills still count (a duel's never: nothing of it is saved)
+  if (!r.training && !r.duel && !r.tallied) { tally(r); saveProfile(G.profile); }
+  if (r.duel) leaveDuel();
   G.run = null;
   for (const p of G.players) p.stopChannel();
   cleanupWorld();
@@ -343,6 +358,8 @@ function spawnGroup(group: SpawnUnit[]): void {
 /** The host's (or solo) run: a guest's follows the host's reports instead. */
 export function updateRun(dt: number): void {
   const r = G.run;
+  // (a duel has turns of its own, on every game: game/duel.ts)
+  if (r?.duel) { updateDuel(dt); return; }
   if (!r || isGuest()) return;
   // multiplier decays without kills
   if (r.multiplier > 1) {
@@ -485,6 +502,8 @@ export function bankRun(): void {
 function onPlayerDied(p: Player): void {
   const r = G.run;
   if (!r || r.phase === 'over') return;
+  // (in a duel no one is raised: the fallen lie till the round is over)
+  if (r.duel) { duelFall(p); return; }
   // a guest's own fall, as the host will rule it (it says so a moment later, and what else follows)
   if (isGuest()) {
     if (p.local && G.players.some((q) => q !== p && q.active)) p.goDown();

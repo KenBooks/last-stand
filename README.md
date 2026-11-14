@@ -53,6 +53,7 @@ A new lobby to try: Wardenhollow, a village you walk around, in place of the pan
 - Skills work in the training yard, on its dummies: free while the inventory is open, with a run's costs and cooldowns once it's put away. A first visit starts with a short training round the village, which you can skip.
 - The village keeps your clock's hours: day and night, with lamps lit after dusk.
 - In co-op a room is in its host's lobby: joining one in the other lobby offers to switch and join.
+- **Duels:** in the village, a party can fight each other. The room's host sets a duel up at the weapons rack before the training yard (battleground, 1 v 1 or 2 v 2, first to 1, 3 or 5 rounds, own gear or none, who is on which side or watches), each fighter readies up there, and the host begins. No foes, no rewards, nothing lost or saved.
 
 ### Play together
 

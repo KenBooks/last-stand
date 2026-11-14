@@ -96,6 +96,9 @@ export interface EnemyOpts {
   id?: number;
   name?: string;
   maxLife?: number;
+  /** a body that stands in for something else (a duel's rival for a hero, entities/rival.ts): its own definition and
+   *  a body to be met by, drawn by nothing and in no crowd */
+  standIn?: { def: EnemyDef; model: Model; reach: Reach };
 }
 
 let nextId = 1;
@@ -105,6 +108,8 @@ export class Enemy {
   readonly def: EnemyDef;
   readonly hero: boolean;
   readonly training: boolean;
+  /** stands in for a hero in a duel (entities/rival.ts): no foe of the fight's, never reported as one */
+  readonly standIn: boolean;
   readonly boss: boolean;
   readonly name: string;
   readonly maxLife: number;
@@ -209,8 +214,9 @@ export class Enemy {
   /** training dummies meter damage instead of losing life */
   meter: DamageMeter | null = null;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife }: EnemyOpts) {
-    const def = ENEMIES[typeId];
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn }: EnemyOpts) {
+    const def = standIn?.def ?? ENEMIES[typeId];
+    this.standIn = !!standIn;
     this.type = typeId;
     this.def = def;
     this.hero = hero;
@@ -230,7 +236,7 @@ export class Enemy {
     this.pos = pos.clone();
     this.facing = this.targetFacing = Math.atan2(-pos.x, -pos.z);
 
-    this.model = buildModel(def.model);
+    this.model = standIn?.model ?? buildModel(def.model);
     // The rising branch skips updateLooks: set the projection before its first crowd row or draw.
     if (this.training && !def.dummy) {
       this.applyProjection();
@@ -240,9 +246,11 @@ export class Enemy {
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
-    this.reach = reachOf(this.model.root);
-    applyShadowDetail(this.obj);
-    joinCrowd(this);
+    this.reach = standIn?.reach ?? reachOf(this.model.root);
+    if (!standIn) {
+      applyShadowDetail(this.obj);
+      joinCrowd(this);
+    }
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
       this.auraMat = additive(c, 1.6, 0.8);
@@ -272,7 +280,7 @@ export class Enemy {
   }
 
   /** The bar painted again when its fill has moved (a hero foe's gold and wider, with its name over it). */
-  private paintBar(): void {
+  protected paintBar(): void {
     if (!this.bar) return;
     const look = this.hero ? { ...HERO_FOE_BAR, name: this.name, nameStyle: FOE_NAME } : FOE_BAR, share = this.life / this.maxLife;
     const step = barStep(look, share);
@@ -459,6 +467,9 @@ export class Enemy {
     const dx = p.x - this.pos.x, dz = p.z - this.pos.z;
     return { dx, dz, dist: Math.hypot(dx, dz) };
   }
+
+  /** Whether `by`'s shot (none: no hero's known) strikes it: any does a foe (a rival, only the other side's). */
+  struckBy(_by?: Player): boolean { return true; }
 
   faceTo(x: number, z: number): void { this.targetFacing = Math.atan2(x - this.pos.x, z - this.pos.z); }
 

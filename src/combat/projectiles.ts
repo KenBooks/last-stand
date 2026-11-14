@@ -270,7 +270,7 @@ export class Projectile {
   private strikeFoes(from: THREE.Vector3): boolean {
     _hits.length = 0; _along.length = 0;
     for (const e of G.enemies) {
-      if (!e.alive || e.invulnerable || this.ignore.has(e)) continue;
+      if (!e.alive || e.invulnerable || this.ignore.has(e) || !e.struckBy(this.by)) continue;
       const t = this.strikes(e, from);
       if (t >= 0) { _hits.push(e); _along.push(t); }
     }

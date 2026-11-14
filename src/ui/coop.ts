@@ -610,7 +610,7 @@ export function updateCoopHud(): void {
     syncPortrait(t.portrait, p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
-    const state = p.away ? 'In the lobby' : p.out === 'banked' ? (G.run?.training ? 'Left training' : 'Banked') : p.out === 'dead' ? 'Fallen'
+    const state = p.away ? 'In the lobby' : p.out === 'banked' ? (G.run?.duel ? 'Watching' : G.run?.training ? 'Left training' : 'Banked') : p.out === 'dead' ? 'Fallen'
       : p.downed ? (p.revive > 0 ? 'Being revived…' : `Down · ${Math.ceil(p.bleed)}s`) : '';
     if (t.state.textContent !== state) t.state.textContent = state;
     t.frame.classList.toggle('down', p.downed);

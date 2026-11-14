@@ -1,4 +1,5 @@
 // In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
+import { duelObjective } from './duelHud';
 import { G } from '../state';
 import { VILLAGE } from '../core/beta';
 import { input } from '../core/input';
@@ -279,7 +280,7 @@ export function updateHud(): void {
   setText(h('.bar.life .txt'), `${Math.ceil(p.life)} / ${Math.round(s.maxLife)}`);
   setStyle(h('.bar.energy .fill'), 'width', pct(p.energy / s.maxEnergy));
   setText(h('.bar.energy .txt'), `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`);
-  if (r) setText(h('.gem-num'), String(r.wave));
+  if (r && !r.duel) setText(h('.gem-num'), String(r.wave));
 
   for (const slot of slots) {
     const sk = p.skillAt(slot.key);
@@ -302,7 +303,8 @@ export function updateHud(): void {
   if (!r) return;
   // objectives
   const ol = h('.obj-line');
-  const txt = r.phase === 'countdown' && r.held ? 'Waiting for players…'
+  const txt = r.duel ? duelObjective(r.duel)
+    : r.phase === 'countdown' && r.held ? 'Waiting for players…'
     : r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
     : r.phase === 'cleared' ? (G.player.active ? (r.training ? 'Leave training or repeat this wave' : 'Bank your spoils or continue') : 'The others decide')
