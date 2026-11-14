@@ -17,6 +17,8 @@ The lab as an agent works with it: what every command measures, in a line here a
 
 - `cloud --google`: real sign-in controls/window and lightweight callback, with local OAuth replies: no game reload, one nonce-bound finish, link, cancel and blocked-popup redirect; `--canary` supplies an invalid code.
 
+- `bank`: a bank on Random in the panels' lobby (#558): the wave in the save under the battleground rolled, offered as the starting wave (and read back from the save), Random rolling only where it is unlocked (`--canary` takes the bank's record out of the save).
+
 - `dev`: developer controls, Hero/Dev tabs, five viewport layouts, frozen training start, refills and reset, and slow first-person entry (`--canary` plants a drained resource).
 
 - `npm run lab:serve`: boots each command's page ahead of it (every command runs on a fresh boot and gives the same result every time)

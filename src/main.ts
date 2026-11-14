@@ -35,7 +35,7 @@ import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerO
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
-import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
+import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
@@ -578,8 +578,9 @@ const AHEAD_PAUSE_MS = 16;
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
-  // (the panels' lobby's battleground, Random rolled now; the village's is the portal's)
-  if (!VILLAGE) rollBiome();
+  // (the panels' lobby's battleground, Random rolled now among those the starting wave is unlocked in; the village's
+  // is the portal's)
+  if (!VILLAGE) rollBiome(startBests(), selectedWave());
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);

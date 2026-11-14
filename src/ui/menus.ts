@@ -35,8 +35,8 @@ import { eyesPortal, setEyesPortal } from '../core/eyesEffects';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
-import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
-import { biomeSetting, setBiomeSetting } from '../game/biome';
+import { BIOMES, BIOME_IDS, type BiomeId, type BiomeSetting } from '../data/biomes';
+import { biomeSetting, setBiomeSetting, bestStart, randomPool, type Bests } from '../game/biome';
 import { VILLAGE } from '../core/beta';
 import { initBeta, renderBetaOptions } from './beta';
 import { whenWarm } from '../game/warm';
@@ -782,9 +782,12 @@ export function selectTraining(on: boolean): void {
 
 // Starting wave: any wave up to the best one cleared and banked in the portal's biome (in the training grounds, the
 // best reached), defaulting to that best and jumping back to it when the biome or best changes. « and » go to the
-// first and the best (a step of ±1000, clamped).
+// first and the best (a step of ±1000, clamped). On the panels' Random it is the best of any battleground, and the
+// dice roll among those the wave picked is unlocked in (`game/biome.ts`).
 let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
+/** The hero's best wave in each battleground, as the mode chosen counts them: banked, or in the training grounds reached. */
+export const startBests = (): Bests => trainingSelected() ? G.profile.records.bestReached : G.profile.records.bestBanked;
 
 function stepWave(d: number): void {
   if (isGuest()) return;   // the host picks
@@ -793,10 +796,10 @@ function stepWave(d: number): void {
 }
 
 function renderWaveOptions(): void {
-  // (the village's portal is its biome's; the panels' lobby picks one, or Random: the least of every biome's)
+  // (the village's portal is its biome's; the panels' lobby picks one, or Random: the best of any biome's)
   const s = VILLAGE ? G.arena.biome : biomeSetting(), grounds = trainingSelected();
-  const bests = grounds ? G.profile.records.bestReached : G.profile.records.bestBanked;
-  const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
+  const bests = startBests();
+  const best = bestStart(bests, s);
   const key = `${G.profile.classId}:${grounds}:${s}:${best}`;
   if (key !== seen) { seen = key; startWave = maxWave = best; }
   // a co-op guest plays the host's choice
@@ -804,6 +807,13 @@ function renderWaveOptions(): void {
   const box = $('#opt-wave');
   $('.wv-val', box).innerHTML = `Wave ${wave}${wave % WAVES.bossEvery === 0 ? ' <small>Boss</small>' : ''}`;
   box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = guest || (Number(b.dataset.d) < 0 ? startWave <= 1 : startWave >= maxWave); });
+  // (on Random, the battlegrounds this wave isn't unlocked in are out of the dice's roll: shown fainter)
+  const rolled = !guest && s === 'random' ? randomPool(bests, startWave) : BIOME_IDS;
+  document.querySelectorAll<HTMLButtonElement>('#opt-biome button[data-b]').forEach((b) => {
+    const out = b.dataset.b !== 'random' && !rolled.includes(b.dataset.b as BiomeId);
+    b.classList.toggle('unrolled', out);
+    if (!VILLAGE && b.dataset.b !== 'random') b.title = out ? `Not in the dice's roll: wave ${startWave} isn't unlocked here yet` : '';
+  });
 }
 
 export function renderMenu(): void {

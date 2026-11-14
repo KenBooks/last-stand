@@ -760,6 +760,12 @@ export async function training(lab: Lab, command: { canary: boolean }): Promise<
   return measure(lab, command);
 }
 
+/** A bank on Random: its wave in the save and offered by the lobby, the dice rolling where it is unlocked. */
+export async function bank(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { bank: measure } = await import('./bank');
+  return measure(lab, command);
+}
+
 /** Preview-only developer controls, their layout and recovery paths. */
 export async function dev(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { devMode } = await import('./devMode');
