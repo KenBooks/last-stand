@@ -13,6 +13,7 @@ import { asLeaves, boulderGeo, boxWithUV, setInstance, type Portal, type Updater
 import { buildGate } from './crypt';
 import { buildRootGate, rootGateMats } from './forest';
 import { fernClumpGeo, fernTexture } from './foliage';
+import { asClutter } from './culling';
 import { PODIUM, TOMB, WAY } from './villagePlan';
 import type { Wall } from './wall';
 
@@ -265,6 +266,8 @@ export function buildForestWay(scene: THREE.Object3D, wall: Wall, updaters: Upda
   }
   ferns.receiveShadow = true;
   g.add(ferns);
+  // (the floor's plants: none at Very low, all of them at every other level)
+  asClutter(ferns, true);
   scene.add(g);
   return buildRootGate(scene, wall, 0, rockMat, rootGateMats(), rng, updaters, portalPlace('forest'));
 }

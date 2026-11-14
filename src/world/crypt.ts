@@ -26,6 +26,7 @@ import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { valueNoise3 } from '../core/patterns';
 import { growTree, type Grow, type TreeKind } from './ezTrees';
+import { leanBark } from './leanFoliage';
 import { restartsAt, runPhase } from './runPhase';
 
 /** where the wall's parts are made: in the arena's frame */
@@ -526,6 +527,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   weeds.receiveShadow = true;
   weeds.name = 'weeds';
   scene.add(...asGrass(weeds));
+  asClutter(weeds, true);
 
   // --- Small dead trees on the floor: wood an arrow goes into -------------------------
   // (after the weeds, which are placed round the obstacles; from streams of their own)
@@ -552,6 +554,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   smallTrees.name = 'small dead trees';
   feet.name = 'small dead roots';
   scene.add(...asTree(smallTrees, feet));
+  leanBark([smallTrees], small);
   updaters.push(contactShadows(scene, obstacles));
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
@@ -1053,7 +1056,9 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     mesh.castShadow = true;
     mesh.name = `dead trees: ${DEAD_TREES[k].preset}`;
     // (a tree a cell, as the forest's: drawn whole, 101k of their 113k triangles in the top view lay outside it)
-    scene.add(...asTree(...cullInCells(mesh, eachInstance)));
+    const drawn = cullInCells(mesh, eachInstance);
+    scene.add(...asTree(...drawn));
+    leanBark(drawn, kinds[k]);
   });
 }
 

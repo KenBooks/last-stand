@@ -17,6 +17,10 @@ export interface TreeKind {
   trunkFoot: number;
   /** how far it reaches from the trunk, over its height, in each of REACH_BANDS bands of height from its foot */
   reach: number[];
+  /** each branch's rings among the bark's vertices, and its level from the trunk (`coarseBark`) */
+  branches: Branch[];
+  /** its finest level of branching */
+  levels: number;
 }
 export const REACH_BANDS = 10;
 
@@ -54,6 +58,8 @@ const LIMB_MOST = 0.85;
 /** a branch as ez-tree grows it among the bark's vertices: its first, how many rings it has, how many vertices each
  *  (its segments and the first again, at u = 1) */
 interface Rings { from: number; rings: number; round: number }
+/** a branch's rings and its level, 0 the trunk */
+interface Branch extends Rings { level: number }
 
 /**
  * The bark's v laid down each branch by its girth: a tile as long as the branch is round where it is, its u one tile
@@ -155,12 +161,12 @@ function growAfresh(g: Grow): TreeKind {
   json.leaves.count = Math.max(1, Math.round(json.leaves.count * g.leaves));
   json.leaves.size *= (g.leafSize ?? 1) / Math.sqrt(g.leaves);
   const tree = new Tree();
-  const branches: Rings[] = [];
+  const branches: Branch[] = [];
   const grow = tree.generateBranch.bind(tree);
   tree.generateBranch = (branch) => {
     const from = tree.branches.verts.length / 3;
     grow(branch);
-    branches.push({ from, rings: branch.sectionCount + 1, round: branch.segmentCount + 1 });
+    branches.push({ from, rings: branch.sectionCount + 1, round: branch.segmentCount + 1, level: branch.level });
   };
   tree.loadFromJson(json as never);
   const bark = tree.branchesMesh.geometry, leaves = tree.leavesMesh.geometry;
@@ -177,7 +183,56 @@ function growAfresh(g: Grow): TreeKind {
       reach[b] = Math.max(reach[b], Math.hypot(p.getX(i), p.getZ(i)));
     }
   }
-  return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach };
+  return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach, branches,
+    levels: json.branch.levels };
+}
+
+/** each kind's coarse bark, made the first time it's asked for (`coarseBark`) */
+const coarse = new WeakMap<TreeKind, THREE.BufferGeometry>();
+
+/**
+ * A kind's bark of fewer rings and segments, Very low's (`world/leanFoliage.ts`): every other ring of each branch (its
+ * last kept), its finest twigs a single section, base to tip, and every other segment round a branch of six or more.
+ * The vertices kept are the grown bark's own, so the tree stands as it was, its outline and reach the same: grown
+ * afresh with fewer sections, ez-tree draws its random numbers by section, and it came out another tree. A grown oak's
+ * twigs are about 70% of its bark (794 of 1182 triangles). Left as it is where the rings don't add up to its vertices.
+ */
+export function coarseBark(kind: TreeKind): THREE.BufferGeometry {
+  let made = coarse.get(kind);
+  if (!made) coarse.set(kind, made = coarsen(kind));
+  return made;
+}
+
+function coarsen(kind: TreeKind): THREE.BufferGeometry {
+  const { bark, branches, levels } = kind;
+  if (branches.reduce((n, b) => n + b.rings * b.round, 0) !== bark.attributes.position.count) return bark;
+  const kept: number[] = [], index: number[] = [];
+  for (const b of branches) {
+    const finest = b.level === levels;
+    const rings = [...Array(b.rings).keys()].filter((i) => i === b.rings - 1 || (finest ? i === 0 : i % 2 === 0));
+    const segments = b.round - 1;
+    // (round each ring, and its first again at u = 1, as ez-tree lays it)
+    const round = [...Array(segments).keys()].filter((j) => segments < 6 || j % 2 === 0).concat(segments);
+    const first = kept.length, n = round.length;
+    for (const i of rings) for (const j of round) kept.push(b.from + i * b.round + j);
+    for (let i = 0; i + 1 < rings.length; i++) {
+      for (let j = 0; j + 1 < n; j++) {
+        // (wound as ez-tree winds its own: `generateBranchIndices`)
+        const v1 = first + i * n + j, v2 = v1 + 1, v3 = v1 + n, v4 = v2 + n;
+        index.push(v1, v3, v2, v2, v3, v4);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  for (const [name, attribute] of Object.entries(bark.attributes)) {
+    const size = attribute.itemSize, from = attribute.array as Float32Array, to = new Float32Array(kept.length * size);
+    kept.forEach((v, at) => to.set(from.subarray(v * size, v * size + size), at * size));
+    geo.setAttribute(name, new THREE.BufferAttribute(to, size));
+  }
+  geo.setIndex(index);
+  geo.computeBoundingSphere();
+  geo.computeBoundingBox();
+  return geo;
 }
 
 /** A leaf card's four corners and two triangles. */

@@ -18,13 +18,22 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setGrassSpread, setGrassTufts } from '../world/meadow';
+import { setLeanFoliage } from '../world/leanFoliage';
+import { compiledThoughHidden } from './shaders';
 import { setDrapeRounds } from '../entities/models/armor';
 import { setLampQuality } from './lamps';
 import { setShadowsOnMove } from '../world/shadowsOnMove';
 import { setHdrAllowed } from './hdr';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
-import { setClutterShare, setLeafShare } from '../world/culling';
+import { setClutterShare, setLeafShare, setFloorPlants } from '../world/culling';
+
+// (Very low's floor plants, hidden, compiled with the rest on WebGPU: Auto may climb to Low, and show them, mid-fight)
+compiledThoughHidden(() => {
+  if (!QUALITY[level].leanFoliage) return () => undefined;
+  setFloorPlants(true);
+  return () => setFloorPlants(false);
+});
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
@@ -219,6 +228,8 @@ function apply(l: QualityLevel, most = Infinity): void {
   setSunShadowStill(p.stillSunShadow);
   setClutterShare(p.clutter);
   setLeafShare(p.leaves);
+  setFloorPlants(!p.leanFoliage);
+  setLeanFoliage(p.leanFoliage);
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);

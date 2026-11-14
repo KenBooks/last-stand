@@ -15,6 +15,7 @@ import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, plac
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
 import { asClutter, cullInCells, eachInstance, gridCell, ringSector, thinLeaves } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
+import { leanBark, leanLeafCards } from './leanFoliage';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
@@ -307,7 +308,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   // through their gaps, the line he's kept behind as ragged as they are, his legs past their ranges stood against it)
   wall.add(bushes, false, 'foliage', bush.leafLumps);
   wall.add(rocks, true, 'wall', true);
-  for (const mesh of [bushes, bushCards, rocks]) scene.add(...cullInCells(mesh, THICKET_CELLS));
+  for (const mesh of [bushes, bushCards, rocks]) {
+    const drawn = cullInCells(mesh, THICKET_CELLS);
+    scene.add(...drawn);
+    if (mesh === bushCards) leanLeafCards(drawn);
+  }
 
   // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
   // ez-tree, each instanced, and the ancient giants among them
@@ -355,7 +360,10 @@ export const buildForest: BiomeBuilder = (scene) => {
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
     // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
     for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
-    for (const mesh of [barks[k], leaves[k]]) scene.add(...asTree(...cullInCells(mesh, eachInstance)));
+    const bark = cullInCells(barks[k], eachInstance), crown = cullInCells(leaves[k], eachInstance);
+    scene.add(...asTree(...bark, ...crown));
+    leanBark(bark, kinds[k]);
+    leanLeafCards(crown);
   });
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
@@ -514,7 +522,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   ferns.receiveShadow = true;
   ferns.name = 'ferns';
   scene.add(...cullInCells(ferns, FLOOR_CELLS));
-  asClutter(ferns);
+  asClutter(ferns, true);
 
   // roots snaking out of the thicket across the floor, half sunk in it
   // (each a tube's samples as well, the floor's relief: feet step onto them, `world/ground.ts`)
@@ -555,6 +563,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   litter.count = li;
   litter.receiveShadow = true;
   scene.add(litter);
+  asClutter(litter, true);
 
   // sunbeams slanting down through gaps in the canopy onto the edges of the clearing
   const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new THREE.Color(0.075, 0.065, 0.035));
@@ -595,6 +604,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
   });
   for (const m of asTree(sapBark, sapLeaves)) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  leanBark([sapBark], young);
+  leanLeafCards([sapLeaves]);
   sapBark.name = 'young trees\' bark';
   sapLeaves.name = 'young trees\' leaves';
   updaters.push(contactShadows(scene, obstacles));
@@ -991,6 +1002,7 @@ export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, 
     m.position.set(0, 5.6, -0.3);
     m.castShadow = cast; m.receiveShadow = true;
     g.add(m);
+    if (geo === crown.cards) leanLeafCards([m]);
   }
 
   const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true, place);

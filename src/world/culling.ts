@@ -130,25 +130,48 @@ let clutterShare = 1;
 /** the floor's clutter that isn't culled in cells (`asClutter`), and each's instances as built */
 const plainClutter = new Map<THREE.InstancedMesh, number>();
 const isClutter = (mesh: THREE.InstancedMesh): boolean => mesh.userData.clutter === true;
+/** whether the floor's plants are drawn (`setFloorPlants`) */
+let plantsShown = true;
 
 /**
  * `mesh` as the floor's clutter (grass, ferns, pebbles, bones): a quality level draws a share of its instances
- * (`setClutterShare`), the first of each cell's where it's culled in cells, of them all where it isn't. Call it
- * after `cullInCells`, which orders the instances.
+ * (`setClutterShare`), the first of each cell's where it's culled in cells, of them all where it isn't; a `plant`
+ * (weeds, ferns, fallen leaves: never the grass, which every level keeps) none where the level draws no plants
+ * (`setFloorPlants`). Call it after
+ * `cullInCells`, which orders the instances.
  */
-export function asClutter(mesh: THREE.InstancedMesh): void {
+export function asClutter(mesh: THREE.InstancedMesh, plant = false): void {
   mesh.userData.clutter = true;
+  if (plant) mesh.userData.plant = true;
   if (!culled.some((c) => c.mesh === mesh)) plainClutter.set(mesh, mesh.count);
   thin();
 }
 
-/** How many of `count` clutter instances the share draws: one at least of any. */
-const thinned = (count: number): number => (count ? Math.max(1, Math.ceil(count * clutterShare)) : 0);
+/** How many of `count` of `mesh`'s clutter instances the share draws: one at least of any, none of a plant's where
+ *  the level draws none. */
+const thinned = (mesh: THREE.InstancedMesh, count: number): number =>
+  (!count || (!plantsShown && mesh.userData.plant === true) ? 0 : Math.max(1, Math.ceil(count * clutterShare)));
 
 /** Every clutter mesh's drawn instances made the share's. */
 function thin(): void {
   for (const c of culled) if (isClutter(c.mesh)) pack(c);
-  for (const [mesh, count] of plainClutter) mesh.count = thinned(count);
+  for (const [mesh, count] of plainClutter) {
+    mesh.count = thinned(mesh, count);
+    // (a mesh of none not drawn at all: three's work for a draw of nothing, on the CPU, `lab draws`)
+    mesh.visible = mesh.count > 0;
+  }
+}
+
+/**
+ * Whether the floor's plants are drawn (Very low's none: the ground's own look where they stood), live: counts alone
+ * change, on both renderers, as the clutter's share does. The forest's ferns and fallen leaves were 9k of its lobby's
+ * 145k triangles at Very low, top down (`lab draws --boot verylow`), each frond's and leaf's pixels shaded over the
+ * floor's.
+ */
+export function setFloorPlants(on: boolean): void {
+  if (on === plantsShown) return;
+  plantsShown = on;
+  thin();
 }
 
 /**
@@ -210,7 +233,7 @@ function pack(c: Culled): void {
   for (const cell of c.cells) {
     if (!cell.shown) continue;
     // (a share of a clutter mesh's: the cell's first)
-    const count = clutter ? thinned(cell.count) : cell.count;
+    const count = clutter ? thinned(mesh, cell.count) : cell.count;
     to.set(matrices.subarray(cell.start * 16, (cell.start + count) * 16), n * 16);
     if (colors) toColors.set(colors.subarray(cell.start * 3, (cell.start + count) * 3), n * 3);
     n += count;

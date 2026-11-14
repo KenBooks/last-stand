@@ -732,6 +732,24 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   return { compileMs, compileStepMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
 }
 
+/** What a quality level hides that a warm-up compiles all the same (`compiledThoughHidden`): each shows it, and
+ *  returns what hides it again. */
+const hiddenByLevel = new Set<() => () => void>();
+
+/**
+ * `show` run round each warm-up's compile on WebGPU, what it shows compiled though the level hides it (Very low's floor
+ * plants: a boot there, Auto climbing to Low later, would have compiled the grass in the fight). three's `compileAsync`
+ * walks what's shown alone; WebGL's `compile` makes every mesh's program, shown or not.
+ */
+export function compiledThoughHidden(show: () => () => void): void {
+  hiddenByLevel.add(show);
+}
+
+function showHiddenByLevel(): () => void {
+  const hideAgain = [...hiddenByLevel].map((show) => show());
+  return () => { for (const hide of hideAgain) hide(); };
+}
+
 /**
  * `warmUp` on WebGPU: its draw's pipelines made by `compileAsync` first, on the GPU's threads, with the node builds a
  * slice a frame. Started with everything as the draw will have it (its objects in, its layer, unculled, the other
@@ -763,9 +781,11 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
     let compiling: Promise<void> = Promise.resolve();
     asDrawn(() => {
       if (how.hide) how.show?.();
+      const hideAgain = showHiddenByLevel();
       try {
         compiling = gpu.compileAsync(scene, camera);
       } finally {
+        hideAgain();
         how.hide?.();
       }
     });
