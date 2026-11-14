@@ -81,6 +81,8 @@ export const session = {
   lobbyAsked: null as boolean | null,
   /** the local player's name tag in the room (net/nameTag) */
   tag: '',
+  /** hosting, the room's link to the co-op server not yet open (the dialog says it's opening) */
+  opening: false,
   /** the host's peer id, on a guest */
   hostId: '',
   /** the host's lobby choice, shown on a guest */
@@ -219,16 +221,27 @@ export async function hostRoom(tag: string): Promise<void> {
   G.player.slot = 0;
   wearRoomColour(freeColour([], savedColour()));
   placeSpawns();
+  session.opening = true;
   hooks.changed();
+  const code = session.code;
+  let opened: Link;
   try {
-    link = await openLink(session.code);
+    opened = await openLink(code);
   } catch (e) {
     netLog((e as Error).message);
-    fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't open a room (${(e as Error).message})`);
+    // (left while it opened: nothing to say)
+    if (session.status === 'hosting' && session.code === code) {
+      fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't open a room (${(e as Error).message})`);
+    }
     return;
   }
+  // (left, or another room asked for, while it opened: this link isn't wanted)
+  if (session.status !== 'hosting' || session.code !== code) { opened.leave(); return; }
+  link = opened;
+  session.opening = false;
   wire(link);
   hostSync();
+  hooks.changed();
 }
 
 /** Joins room `code` as `tag` (the host refuses a tag the room already has: `session.renameAsked`). */
@@ -273,6 +286,7 @@ export function leaveRoom(): void {
   pendingColour = null;
   syncReadying();
   session.status = 'off';
+  session.opening = false;
   session.hostId = '';
   session.biome = null;
   role.current = 'solo';

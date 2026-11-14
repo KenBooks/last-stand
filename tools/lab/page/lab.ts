@@ -71,6 +71,8 @@ declare global {
     __labLock?: { on: boolean };
     /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
     __labKey?: (type: KeyType, code: string) => Promise<void>;
+    /** text put in the focused field by the browser, as a paste or a phone's keyboard commits it (`tools/lab/node/side.mjs`) */
+    __labText?: (text: string) => Promise<void>;
     /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
     __labMotion?: (reduced: boolean) => Promise<void>;
     /** the page's CPU slowed `rate` times, as the browser emulates a slower device's (`tools/lab/node/side.mjs`) */
@@ -961,6 +963,15 @@ export class Lab {
   async press(code: string): Promise<void> {
     await this.keyDown(code);
     await this.keyUp(code);
+  }
+
+  /**
+   * `text` put in the focused field as a paste, or a phone's keyboard, puts it: by the browser, so the field hears the
+   * input events a player's typing makes. No frame runs; it returns once the browser has put it there.
+   */
+  async type(text: string): Promise<void> {
+    if (!window.__labText) throw new Error('lab: type: this page has no keyboard text (opened by an older lab)');
+    await window.__labText(text);
   }
 
   /**

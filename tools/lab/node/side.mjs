@@ -330,6 +330,12 @@ async function keyOf(page, type, key) {
   await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
 }
 
+/** `text` put in the page's focused field by the browser, as a paste or a phone's keyboard commits it. */
+async function textOf(page, text) {
+  const devtools = await devtoolsOf(page);
+  await devtools.send('Input.insertText', { text });
+}
+
 /** The DevTools protocol's fields for the key whose code is `code`: a letter's (`KeyW`), or a named key's. */
 function keyFields(code) {
   const letter = /^Key([A-Z])$/.exec(code);
@@ -673,6 +679,8 @@ export class Side {
     const mouse = (type, x, y, deltaY, button, buttons) => mouseOf(page, type, x, y, deltaY, button, buttons);
     await page.exposeFunction('__labMouse', mouse);
     await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
+    // (a probe's `lab.type`: text put in the focused field as a paste or a phone's keyboard puts it, its input events too)
+    await page.exposeFunction('__labText', (text) => textOf(page, text));
     // (a probe's `lab.reduceMotion`: the motion asked for let back on, to measure a decorative animation)
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
     // (a probe's `lab.throttle`: the CPU slowed as a low-end device's, for what the page's work costs one)

@@ -15,8 +15,11 @@ decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
 a room, the room's code and Join each found at its middle; asked to rename, the taken tag marked, named in the
-refusal and focused, the room's code kept; on touch, the tap focusing the field; `--canary` moves Open a room off the
-window's foot, which must be found; the
+refusal and focused, the room's code kept; on touch, the tap focusing the field; what's typed kept through the
+dialog's renders (a tag typed and a code pasted, a colour picked and the dialog rendered with the code focused; the
+taken tag retyped and rendered again: #555), and Open a room and Join pressed with the heroes cold each saying it waits,
+both choices and the fields waiting, what was typed kept, then the room's view saying it opens or joins, and the
+choices back as they were once left or cancelled; `--canary` moves Open a room off the window's foot, which must be found; the
 performance report's prompt, `page/uiPerfAsk.ts`: over the lobby, under the choice after a wave and so on touch, inside
 the window, each button on one line, a finger's 28 px tall on touch, over none of the choice, the wave's badge, the
 bars or the touch HUD's corners; `--canary` moves it down onto the choice, which must be found):

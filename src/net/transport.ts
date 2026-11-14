@@ -145,7 +145,9 @@ function localLink(code: string): Link {
   let onMsg: (ch: Channel, data: unknown, from: string) => void = () => {};
   let join: (peer: string) => void = () => {}, gone: (peer: string) => void = () => {};
   type Packet = { from: string; to?: string; ch?: Channel; data?: unknown; sys?: 'here' | 'bye' | 'ack' };
-  const post = (p: Omit<Packet, 'from'>) => bc.postMessage({ from: self, ...p });
+  let left = false;
+  // (left before its first word went out, 50 ms in: a closed channel throws)
+  const post = (p: Omit<Packet, 'from'>) => { if (!left) bc.postMessage({ from: self, ...p }); };
   bc.onmessage = (e: MessageEvent<Packet>) => {
     const p = e.data;
     if (p.to && p.to !== self) return;
@@ -166,6 +168,6 @@ function localLink(code: string): Link {
     onMessage(fn) { onMsg = fn; },
     onJoin(fn) { join = fn; },
     onLeave(fn) { gone = fn; },
-    leave() { bye(); window.removeEventListener('pagehide', bye); bc.close(); },
+    leave() { bye(); left = true; window.removeEventListener('pagehide', bye); bc.close(); },
   };
 }

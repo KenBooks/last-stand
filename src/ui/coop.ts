@@ -52,9 +52,23 @@ const dotColour = (p: Player): string => {
 const who = (p: Player): string => `${nameOf(p)} · ${p.slot === 0 ? 'host' : 'partner'} · ${p.cls.name}`;
 
 let touchRevive = false;
+/** Open a room or Join pressed and waiting for the heroes' programs (`whenWarm`) before the room is asked for: the
+ *  button pressed says so, and the dialog's choices wait with it (pressed, nothing showed it was taken) */
+let pressed: 'host' | 'join' | null = null;
+/** What's typed in the dialog's fields (null: untouched), kept through its renders: a colour or portrait picked, the
+ *  server's check answered and the session's changes render it again, and each rebuilt the name tag from the one
+ *  kept, so a name typed was gone by the time the code was (#555). `for`: the form it was typed in (`formFor`), so a
+ *  fresh refusal or invite shows its own tag and code. */
+let typed: { for: string; tag: string | null; code: string | null } = { for: '', tag: null, code: null };
+/** The press answered: the room asked for, and what was typed for it done with (the session says what came of it). */
+function asked(): void {
+  pressed = null;
+  invited = '';
+  typed = { for: '', tag: null, code: null };
+}
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['heroes'], (tag: string) => void hostRoom(tag), READYING.coop);
-const join = whenWarm(['heroes'], (code: string, tag: string) => void joinRoom(code, tag), READYING.coop);
+const host = whenWarm(['heroes'], (tag: string) => { asked(); void hostRoom(tag); }, READYING.coop);
+const join = whenWarm(['heroes'], (code: string, tag: string) => { asked(); void joinRoom(code, tag); }, READYING.coop);
 /** a room code from an invite link, waiting in the dialog for a name tag */
 let invited = '';
 /** what's wrong with the name tag as last tried, said under it */
@@ -141,6 +155,7 @@ export function joinInvited(code: string): void {
     return;
   }
   invited = code;
+  typed = { for: '', tag: null, code: null };
   openCoop(true);
 }
 
@@ -159,6 +174,18 @@ function typedTag(body: HTMLElement): string | null {
   }
   tagNote = '';
   return tag;
+}
+
+/** Which form the dialog shows, for what's typed in it: asked to rename (for which room and tag), an invite's, or
+ *  a fresh one. */
+const formFor = (rename: boolean): string =>
+  rename ? `rename ${session.code} ${session.tag}` : invited ? `invite ${invited}` : 'fresh';
+
+/** The dialog's field being typed in and its caret, to put back once the dialog is rendered again (null: none). */
+function fieldTypedIn(body: HTMLElement): { id: string; from: number | null; to: number | null } | null {
+  const field = document.activeElement;
+  if (!(field instanceof HTMLInputElement) || !field.id || !body.contains(field)) return null;
+  return { id: field.id, from: field.selectionStart, to: field.selectionEnd };
 }
 
 /** The room dialog laid out under the loading screen as the server leaves it (`look`: nothing asked of it here, the
@@ -195,48 +222,66 @@ export function renderCoop(): void {
   const s = session.status;
   if (s === 'off' || s === 'failed') {
     const up = server === 'up';
+    const busy = pressed !== null;
+    const open = up && !busy;
     // (asked to rename: the tag that was taken, picked for retyping, and the room's code kept to join again)
     const rename = s === 'failed' && session.renameAsked;
-    const code = invited || (rename ? session.code : '');
-    const tagValue = rename ? session.tag : savedTag();
+    const form = formFor(rename);
+    if (typed.for !== form) typed = { for: form, tag: null, code: null };
+    const code = typed.code ?? (invited || (rename ? session.code : ''));
+    const tagValue = typed.tag ?? (rename ? session.tag : savedTag());
+    const typingIn = fieldTypedIn(body);
     body.innerHTML = `
       <p class="coop-intro">Fight side by side over the internet, up to ${COOP.maxPlayers} heroes. Each brings their own hero and gear and keeps their own spoils.</p>
       <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
       ${server === 'down' ? `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`
         : server === 'checking' ? '<p class="coop-checking" role="status">Checking the co-op server…</p>'
+        : busy ? `<p class="coop-checking" role="status">Getting co-op ready, then ${pressed === 'host' ? 'opening a room'
+          : `joining room <b>${esc(code.trim().toUpperCase())}</b>`}…</p>`
         : s === 'failed' ? `<p class="coop-error" role="alert">${esc(session.error)}</p>${lobbySwitchHtml()}` : ''}
       <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
-        <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${up ? '' : ' disabled'}></label>
+        <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${open ? '' : ' disabled'}></label>
       <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
       ${colourPickerHtml()}
       ${portraitPickerHtml()}
-      <div class="coop-choice${up ? '' : ' off'}">
+      <div class="coop-choice${up ? '' : ' off'}${busy ? ' busy' : ''}"${busy ? ' aria-busy="true"' : ''}>
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
-          <button class="btn primary" id="btn-coop-host"${server === 'up' ? '' : ' disabled'}>Open a room</button></div>
+          <button class="btn primary${pressed === 'host' ? ' pressed' : ''}" id="btn-coop-host"${open ? '' : ' disabled'}>${pressed === 'host' ? 'Opening a room…' : 'Open a room'}</button></div>
         <div class="coop-col"><div class="coop-h">Join</div><p>Enter the code your friend sent.</p>
-          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${server === 'up' ? '' : ' disabled'}><button class="btn" type="submit"${server === 'up' ? '' : ' disabled'}>Join</button></form></div>
+          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form></div>
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
     bindColourPicker(body);
     bindPortraitPicker(body, renderCoop);
     $('#btn-coop-host', body).onclick = () => {
-      if (server !== 'up') return;
+      if (server !== 'up' || pressed) return;
       const tag = typedTag(body);
       if (tag === null) return;
       sfx.click();
-      invited = '';
+      pressed = 'host';
       host(tag);
+      // (still cold: the room is asked for once the heroes are warm, and the dialog says it's waiting meanwhile)
+      if (pressed) renderCoop();
     };
     const tagField = $<HTMLInputElement>('#coop-tag', body);
+    const codeField = $<HTMLInputElement>('#coop-code', body);
+    // (what's typed kept for the dialog's next render)
+    tagField.oninput = () => { typed.tag = tagField.value; };
+    codeField.oninput = () => { typed.code = codeField.value; };
     // (Enter in the name tag: join with the code if there is one, else just done typing)
     tagField.onkeydown = (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      if ($<HTMLInputElement>('#coop-code', body).value.trim().length >= 4) $<HTMLFormElement>('.coop-join', body).requestSubmit();
+      if (codeField.value.trim().length >= 4) $<HTMLFormElement>('.coop-join', body).requestSubmit();
       else tagField.blur();
     };
-    if (rename && up) {
+    // the field typed in still typed in, its caret where it was; else asked to rename, its taken tag picked to retype
+    const typingBack = typingIn && body.querySelector<HTMLInputElement>(`#${typingIn.id}`);
+    if (typingBack && !typingBack.disabled) {
+      typingBack.focus();
+      if (typingIn.from !== null) typingBack.setSelectionRange(typingIn.from, typingIn.to);
+    } else if (rename && open && typed.tag === null) {
       tagField.focus();
       tagField.select();
     }
@@ -247,13 +292,14 @@ export function renderCoop(): void {
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();
-      const typed = $<HTMLInputElement>('#coop-code', body).value.trim();
-      if (typed.length < 4 || server !== 'up') return;
+      const room = codeField.value.trim();
+      if (room.length < 4 || server !== 'up' || pressed) return;
       const tag = typedTag(body);
       if (tag === null) return;
       sfx.click();
-      invited = '';
-      join(typed, tag);
+      pressed = 'join';
+      join(room, tag);
+      if (pressed) renderCoop();
     };
     return;
   }
@@ -268,7 +314,8 @@ export function renderCoop(): void {
       + (others.length ? '' : '<li class="coop-wait">Waiting for a friend to join…</li>');
     body.innerHTML = `
       <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
-      ${s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
+      ${s === 'hosting' && session.opening ? '<p class="coop-wait" role="status">Opening the room on the co-op server…</p>'
+        : s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
       <ul class="coop-list">${list}</ul>
       ${colourPickerHtml()}
       ${portraitPickerHtml()}
@@ -294,6 +341,7 @@ function renderBar(): void {
   bar.classList.toggle('hidden', session.status === 'off' || session.status === 'failed');
   const others = partners();
   const text = session.status === 'joining' ? `Joining room ${session.code}…`
+    : session.opening ? 'Opening the room…'
     : others.length ? `With ${others.map(nameOf).join(', ')}` : 'Waiting for a friend…';
   bar.innerHTML = `<span class="cb-room">Room <b>${esc(session.code)}</b></span><span class="cb-who">${esc(text)}</span>`;
   bar.onclick = () => { sfx.click(); openCoop(true); };

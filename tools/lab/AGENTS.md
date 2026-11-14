@@ -224,6 +224,8 @@ What the lab gives a probe (`page/lab.ts`):
 - `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
   (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
   them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);
+  `lab.type(text)` puts text in the focused field as a paste or a phone's keyboard does (`Input.insertText`: a key
+  pressed types nothing, as the protocol's key has no text), its input events with it;
   `lab.mouseDown(at)` / `mouseUp(at)` press the left button and hold it (a button held to act), `lab.clickOn(element)` clicks an element at its middle, scrolled to and once the page's CSS transitions are over
   (the lab's frames outrun the browser's clock, and a panel sliding back in took a click 31 px off its tab; a move
   to where the mouse already is makes no pointer move, so a click there skips it), `lab.mouseTo(at)` moves the

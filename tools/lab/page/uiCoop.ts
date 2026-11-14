@@ -5,10 +5,17 @@
 // window's edge); asked to rename, the taken tag must be marked, said, and focused, the room's code kept; on touch a
 // finger's tap must focus the field. The hero's colour picker's swatches must each be found at their middle too, and
 // a swatch clicked (a finger's tap on touch) picked: marked, kept, and the hero's cloth drawn in it at once.
+// What's typed stays through the dialog's renders (#555: a name tag typed was gone once the code was): the coop state
+// types a tag and pastes a code, picks a colour (which renders the dialog again) and renders it as the session's
+// changes do with the code field focused; the rename state retypes the taken tag and renders it again. The coop
+// state then presses Open a room and Join with the heroes cold, as a first visit's are: the button pressed must say
+// it's waiting, everything wait with it, what was typed stay, and once warm the room's own view say it's opening or
+// joining; left or cancelled, the dialog's choices come back as they were.
 // Its canary moves Open a room off the window's foot, which must be found.
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { session } from '../../../src/net/session';
+import * as warm from '../../../src/game/warm';
+import { session, leaveRoom } from '../../../src/net/session';
 import { openCoop, renderCoop } from '../../../src/ui/coop';
 import type { Player } from '../../../src/entities/player';
 
@@ -41,6 +48,120 @@ const COLOUR_KEY = 'last-stand.colour.v1';
 type Dyed = { colour?: string | null; setColour?(colour: string | null): void; model: { dye?: { shown: number } } };
 const dyed = (player: Player): Dyed => player as unknown as Dyed;
 const wornNow = (): number => dyed(G.player).model.dye?.shown ?? 0;
+
+/** what the coop state types in the dialog: a name tag, then a room's code (pasted, as from a friend's message) */
+const TYPED = { tag: 'Wren', code: 'MX4PL' };
+/** what the rename state types over the taken tag */
+const RETYPED = 'Guest Two';
+/** where the game keeps the name tag (net/nameTag.ts): a room asked for keeps it, taken off for the states after */
+const NAME_KEY = 'last-stand.name.v1';
+/** what the coop state saw on its way, before its dialog is checked as it ends */
+let seen: CoopFound = { lines: [], problems: [] };
+
+const coopField = (id: string): HTMLInputElement | null => document.querySelector<HTMLInputElement>(`#coop #${id}`);
+
+/** `text` typed in the dialog's field `id` as a player types it: the field clicked, what's in it picked, the text put
+ *  in its place by the browser (`lab.type`, as a paste or a phone's keyboard puts it). */
+async function typeInto(lab: Lab, id: string, text: string): Promise<void> {
+  const field = coopField(id)!;
+  await lab.clickOn(field);
+  field.select();
+  await lab.type(text);
+}
+
+/** The tag and code as `when` left them, against what was typed (`code`: none expected where the room was left). */
+function fieldsKept(when: string, code = TYPED.code): void {
+  const tag = coopField('coop-tag')?.value ?? 'none', room = coopField('coop-code')?.value ?? 'none';
+  seen.lines.push(`  ${when}: the name tag "${tag}", the code "${room}"`);
+  if (tag !== TYPED.tag) seen.problems.push(`coop: ${when}, the name tag typed ("${TYPED.tag}") reads "${tag}"`);
+  if (room !== code) seen.problems.push(`coop: ${when}, the code typed ("${code}") reads "${room}"`);
+}
+
+/** The dialog rendered again (as a session's change renders it) with `id` typed in: still focused, nothing lost. */
+async function renderedTyping(lab: Lab, id: string, state: string, problems: string[]): Promise<void> {
+  const field = coopField(id)!;
+  field.focus();
+  renderCoop();
+  await lab.step(1);
+  const kept = document.activeElement === coopField(id);
+  if (!kept) problems.push(`${state}: rendered again while typing, the ${id} field lost the focus`);
+}
+
+/** The press of `button` (Open a room, Join) waiting for the heroes: said on it and over the choices, the rest
+ *  waiting too, what was typed kept, and the dialog still within the window with its controls in reach. */
+function waitingFound(which: 'host' | 'join', says: string): void {
+  const state = `coop (${which === 'host' ? 'Open a room' : 'Join'} pressed, the heroes cold)`;
+  const pressed = document.querySelector<HTMLButtonElement>(which === 'host' ? '#btn-coop-host' : '#coop .coop-join button');
+  const other = document.querySelector<HTMLButtonElement>(which === 'host' ? '#coop .coop-join button' : '#btn-coop-host');
+  const status = document.querySelector('#coop .coop-checking')?.textContent ?? '';
+  seen.lines.push(`  ${state}: "${pressed?.textContent}", "${status}"`);
+  if (!pressed?.textContent?.includes(says)) seen.problems.push(`${state}: the button reads "${pressed?.textContent}"`);
+  if (!pressed?.disabled || !other?.disabled) seen.problems.push(`${state}: Open a room and Join don't both wait`);
+  if (!coopField('coop-tag')?.disabled || !coopField('coop-code')?.disabled) {
+    seen.problems.push(`${state}: the name tag and the code can still be changed while it waits`);
+  }
+  if (!status) seen.problems.push(`${state}: nothing over the choices says it's waiting`);
+  fieldsKept(state);
+  // (its choices disabled as meant: the rest of the dialog's checks)
+  const found = dialogFound(state);
+  seen.problems.push(...found.problems.filter((problem) => !problem.includes('is disabled')));
+}
+
+/** The room's own view once the heroes are warm: `status` reached, and its words saying what it does. */
+function roomFound(status: string, says: string): void {
+  const view = document.querySelector('#coop .coop-body')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  seen.lines.push(`  warm: ${session.status}, "${view.slice(0, 60)}…"`);
+  if (session.status !== status) seen.problems.push(`coop: once warm, the session is ${session.status}, not ${status}`);
+  if (!view.includes(says)) seen.problems.push(`coop: once warm, the dialog doesn't say "${says}"`);
+}
+
+/** The dialog's choices back as `when` left them: open to press, their own words, the tag typed kept. */
+function choicesBack(when: string): void {
+  const host = document.querySelector<HTMLButtonElement>('#btn-coop-host');
+  const join = document.querySelector<HTMLButtonElement>('#coop .coop-join button');
+  if (!host || !join) {
+    seen.problems.push(`coop: ${when}, the dialog's choices aren't back`);
+    return;
+  }
+  if (host.disabled || join.disabled || host.textContent !== 'Open a room' || join.textContent !== 'Join') {
+    seen.problems.push(`coop: ${when}, Open a room and Join read "${host.textContent}" and "${join.textContent}"`);
+  }
+  if (document.querySelector('#coop .coop-choice.busy')) seen.problems.push(`coop: ${when}, the choices still wait`);
+  fieldsKept(when, '');
+}
+
+/** The heroes warmed, as their warm-up ends, and the press waiting goes ahead (it does as the wait resolves). */
+async function warmed(lab: Lab): Promise<void> {
+  warm.markWarm('heroes');
+  await new Promise((resolve) => setTimeout(resolve));
+  await lab.step(1);
+}
+
+/** Open a room, then Join, pressed with the heroes cold (`chill`), each waiting and then going ahead: the room opened
+ *  and left, the room joined and the joining cancelled (a refusal renders the same choices again). */
+async function pressesFound(lab: Lab): Promise<void> {
+  const chill = (warm as { chill?: (need: 'heroes') => void }).chill;
+  if (!chill) return;
+  chill('heroes');
+  await lab.clickOn(document.getElementById('btn-coop-host')!);
+  await lab.step(1);
+  waitingFound('host', 'Opening a room');
+  await warmed(lab);
+  roomFound('hosting', 'Room');
+  leaveRoom();
+  await lab.step(1);
+  choicesBack('the room opened and left');
+  chill('heroes');
+  await typeInto(lab, 'coop-code', TYPED.code);
+  await lab.clickOn(document.querySelector('#coop .coop-join button')!);
+  await lab.step(1);
+  waitingFound('join', 'Joining');
+  await warmed(lab);
+  roomFound('joining', `Joining room ${TYPED.code}`);
+  await lab.clickOn(document.getElementById('btn-coop-leave')!);
+  await lab.step(1);
+  choicesBack('the joining cancelled');
+}
 
 /** the problem the canary must raise */
 export const COOP_CANARY = { name: 'Open a room lies past', what: 'Open a room moved off the window\'s foot' };
@@ -78,11 +199,20 @@ async function pickSwatch(lab: Lab, id: string, how: 'click' | 'tap'): Promise<v
   await lab.step(1);
 }
 
-/** The dialog opened and a colour clicked in it, as a player picks one. */
+/** The dialog opened, a name tag typed and a code pasted, a colour clicked in it as a player picks one, the dialog
+ *  rendered again while the code is typed in, and Open a room and Join pressed with the heroes cold. */
 export async function openCoopPicked(lab: Lab): Promise<void> {
   await openCoopDialog(lab);
+  seen = { lines: [], problems: [] };
+  await typeInto(lab, 'coop-tag', TYPED.tag);
+  await typeInto(lab, 'coop-code', TYPED.code);
+  fieldsKept('the code typed');
   wornBefore = wornNow();
   await pickSwatch(lab, PICKS.coop, 'click');
+  fieldsKept('a colour picked (the dialog rendered again)');
+  await renderedTyping(lab, 'coop-code', 'coop', seen.problems);
+  fieldsKept('rendered again as the code is typed in');
+  await pressesFound(lab);
 }
 
 /** The dialog as a joiner sees it once the host refused its tag: asked for another (`session.renameAsked`). */
@@ -95,7 +225,21 @@ export async function openCoopRename(lab: Lab): Promise<void> {
   session.error = `Someone in that room is already called ${TAKEN.tag}: pick another name tag to join.`;
   renderCoop();
   await lab.step(1);
+  // (its taken tag picked as it opens: checked before the retyping replaces it)
+  renameOpened = {
+    picked: (() => {
+      const field = coopField('coop-tag');
+      return document.activeElement === field && field?.selectionStart === 0 && field.selectionEnd === TAKEN.tag.length;
+    })(),
+  };
+  await lab.type(RETYPED);
+  const problems: string[] = [];
+  await renderedTyping(lab, 'coop-tag', 'coopRename', problems);
+  renameOpened.problems = problems;
 }
+
+/** the rename state's tag as it opened: picked to retype, and what rendering it again as it was retyped found */
+let renameOpened: { picked: boolean; problems?: string[] } = { picked: false };
 
 /** The dialog in touch mode (put there by a finger's tap on the world), its name tag field tapped. */
 export async function openCoopTouch(lab: Lab): Promise<void> {
@@ -118,6 +262,8 @@ export function closeCoopDialog(): void {
   session.error = '';
   session.code = '';
   (document.activeElement as HTMLElement | null)?.blur();
+  // (no name tag kept, for the states after: the coop state's presses kept the one it typed)
+  localStorage.removeItem(NAME_KEY);
   // (no colour picked, the hero in his own, for the states after)
   localStorage.removeItem(COLOUR_KEY);
   dyed(G.player).setColour?.(null);
@@ -205,9 +351,12 @@ function renameFound(state: string): CoopFound {
   const problems: string[] = [];
   if (!document.querySelector('#coop .coop-tag.taken')) problems.push(`${state}: the taken tag isn't marked`);
   if (!said.includes(TAKEN.tag)) problems.push(`${state}: the refusal doesn't name the taken tag`);
+  if (!renameOpened.picked) problems.push(`${state}: the taken tag wasn't picked to retype as the dialog opened`);
   if (document.activeElement !== field) problems.push(`${state}: the name tag field isn't focused to retype`);
+  if (field?.value !== RETYPED) problems.push(`${state}: retyped "${RETYPED}", rendered again it reads "${field?.value}"`);
   if (code?.value !== TAKEN.code) problems.push(`${state}: the room's code wasn't kept (${code?.value ?? 'none'})`);
-  return { lines: [`  asked to rename: "${said}"`], problems };
+  problems.push(...(renameOpened.problems ?? []));
+  return { lines: [`  asked to rename: "${said}"`, `  retyped and rendered again: "${field?.value}"`], problems };
 }
 
 /** The touch state's own: the field the finger tapped has the focus (the phone's keyboard comes up for it). */
@@ -225,8 +374,9 @@ export function coopShown(state: 'coop' | 'coopRename' | 'coopTouch', canary: bo
   const found = dialogFound(state);
   const own = state === 'coopRename' ? renameFound(state) : state === 'coopTouch' ? touchFound(state) : null;
   const picked = state === 'coopRename' ? null : pickedFound(state, PICKS[state]);
-  const lines = [...found.lines, ...(own?.lines ?? []), ...(picked?.lines ?? [])];
-  const problems = [...found.problems, ...(own?.problems ?? []), ...(picked?.problems ?? [])];
+  const typing = state === 'coop' ? seen : null;
+  const lines = [...found.lines, ...(own?.lines ?? []), ...(picked?.lines ?? []), ...(typing?.lines ?? [])];
+  const problems = [...found.problems, ...(own?.problems ?? []), ...(picked?.problems ?? []), ...(typing?.problems ?? [])];
   if (!canary) return { lines, problems };
   const host = document.getElementById('btn-coop-host')!;
   // (its transitions off: a button's eases its transform, and the move wasn't there yet when measured)

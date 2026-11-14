@@ -20,6 +20,8 @@
   .btn { flex: none; }
 }
 .coop-choice.off { opacity: .45; }
+// Open a room or Join pressed, waiting to ask for the room (ui/coop.ts `pressed`): the one pressed says so, still read
+.coop-choice.busy .btn.pressed:disabled { opacity: .85; }
 // the player's name tag, asked for before a room is opened or joined (net/nameTag)
 .coop-tag {
   display: flex; align-items: center; gap: 10px; align-self: stretch; justify-content: center; flex-wrap: wrap;
