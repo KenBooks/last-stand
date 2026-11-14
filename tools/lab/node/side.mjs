@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { lowerProcesses, PAGE_SCRIPTS, takeKeptContext } from './browser.mjs';
 import { exportedTreePaths, packagesRoot } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
+import { isRefusedLine, ProductionGuard } from './production.mjs';
 import { mapsCodeOf } from './mapsCode.mjs';
 import { watchLayers } from './layers.mjs';
 import { probeFiles } from './probeFiles.mjs';
@@ -68,21 +69,6 @@ export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false
 
 /** the cookie that keeps the village beta's choice (`src/core/beta.ts`) */
 const VILLAGE_COOKIE = 'last-stand-beta-village';
-/** production's saves service asked what it has on (src/loot/cloudApi.ts `serviceHealth`: the save slots screen and
- *  Play together ask as they open), and the lab's answer in its place: no Google sign-in */
-const SAVES_HEALTH = 'https://ls.wellscoped.dev/saves/health';
-const NO_GOOGLE = { google: false };
-
-/**
- * The lab's own answer to a page asking production's saves service for its health. The service refuses a page on
- * localhost (CORS), which the browser logged as two errors of the page's in every command opening the save slots
- * screen or Play together (`ui --states heroes,coop`), failing it; and a check has no business with production. A
- * command with a service of its own (`cloud`, on another address) is asked there as before.
- */
-function answerSavesHealth(route) {
-  const headers = { 'access-control-allow-origin': '*' };
-  return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(NO_GOOGLE) });
-}
 
 /** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
 const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1' };
@@ -429,6 +415,8 @@ export class Side {
     this.onStale = null;
     /** what the page raised or logged as an error since they were last read */
     this.errors = [];
+    /** what its pages asked of production, refused (production.mjs: all but the saves service's health) */
+    this.production = new ProductionGuard();
   }
 
   /**
@@ -590,6 +578,8 @@ export class Side {
   async openPage(heroClass, how = LAB_BOOT) {
     this.context ??= await this.newContext({ kept: this.isRepo });
     this.errors = [];
+    // (what the last page asked after its command is that page's: the asks of this one start with its boot)
+    this.production.take();
     this.stale = false;
     this.used = false;
     try {
@@ -643,7 +633,7 @@ export class Side {
     const keptContext = kept ? takeKeptContext(this.browser) : null;
     const context = keptContext ?? await this.browser.newContext(CONTEXT_OPTIONS);
     for (const script of PAGE_SCRIPTS) await context.addInitScript(script);
-    await context.route(SAVES_HEALTH, answerSavesHealth);
+    await this.production.attach(context);
     return context;
   }
 
@@ -670,7 +660,10 @@ export class Side {
     }, mapsCodeOf(this.root));
     page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
     page.on('console', (message) => {
-      if (message.type() === 'error' && !fromDevClient(message)) this.errors.push(`${prefix}${message.text()}`);
+      if (message.type() !== 'error' || fromDevClient(message)) return;
+      // (a request the guard refused is said as an ask of production's, which fails the command on its own)
+      if (isRefusedLine(message.text(), message.location().url)) return;
+      this.errors.push(`${prefix}${message.text()}`);
     });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     // (a probe's `lab.screen`: the game with the page's UI over it, which the canvas views can't show)

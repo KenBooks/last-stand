@@ -202,6 +202,12 @@ export class LabSession {
         sideNotes.push(`${turn.name}: PAGE ERRORS\n  ${errors.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
         sideProblems.push(`${turn.name}: ${errors.length} errors in the page`);
       }
+      // (a command that judges them itself, `ui` state by state, has taken its own: production.mjs)
+      const asks = side.production.take();
+      if (asks.length) {
+        sideNotes.push(`${turn.name}: ASKED PRODUCTION (refused)\n  ${asks.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
+        sideProblems.push(`${turn.name}: ${asks.length} requests to production`);
+      }
       if (warnings.length) {
         sideNotes.push(`${turn.name}: joints past their ranges: ${warnings.slice(0, MESSAGES_SHOWN).join(' | ')}`);
       }

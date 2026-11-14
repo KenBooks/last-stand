@@ -9,6 +9,7 @@ import { DEVICES, screenPlaying } from './devices.mjs';
 import { labError } from './errors.mjs';
 import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
+import { canaryVerdict, withAsks } from './production.mjs';
 import { villageSince } from './villageSince.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { pictureUrl } from './pictureFile.mjs';
@@ -592,25 +593,34 @@ export const COMMANDS = {
     async each(side, options) {
       // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
       const states = UI_STATES.filter((state) => (options.states ?? UI_STATES).includes(state));
+      const canary = Boolean(options.canary);
       // (the bug report's form sends to a reports service of the lab's own, read back here: never production's)
       const { checkReportSent, startTracesService } = await import('./tracesService.mjs');
       const service = states.includes('bugReport') ? await startTracesService(new URL(side.url).origin) : null;
       const reports = [];
+      // (each state's asks of production its own problems; the canary lets the saves service's health go to
+      // production's host again, which the guard must refuse and catch: production.mjs)
+      const booting = withAsks({ text: 'boot', problems: [], moments: [] }, 'boot', side.production.take(), false);
+      side.production.answersHealth = !canary;
       try {
         for (const state of states) {
-          const canary = Boolean(options.canary);
           const command = { state, hdr: Boolean(options.hdr), canary, reports: service?.url };
           const report = await side.command('ui', command);
-          reports.push(state === 'bugReport' ? await checkReportSent(report, service, canary) : report);
+          const read = state === 'bugReport' ? await checkReportSent(report, service, canary) : report;
+          reports.push(withAsks(read, state, side.production.take(), canary));
         }
       } finally {
+        side.production.answersHealth = true;
         await service?.close();
       }
-      return {
-        text: reports.map((report) => report.text).join('\n'),
-        problems: reports.flatMap((report) => report.problems),
-        moments: reports.flatMap((report) => report.moments),
-      };
+      const lines = [booting.text, ...reports.map((report) => report.text)];
+      const problems = [...booting.problems, ...reports.flatMap((report) => report.problems)];
+      if (canary) {
+        const verdict = canaryVerdict(states, reports);
+        lines.push(verdict.line);
+        if (verdict.problem) problems.push(verdict.problem);
+      }
+      return { text: lines.join('\n'), problems, moments: reports.flatMap((report) => report.moments) };
     },
     finish(results, options, session) {
       return textWithPictureFiles(results, session.outFor('ui'));
