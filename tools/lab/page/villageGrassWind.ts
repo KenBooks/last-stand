@@ -82,7 +82,8 @@ function centile(values: number[], share: number): number {
 /** The wind pushing the grass as hard as it did (a commit from before the hold has none: an A/B's other side loads
  *  this module too). */
 function holdWindWild(held: boolean): void {
-  const holds = meadow as { holdGrassWindWild?: (held: boolean) => void; holdGrassDropByPixel?: (held: boolean) => void };
+  type Hold = (held: boolean) => void;
+  const holds = meadow as { holdGrassWindWild?: Hold; holdGrassDropByPixel?: Hold };
   holds.holdGrassWindWild?.(held);
   holds.holdGrassDropByPixel?.(held);
 }
@@ -170,7 +171,8 @@ async function readStand(lab: Lab, stand: (typeof STANDS)[number], pictured: boo
     + `cells swing over ${FLIP * 100}% of their light in 3 s (at most ${MOST_FLIPPING * 100}%), the median cell's `
     + `${(centile(swings, 0.5) * 100).toFixed(0)}%; all of it together ${(whole * 100).toFixed(1)}% (at most `
     + `${MOST_WHOLE * 100}%); in one frame its bright cells ${apart.toFixed(1)} times its dark ones `
-    + `(at most ${MOST_APART}); from one frame to the next ${(flicker * 100).toFixed(1)}% of its light changes over the grain's ${(grain * 100).toFixed(1)}% `
+    + `(at most ${MOST_APART}); from one frame to the next ${(flicker * 100).toFixed(1)}% of its light `
+    + `changes over the grain's ${(grain * 100).toFixed(1)}% `
     + `(at most ${MOST_FLICKER * 100}%)`;
   const problems: string[] = [];
   const said = `grassSteadyInWind: ${stand.name}`;
