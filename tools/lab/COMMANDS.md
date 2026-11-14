@@ -436,6 +436,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   too faint with nothing left are problems. `--pictures` (on by default) pictures the frames under the share the
   look starts at into `out/health`; `--canary` draws the look with the Health whole and drives its blood into the
   middle.
+- `staffs`: the mage's staffs by school (`page/staffs.ts`, `--class mage`, #402), what nothing else measures of
+  them. The lightning staff's Stormcall is tapped and charged to full at five foes held frozen from its strike's
+  middle outwards (the middle, 2 m and 3.6 m to the side, 6.5 m beyond its reach, an elite 1.4 m off), each
+  cast's charge read as the skill is given it: a tap must strike the middle alone for the skill's `least` of a
+  full charge's damage, a full charge every foe inside its radius and none beyond, the near one for less than
+  the middle, each landing at least 6 frames after the key is let go (its arc travels first), the middle dazed
+  for the skill's time, the near for less, the elite not at all. The fire staff's burn is set on a training
+  dummy (`igniteEnemy`): its bites counted against the burn's time over `BURN_TICK`, their size against its
+  pace, and the dummy alight for the burn's time and no longer. The healing beam's choice is asked with
+  stand-in allies in the room for a call (`threadTarget`: one in the cone, the nearer the aim of two, one 40
+  degrees off, one past his reach, a fallen one, none), then held on the hero himself with his Health kept at
+  30%: every frame must heal, at the pace its tooltip states with his regeneration, the beam drawn while held
+  and gone after. Void Lance is cast with a staff, and with none from its first key, its second and both
+  together, at a foe held in its line: a strand from every finger of the hands casting it and none from the
+  other's, each hand's damage and Energy a second a staff's, both hands' 1.5 times one's. Then the charge mark (`src/ui/chargeMark.ts`) in the top-down view and third person: none for
+  a tap, the cursor's fill or the ring's arc within 0.03 of the charge while held, the browser's cursor put
+  away under the drawn one, both gone once let go, pictured as the player sees it (`out/staffs`); `--class
+  ranger`, or any class without schools, runs that part alone on its own drawn shot. The hero faces the arena's
+  middle unless `--facing` says: from the lab's spot facing out, 7 m ahead is past the wall, and foes stood
+  there were moved back inside, 4 m off the strike (a training dummy is moved off its spot too, and is never
+  dazed: the strike's foes are the biome's commonest, frozen). `--canary` makes a tap as strong and wide as a
+  full charge, which the first part must catch.
 - `blink`: the mage's blink cast as the player casts it (`page/blink.ts`, `--class mage`): the key held over the
   aim and let go, on open ground, past his reach, at a prop's middle, past a prop, out at the arena's edge, up onto
   the dais and at his own feet. Each says where it was aimed, where the preview showed and where he came out, how

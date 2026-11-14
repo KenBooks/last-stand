@@ -24,7 +24,7 @@ import { menuStowed, toggleMenuStowed, pauseTab } from '../../../src/ui/menus';
 import { openFromLobby } from './uiCoop';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
-import type { ActionState, SkillKey } from '../../../src/types';
+import type { ActionState, School, SkillKey } from '../../../src/types';
 import type { Frame, Lab } from './lab';
 import { watchHeroCost } from './coopCost';
 export { coopHeroCost } from './coopCost';
@@ -90,6 +90,8 @@ export interface FoeSample {
   inReach: boolean;
   /** dazed, as this game shows it (stars over it) */
   dazed: boolean;
+  /** alight, as this game shows it (flames rising off it: combat/burn.ts) */
+  burning: boolean;
   /** carried before a hero's charge as this game shows it, and how high it flies off it (m: 0 on its feet) */
   carried: boolean;
   up: number;
@@ -109,6 +111,8 @@ export interface Sample {
   self: XZ;
   /** its own hero's life */
   life: number;
+  /** a party frame on its page shows its player healed (the + over it: ui/coop.ts) */
+  healedShown: boolean;
   /** its own hero and its partner's as it shows them: standing (`up`), down waiting to be raised, or dead */
   standing: { self: HeroState; partner: HeroState | null };
   /** its partner's hero as it shows it (none before it has arrived) */
@@ -441,7 +445,64 @@ function rushInput(frame: number): Frame {
   return { keys: [key], aim };
 }
 
+/** `staffs` (#402): the foes the guest burns and the frames of its two halves. The guest holds a fire staff and
+ *  casts at the foes until `STAFFS.mend`, then a healing staff, its beam held on the host from `STAFFS.beam`. */
+const STAFFS = { foes: [[14, 17], [16, 16.5], [15, 15.5]] as XZ[], mend: 300, beam: 320, hostLife: 800, hostHurt: 300 };
+
+/** The local hero holding a staff of `school`, as equipping one would have him (his bar and his look). */
+function holdStaff(school: School): void {
+  const hero = G.player;
+  hero.gear = { ...hero.gear, weapon: hero.gear.weapon ?? 'Staff', school };
+  hero.fitToGear();
+  hero.model.setGear?.(hero.gear);
+}
+
+/** The guest in `staffs`: a fire staff's orbs at the foes, every one setting what it strikes alight (its chance
+ *  made sure), then a healing staff's beam held on the host. */
+function staffsGuestInput(frame: number): Frame {
+  const hero = G.player;
+  if (frame === 0) {
+    holdStaff('fire');
+    const fire = hero.known.get('cinderburst');
+    if (fire?.def.burn) fire.def = { ...fire.def, burn: { ...fire.def.burn, chance: 1 } };
+  }
+  if (frame === STAFFS.mend) {
+    holdStaff('healing');
+    // (the host's copy with a hero's own Health here too, so its frame can tell it healed)
+    for (const other of G.players) if (!other.local) other.stats.maxLife = STAFFS.hostLife;
+  }
+  if (frame < STAFFS.mend - 60) {
+    const [x, z] = STAFFS.foes[0];
+    return { m0: true, aim: new THREE.Vector3(x, 0, z) };
+  }
+  const host = G.players.find((other) => !other.local);
+  if (frame < STAFFS.beam || !host) return {};
+  return { m0: true, aim: host.pos.clone() };
+}
+
+/** The host in `staffs`: it stands by, and as the guest takes up the healing staff it is hurt, with a hero's own
+ *  Health to be healed back to. */
+function staffsHostInput(frame: number): Frame {
+  if (frame === STAFFS.mend) {
+    G.player.stats.maxLife = STAFFS.hostLife;
+    G.player.life = STAFFS.hostHurt;
+  }
+  return {};
+}
+
 const SCENARIOS: Record<string, Scenario> = {
+  staffs: {
+    about: 'the guest, a mage, sets three dazed foes alight with a fire staff, then heals the hurt host with a '
+      + 'healing staff\'s beam',
+    frames: 600,
+    host: [9, 19],
+    guest: [15, 23],
+    foes: STAFFS.foes.map((at) => ({ type: 'mossback' as EnemyId, at, dazed: true })),
+    skill: 'voidLance',
+    pictures: [200, 450],
+    hostInput: staffsHostInput,
+    guestInput: staffsGuestInput,
+  },
   walk: {
     about: 'the host runs round in circles and the guest zigzags, stopping now and then',
     frames: 480,
@@ -1038,6 +1099,7 @@ function sampleNow(): Sample {
   const sample: Sample = {
     self: [self.pos.x, self.pos.z],
     life: self.life,
+    healedShown: document.querySelector('#party .pf.healed') !== null,
     standing: { self: stateOf(self), partner: partner ? stateOf(partner) : null },
     partner: partner ? [partner.pos.x, partner.pos.z] : null,
     shown: { self: self.obj.visible, partner: partner ? partner.obj.visible : null },
@@ -1098,6 +1160,8 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   const inReach = distance < def.range + hero.radius + 0.3 && foe.inFront(hero.pos.x, hero.pos.z, 1.3);
   // (an older tree's foes are never dazed, carried nor thrown)
   const dazed = ((foe as { dazed?: number }).dazed ?? 0) > 0;
+  // (an older tree's foes never burn)
+  const burning = ((foe as { burning?: number }).burning ?? 0) > 0;
   const carried = Boolean(foe.carried);
   const up = foe.tossed?.y ?? 0;
   // (an older tree's foes never evade)
@@ -1106,7 +1170,7 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   const risen = !foe.spawning;
   const hidden = hiddenWhy(foe);
   return {
-    id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up, ducked, gone,
+    id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, burning, carried, up, ducked, gone,
     risen, drawn: !hidden, hidden,
   };
 }

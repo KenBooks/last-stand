@@ -8,6 +8,7 @@ let ctx: BaseAudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let crackleBuf: AudioBuffer | null = null;
+let arcBuf: AudioBuffer | null = null;
 let last: Record<string, number> = {};
 /** the effects' level at full volume */
 const LEVEL = 0.45;
@@ -55,6 +56,7 @@ function wire(c: BaseAudioContext, to: AudioNode = c.destination): void {
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   crackleBuf = crackles(c);
+  arcBuf = arcs(c);
   // (the spells' hall made here, behind the loading screen, not at a first cast)
   hall = null;
   space();
@@ -70,6 +72,29 @@ function crackles(c: BaseAudioContext): AudioBuffer {
   for (let i = 0; i < d.length; i++) {
     if (Math.random() < chance) level = (Math.random() < 0.5 ? -1 : 1) * (0.2 + 0.8 * Math.random() ** 2);
     d[i] = level * (Math.random() * 0.6 + 0.4);
+    level *= fall;
+  }
+  return buf;
+}
+
+/** An electric arc: a train of sharp pulses of alternating sign, about 110 a second, each gap drawn anew (0.6 to
+ *  1.4 of the mean, so it buzzes with no steady pitch) and each pulse a rasp of noise dying in a millisecond; now and
+ *  then the arc breaks for a few hundredths of a second and strikes again. It is what electricity sounds like, a
+ *  harsh sputtering buzz: `crackles`' sparse clicks are a sparkler's fizz (Stormcall made of them, from play, "it
+ *  doesnt sound like lightning at all"). */
+function arcs(c: BaseAudioContext): AudioBuffer {
+  const buf = c.createBuffer(1, c.sampleRate * 1.5, c.sampleRate);
+  const d = buf.getChannelData(0);
+  const fall = Math.exp(-1 / (c.sampleRate * 0.0009));
+  let next = 0, level = 0, sign = 1;
+  for (let i = 0; i < d.length; i++) {
+    if (i >= next) {
+      sign = -sign;
+      level = sign * (0.45 + 0.55 * Math.random());
+      const gap = Math.random() < 0.06 ? 0.02 + 0.03 * Math.random() : (0.6 + 0.8 * Math.random()) / 110;
+      next = i + gap * c.sampleRate;
+    }
+    d[i] = level * (0.55 + 0.45 * Math.random());
     level *= fall;
   }
   return buf;
@@ -129,10 +154,10 @@ export const musicOutput = (): AudioNode | null => mix?.music ?? null;
  *  them, through a master, a compressor and a hall of their own at the default level. The lab's `sound` renders them
  *  so into an `OfflineAudioContext`. */
 export function playInto(c: BaseAudioContext): () => void {
-  const kept = { ctx, master, noiseBuf, crackleBuf, hall, last };
+  const kept = { ctx, master, noiseBuf, crackleBuf, arcBuf, hall, last };
   last = {};
   wire(c);
-  return () => ({ ctx, master, noiseBuf, crackleBuf, hall, last } = kept);
+  return () => ({ ctx, master, noiseBuf, crackleBuf, arcBuf, hall, last } = kept);
 }
 
 /** whether a sound of this name played within `ms` (by the context's own clock, which an offline render keeps too) */
@@ -236,6 +261,11 @@ function voice(fadeIn: number, wet: number) {
     const s = c.createBufferSource(); s.buffer = crackleBuf; s.loop = true; s.playbackRate.value = rate;
     s.connect(to); srcs.push(s); return s;
   };
+  /** an electric arc's buzz looped into `to` (`arcs`), `rate` times as fast (and as bright) */
+  const arc = (to: AudioNode, rate = 1): AudioBufferSourceNode => {
+    const s = c.createBufferSource(); s.buffer = arcBuf; s.loop = true; s.playbackRate.value = rate;
+    s.connect(to); srcs.push(s); return s;
+  };
   /** a gain panned across the stereo field, into `to` (out by default) */
   const lane = (gain: number, pan: number, to: AudioNode = out): GainNode => {
     const g = c.createGain(); g.gain.value = gain;
@@ -273,7 +303,7 @@ function voice(fadeIn: number, wet: number) {
     stopAt(n + fade + 0.05);
     return n;
   };
-  return { c, t, out, osc, lfo, loop, crackle, lane, hit, sweep, flange, start, stopAt, end };
+  return { c, t, out, osc, lfo, loop, crackle, arc, lane, hit, sweep, flange, start, stopAt, end };
 }
 
 // Void Lance is a beam of raw arcana, so it plays no notes: chimes, a chord, a choir and glittering bells over it
@@ -597,6 +627,189 @@ function veilstepPass(dur: number): void {
   breath.frequency.cancelScheduledValues(t); breath.frequency.setValueAtTime(1200, t + land); breath.frequency.exponentialRampToValueAtTime(250, t + land + 0.35);
   v.loop(breath); breath.connect(blowAt(v, land, 0.45, 0.45, v.out, 0.01));
   v.start(); v.stopAt(t + land + 1.1);
+}
+
+// The staffs' own spells (#402), built as the rest of the wizard's: noise, driven blows and the hall, no notes (their
+// first sounds were a filtered hiss and an oscillator each, and Lifethread's a chord and a note a second, a second
+// tune over the music; from play, "need better sound effects, pls match other spells/effects"). Each is what it
+// shows: an orb of fire heaved and bursting, lightning gathering, leaping and striking, a beam of life held.
+
+/** Cinderburst hurled, a heavy orb of fire, one a second: a spit as it lights, the heave of it thrown (dark noise
+ *  opening, driven), the flame's roar rising as it leaves and falling as it goes, and its embers crackling after it.
+ *  Each cast a little apart in colour and pan. */
+function cinderCast(): void {
+  const v = voice(0, 0.25);
+  const { c, t } = v;
+  const k = 0.92 + Math.random() * 0.16, lane = v.lane(1, Math.random() * 0.3 - 0.15);
+  // the spit
+  const spit = c.createBiquadFilter(); spit.type = 'highpass'; spit.frequency.value = 2600;
+  v.loop(spit); spit.connect(v.hit(0.14, 0.09, lane, 0.002));
+  // the heave
+  const heave = v.sweep('bandpass', 320, 1500 * k, 0.16, 0.6);
+  v.loop(heave); heave.connect(drive(3)).connect(v.hit(0.2, 0.45, lane, 0.03));
+  // the roar, flanged
+  const roar = glide(v, 'bandpass', 1.1, [[0, 500 * k], [0.14, 2200 * k], [0.6, 600]]);
+  v.loop(roar); roar.connect(v.flange(v.hit(0.44, 0.6, lane, 0.05), 4, 3, 1.6, 0.55));
+  // the embers
+  const embers = v.sweep('bandpass', 3800 * k, 1800, 0.6, 0.7);
+  v.crackle(embers, 0.7 * k); embers.connect(blowAt(v, 0.05, 0.6, 0.6, lane, 0.02));
+  v.start(); v.stopAt(t + 0.95);
+}
+
+/** Cinderburst bursting: a driven blow, a blast closing from bright to dark, the fire washing out to both sides and
+ *  its embers scattering. */
+function cinderBlast(): void {
+  const v = voice(0, 0.5);
+  const { c, t } = v;
+  const lane = v.lane(1, Math.random() * 0.4 - 0.2);
+  // the blow
+  const sh = drive(3.2); sh.connect(v.hit(0.2, 0.5, lane));
+  const o = v.osc('sine', 160, sh); o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.4);
+  // the blast
+  const blast = v.sweep('bandpass', 3600, 380, 0.55, 0.5);
+  v.loop(blast); blast.connect(drive(2.8)).connect(v.hit(0.2, 0.6, lane, 0.002));
+  // the fire washing out
+  for (const [side, rate] of [[-0.6, 1.3], [0.6, 1.8]]) {
+    const f = v.sweep('bandpass', 700, 2600, 0.5, 0.8);
+    v.loop(f); f.connect(v.flange(v.hit(0.26, 0.8, v.lane(1, side), 0.04), 4, 3, rate, 0.55));
+  }
+  // the embers
+  const embers = c.createBiquadFilter(); embers.type = 'bandpass'; embers.frequency.value = 3000; embers.Q.value = 0.7;
+  v.crackle(embers, 1.1); embers.connect(blowAt(v, 0.03, 0.7, 0.7, lane, 0.01));
+  v.start(); v.stopAt(t + 1.3);
+}
+
+/** Stormcall's charge gathering over `dur` s, then held at full for as long as its key is: an arc sputtering at the
+ *  orb in each ear, slow and dull at first, a fast harsh buzz by the full charge, static spitting over it, a hiss of
+ *  charged air, and a pressure of dark noise swelling under it. It starts from nothing, so a tap has no blip of it
+ *  before its spark. Returns a stop(): the strike's own sounds take over as it's let go. */
+function stormGather(dur: number): () => void {
+  const v = voice(0.03, 0.2);
+  const { c, t } = v;
+  const swell = (from: number, peak: number, to: AudioNode): GainNode => {
+    const g = c.createGain(); g.gain.setValueAtTime(from, t); g.gain.exponentialRampToValueAtTime(peak, t + dur); g.connect(to); return g;
+  };
+  // the arc
+  for (const [pan, from, full] of [[-0.5, 0.5, 1], [0.5, 0.65, 1.25]]) {
+    const f = v.sweep('bandpass', 1300, 3200, dur, 0.6);
+    const s = v.arc(f, from); s.playbackRate.setValueAtTime(from, t); s.playbackRate.exponentialRampToValueAtTime(full, t + dur);
+    f.connect(drive(2.5)).connect(swell(0.006, 0.17, v.lane(1, pan)));
+  }
+  // the static
+  const spit = v.sweep('bandpass', 2600, 4600, dur, 0.7);
+  v.crackle(spit, 1.2); spit.connect(swell(0.02, 0.3, v.out));
+  // the charged air
+  const air = v.sweep('highpass', 7000, 4200, dur, 0.7);
+  v.loop(air); air.connect(v.flange(swell(0.002, 0.03, v.out), 1.5, 1, 5, 0.5));
+  // the pressure
+  const low = v.sweep('lowpass', 200, 700, dur, 0.9);
+  v.loop(low); low.connect(drive(3)).connect(swell(0.01, 0.12, v.out));
+  v.start();
+  let done = false;
+  return () => { if (!done) v.end(0.08); done = true; };
+}
+
+/** Stormcall let go (`power` 0..1), the arc leaping from the orb: a crack, and the arc's buzz quickening and
+ *  brightening as it goes. */
+function stormLeap(power: number): void {
+  const v = voice(0, 0.2);
+  const { t } = v;
+  const size = 0.6 + 0.4 * power, long = 0.1 + 0.1 * power, lane = v.lane(1, Math.random() * 0.3 - 0.15);
+  crack(v, 0, 0.2 * size, lane, 3000);
+  const f = v.sweep('bandpass', 1100, 4200, long, 0.5);
+  const s = v.arc(f, 1.1); s.playbackRate.setValueAtTime(1.1, t); s.playbackRate.exponentialRampToValueAtTime(1.9, t + long);
+  f.connect(drive(3)).connect(v.hit(0.5 * size, 0.16 + 0.14 * power, lane, 0.002));
+  v.start(); v.stopAt(t + 0.5);
+}
+
+/** Stormcall striking (`power` 0..1). The crack: the whole band at once, driven. The discharge: the arc's harsh
+ *  buzz on what it struck, slowing and darkening as it dies, sparks spitting off it. A tap's is that alone, a short
+ *  hard zap, a little apart in colour each time. A charged one's is thunder too: the air tearing in a run of cracks
+ *  after the first, each later, fainter and darker, a blow, and the thunder rolling away as booms at uneven times,
+ *  each fainter, from side to side (a rumble wavering at a steady rate was an engine). */
+function stormLand(power: number): void {
+  const v = voice(0, 0.3 + 0.3 * power);
+  const { c, t } = v;
+  const size = 0.6 + 0.4 * power, k = 0.9 + Math.random() * 0.2;
+  // the crack
+  const first = c.createBiquadFilter(); first.type = 'lowpass'; first.frequency.value = 9000;
+  v.loop(first); first.connect(drive(4)).connect(v.hit(0.36 * size, 0.1 + 0.06 * power, v.out, 0.001));
+  // the discharge, held as an arc holds: at its level for `dies` s, half gone by then, and cut off (shaped as a
+  // blow, it was 20 dB down in a tenth of a second, a tick)
+  const dies = 0.26 + 0.25 * power;
+  const held = (peak: number): GainNode => {
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + 0.002);
+    g.gain.linearRampToValueAtTime(peak * 0.5, t + dies); g.gain.exponentialRampToValueAtTime(0.0001, t + dies + 0.09);
+    g.connect(v.out); return g;
+  };
+  const zap = v.sweep('bandpass', 3200 * k, 900, dies, 0.5);
+  const s = v.arc(zap, 1.5 * k); s.playbackRate.setValueAtTime(1.5 * k, t); s.playbackRate.exponentialRampToValueAtTime(0.8 * k, t + dies);
+  zap.connect(drive(3.5)).connect(held(0.26 * size));
+  // its growl: the same arc slower and dark, the buzz's body in the mids (bright alone, a tap was a tick)
+  const growl = c.createBiquadFilter(); growl.type = 'lowpass'; growl.frequency.value = 1400 * k; growl.Q.value = 0.7;
+  const g = v.arc(growl, 0.9 * k); g.playbackRate.setValueAtTime(0.9 * k, t); g.playbackRate.exponentialRampToValueAtTime(0.55 * k, t + dies);
+  growl.connect(drive(4)).connect(held(0.22 * size));
+  // the sparks
+  const sparks = c.createBiquadFilter(); sparks.type = 'bandpass'; sparks.frequency.value = 5000; sparks.Q.value = 0.7;
+  v.crackle(sparks, 1.7); sparks.connect(v.hit(0.25 * size, 0.2 + 0.2 * power, v.out, 0.001));
+  if (power > 0.3) {
+    // the tear
+    const cracks = 4 + Math.round(4 * power);
+    for (let i = 0; i < cracks; i++) {
+      const at = 0.03 + Math.random() ** 1.3 * 0.3;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 7000 - 15000 * at;
+      v.loop(f); f.connect(drive(3)).connect(blowAt(v, at, 0.3 * power * (1 - 2 * at), 0.07 + Math.random() * 0.06, v.lane(1, Math.random() * 1.2 - 0.6), 0.001));
+    }
+    // the blow
+    const sh = drive(3.2); sh.connect(v.hit(0.3 * power, 0.6));
+    const o = v.osc('sine', 110, sh); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.45);
+    // the thunder rolling away
+    const long = 1.2 + 1.2 * power;
+    const roll = v.sweep('lowpass', 700, 110, long, 0.8), dark = drive(2.5);
+    v.loop(roll); roll.connect(dark);
+    dark.connect(blowAt(v, 0.03, 0.12 * power, long, v.out, 0.05));
+    const booms = 5 + Math.round(3 * power);
+    for (let i = 0; i < booms; i++) {
+      const at = 0.08 + Math.random() * long * 0.7;
+      const peak = 0.3 * power * (1 - at / long) * (0.5 + 0.5 * Math.random());
+      dark.connect(blowAt(v, at, peak, 0.5 + Math.random() * 0.5, v.lane(1, Math.random() * 1.4 - 0.7), 0.05 + Math.random() * 0.08));
+    }
+  }
+  v.start(); v.stopAt(t + 0.8 + 2.2 * power);
+}
+
+/** Lifethread held, a beam of life: a soft swell as it takes hold, then warm air breathing in each ear through a slow
+ *  flanger, a faint shimmer over it, motes of light as sparse soft crackle, and a low warmth under it, all swelling a
+ *  little once a second as its heal is counted. Gentle, where every other spell strikes. Returns a stop(), which
+ *  lets it fade. */
+function threadHeld(): () => void {
+  const v = voice(0.25, 0.4);
+  const { c } = v;
+  // the taking hold
+  const open = v.sweep('bandpass', 500, 3200, 0.5, 0.8);
+  v.loop(open); open.connect(v.flange(v.hit(0.12, 0.8, v.out, 0.2), 4, 3, 1.1, 0.5));
+  // the breath
+  const breath = c.createGain(); breath.gain.value = 0.8; breath.connect(v.out);
+  v.lfo(1, 0.2, breath.gain);
+  for (const [pan, rate, hz] of [[-0.55, 0.19, 900], [0.55, 0.27, 1250]]) {
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = 0.8;
+    v.loop(f); f.connect(v.flange(v.lane(0.14, pan, breath), 5, 3.5, rate, 0.6));
+    v.lfo(rate * 1.3, hz * 0.25, f.frequency);
+  }
+  // the shimmer
+  const shimmer = c.createBiquadFilter(); shimmer.type = 'highpass'; shimmer.frequency.value = 5200;
+  v.loop(shimmer); shimmer.connect(v.flange(v.lane(0.018, 0, breath), 2, 1.5, 0.6, 0.55));
+  // the motes
+  for (const [pan, rate] of [[-0.4, 0.3], [0.4, 0.37]]) {
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 4200; f.Q.value = 1.4;
+    v.crackle(f, rate); f.connect(v.lane(0.32, pan));
+  }
+  // the warmth
+  const warm = c.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 380; warm.Q.value = 0.8;
+  v.loop(warm); warm.connect(drive(2)).connect(v.lane(0.09, 0, breath));
+  v.start();
+  let done = false;
+  return () => { if (!done) v.end(0.5); done = true; };
 }
 
 // The warrior's sounds: steel, wood, earth and a man's weight, each skill the thing it shows and told from the others
@@ -1219,6 +1432,16 @@ export const sfx = {
   /** a Splintering Bolt bursting on a foe: the bolt itself, splitting (`split`), or one of its splits */
   boltBurst: guard((split: boolean) => { if (throttle(split ? 'boltBurst' : 'boltSplit', 40)) return; boltBurst(split); }),
   boltHit: guard(() => { if (throttle('boltHit', 45)) return; noise({ dur: 0.12, freq: 3000, q: 1.5, gain: 0.12 }); }),
+  // The staffs' own spells (#402)
+  cinder: guard(() => { if (throttle('cinder', 120)) return; cinderCast(); }),
+  cinderBurst: guard(() => { if (throttle('cinderBurst', 80)) return; cinderBlast(); }),
+  /** Stormcall's charge, gathered over `dur` s and held (returns a stop()) */
+  stormCharge: guard((dur: number) => stormGather(dur)),
+  /** Stormcall let go, and its strike landing (`power` 0..1: how far it was charged) */
+  storm: guard((power: number = 1) => { if (throttle('storm', 60)) return; stormLeap(power); }),
+  stormStrike: guard((power: number = 1) => { if (throttle('stormStrike', 60)) return; stormLand(power); }),
+  /** Lifethread's beam held (returns a stop()) */
+  thread: guard(() => threadHeld()),
   starfallCall: guard(() => { starfallFalling(); }),
   starfallImpact: guard(() => { if (throttle('sfi', 50)) return; starfallStrike(); }),
   /** Void Lance's portal drawn over `dur` s (returns its stop()) */

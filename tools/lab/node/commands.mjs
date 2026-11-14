@@ -1015,6 +1015,23 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  staffs: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('staffs', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('staffs'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   blink: {
     each(side, options) {
       const command = {

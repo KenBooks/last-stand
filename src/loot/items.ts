@@ -2,7 +2,7 @@
 import { SLOTS, SLOT_INFO, RARITIES, STATS, AFFIX_NAMES, LEGENDARY_NAMES, ASCENDANT_NAMES, type RarityInfo } from '../data/items';
 import { LOOT } from '../data/waves';
 import { pick, rand, randInt, weighted } from '../util';
-import type { BaseStats, ClassDef, DerivedStats, Gear, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
+import type { BaseStats, ClassDef, DerivedStats, Gear, Item, Profile, RarityId, School, Slot, StatBlock, StatKey } from '../types';
 
 let uid = Date.now() % 1e6;
 /** A fresh item id (an item from a co-op host gets one here, so it can't clash with the stash). */
@@ -54,6 +54,7 @@ export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
       weapon: weapon?.rarity, offhand: off?.rarity, head: equipped.head?.rarity,
       chest: equipped.chest?.rarity, hands: equipped.hands?.rarity,
     },
+    school: cls.schools && weapon ? weapon.school ?? cls.schools.roll[0] : null,
   };
 }
 
@@ -65,7 +66,7 @@ export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[s
 
 /** Create an item for `cls` (its base names and stats), of `base` if given (else one of the slot's). Everything is
  *  plain JSON so it can be saved directly. */
-export function makeItem({ slot, rarity = 'common', ilvl = 1, cls, base: given }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef; base?: string } = {}): Item {
+export function makeItem({ slot, rarity = 'common', ilvl = 1, cls, base: given, school }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef; base?: string; school?: School } = {}): Item {
   slot ??= pick(SLOTS.filter((s) => !cls?.excludeSlots?.includes(s)));
   const r = rarityOf(rarity);
   const base = given ?? pick(basesFor(slot, cls));
@@ -92,7 +93,10 @@ export function makeItem({ slot, rarity = 'common', ilvl = 1, cls, base: given }
     name = `${pre} ${base}${suf ? ' ' + suf : ''}`;
   }
 
-  return { id: newItemId(), slot, rarity, ilvl, name, base, stats };
+  const item: Item = { id: newItemId(), slot, rarity, ilvl, name, base, stats };
+  // a weapon of a class with schools is attuned to one, each as likely (asked for: the starter's)
+  if (slot === 'weapon' && cls?.schools) item.school = school ?? pick(cls.schools.roll);
+  return item;
 }
 
 export function rollDrop(cls: ClassDef, wave: number, bonus = 0): Item {

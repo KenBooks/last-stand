@@ -115,10 +115,15 @@ export interface SkillDef {
   duration?: number;
   pull?: number;
   absorbPct?: number;
-  /** a draught: the Health it restores, a fixed amount and a share of the hero's most on top (the fixed part keeps a
+  /** a healing beam (no `healPct`): the Health it restores a second, before the healer's All Damage.
+   *  A draught: the Health it restores, a fixed amount and a share of the hero's most on top (the fixed part keeps a
    *  small Health pool's draught from shrinking with it) */
   heal?: number;
   healPct?: number;
+  /** a strike that may set what it hits alight (combat/burn.ts): how likely, its fire damage a second, for how long */
+  burn?: { chance: number; perSecond: number; seconds: number };
+  /** a charged strike let go at once: its share of the full charge's damage and reach */
+  least?: number;
   /** a mark: the extra share of damage its target takes from every player's hits */
   amp?: number;
   /** a shot through foes: its damage on each foe it passes through in turn, as a share (the last for every one after) */
@@ -141,7 +146,13 @@ export interface SkillDef {
   fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string };
   /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
    *  lighter ones): `loot/loadout.ts` `forStyle` */
-  styles?: Partial<Record<WeaponStyle, StyleTuning>>;
+  styles?: Partial<Record<HeldStyle, StyleTuning>>;
+  /** a channel cast with no weapon held from either hand or both (the mage's lance, #402): its damage and its
+   *  Energy a second from both hands at once; from one hand its own */
+  both?: { damage: number; cost: number };
+  /** only cast through a weapon of this school (a staff's own spell); held with another, or with none, its key casts
+   *  that school's instead (`loot/loadout.ts` `resolveFor`) */
+  school?: School;
 }
 
 /** A two-hander's lower grip as the other hand holds it: whether it does, whether it isn't on it on purpose (the
@@ -157,6 +168,17 @@ export interface Fist { hand: 'left' | 'right'; off: number; along?: number; cur
 
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
+
+/** The school of magic a weapon is attuned to (the mage's staffs): it sets the spell the weapon itself casts. */
+export type School = 'arcane' | 'fire' | 'lightning' | 'healing';
+
+/** What a loadout is kept under: how the weapons are held, the school of the one held, or `bare`, none held by a
+ *  class whose weapons have schools. */
+export type HeldStyle = WeaponStyle | School | 'bare';
+
+/** The hands a hero with none full casts a channel from (`SkillDef.both`): one of its keys held is a hand, the
+ *  first key bound to it the left's and the second the right's, two held together both. */
+export type CastHands = 'left' | 'right' | 'both';
 
 /** A class on the hero selection screen: its role in a few words, how it plays (each trait 1 to 5), and the skill it
  *  shows off as the camera comes to it, cast at a spot `at` (m, in front of it and to its right, as it faces); a
@@ -207,12 +229,17 @@ export interface ClassDef {
   /** a bow's hero: the seconds to take an arrow from the quiver and nock it, before a shot with none on the string, and how
    *  long without a shot before the one on it goes back in the quiver */
   quiver?: { fetch: number; idle: number };
+  /** its weapons are attuned to schools: those one rolls (the first is what a weapon saved before there were schools
+   *  is, and the starter's), and the skill their spells' key casts with no weapon held */
+  schools?: { roll: School[]; bare: string };
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
 export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null; /** a head item is worn (a model may show a helmet over the hair) */ helm: boolean; /** a chest item is worn (the body armour; without it the clothes under it) */ chest: boolean; /** a hands item is worn (gloves and bracers; without them bare hands) */ hands: boolean;
   /** each worn item's rarity, by the slot it's shown in: Rare and up glow in its colour (models/itemGlow.ts) */
-  rarity: Partial<Record<GlowSlot, RarityId>> }
+  rarity: Partial<Record<GlowSlot, RarityId>>;
+  /** the school of the weapon held (none: no weapon, or a class whose weapons have no schools) */
+  school?: School | null }
 
 /** the slots whose items a hero's model shows */
 export type GlowSlot = 'weapon' | 'offhand' | 'head' | 'chest' | 'hands';
@@ -231,6 +258,8 @@ export interface Item {
   name: string;
   base: string;
   stats: StatBlock;
+  /** a weapon's school, for a class whose weapons have them (none saved: the class's first) */
+  school?: School;
 }
 
 /** One class's saved progress: every class keeps its own gear, stash and records. */
@@ -347,6 +376,8 @@ export interface EnemyDef {
  *  or at once without one). */
 export interface ActionState {
   name: string; t: number; hit?: number; time?: number; open?: number;
+  /** a channel cast with no weapon held: the hands it's cast from (`Player.hands`) */
+  hands?: CastHands;
   /** a spin: how far round the body has turned since it began (rad, to the left) */
   turn?: number;
   /** a bow: how far it is drawn (0..1, of the full draw's time) and, once loosed, the seconds since, and the arrow's

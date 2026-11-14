@@ -58,6 +58,8 @@ export interface HitOpts {
   freeze?: number;
   /** suppress the damage number (crits are still shown) */
   silent?: boolean;
+  /** no number at all, a crit's neither: whoever deals it shows its sum itself (a burn's bites, a second's at a time) */
+  unnumbered?: boolean;
   /** how the blow drives what it kills (combat/fling.ts): away from `from` (or the player) when not given */
   blow?: Blow;
 }
@@ -65,6 +67,8 @@ export interface HitOpts {
 /** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
 export interface DealtHit {
   amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number;
+  /** set alight for this long (s), which deals nothing itself (`igniteEnemy`, combat/burn.ts) */
+  burn?: number;
   /** a charge's carry: how long (s) and its way (`carryEnemy`) */
   carry?: { seconds: number; way: XZ };
   /** a kill's throw */
@@ -113,7 +117,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   logSink?.({ dealt: true, skill: opts.skill, foe: enemy, amount: dealt, type, crit, kill: !enemy.alive });
   countDealt(dealt, !enemy.alive);
   // everyone sees their own numbers
-  if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);
+  if (!opts.unnumbered && (!opts.silent || crit)) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
   return dealt;
 }

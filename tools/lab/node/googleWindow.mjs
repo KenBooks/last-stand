@@ -110,6 +110,8 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
   await context.route('**/saves/**', routeSaves);
   try {
     await page.evaluate(() => { window.__googleBootMarker = {}; });
+    // (in the village the Save slot button is on the chronicle's card)
+    await page.evaluate(async () => (await import('/tools/lab/page/cloud.ts')).cloudAtChronicle());
     await page.locator('#btn-saves').click();
     await page.evaluate(installFullScreenSpy);
     await page.evaluate(() => { document.querySelector('.sc-google').hidden = false; });

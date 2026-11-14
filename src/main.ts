@@ -28,6 +28,8 @@ import { updateSwingTrails } from './fx/swingTrail';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
+import { updateBurns, clearBurns } from './combat/burn';
+import { updateChargeMark } from './ui/chargeMark';
 import { loadProfile, savedClass, saveClass, addToStash, hasSavedClass, peekProfile, saveProfile } from './loot/profile';
 import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
@@ -775,7 +777,7 @@ function swapHero(id: string) {
   const at = G.player.pos.clone(), facing = G.player.facing;
   G.player.dispose();
   // the old hero's skill visuals go with it
-  clearProjectiles(); clearEffects(); clearLights(); particles.clear();
+  clearProjectiles(); clearBurns(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   const old = G.player;
   G.player = takeSpareHero(id, G.profile) ?? new Player(id, G.profile.equipped);
@@ -976,7 +978,7 @@ function update(dt: number): void {
   perfLap('hall');
   updateGround(dt);
   perfLap('ground');
-  updateProjectiles(dt); perfLap('projectiles');
+  updateProjectiles(dt); updateBurns(dt); perfLap('projectiles');
   // enemies in the arena, training dummies in the lobby
   if (G.mode === 'run') { updateRun(dt); checkRunOver(); }
   updateEnemies(dt);
@@ -1024,6 +1026,7 @@ function update(dt: number): void {
   updateFloaters(dt); perfLap('floaters');
   // the crosshair bold while a drawn shot is held at full draw, swelling into it once (its arrowhead glints then too)
   crosshair.classList.toggle('full', G.player.drawnFull);
+  updateChargeMark();
 }
 
 /**

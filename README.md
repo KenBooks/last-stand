@@ -95,11 +95,11 @@ There are **three save slots** (the lobby's *Save slot* link), each a separate s
 
 ### The Mage
 
-Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
+Robes, skirt panels and a crystal staff; arcane and elemental spells from range. A staff is attuned to a school (arcane, fire, lightning or healing), shown by its crystal's colour, and the school sets the spell on left click. With no staff, Void Lance is cast from either hand, or from both with two of its keys held, harder and at a higher cost in Energy.
 
 | Key | Spell |
 | --- | --- |
-| Left click | Splintering Bolt — seeking arcane bolts that split on impact |
+| Left click | By the staff's school: Splintering Bolt (arcane) — seeking bolts that split on impact; Cinderburst (fire) — a slow orb that bursts and may set foes alight; Stormcall (lightning, hold) — charge up to 3 s, release to strike and daze; Lifethread (healing, hold) — an arching beam that heals the ally you aim at, or you |
 | Right click | Starfall — crystal meteors crash onto the target area |
 | `1` (hold) | Void Lance — channeled piercing beam |
 | `2` | Glacial Nova — freeze everything around you |

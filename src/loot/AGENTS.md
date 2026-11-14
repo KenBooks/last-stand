@@ -4,7 +4,7 @@ Items and what keeps them.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
-- `items.ts`: item generation and stat aggregation (a class's bases and the stats it can't roll).
+- `items.ts`: item generation and stat aggregation (a class's bases and the stats it can't roll; a weapon's school for a class whose weapons have them, `Item.school`, #402).
 - `profile.ts`: the persistent profiles, one per class and save slot (equipment, stash, records; classes share nothing). `loadout.ts`: which skill is on which key, per weapon style for a class with gear-driven skills. `saveSlots.ts`: the three saves. `slotData.ts`: a slot's whole content as plain data (every key it keeps, read, written, rearranged).
 - Cloud saves (#382, milestone "Cloud saves"; the service is `server/saves`): `cloud.ts` the sync on this device, `cloudApi.ts` the service's calls and the browser's passkey prompts. Their screens are `ui/cloudSaves.ts`.
 
@@ -36,3 +36,5 @@ Where each is stored is the `src/loot/` row of the root's Architecture.
   - `/saves/health` is public: ask it without the account's bearer token. A signed-in browser preflights a token-bearing GET; if that preflight fails, `googleOn` reads false and hides Link Google even while saves and `/saves/health` otherwise work.
 
 - records.bestReached holds each biome’s highest attempted normal-run wave for Training grounds, per hero and save slot. Old profiles seed it from bestBanked only: their global bestWave cannot identify a biome. Training never writes progression or banks items.
+
+- **A loadout is kept per `HeldStyle`** (`loadout.ts`): how the weapons are held (the warrior's), the school of the weapon held or `bare` for none (the mage's, #402: `last-stand-loadout-mage-fire`...). `eraseLoadouts` removes every one of them with a save slot. `pr487Staffs.ts` seeds PR 487's preview with a staff of every school, as `pr423Gear.ts` seeds PR 423's: remove only its binding in `profile.ts`, and ask first.

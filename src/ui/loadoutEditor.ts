@@ -4,16 +4,17 @@
 // swap, key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per
 // weapon style for a class whose skills depend on the gear held.
 import { G } from '../state';
-import { SKILL_KEYS } from '../loot/loadout';
+import { SKILL_KEYS, usableFirst } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { isTouch } from './touch';
 import { sfx } from '../core/audio';
 import type { SkillKey } from '../types';
-import type { WeaponStyle } from '../loot/loadout';
+import type { HeldStyle } from '../types';
 
-const STYLE_NAME: Record<WeaponStyle, string> = {
+const STYLE_NAME: Record<HeldStyle, string> = {
   shield: 'Weapon and shield', twoHanded: 'Two-handed weapon', dual: 'A weapon in each hand', oneHanded: 'One-handed weapon',
+  arcane: 'Arcane staff', fire: 'Fire staff', lightning: 'Lightning staff', healing: 'Healing staff', bare: 'No staff',
 };
 
 type Payload = { kind: 'book'; id: string } | { kind: 'slot'; key: SkillKey };
@@ -93,7 +94,7 @@ export function renderLoadoutEditor(): void {
   document.querySelector('#loadout .lo-style-name')!.textContent = style ? `${STYLE_NAME[style]} ·` : '';
   const b = book();
   b.innerHTML = '';
-  for (const { def } of p.known.values()) {
+  for (const def of usableFirst([...p.known.values()].map((known) => known.def), p.gear)) {
     const el = makeSkillSlot(def);
     el.classList.toggle('unusable', !p.usable(def));   // not with the gear held (see its tooltip)
     el.draggable = true;

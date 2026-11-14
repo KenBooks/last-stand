@@ -416,6 +416,46 @@ export function judgeBlinks(host, guest) {
   return { blinks, unmatched: there.length - used.size };
 }
 
+/** `staffs`: the frame the guest takes up the healing staff at (page/coop.ts `STAFFS.mend`), and the Health the
+ *  host must gain back from then at the least */
+const STAFFS_MEND = 300;
+const STAFFS_HEALED = 60;
+
+/** The ids of the foes `samples` shows alight in any frame. */
+function everBurning(samples) {
+  const ids = new Set();
+  for (const sample of samples) for (const foe of sample.foes) if (foe.burning) ids.add(foe.id);
+  return ids;
+}
+
+/**
+ * The staffs (#402): the foes the guest's fire staff set alight on its own screen against those the host shows
+ * alight, the life the burning and the orbs took off them on the host's, the Health the host gained back under
+ * the guest's healing beam on its own screen, and the + over its frame on the guest's.
+ */
+function describeStaffs(host, guest) {
+  const here = everBurning(guest);
+  const there = everBurning(host);
+  const both = [...here].filter((id) => there.has(id)).length;
+  const lifeOf = (sample) => sample.foes.reduce((sum, foe) => sum + foe.life, 0);
+  const hurt = lifeOf(host[0]) - lifeOf(host[Math.min(STAFFS_MEND, host.length - 1)]);
+  const after = host.slice(STAFFS_MEND + 2);
+  const low = Math.min(...after.map((sample) => sample.life));
+  const healed = after.length ? after[after.length - 1].life - low : 0;
+  const marked = guest.slice(STAFFS_MEND).filter((sample) => sample.healedShown).length;
+  const line = `staffs: ${here.size} foes alight on the guest's screen, ${both} of them on the host's `
+    + `(${there.size - both} on the host's alone); the foes lost ${Math.round(hurt)} life on the host's; the host `
+    + `healed ${Math.round(healed)} under the guest's beam, from ${Math.round(low)}; its frame on the guest's `
+    + `screen showed it healed for ${marked} frames`;
+  const problems = [];
+  if (!here.size) problems.push('the guest\'s fire staff set no foe alight on its own screen');
+  if (both < here.size) problems.push(`${here.size - both} foes alight on the guest's screen never showed alight on the host's`);
+  if (hurt <= 0) problems.push('the guest\'s fire took no life off the foes on the host\'s screen');
+  if (healed < STAFFS_HEALED) problems.push(`the host healed ${Math.round(healed)} under the guest's beam, under ${STAFFS_HEALED}`);
+  if (!marked) problems.push('the host\'s frame on the guest\'s screen never showed it healed');
+  return { line, problems };
+}
+
 function describeBlinks(host, guest, frameMs) {
   const { blinks, unmatched } = judgeBlinks(host, guest);
   const seen = blinks.filter((blink) => blink.delay !== undefined);
@@ -861,6 +901,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));
+  if (name === 'staffs') add(describeStaffs(host, guest));
   if (name === 'rush' || name === 'strike') add(describeRush(host, guest));
   if (name === 'strike') add(describeStrike(host, guest));
   if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));

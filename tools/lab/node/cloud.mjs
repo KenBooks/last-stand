@@ -118,8 +118,9 @@ async function shoot(run, device, label) {
   run.shots.push({ lines: [`  ${label} (${device.name}):`, ...shot.lines], problems: shot.problems });
 }
 
-/** Opens the save slots screen from the lobby, as the player does. */
+/** Opens the save slots screen from the lobby, as the player does: in the village from the chronicle's card. */
 async function openSaves(device) {
+  await device.call('cloudAtChronicle');
   await device.click('#btn-saves');
   await device.until((state) => state.savesOpen, 'opened the save slots screen');
 }

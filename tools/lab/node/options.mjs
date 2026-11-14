@@ -37,6 +37,9 @@ export const UI_STATES = [
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
 export const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
 
+/** the schools a weapon may be attuned to, and none held (src/types.ts `School`, `HeldStyle`'s `bare`): the mage's */
+export const SCHOOL_STYLES = ['arcane', 'fire', 'lightning', 'healing', 'bare'];
+
 /** the ways a picture can be drawn (page/looks.ts `LOOKS`) */
 const LOOKS = ['lit', 'wire', 'faces', 'parts', 'bones'];
 
@@ -57,9 +60,10 @@ const SETUP_OPTIONS = {
   nocked: { kind: 'switch', help: 'a bow\'s hero with an arrow on the string (=false: none)' },
   gear: {
     kind: 'choice',
-    choices: WEAPON_STYLES,
-    usage: WEAPON_STYLES.join('|'),
-    help: 'the hero holding his weapons this way (a class with more than one; as rolled by default)',
+    choices: [...WEAPON_STYLES, ...SCHOOL_STYLES],
+    usage: [...WEAPON_STYLES, ...SCHOOL_STYLES].join('|'),
+    help: 'the hero holding his weapons this way (a class with more than one; as rolled by default), or a staff of '
+      + 'this school, or none (bare), for a class whose weapons have schools',
   },
   weapon: {
     kind: 'text',
@@ -322,7 +326,7 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
           + 'down, blink (a mage), rush and strike (a warrior), throws',
       },
@@ -1002,6 +1006,24 @@ export const COMMANDS = {
       },
       at: SETUP_OPTIONS.at,
       facing: SETUP_OPTIONS.facing,
+      ...COMMON_OPTIONS,
+    },
+  },
+  staffs: {
+    help: 'the mage\'s staffs by school: the lightning staff tapped and charged to full at dummies stood out from '
+      + 'its strike (a tap the middle alone for its share of a full charge, a full charge out to its reach and no '
+      + 'further, each landing once its arc has travelled, the daze by how near the middle and none on an elite), '
+      + 'the fire staff\'s burn (its bites, their pace, alight only meanwhile), whom the healing beam lands on and '
+      + 'its heal on himself every frame, and a held skill\'s charge mark at the aim (the cursor filling top-down, '
+      + 'the ring round the crosshair in third person; --class ranger runs this part alone): tools/lab/out/staffs '
+      + '(--class mage)',
+    options: {
+      pictures: { kind: 'switch', help: 'picture the charge mark in each view (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the fault the charge\'s checks must catch: a tap as strong and wide as a full charge',
+      },
+      ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },
   },

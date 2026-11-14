@@ -23,6 +23,10 @@ export const simulates = (): boolean => G.mode === 'menu' || role.current !== 'g
  *  are replayed for show; its own game reports what they hit, net/sync). */
 export const dealsDamage = (by: Player): boolean => by.local;
 
+/** Whether a heal on `on` counts here: a hero is healed by his own game, as its screen shows the heal on him (a
+ *  partner's healing beam is replayed here as every skill is), the way a blow on him is his own game's. */
+export const healsHere = (on: Player): boolean => on.local;
+
 /** Whether a player's skill wears the props down here: in a run where the fight is simulated (the
  *  props are the host's), in the lobby only the local player's. */
 export const hurtsProps = (by: Player): boolean => (G.mode === 'run' ? role.current !== 'guest' : by.local);

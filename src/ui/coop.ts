@@ -351,7 +351,17 @@ export function nameTagLabels(): { player: Player; label: Label }[] {
 
 // --- in a run ------------------------------------------------------------------------------
 /** A partner's frame in the corner. */
-interface Tag { frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement; portrait: HTMLElement }
+interface Tag {
+  frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement; portrait: HTMLElement;
+  /** the player's Health at the last sample and when (game time), and until when the frame shows them healed */
+  life: number; lifeAt: number; healedUntil: number;
+}
+/** A player is shown being healed (a green + over their portrait, or their frame's corner with none, and their bar
+ *  lit) once their Health has risen by this share of their most within `over` s, for `shown` s after: a draught's
+ *  jump and a healing beam's flow both pass it, their own regeneration never does (from play: "overlay + on the
+ *  portrait and some healing animation while they are healed, should apply to both potion heal and mage staff
+ *  heal"). Read off the Health each game is told, so it needs nothing sent. */
+const HEALED = { share: 0.02, over: 0.5, shown: 1.2 };
 const tags = new Map<Player, Tag>();
 /** the marker on a downed partner (over them, or at the screen's edge pointing the way to them), and in reach of
  *  them, the prompt to raise them */
@@ -574,10 +584,10 @@ function tagFor(p: Player): Tag {
   frame.className = p.local ? 'pf self' : 'pf';
   frame.setAttribute('aria-label', who(p));
   frame.style.setProperty('--class-colour', p.cls.accent);
-  frame.innerHTML = `<span class="pf-portrait${p.slot === 0 ? ' host' : ''}"${p.slot === 0 ? ' role="img" aria-label="Host" title="Host"' : ''} hidden></span><div class="pf-content"><div class="pf-heading"><span class="pf-name">${esc(nameOf(p))}</span><span class="pf-class">${esc(p.cls.name)}</span></div><div class="pf-bar"><div class="pf-fill"></div></div><div class="pf-state"></div></div>`;
+  frame.innerHTML = `<span class="pf-portrait${p.slot === 0 ? ' host' : ''}"${p.slot === 0 ? ' role="img" aria-label="Host" title="Host"' : ''} hidden></span><div class="pf-content"><div class="pf-heading"><span class="pf-name">${esc(nameOf(p))}</span><span class="pf-class">${esc(p.cls.name)}</span></div><div class="pf-bar"><div class="pf-fill"></div><div class="pf-mend"></div></div><div class="pf-state"></div></div><div class="pf-plus">+</div>`;
   if (p.local) $('#party').prepend(frame);
   else $('#party').appendChild(frame);
-  t = { frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame), portrait: $('.pf-portrait', frame) };
+  t = { frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame), portrait: $('.pf-portrait', frame), life: p.life, lifeAt: G.time, healedUntil: -1 };
   tags.set(p, t);
   return t;
 }
@@ -605,6 +615,9 @@ export function updateCoopHud(): void {
     if (t.state.textContent !== state) t.state.textContent = state;
     t.frame.classList.toggle('down', p.downed);
     t.frame.classList.toggle('out', !!p.out || p.away);
+    if (p.life - t.life > p.stats.maxLife * HEALED.share) t.healedUntil = G.time + HEALED.shown;
+    if (G.time - t.lifeAt > HEALED.over || p.life < t.life) { t.life = p.life; t.lifeAt = G.time; }
+    t.frame.classList.toggle('healed', G.time < t.healedUntil && p.inRun && !p.downed);
   }
 
 

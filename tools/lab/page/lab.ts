@@ -17,7 +17,8 @@ import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
 import type { Joints } from '../../../src/entities/models/rig';
-import type { ClassDef, Gear, GlowSlot, RarityId } from '../../../src/types';
+import type { ClassDef, Gear, GlowSlot, HeldStyle, RarityId, School } from '../../../src/types';
+import { basesFor } from '../../../src/loot/items';
 import { weaponStyle, type WeaponStyle } from '../../../src/loot/loadout';
 import { Player } from '../../../src/entities/player';
 import { clearProjectiles } from '../../../src/combat/projectiles';
@@ -284,7 +285,7 @@ export interface Fixture {
   nocked?: boolean;
   /** the hero holding his weapons this way (his class's first weapons of it, his armour as it is), for a class with
    *  more than one; as the boot rolled them by default */
-  gear?: WeaponStyle;
+  gear?: HeldStyle;
   /** with `gear`, the weapon he holds that way, by its base (Maul: a two-hander's grips are its own); the class's first
    *  of the style by default */
   weapon?: string;
@@ -687,13 +688,17 @@ export class Lab {
 
   /** The hero holding his weapons `style`'s way (`weapon` the base in hand), as equipping them from the stash would
    *  show it. */
-  private hold(style: WeaponStyle, weapon?: string): void {
-    const gear = gearFor(this.player.cls, this.player.gear, style, weapon);
+  private hold(style: HeldStyle, weapon?: string): void {
+    const gear = schooled(style)
+      ? schoolGear(this.player.cls, this.player.gear, style, weapon)
+      : gearFor(this.player.cls, this.player.gear, style, weapon);
     this.player.gear = gear;
     // (its loadout and its skills tuned to the style too: set by the gear alone, a two-hander swung at a one-hander's
     // pace; an older commit's hero has none of that)
     this.player.fitToGear?.();
     this.model.setGear?.(gear);
+    // (the hotbar shows the bar the gear brought: left as it was, a fire staff's showed the arcane bolt)
+    buildHotbar(this.player);
   }
 
   /** The hero wearing `armour` and nothing else of it, as the player sees him dressed. */
@@ -1309,6 +1314,18 @@ function withinWindow(area: Clip, margin = 0): Clip {
  * class's first one-hander (or two-hander), with a shield or a second one-hander (of the same base) as the style
  * says. Throws for a style the class can't hold, or a base that isn't of it.
  */
+/** Whether `style` is a weapon's school, or none held, and not a way of holding weapons. */
+const schooled = (style: HeldStyle): style is School | 'bare' =>
+  style === 'bare' || style === 'arcane' || style === 'fire' || style === 'lightning' || style === 'healing';
+
+/** What a hero of `cls` wearing `worn` holds with a weapon of `school` in hand (`base`, his first by default), or
+ *  with none (`bare`). */
+function schoolGear(cls: ClassDef, worn: Gear, school: School | 'bare', base?: string): Gear {
+  if (!cls.schools) throw new Error(`lab: --gear ${school}: the ${cls.id}'s weapons have no schools`);
+  const held = school === 'bare' ? null : base ?? basesFor('weapon', cls)[0];
+  return { ...worn, weapon: held, school: school === 'bare' ? null : school };
+}
+
 export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: string): Gear {
   const { twoHanders, oneHanders } = handedBases(cls);
   const ofStyle = style === 'twoHanded' ? twoHanders : oneHanders;

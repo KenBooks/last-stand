@@ -25,8 +25,11 @@ import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
 import { Dye } from './dye';
 import { ItemGlows } from './itemGlow';
+import { SCHOOLS } from '../../data/schools';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 import { built, type ModelSteps } from './steps';
+
+const WHITE = new THREE.Color(0xffffff);
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _fw = new THREE.Vector3(), _vr = new THREE.Quaternion();
 /** a joint's length (its local y) */
@@ -207,7 +210,9 @@ const BRACE_TIME = 0.35;
  *  thrust, but not one frame's (taken at once, the hand went 21 cm and the elbow 12 in a frame, `lab hall`) */
 const THRUST_TIME = 0.1;
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
-const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75];
+const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.15, 0.36, 0.05, -0.19, -0.3, -0.75],
+  // (the lance from the right hand, with no staff: the same stride set on the other side)
+  LANCE_FEET_R = [0.19, -0.3, 0.75, -0.15, 0.36, -0.05];
 
 // --- a spell thrown from the free hand (cast: Starfall, Maelstrom), keyed over the cast, released at 0.55
 // (the skill fires): the body coils away (the right shoulder forward, the weight back) as the hand gathers
@@ -506,6 +511,10 @@ export function* mageSteps(): ModelSteps {
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
   const handGlow = new THREE.Color(), handBody = new THREE.Color();
   glowOutline(handL, handGlow, handBody);
+  // (and the other hand's with no staff in it, #402: both hands lit say both are ready for the lance; black, no
+  // glow, while it holds the staff)
+  const handGlowR = new THREE.Color(0), handBodyR = new THREE.Color(0);
+  glowOutline(handR, handGlowR, handBodyR);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   yield;
@@ -977,6 +986,8 @@ export function* mageSteps(): ModelSteps {
   yield;
   // (robed until setGear says otherwise)
   let robed = true, gloved = true;
+  // (a staff in his right hand until setGear says there's none: both hands free then, #402)
+  let armed = true;
   for (const o of [...tunic, tunicSkirt]) o.visible = false;
   yield;
   // each item's parts glowing in its rarity's colour (itemGlow.ts): the staff, the book at his hip (the off-hand's),
@@ -1010,7 +1021,51 @@ export function* mageSteps(): ModelSteps {
   /** through the eyes, the free hand turned about its forearm as it holds Void Lance (rad: thumb up) */
   const FP_HAND_TURN = 0.9;
   /** where the free arm's elbow points when it reaches (out to the left, down and back) */
-  const POLE_L = V(1, -0.7, -0.6);
+  const POLE_L = V(1, -0.7, -0.6), POLE_R = V(-1, -0.7, -0.6);
+  /** the lance from both hands (no staff): how far out the hands are held, as a share of the arm's length; how far
+   *  each is from the lance's line (m, rig units); how far under the shoulders, as seen and through the eyes; and
+   *  how far the trunk leans in behind them (rad) */
+  // (hands before the breastbone, elbows down by the ribs: 7 cm under the shoulders with the elbows out to the
+  // sides, they were at his throat with the arms winged out, a second review's "chicken wing"; through the eyes
+  // high enough that the wrists stay in the view)
+  // (a fourth review: at 6.5 cm from the line the hands read as one clump, at a wrist bent back 1 rad as pushing a
+  // wall, and the head bowed with the trunk, looking at the ground: the hands a gap apart, the wrists eased, the chin
+  // lifted back by most of the lean)
+  const BOTH = { reach: 0.86, apart: 0.11, eyesApart: 0.085, drop: -0.27, eyesDrop: -0.14, lean: 0.3, wrist: -0.75, chin: 0.75 };
+  /** where the elbows point with both hands on the lance: down and a little out and back */
+  const POLE_BOTH_L = V(0.45, -1, -0.5), POLE_BOTH_R = V(-0.45, -1, -0.5);
+  const _across = V(0, 0, 0);
+  /** the lance cast with no staff: from the right hand this frame (the pose is mirrored), and the hands it was
+   *  last cast from (a change of hands eases across) */
+  let mirrored = false, lanceHands = '';
+  const _ql = new THREE.Quaternion(), _qr = new THREE.Quaternion();
+  /** The arms' and hands' poses changed over, each mirrored across his middle (a turn about x kept, about y and z
+   *  reversed), and the trunk's and head's turns with them: a cast posed for the left hand made the right's. The
+   *  fingers are the hands' own: posed for the hand that casts by `castHand`. */
+  const mirrorCast = (): void => {
+    for (const [left, right] of [[j.shoulderL, j.shoulderR], [j.elbowL, j.elbowR], [j.handL, j.handR]] as const) {
+      _ql.copy(left.quaternion); _qr.copy(right.quaternion);
+      left.quaternion.set(_qr.x, -_qr.y, -_qr.z, _qr.w);
+      right.quaternion.set(_ql.x, -_ql.y, -_ql.z, _ql.w);
+    }
+    for (const turned of [j.chest, j.hips, j.neck, j.spine]) { turned.rotation.y = -turned.rotation.y; turned.rotation.z = -turned.rotation.z; }
+    j.body.position.x = -j.body.position.x;
+  };
+  /** Both hands held before the chest, `reach` of the arm's length out, either side of the lance's line. */
+  const bothHands = (reach: number): void => {
+    root.updateMatrixWorld(true);
+    root.getWorldDirection(_fw).applyQuaternion(j.chest.getWorldQuaternion(_vr).invert());
+    _across.subVectors(j.shoulderL.position, j.shoulderR.position).normalize();
+    for (const side of [1, -1]) {
+      _hp.addVectors(j.shoulderL.position, j.shoulderR.position).multiplyScalar(0.5)
+        .addScaledVector(_fw, (j.P.upperL + j.P.foreL) * reach).addScaledVector(_across, side * (fp ? BOTH.eyesApart : BOTH.apart));
+      _hp.y += fp ? BOTH.eyesDrop : BOTH.drop;
+      if (side > 0) reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_BOTH_L);
+      // (both arms' lengths are `upperL` and `foreL`, L for length: `upperR` and `foreR` are their radii, and
+      // reached with those the right elbow stood locked straight)
+      else reachArm(j.shoulderR, j.elbowR, j.P.upperL, j.P.foreL, _hp, POLE_BOTH_R);
+    }
+  };
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
   let charged = 0;
 
@@ -1049,11 +1104,12 @@ export function* mageSteps(): ModelSteps {
     // (its elbow held as it comes forward: bent more there, as a walk's is, it cancelled the shoulder's swing and the staff
     // bobbed 25 cm up and down at each stride)
     const staffSwing = 0.35 * (1 - 0.45 * runShareOf(move)), staffElbow = 1 - runShareOf(move);
-    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: staffSwing, armL: 0.35, bob: 0.07, dir, run: true, pump: 0, pumpL: 1, elbowSwing: staffElbow, elbowSwingL: 1 });
+    // (with no staff both arms swing and pump as the free one does)
+    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: armed ? staffSwing : 0.35, armL: 0.35, bob: 0.07, dir, run: true, pump: armed ? 0 : 1, pumpL: 1, elbowSwing: armed ? staffElbow : 1, elbowSwingL: 1 });
     // (and at a run bent further, the staff carried higher: hanging as at a walk, its foot met the ground behind him at
     // the back of each swing)
     const staffRun = fp ? 0 : runShareOf(move);
-    j.shoulderR.rotation.x += -0.35 - 0.1 * staffRun; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55 - 0.45 * staffRun;
+    if (armed) { j.shoulderR.rotation.x += -0.35 - 0.1 * staffRun; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55 - 0.45 * staffRun; }
     // (the trunk a little forward over the stride, the head held up against it: the leg IK leans the whole body into the
     // speed, and at 0.12 more the trunk leant 16 degrees at a run, a runner's 11, the face to the ground)
     j.spine.rotation.x += move * 0.06 * dir; j.neck.rotation.x -= move * 0.06 * dir;
@@ -1061,11 +1117,13 @@ export function* mageSteps(): ModelSteps {
 
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
+    if (!armed) poseHand(handR, 0.45 + Math.sin(t * 1.3 + 1.7) * 0.06, 0.12);
     // (through the eyes a share of it: at its full strength the fingertips, seen edge on, lit up as lamps)
     handGlow.copy(HAND_GLOW.color).multiplyScalar((fp ? HAND_GLOW.eyes : 1) * (1 + HAND_GLOW.breathe * Math.sin(t * HAND_GLOW.rate)));
     // (through the eyes the hand fills the view's corner, and its glow over all of it washed the glove's leather to one
     // flat mint, #425: there the outline alone)
     handBody.copy(handGlow).multiplyScalar(fp ? 0 : HAND_GLOW.body);
+    if (armed) { handGlowR.setScalar(0); handBodyR.setScalar(0); } else { handGlowR.copy(handGlow); handBodyR.copy(handBody); }
     const raw = st.action;
     feet = null;
     let flaskWant = 0, drinkLift = 0;
@@ -1104,7 +1162,7 @@ export function* mageSteps(): ModelSteps {
     staffSlide = damp(staffSlide, staffSlideWant, staffSlideWant > staffSlide ? 10 : 3, dt); staffSlideWant = 0;
     staff.rotation.x = STAFF_PITCH + 1.75 * aim;
     // (the haft sits in the fist, the hand on its wrist)
-    seat(handR, staff, STAFF_R);
+    if (armed) seat(handR, staff, STAFF_R);
     if (a) {
       const k = a.t;
       if (a.name === 'cast' && !fp) {
@@ -1135,6 +1193,11 @@ export function* mageSteps(): ModelSteps {
       } else if (a.name === 'channel') {
         const open = a.open ?? 1, time = a.time ?? 0;
         const up = ramp(time, 0, 0.18);
+        // (with no staff: from both hands, or from one as with a staff, the other arm free; the right hand's cast is
+        // the left's posed here and mirrored once the pose is whole, `mirrorCast`)
+        const both = !armed && a.hands === 'both';
+        mirrored = !armed && a.hands === 'right';
+        if (!armed && a.hands !== lanceHands) { if (lanceHands) fade.cut(0.18); lanceHands = a.hands ?? ''; }
         if (open < 1) {
           // drawing the portal: two fingers out, the hand traces the circle with its spark (one turn
           // by 0.7 of the opening), then draws back to gather for the thrust
@@ -1145,13 +1208,35 @@ export function* mageSteps(): ModelSteps {
           j.shoulderL.rotation.z += (-Math.sin(ang) * 0.32 * draw - 0.12) * up;
           j.elbowL.rotation.x += (-0.35 - 0.7 * gather) * up;
           j.handL.rotation.x += (-0.4 + 0.3 * gather) * up;
-          poseHand(handL, 0.15 + gather * 0.9, 0.05, draw * (1 - gather));
+          // (the fingers of the hand that casts: the right's when the pose is mirrored)
+          poseHand(mirrored ? handR : handL, 0.15 + gather * 0.9, 0.05, draw * (1 - gather));
           // the free shoulder leads (a turn of the chest brings it forward)
-          j.chest.rotation.y += -0.15 * up - 0.1 * gather; j.spine.rotation.x += 0.08 * up;
+          j.spine.rotation.x += 0.08 * up;
           j.neck.rotation.x += 0.1 * up;
-          j.shoulderR.rotation.x += -0.5 * up; j.elbowR.rotation.x += -0.2 * up;
-          gathered[0].copy(j.shoulderL.quaternion); gathered[1].copy(j.elbowL.quaternion); gathered[2].copy(j.handL.quaternion);
-          wasGathered = true;
+          if (!both) {
+            j.chest.rotation.y += -0.15 * up - 0.1 * gather;
+            if (armed) { j.shoulderR.rotation.x += -0.5 * up; j.elbowR.rotation.x += -0.2 * up; }
+            gathered[0].copy(j.shoulderL.quaternion); gathered[1].copy(j.elbowL.quaternion); gathered[2].copy(j.handL.quaternion);
+            wasGathered = true;
+          } else {
+            // no staff: both hands before the chest from the start, as the thrust holds them, palms to the portal,
+            // drawn back a little until it comes, the chest square and leaning in behind them. (One hand tracing
+            // the ring as posed and the other raised beside it, the arms were at the height of his face and
+            // straight out, a pose apart from the thrust's that snapped into it; through the eyes neither hand
+            // was in the view. An adversarial review failed both.)
+            j.handL.rotation.x = j.handR.rotation.x = BOTH.wrist * up;
+            // (the hands as the thrust has them, turned thumb up through the eyes too: held another way until it
+            // came, they changed shape as the lance burst out)
+            if (fp) {
+              j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
+              j.handR.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, -FP_HAND_TURN));
+            }
+            strainHand(handL, 0.5, 0.15, t, 0.03); strainHand(handR, 0.5, 0.15, t + 0.37, 0.03);
+            j.spine.rotation.x += BOTH.lean * up; j.neck.rotation.x += -BOTH.lean * BOTH.chin * up;
+            if (!fp) { j.body.position.y += -0.04 * up; feet = LANCE_FEET; }
+            // (through the eyes where the thrust holds them from the first: drawn back, they sank under the view)
+            bothHands(BOTH.reach * (fp ? 1 : 0.86 + 0.1 * gather));
+          }
         } else {
           // the thrust: palm driven into the portal, a recoil as the lance bursts out, then braced
           if (openedAt < 0) openedAt = time;
@@ -1164,25 +1249,48 @@ export function* mageSteps(): ModelSteps {
           // (through the eyes the forearm turned thumb up a little, so the fingers' bend shows: seen square from behind,
           // they bend away from the eyes and read straight; turned about the forearm's length, as a forearm turns, the
           // wrist's bends kept: a turn of the hand after them bent the wrist 40 degrees sideways)
-          if (fp) j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
-          strainHand(handL, 0.75, 0.3 + kick * 0.7, t, 0.04);
-          if (fp) { j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2; }
-          j.chest.rotation.y += -0.25; j.spine.rotation.x += 0.15 - kick * 0.12;
+          if (fp && !both) j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
+          strainHand(mirrored ? handR : handL, 0.75, 0.3 + kick * 0.7, t, 0.04);
+          if (!both) {
+            if (fp && armed) { j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2; }
+            j.chest.rotation.y += -0.25;
+          } else {
+            // no staff: both palms driven into the portal, the chest square behind them
+            j.shoulderR.rotation.x += -1.45 - tr + kick * 0.3 + sway * 0.5; j.shoulderR.rotation.z += 0.4 - sway * 0.4; j.elbowR.rotation.x += 0.05 - kick * 0.4;
+            // (both wrists bent back less than the one hand's, the fingers spread and hooked less: at its strain two
+            // hands read as claws)
+            j.handL.rotation.x = j.handR.rotation.x = BOTH.wrist + kick * 0.2;
+            if (fp) {
+              j.handL.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, FP_HAND_TURN));
+              j.handR.quaternion.premultiply(_vr.setFromAxisAngle(ALONG, -FP_HAND_TURN));
+            }
+            strainHand(handL, 0.5, 0.15 + kick * 0.5, t, 0.03); strainHand(handR, 0.5, 0.15 + kick * 0.5, t + 0.37, 0.03);
+          }
+          j.spine.rotation.x += 0.15 - kick * 0.12;
           j.body.position.z += -kick * 0.05;
           // (braced as a man pushing against a weight: a long stride, the left foot and shoulder forward, sunk at
           // the knees, the weight leaning into the portal; the staff drawn back by the rear hip, its arm bent, out
           // of the cast's way, upright on the ground beside him; the head turned back over the leading shoulder to look down the arm. Upright on a
-          // short stride, the staff held straight out beside the casting arm, a review read "a scarecrow")
+          // short stride, the staff held straight out beside the casting arm, a review read "a scarecrow". With no
+          // staff the same stride and sink, the chest left square behind both hands and the head straight)
           if (!fp) {
             // (sunk into over a third of a second, from where drawing the portal left him: taken at once as the
             // dial closed, the staff's hand went 40 cm in a frame, the staff from upright to leaning; from play,
             // "a noticeable jump from vertical to leaning")
             const b0 = ramp(ft, 0, BRACE_TIME), b = b0 * b0 * (3 - 2 * b0);
-            j.body.position.z += 0.13 * b; j.body.position.y += -0.1 * b; j.hips.rotation.y += -0.3 * b; j.spine.rotation.x += 0.12 * b; feet = LANCE_FEET;
-            j.chest.rotation.y += -0.3 * b;
-            j.shoulderR.rotation.x += lerp(-0.5, 0.35, b); j.elbowR.rotation.x += lerp(-0.2, -0.95, b);
-            j.neck.rotation.y += 0.7 * b; j.neck.rotation.x += lerp(0.1, -0.05, b);
-            staffSlideWant = LANCE_SLIDE * b;
+            j.body.position.z += 0.13 * b; j.body.position.y += -0.1 * b; feet = mirrored ? LANCE_FEET_R : LANCE_FEET;
+            if (!both) {
+              j.hips.rotation.y += -0.3 * b; j.spine.rotation.x += 0.12 * b;
+              j.chest.rotation.y += -0.3 * b;
+              j.neck.rotation.y += 0.7 * b; j.neck.rotation.x += lerp(0.1, -0.05, b);
+              // (the staff's arm drawn back with it; with none, the other arm left to hang)
+              if (armed) {
+                j.shoulderR.rotation.x += lerp(-0.5, 0.35, b); j.elbowR.rotation.x += lerp(-0.2, -0.95, b);
+                staffSlideWant = LANCE_SLIDE * b;
+              }
+            } else {
+              j.hips.rotation.y += -0.06 * b; j.spine.rotation.x += 0.06 * b;
+            }
           }
           // (the arm straight out from its shoulder along the way he casts, square to the portal his fingers feed,
           // drawn back a little by the kick: swung in across the chest, to a portal that stood before his middle,
@@ -1195,15 +1303,20 @@ export function* mageSteps(): ModelSteps {
             // (the way he casts in the chest's own frame, the reach in its own units: laid out in the world's
             // metres, the model's scale left the arm 8% short of the reach asked, the elbow still bent 48 degrees)
             root.getWorldDirection(_fw).applyQuaternion(j.chest.getWorldQuaternion(_vr).invert());
-            reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp.copy(j.shoulderL.position).addScaledVector(_fw, reach), POLE_L);
+            if (!both) reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp.copy(j.shoulderL.position).addScaledVector(_fw, reach), POLE_L);
           }
           // (the thrust eased in from the arm as it was gathered: none for a channel met already open, a partner's)
-          if (wasGathered && ft < THRUST_TIME) {
+          if (wasGathered && !both && ft < THRUST_TIME) {
             const th0 = ft / THRUST_TIME, th = th0 * th0 * (3 - 2 * th0);
             j.shoulderL.quaternion.copy(_vr.copy(gathered[0]).slerp(j.shoulderL.quaternion, th));
             j.elbowL.quaternion.copy(_vr.copy(gathered[1]).slerp(j.elbowL.quaternion, th));
             j.handL.quaternion.copy(_vr.copy(gathered[2]).slerp(j.handL.quaternion, th));
           }
+          // no staff: the two hands brought together before the chest, a hand's breadth either side of the lance's
+          // line, the elbows bent and out, as a man shoves with both palms (each straight out from its own shoulder,
+          // the arms stood out stiff and parallel, a sleepwalker's, and through the eyes the hands were at the view's
+          // two edges, their strands across the whole of it)
+          if (both) { j.spine.rotation.x += BOTH.lean; j.neck.rotation.x += -BOTH.lean * BOTH.chin; bothHands(BOTH.reach - kick * (fp ? 0.02 : 0.08)); }
         }
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: taken from the belt and drunk (models/flask.ts)
@@ -1257,11 +1370,14 @@ export function* mageSteps(): ModelSteps {
     // the hand keeps its motion, shifted in the chest's space, and the arm reaches it
     // and the staff is held out to the right, its crystal clear of the middle; the cast's raise of the
     // staff arm is kept down
-    if (fp) {
+    if (fp && armed) {
       const S = FP_STAFF, c = a?.name === 'cast' || a?.name === 'summon' ? pulse(a.t, 0, 1) : 0;
       j.shoulderR.rotation.x += S[0] + S[3] * c; j.shoulderR.rotation.z += S[1]; j.shoulderR.rotation.y += S[2];
     }
-    const shift = fp && a ? FP_POSE[a.name] : undefined;
+    // (with no staff the lance's thrust places both hands itself, before the chest)
+    const twoHanded = !armed && a?.name === 'channel' && a.hands === 'both';
+    if (a?.name !== 'channel') { mirrored = false; lanceHands = ''; }
+    const shift = fp && a && !twoHanded ? FP_POSE[a.name] : undefined;
     if (shift) {
       const w = a!.name === 'channel' ? ramp(a!.time ?? 0, 0, 0.18) : pulse(a!.t, 0, 1);
       root.updateMatrixWorld(true);
@@ -1270,6 +1386,9 @@ export function* mageSteps(): ModelSteps {
       reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
     }
     if (!fp && !(a && FREE_HAND.has(a.name))) j.handL.rotation.y += HAND_HANG;
+    if (!armed && !fp && !twoHanded) j.handR.rotation.y -= HAND_HANG;
+    // the lance from the right hand: the left's cast, posed above, set on the other side of him
+    if (mirrored) mirrorCast();
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
     if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
@@ -1291,9 +1410,9 @@ export function* mageSteps(): ModelSteps {
     if (!fp && st.dead < 0) clearThigh();
     // every arm within a body's ranges, each hand where the pose put it (armIK.ts)
     let slant = 0;
-    if (!fp && st.dead < 0) { fitArm(j, true, undefined, body); slant = fitArm(j, false, gripTurn(handR, staff, _vr), body, SLANT).slant; }
+    if (!fp && st.dead < 0) { fitArm(j, true, undefined, body); slant = armed ? fitArm(j, false, gripTurn(handR, staff, _vr), body, SLANT).slant : fitArm(j, false, undefined, body).slant; }
     // (the haft seated in the fist as the hand holds it, diagonal across the palm by the slant the arm took)
-    seat(handR, staff, STAFF_R, slant);
+    if (armed) seat(handR, staff, STAFF_R, slant);
     sets.bend();
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
@@ -1314,7 +1433,7 @@ export function* mageSteps(): ModelSteps {
     void drinkLift;
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
-    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
+    if (armed) hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0 && robed) for (const c of cloths) c.update(dt);
@@ -1326,7 +1445,8 @@ export function* mageSteps(): ModelSteps {
     ringA.rotation.set(t * 1.7, t * 1.1, 0);
     ringB.rotation.set(-t * 1.3, 0, t * 2.1);
     charged = damp(charged, st.charge || 0, 4, dt);
-    gem.emissiveIntensity = GEM_GLOW * (1 + charged * 0.6 + Math.sin(t * 6) * 0.08);
+    // (the crystal's own material: it draws a copy of `gem`, the item glow's, and `gem` set, it never pulsed)
+    (crystal.material as THREE.MeshPhysicalMaterial).emissiveIntensity = GEM_GLOW * (1 + charged * 0.6 + Math.sin(t * 6) * 0.08);
   }
 
   return {
@@ -1355,6 +1475,16 @@ export function* mageSteps(): ModelSteps {
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
       glows.set(gear);
+      // the staff: none without a weapon, its crystal and rings in its school's colour (the materials they draw, the
+      // item glow's copies; a colour is a value, so it compiles nothing)
+      staff.visible = armed = !!gear.weapon;
+      const school = SCHOOLS[gear.school ?? 'arcane'].color;
+      for (const lit of [crystal, ringA, ringB]) {
+        const m = lit.material as THREE.MeshStandardMaterial;
+        m.color.set(school); m.emissive.set(school);
+        // (the rings a little paler than the crystal, as they were built)
+        if (lit !== crystal) { m.color.lerp(WHITE, 0.14); m.emissive.lerp(WHITE, 0.14); }
+      }
     },
     reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); hood.reset(); },
     firstPerson: (on) => { fp = on; },

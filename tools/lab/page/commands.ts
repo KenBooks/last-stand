@@ -29,6 +29,7 @@ import type { GlowOptions } from './itemGlow';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
+import type { StaffsOptions } from './staffs';
 import type { HeldOptions } from './held';
 import type { CastOptions } from './cast';
 import type { DrawOptions } from './draw';
@@ -472,6 +473,15 @@ export async function draw(lab: Lab, command: DrawOptions): Promise<Report> {
 export async function blink(lab: Lab, command: BlinkOptions): Promise<Report> {
   const { blink: blinkRound } = await import('./blink');
   return blinkRound(lab, command);
+}
+
+/**
+ * `lab staffs`: the mage's staffs by school (a tap of the lightning staff against a full charge, the fire staff's
+ * burn, whom the healing beam lands on and its heal a frame) and a held skill's charge mark at the aim.
+ */
+export async function staffs(lab: Lab, command: StaffsOptions): Promise<Report> {
+  const { staffs: staffsRound } = await import('./staffs');
+  return staffsRound(lab, command);
 }
 
 /**

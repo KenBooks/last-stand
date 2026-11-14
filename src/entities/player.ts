@@ -12,7 +12,8 @@ import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
 import { recorder } from '../perf/recorder';
-import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
+import { SCHOOLS } from '../data/schools';
+import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveProps } from '../world/collision';
 import { input, isDown, wasPressed } from '../core/input';
@@ -29,7 +30,7 @@ import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import { ownColour } from '../net/heroColour';
 import type { HeroColourId } from '../data/heroColours';
-import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
+import type { ActionState, CastAnim, CastHands, ClassDef, DamageType, DerivedStats, Gear, HeldStyle, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 import { walkPath } from '../world/walkPath';
 
@@ -87,6 +88,12 @@ interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number;
   /** a bow's shot with no arrow on the string: the seconds taking one from the quiver first (`ClassDef.quiver`), before the draw */
   nockT?: number }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
+/** The hands `held` of a skill's `keys` cast it from: a key a hand, the first the left's, the next the right's and
+ *  so on in turn; both once a key of each is held. */
+function handsOf(keys: SkillKey[], held: SkillKey[]): CastHands {
+  const sides = new Set(held.map((key) => (keys.indexOf(key) % 2 === 0 ? 'left' : 'right')));
+  return sides.size > 1 ? 'both' : sides.has('right') ? 'right' : 'left';
+}
 /** How far a drawn shot is drawn (0 to 1): its time since its arrow was on the string, of its time to full draw. */
 const drawShare = (c: CastState): number => Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / (c.drawT ?? 1));
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
@@ -107,7 +114,9 @@ const round2 = (v: number): number => Math.round(v * 100) / 100;
 export type PlayerAction =
   | { t: 'cast'; s: string; dur: number; x: number; z: number; /** a drawn shot: `dur` is its time to full draw */ h?: 1; /** a bow's arrow taken from the quiver first: its seconds (`CastState.nockT`) */ n?: number }
   | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number; /** how high the aim was on a prop */ y?: number }
-  | { t: 'chs'; s: string; k: SkillKey }
+  | { t: 'chs'; s: string; k: SkillKey; h?: CastHands }
+  /** the hands a held channel is cast from changed (`Player.hands`) */
+  | { t: 'chh'; h: CastHands }
   | { t: 'che' }
   /** a hit it took, as its own game judged it (shown on the others) */
   | { t: 'hurt'; r: HitResult }
@@ -229,7 +238,10 @@ export class Player {
   /** key -> skill id; any skill may be bound to any (or several) keys */
   loadout!: Loadout;
   /** the weapon style the loadout belongs to */
-  private style: WeaponStyle | null = null;
+  private style: HeldStyle | null = null;
+  /** the hands the channel held is cast from, for one cast with none full (`bare`): by its keys held here, as its
+   *  own game reports them for a partner's copy */
+  hands: CastHands = 'left';
   /** remaining cooldown per skill id (shared by every key bound to it) */
   readonly cooldowns = new Map<string, number>();
 
@@ -383,7 +395,7 @@ export class Player {
   }
 
   /** The weapon style the loadout belongs to (null: the class has one loadout). */
-  get weaponStyle(): WeaponStyle | null { return this.style; }
+  get weaponStyle(): HeldStyle | null { return this.style; }
 
   /** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
   usable(def: SkillDef): boolean { return usableWith(def, this.gear); }
@@ -393,7 +405,7 @@ export class Player {
     const id = this.loadout[key];
     const s = id ? this.known.get(id) ?? null : null;
     if (!s || this.usable(s.def)) return s;
-    const alt = resolveFor(s.def, this.gear);
+    const alt = resolveFor(s.def, this.gear, this.cls);
     return alt ? this.known.get(alt) ?? null : null;
   }
 
@@ -485,6 +497,14 @@ export class Player {
    *  from the camera, so some place themselves where they're seen instead */
   get eyes(): boolean { return this.local && viewMode() === 'first' && viewSettled(); }
 
+  /** a drawn skill being held and not yet let go (ui/chargeMark.ts shows it at the aim): how far it's drawn (0..1,
+   *  1 from `FULL_DRAW` of its time on) and how long it has been held (s); null with none */
+  get charge(): { share: number; held: number } | null {
+    const c = this.casting;
+    if (!c?.drawT || c.fired || c.skill.impl.channel) return null;
+    return { share: Math.min(1, drawShare(c) / FULL_DRAW), held: Math.max(0, c.t - (c.nockT ?? 0)) };
+  }
+
   /** a drawn shot held at full draw and not yet loosed (the crosshair shows it bold: main.ts) */
   get drawnFull(): boolean {
     const c = this.casting;
@@ -563,8 +583,12 @@ export class Player {
     this.aim.copy(input.ground);
     this.aimFoe = input.foe;
 
-    // a channel ends when the key that started it is released
-    if (this.channel && !isDown(this.channel.key)) this.stopChannel();
+    // a channel ends when every key that casts it is released (the same skill on two keys is held by either)
+    if (this.channel) {
+      const keys = this.keysOf(this.channel.skill), held = keys.filter((key) => isDown(key));
+      if (!held.length) this.stopChannel();
+      else this.holdWith(keys, held);
+    }
     // (out of the village's yard nothing is cast: what was held is let go, what was aimed given up)
     if (!this.armed) {
       if (this.channel) this.stopChannel();
@@ -724,6 +748,7 @@ export class Player {
 
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
+    if (a.t === 'chh') { this.hands = a.h; return; }
     if (a.t === 'hurt') { this.applyHit(a.r); return; }
     if (a.t === 'died') { if (this.alive) this.die(); return; }
     const s = this.known.get(a.s);
@@ -744,6 +769,7 @@ export class Player {
       else if (own) own.fired = true;
       this.fire(s, new THREE.Vector3(a.x, a.y ?? 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
+      if (a.h) this.hands = a.h;
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
     }
   }
@@ -854,9 +880,12 @@ export class Player {
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     if (this.channel) this.stopChannel();
     if (this.local) recorder.mark(`channel ${s.def.impl}`);
+    // (the hand its key casts it from, before it starts: its look is made for it)
+    const keys = this.keysOf(s);
+    this.hands = handsOf(keys, [key]);
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
     this.queued = null;
-    actionSink?.({ t: 'chs', s: s.def.impl, k: key });
+    actionSink?.({ t: 'chs', s: s.def.impl, k: key, ...(this.bare ? { h: this.hands } : {}) });
   }
 
   /** A held block comes back in the same update that a swing finishes, never during it or a dash. */
@@ -869,6 +898,25 @@ export class Player {
       if (skill?.def.block) { this.startChannel(skill, key); return; }
     }
   }
+
+  /** The keys that cast `s` now, in the bar's order. */
+  private keysOf(s: KnownSkill): SkillKey[] {
+    return SKILL_KEYS.filter((key) => this.skillAt(key) === s);
+  }
+
+  /** The channel held by `held` of its `keys`: the hands they cast it from, told to the partners as it changes. */
+  private holdWith(keys: SkillKey[], held: SkillKey[]): void {
+    const hands = handsOf(keys, held);
+    if (hands === this.hands) return;
+    this.hands = hands;
+    if (this.bare) actionSink?.({ t: 'chh', h: hands });
+  }
+
+  /** No weapon held by a hero whose weapons have schools: both his hands are free to cast (the mage's lance). */
+  get bare(): boolean { return !!this.cls.schools && !this.gear.weapon; }
+
+  /** A channel that can be cast from both hands is, now: none held, and two of its keys held together. */
+  get bothHands(): boolean { return this.bare && this.hands === 'both'; }
 
   stopChannel(): void {
     const ch = this.channel;
@@ -935,7 +983,9 @@ export class Player {
     this.tickQuiver(dt);
     if (this.channel) {
       const ch = this.channel;
-      const cost = this.sandbox ? 0 : ch.skill.def.cost * dt;
+      // (from both hands it drains as its `both` has it)
+      const perSecond = this.bothHands ? ch.skill.def.both?.cost ?? ch.skill.def.cost : ch.skill.def.cost;
+      const cost = this.sandbox ? 0 : perSecond * dt;
       if (this.energy < cost) { this.lowEnergy(); this.stopChannel(); }
       else {
         this.energy -= cost;
@@ -1099,6 +1149,7 @@ export class Player {
       const ch = this.channel, opens = ch.skill.def.opening ?? 0;
       ch.t += dt;
       action = { name: ch.skill.impl.anim || 'channel', t: Math.min(1, ch.t / 0.2), time: ch.t, open: opens > 0 ? Math.min(1, ch.t / opens) : 1 };
+      if (this.bare) action.hands = this.hands;
       (ch.skill.impl as ChannelSkill).pose?.(this, ch.skill.def, ch.state, action);
     }
     if (dashed && action && action !== dashed && !this.staggered) action.under = dashed;
@@ -1198,12 +1249,14 @@ export class Player {
         this.staffLight.position.y += 0.35;
       }
       const glow = this.cls.aura.intensity;
+      // (in the colour of the staff's school, as its crystal: a value set, nothing compiled)
+      if (this.gear.school) this.staffLight.color.set(SCHOOLS[this.gear.school].color);
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)
       const full = this.drawnFull;
       this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
       // (hidden, as the hero selection screen hides him: it lights nothing)
       const shown = this.obj.visible ? 1 : 0;
-      this.staffLight.intensity = shown * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      this.staffLight.intensity = shown * (this.cls.schools && !this.gear.weapon ? 0 : 1) * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
     // (the glowing hand lights what's round it, breathing as its glow does; off through the eyes, where a light by the
     // camera floods the view; held off the palm, `HAND_LIGHT`)
