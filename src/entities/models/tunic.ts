@@ -249,8 +249,9 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
  *  off to none `reach` from it (`top` above `topY`, under a strap over the shoulder), and the sleeve's rising from it to the
  *  whole arm's at its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the
  *  body's and the sleeve's the same; `bulk`, how much the cloth between swells with the arm raised level (a share of its
- *  size about the joint, none hanging) */
-export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number };
+ *  size about the joint, none hanging); `over`, the seam's share cut above the joint too (`keep` of it lost, from `from`
+ *  above the joint, wholly `depth` on): the top of the shoulder stays the chest's and a raised arm leaves it whole */
+export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number; over?: { keep: number; from: number; depth: number } };
 const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** the cloth round the armhole under the shoulder joint: how much of the arm's share it keeps from going, wholly this far
@@ -305,7 +306,8 @@ export class SetInShoulders {
    *  further than the armhole it's sewn into, and the seam opened round the armpit and behind the shoulder, the forest
    *  seen through the coat at every draw) */
   private seamShare(y: number, s: number): number {
-    return this.K.seam * (1 - UNDER.keep * smooth(clamp((this.restOf(s).y - y) / UNDER.depth, 0, 1)));
+    const o = this.K.over, dy = y - this.restOf(s).y;
+    return this.K.seam * (1 - UNDER.keep * smooth(clamp(-dy / UNDER.depth, 0, 1))) * (o ? 1 - o.keep * smooth(clamp((dy - o.from) / o.depth, 0, 1)) : 1);
   }
 
   /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */

@@ -461,7 +461,7 @@ const bpRx = (y: number) => 0.148 + 0.034 * sm(-0.07, 0.12, y) - 0.024 * sm(0.17
 const bpRz = (y: number) => 0.128 + 0.026 * sm(-0.07, 0.1, y) - 0.028 * sm(0.16, 0.25, y);
 const BP_A = 1.75;
 /** the gambeson's cloth round each armhole and its sleeve's top, shared between the chest and the arm (tunic.ts) */
-const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.2 };
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.2, over: { keep: 1, from: -0.02, depth: 0.04 } };
 const gauss = (x: number, at: number, wide: number): number => Math.exp(-(((x - at) / wide) ** 2));
 /** A fighter's arm in the gambeson's sleeve: its radius at `t` down the sleeve (0 the shoulder joint, 0.79 the elbow,
  *  1 the sleeve's end on the forearm) and `phi` round it (0 the outside, a quarter turn the front), as a share of a
