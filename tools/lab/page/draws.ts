@@ -25,6 +25,7 @@ import * as swingTrail from '../../../src/fx/swingTrail';
 import { armsLens } from './inFrame';
 import { toLobby } from './hallMoves';
 import { holdHour } from '../../../src/game/clock';
+import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera } from '../../../src/core/renderer';
 
@@ -41,6 +42,9 @@ export interface DrawsOptions {
   village?: boolean;
   /** with `village`, the hour it's lit for (the page's own when not given) */
   hour?: number;
+  /** with `village`, the frame as one in which he moves: what moves is drawn into the kept shadow maps (standing
+   *  still they're left as they are, and a frame counts none of the heroes' shadows) */
+  moving?: boolean;
   canary: boolean;
 }
 
@@ -599,12 +603,15 @@ async function villageDraws(lab: Lab, options: DrawsOptions): Promise<Report> {
   await inVillage(lab, options.fixture.at ?? VILLAGE_SPOT, facing);
   const unplant = options.canary ? plantBoxes() : () => {};
   let record: FrameDraws;
+  if (options.moving) holdShadowsOnMove('every');
   try {
+    if (options.moving) await lab.step(2);
     record = await recordedFrame(lab);
   } finally {
+    if (options.moving) holdShadowsOnMove('level');
     unplant();
   }
-  const view = options.fixture.view ?? 'top';
+  const view = (options.fixture.view ?? 'top') + (options.moving ? ' (as he moves)' : '');
   const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
   const compiled = programCount() - before;
   const head = `${G.player.cls.id}, the village${hour}, ${view} view: ${totalsOf(record)}; ${objectsOf()}; `

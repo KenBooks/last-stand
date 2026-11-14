@@ -94,10 +94,23 @@ function drawnShifted(lab: Lab): Canvas {
   }
 }
 
+/** the most pixels a shadow cast from fewer triangles may differ in from one cast from every triangle, and by how
+ *  much (levels of 255): its outline within a texel or two, no patch of his own body shaded otherwise */
+const COARSE_PIXELS = 4000;
+const COARSE_LEVELS = 40;
+
+/** Every triangle cast, or fewer as the game casts them (`models/shadowDetail.ts`; a commit from before it takes the
+ *  property as nothing, an A/B's other side loading this module too). */
+function holdWhole(whole: boolean): void {
+  (castingAsOne as { whole?: boolean }).whole = whole;
+}
+
 /** One case's line, and its problems. */
 async function measureCase(lab: Lab, view: ViewMode, gear: WeaponStyle | undefined, wear: readonly string[],
   canary: boolean): Promise<{ line: string; problems: string[]; caught?: boolean }> {
   await lab.setup({ view, gear, facing: FACING, wear: [...wear] as ('helm' | 'chest' | 'hands')[] });
+  // (every triangle cast for the match of as one against alone: cast from fewer, the two are simplified apart)
+  holdWhole(true);
   // (each way drawn after one drawn the other way: a frame's look follows from the one before, its exposure adapting)
   const before = drawnWith(lab, false);
   const asOne = drawnWith(lab, true);
@@ -107,10 +120,18 @@ async function measureCase(lab: Lab, view: ViewMode, gear: WeaponStyle | undefin
   const steady = differenceOf(before, alone);
   const name = `${gear ?? 'as rolled'}, ${wear.length ? 'armoured' : 'bare'}, ${view}`;
   const apart = `${difference.pixels} pixels apart, by ${difference.most} at most`;
-  const line = `${name}: ${pieces} pieces cast as one; ${apart} (cast alone twice: ${steady.pixels}, ${steady.most})`;
+  let line = `${name}: ${pieces} pieces cast as one; ${apart} (cast alone twice: ${steady.pixels}, ${steady.most})`;
   const problems: string[] = [];
   if (!pieces) problems.push(`${name}: no piece cast as one`);
   if (isFault(difference)) problems.push(`${name}: ${apart} from the pieces cast alone`);
+  // (then from fewer triangles, as the game casts it, against every triangle)
+  holdWhole(false);
+  drawnWith(lab, true);
+  const coarse = differenceOf(drawnWith(lab, true), asOne);
+  line += `; cast from fewer triangles ${coarse.pixels} pixels apart, by ${coarse.most} at most`;
+  if (coarse.pixels > COARSE_PIXELS || coarse.most > COARSE_LEVELS) {
+    problems.push(`${name}: cast from fewer triangles, ${coarse.pixels} pixels apart by ${coarse.most} at most`);
+  }
   if (!canary) return { line, problems };
   const shifted = differenceOf(drawnShifted(lab), alone);
   return { line: `${line}\ncanary: his pieces' shadow moved, ${shifted.pixels} pixels apart`, problems,

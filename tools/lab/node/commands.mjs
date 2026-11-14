@@ -1451,6 +1451,7 @@ export const COMMANDS = {
         biome: options.biome,
         village: Boolean(options.village),
         hour: options.hour,
+        moving: Boolean(options.moving),
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);

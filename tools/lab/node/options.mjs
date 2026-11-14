@@ -1606,6 +1606,10 @@ export const COMMANDS = {
         help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '
           + 'hero stands there, the square by default)',
       },
+      moving: {
+        kind: 'switch',
+        help: 'with --village, the frame as one in which he moves: what moves drawn into the kept shadow maps',
+      },
       canary: {
         kind: 'switch',
         help: 'stand seven boxes of one geometry before the hero, which must come out as seven draws of it, seven '
