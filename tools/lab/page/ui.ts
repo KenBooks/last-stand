@@ -71,6 +71,7 @@ import { BETA_NOTICE_CANARY, betaNoticeHere, betaNoticeShown, closeBetaNotice, o
 import { showHelp } from '../../../src/ui/menus';
 import {
   BUG_REPORT_CANARY, bugReportChecked, bugReportPictures, closeBugReportState, openBugReport, openBugReportTouch,
+  useReportService,
 } from './uiBugReport';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
 import {
@@ -104,6 +105,8 @@ export interface UiOptions {
   hdr?: boolean;
   /** the system's cursor planted on the page's body: the cursors' check must find it */
   canary?: boolean;
+  /** the bug report states' reports service, the lab's own (node/tracesService.mjs): Send sends there alone */
+  reports?: string;
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
@@ -1105,6 +1108,7 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   tallTips = !!options.canary;
   canaryAsked = !!options.canary;
   plantLitCanary(!!options.canary);
+  useReportService(options.reports);
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
   const found = (await steps.check?.(!!options.canary, lab)) ?? { lines: [], problems: [] };

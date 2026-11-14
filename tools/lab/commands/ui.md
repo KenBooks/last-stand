@@ -14,12 +14,16 @@ run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSe
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
 `page/uiBugReport.ts`: `bugReport` opens it from the lobby's pause menu by a click on Report a bug and makes a report
 as a player does, `bugReportTouch` opens it over a run by a tap: the form within the window and not scrolling, every
-kind and control found at its middle, the picture of the game taken and not blank, an empty form's Copy report
-refused, a kind pressed the one marked, a key pressed in the field kept from the game, the report shown whole holding
-what was typed and where the player was, Open on GitHub opening the repo's new-issue page with the kind's labels,
-Done giving the game back, what's typed kept through Esc; on touch each kind 36 css px tall, each button 40 and each
-field's text 16 at least; the clipboard and the new tab are stood in for, so nothing leaves the page; `--canary`
-makes the form's box twice the window's height, which must be found; the Play together dialog,
+kind and control found at its middle, the picture of the game taken, not blank and under the server's 600 KB, an
+empty form's Send refused, a kind pressed the one marked, a key pressed in the field kept from the game, the report
+shown whole holding what was typed and where the player was, Send failed once by the server (a 503) said so with the
+form kept and Try again offered, Try again sending it to a reports service the command starts for the page's origin
+(`node/tracesService.mjs`, `server/traces`'s `/traces/reports`) and the report read back from it with its token, its
+kind, text, facts and picture as sent, Done giving the game back, the form empty after a send, what's typed kept
+through Esc, Copy report copying it; on touch each kind 36 css px tall, each button 40 and each field's text 16 at
+least; the clipboard is stood in for, a new tab caught, and every report's POST must go to the lab's service, or the
+page turns it away (never production's); `--canary` makes the form's box twice the window's height, which must be
+found, and drops the report's picture on its way to the service, which the read-back must find; the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its
 name tag sees it, and on touch with its name tag field tapped: the dialog within the window, its name tag field, Open
 a room, the room's code and Join each found at its middle; asked to rename, the taken tag marked, named in the
