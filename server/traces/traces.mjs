@@ -10,6 +10,7 @@
 //   GET  /traces/summary          how many are kept, their size, builds, scenes, the disk's budget (read)
 //   GET  /traces/latest           the newest trace's gzip (read), its code in X-Trace-Code
 //   GET  /traces/<code>           a trace's gzip (read)
+//   POST /traces/reports, GET /traces/reports[/<code>[.jpg]]  the pause menu's bug reports (reports.mjs)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`) or the session cookie a Dokci link set (a
 // browser never sees the token): a report's code alone reads nothing. Kept for KEEP_DAYS, the oldest dropped first
 // past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours from
@@ -24,6 +25,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { asset, notePage, pageBuilt, viewerPage } from './page.mjs';
+import { reportsService } from './reports.mjs';
 
 const env = process.env;
 /** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
@@ -60,6 +62,21 @@ export function settingsFrom(vars) {
     perDayAll: Number(vars.PER_DAY_ALL ?? 40),
     /** addresses never held to `perDay` (the owner's, testing) */
     trusted: new Set(String(vars.TRUSTED_ADDRESSES ?? '').split(',').map((a) => a.trim()).filter(Boolean)),
+    // the bug reports' (reports.mjs: each limit and what happens past it in the AGENTS.md)
+    /** a report's body at most (its JSON: the text, the facts and the picture as base64) */
+    reportMaxBytes: Number(vars.REPORT_MAX_BYTES ?? 1 << 20),
+    /** its picture at most, decoded (a JPEG), and its longest side (the game shrinks it to 1280 px) */
+    reportPictureMax: Number(vars.REPORT_PICTURE_MAX ?? 600 << 10),
+    reportPictureSide: Number(vars.REPORT_PICTURE_SIDE ?? 1280),
+    /** what happened and what was expected, in characters at most (the form's own limits) */
+    reportMostText: Number(vars.REPORT_MOST_TEXT ?? 1200),
+    reportMostExpected: Number(vars.REPORT_MOST_EXPECTED ?? 400),
+    /** from one address, an hour and a day; from every address together, a day */
+    reportPerHour: Number(vars.REPORT_PER_HOUR ?? 5),
+    reportPerDay: Number(vars.REPORT_PER_DAY ?? 20),
+    reportPerDayAll: Number(vars.REPORT_PER_DAY_ALL ?? 200),
+    reportKeepDays: Number(vars.REPORT_KEEP_DAYS ?? 90),
+    reportDiskMax: Number(vars.REPORT_DISK_MAX ?? 100 << 20),
   };
 }
 let settings = settingsFrom(env);
@@ -79,6 +96,8 @@ const index = new Map();
 let diskBytes = 0, uploading = 0;
 /** `address site` (and `address *`, every site's) -> its uploads' times (ms) in the last day */
 const sent = new Map();
+/** the bug reports' part (reports.mjs), made afresh at each start */
+let reports = null;
 
 function newCode() {
   const bytes = randomBytes(8);
@@ -281,6 +300,52 @@ async function upload(req, res) {
   }
 }
 
+/** A bug report (reports.mjs): its JSON from the game's own pages, checked against every limit, then kept. */
+async function reportUpload(req, res) {
+  const headers = cors(req);
+  if (!settings.origins.has(req.headers.origin ?? '')) return answer(res, 403, 'not from the game', headers);
+  if (Number(req.headers['content-length'] ?? 0) > settings.reportMaxBytes) {
+    return answer(res, 413, 'over its most', headers);
+  }
+  if (uploading >= AT_ONCE) return answer(res, 503, 'busy', { ...headers, 'retry-after': '5' });
+  const allowed = reports.allowed(addressOf(req));
+  if (!allowed.ok) {
+    const retry = String(Math.ceil(allowed.retryMs / 1000));
+    // (the browser lets the page read retry-after only if it's exposed)
+    return answer(res, 429, allowed.why, { ...headers, 'retry-after': retry, 'access-control-expose-headers': 'retry-after' });
+  }
+  uploading++;
+  try {
+    const body = await bodyOf(req, settings.reportMaxBytes);
+    if (!body) return answer(res, 413, 'over its most', headers);
+    let json;
+    try { json = JSON.parse(body.toString('utf8')); } catch { return answer(res, 400, 'not JSON', headers); }
+    const checked = reports.check(json);
+    if (checked.error) return answer(res, 400, checked.error, headers);
+    return answer(res, 201, { code: await reports.keep(checked.report, checked.picture) }, headers);
+  } finally {
+    uploading--;
+  }
+}
+
+/** What reading asks of the reports: the list, a report whole, its picture. */
+async function reportRead(res, url, path) {
+  if (path === '/traces/reports') return answer(res, 200, reports.list(url));
+  const name = decodeURIComponent(path.slice('/traces/reports/'.length)).toUpperCase();
+  const pictured = name.endsWith('.JPG');
+  const code = pictured ? name.slice(0, -4) : name;
+  if (!CODE.test(code)) return answer(res, 404, 'not a code');
+  if (!pictured) {
+    const report = reports.whole(code);
+    return report ? answer(res, 200, report) : answer(res, 404, 'no such report');
+  }
+  const picture = await reports.picture(code);
+  if (!picture) return answer(res, 404, 'no such picture');
+  res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+    'content-disposition': `inline; filename="${code}.jpg"` });
+  res.end(picture);
+}
+
 /** Whether a trace's line holds `q` (the page's filter: any of its build, scene, why, GPU, quality or code). */
 function holds(meta, q) {
   const fields = [meta.code, meta.commit, meta.pr ? `#${meta.pr}` : '', meta.bundle, meta.scene, meta.why, meta.gpu,
@@ -348,6 +413,10 @@ async function handle(req, res) {
     return answer(res, 204, '', { ...cors(req), 'access-control-allow-methods': 'POST', 'access-control-max-age': '86400' });
   }
   if (req.method === 'POST' && path === '/traces') return upload(req, res);
+  if (req.method === 'OPTIONS' && path === '/traces/reports') {
+    return answer(res, 204, '', { ...cors(req), 'access-control-allow-methods': 'POST', 'access-control-max-age': '86400' });
+  }
+  if (req.method === 'POST' && path === '/traces/reports') return reportUpload(req, res);
   if (req.method !== 'GET' || !path.startsWith('/traces')) return answer(res, 404, 'not here');
   if (path.startsWith('/traces/assets/')) return serveAsset(res, path.slice('/traces/assets/'.length));
   const browsing = path === '/traces' && wantsPage(req) && pageBuilt();
@@ -366,6 +435,7 @@ async function handle(req, res) {
   if (browsing) return page(res, 200, viewerPage());
   if (path === '/traces') return answer(res, 200, list(url));
   if (path === '/traces/summary') return answer(res, 200, summary());
+  if (path === '/traces/reports' || path.startsWith('/traces/reports/')) return reportRead(res, url, path);
   if (path === '/traces/latest') {
     const newest = [...index.keys()].pop();
     return newest ? read(res, newest) : answer(res, 404, 'none kept');
@@ -417,11 +487,13 @@ export async function start(port, overrides = {}) {
   usedLinks.clear();
   diskBytes = 0;
   await load();
+  reports = reportsService(settings, { log, newCode });
+  await reports.load();
   const http = createServer((req, res) => {
     handle(req, res).catch((e) => { log('error', e); if (!res.headersSent) answer(res, 500, 'error'); else res.end(); });
   });
   http.requestTimeout = 30_000;
-  const timer = setInterval(() => void prune(), PRUNE_EVERY);
+  const timer = setInterval(() => { void prune(); void reports.prune(); }, PRUNE_EVERY);
   timer.unref();
   http.on('close', () => clearInterval(timer));
   await new Promise((resolve) => http.listen(port ?? settings.port, resolve));

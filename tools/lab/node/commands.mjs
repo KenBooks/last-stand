@@ -592,10 +592,19 @@ export const COMMANDS = {
     async each(side, options) {
       // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
       const states = UI_STATES.filter((state) => (options.states ?? UI_STATES).includes(state));
+      // (the bug report's form sends to a reports service of the lab's own, read back here: never production's)
+      const { checkReportSent, startTracesService } = await import('./tracesService.mjs');
+      const service = states.includes('bugReport') ? await startTracesService(new URL(side.url).origin) : null;
       const reports = [];
-      for (const state of states) {
-        const command = { state, hdr: Boolean(options.hdr), canary: Boolean(options.canary) };
-        reports.push(await side.command('ui', command));
+      try {
+        for (const state of states) {
+          const canary = Boolean(options.canary);
+          const command = { state, hdr: Boolean(options.hdr), canary, reports: service?.url };
+          const report = await side.command('ui', command);
+          reports.push(state === 'bugReport' ? await checkReportSent(report, service, canary) : report);
+        }
+      } finally {
+        await service?.close();
       }
       return {
         text: reports.map((report) => report.text).join('\n'),

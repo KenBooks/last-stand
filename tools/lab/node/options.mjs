@@ -444,8 +444,9 @@ export const COMMANDS = {
           + '(every touch button shown in the lobby, its practice and a run: nothing over its middle, and a '
           + 'finger\'s tap there does what it\'s for; the canary lays a clear sheet over the pause button), '
           + 'bugReport and bugReportTouch (the bug report\'s form opened from the pause menu, by the mouse in the '
-          + 'lobby and a finger over a run: within the window, each control found, a report made of it; the canary '
-          + 'makes its box twice the window\'s height)',
+          + 'lobby and a finger over a run: within the window, each control found, a report made of it and sent '
+          + 'to a reports service of the lab\'s own, failed once and sent again, then read back; the canary makes '
+          + 'its box twice the window\'s height and drops the report\'s picture on its way)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {

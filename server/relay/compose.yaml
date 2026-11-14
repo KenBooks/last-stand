@@ -34,6 +34,9 @@ services:
       TRUSTED_ADDRESSES: ${LS_TRACES_TRUSTED:-}
       KEEP_DAYS: "30"
       DISK_MAX: "104857600"
+      # (the bug reports', beside the traces in the same volume: every limit in server/traces/AGENTS.md)
+      REPORT_KEEP_DAYS: "90"
+      REPORT_DISK_MAX: "104857600"
     volumes:
       - traces-data:/data
     expose:

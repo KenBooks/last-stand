@@ -2,17 +2,19 @@
 // the class `report-link` opens it). The player picks what the trouble is about (data/bugReport.ts), says what happened and, if they
 // like, what they expected; a picture of the game as it was when the form opened goes with it unless they untick it;
 // and the game adds where they were and what they play on (bugReportText.ts), shown whole under "See everything in
-// the report". Nothing leaves the device until a button is pressed: Copy report puts the text on the clipboard, Open
-// on GitHub opens a new issue filled in with it, labelled by its kind. An address can't carry a picture, so after
-// either the form offers the picture to copy or save, to add by hand.
-// What's typed is kept while the page lives, till a report is made of it.
+// the report". Nothing leaves the device until a button is pressed: Send sends it, the picture with it, to our own
+// server (bugReportSend.ts: the traces service's /traces/reports, the game's own server alone), and says what came of it; a failed
+// send keeps the form as it was, to send again. Copy report puts the text on the clipboard (offline, or for a
+// message), and after it the form offers the picture to copy or save, as the clipboard holds one or the other.
+// What's typed is kept while the page lives, till a report is sent.
 import { G } from '../state';
 import { BUG_REPORT, REPORT_KINDS, type ReportKind } from '../data/bugReport';
 import { sfx } from '../core/audio';
 import { isCoop } from '../net/role';
 import { aboveKeyboard } from './aboveKeyboard';
 import { copyText } from './clipboard';
-import { issueUrl, reportFacts, reportText, type ReportDraft } from './bugReportText';
+import { reportFacts, reportText, type ReportDraft } from './bugReportText';
+import { reportBody, sendReport } from './bugReportSend';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(`#bug-report ${s}`)!;
 const root = (): HTMLElement => document.getElementById('bug-report')!;
@@ -24,6 +26,10 @@ let facts: string[] = [];
 /** the picture asked of the next frame drawn, and the one taken: shrunk on a canvas, as a JPEG and its address */
 let shotWanted = false;
 let shot: { canvas: HTMLCanvasElement; blob: Blob; url: string } | null = null;
+/** a send under way (Send pressed once until it answers) */
+let sending = false;
+/** where Send sends (a harness's own service: tools/lab's `ui --states bugReport`), else the game's server */
+let server: string | undefined;
 
 const draft = (): ReportDraft => ({
   kind: kind ?? REPORT_KINDS[REPORT_KINDS.length - 1],
@@ -67,7 +73,7 @@ export function initBugReport(onClosed: () => void): void {
   $('form').addEventListener('submit', (e) => e.preventDefault());
   $('#br-cancel').onclick = () => { sfx.click(); closeBugReport(); };
   $('#br-copy').onclick = () => { sfx.click(); void copyReport(); };
-  $('#br-github').onclick = () => { sfx.click(); void openIssue(); };
+  $('#br-send').onclick = () => { sfx.click(); void send(); };
   $('#br-close').onclick = () => { sfx.click(); closeBugReport(); };
   $('#br-shot-copy').onclick = () => { sfx.click(); void copyPicture(); };
 }
@@ -82,6 +88,7 @@ export function openBugReport(): void {
   shotWanted = true;
   shotState('Taking a picture of the game…', true);
   $<HTMLDetailsElement>('.br-sent').open = false;
+  sendLabel(false);
   show('form');
   say('');
   changed();
@@ -112,7 +119,7 @@ export function bugReportAfterRender(): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) { shotState(NO_SHOT, false); return; }
   try { ctx.drawImage(view, 0, 0, canvas.width, canvas.height); } catch { shotState(NO_SHOT, false); return; }
-  canvas.toBlob((blob) => {
+  void fittedJpeg(canvas).then((blob) => {
     if (!bugReportOpen()) return;
     if (!blob) { shotState(NO_SHOT, false); return; }
     dropShot();
@@ -122,7 +129,18 @@ export function bugReportAfterRender(): void {
     shotState(isCoop() ? 'It shows the game\'s view, players\' name tags too.' : 'It shows the game\'s view, without the menus.', true);
     $<HTMLInputElement>('#br-shot-on').disabled = false;
     changed();
-  }, 'image/jpeg', BUG_REPORT.shotQuality);
+  });
+}
+
+/** The canvas as a JPEG the server takes: at the picture's quality, else at each lower one till it fits (null if none
+ *  does, or the browser made none). */
+async function fittedJpeg(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  for (const quality of [BUG_REPORT.shotQuality, ...BUG_REPORT.lowerQualities]) {
+    const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', quality));
+    if (!blob) return null;
+    if (blob.size <= BUG_REPORT.mostShotBytes) return blob;
+  }
+  return null;
 }
 
 function dropShot(): void {
@@ -183,27 +201,42 @@ async function copyReport(): Promise<void> {
   if (!ready()) return;
   const d = draft();
   if (!(await copyText(reportText(d, facts)))) { say('The browser wouldn\'t copy it. Open "See everything in the report" and copy it by hand.', true); return; }
-  done('Report copied', 'Paste it into a message to the game\'s makers, or into a new issue on the game\'s GitHub page.', d.picture);
+  done('Report copied', 'Paste it into a message to the game\'s makers. The form keeps it too, to Send once you\'re online.', d.picture);
 }
 
-async function openIssue(): Promise<void> {
-  if (!ready()) return;
+/** The report sent to our server: the form stays as it was while it goes, and says what came of it. */
+async function send(): Promise<void> {
+  if (sending || !ready()) return;
   const d = draft();
-  const { url, cut } = issueUrl(d, facts);
-  // (the whole report copied too: a long one is cut in the address, and a page that didn't open loses nothing)
-  const copied = await copyText(reportText(d, facts));
-  // (offline, the installed game still runs and GitHub can't open: the copy is what's left, and the form stays)
+  // (offline, the installed game still runs: the report stays, to send once back or to copy)
   if (!navigator.onLine) {
-    say(copied ? 'You\'re offline, so GitHub can\'t open: the report was copied instead. Send it once you\'re back.'
-      : 'You\'re offline, so GitHub can\'t open. Your report stays here: try again once you\'re back.', !copied);
+    say('You\'re offline, so the report can\'t be sent. It stays here: press Send again once you\'re back, or Copy report.', true);
     return;
   }
-  window.open(url, '_blank', 'noopener');
-  const more = cut && copied ? ' Your text was too long for the link: paste the copied report over it there.' : '';
-  done('GitHub opened in a new tab', `Your report is filled in there: sign in if it asks, then press its Create button.${more}`, d.picture);
+  sending = true;
+  $<HTMLButtonElement>('#br-send').disabled = true;
+  say('Sending…');
+  const sent = await sendReport(await reportBody(d, facts, shot?.blob ?? null), server);
+  sending = false;
+  $<HTMLButtonElement>('#br-send').disabled = false;
+  if ('error' in sent) {
+    say(`Not sent. ${sent.error} Your report stays here.`, true);
+    sendLabel(true);
+    return;
+  }
+  // (a report sent: the form starts empty next time; a copy keeps it, to send once online)
+  $<HTMLTextAreaElement>('#br-text').value = '';
+  $<HTMLInputElement>('#br-expected').value = '';
+  kind = null;
+  done('Report sent', `It reached the game's makers as report ${sent.code}. Quote that code if you write to them about it.`, false);
 }
 
-/** The form's last page: what was done and what's left to the player, the picture to add by hand if one goes along. */
+/** Send's label: Try again after a send failed, till the form opens afresh. */
+function sendLabel(failed: boolean): void {
+  $('#br-send').textContent = failed ? 'Try again' : 'Send';
+}
+
+/** The form's last page: what was done and what's left to the player, the picture to add by hand after a copy. */
 function done(title: string, text: string, picture: boolean): void {
   $('.br-done-title').textContent = title;
   $('.br-done-text').textContent = text;
@@ -213,12 +246,8 @@ function done(title: string, text: string, picture: boolean): void {
     const save = $<HTMLAnchorElement>('#br-shot-save');
     save.href = shot.url;
     save.download = `last-stand-report-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.jpg`;
-    $('.br-done-shot-note').textContent = 'A link can\'t carry the picture. Copy it and paste it into your report, or save it and attach it.';
+    $('.br-done-shot-note').textContent = 'The copied text holds no picture. Copy it and paste it beside your report, or save it and attach it.';
   }
-  // (a report made: the form starts empty next time)
-  $<HTMLTextAreaElement>('#br-text').value = '';
-  $<HTMLInputElement>('#br-expected').value = '';
-  kind = null;
   show('done');
 }
 
@@ -238,6 +267,11 @@ async function copyPicture(): Promise<void> {
 function show(page: 'form' | 'done'): void {
   $('form').classList.toggle('hidden', page !== 'form');
   $('.br-done').classList.toggle('hidden', page !== 'done');
+}
+
+/** For a harness (tools/lab `ui --states bugReport`): Send's server set to its own (undefined: the game's again). */
+export function bugReportServer(base: string | undefined): void {
+  server = base;
 }
 
 /** For a harness (tools/lab `ui --states bugReport`): the picture taken, if any, as its size. */

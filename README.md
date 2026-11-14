@@ -76,7 +76,7 @@ There are **three save slots** (the lobby's *Save slot* link; the chronicle, in 
 
 ### Report a bug
 
-**Report a bug**, at the foot of the pause menu (`Esc`), opens a short form: pick what it's about (gameplay, looks, speed, sound, controls, playing together, menus, saves, a crash, an idea), say what happened, and a picture of the game as it was goes along unless you untick it. The game adds where you were, its version and your device's make, never your name tag, a room's code or your saves, and shows you the whole report first. Nothing leaves your device until you press **Copy report** or **Open on GitHub**, which opens a new issue here with the report filled in.
+**Report a bug**, at the foot of the pause menu (`Esc`), opens a short form: pick what it's about (gameplay, looks, speed, sound, controls, playing together, menus, saves, a crash, an idea), say what happened, and a picture of the game as it was goes along unless you untick it. The game adds where you were, its version and your device's make, never your name tag, a room's code or your saves, and shows you the whole report first. Nothing leaves your device until you press **Send**, which sends it, the picture with it, to the game's own server (the one the performance reports go to), and gives you the report's code; a send that fails keeps the report to try again. **Copy report** puts the text on your clipboard instead, for when you're offline.
 
 ### Install and play offline
 
