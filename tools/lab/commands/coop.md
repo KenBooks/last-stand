@@ -36,7 +36,13 @@ practises in its lobby while it waits (stowed, as Space and a phone's Practice s
 where alone a hero is armed), as a player does, and readies the run the host starts slowly: its fight's programs kept
 cold for 6 s past the host's start, longer than the countdown, the host's countdown must hold ("Waiting for players")
 and no wave come until the guest is in, then go on (from play, "readying the fight for slower device takes forever, and
-first wave already launched"; `--canary` tells the host no guest readies, and its wave must be found coming); and a
+first wave already launched"; `--canary` tells the host no guest readies, and its wave must be found coming). Meanwhile
+the guest's joining bar (#561, `node/coopJoin.mjs`, `page/coopJoin.ts`) must show on top of its screen saying "Joining
+the fight", filled as far as its warm-up, which the lab sets to half midway; the host's party frame of the guest must
+say `Readying 50%` from the guest's reports and its held countdown "Waiting for Guest…"; once the guest is in, its bar
+must have been drawn in the frame before its run began and be gone, the host's frame and line saying no more of it.
+The second run's start, its fight warm, is held to the same (the bar drawn before the run, gone after). `--canary`
+also hides the guest's bar every frame, which must be found; and a
 game whose hero casts freely in the run the host starts is a problem (on main the guest's did, no costs or
 cooldowns through the whole run: `practice` measures the casts).
 What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the

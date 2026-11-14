@@ -43,6 +43,8 @@ export {
   coopDuelAnswer, coopDuelFit, coopDuelGo, coopDuelLosePicks, coopDuelMenu, coopDuelMouseBack, coopDuelParts,
   coopDuelPart, coopDuelPlace, coopDuelRound, coopDuelSetUp,
 } from './coopDuel';
+import { joinNow, watchJoin, type JoinState } from './coopJoin';
+export { coopHideJoining, coopJoinAfresh, coopJoinSeen, coopReadyingShare, coopShowJoining } from './coopJoin';
 export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
@@ -199,6 +201,8 @@ export interface CoopState extends Together {
   duel: DuelNow | null;
   /** the trade as it shows it (page/coopTrade.ts) */
   trade: TradeNow;
+  /** what it shows of a guest joining a run: a guest's joining bar, the host's line and party frames (#561) */
+  join: JoinState;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -964,6 +968,7 @@ function stateNow(): CoopState {
     duel: duelNow(),
     ...togetherNow(),
     trade: tradeNow(),
+    join: joinNow(),
   };
 }
 
@@ -1091,6 +1096,7 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     watchTags();
     watchHeroCost();
     watchOut();
+    watchJoin();
     if (!scenario) return;
     const sample = sampleNow();
     if (play.frame + frame >= SETTLE_FRAMES) play.samples.push(sample);

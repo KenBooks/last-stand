@@ -37,8 +37,9 @@ import { setTradeNet, tradeHeard, tradePeerLeft, endRoomTrades, endTrades, updat
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
- *  rooms' cards, whose `v` keeps a list to the rooms this game can join) */
-export const PROTOCOL = 38;
+ *  rooms' cards, whose `v` keeps a list to the rooms this game can join; 39: a guest's `rdy` says how far
+ *  along its readying is) */
+export const PROTOCOL = 39;
 /** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
 const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
@@ -90,6 +91,8 @@ interface Peer {
   colour: HeroColourId | null;
   /** sent the start of a run and not yet in it: readying it (the host's countdown holds for it) */
   readying: boolean;
+  /** how far along its readying is (0 to 1), as its `rdy` reports say (the host's party frames show it) */
+  readyShare: number;
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
@@ -693,6 +696,12 @@ function onControl(from: string, m: Record<string, unknown>): void {
     return;
   }
   if (m.t === 'danswer') { if (peer && G.mode === 'menu') askAnswered(peer.slot, m.yes === true); return; }
+  // (how far along its readying is: its party frame and the countdown's line say so)
+  if (m.t === 'rdy') {
+    if (peer?.readying && typeof m.p === 'number') peer.readyShare = Math.min(1, Math.max(0, m.p));
+    syncReadying();
+    return;
+  }
   if (peer?.player) onGuestControl(peer.player, m);
 }
 
@@ -924,7 +933,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 function addPeer(id: string, slot: number, look: Look, tag: string, colour: HeroColourId | null): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, tag, colour, player: null, look, inRun: false, room: 0, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, tag, colour, player: null, look, inRun: false, room: 0, readying: false, readyShare: 0, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [], placed: false,
   };
   session.peers.set(id, peer);
@@ -1034,6 +1043,7 @@ export function sendStart(biome: BiomeId, wave: number, seed: number, training =
     if (peer.inRun) continue;
     send('ctl', { t: 'start', biome, wave, seed, training }, peer.id);
     peer.readying = true;
+    peer.readyShare = 0;
   }
   // they're in from now on (their reports will say so too)
   for (const peer of session.peers.values()) peer.inRun = true;
@@ -1044,11 +1054,34 @@ export function sendStart(biome: BiomeId, wave: number, seed: number, training =
 /** A guest: our run begun as the host's start asked (its fight's programs warm): the host's countdown goes on. */
 export function sendInRun(): void { sendControl({ t: 'inrun' }); }
 
+/** the least time between a guest's reports of how far its readying is (ms), and the least change that's sent */
+const READY_EVERY_MS = 250;
+const READY_STEP = 0.02;
+let readySent = { at: -Infinity, share: -1 };
+
+/** A guest readying the run its host started: how far along it is (0 to 1), for the host's party frames, sent a few
+ *  times a second as it changes. */
+export function sendReadying(share: number): void {
+  const now = performance.now();
+  const p = Math.round(share * 100) / 100;
+  if (now - readySent.at < READY_EVERY_MS || Math.abs(p - readySent.share) < READY_STEP) return;
+  readySent = { at: now, share: p };
+  sendControl({ t: 'rdy', p });
+}
+/** A guest's start: its reports of how far it is begin afresh. */
+export function readyingAfresh(): void { readySent = { at: -Infinity, share: -1 }; }
+
 /** The guests still readying the run the host started, for its countdown (net/role.ts `readying`). */
 function syncReadying(): void {
   readying.guests = [...session.peers.values()]
     .filter((peer) => peer.readying)
-    .map((peer) => peer.player?.cls.name ?? 'a partner');
+    .map((peer) => peer.player?.tag || peer.tag || peer.player?.cls.name || 'a partner');
+}
+
+/** How far along `p` is readying the run the host started (0 to 1), or null if it isn't (the host's alone knows). */
+export function readyingOf(p: Player): number | null {
+  for (const peer of session.peers.values()) if (peer.player === p) return peer.readying ? peer.readyShare : null;
+  return null;
 }
 
 /** A guest's choice in the run, for the host. */

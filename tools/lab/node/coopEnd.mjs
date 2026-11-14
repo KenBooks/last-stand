@@ -14,6 +14,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OUT } from './paths.mjs';
+import { judgeJoined } from './coopJoin.mjs';
 
 /** where `--pictures` puts the watching bar on each screen it's fitted on */
 const BAR_PICTURES = join(OUT, 'coop');
@@ -189,9 +190,12 @@ async function clickedBack(pair, call, tags) {
 export async function watchedRun(pair, call, lines, { tags, picture = null, canary = false }) {
   const [host, guest] = pair.pages;
   await call(host, 'coopHoldRun');
+  await call(guest, 'coopJoinAfresh');
   await call(host, 'coopStart');
   const started = await waitFor(pair, (states) => states.every((state) => state.mode === 'run'), STEP_FRAMES);
   if (!started.met) return ['the second run never started on every game'];
+  // (its fight warm now: the guest's joining bar still drawn before its run begins, #561)
+  const joinProblems = await warmJoin(pair, call, lines, tags[1]);
   await call(guest, 'coopLeaveRun');
   const fallen = await waitFor(pair, (states) => states[1].summary, STEP_FRAMES);
   if (!fallen.met) return ['the guest left the second run, and no summary came'];
@@ -199,13 +203,30 @@ export async function watchedRun(pair, call, lines, { tags, picture = null, cana
   const watching = await waitFor(pair, (states) => !states[1].summary, STEP_FRAMES);
   if (!watching.met) return ['the guest\'s summary never closed for it to watch the rest'];
   const order = watching.states[1].partnerSlots;
-  const problems = await watchControls(pair, call, lines, order);
+  const problems = [...joinProblems, ...await watchControls(pair, call, lines, order)];
   problems.push(...await barFits(guest, call, lines, { canary, pictures: picture !== null }));
   if (picture) await pictureWatching(pair, call, lines, picture);
   problems.push(...await theRestLeave(pair, call, tags));
   await call(host, 'coopLeaveRun');
   problems.push(...await backByItself(pair, call, lines, { tags, canary: false }));
   return problems;
+}
+
+/**
+ * A warm guest's start (the second run's): its joining bar must still be drawn in the frame before its run began,
+ * and be gone once it's in, the host's frame of it no longer readying once its word came (a link's round trip).
+ * Returns the problems.
+ */
+async function warmJoin(pair, call, lines, guestTag) {
+  const settled = (states) => {
+    const card = states[0].join.cards[guestTag] ?? '';
+    return !card.startsWith('Readying') && !states[1].join.shown;
+  };
+  const { states } = await waitFor(pair, settled, STEP_FRAMES);
+  const seen = await call(pair.pages[1], 'coopJoinSeen');
+  const joined = judgeJoined({ host: states[0], guest: states[1], guestTag, seen, what: 'warm' });
+  lines.push(...joined.lines);
+  return joined.problems;
 }
 
 /**

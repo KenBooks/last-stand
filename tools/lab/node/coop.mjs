@@ -5,6 +5,7 @@
 // late message holds up the ones behind it), and every couple of seconds on average a stall of several times the
 // jitter (a mobile network's). The pages play each scenario (page/coop.ts), and what the host and the guest showed is
 // judged against each other (coopJudge.mjs); a party's room is judged as it fills (`judgeRoom`).
+import { JOIN_CANARY, judgeJoined, judgeReadying } from './coopJoin.mjs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
@@ -37,6 +38,8 @@ const PRACTICE_FRAMES = 60;
 const START_FRAMES = 900;
 /** how long the guest is kept readying the run after the host's is under way (frames): past the countdown's 3.5 s */
 const READYING_FRAMES = 360;
+/** how far along the guest's warm-up is set halfway through its readying: its bar and the host's frame of it say so */
+const READYING_SHARE = 0.5;
 /** the seed the link's delays are drawn from */
 const LINK_SEED = 0x9e3779b9;
 /** each page's name tag: the host's, the guest's, the party's others' (the third first joins as the guest's) */
@@ -323,11 +326,16 @@ export class Pair {
  */
 async function slowGuestStart(pair, canary) {
   await callPage(pair.guest, 'coopSlowToReady');
+  await callPage(pair.guest, 'coopJoinAfresh');
   if (canary) await callPage(pair.host, 'coopForgetReadying');
+  if (canary) await callPage(pair.guest, 'coopHideJoining');
   await callPage(pair.host, 'coopStart');
   const hostInRun = (host) => host.mode === 'run';
   await pair.until(hostInRun, START_FRAMES, 'the host\'s run never started');
-  const [host, guest] = await pair.run(READYING_FRAMES);
+  // (halfway, the guest's warm-up half done: its bar fills, and its reports tell the host's frame of it)
+  await pair.run(READYING_FRAMES / 2);
+  await callPage(pair.guest, 'coopReadyingShare', { share: READYING_SHARE });
+  const [host, guest] = await pair.run(READYING_FRAMES / 2);
   if (canary) await callPage(pair.host, 'coopRememberReadying');
   const seconds = (READYING_FRAMES / 60).toFixed(1);
   const held = host.held ? ', held, "Waiting for players"' : '';
@@ -340,12 +348,21 @@ async function slowGuestStart(pair, canary) {
     problems.push(`coop: the host's wave came while the guest readied the run (${host.phase})`);
   }
   else if (!host.held) problems.push('coop: the host\'s countdown wasn\'t held for the guest readying the run');
+  const guestTag = PARTY_TAGS[1];
+  const readied = judgeReadying({ host, guest, guestTag, share: READYING_SHARE });
+  lines.push(...readied.lines);
+  problems.push(...readied.problems);
   await callPage(pair.guest, 'coopReady');
   const inRun = (h, g) => h.mode === 'run' && g.mode === 'run';
   await pair.until(inRun, START_FRAMES, 'the guest never joined the run once ready');
   const goesOn = (h) => h.phase === 'fighting' || (h.phase === 'countdown' && !h.held);
-  const [after] = await pair.until(goesOn, START_FRAMES, 'the host\'s countdown never went on once the guest was in');
+  const [after, guestAfter] = await pair.until(goesOn, START_FRAMES, 'the host\'s countdown never went on once the guest was in');
+  if (canary) await callPage(pair.guest, 'coopShowJoining');
   lines.push(`the guest in: the host's countdown ${after.held ? 'still held' : 'goes on'}`);
+  const seen = await callPage(pair.guest, 'coopJoinSeen');
+  const joined = judgeJoined({ host: after, guest: guestAfter, guestTag, seen, what: 'cold' });
+  lines.push(...joined.lines);
+  problems.push(...joined.problems);
   return { lines, problems };
 }
 
@@ -674,6 +691,10 @@ export async function runCoop(side, options) {
       lines.push(`canary: the host told no guest readies ${caught ? 'caught' : 'went unseen'}`);
       if (!caught) problems.push('coop: the canary\'s wave without the guest went unseen');
       else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(SLOW_GUEST_CANARY)));
+      const hidden = problems.some((problem) => problem.includes(JOIN_CANARY));
+      lines.push(`canary: the guest's joining bar hidden ${hidden ? 'caught' : 'went unseen'}`);
+      if (!hidden) problems.push('coop: the canary\'s hidden joining bar went unseen');
+      else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(JOIN_CANARY)));
     }
     if (scenarios?.length === 1 && scenarios[0] === 'ends') {
       const late = {

@@ -1,10 +1,13 @@
 // The fight's loading bar (ui/readying.ts): the lobby dimmed while what was pressed waits for the fight's programs,
-// the loading screen's bar in a small panel in its middle. Over the lobby, under the save slots and the modals.
+// the loading screen's bar in a small panel in its middle. Over the lobby, under the save slots and the modals; a co-op
+// guest's joining its host's run over them too.
 @use 'theme' as *;
 
 #readying { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
   padding: 16px; background: rgba(0, 0, 0, .55); }
 #readying.on { display: flex; }
+// (a guest joining its host's run: over the hall of heroes, the save slots and the dialogs, under the cursor drawn)
+#readying.join { z-index: 45; }
 #readying .rd-box { display: flex; flex-direction: column; align-items: center; gap: ui(10px); max-width: 100%;
   padding: ui(16px) ui(24px); background: $panel; border: 1px solid $frame-dark;
   box-shadow: 0 0 0 1px rgba($frame, .35), 0 ui(8px) ui(30px) rgba(0, 0, 0, .6); }
