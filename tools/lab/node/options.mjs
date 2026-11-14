@@ -1274,6 +1274,19 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  denied: {
+    help: 'the sound a press that casts nothing makes (#572): a skill on a key pressed while it cools (a knock, '
+      + 'once), held down while it cools (once), mashed while it cools (no more often than the player\'s throttle, '
+      + 'and not muted), short of energy (a fizzle), ready (none, and it casts) and in free casting (none); a channel '
+      + 'held short of energy, an aimed skill let go while it cools, and a partner\'s copy (none)',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'break the throttle, which the mashing must catch',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   nearaim: {
     help: 'the hero\'s aim as a foe stands under the crosshair near him, in each close view: a training dummy stood '
       + 'under it from abreast of him to 7 m ahead, the aim\'s way from the hero held within 10 degrees of the '

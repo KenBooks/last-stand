@@ -48,6 +48,7 @@ import type { SpinOptions } from './spin';
 import type { PaceOptions } from './pace';
 import type { NearAimOptions } from './nearAim';
 import type { BowPropOptions } from './bowProp';
+import type { DeniedOptions } from './denied';
 import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
@@ -621,6 +622,15 @@ export async function nearaim(lab: Lab, command: NearAimOptions): Promise<Report
 export async function bowprop(lab: Lab, command: BowPropOptions): Promise<Report> {
   const { bowProp } = await import('./bowProp');
   return bowProp(lab, command);
+}
+
+/**
+ * `lab denied`: a press that casts nothing heard (#572): once while its skill cools, held, mashed no faster than its
+ * throttle, short of energy; never when it casts, in free casting or for a partner's copy.
+ */
+export async function denied(lab: Lab, command: DeniedOptions): Promise<Report> {
+  const { denied: deniedRound } = await import('./denied');
+  return deniedRound(lab, command);
 }
 
 /**
