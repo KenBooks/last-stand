@@ -867,17 +867,18 @@ export const COMMANDS = {
       level: {
         kind: 'choice',
         usage: 'level',
-        choices: ['high', 'medium', 'low'],
+        choices: ['high', 'medium', 'low', 'verylow'],
         default: 'low',
         help: 'the quality level whose settings the scene takes, its pixels all the screen\'s',
       },
+      rarity: SETUP_OPTIONS.rarity,
       rounds: { kind: 'number', usage: 'n', default: '6', help: 'the rounds of turns, each of 6 renders a side' },
       canary: { kind: 'switch', help: 'draw the scene twice: it must read at least 1.6 times once' },
       each: { kind: 'switch', help: 'time each see-through or cut-out mesh alone too, the costliest listed' },
       hero: {
         kind: 'switch',
         help: 'time the hero\'s parts alone too: his head, his hands, his cloth, the rest of him and the shadows '
-          + 'he casts, '
+          + 'he casts, the glow of his gear (with --rarity), '
           + 'with what a change of nothing reads (the measure\'s noise)',
       },
       frame: {

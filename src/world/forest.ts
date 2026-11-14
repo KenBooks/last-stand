@@ -13,7 +13,7 @@ import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, plac
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
-import { asClutter, cullInCells, eachInstance, gridCell, ringSector } from './culling';
+import { asClutter, cullInCells, eachInstance, gridCell, ringSector, thinLeaves } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
@@ -299,6 +299,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   bushes.count = bushCards.count = bi; rocks.count = ri;
   bushes.receiveShadow = bushCards.castShadow = bushCards.receiveShadow = rocks.castShadow = rocks.receiveShadow = true;
   bushes.name = 'thicket'; bushCards.name = 'thicket leaves'; rocks.name = 'thicket rocks';
+  thinLeaves(bush.cards);
   // (the thicket's leaves walked up to, its bushes' cores and rocks flown into: an arrow goes through the leaves)
   wall.add(bushes, false, 'wall', bush.lumps);
   // (walked up to, its lumps swollen partway into their leaves: they give, brushed through. A hull round a lump's cards

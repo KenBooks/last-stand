@@ -24,7 +24,7 @@ import { setShadowsOnMove } from '../world/shadowsOnMove';
 import { setHdrAllowed } from './hdr';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
-import { setClutterShare } from '../world/culling';
+import { setClutterShare, setLeafShare } from '../world/culling';
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
@@ -218,6 +218,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setShadowInTurns(p.shadowInTurns);
   setSunShadowStill(p.stillSunShadow);
   setClutterShare(p.clutter);
+  setLeafShare(p.leaves);
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);

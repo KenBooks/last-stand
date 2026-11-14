@@ -243,7 +243,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--hero` times the hero's parts too, over 24 rounds: his head, his hands, his cloth, the rest of him and that rest
   a material at a time, the shadows he casts (his pieces' casting switched with his one shadow let go, `castingAsOne`:
   switched alone, the one shadow was merged again at every turn, and the merge was what read, 1.9 ms), and a change
-  of nothing, which must read nothing: told from nothing and over 0.15 ms is a problem.
+  of nothing, which must read nothing: told from nothing and over 0.15 ms is a problem. With `--rarity` (every item
+  he wears of it: Rare and up glow) it times the glow of his gear too, each glowing material's colour put to black, so
+  its lit shader skips the pattern, the same program either way. `--level verylow` takes Very low's settings: at a
+  phone's screen (`--screen 832x384@3.75`) on an AMD integrated GPU the forest's thicket leaves were a quarter of its
+  scene pass (`--each`), and the point lights' shadows and the environment taken off by a uniform's value saved
+  nothing there, as only what the program is built of read.
 - `envcost`: what the environment's lookups take of the GPU (`page/envCost.ts`), the hero standing in each biome
   and view (`--biomes`, `--views`: top and third): the frame timed on the GPU with the scene's environment and
   without it in turns (`page/gpuTurns.ts`, which `fire --cost` shares: `--rounds` of 6 renders a side), so a run's

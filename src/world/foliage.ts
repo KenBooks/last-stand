@@ -92,7 +92,8 @@ const LEAF_REACH = 1.4;
  * core's facets, so the whole crown lights as one soft mass instead of a heap of flat planes.
  */
 export function canopyGeo(rng: () => number, blobs: [number, number, number, number][], cardsPerBlob: number, card: number): { core: THREE.BufferGeometry; cards: THREE.BufferGeometry; lumps: THREE.BufferGeometry[]; leafLumps: THREE.BufferGeometry[] } {
-  const cores: THREE.BufferGeometry[] = [], cards: THREE.BufferGeometry[] = [], leafLumps: THREE.BufferGeometry[] = [];
+  const cores: THREE.BufferGeometry[] = [], leafLumps: THREE.BufferGeometry[] = [];
+  const cardsOf: THREE.BufferGeometry[][] = blobs.map(() => []);
   const q = new THREE.Quaternion(), z = new THREE.Vector3(0, 0, 1), roll = new THREE.Quaternion(), n = new THREE.Vector3();
   // out from the blob, tipped up: the top of a crown catches the light
   const soft = (g: THREE.BufferGeometry, x: number, y: number, zz: number, s: number) => {
@@ -117,9 +118,12 @@ export function canopyGeo(rng: () => number, blobs: [number, number, number, num
       const at = d.clone().multiplyScalar(s * (0.62 + rng() * 0.3));
       g.translate(x + at.x, y + at.y, zz + at.z);
       soft(g, x, y, zz, s);
-      cards.push(g);
+      cardsOf[bi].push(g);
     }
   });
+  // (the cards merged a blob's each in turn, so any share of them from the start covers every blob alike: a quality
+  // level draws fewer, `thinLeaves` in world/culling.ts)
+  const cards = Array.from({ length: cardsPerBlob }, (_, i) => cardsOf.map((blob) => blob[i])).flat();
   // (and each blob's core alone, and swollen into its leaves: the wall meets each by its own hull, world/wall.ts)
   return { core: mergeGeometries(cores.map((g) => g.index ? g.toNonIndexed() : g))!, cards: mergeGeometries(cards)!, lumps: cores, leafLumps };
 }

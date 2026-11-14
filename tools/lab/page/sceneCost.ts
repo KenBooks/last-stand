@@ -12,6 +12,7 @@ import * as renderer from '../../../src/core/renderer';
 import { useQuality } from '../../../src/core/quality';
 import { QUALITY, type QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
+import type { RarityId } from '../../../src/types';
 import { standIn } from './light';
 import { costInTurns, sure, type TurnsCost } from './gpuTurns';
 import { castingAsOne } from '../../../src/entities/models/castAsOne';
@@ -33,6 +34,8 @@ export interface SceneCostOptions {
   hero: boolean;
   /** the whole frame timed by the browser's clock too, with HDR's output and the level's MSAA and without */
   frame: boolean;
+  /** every item he wears of this rarity (Rare and up glow: the glow of his gear, a part of `--hero`'s) */
+  rarity?: RarityId;
 }
 
 /** `--frame`'s turns: rounds of frames a side */
@@ -282,8 +285,37 @@ function byMaterial(meshes: THREE.Mesh[]): Part[] {
     .map(([material, group]) => heroPart(`  in ${looksLike(material)}`, group));
 }
 
+/** A kit material's own glow colour (`kitLooks.aura` in src/core/materials.ts), where it has one. */
+type Glowing = THREE.Material & { kitLooks?: { aura?: { value: THREE.Color } } };
+
+/** The glows of `meshes`' worn items, each its rarity's colour (black: none, the pattern skipped). */
+function glowsOf(meshes: THREE.Mesh[]): THREE.Color[] {
+  const glows = new Set<THREE.Color>();
+  for (const mesh of meshes) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials as Glowing[]) {
+      const glow = material.kitLooks?.aura?.value;
+      if (glow && (glow.r > 0 || glow.g > 0 || glow.b > 0)) glows.add(glow);
+    }
+  }
+  return [...glows];
+}
+
+/**
+ * His gear's glow in its rarity's colour (`ITEM_GLOW`): each glowing material's colour put to black, so its lit shader
+ * skips the pattern (`dot(uAura, uAura) > 0.0`), the same program either way. What a glow costs where it's drawn.
+ */
+function glowPart(meshes: THREE.Mesh[]): Part {
+  const glows = glowsOf(meshes);
+  const kept = glows.map((glow) => glow.clone());
+  return {
+    name: `the glow of his gear (${glows.length} materials)`,
+    change: (on) => glows.forEach((glow, index) => (on ? glow.copy(kept[index]) : glow.setRGB(0, 0, 0))),
+  };
+}
+
 /** The hero's parts: his head, his hands, his cloth (what moves as cloth: its shape changes), the rest of him, that
- *  rest by its materials, and the shadows he casts. */
+ *  rest by its materials, the glow of his gear, and the shadows he casts. */
 function heroParts(): Part[] {
   const meshes = heroMeshes();
   const head = G.player.model.joints?.head;
@@ -303,6 +335,7 @@ function heroParts(): Part[] {
     heroPart('his cloth', cloth),
     heroPart('the rest of him', rest),
     ...byMaterial(rest),
+    glowPart(meshes),
     heroShadowsPart(meshes),
   ];
 }
@@ -406,6 +439,7 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
   const name = `${biome} ${view}`;
   const settings = atFullPixels(level);
   await standIn(lab, { biome, view, facing: 0 });
+  if (command.rarity) lab.glowAs(command.rarity);
   const drawing = lab.drawing;
   lab.drawing = true;
   const turns = { rounds: command.rounds, renders: TURN_RENDERS };
