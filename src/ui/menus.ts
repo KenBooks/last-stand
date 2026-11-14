@@ -120,6 +120,9 @@ const CONTROL_ICONS = {
     + 'M10.5 12.5h3v3.2a1.5 1.5 0 0 1-3 0Z'),
   /** Ping: a map's pin */
   ping: drawn('M12 2.5a7 7 0 0 0-7 7c0 5 7 12 7 12s7-7 7-12a7 7 0 0 0-7-7ZM12 6.8a2.7 2.7 0 1 0 0 5.4a2.7 2.7 0 1 0 0-5.4Z'),
+  /** Use: an open hand (drawn as the others are: the emoji came in the system's own colours, a yellow hand among them) */
+  use: drawn('M7 13.6V5.2a1.2 1.2 0 0 1 2.4 0V11h.7V3.7a1.2 1.2 0 0 1 2.4 0V11h.7V4.7a1.2 1.2 0 0 1 2.4 0V11h.7V7.1a1.1 1.1 0 0 1 2.2 0V15.5'
+    + 'a6 6 0 0 1-6 6h-1.2c-2 0-3.4-1-4.6-2.8L3.3 13.7a1.35 1.35 0 0 1 2.2-1.55Z'),
 };
 
 /**
@@ -144,7 +147,7 @@ function keyboardDiagram(): string {
   // as the game's: left out there, B and C were missed beside the rules' Bank and Continue)
   if (VILLAGE && G.mode === 'menu') {
     Object.assign(used, {
-      e: { icon: '✋', cap: 'Use', tip: 'Use what the hero is near (a click on it walks him there)' },
+      e: { icon: CONTROL_ICONS.use, cap: 'Use', tip: 'Use what the hero is near (a click on it walks him there)' },
       i: { icon: '⛉', cap: 'Inventory', tip: 'Inventory: equipment, attributes and skills' },
       m: { icon: '⌖', cap: 'Map', tip: "The village's map" },
     });
