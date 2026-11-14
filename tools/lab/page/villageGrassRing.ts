@@ -42,7 +42,10 @@ const STRIDE = 0.5;
 /** a band read only if blades cover this much of it: thin, over a road or a house's side, a few blades are all it has,
  *  and it read the highest of all at every hand-over tried */
 const LEAST_COVER = 0.7;
-const MOST_CHANGED = 0.1;
+// (0.1 while every blade was a blade wide: High's tufts are thin blades that hide little of each other, so as many
+// coming and going in a stride change more of a band's pixels, 10.0 to 11.7% from run to run; Medium's whole blades
+// read 8.7%. Wider or slower hand-overs moved the worst band and changed as much: it's as many blades a stride)
+const MOST_CHANGED = 0.12;
 
 /** One band's grass in a frame: its pixels showing blades, and the sums of their light and of the light's steps to the
  *  next blade pixel beside each (over `pairs` of them). */

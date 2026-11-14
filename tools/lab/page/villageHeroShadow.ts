@@ -12,6 +12,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, topLight, type Canvas } from './light';
 import { castingAsOne } from '../../../src/entities/models/castAsOne';
 import { roadLines, SQUARE_R, toPolyline } from '../../../src/world/villagePlan';
+import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import type { LightsChecked } from './villageLights';
 
 /** how far from the lamp he stands (m): near it, and further off (from play, by a lamp at the stair: "no shadows
@@ -222,6 +223,9 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
   holdHour(0);
   const casts = new Map<THREE.Object3D, boolean>();
   const read: ByLamp[] = [];
+  // (his shadow drawn every frame: it's read with him casting and not, stood still, which a level that draws the
+  // movers only as they move never sees change)
+  holdShadowsOnMove('every');
   try {
     await lab.step(SETTLE);
     if (!castingLights().length) throw new Error('lab: village: no lamp casting at midnight');
@@ -239,6 +243,7 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
       read.push(reading);
     }
   } finally {
+    holdShadowsOnMove('level');
     heroCasts(true, casts);
     holdHour(null);
   }
@@ -302,6 +307,7 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
   holdHour(0);
   const casts = new Map<THREE.Object3D, boolean>();
   const read: BetweenRead[] = [];
+  holdShadowsOnMove('every');
   try {
     await lab.step(SETTLE);
     const pairs = pairsToStandBetween();
@@ -325,6 +331,7 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
       read.push({ lamps: [a, b], his: [hisA, hisB], moon });
     }
   } finally {
+    holdShadowsOnMove('level');
     heroCasts(true, casts);
     holdHour(null);
   }

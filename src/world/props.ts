@@ -887,9 +887,9 @@ export function bakeStaticShadows(group: THREE.Group): void {
 
 /** Whether `mesh` can be drawn merged with others of its material (`mergeStill`): a plain mesh standing still, one
  *  material, nothing run round its draw. */
-function mergeable(mesh: THREE.Mesh): boolean {
+function mergeable(mesh: THREE.Mesh, kept = false): boolean {
   if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
-  if (Array.isArray(mesh.material) || mesh.userData.noMerge) return false;
+  if (Array.isArray(mesh.material) || (mesh.userData.noMerge && !kept)) return false;
   if (Object.keys(mesh.geometry.morphAttributes).length) return false;
   return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender;
 }
@@ -917,10 +917,21 @@ export function mergeStill(root: THREE.Object3D): void {
     const mesh = object as THREE.Mesh;
     if (mesh.isMesh && thinsByMiddle(mesh.material)) keepMiddle(mesh);
   });
+  mergeUnder(root, false);
+  // (what's kept out of that merge, a part with materials of its own that's shown and hidden as one, is merged
+  // within itself: the hall's roof and front wall were some 100 draws of their rafters, slates and courses)
+  const within: THREE.Object3D[] = [];
+  root.traverse((object) => { if (object.userData.mergeWithin) within.push(object); });
+  for (const part of within) mergeUnder(part, true);
+}
+
+/** The mergeable meshes under `root` drawn as one a material, the merged ones added to it; `kept`: those kept out
+ *  of the place's merge (`noMerge`), merged among themselves and kept out still. */
+function mergeUnder(root: THREE.Object3D, kept: boolean): void {
   const groups = new Map<string, THREE.Mesh[]>();
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mergeable(mesh)) return;
+    if (!mergeable(mesh, kept) || (kept && !mesh.userData.noMerge)) return;
     const key = mergeKey(mesh);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(mesh);
@@ -938,6 +949,7 @@ export function mergeStill(root: THREE.Object3D): void {
     one.castShadow = first.castShadow;
     one.renderOrder = first.renderOrder;
     one.layers.mask = first.layers.mask;
+    one.userData.noMerge = kept;
     root.add(one);
     one.updateMatrixWorld(true);
     one.matrixAutoUpdate = false;

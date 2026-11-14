@@ -17,6 +17,7 @@ import {
 } from './webgpu';
 import { G } from '../state';
 import { sunShadowStill } from '../world/props';
+import { moonShadowKept } from '../world/moonShadow';
 import { CAMERA } from '../data/balance';
 import { countGhostLayers } from './ghostLayers';
 import { clamp, damp } from '../util';
@@ -579,7 +580,9 @@ function sunShadowInTurns(): void {
   const skip = turns && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
   // (where the sun's shadow is the still world's alone, it's drawn with the still shadows, by no frame of its own)
-  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill();
+  // (nor where its map is kept, the village's: set to draw here every frame, the whole map was drawn again, every
+  // tree, the palisade and the hero, 430k triangles of a frame's 1.3M on High, and the kept copy then laid over it)
+  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill() && !moonShadowKept();
 }
 
 /** top-down (the default), over the shoulder, or through the character's eyes */

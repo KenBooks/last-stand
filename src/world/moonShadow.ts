@@ -58,6 +58,9 @@ export function holdMoonShadow(moon: THREE.DirectionalLight, on: boolean): boole
   return begun || (hold && (!kept || kept.width !== moon.shadow.mapSize.x));
 }
 
+/** Whether the sun's map is kept now, only what moves drawn over it each frame: no frame draws it whole. */
+export const moonShadowKept = (): boolean => holding && wanted;
+
 /** A lab's switch: false redraws the map every frame as it was, from the next draw (none need run between: the frame
  *  is compared with itself, at one moment). */
 export function keepMoonShadow(on: boolean): void {

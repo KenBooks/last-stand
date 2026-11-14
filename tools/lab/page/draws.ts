@@ -90,6 +90,8 @@ interface FrameDraws {
   geometries: Map<THREE.BufferGeometry, Drawn>;
   looks: Map<string, Look>;
   parts: Map<string, number>;
+  /** the triangles drawn under each part of the scene, by pass (its shadow maps' too) */
+  weights: Map<string, Record<Pass, number>>;
   arms: Map<THREE.Object3D, number>;
 }
 
@@ -172,7 +174,7 @@ function webgpuPassOf(drawn: RenderObject): Pass {
 /** Records every draw call until `stop()`: what was drawn, and the record. On WebGPU, each draw its backend is given
  *  (`backend.draw`, a `RenderObject` a draw: WebGL's `renderBufferDirect` isn't there). */
 function recordDraws(): { record: FrameDraws; stop(): void } {
-  const record: FrameDraws = { geometries: new Map(), looks: new Map(), parts: new Map(), arms: new Map() };
+  const record: FrameDraws = { geometries: new Map(), looks: new Map(), parts: new Map(), weights: new Map(), arms: new Map() };
   if (WEBGPU) {
     const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
     const draw = backend.draw;
@@ -213,6 +215,10 @@ function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geomet
   const instances = (object as THREE.InstancedMesh).count;
   if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * triangles) / instances;
   drawn.objects.add(object);
+  const under = scenePartOf(object);
+  const weight = record.weights.get(under) ?? noDraws();
+  weight[pass] += triangles;
+  record.weights.set(under, weight);
   if (pass === 'scene') {
     drawn.material = material;
     const key = lookOf(material);
@@ -243,6 +249,15 @@ function scenePartOf(object: THREE.Object3D): string {
   }
   if (named.length < 2) named.push(object.type);
   return named.slice(0, 2).join(' > ');
+}
+
+/** every pass */
+const ALL_PASSES: Pass[] = ['scene', 'arms', 'shadow', 'other'];
+
+/** A part's row: its triangles in all, in the scene and in the shadow maps. */
+function weightRow([part, weight]: [string, Record<Pass, number>]): string {
+  const all = Math.round(sumOf(weight, ALL_PASSES));
+  return `  ${String(all).padStart(8)}  ${part}  (${Math.round(weight.scene)} scene, ${Math.round(weight.shadow)} shadow)`;
 }
 
 /** A sum over `passes` of a record by pass. */
@@ -355,7 +370,10 @@ function lists(record: FrameDraws, rows: number): string[] {
     .map(([look, { draws, geometries: drew }]) => `  ${String(draws).padStart(4)}  ${look}  (${drew.size} geometries)`);
   const parts = [...record.parts].sort((a, b) => b[1] - a[1]).slice(0, rows)
     .map(([part, draws]) => `  ${String(draws).padStart(4)}  ${part}`);
+  const weights = [...record.weights].sort((a, b) => sumOf(b[1], ALL_PASSES) - sumOf(a[1], ALL_PASSES))
+    .slice(0, rows).map(weightRow);
   return [
+    'the triangles by the scene\'s part (all of them: in the scene, in the shadow maps):', ...weights,
     'the geometries drawn most often:', ...often,
     'the geometries that drew the most triangles:', ...heavy,
     'the geometries that drew the most triangles outside the view (an instanced mesh\'s instances beyond the camera '

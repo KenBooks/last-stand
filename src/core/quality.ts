@@ -17,7 +17,7 @@ import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
-import { setGrassSpread } from '../world/meadow';
+import { setGrassSpread, setGrassTufts } from '../world/meadow';
 import { setDrapeRounds } from '../entities/models/armor';
 import { setLampQuality } from './lamps';
 import { setShadowsOnMove } from '../world/shadowsOnMove';
@@ -208,6 +208,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
   setGrassSpread(p.grassSpread);
+  setGrassTufts(p.grassTufts);
   setLampQuality(p.lampReach, p.lampShadows);
   setShadowsOnMove(p.shadowsOnMove);
   setBloomShare(p.bloomShare);
