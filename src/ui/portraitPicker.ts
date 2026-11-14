@@ -1,5 +1,5 @@
 // Optional painted portraits in the co-op dialog and the two party lists, never over heroes in the world. With none
-// chosen a player's picture is their class's grey outline (classOutlines.ts), so every card is laid out alike.
+// chosen a player's picture is their class's default one, in greys (classOutlines.ts), so every card is laid out alike.
 import { G } from '../state';
 import { portraitIds, portraitOf, savePortrait, PORTRAIT_COLORS } from '../net/portraits';
 import { portraitUrl } from './portraitArt';
@@ -9,8 +9,8 @@ import type { Player } from '../entities/player';
 
 const shown = new WeakMap<HTMLElement, string>();
 
-/** Decorative party-list picture: names remain text, and the None choice shows the class's outline, drawn inline, so
- *  it creates no image request. */
+/** Decorative party-list picture: names remain text, and the None choice shows the class's default picture, inlined in the
+ *  bundle, so it creates no image request. */
 export function portraitHtml(player: Player): string {
   const id = portraitOf(player), url = id ? portraitUrl(id) : undefined;
   return url ? `<img class="party-portrait" src="${url}" width="36" height="36" alt="" decoding="async">` : classOutline(player.cls.id);

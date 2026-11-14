@@ -405,4 +405,4 @@ lists Chrome's layers at each picture, and where the sides' differ.
 
 - `guard`: #399, attacks while blocking in third person and through the eyes, a damage control during the exposed swing, immediate return/release/failure cases, independent shield and attack touch fingers. `--canary` leaves a shield raised during a swing and must detect it.
 
-- `portraits`: optional portrait requests and the real co-op picker; no downloads before use, current class only, selection, peer picture rendering and clearing, a class's outline shown with none chosen, no two classes' alike (run it with `--panels`: the village's lobby hides the party cards it pictures). `--canary` requests another class and must detect it.
+- `portraits`: optional portrait requests and the real co-op picker; no downloads before use, current class only, selection, peer picture rendering and clearing, a class's default picture shown with none chosen, no two classes' alike (run it with `--panels`: the village's lobby hides the party cards it pictures). `--canary` requests another class and must detect it.
