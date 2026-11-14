@@ -44,3 +44,52 @@
 @media (prefers-reduced-motion: reduce) {
   .vm-names, .vm-you { transition: none; }
 }
+
+// --- the looks while one is chosen (ui/villageMapLooks.ts: `?mapStyle=a|b|c`), each its names, close and mark ---
+
+/* A: an explorer's chart: names lettered in sepia on slips of vellum, ruled twice */
+#vmap[data-style="a"] {
+  .vm-name { font: italic 600 ui(14px) Georgia, 'Times New Roman', serif; letter-spacing: .02em; color: #3b2615;
+    background: linear-gradient(#f3e4bf, #e6cf9c); border: 1px solid rgba(59, 38, 21, .75); border-radius: ui(2px);
+    box-shadow: 0 0 0 ui(2px) rgba(243, 228, 191, .9), 0 0 0 calc(#{ui(2px)} + 1px) rgba(59, 38, 21, .45),
+      0 ui(3px) ui(6px) rgba(40, 24, 8, .35); }
+  .vm-name::after { border-top-color: rgba(59, 38, 21, .85); }
+  .vm-name:hover, .vm-name:focus-visible { background: #fff6dc; color: #1a0f04; }
+  .vm-name[data-biome="crypt"] { color: #5a1f78; }
+  .vm-name[data-biome="forest"] { color: #24602e; }
+  .vm-you::before { background: #8a2c1c; filter: drop-shadow(0 0 1px #f3e4bf) drop-shadow(0 0 2px #f3e4bf); }
+  .vm-close { font: italic 600 ui(13px) Georgia, serif; color: #3b2615; background: #efdfb5;
+    border-color: rgba(59, 38, 21, .8); right: ui(28px); top: ui(26px); }
+}
+
+/* B: a gilded war table: names on dark enamel plates rimmed in gold, as the game's panels are */
+#vmap[data-style="b"] {
+  .vm-name { font: 700 ui(12.5px) var(--font-display); letter-spacing: .08em; color: $accent;
+    background: linear-gradient(#221c18, #0e0b0a); border: 1px solid $frame; border-radius: ui(2px);
+    box-shadow: inset 0 1px 0 rgba(240, 200, 120, .18), 0 0 0 1px rgba(0, 0, 0, .8), 0 ui(3px) ui(8px) rgba(0, 0, 0, .7); }
+  .vm-name::after { border-top-color: $frame; }
+  .vm-name:hover, .vm-name:focus-visible { color: $highlight; border-color: $highlight;
+    background: linear-gradient(#2e251c, #14100c); }
+  .vm-name[data-biome="crypt"] { color: #cf9cf2; }
+  .vm-name[data-biome="forest"] { color: #8fe0a2; }
+  .vm-you::before { background: linear-gradient(#ff5a3c, #a8160e);
+    filter: drop-shadow(0 0 1px $highlight) drop-shadow(0 0 3px rgba(0, 0, 0, .9)); }
+  .vm-close { color: $accent; background: linear-gradient(#221c18, #0e0b0a); border-color: $frame;
+    right: ui(30px); top: ui(28px); }
+}
+
+/* C: a painted map: names on cream ribbons with notched ends */
+#vmap[data-style="c"] {
+  .vm-name { font: 700 ui(12.5px) var(--font-display); letter-spacing: .05em; color: #4a2a1e; background: none;
+    border: 0; box-shadow: none; padding: ui(4px) ui(16px); isolation: isolate; }
+  .vm-name::before { content: ''; position: absolute; inset: 0; z-index: -1;
+    background: linear-gradient(#fbf3e0 0 60%, #e6d2a8);
+    clip-path: polygon(0 0, 100% 0, calc(100% - #{ui(8px)}) 50%, 100% 100%, 0 100%, #{ui(8px)} 50%); }
+  .vm-name::after { border-top-color: #e6d2a8; }
+  .vm-name:hover, .vm-name:focus-visible { color: #1a0f04; }
+  .vm-name:hover::before, .vm-name:focus-visible::before { background: linear-gradient(#fffaf0, #f6e8c8); }
+  .vm-name[data-biome="crypt"] { color: #6a2a9a; }
+  .vm-name[data-biome="forest"] { color: #24743a; }
+  .vm-you::before { background: #c4473a; filter: drop-shadow(0 0 1.5px #fbf3e0) drop-shadow(0 1px 1px rgba(60, 40, 20, .5)); }
+  .vm-close { color: #fbf1dc; background: #9a3328; border-color: #6a2018; right: ui(24px); top: ui(22px); }
+}

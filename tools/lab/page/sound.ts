@@ -159,6 +159,16 @@ const WARRIOR: Record<string, Scene> = {
   draught: { what: 'Healing Draught drunk', cues: [{ at: 0, sound: ['draught'] }] },
 };
 
+/** the village's map's scenes: opened and left open, folded away, and opened and folded away again at once */
+const MAP_SCENES: Record<string, Scene> = {
+  mapOpen: { what: 'the village\'s map unfolded', cues: [{ at: 0, sound: ['mapOpen'] }] },
+  mapClose: { what: 'the village\'s map folded away', cues: [{ at: 0, sound: ['mapClose'] }] },
+  mapBoth: {
+    what: 'the village\'s map unfolded, read 1.5 s, folded away',
+    cues: [{ at: 0, sound: ['mapOpen'] }, { at: 1.5, sound: ['mapClose'] }],
+  },
+};
+
 const SCENES: Record<string, Scene> = {
   bolt: {
     what: 'Splintering Bolt held: four casts, each bursting on a foe and its two splits on two others',
@@ -212,6 +222,7 @@ const SCENES: Record<string, Scene> = {
     held: [1, THREAD_HELD],
   },
   ...WARRIOR,
+  ...MAP_SCENES,
   lanceEarly: {
     what: 'Void Lance let go as its portal is drawn, before the beam',
     cues: [

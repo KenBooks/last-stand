@@ -14,7 +14,7 @@ import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { COTTAGE, PODIUM, SQUARE_EDGE, TOMB, WAY, footpathOf, fromGap, palisadePolygon, roadLines } from '../world/villagePlan';
 import { canvasOf, ctx2d } from '../core/textures';
 import { FOUNTAIN } from '../world/fountain';
-import { mulberry } from '../util';
+import { LOOKS, mapStyle, type Look } from './villageMapLooks';
 import { sfx } from '../core/audio';
 import { completeStep } from '../game/training';
 import { input, isDown } from '../core/input';
@@ -30,12 +30,6 @@ export const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
 const NAME_GAP = 3, TAIL_IN = 3, NAME_ROUNDS = 12;
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
-/** the ink and washes it's drawn in */
-const INK = '#3a2a1a', INK_SOFT = 'rgba(58, 42, 26, 0.55)', PAPER = '#ead9b4', PAPER_DARK = '#c8ad7c';
-const MEADOW = 'rgba(112, 148, 70, 0.30)', WOOD = 'rgba(70, 104, 48, 0.55)', ROAD = '#bfa676', ROOF = '#a8664a';
-const STONE = '#b9b1a2', DARK_STONE = '#5e5852', SAND = 'rgba(196, 170, 120, 0.45)';
-/** each portal's colour on the map */
-const PORTAL_INK: Record<BiomeId, string> = { crypt: '#7a2fb0', forest: '#2f9a4a' };
 
 export interface VillageMapHooks {
   /** an object picked on the map: the hero walks there and uses it */
@@ -137,8 +131,9 @@ export function setVillageMap(on: boolean): void {
     drawSheet();
     layNames();
     root.setAttribute('aria-hidden', 'false');
-    sfx.click();
   }
+  // (paper unfolded or folded away, however it's opened or put away: M, the touch Map button, Esc, a name, its margin)
+  if (on) sfx.mapOpen(); else sfx.mapClose();
   root.classList.toggle('open', on);
 }
 
@@ -272,14 +267,16 @@ function toSheet(x: number, z: number): Spot {
   return [(x - VIEW.x0) / (VIEW.x1 - VIEW.x0), (z - VIEW.z0) / (VIEW.z1 - VIEW.z0)];
 }
 
-/** The sheet drawn at its size on the screen, and cut into its panels (once a size). */
+/** The sheet drawn at its size on the screen in the look chosen, and cut into its panels (once a size and look). */
 function drawSheet(): void {
   const ratio = devicePixelRatio || 1;
   const w = Math.round(sheet.clientWidth * ratio), h = Math.round(sheet.clientHeight * ratio);
-  if (!w || !h || drawnAt === `${w}x${h}`) return;
-  drawnAt = `${w}x${h}`;
+  const style = mapStyle();
+  root.dataset.style = style;
+  if (!w || !h || drawnAt === `${w}x${h}:${style}`) return;
+  drawnAt = `${w}x${h}:${style}`;
   const whole = canvasOf(w, h);
-  drawMap(ctx2d(whole), w, h);
+  drawMap(ctx2d(whole), w, h, LOOKS[style]);
   const pw = Math.ceil(w / PANELS);
   for (const [i, { canvas }] of panels.entries()) {
     canvas.width = pw;
@@ -290,8 +287,8 @@ function drawSheet(): void {
 
 // --- the drawing ----------------------------------------------------------------------------------------------------
 
-/** The whole map on `g`, `w` by `h` px. */
-function drawMap(g: CanvasRenderingContext2D, w: number, h: number): void {
+/** The whole map on `g`, `w` by `h` px, in `look`. */
+function drawMap(g: CanvasRenderingContext2D, w: number, h: number, look: Look): void {
   const metre = w / (VIEW.x1 - VIEW.x0);
   const at = (x: number, z: number): Spot => [(x - VIEW.x0) * metre, (z - VIEW.z0) * metre];
   const line = (points: readonly Spot[], close = false): void => {
@@ -299,15 +296,16 @@ function drawMap(g: CanvasRenderingContext2D, w: number, h: number): void {
     points.forEach(([x, z], i) => (i ? g.lineTo(...at(x, z)) : g.moveTo(...at(x, z))));
     if (close) g.closePath();
   };
-  // (everything drawn within the paper's ragged margin)
+  // (everything drawn within the sheet's margin)
   g.save();
-  g.clip(drawParchment(g, w, h));
+  g.clip(look.ground(g, w, h));
   // the meadow inside the palisade, the wood round it
   const fence = palisadePolygon(200);
-  line(fence, true);
-  g.fillStyle = MEADOW;
-  g.fill();
-  for (const t of hooks.trees()) drawTree(g, ...at(t.x, t.z), Math.max(1.6, t.height * 0.28) * metre, t.x * 7.1 + t.z * 3.3);
+  const meadow = new Path2D();
+  fence.forEach(([x, z], i) => (i ? meadow.lineTo(...at(x, z)) : meadow.moveTo(...at(x, z))));
+  meadow.closePath();
+  look.meadowWash(g, meadow, metre);
+  for (const t of hooks.trees()) look.tree(g, ...at(t.x, t.z), Math.max(1.6, t.height * 0.28) * metre, t.x * 7.1 + t.z * 3.3);
   // the footpaths (each runs on under the road it joins), the roads over them, the square
   g.lineCap = 'butt';
   g.lineJoin = 'round';
@@ -317,7 +315,7 @@ function drawMap(g: CanvasRenderingContext2D, w: number, h: number): void {
     if (!path) continue;
     // (laid from the way it joins, so a whole dash meets its edge)
     line([...path].reverse());
-    g.strokeStyle = 'rgba(120, 92, 56, 0.8)';
+    g.strokeStyle = look.footpath;
     g.lineWidth = metre * 0.3;
     g.stroke();
   }
@@ -325,142 +323,170 @@ function drawMap(g: CanvasRenderingContext2D, w: number, h: number): void {
   line(groveIn);
   g.stroke();
   g.setLineDash([]);
+  const edge = look.box === 'token' ? 0.35 : 0.5;
   for (const road of roadLines) {
     line(road.line);
-    g.strokeStyle = INK_SOFT;
-    g.lineWidth = (road.width + 0.5) * metre;
+    g.strokeStyle = look.roadEdge;
+    g.lineWidth = (road.width + edge) * metre;
     g.stroke();
-    g.strokeStyle = ROAD;
+  }
+  g.beginPath();
+  g.arc(...at(0, 0), SQUARE_EDGE * metre + (edge / 2) * metre, 0, Math.PI * 2);
+  g.fillStyle = look.roadEdge;
+  if (look.box !== 'ink') g.fill();
+  for (const road of roadLines) {
+    line(road.line);
+    g.strokeStyle = look.road;
     g.lineWidth = road.width * metre;
     g.stroke();
   }
   g.beginPath();
   g.arc(...at(0, 0), SQUARE_EDGE * metre, 0, Math.PI * 2);
-  g.fillStyle = ROAD;
+  g.fillStyle = look.road;
   g.fill();
-  g.strokeStyle = INK_SOFT;
-  g.lineWidth = Math.max(1, metre * 0.12);
-  g.stroke();
-  drawBuildings(g, at, metre);
-  drawPalisade(g, at, metre, fence);
-  for (const id of BIOME_IDS) drawWay(g, at, metre, id);
-  drawCompass(g, w - metre * 6.5, h - metre * 6.5, metre * 4.2);
-  drawTitle(g, w, metre);
-  g.restore();
-}
-
-/** The parchment: its colour, darker to its edges, its fibres and stains, a margin worn ragged (its outline). */
-function drawParchment(g: CanvasRenderingContext2D, w: number, h: number): Path2D {
-  const rng = mulberry(41);
-  const edge = Math.min(w, h) * 0.025;
-  const outline = new Path2D();
-  const steps = 120;
-  for (let k = 0; k <= steps * 4; k++) {
-    const t = (k % steps) / steps, side = Math.floor(k / steps) % 4;
-    const wobble = edge * (0.4 + rng() * 0.6);
-    const [x, y] = side === 0 ? [t * w, wobble] : side === 1 ? [w - wobble, t * h] : side === 2 ? [w - t * w, h - wobble] : [wobble, h - t * h];
-    if (k === 0) outline.moveTo(x, y); else outline.lineTo(x, y);
-  }
-  outline.closePath();
-  g.fillStyle = PAPER;
-  g.fill(outline);
-  g.save();
-  g.clip(outline);
-  const vignette = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7);
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, PAPER_DARK);
-  g.fillStyle = vignette;
-  g.fillRect(0, 0, w, h);
-  for (let k = 0; k < 26; k++) {
-    const x = rng() * w, y = rng() * h, r = (0.03 + rng() * 0.09) * w;
-    const stain = g.createRadialGradient(x, y, 0, x, y, r);
-    stain.addColorStop(0, `rgba(150, 110, 60, ${0.04 + rng() * 0.06})`);
-    stain.addColorStop(1, 'rgba(150, 110, 60, 0)');
-    g.fillStyle = stain;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  g.strokeStyle = 'rgba(120, 90, 50, 0.08)';
-  g.lineWidth = 1;
-  for (let k = 0; k < 900; k++) {
-    const x = rng() * w, y = rng() * h, a = rng() * Math.PI, l = 4 + rng() * 14;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+  if (look.box === 'ink') {
+    g.strokeStyle = look.inkSoft;
+    g.lineWidth = Math.max(1, metre * 0.12);
     g.stroke();
   }
+  drawBuildings(g, at, metre, look);
+  drawPalisade(g, at, metre, fence, look);
+  for (const id of BIOME_IDS) drawWay(g, at, metre, id, look);
+  look.frame?.(g, w, h, metre);
+  look.compass(g, w - metre * look.compassAt.in, h - metre * look.compassAt.in, metre * look.compassAt.size);
+  look.title(g, w, h, metre);
   g.restore();
-  return outline;
-}
-
-/** A tree from above: a crown of lobes washed green, inked round, its shade to the south-east. */
-function drawTree(g: CanvasRenderingContext2D, x: number, y: number, r: number, seed: number): void {
-  const rng = mulberry(Math.floor(Math.abs(seed) * 1000) + 1);
-  g.fillStyle = 'rgba(40, 50, 30, 0.18)';
-  g.beginPath();
-  g.arc(x + r * 0.35, y + r * 0.35, r, 0, Math.PI * 2);
-  g.fill();
-  g.beginPath();
-  const lobes = 7;
-  for (let k = 0; k <= lobes; k++) {
-    const a = (k / lobes) * Math.PI * 2, rr = r * (0.8 + rng() * 0.25);
-    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
-    if (k === 0) g.moveTo(px, py);
-    else g.quadraticCurveTo(x + Math.cos(a - Math.PI / lobes) * r * 1.2, y + Math.sin(a - Math.PI / lobes) * r * 1.2, px, py);
-  }
-  g.closePath();
-  g.fillStyle = WOOD;
-  g.fill();
-  g.strokeStyle = 'rgba(38, 56, 28, 0.7)';
-  g.lineWidth = Math.max(1, r * 0.08);
-  g.stroke();
 }
 
 type At = (x: number, z: number) => Spot;
 
-/** A box (half sides hx, hz round (x, z), turned `turn` about y) filled and inked. */
-function drawBox(g: CanvasRenderingContext2D, at: At, x: number, z: number, hx: number, hz: number, turn: number, fill: string,
-  ink = INK, width = 1.5): void {
+/** A box's outline (half sides hx, hz round (x, z), turned `turn` about y) as the current path. */
+function boxPath(g: CanvasRenderingContext2D, at: At, x: number, z: number, hx: number, hz: number, turn: number): void {
   const c = Math.cos(turn), s = Math.sin(turn);
   const corner = (u: number, v: number): Spot => at(x + u * c + v * s, z - u * s + v * c);
   g.beginPath();
   [[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]].forEach(([u, v], i) => (i ? g.lineTo(...corner(u, v)) : g.moveTo(...corner(u, v))));
   g.closePath();
-  g.fillStyle = fill;
-  g.fill();
-  g.strokeStyle = ink;
-  g.lineWidth = width;
+}
+
+/** A box (half sides hx, hz round (x, z), turned `turn` about y) filled and edged as the look draws one: inked flat,
+ *  hatched in ink, a raised token with a gold edge, or a wash with a pencil line. `edged` false leaves its edge off. */
+function drawBox(g: CanvasRenderingContext2D, at: At, x: number, z: number, hx: number, hz: number, turn: number, fill: string,
+  look: Look, edged = true, ink = look.ink, width = 1.5): void {
+  const metre = Math.hypot(...sub(at(1, 0), at(0, 0)));
+  if (look.box === 'token' && edged) {
+    // its shadow cast on the table
+    g.save();
+    g.translate(metre * 0.22, metre * 0.3);
+    boxPath(g, at, x, z, hx, hz, turn);
+    g.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    g.fill();
+    g.restore();
+  }
+  boxPath(g, at, x, z, hx, hz, turn);
+  if (look.box === 'wash') {
+    g.save();
+    g.globalAlpha = 0.85;
+    g.fillStyle = fill;
+    g.fill();
+    g.translate(metre * 0.12, metre * 0.1);
+    g.globalAlpha = 0.35;
+    g.fill();
+    g.restore();
+    boxPath(g, at, x, z, hx, hz, turn);
+  } else {
+    g.fillStyle = fill;
+    g.fill();
+  }
+  if (!edged) return;
+  if (look.box === 'hatch') {
+    // hatched across in ink, as an engraver shades
+    g.save();
+    g.clip();
+    const [cx, cy] = at(x, z), reach = (Math.max(hx, hz) + 1) * metre * 1.5;
+    g.strokeStyle = 'rgba(59, 38, 21, 0.28)';
+    g.lineWidth = Math.max(0.8, metre * 0.06);
+    g.beginPath();
+    for (let o = -reach; o <= reach; o += metre * 0.45) {
+      g.moveTo(cx + o - reach, cy + reach);
+      g.lineTo(cx + o + reach, cy - reach);
+    }
+    g.stroke();
+    g.restore();
+    boxPath(g, at, x, z, hx, hz, turn);
+  }
+  g.strokeStyle = look.box === 'wash' ? look.inkSoft : ink;
+  g.lineWidth = look.box === 'wash' ? Math.max(1, metre * 0.06) : look.box === 'token' ? Math.max(1, metre * 0.1) : width;
+  g.stroke();
+}
+
+const sub = (a: Spot, b: Spot): Spot => [a[0] - b[0], a[1] - b[1]];
+
+/** A roof (half sides hx, hz round (x, z), turned `turn`), its ridge along its hx: one flat box, or two pitches in the
+ *  look's light and shade either side of the ridge, and the ridge drawn. */
+function drawRoof(g: CanvasRenderingContext2D, at: At, metre: number, x: number, z: number, hx: number, hz: number,
+  turn: number, lit: string, shade: string, look: Look): void {
+  const c = Math.cos(turn), s = Math.sin(turn);
+  const r0 = at(x - hx * c, z + hx * s), r1 = at(x + hx * c, z - hx * s);
+  if (!look.pitched) {
+    drawBox(g, at, x, z, hx, hz, turn, lit, look);
+  } else {
+    if (look.box === 'token') drawBox(g, at, x, z, hx, hz, turn, lit, look);
+    for (const side of [-1, 1]) {
+      const v = side * hz / 2;
+      drawBox(g, at, x + v * s, z + v * c, hx, hz / 2, turn, side > 0 ? shade : lit, look, look.box !== 'token');
+    }
+    if (look.box === 'hatch') {
+      // the shaded pitch hatched again across, darker
+      drawBox(g, at, x + (hz / 2) * s, z + (hz / 2) * c, hx, hz / 2, turn, 'rgba(59, 38, 21, 0.12)', look);
+    }
+    if (look.box === 'token') boxPath(g, at, x, z, hx, hz, turn), g.strokeStyle = look.ink, g.stroke();
+  }
+  g.beginPath();
+  g.moveTo(...r0);
+  g.lineTo(...r1);
+  g.strokeStyle = look.box === 'token' ? look.ink : look.box === 'ink' ? look.inkSoft : look.ink;
+  g.lineWidth = look.box === 'ink' ? 1.2 : Math.max(1, metre * 0.1);
   g.stroke();
 }
 
 /** The hall's terrace and its plinths, the cottages and sheds, the yard, the fountain, the
  *  campfire and the notice board. */
-function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void {
+function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number, look: Look): void {
   const X = TERRACE.x;
-  drawBox(g, at, X, (TERRACE.front + TERRACE.back) / 2, TERRACE.half, (TERRACE.front - TERRACE.back) / 2, 0, STONE);
-  drawBox(g, at, X, (TERRACE.stairFoot + TERRACE.front) / 2, TERRACE.stairHalf, (TERRACE.front - TERRACE.stairFoot) / 2, 0, STONE, INK_SOFT);
-  // (the hall a roofed building: its slate roof from the back wall to past the colonnade, its ridge front to back)
-  const back = HALL.wall - HALL_ROOF.back, front = HALL_ROOF.front;
-  drawBox(g, at, X, (front + back) / 2, HALL_ROOF.half, (front - back) / 2, 0, DARK_STONE);
-  g.beginPath();
-  g.moveTo(...at(X, back));
-  g.lineTo(...at(X, front));
-  g.strokeStyle = 'rgba(234, 217, 180, 0.6)';
-  g.lineWidth = Math.max(1, metre * 0.12);
-  g.stroke();
-  for (const c of COTTAGES) {
-    const hx = (COTTAGE.w / 2 + COTTAGE.eave) * c.size, hz = (COTTAGE.d / 2 + COTTAGE.eave) * c.size;
-    drawBox(g, at, c.x, c.z, hx, hz, c.facing, ROOF);
-    // the ridge along its roof
-    const r = Math.cos(c.facing), s = Math.sin(c.facing);
+  drawBox(g, at, X, (TERRACE.front + TERRACE.back) / 2, TERRACE.half, (TERRACE.front - TERRACE.back) / 2, 0, look.stone, look);
+  drawBox(g, at, X, (TERRACE.stairFoot + TERRACE.front) / 2, TERRACE.stairHalf, (TERRACE.front - TERRACE.stairFoot) / 2, 0,
+    look.stone, look, true, look.inkSoft);
+  if (look.box !== 'ink') {
+    // the stair's treads
+    g.strokeStyle = look.inkSoft;
+    g.lineWidth = Math.max(1, metre * 0.06);
     g.beginPath();
-    g.moveTo(...at(c.x - hx * r, c.z + hx * s));
-    g.lineTo(...at(c.x + hx * r, c.z - hx * s));
-    g.strokeStyle = INK_SOFT;
-    g.lineWidth = 1.2;
+    for (let zz = TERRACE.stairFoot - 0.4; zz > TERRACE.front; zz -= 0.6) {
+      g.moveTo(...at(X - TERRACE.stairHalf, zz));
+      g.lineTo(...at(X + TERRACE.stairHalf, zz));
+    }
     g.stroke();
   }
+  // (the hall a roofed building: its slate roof from the back wall to past the colonnade, its ridge front to back)
+  const back = HALL.wall - HALL_ROOF.back, front = HALL_ROOF.front;
+  if (look.pitched) {
+    drawRoof(g, at, metre, X, (front + back) / 2, (front - back) / 2, HALL_ROOF.half, Math.PI / 2, look.slate, look.slateShade, look);
+  } else {
+    drawBox(g, at, X, (front + back) / 2, HALL_ROOF.half, (front - back) / 2, 0, look.darkStone, look);
+    g.beginPath();
+    g.moveTo(...at(X, back));
+    g.lineTo(...at(X, front));
+    g.strokeStyle = 'rgba(234, 217, 180, 0.6)';
+    g.lineWidth = Math.max(1, metre * 0.12);
+    g.stroke();
+  }
+  for (const c of COTTAGES) {
+    const hx = (COTTAGE.w / 2 + COTTAGE.eave) * c.size, hz = (COTTAGE.d / 2 + COTTAGE.eave) * c.size;
+    drawRoof(g, at, metre, c.x, c.z, hx, hz, c.facing, look.roof, look.roofShade, look);
+  }
   // the yard: a fence round trodden ground, its dummies crosses
-  drawBox(g, at, YARD.x, YARD.z, YARD.halfX, YARD.halfZ, YARD.turn, SAND, 'rgba(0,0,0,0)', 0);
+  drawBox(g, at, YARD.x, YARD.z, YARD.halfX, YARD.halfZ, YARD.turn, look.sand, look, false);
   const { halfX, halfZ, gate, gateAt } = YARD;
   // (its fence round from one gatepost to the other, the gate left open)
   const fence: Spot[] = [[gateAt + gate, -halfZ], [halfX, -halfZ], [halfX, halfZ], [-halfX, halfZ], [-halfX, -halfZ],
@@ -468,14 +494,14 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
   g.setLineDash([metre * 0.6, metre * 0.3]);
   g.beginPath();
   fence.forEach(([fx, fz], i) => (i ? g.lineTo(...at(...yardToWorld(fx, fz))) : g.moveTo(...at(...yardToWorld(fx, fz)))));
-  g.strokeStyle = '#6a4a2a';
+  g.strokeStyle = look.yardFence;
   g.lineWidth = Math.max(1.5, metre * 0.15);
   g.stroke();
   g.setLineDash([]);
   for (const s of [-1, 1]) {
     g.beginPath();
     g.arc(...at(...yardToWorld(gateAt + s * gate, -halfZ)), metre * 0.22, 0, Math.PI * 2);
-    g.fillStyle = '#6a4a2a';
+    g.fillStyle = look.yardFence;
     g.fill();
   }
   for (const [dx, dz] of [[-3, 1.7], [0, 2.9], [3, 1.7]]) {
@@ -484,35 +510,45 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
     g.beginPath();
     g.moveTo(x - s, y - s); g.lineTo(x + s, y + s);
     g.moveTo(x + s, y - s); g.lineTo(x - s, y + s);
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
+    g.strokeStyle = look.ink;
+    g.lineWidth = Math.max(1.5, metre * 0.12);
     g.stroke();
   }
   // (its name is a button over the sheet, as the objects' are: a place to walk to)
   // the fountain (its basin, its upper bowl), the campfire, the notice board
-  for (const [radius, fill] of [[FOUNTAIN.r, '#5a7ea0'], [0.85, '#7fa2c0']] as const) {
+  for (const [radius, fill] of [[FOUNTAIN.r, look.water], [0.85, look.waterLight]] as const) {
     g.beginPath();
     g.arc(...at(0, 0), radius * metre, 0, Math.PI * 2);
     g.fillStyle = fill;
     g.fill();
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
+    g.strokeStyle = look.box === 'wash' ? look.inkSoft : look.ink;
+    g.lineWidth = look.box === 'token' ? Math.max(1.5, metre * 0.15) : 1.5;
     g.stroke();
   }
-  drawCampfire(g, ...at(CAMPFIRE[0], CAMPFIRE[1]), metre);
-  drawBox(g, at, NOTICE.x, NOTICE.z, 1, 0.15, NOTICE.facing, '#8a6a4a');
+  if (look.box !== 'ink') {
+    // its water's ripples
+    g.strokeStyle = look.box === 'token' ? 'rgba(216, 180, 106, 0.4)' : 'rgba(255, 255, 255, 0.45)';
+    g.lineWidth = Math.max(1, metre * 0.05);
+    for (const rr of [1.4, 1.95]) {
+      g.beginPath();
+      g.arc(...at(0, 0), rr * metre, -0.6, 1.4);
+      g.stroke();
+    }
+  }
+  drawCampfire(g, ...at(CAMPFIRE[0], CAMPFIRE[1]), metre, look);
+  drawBox(g, at, NOTICE.x, NOTICE.z, 1, 0.15, NOTICE.facing, look.notice, look);
 }
 
 /** The campfire as a map draws one: a ring of stones round two crossed logs, a flame rising over them. */
-function drawCampfire(g: CanvasRenderingContext2D, x: number, y: number, metre: number): void {
+function drawCampfire(g: CanvasRenderingContext2D, x: number, y: number, metre: number, look: Look): void {
   const ring = metre * 1.15;
   for (let k = 0; k < 9; k++) {
     const a = k / 9 * Math.PI * 2;
     g.beginPath();
     g.arc(x + Math.cos(a) * ring, y + Math.sin(a) * ring, metre * 0.3, 0, Math.PI * 2);
-    g.fillStyle = STONE;
+    g.fillStyle = look.stone;
     g.fill();
-    g.strokeStyle = INK;
+    g.strokeStyle = look.box === 'wash' ? look.inkSoft : look.ink;
     g.lineWidth = 1;
     g.stroke();
   }
@@ -522,10 +558,10 @@ function drawCampfire(g: CanvasRenderingContext2D, x: number, y: number, metre: 
     g.beginPath();
     g.moveTo(x - dx, y - dy);
     g.lineTo(x + dx, y + dy);
-    g.strokeStyle = INK;
+    g.strokeStyle = look.box === 'token' ? '#140c08' : look.ink;
     g.lineWidth = metre * 0.42;
     g.stroke();
-    g.strokeStyle = '#8a5a34';
+    g.strokeStyle = look.log;
     g.lineWidth = metre * 0.28;
     g.stroke();
   }
@@ -538,24 +574,37 @@ function drawCampfire(g: CanvasRenderingContext2D, x: number, y: number, metre: 
     g.fillStyle = fill;
     g.fill();
   };
+  if (look.box === 'token') {
+    // (a glow round it on the dark table)
+    const glow = g.createRadialGradient(x, y, 0, x, y, metre * 3);
+    glow.addColorStop(0, 'rgba(255, 150, 60, 0.35)');
+    glow.addColorStop(1, 'rgba(255, 150, 60, 0)');
+    g.fillStyle = glow;
+    g.fillRect(x - metre * 3, y - metre * 3, metre * 6, metre * 6);
+  }
   flame(metre * 1.3, metre * 0.62, '#d9541e');
-  g.strokeStyle = INK;
+  g.strokeStyle = look.box === 'wash' ? look.inkSoft : look.box === 'token' ? '#3a1408' : look.ink;
   g.lineWidth = 1;
   g.stroke();
   flame(metre * 0.75, metre * 0.32, '#f6c04a');
 }
 
-/** The palisade: its line inked thick, a stake across it every metre or so, open at the ways out. */
-function drawPalisade(g: CanvasRenderingContext2D, at: At, metre: number, fence: readonly Spot[]): void {
-  g.strokeStyle = '#4a3220';
+/** The palisade: its line drawn thick, a stake across it every metre or so, open at the ways out. */
+function drawPalisade(g: CanvasRenderingContext2D, at: At, metre: number, fence: readonly Spot[], look: Look): void {
+  g.strokeStyle = look.palisade;
   g.lineCap = 'round';
+  if (look.box === 'token') {
+    g.save();
+    g.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    g.shadowBlur = metre * 0.4;
+  }
   for (let i = 0; i < fence.length; i++) {
     const [ax, az] = fence[i], [bx, bz] = fence[(i + 1) % fence.length];
     if (fromGap(ax, az) < GAP_HALF || fromGap(bx, bz) < GAP_HALF) continue;
     g.beginPath();
     g.moveTo(...at(ax, az));
     g.lineTo(...at(bx, bz));
-    g.lineWidth = Math.max(2, metre * 0.35);
+    g.lineWidth = Math.max(2, metre * (look.box === 'token' ? 0.25 : 0.35));
     g.stroke();
     // (a stake across it)
     const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len, nz = (bx - ax) / len;
@@ -565,41 +614,47 @@ function drawPalisade(g: CanvasRenderingContext2D, at: At, metre: number, fence:
     g.lineWidth = Math.max(1, metre * 0.12);
     g.stroke();
   }
+  if (look.box === 'token') g.restore();
 }
 
 /** A way out: the crypt's court and tomb in stone, or the grove's path; its portal a swirl in its colour. */
-function drawWay(g: CanvasRenderingContext2D, at: At, metre: number, id: BiomeId): void {
+function drawWay(g: CanvasRenderingContext2D, at: At, metre: number, id: BiomeId, look: Look): void {
   const { gap, out } = ENTRANCES[id];
   const turn = Math.atan2(-out[0], -out[1]);
   const along = (o: number): Spot => [gap[0] + out[0] * o, gap[1] + out[1] * o];
   if (id === 'crypt') {
     // its court, the stair up, the mausoleum's podium and its pitched roof, a ridge down its middle
     const front = PODIUM.front, run = front - TOMB.stairFoot, from = front - 0.2, to = TOMB.back + 0.5;
-    drawBox(g, at, ...along(front / 2), GAP_HALF - 0.3, front / 2, turn, 'rgba(120, 112, 104, 0.55)', INK_SOFT);
-    drawBox(g, at, ...along(TOMB.stairFoot + run / 2), 2.7, run / 2, turn, STONE, INK_SOFT);
-    drawBox(g, at, ...along((front + TOMB.back + 0.7) / 2), TOMB.w / 2 + 0.7, (TOMB.back + 0.7 - front) / 2, turn, STONE);
-    drawBox(g, at, ...along((from + to) / 2), TOMB.w / 2 + 0.6, (to - from) / 2, turn, DARK_STONE);
-    g.beginPath();
-    g.moveTo(...at(...along(from)));
-    g.lineTo(...at(...along(to)));
-    g.strokeStyle = STONE;
-    g.lineWidth = Math.max(1.5, metre * 0.25);
-    g.stroke();
+    drawBox(g, at, ...along(front / 2), GAP_HALF - 0.3, front / 2, turn, look.courtStone, look, true, look.inkSoft);
+    drawBox(g, at, ...along(TOMB.stairFoot + run / 2), 2.7, run / 2, turn, look.stone, look, true, look.inkSoft);
+    drawBox(g, at, ...along((front + TOMB.back + 0.7) / 2), TOMB.w / 2 + 0.7, (TOMB.back + 0.7 - front) / 2, turn, look.stone, look);
+    if (look.pitched) {
+      const [mx, mz] = along((from + to) / 2);
+      drawRoof(g, at, metre, mx, mz, (to - from) / 2, TOMB.w / 2 + 0.6, turn + Math.PI / 2, look.slate, look.slateShade, look);
+    } else {
+      drawBox(g, at, ...along((from + to) / 2), TOMB.w / 2 + 0.6, (to - from) / 2, turn, look.darkStone, look);
+      g.beginPath();
+      g.moveTo(...at(...along(from)));
+      g.lineTo(...at(...along(to)));
+      g.strokeStyle = look.stone;
+      g.lineWidth = Math.max(1.5, metre * 0.25);
+      g.stroke();
+    }
   } else {
-    drawBox(g, at, ...along(WAY.forest.out / 2), WAY.forest.half - 0.6, WAY.forest.out / 2, turn, 'rgba(90, 120, 60, 0.25)', 'rgba(0,0,0,0)', 0);
+    drawBox(g, at, ...along(WAY.forest.out / 2), WAY.forest.half - 0.6, WAY.forest.out / 2, turn, look.forestWay, look, false);
   }
   const p = portalPlace(id);
   const [x, y] = at(p.x, p.z);
   const r = metre * 1.9;
   const swirl = g.createRadialGradient(x, y, 0, x, y, r);
   swirl.addColorStop(0, '#ffffff');
-  swirl.addColorStop(0.35, PORTAL_INK[id]);
+  swirl.addColorStop(0.35, look.portal[id]);
   swirl.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = swirl;
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
   g.fill();
-  g.strokeStyle = PORTAL_INK[id];
+  g.strokeStyle = look.portal[id];
   g.lineWidth = Math.max(1.5, metre * 0.18);
   g.beginPath();
   for (let k = 0; k < 40; k++) {
@@ -608,54 +663,4 @@ function drawWay(g: CanvasRenderingContext2D, at: At, metre: number, id: BiomeId
     if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
   }
   g.stroke();
-}
-
-/** A compass rose at (x, y), `r` px across its points: north up, its points inked and half washed. */
-function drawCompass(g: CanvasRenderingContext2D, x: number, y: number, r: number): void {
-  g.save();
-  g.translate(x, y);
-  g.strokeStyle = INK;
-  g.lineWidth = Math.max(1, r * 0.03);
-  g.beginPath();
-  g.arc(0, 0, r * 0.62, 0, Math.PI * 2);
-  g.stroke();
-  for (let k = 0; k < 8; k++) {
-    const long = k % 2 === 0, len = long ? r : r * 0.55, half = r * (long ? 0.13 : 0.09);
-    g.save();
-    g.rotate((k * Math.PI) / 4);
-    for (const side of [-1, 1]) {
-      g.beginPath();
-      g.moveTo(0, 0);
-      g.lineTo(0, -len);
-      g.lineTo(side * half, -half);
-      g.closePath();
-      g.fillStyle = side < 0 ? INK : PAPER;
-      g.fill();
-      g.stroke();
-    }
-    g.restore();
-  }
-  g.fillStyle = INK;
-  g.font = `700 ${Math.round(r * 0.32)}px Cinzel, Georgia, serif`;
-  g.textAlign = 'center';
-  g.fillText('N', 0, -r * 1.08);
-  g.restore();
-}
-
-/** The map's title in a cartouche at its top. */
-function drawTitle(g: CanvasRenderingContext2D, w: number, metre: number): void {
-  const y = metre * 3.6, size = Math.round(metre * 1.9);
-  g.font = `700 ${size}px Cinzel, Georgia, serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  const text = 'Wardenhollow';
-  const tw = g.measureText(text).width + size * 2;
-  g.fillStyle = 'rgba(234, 217, 180, 0.9)';
-  g.fillRect(w / 2 - tw / 2, y - size, tw, size * 2);
-  g.strokeStyle = INK;
-  g.lineWidth = Math.max(1, metre * 0.1);
-  g.strokeRect(w / 2 - tw / 2, y - size, tw, size * 2);
-  g.strokeRect(w / 2 - tw / 2 + 4, y - size + 4, tw - 8, size * 2 - 8);
-  g.fillStyle = INK;
-  g.fillText(text, w / 2, y + size * 0.06);
 }

@@ -1342,6 +1342,39 @@ function draught(): void {
   v.start(); v.stopAt(v.t + 2.2);
 }
 
+/** A sheet of paper handled, as the village's map is (`ui/villageMap.ts`): `open` it's unfolded, its panels flapping
+ *  out one after another and drawn taut as it lies flat (by `FOLD_TIME`, 0.75 s); else it's folded away, softer and
+ *  quicker, the panels closing on each other and patted down. Paper alone, no notes: its crinkle the crackle through a
+ *  band in the mids (sparse clicks are a sheet's fibres giving), its flaps bands of noise swept as air moves off a
+ *  panel, its taut snap a short band of noise at 1.5 kHz, its pat a dark puff. */
+function paper(open: boolean): void {
+  const v = voice(0, 0.1);
+  const { c } = v;
+  // the crinkle of it handled, swelling in and dying away under the rest
+  const crinkle = glide(v, 'bandpass', 0.8, open ? [[0, 2200], [0.6, 3000]] : [[0, 2600], [0.5, 1900]]);
+  v.crackle(crinkle, open ? 0.75 : 0.55);
+  crinkle.connect(swellAt(v, 0, open ? 0.12 : 0.06, open ? 0.75 : 0.45, open ? 0.7 : 0.5));
+  // each panel's flap: air off a moving sheet, rising as it opens out, falling as it folds in, from side to side
+  const flaps = open ? [0.08, 0.27, 0.48] : [0.02, 0.2, 0.36];
+  flaps.forEach((at, i) => {
+    const from = open ? 650 : 1700, to = open ? 1700 : 600;
+    const band = glide(v, 'bandpass', 1.1, [[0, from], [at, from], [at + 0.16, to]]);
+    v.loop(band);
+    band.connect(blowAt(v, at, open ? 0.32 : 0.2, 0.2, v.lane(1, i % 2 ? 0.3 : -0.3), 0.025));
+  });
+  if (open) {
+    // drawn taut as it lies flat: a crisp snap of the sheet and a little body under it
+    const snap = c.createBiquadFilter(); snap.type = 'bandpass'; snap.frequency.value = 1500; snap.Q.value = 1.4;
+    v.loop(snap); snap.connect(blowAt(v, 0.7, 0.55, 0.09, v.out, 0.001));
+    whump(v, 0.7, 0.1, 0.12);
+  } else {
+    // patted down: a dark puff of the panels meeting
+    const pat = c.createBiquadFilter(); pat.type = 'lowpass'; pat.frequency.value = 1100; pat.Q.value = 0.6;
+    v.loop(pat); pat.connect(blowAt(v, 0.5, 0.28, 0.16, v.out, 0.004));
+  }
+  v.start(); v.stopAt(v.t + 1.3);
+}
+
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
  *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
  *  s, landed by about 2.95). Timed to it, and soft, as the first sound a visit hears (from the owner's review of
@@ -1511,6 +1544,9 @@ export const sfx = {
   chip: guard((kind?: string) => { if (throttle('chip', 60)) return; chip(kind); }),
   /** Healing Draught drunk */
   draught: guard(() => { draught(); }),
+  /** the village's map unfolded, and folded away */
+  mapOpen: guard(() => { paper(true); }),
+  mapClose: guard(() => { paper(false); }),
   rush: guard(() => { noise({ dur: 0.45, freq: 220, sweep: 600, type: 'lowpass', gain: 0.45, attack: 0.04 }); tone({ freq: 70, to: 45, dur: 0.4, gain: 0.3 }); }),
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
   /** a co-op ping (game/ping.ts): two bright notes, rising */
