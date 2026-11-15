@@ -6,15 +6,17 @@
 // renamed or rebound skill is named as it is.
 
 /** A station of the tutorial. */
-export type StationId = 'items' | 'combat';
+export type StationId = 'items' | 'combat' | 'hero' | 'runs' | 'together';
 
 /** A step of the tutorial (its id is what's saved: never reuse one for another step). */
 export type TutorialStepId =
   | 'bag' | 'throw' | 'take' | 'stash' | 'wear'
-  | 'yard' | 'strike' | 'skills' | 'block' | 'break' | 'daze' | 'lure' | 'draught';
+  | 'yard' | 'strike' | 'skills' | 'block' | 'break' | 'daze' | 'lure' | 'draught'
+  | 'bind' | 'hall' | 'chronicle' | 'portal' | 'bank' | 'campfire';
 
-/** Where a step's marker stands over the village: the stash's chest, the training yard, the sparring shade. */
-export type TutorialPlace = 'chest' | 'yard' | 'shade';
+/** Where a step's marker stands over the village: the training yard, the sparring shade, or one of the village's
+ *  objects by its id (data/village.ts `VILLAGE_OBJECTS`: the stash's chest, the hall, a portal...). */
+export type TutorialPlace = 'yard' | 'shade' | 'chest' | 'hall' | 'chronicle' | 'crypt' | 'campfire';
 
 export interface TutorialStep {
   id: TutorialStepId;
@@ -122,6 +124,54 @@ export const TUTORIAL: readonly Station[] = [
         id: 'draught', title: 'Drink your draught', skills: ['potion'],
         how: 'Press {key:potion}.', touch: 'Tap the {name:potion} button.',
         why: 'It heals at once, then needs a long while before the next. Keep it for when it counts.',
+      },
+    ],
+  },
+  {
+    id: 'hero', name: 'Your hero', covers: 'Your keys, the three heroes, the save slots',
+    steps: [
+      {
+        id: 'bind', title: 'Put a skill on another key',
+        how: 'Open your bag (I). Click a key on the bar at its foot, then a skill in the book that opens.',
+        touch: 'Tap Bag, then Skills. Tap a key, then a skill in the book.',
+        why: 'A skill can sit on several keys, which share its cooldown. Your keys are kept from visit to visit.',
+      },
+      {
+        id: 'hall', title: 'Visit the Hall of Heroes', at: 'hall',
+        how: 'Walk in through its door to the dais and press E, or click the dais from anywhere.',
+        touch: 'Walk in through its door to the dais and tap Use, or tap the dais from anywhere.',
+        why: 'Each hero keeps their own gear, stash and records: changing hero loses nothing.',
+      },
+      {
+        id: 'chronicle', title: 'Open the Chronicle', at: 'chronicle',
+        how: 'It stands left of the hall\'s door: click it, or walk to it and press E.',
+        touch: 'It stands left of the hall\'s door: tap it, or walk to it and tap Use.',
+        why: 'Three save slots, each with heroes of its own. Signed in, slot 1 is kept for every device you play on.',
+      },
+    ],
+  },
+  {
+    id: 'runs', name: 'Runs', covers: 'The portals, bank or continue, what a fall costs',
+    steps: [
+      {
+        id: 'portal', title: 'Look into a portal', at: 'crypt',
+        how: 'Click a portal, or walk to it and press E.', touch: 'Tap a portal, or walk to it and tap Use.',
+        why: 'Its card names the wave you start from: any you have banked from in that battleground. Enter begins the run.',
+      },
+      {
+        id: 'bank', title: 'Clear a wave and bank',
+        how: 'Enter, survive a wave, then press B.', touch: 'Enter, survive a wave, then tap Bank.',
+        why: 'After every wave you choose: Bank keeps all you carry and ends the run, Continue brings a harder wave and better loot. You see only the rarity of what you carry until you bank. Fall, and all of it is lost. A boss comes every fifth wave.',
+      },
+    ],
+  },
+  {
+    id: 'together', name: 'Playing together', covers: 'Rooms, sharing gear, raising a fallen friend',
+    steps: [
+      {
+        id: 'campfire', title: 'Sit at the campfire', at: 'campfire',
+        how: 'Click the campfire, or walk to it and press E.', touch: 'Tap the campfire, or walk to it and tap Use.',
+        why: 'Open a room and give a friend its code, or join theirs: up to four heroes. Each keeps their own spoils, gear thrown on the ground can be taken by a friend, and a fallen hero can be raised by a teammate before bleeding out.',
       },
     ],
   },

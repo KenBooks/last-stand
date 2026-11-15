@@ -178,12 +178,12 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
   background: rgba(0, 0, 0, .25); }
 .help-tour.hidden { display: none; }
 .ht-lead { font-size: 15px; line-height: 1.4; }
-.ht-stations { margin-top: 8px; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: baseline; font-size: 14px; }
-.ht-station { display: contents; }
+/* (the stations in a row that wraps, each its name and how far it was walked: a row each with what it covers, five
+   of them pushed Got it under the fold of a 720p window) */
+.ht-stations { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 22px; align-items: baseline; font-size: 14px; }
+.ht-station { display: flex; gap: 7px; align-items: baseline; white-space: nowrap; }
 .ht-station b { font-family: var(--font-display); color: var(--accent); }
-.ht-station span { color: var(--ink-dim); }
-.ht-station i { font-style: normal; color: #8fae7c; white-space: nowrap; }
-@media (max-width: 720px) { .ht-station span { display: none; } .ht-stations { grid-template-columns: 1fr auto; } }
+.ht-station i { font-style: normal; color: #8fae7c; }
 
 /* the village's: its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the
    right"); the panels' lobby keeps it in the box's middle */

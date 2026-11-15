@@ -212,5 +212,6 @@ export function bankItems(p: Profile, items: Item[]): { lost: Item[]; replaced: 
   p.stash = p.stash.filter((i) => keep.has(i)).concat(kept);
   p.records.banked += kept.length;
   saveProfile(p);
+  emit('spoilsBanked');
   return { lost: items.filter((i) => !keep.has(i)), replaced };
 }

@@ -533,11 +533,12 @@ function renderTour(board: boolean): void {
     const row = document.createElement('div');
     row.className = 'ht-station';
     row.classList.toggle('done', walked === steps.length);
-    const name = document.createElement('b'), covers = document.createElement('span'), state = document.createElement('i');
+    const name = document.createElement('b'), state = document.createElement('i');
     name.textContent = s.name;
-    covers.textContent = s.covers;
+    // (what it covers said on hover: the row has room for its name alone)
+    row.title = s.covers;
     state.textContent = walked === steps.length ? 'Done' : walked ? `${walked} of ${steps.length}` : '';
-    row.append(name, covers, state);
+    row.append(name, state);
     return row;
   }));
 }

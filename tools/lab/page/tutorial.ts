@@ -16,12 +16,16 @@ import { setTraceConsent, traceConsent } from '../../../src/perf/consent';
 import { TUTORIAL, type TutorialStepId } from '../../../src/data/tutorial';
 import { YARD_DUMMIES, yardToWorld } from '../../../src/data/village';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
+import { clearEnemies } from '../../../src/entities/enemy';
 import { groundDrops } from '../../../src/game/groundItems';
+import { updateRun } from '../../../src/game/run';
 import { skipTraining } from '../../../src/game/training';
 import { sparringShade, stationDone, stationSteps, tutorialStation, tutorialStep } from '../../../src/game/tutorial';
 import { villageObject } from '../../../src/game/village';
 import { project } from '../../../src/ui/floaters';
 import { panelsOpen } from '../../../src/ui/menus';
+import { heroSelectOpen } from '../../../src/ui/heroSelect';
+import { untilInRealTime } from './villageWaits';
 import { labelAt } from '../../../src/ui/overlay/layer';
 import { groundHeight } from '../../../src/world/ground';
 import type { SkillKey } from '../../../src/types';
@@ -45,6 +49,12 @@ const SHOW_FRAMES = 15;
 const STEP_FRAMES = 1200;
 /** how far over a drop its name is looked for (css px), as a player clicks the name and not the shard */
 const NAME_OVER_PX = 14;
+/** frames, each a real moment long, the hall's screen has to open or close in */
+const HALL_FRAMES = 600;
+/** the key rebound in the bag: its place on the bar (the first of the number keys) */
+const BOUND_KEY = 2;
+/** frames a run has to start in, and its summary to lead back */
+const RUN_FRAMES = 1800;
 /** frames for the camera to come to rest after the hero is stood somewhere else */
 const CAMERA_FRAMES = 90;
 /** where he steps round a thrown item to bring its name clear of the touch controls (m from it) */
@@ -84,6 +94,11 @@ function under(at: { x: number; y: number }): string {
 }
 
 const rectText = (r: DOMRect): string => `${r.width.toFixed(0)}x${r.height.toFixed(0)} at ${r.left.toFixed(0)}, ${r.top.toFixed(0)}`;
+/** The page's transitions over (a panel slid or faded in), as a player waits to see what he presses. */
+async function settled(): Promise<void> {
+  const sliding = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
+  await Promise.all(sliding.map((animation) => animation.finished.catch(() => undefined)));
+}
 
 const overlap = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
@@ -129,6 +144,8 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   const tap = async (target: Element): Promise<void> => {
     try {
       target.scrollIntoView({ block: 'nearest' });
+      // (as `clickOn` waits: a panel still sliding in has its buttons elsewhere)
+      await settled();
       await lab.tap(middleOf(target));
     } catch (error) {
       const at = middleOf(target);
@@ -361,6 +378,80 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
     await lab.step(120);
     const key = keyOf('potion')!;
     await hold(key, dummy, () => tutorialStep()?.id !== 'draught', 30);
+  }
+
+  // --- your hero ---
+  if (await asked('bind')) {
+    if (touch) await press(element('#touch-village .tv-bag'));
+    else await lab.step(1, () => ({ keys: ['i'] }));
+    await lab.step(SHOW_FRAMES, REST);
+    // (a short screen shows one of the bag's panels at a time: its skills picked on the rail)
+    // (the bag faded in first: its rail counts as shown only then)
+    await settled();
+    const skillsTab = document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]');
+    if (skillsTab?.checkVisibility(SHOWN)) await press(skillsTab);
+    await press(element('#loadout-bar').children[BOUND_KEY]);
+    await press(element('#spellbook').firstElementChild!);
+    if (touch) await press(element('#rail-close'));
+    else await lab.step(1, () => ({ keys: ['i'] }));
+    await lab.step(SHOW_FRAMES, REST);
+  }
+  if (await asked('hall')) {
+    await use('hall');
+    // (its screen opens and closes by the browser's clock, the heroes built behind it: waited for in real time)
+    if (!await untilInRealTime(lab, heroSelectOpen, HALL_FRAMES)) problems.push('the hall never opened its heroes');
+    else {
+      await lab.step(SHOW_FRAMES, REST);
+      await press(element('#heroes .hs-back'));
+      if (!await untilInRealTime(lab, () => !heroSelectOpen(), HALL_FRAMES)) problems.push('the hall\'s heroes never closed');
+    }
+    await stand(ON_THE_SQUARE);
+    await lab.step(CAMERA_FRAMES, REST);
+  }
+  if (await asked('chronicle')) {
+    await use('chronicle');
+    check(open('#vcard'), 'the chronicle opened no card');
+    await stand(ON_THE_SQUARE);
+    await lab.step(SHOW_FRAMES * 2, REST);
+  }
+
+  // --- runs ---
+  if (await asked('portal')) {
+    await use('crypt');
+    check(open('#vcard'), 'the portal opened no card');
+    await stand(ON_THE_SQUARE);
+    await lab.step(SHOW_FRAMES * 2, REST);
+  }
+  if (await asked('bank')) {
+    // (a run of one wave, entered by the portal's card and banked by the choice's button)
+    await use('crypt');
+    await press(element('#btn-start'));
+    await lab.until(() => G.mode === 'run' && G.run !== null, RUN_FRAMES, 'the run never started');
+    const run = G.run!;
+    clearEnemies();
+    run.phase = 'fighting';
+    run.queue = [];
+    run.boss = null;
+    run.pending = 0;
+    updateRun(0.1);
+    check(String(run.phase) === 'cleared', 'the run\'s wave never cleared');
+    await lab.step(40, REST);
+    await press(element('#decision .bank'));
+    await lab.until(() => open('#summary'), RUN_FRAMES, 'the bank showed no summary');
+    await press(element('#btn-summary'));
+    await lab.until(() => G.mode === 'menu', RUN_FRAMES, 'the summary never led back to the village');
+    await lab.step(CAMERA_FRAMES, REST);
+    check(tutorialStep()?.id !== 'bank', 'a wave banked did not tick the bank step');
+  }
+
+  // --- playing together ---
+  if (await asked('campfire')) {
+    // (the lab's own link, `?net=local`: the dialog asks no server for its health, which production's refuses a page
+    // on localhost, an error of the page's)
+    history.replaceState(null, '', `${location.pathname}?net=local`);
+    await use('campfire');
+    check(open('#coop'), 'the campfire opened no Play together');
+    await press(element('#btn-coop-close'));
   }
 
   // --- the end, and what's kept ---

@@ -9,7 +9,8 @@ import { G } from '../state';
 import { emit, on } from '../events';
 import { readCookie, writeCookie } from '../core/cookies';
 import { SHADE, TUTORIAL, type Station, type StationId, type TutorialPlace, type TutorialStep, type TutorialStepId } from '../data/tutorial';
-import { CHEST, YARD, yardToWorld } from '../data/village';
+import type { VillageUse } from '../data/village';
+import { YARD, yardToWorld } from '../data/village';
 import { SKILL_KEYS } from '../loot/loadout';
 import { setSparSink } from '../combat/damage';
 import { spawnEnemy } from '../entities/spawner';
@@ -19,7 +20,7 @@ import { groundHeight } from '../world/ground';
 import { anchorLabel, floatText, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
-import { inYard } from './village';
+import { inYard, villageObject } from './village';
 import { isWarm, want } from './warm';
 
 const COOKIE = 'last-stand-tutorial';
@@ -77,6 +78,9 @@ export function initTutorial(): void {
   on('itemTaken', () => tutorialDid('take'));
   on('itemEquipped', () => tutorialDid('wear'));
   on('skillUsed', (impl) => skillUsed(impl));
+  on('skillBound', () => tutorialDid('bind'));
+  on('hallShown', () => tutorialDid('hall'));
+  on('spoilsBanked', () => tutorialDid('bank'));
   setSparSink(sparred);
   marker = anchorLabel(ORDER.marker, markerAt, true);
   marker.ay = 1;
@@ -141,6 +145,13 @@ function skillUsed(impl: string): void {
 
 function save(): void { writeCookie(COOKIE, [...done].join(',')); }
 
+/** What a village object the hero used has open now (its card or its dialog): the steps that ask for one, done. */
+export function tutorialOpened(use: VillageUse): void {
+  if (use === 'portal') tutorialDid('portal');
+  if (use === 'chronicle') tutorialDid('chronicle');
+  if (use === 'coop') tutorialDid('campfire');
+}
+
 // --- the sparring shade -------------------------------------------------------------------------------------------
 let shade: Enemy | null = null;
 
@@ -188,13 +199,17 @@ function sparred(p: Player, from: THREE.Vector3 | null, foe: Enemy | null): void
 
 // --- the marker over the step's place -------------------------------------------------------------------------------
 let marker: Label;
-let markerSays = '';
+let markerSaid = '';
 let shown = false;
-const MARKER: Record<TutorialPlace, { says: string; high: number }> = {
-  chest: { says: 'Stash', high: 2.3 },
-  yard: { says: 'Training yard', high: 2.8 },
-  shade: { says: SHADE.name, high: 2.6 },
-};
+/** how far over an object's own height its marker stands, and the most of that height counted (a portal's arch is
+ *  tall: its marker stands where the hero's eye is) (m) */
+const MARKER_OVER = 0.6, MARKER_MOST = 2.4;
+/** the yard's and the shade's markers: what each says, and how high it stands (m) */
+const MARKER = { yard: { says: 'Training yard', high: 2.8 }, shade: { says: SHADE.name, high: 2.6 } };
+
+/** What the marker over `at` says: the place's name. */
+const markerSays = (at: TutorialPlace): string =>
+  (at === 'yard' || at === 'shade' ? MARKER[at].says : villageObject(at)?.name ?? '');
 
 /** Where the marker stands: over the step's place, while the tutorial shows and he isn't there yet. */
 function markerAt(): { x: number; y: number; z: number } | null {
@@ -204,8 +219,10 @@ function markerAt(): { x: number; y: number; z: number } | null {
     const e = sparringShade();
     return e ? { x: e.pos.x, y: e.obj.position.y + MARKER.shade.high, z: e.pos.z } : null;
   }
-  const [x, z] = at === 'chest' ? [CHEST.x, CHEST.z] : [YARD.x, YARD.z];
-  return { x, y: groundHeight(x, z) + MARKER[at].high, z };
+  if (at === 'yard') return { x: YARD.x, y: groundHeight(YARD.x, YARD.z) + MARKER.yard.high, z: YARD.z };
+  const o = villageObject(at);
+  if (!o) return null;
+  return { x: o.at[0], y: groundHeight(o.at[0], o.at[1]) + Math.min(o.tall, MARKER_MOST) + MARKER_OVER, z: o.at[1] };
 }
 
 /** The tutorial's frame: its steps done by where the hero is and what's open (`bag`: the inventory or the stash up,
@@ -224,8 +241,8 @@ export function updateTutorial(active: boolean, bag: boolean, stash: boolean): v
   }
   keepShade(shown);
   const at = shown ? tutorialStep()?.at : undefined;
-  const says = at ? `${MARKER[at].says} ▼` : '';
-  if (says === markerSays) return;
-  markerSays = says;
+  const says = at ? `${markerSays(at)} ▼` : '';
+  if (says === markerSaid) return;
+  markerSaid = says;
   if (says) marker.show(textArt(says, { face: 'display', size: 15, weight: 700, spacing: 0.5, color: '#ffd166', shadows: OUTLINE }));
 }

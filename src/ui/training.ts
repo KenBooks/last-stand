@@ -9,8 +9,10 @@ import { on } from '../events';
 import { skipTraining, stepDone, trainingPending, trainingSteps } from '../game/training';
 import {
   boundSkills, initTutorial, leaveTutorial, shadeComing, stationSteps, tutorialCount, tutorialFinished, tutorialSaid,
-  tutorialStation, tutorialStep, tutorialStepDone, updateTutorial,
+  tutorialOpened, tutorialStation, tutorialStep, tutorialStepDone, updateTutorial,
 } from '../game/tutorial';
+import { coopOpen } from './coop';
+import { villageCardOf } from './villageCard';
 import type { TutorialStep } from '../data/tutorial';
 import { SKILL_KEYS } from '../loot/loadout';
 import { sfx } from '../core/audio';
@@ -82,14 +84,20 @@ function finish(says: string): void {
  *  village is `up` (it takes the hero's input, or his bag or the stash is open over it: `bag`, `stash`). */
 export function updateTrainingTracker(dt: number, visible: boolean, up = visible, bag = false, stash = false): void {
   if (finishing > 0) finishing = Math.max(0, finishing - dt);
+  const touring = !!tutorialStation();
   updateTutorial(up, bag, stash);
+  // (a card or Play together up over the village: the step that asks for it)
+  if (touring) {
+    const card = villageCardOf();
+    if (card) tutorialOpened(card.use);
+    if (coopOpen()) tutorialOpened('coop');
+  }
   // (its keys said with a keyboard alone: told again as the player takes up the other)
   if (input.touchMode !== touchSaid || shadeComing() !== comingSaid) {
     touchSaid = input.touchMode;
     comingSaid = shadeComing();
     render();
   }
-  const touring = !!tutorialStation();
   // (the minimap's column is put away with the bag or the stash open, and on a short screen it stands over the skill
   // buttons' arc: a station's step is said from the page's own box there, placed by the stylesheet)
   const floats = touring && bag;

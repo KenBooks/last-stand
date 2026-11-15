@@ -29,6 +29,10 @@ export interface GameEvents {
   itemThrown: [item: Item];
   itemTaken: [item: Item];
   itemEquipped: [item: Item];
+  /** the local hero's skill put on a key or taken off one (the loadout's editor) */
+  skillBound: [];
+  /** a run's spoils banked into the stash (`loot/profile.ts` `bankItems`) */
+  spoilsBanked: [];
   /** the local hero began a skill (a cast, a draw or a channel), by its behaviour (`SkillDef.impl`) */
   skillUsed: [impl: string];
 }

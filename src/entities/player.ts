@@ -483,6 +483,7 @@ export class Player {
     if (this.channel?.key === key) this.stopChannel();
     this.loadout[key] = skillId;
     saveLoadout(this.cls, this.gear, this.loadout);
+    if (this.local) emit('skillBound');
   }
 
   /** Back to the class's default bindings for the weapon style held. */
