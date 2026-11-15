@@ -225,5 +225,5 @@ export const HEAVE = { step: 0.24, hold: 0.36, throw: 1.75, before: 1.75 };
  *  skill is given up for `reset` s. A foe of `size` (m, its radius: a Hollow Husk's) strikes its figure, a smaller or
  *  a bigger one as much less or more, from `light` to `heavy` of it. Swung into a thing standing `stands` m or more
  *  over the floor (a rock, a column), its body reaching `long` of its height out from his hands, the foe takes that
- *  blow too, with the turn's next strike. */
-export const FLAIL = { lifts: 0.7, reach: 1.1, arm: 0.2, tilt: -1.25, lift: 0.95, renew: 0.25, carry: 0.6, throw: 1.75, bare: 0.4, takes: 0.25, wait: 0.8, reset: 1, size: 0.55, light: 0.85, heavy: 1.15, long: 0.85, stands: 0.5 };
+ *  blow too, with the turn's next strike. Swung `round` rad, once round, he lets it go himself. */
+export const FLAIL = { lifts: 0.7, reach: 1.1, arm: 0.2, tilt: -1.25, lift: 0.95, renew: 0.25, carry: 0.6, throw: 1.75, bare: 0.4, takes: 0.25, wait: 0.8, reset: 1, size: 0.55, light: 0.85, heavy: 1.15, long: 0.85, stands: 0.5, round: Math.PI * 2 };

@@ -550,12 +550,22 @@ export function judgeRush(host, guest) {
  * The guest's swing (Living Flail): the foe it took up on its own screen, whether the host's screen carried it too
  * and each threw it as it was let go.
  */
+/** How far apart two paths of a foe are, every `step` frames (cm; `-` where either screen doesn't show it). */
+function apartEvery(shown, source, step) {
+  const each = [];
+  for (let frame = 0; frame < shown.length; frame += step) {
+    each.push(shown[frame] && source[frame] ? Math.round(distance(shown[frame], source[frame]) * 100) : '-');
+  }
+  return each.join(' ');
+}
+
 function describeFlail(host, guest) {
   const swung = judgeRush(host, guest);
   const line = `the guest's swing took up ${swung.length} foe(s) on its screen, ` +
     `${swung.filter((foe) => foe.there?.carried).length} carried on the host's, thrown ` +
     `${swung.filter((foe) => foe.here.thrown).length} on its screen and ` +
-    `${swung.filter((foe) => foe.there?.thrown).length} on the host's`;
+    `${swung.filter((foe) => foe.there?.thrown).length} on the host's; apart on the two screens every quarter second: ` +
+    `${swung.map((foe) => apartEvery(foePath(guest, foe.id), foePath(host, foe.id), 15)).join('; ')}`;
   const problems = [];
   if (swung.length !== 1) problems.push(`the guest's swing took up ${swung.length} foes on its screen, not one`);
   for (const foe of swung) {

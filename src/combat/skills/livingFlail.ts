@@ -38,8 +38,8 @@ interface FlailState {
   renew: number; since: number;
   /** the thing standing in its way the foe in hand was swung into since the last strike, and where */
   bumped: { on: Obstacle; x: number; z: number } | null;
-  /** whether he has come up to speed in this hold */
-  spun: boolean;
+  /** whether he has come up to speed in this hold, and how far round he has swung the foe in hand (rad) */
+  spun: boolean; round: number;
 }
 
 /** how far round it turns between strikes (rad), and how long the turn takes to come up to speed (s): Steel Tempest's */
@@ -83,7 +83,7 @@ const skill: ChannelSkill<FlailState> = {
       { per: 'blow', base: base * FLAIL.heavy * FLAIL.bare, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'the foe swung, each time it strikes another or a rock or column in its way' },
     ];
   },
-  start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0, bumped: null, spun: false }),
+  start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0, bumped: null, spun: false, round: 0 }),
 
   // (reaching, he stands: from play, "when holding the key (1) to grab someone, you should not be able to walk (if no
   // one is grabbed yet), once somone is grabbed, then you can walk/move around")
@@ -114,7 +114,7 @@ const skill: ChannelSkill<FlailState> = {
     } else if (!st.held && !deals) {
       st.held = G.enemies.find((e) => e.alive && e.carried?.by === player) ?? null;
     }
-    if (st.held && st.held !== had) st.since = st.t;
+    if (st.held && st.held !== had) { st.since = st.t; st.round = 0; }
     // nothing taken up in time (or the one in hand lost and no other in reach): given up, and not held again at once
     if (!st.held) {
       if (had) st.since = st.t;
@@ -122,7 +122,9 @@ const skill: ChannelSkill<FlailState> = {
       return;
     }
     const held = st.held, carry = held?.carried;
-    if (held && carry) {
+    // (a carry given no time is a foe let go, on its way out as its hero's game threw it: a partner's game still
+    // playing the swing, its end not yet heard, turned it to its own point of the turn and threw it there, 6 m off)
+    if (held && carry && carry.until - G.time > LET_GO) {
       // (kept up while he swings: a carry lasts as long as it was given)
       if (deals && (st.renew -= dt) <= 0) { carryEnemy(held, player, way, FLAIL.carry); st.renew = FLAIL.renew; }
       // swung round him at arm's length, its feet in his hands and its head out
@@ -151,6 +153,10 @@ const skill: ChannelSkill<FlailState> = {
     }
 
     st.tick += turned;
+    st.round += turned;
+    // once round, he lets go himself (from play: "it lets go after 1 full rotation automatically"): the foe leaves the
+    // way he faces, his aim; the key still held, he reaches for the next
+    if (player.local && st.round >= FLAIL.round) { player.stopChannel(); return; }
     if (st.tick < TICK_TURN) return;
     st.tick -= TICK_TURN;
     sfx.flailAir(1);
