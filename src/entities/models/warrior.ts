@@ -243,6 +243,8 @@ const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry
 /** both hands empty (models/warriorFists.ts): how long after a move the fists stay up in their guard (s), and the
  *  moves that alternate hands, a weapon's cut and a punch */
 const FISTS_UP = 4;
+/** both hands empty, moving: how far the hands close (of a fist) and how far the wrists let them hang (rad) */
+const WALK_FIST = 0.45, WALK_DROOP = 0.3;
 const alternates = (name: string | undefined): boolean => name === 'swing' || name === 'punch';
 /** Through the eyes, a cut's end held this long (s) for another attack to follow it, the way back to rest after it
  *  (s), and a cut begun within the hold the next of a row: the other way round, from where the last left the blade;
@@ -1719,7 +1721,9 @@ export function* warriorSteps(): ModelSteps {
     // (and at a run a weapon arm pumps as a runner's arm does, a little less than a free one, the shield arm hardly)
     const pump = fp || two ? 0 : held ? RUN_PUMP : 1, pumpL = fp ? 0 : two ? shouldered : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
     // (a hand round a grip or a shield's is held steady by its wrist; a free one flops)
-    const looseR = held ? 0 : 1, looseL = shield.visible || offHeld ? 0 : 1;
+    // (both hands empty, they're loose fists held in line with the forearms: flopping open on the wrists as he ran,
+    // from play, "his writs are not relaxed, they are up ... like a vampire walk")
+    const looseR = held || bare ? 0 : 1, looseL = shield.visible || offHeld || bare ? 0 : 1;
     const swung = walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true, pump, pumpL, looseR, looseL });
     const runK = fp ? 0 : runShareOf(move);
     // (the wrists against each forearm's swing, the shoulder's and the elbow's together)
@@ -2368,7 +2372,9 @@ export function* warriorSteps(): ModelSteps {
     // pump), let down to hang once the fight has left him
     fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP ? 1 : 0, 6, dt) : 0;
     if (bare && !a && st.dead < 0) fistGuard(j, fistsUp * (1 - runK), t, fp);
-    const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' || a?.name === 'whirl' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : fistsUp;
+    const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' || a?.name === 'whirl' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : Math.max(fistsUp, WALK_FIST * Math.min(1, move * 2));
+    // (and as he moves the wrists let the hands hang a little, the knuckles down)
+    if (bare && !a && !fp && st.dead < 0) { const droop = WALK_DROOP * Math.min(1, move * 2) * (1 - fistsUp); j.handL.rotation.x += droop; j.handR.rotation.x += droop; }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)

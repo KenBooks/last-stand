@@ -1,8 +1,10 @@
-// Living Flail: the warrior with both hands empty. Held, he turns on the spot with his arms out; the first foe his
-// hands meet that a man could lift is seized and swung round him as a club, striking everything in its reach, and
-// let go as the key is, thrown out the way it was swinging. With no foe in hand his fists strike what stands close,
-// lighter. A boss, an elite, a foe too big to lift (a Cinder Brute, a Barkhide Hulk) and a training dummy are never
-// taken up: they are struck as the rest are.
+// Living Flail: the warrior with both hands empty. Held, he reaches out; the first foe his hands meet that a man
+// could lift is seized, and only then does he turn, swinging it round him as a club that strikes everything in its
+// reach, the harder the bigger it is; let go as the key is, it's thrown out the way it was swinging. With no foe in
+// hand he neither turns nor strikes (from play: "you cant spin without one, you have to have one ... you cant deal
+// the damadge without anything in hands"), and with none taken up within `FLAIL.wait` s the skill is given up and
+// can't be held again for `FLAIL.reset` s ("the ability resets for 1 seconds"). A boss, an elite, a foe too big to
+// lift (a Cinder Brute, a Barkhide Hulk) and a training dummy are never taken up.
 //
 // The foe in hand is a carried one (entities/carry.ts, as Bull Rush's and Heave's): thinking of nothing, placed by
 // its game. The caster's game seizes it and keeps the carry up (`carryEnemy`, which co-op reports as it does a
@@ -35,6 +37,9 @@ interface FlailState {
 
 /** how far round it turns between strikes (rad), and how long the turn takes to come up to speed (s): Steel Tempest's */
 const TICK_TURN = 3, SPIN_UP = 0.2;
+
+/** How hard a foe of `radius` strikes as a club, of a foe of `FLAIL.size`'s: a bigger one a little harder. */
+const weightOf = (radius: number): number => Math.max(FLAIL.light, Math.min(FLAIL.heavy, radius / FLAIL.size));
 /** what the swing drives round with it, against out */
 const SWIRL = 1.3;
 
@@ -67,8 +72,8 @@ const skill: ChannelSkill<FlailState> = {
     const rate = def.spin * (1 + stats.castSpeed / 100) / TICK_TURN;
     const base = def.damage * TICK_TURN / def.spin;
     return [
-      { per: 'strike', base, rate, type: 'physical', note: 'with a foe in hand, on every foe in its reach' },
-      { per: 'fist', base: base * FLAIL.bare, rate, type: 'physical', note: 'with no foe in hand; the foe swung takes as much as it strikes' },
+      { per: 'strike', base: base * FLAIL.heavy, rate, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'on every foe in its reach, with the biggest foe he can lift in hand; less with a smaller one' },
+      { per: 'blow', base: base * FLAIL.heavy * FLAIL.bare, rate, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'the foe swung, as it strikes another' },
     ];
   },
   start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0 }),
@@ -81,20 +86,27 @@ const skill: ChannelSkill<FlailState> = {
     const def = rawDef as Def;
     const p = player.pos, deals = dealsDamage(player);
     st.t += dt;
-    const turned = def.spin * (1 + player.stats.castSpeed / 100) * Math.min(1, st.t / SPIN_UP) * dt;
+    // (he turns only with a foe in hand, from standing each time one is taken up)
+    const turned = st.held ? def.spin * (1 + player.stats.castSpeed / 100) * Math.min(1, (st.t - st.since) / SPIN_UP) * dt : 0;
     st.turn += turned;
     const way = wayOf(player, st);
 
     // the foe in hand: seized by the caster's game, found by the others as the one their copy of him carries
     if (st.held && (!st.held.alive || st.held.carried?.by !== player)) st.held = null;
     const had = st.held;
-    if (!st.held && deals && st.t > SPIN_UP) {
+    if (!st.held && deals) {
       st.held = seize(player);
       if (st.held) { carryEnemy(st.held, player, way, FLAIL.carry); st.renew = FLAIL.renew; fistMark(st.held, 8); sfx.heaveGrab(); }
     } else if (!st.held && !deals) {
       st.held = G.enemies.find((e) => e.alive && e.carried?.by === player) ?? null;
     }
     if (st.held && st.held !== had) st.since = st.t;
+    // nothing taken up in time (or the one in hand lost and no other in reach): given up, and not held again at once
+    if (!st.held) {
+      if (had) st.since = st.t;
+      if (player.local && st.t - st.since > FLAIL.wait) { player.cooldowns.set(def.impl, FLAIL.reset); player.stopChannel(); }
+      return;
+    }
     const held = st.held, carry = held?.carried;
     if (held && carry) {
       // (kept up while he swings: a carry lasts as long as it was given)
@@ -111,21 +123,21 @@ const skill: ChannelSkill<FlailState> = {
     st.tick += turned;
     if (st.tick < TICK_TURN) return;
     st.tick -= TICK_TURN;
-    sfx.flailAir(held ? 1 : 0);
-    const share = TICK_TURN / def.spin, k = held ? 1 : FLAIL.bare, reach = held ? def.radius : FLAIL.fists;
+    sfx.flailAir(1);
+    const share = TICK_TURN / def.spin, k = weightOf(st.held.radius), reach = def.radius;
     hurtPropsIn(player, p.x, p.z, reach, PROP_DAMAGE.zone * share);
     blastCorpses(p, reach, 3.5, { swirl: SWIRL, lift: 0.35 });
     let hits = 0;
     for (const e of G.enemies) {
       if (!e.alive || e === held || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > reach + e.radius) continue;
-      hitEnemy(e, def.damage * share * k, { by: player, skill: def, tags: def.tags, type: 'physical', knock: held ? 2.5 : 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3, on: swingOn(p, e.pos, 1, e.radius) } });
+      hitEnemy(e, def.damage * share * k, { by: player, skill: def, tags: def.tags, type: 'physical', knock: 2.5, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3, on: swingOn(p, e.pos, 1, e.radius) } });
       fistMark(e, 4);
       hits++;
     }
     if (!hits) return;
     // (the club takes its blows too)
-    if (held) hitEnemy(held, def.damage * share * FLAIL.bare, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir: way, lift: 0.3 } });
-    if (held) sfx.heaveLand(); else sfx.punchLand(0);
+    hitEnemy(st.held, def.damage * share * k * FLAIL.bare, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir: way, lift: 0.3 } });
+    sfx.heaveLand();
   },
 
   stop(player, _def, st) {

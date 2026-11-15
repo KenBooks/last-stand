@@ -50,6 +50,8 @@ export const STANDS: Record<string, Stand> = {
   crescent: { count: 3, ahead: 4, across: 1.4 },
   bullRush: { count: 3, ahead: 3.5, along: 1.3 },
   tempest: { count: 4, round: 1.7 },
+  // (within his hands' reach: he swings only once one of them is taken up)
+  livingFlail: { count: 4, round: 1.5 },
   ironBellow: { count: 4, round: 2.5 },
   glacialNova: { count: 4, round: 3.2 },
   splinterBolt: { count: 3, ahead: 6, across: 1 },

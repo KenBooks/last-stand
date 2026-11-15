@@ -966,6 +966,8 @@ export class Player {
     // a broken guard can't be raised again until the shield recovers
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
+    // (a held skill that gave itself up waits its time out, in the lobby too: Living Flail with no foe to take up)
+    if (this.local && this.cooldownLeft(s.def.impl) > 0) return;
     if (this.channel) this.stopChannel();
     if (this.local) recorder.mark(`channel ${s.def.impl}`);
     // (the hand its key casts it from, before it starts: its look is made for it)
@@ -1365,7 +1367,7 @@ export class Player {
       this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
       // (hidden, as the hero selection screen hides him: it lights nothing)
       const shown = this.obj.visible ? 1 : 0;
-      this.staffLight.intensity = shown * (this.cls.schools && !this.gear.weapon ? 0 : 1) * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      this.staffLight.intensity = shown * (this.gear.weapon ? 1 : 0) * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
     // (the glowing hand lights what's round it, breathing as its glow does; off through the eyes, where a light by the
     // camera floods the view; held off the palm, `HAND_LIGHT`)

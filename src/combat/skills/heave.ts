@@ -1,10 +1,17 @@
-// Heave: the warrior with both hands empty. A step in at the aim, the first foe he meets seized and struck, carried
-// before him for the step's last instant and thrown on along it through the air (the charge's own carry and throw,
-// entities/carry.ts, so every game shows it as it does Bull Rush's); where it comes down, it and every foe round it
-// take the landing. An elite or a boss is too heavy to throw: struck and shoved back. A training dummy stands.
+// Heave: the warrior with both hands empty. The nearest foe before him is his mark: a step in at it, the foe struck
+// and seized, carried before him for the step's last instant and thrown on through the air (the charge's own carry
+// and throw, entities/carry.ts, so every game shows it as it does Bull Rush's, thrown `HEAVE.throw` times as hard);
+// where it comes down, it and every foe round it take the landing. An elite or a boss is too heavy to throw: struck
+// and shoved back. A training dummy stands. With no foe in his reach it isn't cast, and costs nothing.
+//
+// The mark is chosen by where he stands, not by where the click fell (from play: "it shoud grab the closest mob to
+// the charecter. and the one its roughly facing, and less prioritzing where the mouse is when clicking. Becuase
+// currently, the lauch works 50/50"): stepping at the aim and seizing what the step met, a click a little off a foe,
+// or past a nearer one, took hold of nothing.
 import * as THREE from 'three';
 import { G } from '../../state';
 import { carryEnemy, hitEnemy } from '../damage';
+import { dealsDamage } from '../../net/role';
 import { evades } from '../../entities/evade';
 import { addEffect, shockwave, decal } from '../../fx/effects';
 import { smokePuff, debris } from '../../fx/particles';
@@ -13,6 +20,7 @@ import { sfx } from '../../core/audio';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { blastCorpses } from '../../entities/corpse';
 import { fistMark } from './knuckles';
+import { angleBetween } from './slash';
 import { HEAVE } from '../../data/balance';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
@@ -21,10 +29,31 @@ import type { Player } from '../../entities/player';
 type Def = Needs<'damage' | 'range' | 'radius' | 'knock'>;
 
 const DUST = 0x2a241c;
-/** the hands close on what comes within this of his middle, past the foe's own size (m), before him */
+/** how near his hands must be to a foe's body to close on it (m) */
 const REACH = 0.9;
+/** how near his body the step brings a foe's (m) */
+const CLOSE = 0.15;
 /** how long a throw is watched for its landing at most (s) */
 const WATCHED = 3;
+
+/**
+ * The foe a Heave cast towards `target` takes hold of: the nearest within his step and his reach among those before
+ * him, the way he's turned to cast (`HEAVE.before` either side of the aim: the half of the ground the click is in),
+ * or with none there the nearest all round.
+ */
+function markOf(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
+  const p = player.pos;
+  const aimed = Math.hypot(target.x - p.x, target.z - p.z) > 1e-3 ? Math.atan2(target.x - p.x, target.z - p.z) : player.facing;
+  let before: Enemy | null = null, any: Enemy | null = null, leastBefore = Infinity, leastAny = Infinity;
+  for (const e of G.enemies) {
+    if (!e.alive || e.invulnerable || e.carried || e.tossed) continue;
+    const dx = e.pos.x - p.x, dz = e.pos.z - p.z, off = Math.hypot(dx, dz) - e.radius;
+    if (off > def.range + REACH) continue;
+    if (off < leastAny) { any = e; leastAny = off; }
+    if (off < leastBefore && angleBetween(Math.atan2(dx, dz), aimed) <= HEAVE.before) { before = e; leastBefore = off; }
+  }
+  return before ?? any;
+}
 
 /** The landing: the thrown foe and all round where it came down struck, the ground answering. */
 function land(player: Player, def: Def, thrown: Enemy): void {
@@ -54,32 +83,34 @@ const skill: InstantSkill = {
     { per: 'grab', base: (def as Def).damage, type: 'physical', note: 'the foe seized' },
     { per: 'landing', base: (def as Def).damage, type: 'physical', note: 'the foe thrown and each one it lands among' },
   ],
+  canCast: (player, def, target) => markOf(player, def as Def, target) !== null,
   cast(player, rawDef, target) {
     const def = rawDef as Def;
-    const p = player.pos;
-    const dx = target.x - p.x, dz = target.z - p.z, d = Math.hypot(dx, dz);
+    const p = player.pos, deals = dealsDamage(player);
+    // (a partner's copy of him steps at the foe its own game shows nearest, and throws the one his game seized)
+    const mark = markOf(player, def, target);
+    const to = mark?.pos ?? target;
+    const dx = to.x - p.x, dz = to.z - p.z, d = Math.hypot(dx, dz);
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
-    // (closes in on the aim, never past it: the hands reach the rest)
-    const step = Math.min(def.range, Math.max(0, d - REACH));
+    // (closes in on it, up to its body: the hands close on it on the way, and it's carried the rest of the step.
+    // Stopped at his hands' reach, he took hold only as the step ended and threw it the same instant, never carried)
+    const step = Math.min(def.range, Math.max(0, d - (mark?.radius ?? 0) - player.radius - CLOSE));
     let seized: Enemy | null = null;
     sfx.heave(HEAVE.step);
     player.startDash(dir, step / HEAVE.step, HEAVE.step, { anim: 'heave', hold: HEAVE.hold, step: () => {
       const dash = player.dash;
-      if (seized || !dash) return;
-      let nearest: Enemy | null = null, least = Infinity;
-      for (const e of G.enemies) {
-        if (!e.alive || e.carried || e.tossed) continue;
-        const ex = e.pos.x - p.x, ez = e.pos.z - p.z, off = Math.hypot(ex, ez) - e.radius;
-        if (off > REACH || ex * dir.x + ez * dir.z < 0 || off >= least) continue;
-        nearest = e; least = off;
-      }
-      if (!nearest || evades(nearest, player, { kind: 'rush', x: p.x, z: p.z, way: dir, half: REACH })) return;
-      seized = nearest;
-      // (struck as he takes hold, then carried to the step's end and thrown on from there, entities/enemy `letGo`)
-      hitEnemy(nearest, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.5 } });
-      // (the way's length is how hard it's thrown, entities/carry `carryOf`)
-      carryEnemy(nearest, player, { x: dir.x * HEAVE.throw, z: dir.z * HEAVE.throw }, Math.max(0, dash.dur - dash.t));
-      fistMark(nearest, 8);
+      if (seized || !dash || !deals || !mark?.alive || mark.carried || mark.tossed) return;
+      // (taken hold of as the hands come to it, or as the step ends: a foe that backed off a pace is still his)
+      const off = Math.hypot(mark.pos.x - p.x, mark.pos.z - p.z) - mark.radius;
+      if (off > REACH && dash.t < dash.dur) return;
+      if (off > REACH * 2) return;
+      seized = mark;
+      if (evades(mark, player, { kind: 'rush', x: p.x, z: p.z, way: dir, half: REACH })) return;
+      // (struck as he takes hold, then carried to the step's end and thrown on from there, entities/enemy `letGo`;
+      // the way's length is how hard it's thrown, entities/carry `carryOf`)
+      hitEnemy(mark, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.5 } });
+      carryEnemy(mark, player, { x: dir.x * HEAVE.throw, z: dir.z * HEAVE.throw }, Math.max(0.05, dash.dur - dash.t));
+      fistMark(mark, 8);
       addShake(0.1);
       sfx.heaveGrab();
     } });
@@ -89,12 +120,13 @@ const skill: InstantSkill = {
     addEffect({
       update(dt) {
         t += dt;
-        if (!seized) return player.dash === mine && mine !== null;
+        if (!deals && !seized) seized = G.enemies.find((e) => e.alive && e.carried?.by === player) ?? null;
+        if (!seized) return (player.dash === mine && mine !== null) || t < HEAVE.step + 0.5;
         if (!seized.alive || t > WATCHED) return false;
         if (seized.tossed) { flying = true; return true; }
         if (flying) { land(player, def, seized); return false; }
         // (not thrown: an elite or a boss shoved on, a dummy that stood)
-        return !!seized.carried || t < HEAVE.step + 0.2;
+        return !!seized.carried || t < HEAVE.step + 0.5;
       },
       dispose() {},
     });

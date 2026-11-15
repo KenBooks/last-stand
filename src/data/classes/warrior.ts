@@ -57,7 +57,7 @@ const warrior: ClassDef = {
     },
     {
       key: '1', impl: 'livingFlail', name: 'Living Flail',
-      desc: 'Turn on the spot with your arms out. The first foe your hands meet is seized by the legs and swung round you as a club, striking everything in its reach; let go and it flies off. With no foe in hand your fists strike what stands close. Bosses, elites and foes too big to lift cannot be taken up. Drains Energy while held.',
+      desc: 'Reach out and seize the first foe your hands meet by the legs, then swing it round you as a club, striking everything in its reach; let go and it flies off. A bigger foe strikes a little harder. With no foe in reach nothing is swung, and it cannot be held again for a second. Bosses, elites and foes too big to lift cannot be taken up. Drains Energy while held.',
       tags: ['physical'], cost: 28, cooldown: 0, castTime: 0, channel: true,
       damage: 140, radius: 3, moveMult: 0.75, spin: 11,
       needs: 'bare',
