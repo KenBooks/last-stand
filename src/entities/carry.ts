@@ -12,8 +12,20 @@ import type { XZ } from '../types';
 import type { Player } from './player';
 
 /** A foe carried before a charge: by whom, the charge's way (along the ground, its length 1), until when by the clock
- *  (`G.time`), and the dash it rides as its game plays it (none seen yet: by the clock alone). */
-export interface Carry { by: Player; way: XZ; until: number; dash: Player['dash'] }
+ *  (`G.time`), the dash it rides as its game plays it (none seen yet: by the clock alone), and how hard it is thrown
+ *  as it's let go, as a multiple of a charge's throw (`carryOf`). */
+export interface Carry { by: Player; way: XZ; until: number; dash: Player['dash']; power: number }
+
+/**
+ * A carry along `way`, whose length says how hard its throw is: 1 a charge's, more a harder one (Heave's). Co-op
+ * sends a carry's way as it is (`net/sync.ts`), so every game throws as hard with no message of its own; a length
+ * within a hundredth of 1 (the report's rounding) is a charge's.
+ */
+export function carryOf(by: Player, way: XZ, until: number): Carry {
+  const length = Math.hypot(way.x, way.z) || 1;
+  const power = Math.abs(length - 1) < 0.02 ? 1 : length;
+  return { by, way: { x: way.x / length, z: way.z / length }, until, dash: by.dash, power };
+}
 
 /** Whether `carry`'s charge still runs: its hero's dash until it stops, as this game plays it (a partner's copy of him
  *  too, a little later than his own game: by the clock, the host let go of what a guest's charge carried 50 to 100 ms
@@ -82,7 +94,9 @@ export function throwOf(pos: XZ, radius: number, carry: Carry): { vx: number; vz
   const across = (pos.x - by.pos.x) * way.z - (pos.z - by.pos.z) * way.x;
   const fan = Math.max(-1, Math.min(1, across / (by.radius + radius))) * CARRY.fan;
   const x = way.x + way.z * fan, z = way.z - way.x * fan, len = Math.hypot(x, z);
-  return { vx: (x / len) * CARRY.throw, vz: (z / len) * CARRY.throw, vy: CARRY.lift };
+  // (a harder throw goes faster and a little higher: as much higher, it hung in the air)
+  const lift = CARRY.lift * (1 + (carry.power - 1) * CARRY.higher);
+  return { vx: (x / len) * CARRY.throw * carry.power, vz: (z / len) * CARRY.throw * carry.power, vy: lift };
 }
 
 /** A co-op guest's copy its own hero's charge threw is held where it landed until the host's reports have it within

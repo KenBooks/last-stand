@@ -77,7 +77,8 @@ const skill: InstantSkill = {
       seized = nearest;
       // (struck as he takes hold, then carried to the step's end and thrown on from there, entities/enemy `letGo`)
       hitEnemy(nearest, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.5 } });
-      carryEnemy(nearest, player, dir, Math.max(0, dash.dur - dash.t));
+      // (the way's length is how hard it's thrown, entities/carry `carryOf`)
+      carryEnemy(nearest, player, { x: dir.x * HEAVE.throw, z: dir.z * HEAVE.throw }, Math.max(0, dash.dur - dash.t));
       fistMark(nearest, 8);
       addShake(0.1);
       sfx.heaveGrab();

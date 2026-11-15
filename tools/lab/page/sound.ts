@@ -84,7 +84,7 @@ const FANGS = { first: 0.2, apart: 0.15 };
 /** his fists' paces (s): Bare Knuckles' punch and the share of it the fist lands at (its `castTime`, `fireAt`),
  *  Heave's step and its foe's flight, Groundbreaker's fists landing (its `castTime` by its `fireAt`) */
 const PUNCH = { pace: 0.24, fires: 0.5 };
-const HEAVE = { step: 0.24, flight: 0.65 };
+const HEAVE = { step: 0.24, flight: 0.8 };
 const POUND_LANDS = 0.75 * 0.62;
 
 /** Rending Cleave held: three swings at a weapon's pace (`heft`: 0 a blade in each hand, 1 a one-hander, 2 a great

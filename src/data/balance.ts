@@ -198,6 +198,8 @@ export const FLING = { base: 1.6, most: 10, full: 1.5, curve: 0.6, stand: 0.6, b
  *  A foe rides until the charge stops as its game plays it, or its clock says so, `late` s past that at most. */
 export const CARRY = {
   gap: 0.1, throw: 6, lift: 5, fan: 0.35, tilt: 1.1, skid: 0.5, daze: 0.7, shove: 4,
+  // (the share of a harder throw's extra speed its lift gains: `Carry.power`, Heave's)
+  higher: 0.3,
   reach: 1.1, wide: 1.6, high: 2.4, grip: 30, ahead: 1.5, late: 0.5,
 };
 
@@ -210,5 +212,6 @@ export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
 
 /** Heave's timing (s), the skill's (combat/skills/heave: its step in, as it takes hold) and the warrior's pose keyed
  *  to it (entities/models/warriorFists): the step, and the follow-through standing after it as the throw leaves his
- *  hands. */
-export const HEAVE = { step: 0.24, hold: 0.36 };
+ *  hands; and how hard it throws, as a multiple of a charge's throw (from play: "lets make the push lauch them
+ *  further away"). */
+export const HEAVE = { step: 0.24, hold: 0.36, throw: 1.75 };

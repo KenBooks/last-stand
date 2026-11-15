@@ -9,7 +9,7 @@ import { reachOf, type Reach } from './models/hulls';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { AI, fx, lured } from './enemyAI';
-import { carrying, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
+import { carrying, carryOf, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
 import { lures, type Lure } from '../combat/lures';
 import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
@@ -368,7 +368,7 @@ export class Enemy {
    *  dummy stands its ground. */
   carry(by: Player, way: XZ, seconds: number): void {
     if (!this.alive || this.def.dummy) return;
-    this.carried = { by, way: { x: way.x, z: way.z }, until: G.time + seconds, dash: by.dash };
+    this.carried = carryOf(by, way, G.time + seconds);
     this.tossed = null;
     this.knock.set(0, 0, 0);
     this.daze(seconds);
@@ -435,7 +435,7 @@ export class Enemy {
   private letGo(c: Carry): void {
     this.carried = null;
     if (this.hero || this.boss) {
-      this.knock.set(c.way.x * CARRY.shove, 0, c.way.z * CARRY.shove);
+      this.knock.set(c.way.x * CARRY.shove * c.power, 0, c.way.z * CARRY.shove * c.power);
       this.daze(CARRY.daze);
       return;
     }
