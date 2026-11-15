@@ -12,9 +12,11 @@
 // it swung, and a carry given no time lets it go, thrown on every game as a charge's are.
 import { G } from '../../state';
 import { carryEnemy, hitEnemy } from '../damage';
-import { dealsDamage } from '../../net/role';
+import { dealsDamage, hurtsProps } from '../../net/role';
 import { sfx } from '../../core/audio';
-import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
+import { hurtProp, hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
+import { debris } from '../../fx/particles';
+import { addShake } from '../../core/renderer';
 import { blastCorpses } from '../../entities/corpse';
 import { swingOn, swingWay } from '../fling';
 import { fistMark } from './knuckles';
@@ -23,6 +25,7 @@ import { LET_GO } from '../../entities/carry';
 import type { ChannelSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
+import type { Obstacle } from '../../types';
 
 type Def = Needs<'damage' | 'radius' | 'spin'>;
 
@@ -33,6 +36,10 @@ interface FlailState {
   turn: number; tick: number; t: number;
   /** until the carry is kept up again (s), and when the foe in hand was taken up (of `t`) */
   renew: number; since: number;
+  /** the thing standing in its way the foe in hand was swung into since the last strike, and where */
+  bumped: { on: Obstacle; x: number; z: number } | null;
+  /** whether he has come up to speed in this hold */
+  spun: boolean;
 }
 
 /** how far round it turns between strikes (rad), and how long the turn takes to come up to speed (s): Steel Tempest's */
@@ -73,10 +80,10 @@ const skill: ChannelSkill<FlailState> = {
     const base = def.damage * TICK_TURN / def.spin;
     return [
       { per: 'strike', base: base * FLAIL.heavy, rate, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'on every foe in its reach, with the biggest foe he can lift in hand; less with a smaller one' },
-      { per: 'blow', base: base * FLAIL.heavy * FLAIL.bare, rate, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'the foe swung, as it strikes another' },
+      { per: 'blow', base: base * FLAIL.heavy * FLAIL.bare, type: 'physical', least: FLAIL.light / FLAIL.heavy, note: 'the foe swung, each time it strikes another or a rock or column in its way' },
     ];
   },
-  start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0 }),
+  start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0, bumped: null, spun: false }),
 
   // (reaching, he stands: from play, "when holding the key (1) to grab someone, you should not be able to walk (if no
   // one is grabbed yet), once somone is grabbed, then you can walk/move around")
@@ -90,8 +97,11 @@ const skill: ChannelSkill<FlailState> = {
     const def = rawDef as Def;
     const p = player.pos, deals = dealsDamage(player);
     st.t += dt;
-    // (he turns only with a foe in hand, from standing each time one is taken up)
-    const turned = st.held ? def.spin * (1 + player.stats.castSpeed / 100) * Math.min(1, (st.t - st.since) / SPIN_UP) * dt : 0;
+    // (he turns only with a foe in hand: up to speed from standing with the first, and on at speed with the next, taken
+    // up as the one before it was spent)
+    const upTo = st.spun ? 1 : Math.min(1, (st.t - st.since) / SPIN_UP);
+    const turned = st.held ? def.spin * (1 + player.stats.castSpeed / 100) * upTo * dt : 0;
+    if (st.held && upTo >= 1) st.spun = true;
     st.turn += turned;
     const way = wayOf(player, st);
 
@@ -124,10 +134,36 @@ const skill: ChannelSkill<FlailState> = {
       held.pos.x += (p.x + way.x * out - held.pos.x) * k; held.pos.z += (p.z + way.z * out - held.pos.z) * k;
     }
 
+    // swung into something standing (a rock, a column, a log), the foe in hand takes the blow, as it does striking a foe,
+    // with the turn's next strike (from play: "when they are in a spin (1), and they hit objects, like rocks or colums, the
+    // mobs should take damdge"). One a strike: a rock or a log is several circles, and each took one, three blows in
+    // a frame; and on the strikes' own beat, as its tooltip states its blows' pace
+    if (held && !st.bumped && st.t - st.since > FLAIL.takes) {
+      const reach = player.radius + held.radius + FLAIL.arm + held.height * FLAIL.long;
+      for (const o of G.arena.obstacles) {
+        if (o.h < FLAIL.stands) continue;
+        // (how far the thing is from the line of its body, from his hands out to its head)
+        const dx = o.x - p.x, dz = o.z - p.z, along = Math.max(player.radius, Math.min(reach, dx * way.x + dz * way.z));
+        if (Math.hypot(dx - way.x * along, dz - way.z * along) > o.r + held.radius * 0.5) continue;
+        st.bumped = { on: o, x: p.x + way.x * along, z: p.z + way.z * along };
+        break;
+      }
+    }
+
     st.tick += turned;
     if (st.tick < TICK_TURN) return;
     st.tick -= TICK_TURN;
     sfx.flailAir(1);
+    const bump = st.bumped;
+    st.bumped = null;
+    if (bump && st.held.alive) {
+      hitEnemy(st.held, def.damage * (TICK_TURN / def.spin) * weightOf(st.held.radius) * FLAIL.bare, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir: way, lift: 0.3 } });
+      if (bump.on.prop && hurtsProps(player)) hurtProp(bump.on, PROP_DAMAGE.swing);
+      fistMark(st.held, 6);
+      debris({ x: bump.x, y: Math.min(bump.on.h, 1), z: bump.z }, { count: 5, speed: 4 });
+      addShake(0.12);
+      sfx.heaveLand();
+    }
     const share = TICK_TURN / def.spin, k = weightOf(st.held.radius), reach = def.radius;
     hurtPropsIn(player, p.x, p.z, reach, PROP_DAMAGE.zone * share);
     blastCorpses(p, reach, 3.5, { swirl: SWIRL, lift: 0.35 });
