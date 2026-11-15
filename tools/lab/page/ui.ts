@@ -70,7 +70,7 @@ import { autoFullChecked, autoFullPictures, ESC_CANARY, FULL_CANARY } from './ui
 import { BETA_NOTICE_CANARY, betaNoticeHere, betaNoticeShown, closeBetaNotice, openBetaNotice } from './uiBeta';
 import { showHelp } from '../../../src/ui/menus';
 import {
-  BUG_REPORT_CANARY, bugReportChecked, bugReportPictures, closeBugReportState, openBugReport, openBugReportTouch,
+  BUG_REPORT_CANARY, LINK_ROW_CANARY, linkRowSeen, bugReportChecked, bugReportPictures, closeBugReportState, openBugReport, openBugReportTouch,
   useReportService,
 } from './uiBugReport';
 import { closeCoopDialog, COOP_CANARY, coopShown, openCoopPicked, openCoopRename, openCoopTouch } from './uiCoop';
@@ -1236,6 +1236,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(BUG_REPORT_CANARY.name));
     lines.push(`  canary: ${BUG_REPORT_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${BUG_REPORT_CANARY.what} went unseen`);
+    if (state === 'bugReport' && linkRowSeen()) {
+      const row = found.problems.some((problem) => problem.includes(LINK_ROW_CANARY.name));
+      lines.push(`  canary: ${LINK_ROW_CANARY.what} ${row ? 'caught' : 'went unseen'}`);
+      if (!row) missed.push(`${state}: the canary's ${LINK_ROW_CANARY.what} went unseen`);
+    }
   }
   if (state === 'coop' || state === 'coopRename' || state === 'coopTouch') {
     const caught = found.problems.some((problem) => problem.includes(COOP_CANARY.name));

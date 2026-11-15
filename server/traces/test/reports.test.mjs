@@ -102,6 +102,15 @@ test('takes a report from the game and answers with its code, readable with the 
   const { reports, total } = await (await read('/traces/reports')).json();
   assert.ok(total >= 1);
   assert.equal(reports[0].code, code);
+  // (the page's chips and its filter: how many of each kind are kept, and the list of one kind alone)
+  const other = await (await send(report({ kind: 'sound', picture: null }))).json();
+  const all = await (await read('/traces/reports')).json();
+  assert.equal(all.kept, all.total);
+  assert.equal(Object.values(all.kinds).reduce((sum, n) => sum + n, 0), all.kept);
+  const sounds = await (await read('/traces/reports?kind=sound')).json();
+  assert.deepEqual(sounds.reports.map((r) => r.code), [other.code]);
+  assert.deepEqual([sounds.total, sounds.kept, sounds.kinds], [1, all.kept, all.kinds]);
+  assert.equal((await (await read('/traces/reports?kind=nothing')).json()).total, 0);
   // (no address written down: the rate limits count in memory alone)
   for (const name of readdirSync(join(DATA, 'reports')).filter((n) => n.endsWith('.json'))) {
     const kept = readFileSync(join(DATA, 'reports', name), 'utf8');

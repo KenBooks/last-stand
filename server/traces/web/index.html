@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<!-- The traces page (served at GET /traces to a signed-in browser): the summary and the list, filled by src/main.ts. -->
+<!-- The traces page (served at GET /traces to a signed-in browser): two views, switched by src/main.ts from the
+     address's hash. The traces: the summary and the list. The bug reports (#reports): what's kept, by kind, each
+     opened whole with its picture. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -11,6 +13,12 @@
 <body>
   <main>
     <h1>Last Stand <span>traces</span></h1>
+    <nav class="views">
+      <a href="#traces" data-view="traces">Traces</a>
+      <a href="#reports" data-view="reports">Bug reports <em id="reports-count"></em></a>
+    </nav>
+
+    <div id="view-traces">
     <p class="sub">
       Performance traces slow games sent, with their player's consent.
       Read one with <code>npm run lab -- trace CODE</code>.
@@ -39,6 +47,20 @@
     </table>
     <p class="empty" id="empty" hidden>No traces.</p>
     <button id="more" hidden>Show more</button>
+    </div>
+
+    <div id="view-reports" hidden>
+      <p class="sub">
+        Bug reports players sent from the pause menu's Report a bug: what they wrote, what the game added, and a
+        picture of the game if they left it in. Click one to read it whole.
+      </p>
+      <section class="cards" id="report-cards"></section>
+      <div class="card kinds"><h2>By kind</h2><div class="chips" id="report-kinds"></div></div>
+      <div class="bar"><span id="report-count"></span></div>
+      <div id="reports"></div>
+      <p class="empty" id="report-empty" hidden>No bug reports.</p>
+      <button id="report-more" hidden>Show more</button>
+    </div>
   </main>
 </body>
 </html>

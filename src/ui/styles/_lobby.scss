@@ -102,6 +102,12 @@
 #{$village} #opt-wave .wv-val { min-width: 6.5em; }
 #opt-wave .wv-val small { color: var(--accent); }
 .menu-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 6px; }
+// (the panels' lobby's row holds five links on one line of the panel, Report a bug the fifth: at the links' own 16 px
+// it went to a second line, which a short screen's panel has no room for: cut off under Enter the Arena at 1280x720
+// and on a phone held sideways. Install, shown where the browser offers it, is a sixth and takes a second line, as
+// it did as a fifth)
+.menu-left .menu-links { gap: 0 2px; }
+.menu-left .menu-links .link { padding: 4px 2px; font-size: 13px; white-space: nowrap; }
 
 .menu-right { position: relative; width: 290px; padding: 12px 14px 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); background: linear-gradient(270deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba($frame, .45); margin-bottom: 10px; }

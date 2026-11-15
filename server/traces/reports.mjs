@@ -3,7 +3,8 @@
 // the same kind of upload (anonymous, from the game's own pages, read back by agents with the owner's token), on the
 // same host, route, certificate, token and volume, so no new deploy. Nothing goes to GitHub.
 //   POST /traces/reports              a report as JSON (1 MB at most), from the game's own pages -> 201 { code }
-//   GET  /traces/reports?limit=&offset=   the reports kept, newest first (read)  -> { reports: [...], total, ... }
+//   GET  /traces/reports?kind=&limit=&offset=   the reports kept, newest first, of one kind if asked (read)
+//                                     -> { reports: [...], total, kept, kinds, ... }
 //   GET  /traces/reports/<code>       a report whole, as JSON (read)
 //   GET  /traces/reports/<code>.jpg   its picture (read)
 // Every limit is a setting (settingsFrom in traces.mjs) and listed with what happens past it in the AGENTS.md.
@@ -189,16 +190,23 @@ export function reportsService(settings, { log, newCode }) {
     await prune();
   }
 
-  /** The list, newest first, each report's line (what happened cut to 200 characters), `limit` from `offset`. */
+  /** The list, newest first, each report's line (what happened cut to 200 characters), `limit` from `offset`, of one
+   *  `kind` if asked; with how many of each kind are kept. */
   function list(url) {
     const limit = Math.min(500, Number(url.searchParams.get('limit')) || 50);
     const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
-    const all = [...index.values()].reverse();
+    const kind = url.searchParams.get('kind') ?? '';
+    const kept = [...index.values()].reverse();
+    /** how many of each kind are kept (the page's chips), whatever the list is filtered by */
+    const kinds = {};
+    for (const m of kept) kinds[m.kind] = (kinds[m.kind] ?? 0) + 1;
+    const all = kind ? kept.filter((m) => m.kind === kind) : kept;
     const lines = all.slice(offset, offset + limit).map((m) => ({
       code: m.code, at: m.at, kind: m.kind, text: m.text.slice(0, 200), picture: m.picture, bytes: m.bytes,
     }));
     return {
-      reports: lines, total: all.length, diskBytes, diskMax: settings.reportDiskMax, keepDays: settings.reportKeepDays,
+      reports: lines, total: all.length, kept: kept.length, kinds, diskBytes, diskMax: settings.reportDiskMax,
+      keepDays: settings.reportKeepDays,
     };
   }
 

@@ -1,4 +1,4 @@
-// What the traces service answers (traces.mjs: `list`, `summary`).
+// What the traces service answers (traces.mjs: `list`, `summary`; reports.mjs: `list`, `whole`).
 
 /** A trace's line in the list. */
 export interface Trace {
@@ -20,6 +20,39 @@ export interface Trace {
 export interface TraceList {
   traces: Trace[];
   total: number;
+}
+
+/** A bug report's line in the list: what happened cut to 200 characters. */
+export interface ReportLine {
+  code: string;
+  at: string;
+  kind: string;
+  text: string;
+  picture: boolean;
+  bytes: number;
+}
+
+/** A page of the bug reports, newest first: how many match the kind asked for, how many are kept and of each kind. */
+export interface ReportList {
+  reports: ReportLine[];
+  total: number;
+  kept: number;
+  kinds: Record<string, number>;
+  diskBytes: number;
+  diskMax: number;
+  keepDays: number;
+}
+
+/** A bug report whole (reports.mjs: `whole`). */
+export interface Report {
+  code: string;
+  at: string;
+  kind: string;
+  text: string;
+  expected: string;
+  facts: string[];
+  picture: boolean;
+  pictureBytes: number;
 }
 
 /** What's kept, in sum. */

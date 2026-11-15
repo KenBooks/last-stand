@@ -9,7 +9,7 @@ export function when(iso: string | null): Node | string {
   return el('span', { textContent: ago(iso), title: new Date(iso).toLocaleString() });
 }
 
-function card(label: string, value: Node | string, note = '', meter?: number): HTMLElement {
+export function card(label: string, value: Node | string, note = '', meter?: number): HTMLElement {
   const card = el('div', { className: 'card' }, el('small', { textContent: label }), el('b', {}, value));
   if (note) card.append(el('small', { textContent: note }));
   if (meter !== undefined) card.append(meterOf(meter));

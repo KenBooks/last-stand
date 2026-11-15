@@ -9,10 +9,13 @@
 // what's typed is kept when the form is closed by Esc, then copied by Copy report.
 // `bugReportTouch`, by a finger over a run's pause menu: the same fit, each button a finger's height, each field's
 // text 16 css px at least (a phone zooms the page into a smaller one), and the report saying the run and its wave.
+// In the panels' lobby (`--panels`) `bugReport` begins at that lobby's own row of links: its links on one line inside
+// the panel (a second line is cut off under a short screen's panel), Report a bug among them opening the form.
 // Nothing leaves for anywhere else: the clipboard is stood in for, a new tab is caught, and every report's POST must go
 // to the lab's own service, or it's turned away here (never production's).
 // Its canaries: the form's box twice the window's height, which must be found here; and the report's picture taken out
-// on its way to the service, which the node side's read-back must find.
+// on its way to the service, which the node side's read-back must find; and, in the panels' lobby, its row's links at
+// the size they had before Report a bug joined them, which must be found on two lines.
 import { middleOf, realWait } from './lab';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -32,6 +35,12 @@ type State = 'bugReport' | 'bugReportTouch';
 
 /** the problem the box's canary must raise */
 export const BUG_REPORT_CANARY = { name: 'reaches past the window', what: 'the form twice the window\'s height' };
+
+/** the problem the panels' lobby's row's canary must raise */
+export const LINK_ROW_CANARY = { name: 'the lobby\'s links are on', what: 'the lobby\'s links at their old size' };
+/** the panels' lobby's row of links, and the size its links had before the form's joined them (css px) */
+const LINK_ROW = '.menu-left .menu-links';
+const OLD_LINK_SIZE = '16px';
 
 /** what of the form a player must reach, by its selector and what it's called in a report (each kind besides) */
 const CONTROLS: [string, string][] = [
@@ -80,6 +89,11 @@ let failNext = false;
 let dropPicture = false;
 /** the pictures a state took along its way */
 let pictures: Pictured[] = [];
+/** what the panels' lobby's row of links was found to be, or null where the lobby has none (the village) */
+let linkRow: BugReportFound | null = null;
+
+/** Whether the lobby shown has the panels' row of links (so its canary has something to catch). */
+export const linkRowSeen = (): boolean => linkRow !== null;
 
 /** The reports service the node side started for this command: Send sends there, and nowhere else. */
 export function useReportService(url: string | undefined): void {
@@ -153,21 +167,55 @@ async function until(lab: Lab, done: () => boolean): Promise<boolean> {
   return done();
 }
 
-/** Report a bug pressed at the pause menu's foot, and the form's picture waited for. */
-async function openForm(lab: Lab, state: State): Promise<void> {
+/** Report a bug pressed (at the pause menu's foot, or `way`), and the form's picture waited for. */
+async function openForm(lab: Lab, state: State, way = document.getElementById('btn-report')!): Promise<void> {
   // (the lab's frames draw nothing unless asked: the form's picture is of the first frame drawn after it opens)
   const drawing = lab.drawing;
   lab.drawing = true;
-  await pressOn(lab, state, document.getElementById('btn-report')!);
+  await pressOn(lab, state, way);
   await lab.step(OPEN_FRAMES);
   lab.drawing = drawing;
   for (let f = 0; f < SHOT_FRAMES && !bugReportShot(); f++) await window.__labClock.realFrame();
+}
+
+/**
+ * The panels' lobby's row of links: every link shown on one line, none past the panel's foot, and Report a bug in it
+ * opening the form (closed again after). Null in the village's lobby, which has no such row.
+ */
+async function linkRowFound(lab: Lab, canary: boolean): Promise<BugReportFound | null> {
+  const row = document.querySelector<HTMLElement>(LINK_ROW);
+  const link = row?.querySelector<HTMLElement>('.report-link');
+  if (!row || !link || !row.offsetParent) return null;
+  const links = [...row.querySelectorAll<HTMLElement>('.link')].filter((each) => each.offsetParent);
+  if (canary) for (const each of links) each.style.fontSize = OLD_LINK_SIZE;
+  await lab.step(1);
+  const problems: string[] = [];
+  const tops = new Set(links.map((each) => Math.round(each.getBoundingClientRect().top)));
+  if (tops.size > 1) problems.push(`bugReport: ${LINK_ROW_CANARY.name} ${tops.size} lines (${links.length} links)`);
+  const foot = row.closest<HTMLElement>('.menu-left')!.getBoundingClientRect().bottom;
+  const past = links.filter((each) => each.getBoundingClientRect().bottom > foot + 0.5);
+  if (past.length) problems.push(`bugReport: ${past.length} of the lobby's links reach past the panel's foot`);
+  pictures.push(await lab.screen('bugReport-lobby', ['the panels\' lobby: Report a bug in its row of links'], '.menu-left'));
+  for (const each of links) each.style.fontSize = '';
+  await lab.step(1);
+  await openForm(lab, 'bugReport', link);
+  const opened = bugReportOpen();
+  if (!opened) problems.push('bugReport: the lobby\'s Report a bug link didn\'t open the form');
+  const held = G.menuOpen && G.paused;
+  if (opened && !held) problems.push('bugReport: the game goes on under the form opened from the lobby\'s link');
+  closeBugReport();
+  await lab.step(1);
+  if (G.menuOpen || G.paused) problems.push('bugReport: the form opened from the lobby\'s link kept the game as it closed');
+  const lines = [`  the lobby's row: ${links.length} links on ${tops.size} line${tops.size === 1 ? '' : 's'}, `
+    + `Report a bug ${opened ? 'opening the form' : 'opening nothing'}`];
+  return { lines, problems };
 }
 
 /** The lobby's pause menu up, its foot pictured with the way in, and the form opened from it by a click. */
 export async function openBugReport(lab: Lab, canary: boolean): Promise<void> {
   pictures = [];
   standIn();
+  linkRow = await linkRowFound(lab, canary);
   showPause(true);
   await lab.step(1);
   pictures.push(await lab.screen('bugReport-entry', ['the pause menu: Report a bug at its foot'], '#pause .pause-box'));
@@ -334,6 +382,10 @@ async function reportMade(lab: Lab, canary: boolean): Promise<BugReportFound> {
     await lab.step(1);
   }
   const { lines, problems } = found;
+  if (linkRow) {
+    lines.push(...linkRow.lines);
+    problems.push(...linkRow.problems);
+  }
   const held = G.menuOpen && G.paused;
   if (!held) problems.push(`${state}: the game goes on under the form (solo)`);
   // (empty, a press makes no report)
