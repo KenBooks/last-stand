@@ -1501,7 +1501,8 @@ function inHdr(colour: any, u: GradeUniforms, knee: number): any {
   const a = room.sub(knee).div(1 - knee).reciprocal();
   const grown = v.mul(along.mul(1 - knee).div(along.mul(a.oneMinus()).oneMinus()).add(knee)).div(max(top, 1e-6));
   const shown = sRGBTransferOETF(vec4(select(top.greaterThan(knee), grown, v).mul(paper), 1)).rgb;
-  return vec4(select(read(u.uHdr).greaterThan(0.5), shown, colour.rgb), colour.a);
+  // (the frame is opaque, whatever the scene's added light left in its alpha: core/renderer.ts's grade, #575)
+  return vec4(select(read(u.uHdr).greaterThan(0.5), shown, colour.rgb), 1);
 }
 
 /** what draws into the scene's target after its pass, before the post chain reads it (the arms: `core/renderer.ts`) */

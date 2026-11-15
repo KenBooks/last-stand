@@ -356,6 +356,15 @@ function shownOff(drawn: Canvas, shown: Float32Array): number {
   return most;
 }
 
+/** How far the canvas shown's alpha is off 1 at most: an opaque frame's, whatever was added to the scene under it.
+ *  (#575: the forest's shafts of light, added, left 2 and 3 in the frame's alpha, which a Mac's screen multiplied the
+ *  colour by: flat bright bands where the shafts stood. Windows shows such a canvas the same.) */
+function shownAlphaOff(shown: Float32Array): number {
+  let most = 0;
+  for (let index = 3; index < shown.length; index += 4) most = Math.max(most, Math.abs(shown[index] - 1));
+  return most;
+}
+
 /** A scenario's name: `forest first 90°`. */
 export function scenarioName(scenario: LightScenario): string {
   return `${scenario.biome} ${scenario.view} ${scenario.facing}°`;
@@ -533,6 +542,11 @@ async function hdrRound(lab: Lab, name: string, sdr: Canvas, levels: HdrLevels, 
     lines.push(`  the canvas shown: ${shown ? `at most ${off.toFixed(4)} off the frame drawn` : 'none read'}`);
     if (off > SHOWN_SLACK) {
       problems.push(`${name}: the HDR canvas doesn't show the frame drawn (off by ${off.toFixed(4)})`);
+    }
+    const alphaOff = shown ? shownAlphaOff(shown) : Infinity;
+    lines.push(`  the canvas shown's alpha: ${shown ? `at most ${alphaOff.toFixed(4)} off 1` : 'none read'}`);
+    if (alphaOff > SHOWN_SLACK) {
+      problems.push(`${name}: the HDR canvas's alpha isn't 1 everywhere (off by ${alphaOff.toFixed(4)})`);
     }
     if (canary) {
       output.setHdrSettings({ paper: levels.paper * CANARY_PAPER });

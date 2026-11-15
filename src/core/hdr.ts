@@ -251,8 +251,8 @@ export function presentHdr(): void {
     canvas.height = height;
   }
   const texture = context.getCurrentTexture();
-  // (the frame's alpha is 0, the canvas premultiplied and drawn over the page as light added to it: taken as it is,
-  // or the copy divides the colour by that alpha)
+  // (taken as it is, premultiplied: the grade writes the frame's alpha as 1, and the copy would divide the colour by
+  // any other)
   const destination = { texture, premultipliedAlpha: true };
   device.queue.copyExternalImageToTexture({ source: glCanvas }, destination, [width, height]);
 }
