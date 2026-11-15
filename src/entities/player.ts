@@ -605,7 +605,10 @@ export class Player {
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
-    if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
+    if (this.channel) {
+      const { skill, state } = this.channel;
+      speed *= (skill.impl as ChannelSkill).moveMult?.(this, skill.def, state) ?? skill.def.moveMult ?? 0.4;
+    }
     if (this.rooted || this.stunned) speed = 0;
     if (this.chilledUntil > G.time) speed *= PVP.chill;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);

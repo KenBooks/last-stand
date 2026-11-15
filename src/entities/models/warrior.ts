@@ -245,6 +245,8 @@ const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry
 const FISTS_UP = 4;
 /** both hands empty, moving: how far the hands close (of a fist) and how far the wrists let them hang (rad) */
 const WALK_FIST = 0.45, WALK_DROOP = 0.3;
+/** both hands empty: how much of a runner's pump his arms have at a run (of 1: bent near a right angle) */
+const BARE_PUMP = 0.12;
 const alternates = (name: string | undefined): boolean => name === 'swing' || name === 'punch';
 /** Through the eyes, a cut's end held this long (s) for another attack to follow it, the way back to rest after it
  *  (s), and a cut begun within the hold the next of a row: the other way round, from where the last left the blade;
@@ -1719,7 +1721,10 @@ export function* warriorSteps(): ModelSteps {
     // the arms pump against the legs, the hands (and so the blades) held steady by the wrists: a weapon arm swings by 0.4 at a run, a shield arm less, a two-hander's hardly (the left hand is on its grip)
     const armR = fp ? 0.03 : two ? 0.12 : ARM_SWING, armL = fp ? 0.03 : two ? lerp(0.12, ARM_SWING, shouldered) : shield.visible ? 0.6 * ARM_SWING : ARM_SWING;
     // (and at a run a weapon arm pumps as a runner's arm does, a little less than a free one, the shield arm hardly)
-    const pump = fp || two ? 0 : held ? RUN_PUMP : 1, pumpL = fp ? 0 : two ? shouldered : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
+    // (both hands empty, the arms hang and swing from the shoulders, nearly straight: pumped as a runner's, bent to a
+    // right angle, from play, "the arms are at a 90 degree angle when walking, they should be relaxed, since he is not
+    // holding anything")
+    const pump = fp || two ? 0 : bare ? BARE_PUMP : held ? RUN_PUMP : 1, pumpL = fp ? 0 : bare ? BARE_PUMP : two ? shouldered : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
     // (a hand round a grip or a shield's is held steady by its wrist; a free one flops)
     // (both hands empty, they're loose fists held in line with the forearms: flopping open on the wrists as he ran,
     // from play, "his writs are not relaxed, they are up ... like a vampire walk")

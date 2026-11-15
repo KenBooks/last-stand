@@ -58,6 +58,9 @@ export interface ChannelSkill<S = unknown> extends SkillBase {
   start(player: Player, def: SkillDef): S;
   tick(player: Player, def: SkillDef, dt: number, state: S): void;
   stop(player: Player, def: SkillDef, state: S): void;
+  /** how fast he moves while it's held now, of his speed, where that changes as it goes (its `SkillDef.moveMult`
+   *  when not given): Living Flail's, rooted until a foe is in his hands */
+  moveMult?(player: Player, def: SkillDef, state: S): number;
   /** fills in the pose's action each frame (a bow's channel: its draw, its loose and where it aims, as a shot's) */
   pose?(player: Player, def: SkillDef, state: S, action: ActionState): void;
 }

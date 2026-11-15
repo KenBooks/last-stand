@@ -78,6 +78,10 @@ const skill: ChannelSkill<FlailState> = {
   },
   start: () => ({ held: null, turn: 0, tick: 0, t: 0, renew: 0, since: 0 }),
 
+  // (reaching, he stands: from play, "when holding the key (1) to grab someone, you should not be able to walk (if no
+  // one is grabbed yet), once somone is grabbed, then you can walk/move around")
+  moveMult: (_player, def, st) => (st.held ? def.moveMult ?? 1 : 0),
+
   pose(_player, _def, st, action) {
     action.turn = st.turn;
   },
