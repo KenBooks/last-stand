@@ -31,9 +31,17 @@ const PUNCH_REACH = 0.96;
 /** the elbows' way in the chest's frame: down and a little out in the guard, further out behind a punch */
 const POLE_L = new THREE.Vector3(0.3, -1, 0), POLE_R = new THREE.Vector3(-0.3, -1, 0);
 
-/** how far each forearm is turned in the guard, the palm in towards the other fist (rad); a punch turns it over,
- *  palm down, as it goes out */
-const TURN = 1.3;
+/**
+ * The line of each fist's knuckles this frame, in the body's frame (to his left, up, ahead; the model clears both
+ * before it poses, and a fist with none keeps the hand's own): ahead in the guard, the palms in towards each other,
+ * and across in a punch, the palm turned down as it goes out. The visible hand is turned to it, as a fist is turned
+ * on a handle (`hold`), and the wrist's joint left as it is: turned at the joint, the bare wrist's skin, a tube skinned
+ * from the forearm to the hand, was wrung flat into a ribbon standing off the arm (from play: "I still see issues
+ * with loose geometry").
+ */
+export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+/** the knuckles' line in the guard and in a punch, each hand's (the right's the left's mirrored) */
+const LINE = { guard: { L: [0, 0, 1], R: [0, 0, 1] }, punch: { L: [1, 0, 0], R: [1, 0, 0] } };
 
 const _mid = new THREE.Vector3(), _at = new THREE.Vector3(), _sh = new THREE.Vector3(), _far = new THREE.Vector3();
 const _sq = new THREE.Quaternion(), _eq = new THREE.Quaternion();
@@ -68,7 +76,8 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean): void 
   place(j, false, from(_mid, G.rear, _far), w);
   // (the wrists straight behind the knuckles, the forearms turned so the palms face each other: unturned, the palms
   // faced ahead and from the front the fists read as open claws)
-  j.handL.rotation.set(lerp(j.handL.rotation.x, 0, w), TURN * w, 0); j.handR.rotation.set(lerp(j.handR.rotation.x, 0, w), -TURN * w, 0);
+  j.handL.rotation.x = lerp(j.handL.rotation.x, 0, w); j.handR.rotation.x = lerp(j.handR.rotation.x, 0, w);
+  fistLine.L.fromArray(LINE.guard.L); fistLine.R.fromArray(LINE.guard.R);
 }
 
 /** How far a punch is out at `k` of its cast: thrown out fast, landed at its middle, drawn back to the guard. */
@@ -98,7 +107,8 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
   _far.sub(_sh).setLength((j.P.upperL + j.P.foreL) * PUNCH_REACH).add(_sh);
   place(j, lead, _far, out);
-  (lead ? j.handL : j.handR).rotation.y *= 1 - out;
+  const line = lead ? fistLine.L : fistLine.R, punch = lead ? LINE.punch.L : LINE.punch.R;
+  line.set(lerp(line.x, punch[0], out), lerp(line.y, punch[1], out), lerp(line.z, punch[2], out));
   // (the other fist drawn in to the jaw as this one goes)
   const other = lead ? j.elbowR : j.elbowL;
   if (!eyes) other.rotation.x += -0.12 * out;

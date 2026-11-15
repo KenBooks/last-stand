@@ -32,7 +32,7 @@ import {
 } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import { FANGS, HEAVE } from '../../data/balance';
-import { FIST, fistGuard, fistPunch, fistHeave, fistPound, fistWhirl } from './warriorFists';
+import { FIST, fistGuard, fistPunch, fistHeave, fistPound, fistWhirl, fistLine } from './warriorFists';
 import {
   TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_FORE_ROW, ONE_BACK_CUT, ONE_BACK_OUT,
   CUT_TURN, TWO_CUT_TURN, DUAL_CUT, DUAL_CUT_TURN,
@@ -44,7 +44,7 @@ import { built, type ModelSteps } from './steps';
 import { Dye } from './dye';
 import { ItemGlows } from './itemGlow';
 
-const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
+const ZERO = new THREE.Vector3(), _v = new THREE.Vector3(), _fa = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
@@ -1702,6 +1702,7 @@ export function* warriorSteps(): ModelSteps {
     const two = held?.off != null;
     // (both hands empty: no weapon, no shield; he fights with his fists, models/warriorFists.ts)
     const bare = !held && !offHeld && !shield.visible;
+    fistLine.L.set(0, 0, 0); fistLine.R.set(0, 0, 0);
     twoHold.k = 0;
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
@@ -2688,16 +2689,24 @@ export function* warriorSteps(): ModelSteps {
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
+    // (a fist's handle, the line of its knuckles: the one the pose gives it in the body's frame, `fistLine`, or the
+    // hand's own grip's; square across its forearm, where a weapon's grip slants out of the hand (the fist shut on that
+    // hung 38 degrees off the wrist, past its range, in a punch). The visible hand turns to it, the wrist's joint doesn't)
+    const knuckles = (g: THREE.Object3D, hand: THREE.Object3D, line: THREE.Vector3) => {
+      const dir = line.lengthSq() > 0 ? _hd.copy(line).transformDirection(j.body.matrixWorld) : along(g);
+      _fa.set(0, 1, 0).transformDirection(hand.matrixWorld);
+      return dir.addScaledVector(_fa, -dir.dot(_fa)).normalize();
+    };
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held) hold(handR, along(grip), held.r, undefined, slantR);
     // (a fist is the hand closed as round a thin handle, the fingers into the palm and the thumb over them: curled
     // joint by joint it was a claw, from play, "fists need some work")
-    else if (fisted > FIST.from) hold(handR, along(grip), FIST.r);
+    else if (fisted > FIST.from) hold(handR, knuckles(grip, j.handR, fistLine.R), FIST.r);
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fisted), lerp(0.1, FIST.spread, fisted));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
-    else if (fisted > FIST.from) hold(handL, along(gripL), FIST.r);
+    else if (fisted > FIST.from) hold(handL, knuckles(gripL, j.handL, fistLine.L), FIST.r);
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 
     if (dt > 0) for (const f of furs) f.update(dt);
