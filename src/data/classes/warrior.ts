@@ -44,7 +44,7 @@ const warrior: ClassDef = {
       damage: 30, range: 2.4, arc: 1.3, knock: 1.2, gain: 4,
       needs: 'bare',
       color: 0xd8c8b0,
-      icon: { glyph: '✊︎', color: '#e8d2b0' },
+      icon: { glyph: '✊︎', color: '#ffb85a' },
     },
     {
       key: 'mouse2', impl: 'heave', name: 'Heave',
@@ -53,7 +53,7 @@ const warrior: ClassDef = {
       damage: 110, range: 2.2, radius: 2.4, knock: 5,
       needs: 'bare',
       color: 0xd8c0a0,
-      icon: { glyph: '⤴', color: '#e8c89a' },
+      icon: { glyph: '⤴', color: '#58d6c0' },
     },
     {
       key: '1', impl: 'livingFlail', name: 'Living Flail',
@@ -61,7 +61,7 @@ const warrior: ClassDef = {
       tags: ['physical'], cost: 28, cooldown: 0, castTime: 0, channel: true,
       damage: 140, radius: 3, moveMult: 0.75, spin: 11,
       needs: 'bare',
-      icon: { glyph: '↻', color: '#d8c8b0' },
+      icon: { glyph: '↻', color: '#b58cff' },
     },
     {
       key: '3', impl: 'groundbreaker', name: 'Groundbreaker',
@@ -70,7 +70,7 @@ const warrior: ClassDef = {
       damage: 260, radius: 4, knock: 9,
       needs: 'bare',
       color: 0xffb060,
-      icon: { glyph: '⤓', color: '#ffb060' },
+      icon: { glyph: '⤓', color: '#ff7a2a' },
     },
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
