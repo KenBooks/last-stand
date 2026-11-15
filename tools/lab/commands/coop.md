@@ -111,7 +111,9 @@ no further than 40% down the window, over the hero it follows (on the short phon
 leave and the host last, every game back in the lobby by itself. `--party 4` plays the watching over three partners
 (LMB and RMB round them in their slots' order: its taps on the bar's next button caught the bar laid out again for
 touch as the first tap went down, its click landing on another button). `--pictures` pictures the guest's screen as
-it watches (`out/coop/watching-guest.png`) and the bar on each screen it's fitted on (`watching-bar-<n>.png`).
+it watches (`out/coop/watching-guest.png`), the bar on each screen it's fitted on (`watching-bar-<n>.png`) and the
+guest's lobby before and after its middle drag, its panels shown (`lobby-turn-guest-before.png`, `-after.png`: the
+proof asked for when the lobby's turn was reported again, 2026-11-15, the report #389's own).
 `--canary` (a pair's) also begins a cast on the banked guest (its sight drawn with it, a ranger's), shows its summary
 again over its lobby and pads the watching bar a window tall: each must be caught. Each lobby's middle drag says what
 lies over its canvas there (a middle press there turns nothing): a party of 4's lobby has what a pair's has.
