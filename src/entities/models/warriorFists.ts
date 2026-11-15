@@ -13,8 +13,9 @@ import * as THREE from 'three';
 import { reachArm, ramp, type Joints } from './rig';
 import { lerp, smooth } from '../../util';
 
-/** a closed fist's curl and its fingers' spread (models/hands.ts `poseHand`) */
-export const FIST = { curl: 1.7, spread: 0.02 };
+/** a hand closing: its curl and its fingers' spread on the way (models/hands.ts `poseHand`), and from how far closed
+ *  it is a fist, the hand shut as round a handle this thin (m, `hold`) */
+export const FIST = { curl: 1.7, spread: 0.02, from: 0.6, r: 0.012 };
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
  *  up, ahead): the lead (left) further out, both before the chin; and through the eyes, low in the view */

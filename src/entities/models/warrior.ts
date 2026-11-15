@@ -2690,10 +2690,14 @@ export function* warriorSteps(): ModelSteps {
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held) hold(handR, along(grip), held.r, undefined, slantR);
+    // (a fist is the hand closed as round a thin handle, the fingers into the palm and the thumb over them: curled
+    // joint by joint it was a claw, from play, "fists need some work")
+    else if (fisted > FIST.from) hold(handR, along(grip), FIST.r);
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fisted), lerp(0.1, FIST.spread, fisted));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
+    else if (fisted > FIST.from) hold(handL, along(gripL), FIST.r);
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 
     if (dt > 0) for (const f of furs) f.update(dt);
