@@ -12,6 +12,15 @@ its door with the guest's name (`ui/houseMarks.ts`), a dot for him at the door o
 tavern's on the village's map; none of them before he goes in or once he's out. `--pictures` takes the marker and the
 map (`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn, which must be found.
 
+`coop --scenarios looks` (alone, as `colours`) checks a hero's look across the room (`data/heroLooks.ts`, `Look.hl` in
+`src/net/session.ts`): the host opens its hero selection screen and picks another look and a hair colour on its Look
+page (`coopPickLook`: the hall's hero built again in it, the screen closed), and every partner must build its copy of
+him in that look (`look/hair` as his own game has it) and draw his face with the same hair shift (`KitLooks.hair`);
+then a hair colour alone. A partner that hasn't made the look yet shows him in one it has until its workers have
+painted the face and made the head, in real time: waited for up to 90 s (`LOOK_MADE_MS`). `--pictures` takes the
+guest's screen with its camera brought close onto the host's copy (`out/coop/looks-guest.png`, `coopFacePartner`);
+`--canary` drops the host's look messages on the way out (`wire.dropLooks`), which must be caught.
+
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 

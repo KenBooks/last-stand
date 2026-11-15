@@ -27,6 +27,7 @@ import { heroShare, warmingRuns } from './warm';
 import { preloadHeads } from '../entities/models/head';
 import { builtInSlices } from '../entities/models/steps';
 import { HALL, TERRACE } from '../data/village';
+import { buildableLook, profileLook, readyLook } from './looks';
 
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
@@ -286,6 +287,15 @@ const AWAITED_MOST = 5;
  * the lab's first frame in the village (from play, "FPS is not stable, even on high end hardware").
  */
 function builtToStand(id: string, dt: number): boolean {
+  // (one kept in other gear, at another detail or in another look is built again behind the lobby too: stood by
+  // `heroIn`, he was built whole in the frame, and after a detail change the heads the workers were still making for it
+  // were sculpted there, two heroes' 13 pieces, `lab behind`)
+  const hero = kept.get(id), profile = profileOf(id);
+  if (hero && (hero.gear !== gearOf(profile) || !inItsLook(hero.player, profile))) {
+    halos.delete(hero.player);
+    hero.player.dispose();
+    kept.delete(id);
+  }
   if (kept.has(id)) {
     awaited = 0;
     return true;
@@ -333,6 +343,9 @@ function profileOf(id: string): Profile {
 
 /** what a hero kept for the hall is built for: the gear he wears and the detail he's built at */
 const gearOf = (profile: Profile): string => `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+/** Whether `player` stands in the look `profile` keeps (his head's: his hair's colour is a uniform's, set as he's
+ *  shown). One built in another, as his wasn't made yet, or since picked otherwise, is built again. */
+const inItsLook = (player: Player | undefined, profile: Profile): boolean => player?.heroLook.preset === profileLook(profile).preset;
 
 /**
  * Each class's hero the hall would show built ahead of its opening, out of the scene, a hero after each `step`, where
@@ -349,14 +362,14 @@ export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
     for (const id of CLASS_IDS) {
       if (hallOpen()) return;
       const profile = profileOf(id);
-      if (kept.get(id)?.gear === gearOf(profile)) continue;
+      if (kept.get(id)?.gear === gearOf(profile) && inItsLook(kept.get(id)?.player, profile)) continue;
       await step();
       if (hallOpen()) return;
       await finishInSlices(`hall ${id}`, step);
-      if (kept.get(id)?.gear !== gearOf(profile)) {
+      if (kept.get(id)?.gear !== gearOf(profile) || !inItsLook(kept.get(id)?.player, profile)) {
         const old = kept.get(id);
         if (old) { halos.delete(old.player); old.player.dispose(); }
-        keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false), step));
+        keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false, profileLook(profile)), step));
       }
       G.scene.remove(kept.get(id)!.player.obj);
     }
@@ -372,9 +385,10 @@ export async function prepareHeroSelection(step: () => Promise<void>): Promise<v
   } finally { warmingRuns(false); }
 }
 
-/** A first visit's hall has no lobby frames to build its playable copy; readiness must include that copy. */
+/** A first visit's hall has no lobby frames to build its playable copy; readiness must include that copy. The lobby's
+ *  own class has one only once his look has changed in the hall (built in Back's click otherwise: `restyleHallHero`). */
 export async function prepareSpareHero(id: string, step: () => Promise<void>): Promise<void> {
-  if (id === G.profile.classId) return;
+  if (id === G.profile.classId && G.player.heroLook.preset === profileLook(G.profile).preset) return;
   warmingRuns(true);
   try {
     await preloadHeads(heroDetail());
@@ -382,10 +396,11 @@ export async function prepareSpareHero(id: string, step: () => Promise<void>): P
     await finishInSlices(`spare ${id}`, step);
     const spare = spares.get(id);
     const profile = profileOf(id), gear = gearOf(profile);
-    if (spare?.gear === gear) return;
+    if (spare?.gear === gear && inItsLook(spare.player, profile)) return;
     spare?.player.dispose();
     spares.delete(id);
-    const player = await builtInSlices(Player.inSteps(id, profile.equipped), step);
+    await readyLook(id, profileLook(profile));
+    const player = await builtInSlices(Player.inSteps(id, profile.equipped, true, profileLook(profile)), step);
     player.stowed();
     spares.set(id, { player, gear });
   } finally { warmingRuns(false); }
@@ -419,7 +434,7 @@ export function queueHallBehind(): void {
     // (the profile his class's hall hero is being built in, or was: `profileOf`)
     const profile = profileOf(id);
     const gear = gearOf(profile);
-    buildLater(`spare ${id}`, Player.inSteps(id, profile.equipped), (player) => {
+    buildLater(`spare ${id}`, Player.inSteps(id, profile.equipped, true, buildableLook(id, profileLook(profile))), (player) => {
       player.stowed();
       spares.set(id, { player, gear });
     });
@@ -430,7 +445,7 @@ export function queueHallBehind(): void {
  *  piece (`restingSteps`), out of the scene: stood there as the doorway first came on screen, his 11 poses took 47 ms
  *  of that frame, and all in his build's last piece 40 to 60 ms (`lab behind`). */
 function* hallHeroSteps(id: string, profile: Profile): Generator<void, Player, undefined> {
-  const player = yield* Player.inSteps(id, profile.equipped, false);
+  const player = yield* Player.inSteps(id, profile.equipped, false, buildableLook(id, profileLook(profile)));
   G.scene.remove(player.obj);
   // (with no village there are no plinths to stand at rest on: he's posed as the hall's room opens)
   if (!VILLAGE) return player;
@@ -455,11 +470,12 @@ export function takeSpareHero(id: string, profile: Profile): Player | null {
   const spare = spares.get(id);
   if (!spare) return null;
   spares.delete(id);
-  if (spare.gear !== gearOf(profile)) {
+  if (spare.gear !== gearOf(profile) || !inItsLook(spare.player, profile)) {
     spare.player.dispose();
     return null;
   }
   spare.player.unstowed(profile.equipped);
+  spare.player.setHair(profileLook(profile).hair);
   return spare.player;
 }
 
@@ -497,17 +513,61 @@ function heroIn(id: string, profile: Profile): Player {
   finishNow(`hall ${id}`);
   const gear = gearOf(profile);
   let hero = kept.get(id);
-  if (hero?.gear !== gear) {
+  if (hero?.gear !== gear || !inItsLook(hero?.player, profile)) {
     if (hero) halos.delete(hero.player);
     hero?.player.dispose();
-    hero = keepHero(id, profile, new Player(id, profile.equipped, false));
+    hero = keepHero(id, profile, new Player(id, profile.equipped, false, undefined, buildableLook(id, profileLook(profile))));
   } else {
     G.scene.add(hero.player.obj);
     // (a walk of every mesh: 7 ms of the opening's frame, needed only where the quality changed meanwhile)
     if (hero.level !== qualityLevel()) applyShadowDetail(hero.player.obj);
     Object.assign(hero, { profile, slot: saveSlot(), level: qualityLevel() });
   }
+  hero.player.setHair(profileLook(profile).hair);
   return hero.player;
+}
+
+/** the latest restyle asked for each class's hall hero (`restyleHallHero`): an earlier one still readying is dropped */
+const restyling = new Map<string, number>();
+let restyles = 0;
+/** Whether class `id`'s hall hero is being built again in another look (the Look page says so meanwhile). */
+export const hallHeroRestyling = (id: string): boolean => restyling.has(id);
+
+/**
+ * Class `id`'s hall hero in the look his profile now has (ui/heroLook.ts, as the player picks it): another hair colour
+ * at once (a uniform's); another look's face and head made by the workers first, then the hero built again a slice a
+ * frame, taking his place on his plinth once he's whole (meanwhile the old one stands). Resolved once he stands there,
+ * or once a later pick or the hall's closing has taken over. His spare is made again for him after, as the lobby's
+ * hero chosen in that look (`prepareSpareHero`).
+ */
+export async function restyleHallHero(id: string): Promise<void> {
+  const h = heroes.find((x) => x.id === id);
+  if (!h) return;
+  const look = profileLook(h.profile);
+  h.player.setHair(look.hair);
+  if (h.player.heroLook.preset === look.preset) { restyling.delete(id); return; }
+  const mine = ++restyles;
+  restyling.set(id, mine);
+  const current = (): boolean => restyling.get(id) === mine && hallOpen() && heroes.includes(h);
+  await readyLook(id, look);
+  if (!current()) return;
+  const frame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+  const player = await builtInSlices(Player.inSteps(id, h.profile.equipped, false, look), frame);
+  if (!current()) { player.dispose(); return; }
+  restyling.delete(id);
+  endShowcase(h);
+  const old = h.player;
+  halos.delete(old);
+  old.dispose();
+  h.player = player;
+  keepHero(id, h.profile, player);
+  const i = heroes.indexOf(h);
+  standAtRest(player, spot(i), ROW.facing);
+  stillSince.add(player);
+  player.obj.visible = heroShare(player.cls.model) >= 1;
+  h.facing = ROW.facing; h.spin = 0;
+  if (i === focus) h.due = G.time + SHOWCASE.after;
+  void prepareSpareHero(id, frame);
 }
 
 /** A hall hero's glowing weapon head kept under the bloom and given a halo of its own (`HEAD`, `HALO`): its colour,

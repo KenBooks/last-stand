@@ -13,7 +13,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, grou
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCutSteps, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
+import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type Head, type HeadSpec } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
@@ -377,7 +377,8 @@ function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather
 export const buildRanger = (): Model => built(rangerSteps());
 
 /** buildRanger's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
-export function* rangerSteps(): ModelSteps {
+/** `look`: his head (his look's face and hair; the one picked in the slot in play where none's given). */
+export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   const kit = createKit(0xc9d993);
   yield;
   // (the colours his reference sheet's, measured in a studio render against it)
@@ -408,7 +409,7 @@ export function* rangerSteps(): ModelSteps {
   const serving = kit.std({ color: 0x2c2620, roughness: 0.9 });
   const yarn = kit.std({ color: 0x5c7342, roughness: 1, ...pbrMaterialMaps(woolMaps(), 4) });
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
-  const skin = handSkin(kit, 'ranger');
+  const skin = handSkin(kit, look.who);
   const cord = kit.std({ color: 0xe0d6bc, roughness: 0.85 });
   yield;
   // (double-sided: the feathers are single sheets)
@@ -539,8 +540,8 @@ export function* rangerSteps(): ModelSteps {
   }
   yield;
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger);
-  buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
+  const head = yield* headSteps(j.head, kit, look.who, look);
+  buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
   yield;
   // (on the lips, under the moustache: at the others' height he drank at his nose)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
@@ -1206,6 +1207,7 @@ export function* rangerSteps(): ModelSteps {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, weaponTip: limbTip, palm, arrowHead, height: 2,
     // (the coat, its hem and the hat's felt: his green)
     dye: new Dye('green').cloth(coat, coatHem, felt),
+    setHair: head.setHair,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; glows.set(gear); },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },

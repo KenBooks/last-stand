@@ -187,6 +187,12 @@ export interface CoopState extends Together {
   partnerColours?: (string | null)[];
   worn?: number | null;
   partnerWorn?: (number | null)[];
+  /** its own hero's look and its partners', by slot, as each is built here (`look/hair`, data/heroLooks.ts; undefined in
+   *  an older tree), and the hair shift each one's face is drawn with (core/materials.ts `KitLooks.hair`, rounded) */
+  look?: string;
+  partnerLooks?: string[];
+  hairShift?: string;
+  partnerHairShifts?: string[];
   /** its own player out of the run (banked or fallen), the run over here, and its summary shown */
   out: boolean;
   /** the run's phase here ('' out of one) */
@@ -723,6 +729,8 @@ const wire = {
   outbox: [] as Sent[],
   inbox: [] as Arriving[],
   channels: new Set<LabChannel>(),
+  /** the canary's: this page's look messages dropped as sent (`coopPickLook`'s `quiet`) */
+  dropLooks: false,
 };
 
 function wireTime(): number {
@@ -744,6 +752,7 @@ class LabChannel {
   }
 
   postMessage(data: unknown): void {
+    if (wire.dropLooks && (data as Packet | null)?.ch === 'look') return;
     wire.outbox.push({ at: wireTime(), name: this.name, data: structuredClone(data) });
   }
 
@@ -922,6 +931,62 @@ export async function coopPickColour(
   swatch.click();
 }
 
+/** how long a look picked may take to be made and built (real ms) */
+const RESTYLE_MS = 180000;
+
+/** A hero's look as built (`look/hair`; none in an older tree). */
+function lookOf(player: Player): string | undefined {
+  const look = (player as unknown as { heroLook?: { preset: string; hair: string | null } }).heroLook;
+  return look && `${look.preset}/${look.hair ?? 'own'}`;
+}
+
+/** The hair shift a hero's face is drawn with (rounded to a hundredth; none in an older tree). */
+function hairShiftOf(player: Player): string | undefined {
+  let shift: string | undefined;
+  player.model.root.traverse((child) => {
+    const material = (child as THREE.Mesh).material as { kitLooks?: { hair?: { value: THREE.Vector3 } } } | undefined;
+    const value = child.name === 'face' ? material?.kitLooks?.hair?.value : undefined;
+    if (value) shift = value.toArray().map((channel) => channel.toFixed(2)).join(',');
+  });
+  return shift;
+}
+
+/**
+ * This page's player picks look `preset` and hair colour `hair` as a player does: the hero selection screen opened on
+ * his class, its Look page's buttons clicked, the hall's hero built again in it, and the screen closed (the lobby's
+ * hero takes the look as it closes, and the room is told). `quiet`: the canary's, the look kept and worn here but the
+ * room never told.
+ */
+export async function coopPickLook(lab: Lab, { preset, hair, quiet = false }: { preset: string; hair: string | null; quiet?: boolean }): Promise<void> {
+  const select = await import('../../../src/ui/heroSelect');
+  const hall = await import('../../../src/game/hall');
+  select.openHeroSelect(G.profile.classId);
+  document.querySelector<HTMLButtonElement>(`#heroes .hl-preset[data-look="${preset}"]`)?.click();
+  document.querySelector<HTMLButtonElement>(`#heroes .hl-swatch[data-hair="${hair ?? ''}"]`)?.click();
+  // (real time: a look's face is painted by a worker, which on a loaded machine took over 30 s)
+  const deadline = window.__labClock.realNow() + RESTYLE_MS;
+  while (hall.hallHeroRestyling(G.profile.classId)) {
+    if (window.__labClock.realNow() > deadline) throw new Error('lab: the hall never built the look picked');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await lab.step(1);
+  }
+  // (the canary's look kept and worn here, its messages dropped on the way out: the room is never told)
+  wire.dropLooks = quiet;
+  select.closeHeroSelect();
+}
+
+/** This page's camera brought close onto its first partner from in front of him and drawing (`on`), for a picture of
+ *  his copy as this game draws it; or back to its own hero, not drawing. */
+export async function coopFacePartner(lab: Lab, { on }: { on: boolean }): Promise<void> {
+  const { stageCamera } = await import('../../../src/core/renderer');
+  lab.drawing = on;
+  const partner = G.players.find((player) => !player.local);
+  if (!on || !partner) { stageCamera(null, true); return; }
+  const at = partner.obj.position, facing = partner.facing;
+  const pos = new THREE.Vector3(at.x + Math.sin(facing) * 3.2, at.y + 1.75, at.z + Math.cos(facing) * 3.2);
+  stageCamera({ pos, look: new THREE.Vector3(at.x, at.y + 1.45, at.z), fov: 30 }, true);
+}
+
 /** Joins the room again as `tag`: asked for another name tag, the player types one. */
 export async function coopRejoin(_lab: Lab, { code, tag }: { code: string; tag: string }): Promise<void> {
   drawApart();
@@ -958,6 +1023,10 @@ function stateNow(): CoopState {
     partnerColours: partners.map((player) => colourOf(player) ?? null),
     worn: wornOf(G.player),
     partnerWorn: partners.map(wornOf),
+    look: lookOf(G.player),
+    partnerLooks: partners.map((player) => lookOf(player) ?? ''),
+    hairShift: hairShiftOf(G.player),
+    partnerHairShifts: partners.map((player) => hairShiftOf(player) ?? ''),
     out: Boolean(G.player.out),
     phase: G.run?.phase ?? '',
     runOver: !G.run || G.run.phase === 'over',

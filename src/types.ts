@@ -4,6 +4,7 @@ import type * as THREE from 'three';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
 import type { Dye } from './entities/models/dye';
+import type { HeroLook } from './data/heroLooks';
 import type { Hand } from './entities/models/hands';
 import type { BiomeId } from './data/biomes';
 
@@ -293,6 +294,8 @@ export interface Profile {
   saved?: number;
   /** the village's merchant's stock for this hero (loot/merchant.ts), and the runs begun when he last restocked */
   merchant?: { stock: Item[]; restockedAt: number };
+  /** his look and hair colour (data/heroLooks.ts; none kept: his first look, his own hair) */
+  look?: HeroLook;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +517,9 @@ export interface Model {
   readonly fists?: readonly Fist[];
   /** a hero's cloth dyed in a player's colour (models/dye.ts, data/heroColours.ts) */
   readonly dye?: Dye;
+  /** a hero's hair, brows and beard in a hair colour (data/heroLooks.ts `HairColour.rgb`; null: his look's own), by
+   *  uniforms alone (models/head.ts `Head.setHair`) */
+  setHair?(rgb: readonly [number, number, number] | null): void;
   dispose(): void;
 }
 

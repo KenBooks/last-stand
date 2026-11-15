@@ -591,14 +591,16 @@
     <button class="hs-arrow hs-prev" aria-label="Previous hero"><svg viewBox="0 0 20 40" aria-hidden="true"><path d="M15 4 4 20l11 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="hs-arrow hs-next" aria-label="Next hero"><svg viewBox="0 0 20 40" aria-hidden="true"><path d="M5 4l11 16L5 36" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <aside class="hs-panel panel">
-      <!-- the hero in focus's card, his gear (to look at: he's not the lobby's hero until chosen) and his attributes -->
+      <!-- the hero in focus's card, his look (ui/heroLook.ts), his gear (to look at: he's not the lobby's hero until chosen) and his attributes -->
       <div class="tabs hs-pagetabs" role="tablist">
         <button class="tab active" data-page="hero" role="tab">Hero</button>
+        <button class="tab" data-page="look" role="tab">Look</button>
         <button class="tab" data-page="gear" role="tab">Equipment</button>
         <button class="tab" data-page="attrs" role="tab">Attributes</button>
       </div>
       <div class="hs-pages">
         <div class="hs-page hs-cards" data-page="hero" role="tabpanel"></div>
+        <div class="hs-page hs-look off" data-page="look" role="tabpanel"></div>
         <div class="hs-page hs-gear off" data-page="gear" role="tabpanel">
           <div class="hs-equip"></div>
           <div class="panel-title">Stash <span class="hs-stash-count"></span></div>

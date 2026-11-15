@@ -17,7 +17,7 @@ import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
@@ -516,7 +516,8 @@ function onPlate(x: number, y: number, lift = 0.004): THREE.Vector3 {
 export const buildWarrior = (): Model => built(warriorSteps());
 
 /** buildWarrior's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
-export function* warriorSteps(): ModelSteps {
+/** `look`: his head (his look's face and hair; the one picked in the slot in play where none's given). */
+export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const kit = createKit(0xffa040);
   const rng = mulberry(11);
   const tex = (maps: ReturnType<typeof steelMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
@@ -552,7 +553,7 @@ export function* warriorSteps(): ModelSteps {
   // bare hands and wrists, and the fingertips his gloves leave bare (a paler skin of their own, they were another
   // man's fingers, #425)
   yield;
-  const bareSkin = handSkin(kit, 'warrior');
+  const bareSkin = handSkin(kit, look.who);
   yield;
   // the fuller only glows while a skill charges
   const edge = kit.glow(0xffb070, 0, false);
@@ -812,11 +813,11 @@ export function* warriorSteps(): ModelSteps {
   // equipped: a steel skull with a low crest, bands riveted over it and round the brow, a nasal down the nose,
   // cheek guards over the ears and a mail curtain over the nape. It is shaped on the head itself (padded over
   // the scalp); the face stays bare.
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior);
+  const head = yield* headSteps(j.head, kit, look.who, look);
   yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
-  buildNeck(j.neck, kit, 'warrior', j.P.neckL, j.head);
+  buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
   yield;
   // (worn only with a head item equipped: bareheaded, the hair shows; setGear)
   const helm = new THREE.Group(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
@@ -1131,7 +1132,8 @@ export function* warriorSteps(): ModelSteps {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    helm.visible = gear.helm; for (const m of head.hair) m.visible = !gear.helm;
+    // (a cropped look's tufts under the helm too)
+    helm.visible = gear.helm; for (const m of [...head.hair, ...(head.crop ? [head.crop] : [])]) m.visible = !gear.helm;
     for (const o of harness) o.visible = gear.chest;
     gloved = gear.hands;
     for (const o of gloves) o.visible = gloved;
@@ -2655,7 +2657,7 @@ export function* warriorSteps(): ModelSteps {
   }
 
   return {
-    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear, dye,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear, dye, setHair: head.setHair,
     get swing() { return side; },
     swung: struck,
     get swingKeyed() { return keyed; },

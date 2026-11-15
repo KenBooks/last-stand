@@ -352,7 +352,7 @@ function seeOfKind(of: SeeThrough): SeeNodes {
  *  glow dimmed near the camera (`near`), a rim of light at glancing angles, the frost's, the char's embers and a hit's
  *  flash, the hood's shade over all its light (`hoodShaded`) and the shine's cap (`shineCapped`). Each read off the
  *  material drawn: every kit's material of a kind shares the build. */
-function kitNodes(node: N): void {
+function kitNodes(node: N, kit: KitLooks): void {
   const {
     materialReference, materialColor, materialEmissive, positionGeometry, positionView, normalView,
     positionViewDirection, varying, mix, vec3, vec4, smoothstep, clamp, pow, dot, select,
@@ -365,7 +365,14 @@ function kitNodes(node: N): void {
   // (made only while the dissolve or the char reads it, as WebGL's patch does: a node's `select` makes both sides)
   const dn = kitNoise()({ x: at, on: dissolve.max(char) });
   const near = clamp(pow(positionView.z.negate().div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1);
-  const shown = vec4(materialColor);
+  let shown = vec4(materialColor);
+  // (a painted face's hair in another colour: `HAIR_SHIFT_GLSL` in core/materials.ts, read off the material drawn)
+  if (kit.hairTinted) {
+    const { max } = tsl as any;
+    const shift = read('hair', 'vec3'), share = materialReference('roughnessMap', 'texture').b.mul(4);
+    const painted = max(shown.rgb, vec3(0)).pow(vec3(1 / 2.2)).add(shift.mul(share));
+    shown = vec4(max(painted, vec3(0)).pow(vec3(2.2)), shown.a);
+  }
   const frost = mix(shown.rgb, vec3(0.55, 0.8, 1.0), frozen.mul(0.75));
   // (its alpha the map's: three multiplies the opacity in after. Taken from the opacity alone, a cut-out drew whole:
   // the mage's ink, laid over his forearm, hid it, and that's what a copy given these looks showed)
@@ -552,7 +559,7 @@ export function takePorts(renderer: WebGPURenderer): void {
         // (an effect's plain material: `nearGlow`'s GLSL patch is WebGL's alone. Its node reads nothing of the frame's
         // that three must refresh)
         if (material.customProgramCacheKey() === 'nearGlow') (converted as N).colorNode = nearGlowed((tsl as any).vec4((tsl as any).materialColor));
-        if (kit) kitNodes(converted);
+        if (kit) kitNodes(converted, kit);
         if (own) own(converted);
         // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh; a
         // kit's looks are refreshed as they change, `stillWhereStill` in core/webgpu.ts. Its node is given all the

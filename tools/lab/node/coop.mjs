@@ -407,6 +407,71 @@ async function openTogether(pair, link, lines, canary) {
   return { problems, code };
 }
 
+/** the look and hair colour the host picks in `looks` (another than his first, and a colour of the palette's) */
+const HOST_LOOK = { warrior: 'veteran', mage: 'sage', ranger: 'tracker' };
+const HOST_HAIR = 'ginger';
+/** how long a guest may take to make a look it hadn't (real ms: a face painted and a head made by its workers) */
+const LOOK_MADE_MS = 90000;
+
+/**
+ * The host picks another look and hair colour on its hero selection screen, then a hair colour alone: every partner
+ * must build its copy of him in that look (`look/hair` as his own game has it) and draw his face with the same hair
+ * shift. The canary picks a look the room is never told of, which must be caught.
+ */
+async function changeLooks(pair, link, lines, canary, pictures) {
+  const { problems } = await openTogether(pair, link, lines, false);
+  const settled = () => pair.run(Math.ceil((link.ping + link.jitter * 8 + 3000) / pair.frameMs));
+  let states = await pair.run(1);
+  if (states[0].look === undefined) {
+    lines.push('looks: none (an older tree)');
+    return { text: lines.join('\n'), problems };
+  }
+  const heroClass = await pair.host.evaluate(() => window.__G.profile.classId);
+  const judge = (label) => {
+    const found = [];
+    states.slice(1).forEach((state, index) => {
+      const seen = state.partnerLooks?.[0];
+      if (seen !== states[0].look) found.push(`${label}: ${PARTY_TAGS[index + 1]} sees the host as ${seen}, not ${states[0].look}`);
+      if (state.partnerHairShifts?.[0] !== states[0].hairShift) {
+        found.push(`${label}: ${PARTY_TAGS[index + 1]} draws the host's hair with ${state.partnerHairShifts?.[0]}, not ${states[0].hairShift}`);
+      }
+    });
+    lines.push(`${label}: the host ${states[0].look} (hair shift ${states[0].hairShift}); seen as ${states.slice(1).map((state) => state.partnerLooks?.[0]).join(', ')}`);
+    return found;
+  };
+  await callPage(pair.host, 'coopPickLook', { preset: HOST_LOOK[heroClass], hair: HOST_HAIR, quiet: canary });
+  states = await settled();
+  // (a look the guest hasn't made yet shows in one it has, and again in the host's once its workers have painted its
+  // face and made its head, in real time: waited for, up to `LOOK_MADE_MS`)
+  const shown = () => states.slice(1).every((state) => state.partnerLooks?.[0] === states[0].look);
+  const until = Date.now() + LOOK_MADE_MS;
+  while (!shown() && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    states = await pair.run(Math.ceil(500 / pair.frameMs));
+  }
+  const picked = judge('a look and a hair colour picked');
+  if (canary) {
+    const caught = picked.some((problem) => problem.includes('sees the host'));
+    lines.push(`canary: a look the room was never told of ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) problems.push('coop: looks: the canary\'s untold look went unseen');
+    return { text: lines.join('\n'), problems };
+  }
+  problems.push(...picked);
+  await callPage(pair.host, 'coopPickLook', { preset: HOST_LOOK[heroClass], hair: 'blond' });
+  states = await settled();
+  problems.push(...judge('a hair colour alone'));
+  if (pictures) {
+    mkdirSync(PICTURES, { recursive: true });
+    const file = join(PICTURES, 'looks-guest.png');
+    await callPage(pair.guest, 'coopFacePartner', { on: true });
+    await pair.turn(1, 'looks');
+    await pair.guest.screenshot({ path: file });
+    await callPage(pair.guest, 'coopFacePartner', { on: false });
+    lines.push(`pictured: the host's copy as the guest's game draws him, ${file}`);
+  }
+  return { text: lines.join('\n'), problems };
+}
+
 /** Real picker changes plus conflicting requests over the same delayed link as combat. */
 async function changeColours(pair, link, lines, canary) {
   const { problems, code } = await openTogether(pair, link, lines, false);
@@ -647,6 +712,9 @@ export async function runCoop(side, options) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
   if (scenarios?.includes('trade') && scenarios.length !== 1) throw labError('coop: trade runs alone, in the lobby');
+  if (scenarios?.includes('looks') && scenarios.length !== 1) {
+    throw labError('coop: looks runs alone, without combat');
+  }
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -675,6 +743,8 @@ export async function runCoop(side, options) {
       if (party > 2) problems.push(...await fightPartyDuel(pair, callPage, lines, { pictures }));
       else problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures }));
       return { text: lines.join('\n'), problems };
+    if (scenarios?.length === 1 && scenarios[0] === 'looks') {
+      return await changeLooks(pair, { ping, jitter }, lines, canary, pictures);
     }
     if (scenarios?.length === 1 && scenarios[0] === 'houses') {
       // (in the village, no run: a partner gone into a house, node/coopHouses.mjs)

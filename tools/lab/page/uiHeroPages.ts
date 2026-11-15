@@ -1,12 +1,18 @@
-// tools/lab ui `heroes`, the panel's pages: the hero card, his equipment and his attributes, each a tab of the panel
+// tools/lab ui `heroes`, the panel's pages: the hero card, his look, his equipment and his attributes, each a tab of the panel
 // (src/ui/heroSelect.ts). Checked: each tab clicked shows its page alone; the equipment the hero in focus's (each
 // slot's item his in the hall, his stash's count), an item's card shown as the mouse comes over it (a tap on touch),
 // and nothing of it to be moved (no slot or stash item draggable, a click on one leaving his gear as it was); his
 // attributes his (the Health row his hall copy's); and the page chosen still shown as the screen opens again. The
 // hall and the screen are read through their modules: `uiHeroes.ts` loads this one only where the tree has the screen
-// (main's side of an A/B has neither). The canary makes one of his items draggable, which must be found.
+// (main's side of an A/B has neither). The canary makes one of his items draggable, which must be found. The look page:
+// a button for each of his looks and a swatch for each hair colour, all within the panel (a finger's 40 px each on
+// touch), another look and a hair colour clicked (tapped on touch) shown on his hall hero once he's built again, and
+// pictured; then his own look and hair picked back.
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
+import { CLASSES } from '../../../src/data/classes/index';
+import { HAIR_COLOURS, looksOf } from '../../../src/data/heroLooks';
+import { addHeroPicture } from './uiHeroes';
 import { closeHeroSelect, openHeroSelect } from '../../../src/ui/heroSelect';
 import type { Lab } from './lab';
 
@@ -126,6 +132,78 @@ async function attributesPage(lab: Lab, screen: HTMLElement): Promise<Found> {
   return { lines: [`  his attributes: ${rows.length} rows, Health ${health} (the ${hero.id}'s ${his})`], problems };
 }
 
+/** how long a look picked may take to be made and built (real ms: the workers paint and sculpt it) */
+const RESTYLE_MS = 180000;
+/** the least a touch target is across (css px, as drawn) */
+const FINGER = 40;
+/** the hair colour the check picks */
+const PICKED_HAIR = 'auburn';
+
+/** Button `element` clicked as the player would: tapped on touch, clicked with the mouse. */
+async function press(lab: Lab, element: HTMLElement): Promise<void> {
+  if (document.body.classList.contains('touch')) await lab.tap(middleOf(element));
+  else await lab.clickOn(element);
+}
+
+/** Frames run until class `id`'s hall hero stands in his look, or `RESTYLE_MS` have passed (real time). */
+async function restyled(lab: Lab, id: string): Promise<boolean> {
+  const until = window.__labClock.realNow() + RESTYLE_MS;
+  while (hall.hallHeroRestyling(id)) {
+    if (window.__labClock.realNow() > until) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await lab.step(1);
+  }
+  return true;
+}
+
+/** The look page: every look and hair colour a button within the panel, another look and a colour picked shown on
+ *  him, pictured, and his own picked back. */
+async function lookPage(lab: Lab, screen: HTMLElement): Promise<Found> {
+  const problems: string[] = [];
+  if (!(await openPage(lab, screen, 'look', problems))) return { lines: [], problems };
+  const hero = heroInFocus('look', problems);
+  if (!hero) return { lines: [], problems };
+  const page = tabOf(screen, 'look').body!;
+  const looks = looksOf(CLASSES[hero.id].model);
+  const presets = [...page.querySelectorAll<HTMLElement>('.hl-preset')];
+  const swatches = [...page.querySelectorAll<HTMLElement>('.hl-swatch')];
+  if (presets.length !== looks.length) problems.push(`heroes: the look page shows ${presets.length} looks, the ${hero.id} has ${looks.length}`);
+  if (swatches.length !== HAIR_COLOURS.length + 1) problems.push(`heroes: the look page shows ${swatches.length} hair colours`);
+  const panel = screen.querySelector('.hs-panel')!.getBoundingClientRect();
+  const outside = [...presets, ...swatches].filter((button) => {
+    const box = button.getBoundingClientRect();
+    return box.left < panel.left - 1 || box.right > panel.right + 1;
+  });
+  if (outside.length) problems.push(`heroes: ${outside.length} of the look page's buttons reach past the panel`);
+  const touch = document.body.classList.contains('touch');
+  const small = touch ? swatches.filter((swatch) => swatch.getBoundingClientRect().width < FINGER - 0.5).length : 0;
+  if (small) problems.push(`heroes: ${small} hair swatches under a finger's ${FINGER} px on touch`);
+  const was = { ...hero.player.heroLook };
+  const other = presets.find((button) => button.dataset.look !== was.preset);
+  if (other) await press(lab, other);
+  const hair = page.querySelector<HTMLElement>(`.hl-swatch[data-hair="${PICKED_HAIR}"]`);
+  if (hair) await press(lab, hair);
+  const built = await restyled(lab, hero.id);
+  await lab.step(PAGE_FRAMES);
+  const now = hall.hallHeroes()[hall.hallFocus()].player.heroLook;
+  const shownLook = `${now.preset}, ${now.hair ?? 'own hair'}`;
+  if (!built) problems.push(`heroes: the ${hero.id}'s look picked never built`);
+  else if (now.preset !== other?.dataset.look || now.hair !== PICKED_HAIR) {
+    problems.push(`heroes: picked ${other?.dataset.look}, ${PICKED_HAIR}; the hall's ${hero.id} stands in ${shownLook}`);
+  }
+  const marked = page.querySelector('.hl-preset[aria-checked="true"]')?.getAttribute('data-look');
+  if (marked !== now.preset) problems.push(`heroes: the look page marks ${marked}, the hero wears ${now.preset}`);
+  addHeroPicture(await lab.screen(`heroes: the look page, ${shownLook} picked`, [shownLook]));
+  const own = page.querySelector<HTMLElement>(`.hl-preset[data-look="${was.preset}"]`);
+  if (own) await press(lab, own);
+  const ownHair = page.querySelector<HTMLElement>(`.hl-swatch[data-hair="${was.hair ?? ''}"]`);
+  if (ownHair) await press(lab, ownHair);
+  await restyled(lab, hero.id);
+  const lines = [`  his look: ${presets.length} looks, ${swatches.length} hair colours, ${outside.length} past the panel; `
+    + `picked ${shownLook} (${built ? 'built' : 'never built'}); then ${was.preset}, ${was.hair ?? 'own hair'} again`];
+  return { lines, problems };
+}
+
 /** The screen closed and opened again on the hero in focus: the page last chosen still shown. */
 async function pageKept(lab: Lab, screen: HTMLElement, page: string): Promise<Found> {
   const id = hall.hallHeroes()[hall.hallFocus()].id;
@@ -142,10 +220,11 @@ async function pageKept(lab: Lab, screen: HTMLElement, page: string): Promise<Fo
 export async function heroPages(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const lines: string[] = [];
   const problems: string[] = [];
+  const look = await lookPage(lab, screen);
   const gear = await gearPage(lab, screen, canary);
   const attributes = await attributesPage(lab, screen);
   const kept = await pageKept(lab, screen, 'attrs');
-  for (const found of [gear, attributes, kept]) {
+  for (const found of [look, gear, attributes, kept]) {
     lines.push(...found.lines);
     problems.push(...found.problems);
   }

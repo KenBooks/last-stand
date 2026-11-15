@@ -353,6 +353,16 @@ export async function touchpad(lab: Lab, command: TouchPadOptions): Promise<Repo
 }
 
 /**
+ * `lab herolooks`: each class's looks made by the workers, built, drawn and pictured, the hair colours on the hair,
+ * brows and beard, and a look kept; a head sculpted on the page, a program compiled, a part missing, a colour that
+ * misses one of them or a look not kept, or a canary it missed, is a problem.
+ */
+export async function herolooks(lab: Lab, command: import('./heroLooks').HeroLooksOptions): Promise<Report> {
+  const { heroLooks } = await import('./heroLooks');
+  return heroLooks(lab, command);
+}
+
+/**
  * `lab heropick`: a first visit's hero picked on the hero selection screen by a tap and by the mouse: each must land
  * in the lobby with no run started, the click after it reaching nothing of the lobby.
  */
