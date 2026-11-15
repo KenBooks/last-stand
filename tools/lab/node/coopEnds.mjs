@@ -9,6 +9,8 @@
 //   back). Then the guest leaves, and every game must be back in the lobby by itself, the heroes together.
 // - The party falls: a second run, the guest struck down and then the host, with nobody left to raise them. Every
 //   game must be back in the lobby by itself, the heroes together.
+// - A player joins in the middle of a third run: let in, he waits in the lobby as the run goes on, and once the two
+//   in it have left it every game must be in the lobby by itself, each showing both of the others.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitFor } from './coopEnd.mjs';
@@ -31,6 +33,9 @@ const TOGETHER_M = 6;
  *  the portal's one spot, 0.0 m from the other, one standing in another) */
 const LEAST_APART_M = 0.6;
 
+/** each page's name in a picture's file: the host's, the guest's, the player's who joins in the middle of a run */
+const SCREENS = ['host', 'guest', 'joiner'];
+
 /** the canary's problem: the host's game out of the run while the guest plays on */
 const HOST_GONE = 'went back to the lobby while';
 
@@ -40,10 +45,10 @@ async function picture(pair, call, lines, name) {
   for (const page of pair.pages) await call(page, 'coopDrawing', { on: true });
   await pair.run(1);
   for (const [index, page] of pair.pages.entries()) {
-    await page.screenshot({ path: join(PICTURES, `ends-${name}-${index ? 'guest' : 'host'}.png`) });
+    await page.screenshot({ path: join(PICTURES, `ends-${name}-${SCREENS[index]}.png`) });
   }
   for (const page of pair.pages) await call(page, 'coopDrawing', { on: false });
-  lines.push(`pictured both screens, ${name}, in ${PICTURES}`);
+  lines.push(`pictured every screen, ${name}, in ${PICTURES}`);
 }
 
 /**
@@ -130,12 +135,65 @@ async function partyFalls(pair, call, lines, { tags, pictures }) {
 }
 
 /**
+ * A third run, a player joining the room in the middle of it (`late`: its name tag, how its page opens and what it
+ * joins with). He must be let in and wait in the lobby, the run going on without him; then the host and the guest
+ * leave it, and every game must be in the lobby by itself, each showing both of the others. Returns the problems.
+ */
+async function joinsMidRun(pair, call, lines, { tags, late, pictures }) {
+  const [host, guest] = pair.pages;
+  await call(host, 'coopHoldRun');
+  await call(host, 'coopStart');
+  const started = await waitFor(pair, (states) => states.every((state) => state.mode === 'run'), STEP_FRAMES);
+  if (!started.met) return ['the run a player joins in the middle of never started on every game'];
+  const joiner = await late.open();
+  const code = await call(host, 'coopCode');
+  await call(joiner, 'coopOpen', { ...late.opening, code });
+  await pair.add(joiner);
+  const everyone = pair.pages.length - 1;
+  const inTheRoom = (states) => states[2].status !== 'joining' && states.every((state) => state.partners === everyone);
+  const joined = await waitFor(pair, inTheRoom, STEP_FRAMES);
+  const [hostIn, guestIn, waiting] = await pair.run(SETTLE_FRAMES);
+  const fightGoesOn = hostIn.mode === 'run' && guestIn.mode === 'run' && !hostIn.out && !guestIn.out;
+  const waits = waiting.mode === 'menu' ? `waits in the lobby, ${waiting.hidden} of its partners away` : 'is in the run';
+  lines.push(`${late.tag} joining in the middle of a run: ${joined.met ? 'let in' : waiting.status}, ${waits}; `
+    + `the run ${fightGoesOn ? 'goes on' : 'stopped'} for ${tags.join(' and ')}`);
+  if (pictures) await picture(pair, call, lines, 'joined-mid-run');
+  if (!joined.met) return [`${late.tag}, joining in the middle of a run, was never in the room on every game`];
+  const problems = [];
+  if (!fightGoesOn) problems.push(`the run stopped for ${tags.join(' and ')} as ${late.tag} joined in the middle of it`);
+  if (waiting.mode !== 'menu') problems.push(`${late.tag}, joining in the middle of a run, was put in it`);
+  await call(host, 'coopLeaveRun');
+  const fallen = await waitFor(pair, (states) => states[0].summary, STEP_FRAMES);
+  if (fallen.met) await call(host, 'coopSummaryDone');
+  await call(guest, 'coopLeaveRun');
+  const back = await waitFor(pair, (states) => states.every((state) => state.mode === 'menu'), STEP_FRAMES);
+  const states = await pair.run(SETTLE_FRAMES);
+  const names = [...tags, late.tag];
+  const said = states.map((state, index) => (state.mode === 'menu'
+    ? `${names[index]} in the lobby, ${everyone - state.hidden} of its partners shown` : `${names[index]} still in the run`));
+  lines.push(`the run ${late.tag} waited for left by ${tags.join(' and ')}, with nothing clicked: ${said.join('; ')}`);
+  if (!back.met) problems.push(`the run ${late.tag} waited for: not every game went back to the lobby by itself`);
+  for (const [index, state] of states.entries()) {
+    if (state.mode === 'menu' && state.hidden) {
+      problems.push(`the run ${late.tag} waited for: ${names[index]}'s lobby doesn't show ${state.hidden} of its partners`);
+    }
+    if (state.summary) await call(pair.pages[index], 'coopSummaryDone');
+  }
+  await pair.run(pair.turnFrames);
+  if (pictures) await picture(pair, call, lines, 'joiner-met');
+  return problems;
+}
+
+/**
  * The ends of a run that left a player apart, on a pair already in a run. Returns the problems (with `canary`, the
  * first end's alone: the host's game dropped out of the run as the guest plays on, which must be caught).
  */
-export async function runsEnds(pair, call, lines, { tags, canary, pictures = false }) {
+export async function runsEnds(pair, call, lines, { tags, canary, pictures = false, late }) {
   const problems = await hostLeavesAgain(pair, call, lines, { tags, canary, pictures });
-  if (!canary) return [...problems, ...await partyFalls(pair, call, lines, { tags, pictures })];
+  if (!canary) {
+    problems.push(...await partyFalls(pair, call, lines, { tags, pictures }));
+    return [...problems, ...await joinsMidRun(pair, call, lines, { tags, late, pictures })];
+  }
   const caught = problems.some((problem) => problem.includes(HOST_GONE));
   lines.push(`canary: the host's game out of the run as the guest plays on ${caught ? 'caught' : 'missed'}`);
   const rest = problems.filter((problem) => !problem.includes(HOST_GONE));

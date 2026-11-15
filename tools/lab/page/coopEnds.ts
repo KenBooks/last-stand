@@ -6,6 +6,7 @@
 import { G } from '../../../src/state';
 import { hurtPlayer } from '../../../src/combat/damage';
 import { abandonRun } from '../../../src/game/run';
+import { session } from '../../../src/net/session';
 import { ABANDON_HOLD_MS, showPause } from '../../../src/ui/menus';
 import { realWait, type Lab } from './lab';
 
@@ -64,6 +65,11 @@ export function coopFall(): void {
   G.player.life = LAST_LIFE;
   hurtPlayer(G.player, DEADLY);
   if (G.player.alive) throw new Error('lab: coop: a deadly blow, and the hero still stands');
+}
+
+/** The code of the room this game is in, for a player who joins it later. */
+export function coopCode(): string {
+  return session.code;
 }
 
 /** The canary: this game drops the run and stands in the lobby, as the host's did leaving a run it was out of. */

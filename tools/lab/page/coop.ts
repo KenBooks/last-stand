@@ -48,7 +48,7 @@ export {
   coopWorldAngle,
 } from './coopEnd';
 import { togetherNow, type Together } from './coopEnds';
-export { coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
+export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
 /** Which game a page plays. */
 export type Role = 'host' | 'guest';
@@ -715,6 +715,12 @@ const wire = {
 
 function wireTime(): number {
   return window.__labClock.t - wire.start;
+}
+
+/** This page's time on the link now, ms since it opened or joined the room: what its messages' times count from (a
+ *  page that joins later counts from later, `Pair.add`). */
+export function coopLinkTime(): number {
+  return wireTime();
 }
 
 /** Stands in for the browser's BroadcastChannel, which the game's `?net=local` link talks over. */
