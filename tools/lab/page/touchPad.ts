@@ -11,6 +11,7 @@ import { setPerfHud } from '../../../src/ui/perfHud';
 import { setBattleLog } from '../../../src/ui/battleLog';
 import type { Fixture, Lab, PagePoint, Pictured, Report } from './lab';
 import { showTouchControls, slide } from './touchStick';
+import { dragsOverlay } from './perfDrag';
 
 export interface TouchPadOptions {
   fixture: Fixture;
@@ -313,6 +314,11 @@ export async function touchPad(lab: Lab, options: TouchPadOptions): Promise<Repo
   const copies = await tapsToCopy(lab);
   lines.push(...copies.lines);
   problems.push(...copies.problems);
+  await showOverlays(lab, true);
+  const drags = await dragsOverlay(lab, !!options.canary);
+  lines.push(...drags.lines);
+  problems.push(...drags.problems);
+  moments.push(drags.moment);
   await showOverlays(lab, false);
   if (options.canary) {
     const sheet = plantSheet();

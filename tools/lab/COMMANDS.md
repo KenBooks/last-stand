@@ -376,7 +376,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   Then the performance overlay's frame rate and its graph are each tapped, a finger put down and lifted, with the
   touch controls shown and hidden (a menu open), and each must copy a report (the overlay says so): on the owner's phone the panel let touches through to the stick, its
   frame rate alone a button, and a tap on the panel copied nothing (the frame rate's own click came one tap in two).
-  `--canary` lays a clear sheet over the move area's lower left, which must be caught.
+  Then the overlay moved by a finger (`page/perfDrag.ts`, #245: on a phone it shared the top left corner with the
+  pause button): a finger held still on it must lift it (no sooner than a tap ends, 350 ms), slid 160,-60 px the
+  overlay must follow it within 3 px with the hero standing (the stick unpushed), and let go its place must be kept
+  (the cookie `last-stand-overlays-place`), pictured; a finger sliding at once from it must walk the hero and leave
+  it, and one pushed far past the window's top left must leave it whole inside the window.
+  `--canary` lays a clear sheet over the move area's lower left, and pins the overlays to their corner for the drag,
+  which must both be caught.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.

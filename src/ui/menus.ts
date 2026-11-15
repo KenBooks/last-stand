@@ -52,6 +52,7 @@ import { initRecordingTab } from './recordingTab';
 import { recorder } from '../perf/recorder';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 import { showBuildStatus } from './buildStatus';
+import { overlaysPlaced } from './overlayPlace';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -707,10 +708,14 @@ export function clearOverlays(): void {
   const diag = $('#diag'), chat = document.querySelector<HTMLElement>('#chat');
   const chatShown = !!chat && !chat.classList.contains('hidden');
   if (!chatShown && ![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;
-  const { x, y } = clearance();
+  const lobby = clearance();
   // (the co-op chat in the bottom left corner, right of the hero panel: ui/chat.ts)
-  const chatX = `${Math.round(x)}px`;
+  const chatX = `${Math.round(lobby.x)}px`;
   if (chat && chat.style.getPropertyValue('--clear-x') !== chatX) chat.style.setProperty('--clear-x', chatX);
+  // (on touch, where the player put them with a finger, with the lobby's panels out of the way: `overlayPlace.ts`)
+  const menu = $('#menu');
+  const free = menu.classList.contains('hidden') || menu.classList.contains('stowed');
+  const { x, y } = (free && isTouch() && overlaysPlaced()) || lobby;
   const clear = `${Math.round(x)},${Math.round(y)}`;
   if (clear === overlaysClear) return;
   overlaysClear = clear;

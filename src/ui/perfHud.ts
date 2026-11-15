@@ -543,9 +543,14 @@ export const perfReport = (): string => report();
 /** A report copied if the overlay is shown at this point of the page (css px), as a tap on it copies one where its
  *  touches go through to the move stick (`ui/touch.ts`). */
 export function copyPerfReportAt(x: number, y: number): void {
-  if (!enabled || !el) return;
+  if (perfHudAt(x, y)) copyReport();
+}
+
+/** Whether the overlay is shown at this point of the page (css px): a finger held there moves it (`ui/touch.ts`). */
+export function perfHudAt(x: number, y: number): boolean {
+  if (!enabled || !el) return false;
   const box = el.getBoundingClientRect();
-  if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) copyReport();
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 }
 
 function copyReport(): void {
