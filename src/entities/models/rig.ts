@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
+import { tunable } from '../../core/tuning';
 
 export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
@@ -135,7 +136,11 @@ export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** th
 const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 /** What the walk cycle reads from a model's leg IK (`LegIK` in ik.ts): where the feet are in their strides and how
  *  far each thigh points forward. */
-interface WalkingLegs { bodyPhase?(phase: number, side?: number): number; thighForward?(side: number): number }
+interface WalkingLegs {
+  bodyPhase?(phase: number, side?: number): number;
+  thighForward?(side: number): number;
+  readonly hipsTurn?: number;
+}
 /** A thigh pointing `forward` (rad) as the cycle's swing of it (its `sin`, the left's sign), for the arm on its side
  *  to swing against: the cycle swings a thigh `stride` either way, and an arm no further than it swings it (a carried
  *  bow's swing is tuned to that: further, its arrow swept into the coat's hem) */
@@ -152,6 +157,22 @@ const RUN_ARM = 0.62, RUN_ARM_BACK = 0.14, RUN_ELBOW = 1.5, RUN_ELBOW_SWING = 0.
 const RUN_FOREARM_LAG = 0.35, RUN_HAND_LAG = 0.8, RUN_HAND_LOOSE = 0.35;
 /** a run's rise and fall a step, a share of the model's `bob` */
 const RUN_BOB = 0.75;
+/**
+ * The trunk with the legs, as a person's moves (Perry 1992 and Whittle 2007 for a walk, Novacheck 1998 and Schache et
+ * al. 2002 for a run; the lab's `form` and `gait` read each against the feet, `page/trunkSwing.ts`): the pelvis turns
+ * with the leg that reaches out, the hip of the foot ahead ahead (rad either way, at a walk and at a run), and the
+ * shoulders the other way, with the arms (their turn in the world, rad: a runner's turn far more than a walker's);
+ * the pelvis drops on the side of the leg in the air, the trunk held upright over it (rad; the share of it the spine
+ * takes back); and the hips sway out over the foot that carries them (m, at a walk and at a run). Each went the other
+ * way for a year: the pelvis turned with the hip of the leg behind ahead and the shoulders with it, and it tipped up
+ * on the side in the air, with the feet half a cycle off the walk cycle's own legs and put back (#571).
+ */
+const TRUNK = tunable('trunk', {
+  pelvisWalk: 0.07, pelvisRun: 0.09,
+  shouldersWalk: 0.05, shouldersRun: 0.12,
+  drop: 0.06, dropHeld: 0.8,
+  swayWalk: 0.018, swayRun: 0.012,
+});
 /** Exported for the models posing a loaded arm at a run: how far it is through a runner's, from the walk cycle's
  *  `amt` (0 at a walk, 1 at a run). */
 export const runShareOf = (amt: number): number => (IK_ON ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0);
@@ -211,11 +232,34 @@ export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpt
   // further: a runner's hips rise and fall 6 cm a step (at half a walk's, 4)
   const walkBob = Math.abs(c) - 0.6, runBob = -0.5 * RUN_BOB * Math.cos(2 * phase);
   j.body.position.y += (walkBob + (runBob - walkBob) * run) * bob * amt;
-  // the body's weight goes over the foot it stands on (the right at phase 0, the left at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
-  if (IK_ON) j.body.position.x += -c * 0.02 * run * amt;
-  j.hips.rotation.y += s * 0.12 * amt;
-  j.chest.rotation.y += -s * 0.16 * amt;
-  j.hips.rotation.z += c * 0.04 * amt;
+  // the body's weight goes over the foot it stands on (the right at phase 0, the left at π, as `LegIK` times its
+  // steps), along the pelvis's own side as the gait turns it (a strafe's hips turned to the way it goes), so the two
+  // legs read apart from behind and in front; at a walk too (by a run's alone, a walk carried the body straight on
+  // over each foot in turn, as on rails)
+  const runs = IK_ON ? run : 0;
+  const { pelvisWalk, pelvisRun, shouldersWalk, shouldersRun, drop, dropHeld, swayWalk, swayRun } = TRUNK;
+  const sway = -c * (swayWalk + (swayRun - swayWalk) * runs) * amt;
+  const hipsTurn = IK_ON ? legs?.hipsTurn ?? 0 : 0;
+  j.body.position.x += sway * Math.cos(hipsTurn);
+  j.body.position.z += -sway * Math.sin(hipsTurn);
+  // (the left leg reaches out as `s` rises: its hip comes forward, a turn to the right, and the shoulders turn to the
+  // left; at phase 0 the left is in the air, its side of the pelvis the lower)
+  const pelvis = pelvisWalk + (pelvisRun - pelvisWalk) * runs;
+  const shoulders = shouldersWalk + (shouldersRun - shouldersWalk) * runs;
+  const turn = -s * pelvis * amt;
+  j.hips.rotation.y += turn;
+  j.chest.rotation.y += s * (pelvis + shoulders) * amt;
+  j.hips.rotation.z += -c * drop * amt;
+  j.spine.rotation.z += c * drop * dropHeld * amt;
+  // (both about the hip it stands on, as a body's pelvis turns and drops over its stance hip: about its middle, that
+  // hip went back or forward and up, and the leg under it, at the edge of its reach as a run turned round, fell short
+  // of its planted foot: dragged 12% more often over the gait's scenarios. The right hip at phase 0, the left at π,
+  // the middle between)
+  const halfHips = Math.abs(j.thighL.position.x);
+  const stanceX = -c * halfHips;
+  j.body.position.x += stanceX * turn * Math.sin(hipsTurn);
+  j.body.position.z += stanceX * turn * Math.cos(hipsTurn);
+  j.body.position.y -= halfHips * drop * Math.abs(c) * amt;
   return {
     forearmL: (armSL * swingL + RUN_ELBOW_SWING * lateL * pumpL) * amt,
     forearmR: (-armSR * swingR - RUN_ELBOW_SWING * lateR * pumpR) * amt,

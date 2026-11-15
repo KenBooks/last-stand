@@ -13,6 +13,7 @@ import { legLength } from '../../../src/entities/models/ik';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Joints } from '../../../src/entities/models/rig';
 import { armAt, MAN_LEG, runnerAt, type LegCurve, type RunnerForm } from './runner';
+import { judgeTrunk, trunkLine, trunkSampleOf, type TrunkSample } from './trunkSwing';
 
 /** What `lab form` is asked: the ways of holding the weapons to run with (the class's all by default). */
 export interface FormOptions {
@@ -24,6 +25,9 @@ export interface FormOptions {
   /** picture the run (true by default): stick figures, and the hero run again to picture him; a check reads the
    *  numbers, and both sides' pictures to compare were more than the browser held, which closed */
   pictures?: boolean;
+  /** tunable values set at each run's set-up, by their paths (`Fixture.tune`): a pose's amounts compared without
+   *  editing the source */
+  tune?: Record<string, number[]>;
 }
 
 /** What `lab form` found: its lines, its pictures, and what went wrong with a run itself. */
@@ -92,6 +96,8 @@ interface FormFrame {
   /** the pelvis's turn off the way the body faces, and the chest's on the pelvis (deg) */
   pelvis: number;
   chest: number;
+  /** the trunk and the feet, for the trunk against the legs (`trunkSwing.ts`) */
+  trunk: TrunkSample;
   stick: Stick;
 }
 
@@ -214,6 +220,7 @@ function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
     head: Math.atan2(headUp.dot(forward), headUp.y) * DEG,
     pelvis: yawOf(j.hips, facing),
     chest: yawOf(j.chest, facing) - yawOf(j.hips, facing),
+    trunk: trunkSampleOf(j, [legs.feet[0].state === 'plant', legs.feet[1].state === 'plant']),
     stick: {
       head: sideOf(view, j.head.localToWorld(new THREE.Vector3(0, 0.12, 0))),
       neck: sideOf(view, at(j.neck, new THREE.Vector3())),
@@ -232,9 +239,9 @@ function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
 // --- the run -------------------------------------------------------------------------------------------------------
 
 /** The hero set up at the start holding his weapons `style`'s way (as he is, with none). */
-async function setUp(lab: Lab, style: WeaponStyle | null): Promise<LegIK> {
+async function setUp(lab: Lab, style: WeaponStyle | null, tune?: Record<string, number[]>): Promise<LegIK> {
   const nocked = Boolean(lab.player.cls.quiver);
-  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined });
+  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined, tune });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: form: the ${lab.player.cls.id} has no leg IK`);
   return legs;
@@ -268,9 +275,10 @@ interface PictureRow {
 }
 
 /** Runs the hero across, measuring each frame; with `pictured`, also pictures those frames into its rows' tiles. */
-async function runAcross(lab: Lab, style: WeaponStyle | null, pictured?: Map<number, PictureRow[]>):
-  Promise<{ measured: Measured; tiles: Map<string, Tile[]> }> {
-  const legs = await setUp(lab, style);
+async function runAcross(
+  lab: Lab, style: WeaponStyle | null, tune?: Record<string, number[]>, pictured?: Map<number, PictureRow[]>,
+): Promise<{ measured: Measured; tiles: Map<string, Tile[]> }> {
+  const legs = await setUp(lab, style, tune);
   const toMan = MAN_LEG / legLength(lab.model);
   await lab.step(SETTLE, () => ({ keys: KEYS }));
   const start = lab.player.pos.clone();
@@ -486,6 +494,7 @@ function describe(what: string, measured: Measured, unlike: string[]): string[] 
   if (Math.abs(lean - runner.lean) > 8) unlike.push(`the trunk leans ${deg(lean)} deg, a runner's ${deg(runner.lean)}`);
   if (Math.abs(head) > 12) unlike.push(`the head tipped ${deg(head)} deg off upright`);
   lines.push(...armLines(measured, runner, unlike));
+  lines.push(`  ${trunkLine(judgeTrunk(frames.map((frame) => frame.trunk)), unlike)}`);
   return lines;
 }
 
@@ -717,7 +726,7 @@ const PICTURE_ROWS: PictureRow[] = [
 /** One way of holding the weapons, run, measured, judged and pictured. */
 async function runStyle(lab: Lab, style: WeaponStyle | null, options: FormOptions, report: FormReport): Promise<void> {
   const what = style ? `holding ${style}` : `as he holds his ${lab.player.gear.weapon ?? 'weapon'}`;
-  const { measured } = await runAcross(lab, style);
+  const { measured } = await runAcross(lab, style, options.tune);
   const wanted = lab.player.stats.moveSpeed * measured.toMan;
   if (measured.speed < wanted * HELD_UP) {
     const speeds = `${measured.speed.toFixed(2)} of ${wanted.toFixed(2)} m/s`;
@@ -740,7 +749,7 @@ async function runStyle(lab: Lab, style: WeaponStyle | null, options: FormOption
   report.moments.push(sticksMoment(what, measured, chosen));
   const pictured = new Map<number, PictureRow[]>();
   chosen.forEach((frame, i) => pictured.set(frame, PICTURE_ROWS.filter((row) => row.points.includes(i))));
-  const { tiles } = await runAcross(lab, style, pictured);
+  const { tiles } = await runAcross(lab, style, options.tune, pictured);
   for (const row of PICTURE_ROWS) {
     report.moments.push({ label: `${what}: ${row.name}`, tiles: tiles.get(row.name) ?? [], notes: [] });
   }

@@ -493,6 +493,7 @@ export const COMMANDS = {
         span: options.span,
         films: options.films !== false,
         offsets: (options.offsets ?? [0]).map(Number),
+        tune: options.tune === undefined ? undefined : tunesFrom(options.tune),
       });
     },
     check(options) {
@@ -522,7 +523,8 @@ export const COMMANDS = {
     keepsPage: true,
     each(side, options) {
       const listed = { canary: Boolean(options.canary), frames: Boolean(options.frames) };
-      return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false });
+      const tune = options.tune === undefined ? undefined : tunesFrom(options.tune);
+      return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false, tune });
     },
     finish(results, options, session) {
       return textWithSheetsByGroup(results, session.outFor('form'), session.browser);

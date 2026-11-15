@@ -812,6 +812,12 @@ export class LegIK {
     return IK ? this.leanX : 0;
   }
 
+  /** how far the pelvis is turned off the way the body faces as the gait last turned it (rad: a strafe's hips turned
+   *  to the way it goes): the walk cycle sways the hips out along the pelvis's own side */
+  get hipsTurn(): number {
+    return IK ? this.twist : 0;
+  }
+
   /**
    * Where a standing body puts its feet (a fighting stance, a step in): each foot's spot in the root's own frame
    * (x left, z forward, rig units) and how far it is turned out (rad, + to the left); null puts it under its hip.

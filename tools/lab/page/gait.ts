@@ -19,6 +19,7 @@ import { shapesOf } from './soles';
 import { bodyBreaches, describeBreach } from './range';
 import { LegTrace, planOf, traceSpanOf, type TracedFrame, type TraceSpan } from './legTrace';
 import { FootfallWatch, footfallLines } from './footfalls';
+import { judgeTrunk, trunkLine, trunkSampleOf, type TrunkSample } from './trunkSwing';
 import {
   evennessLine, runnerCanary, stepPairsOf, ThighSwings, TogetherWatch, togetherLine, unevenOf, type StepPair,
 } from './alternation';
@@ -170,6 +171,9 @@ export interface GaitOptions {
    *  later change of way comes at another point of a stride (0 alone by default; a check runs each scenario from a
    *  few, on one page: each run sets a fresh hero up, so it comes out the same whatever ran before it) */
   offsets?: number[];
+  /** tunable values set at each scenario's set-up, by their paths (`Fixture.tune`): a pose's amounts compared without
+   *  editing the source */
+  tune?: Record<string, number[]>;
 }
 
 /** a body going slower than this is standing (m/s) */
@@ -286,6 +290,8 @@ interface GaitRun {
    *  frames they were taken on (`ankle` keeps the knee: the name an older report used) */
   swings: { hand: number[]; ankle: number[] }[];
   swingFrames: number[];
+  /** the trunk and the feet each frame moving, for the trunk against the legs (`trunkSwing.ts`) */
+  trunk: TrunkSample[];
   /** each frame's body for the balance, and the frames it couldn't have moved so (`balance.ts`) */
   balance: BalanceSample[];
   falls: Fall[];
@@ -497,9 +503,10 @@ function bobOfSteps(heights: number[], steps: Step[]): number[] {
 /** Runs one scenario, set up afresh, and measures its walk, picturing the frames `film` takes, if any. */
 async function runScenario(
   lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null, offset = 0,
+  tune?: Record<string, number[]>,
 ): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
-  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true });
+  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true, tune });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
   const seconds = window.__labClock.frame / 1000;
@@ -533,6 +540,7 @@ async function runScenario(
     heldUpAt: '',
     swings: [{ hand: [], ankle: [] }, { hand: [], ankle: [] }],
     swingFrames: [],
+    trunk: [],
     balance: [],
     falls: [],
     pastRange: 0,
@@ -576,6 +584,7 @@ async function runScenario(
     });
     followReach(run, legs);
     followSwings(run, lab, frame);
+    run.trunk.push(trunkSampleOf(lab.joints, [down[0], down[1]]));
     const support = down[0] && down[1] ? 'double' : down[0] || down[1] ? 'single' : 'flight';
     if (support === 'double') run.bothDown++;
     if (support === 'flight') run.bothUp++;
@@ -1078,6 +1087,8 @@ function describeRun(
   const hands = `L ${against[0]}, R ${against[1]}`;
   lines.push(`  each hand fore and aft against its own side's knee: ${hands} (a person's: -1)`);
   lines.push(`    ${swingsByStretch(run)}`);
+  // (said, not judged: going round, zigzagging and strafing turn the trunk for the way as well as the stride)
+  lines.push(`  ${trunkLine(judgeTrunk(run.trunk), [])}`);
   const unlike = unlikeAPerson(run, speed, seconds);
   lines.push(unlike.length ? `  unlike a person: ${unlike.join('; ')}` : '  as a person walks');
   if (listSteps) {
@@ -1125,7 +1136,7 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
   const offsets = options.offsets?.length ? options.offsets : [0];
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     for (const offset of offsets) {
-      const run = await runScenario(lab, scenario, null, traceSpanOf(options), offset);
+      const run = await runScenario(lab, scenario, null, traceSpanOf(options), offset, options.tune);
       report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames), offset));
       addCounts(report.counts, countsOf(run, seconds));
       if (run.heldUp) {
@@ -1134,7 +1145,7 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
       if (options.films === false) continue;
       const gallops = gallopsOf(run.steps, seconds).map((gallop) => gallop.left);
       const film = filmFor([...run.hopFrames, ...gallops].sort((a, b) => a - b));
-      await runScenario(lab, scenario, film, null, offset);
+      await runScenario(lab, scenario, film, null, offset, options.tune);
       const moment = filmMoment(scenario, film, offset);
       if (moment) report.moments.push(moment);
     }

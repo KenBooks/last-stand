@@ -42,7 +42,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the steps a second and their length, a foot's time down and in the air, the hips' rise and fall, each joint at the
   touchdown, mid-stance, the push off and the swing's most against the runner's (and how far off on average and at
   its worst), the trunk's lean and the head's tip, the pelvis's and chest's turn, each arm's swing in the chest's
-  frame and its elbow's bend, and what is unlike a runner. Each way is pictured at eight points of the stride
+  frame and its elbow's bend, the trunk against the legs (`page/trunkSwing.ts`: the pelvis's turn and the
+  shoulders' against the feet's split, the pelvis's tip and the hips' sway against the foot down, each as a
+  correlation a person's reads about +1, the shoulders -1: the walk cycle moved each the wrong way for a year, which
+  no other line saw, #571), and what is unlike a runner. Each way is pictured at eight points of the stride
   (`out/form/<way>.png`, one sheet a way: all four in one took the browser down): stick figures of his run (the left
   limbs blue, the right orange) over a runner's on his lengths (grey, the hips rising and falling as a body flies),
   the hero from both sides, the game's own views and his arms close up, measured first and run again to picture the
