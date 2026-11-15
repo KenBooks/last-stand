@@ -546,6 +546,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (on by default) pictures the bodies as the player sees them, and close from the hero's left and from behind, at
   0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame,
   throws one back at the hero, and turns the first struck off its middle the other way.
+- `heard <skills>`: the sounds each skill plays as its key is held (`page/heard.ts`): foes stand where it strikes and
+  it's cast at them as `hits` casts it (`castAt`), its key held as a player holds it (`cast.ts` `holdFor`: a drawn
+  shot to full and a moment more, a channel 3 s) or for `--hold s`, and followed for its cast time, its effect's own
+  time and 2 s more. Every sound the game asks for (`sfx` in `src/core/audio.ts`) is caught as it's asked for: its
+  name, what it was given, when from the press (a row of more than four as its count and span), and for a held sound
+  (one that returns its stop: a bow's creak, a beam) when it was stopped. A skill that plays nothing, a held sound
+  never stopped and a sound the skill is known to play that never came (`EXPECTED`, the ranger's) are problems.
+  `--biome crypt|forest` stands him in a biome (an arrow glances off the crypt's stone floor and sticks in the
+  forest's earth); `--awake` leaves the foes awake once they've risen, so they come at the hero, or at his lure and
+  strike it (`heard strawman --awake`: the Strawman's blows must be heard). `--canary` starts a bow's creak in each cast and never stops it, which must be caught. It says which sounds play
+  and when; what each sounds like is `sound`'s (`heard nockShot,fanShot,piercingShot,arrowRain,quarryMark,strawman
+  --class ranger`).
 - `hits <skills>`: each skill's blows as they land (`page/hits.ts`): foes stand dazed where it strikes (`death`'s
   stands), living past every blow, and it's cast at them on a fresh set-up as the player casts it (`cast.ts`
   `holdFor`). Where the set-up's props stand in the 9 m before him (the crypt's columns are rolled with each run) and
@@ -1082,7 +1094,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   portal is drawn; the warrior's (`WARRIOR`): `cleave`, `cleaveGreat` and `cleaveDual`, Rending Cleave held with each
   weapon, three swings each biting; `fangs`; `crescent`; `shield`, raised, two blows caught and the guard broken;
   `tempest` and `tempestGreat`, held 3 s and let go; `bullRush`; `powerStrike` and `powerStrikeEarly`; `bellow`;
-  `draught`. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
+  `draught`; the ranger's (`RANGER`): `nockshot`, held to full and let go three times; `nockshotQuick`, loosed at
+  its least draw into the ground, a foe, a log and off a stone; `nockshotHeld`, held at full for 4 s; `briar`;
+  `lancewood` and `lancewoodShort`; `hail`, Hailfletch held for three volleys of 24; `rangerMany`, the loudest a
+  ranger gets (two in co-op, a volley landing as a fan and a full Lancewood Shot are loosed); `quarry`, the mark and
+  its refresh; `strawman`, raised, struck and sinking; `glance`; `arrowLands`. A cue marked `optional` is a sound an
+  older game played nothing for (the bow's creak, an arrow into the ground), skipped quietly on the other side of
+  an `--ab`. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
   hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
   peak, its loudest half second (the level to hold against the other heroes' sounds: on #413 a bow's shot was
   -56 dB, a swing -56, a Splintering Bolt cast -36), its level every tenth of a second, its brightness (its

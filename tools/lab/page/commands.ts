@@ -39,6 +39,7 @@ import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
 import type { SoundOptions } from './sound';
 import type { DeathOptions } from './death';
+import type { HeardOptions } from './heard';
 import type { HitsOptions } from './hits';
 import type { LogOptions } from './log';
 import type { TooltipsOptions } from './tooltips';
@@ -515,6 +516,15 @@ export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
 export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
   const { death: deathRound } = await import('./death');
   return deathRound(lab, command);
+}
+
+/**
+ * `lab heard`: each skill's key held as a player holds it and every sound the game asks for caught, when from the
+ * press; a skill that plays nothing, a held sound never stopped and a sound it's known to play missing are problems.
+ */
+export async function heard(lab: Lab, command: HeardOptions): Promise<Report> {
+  const { heard: heardOf } = await import('./heard');
+  return heardOf(lab, command);
 }
 
 /**

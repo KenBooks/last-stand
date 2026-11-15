@@ -71,8 +71,9 @@ export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: numbe
 /** An arrow coming down at `tip` going `dir` at `vel`: into the ground, or off it if it's stone. */
 export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
   tip.y = groundHeight(tip.x, tip.z);
-  if (floorIsStone(tip.x, tip.z)) glance(tip, vel, _n.set(0, 1, 0));
-  else stickAt(tip, _d.copy(vel).normalize(), SINK.ground);
+  if (floorIsStone(tip.x, tip.z)) { glance(tip, vel, _n.set(0, 1, 0)); return; }
+  stickAt(tip, _d.copy(vel).normalize(), SINK.ground);
+  sfx.arrowLand('earth');
 }
 
 /** Whether an arrow's point at `at` is in the village fountain's water. */
@@ -99,6 +100,7 @@ export function intoWater(at: THREE.Vector3, vel: THREE.Vector3): void {
   _floor.x *= kept;
   _floor.z *= kept;
   stickAt(_floor, _down, INTO_BASIN);
+  sfx.arrowLand('water');
 }
 
 /** An arrow into a prop met on its circle at `at`, going `vel`: off it if it's stone, else into it (and down with it when it
@@ -108,8 +110,9 @@ export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): bo
   // (where it really meets the prop: met on its circle, an arrow went most of its length into a stump wider than that)
   const dir = _d.copy(vel).normalize(), hit = propSurface(o, at, dir, _n);
   if (!hit) return false;
-  if (propIsStone(o)) glance(hit, vel, _n);
-  else stickAt(hit, dir, SINK.prop, o);
+  if (propIsStone(o)) { glance(hit, vel, _n); return true; }
+  stickAt(hit, dir, SINK.prop, o);
+  sfx.arrowLand('wood');
   return true;
 }
 
@@ -164,7 +167,7 @@ function fly(proj: Projectile, dt: number): void {
   if (throughGate(_prev, _p)) { proj.kill(); return; }
   if (!G.arena.wall.cast(_prev, _p, _hit)) return;
   if (_hit.stone) glance(_hit.point, proj.vel, _hit.normal);
-  else stickAt(_hit.point, _v, SINK.prop);
+  else { stickAt(_hit.point, _v, SINK.prop); sfx.arrowLand('wood'); }
   proj.kill();
 }
 
@@ -274,6 +277,36 @@ function drawGlint(player: Player, k: number): void {
   if (was < FULL_DRAW && player.local) sfx.bowReady();
 }
 
+/** the casts whose arrows' taking from the quiver, and whose draw, have been heard */
+const fetched = new WeakSet<object>(), drawing = new WeakSet<object>();
+/** the share of a fetch, and of a shot's follow-through, at which the arrow is heard onto the string */
+const NOCKED_AT = 0.9, RELOADED_AT = 0.7;
+
+/**
+ * A drawn shot's own sounds, for the archer's ears alone (the hero on this screen): its arrows taken from the quiver,
+ * if the string had too few, and the bow creaking as it bends, until the shot is loosed or let down. Watched, as
+ * nothing says a cast ended.
+ */
+function drawSound(player: Player, def: BowDef, k: number): void {
+  const cast = player.casting;
+  if (!cast || !player.local || player.quiet) return;
+  if (cast.nockT && !fetched.has(cast)) { fetched.add(cast); fetchSound(player, cast.nockT, def.missiles); }
+  if (k <= 0 || drawing.has(cast)) return;
+  drawing.add(cast);
+  const hush = sfx.bowDraw((cast.drawT ?? def.draw ?? 1) * (1 - k), def.missiles > 1 || def.falloff ? 1 : 0);
+  if (hush) addEffect({ update: () => { if (!cast.fired && player.casting === cast) return true; hush(); return false; }, dispose: hush });
+}
+
+/** `n` arrows heard out of the quiver and onto the string over the `fetch` s it takes (the archer's ears alone). */
+export function fetchSound(player: Player, fetch: number, n: number): void {
+  if (player.local && !player.quiet) sfx.nock(fetch * NOCKED_AT, n);
+}
+
+/** The next arrow heard onto the string in the `after` s that follow a shot (the archer's ears alone). */
+export function reloadSound(player: Player, after: number): void {
+  if (player.local && !player.quiet) sfx.nock(after / (1 + player.stats.castSpeed / 100) * RELOADED_AT);
+}
+
 /** a drawn shot's damage drawn less than full: the square of the draw (`cast`) */
 const SHORT_DRAW = 'less drawn short';
 
@@ -288,6 +321,7 @@ export const bowShot: InstantSkill = {
   charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.22, true, false);
     drawGlint(player, k);
+    drawSound(player, def as BowDef, k);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
@@ -307,11 +341,12 @@ export const bowShot: InstantSkill = {
           hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock,
             from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, 0.9) });
           burst(proj.pos, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
-          sfx.boltHit();
+          sfx.arrowHit(0.6 + 0.4 * pull);
         },
       });
     }
-    sfx.bow();
+    if (def.missiles > 1) sfx.fan(pull); else sfx.bow(pull);
+    reloadSound(player, def.castTime);
   },
 };
 
@@ -332,6 +367,7 @@ export const piercingShot: InstantSkill = {
   charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.24, false, true);
     drawGlint(player, k);
+    drawSound(player, def as BowDef, k);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
@@ -351,7 +387,7 @@ export const piercingShot: InstantSkill = {
           from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
         burst(proj.pos, { count: 8, color: 0xd3bf8d, speed: 2.4, life: 0.22, size: 0.07 });
         debris(proj.pos, { count: 3, color: 0x6a4a2a, speed: 2, size: 0.05, life: 0.5 });
-        sfx.boltHit();
+        sfx.arrowHit(full ? 1.3 : 0.7 + 0.4 * pull, true);
       },
     });
     // its line through the pack, a streak behind the arrow from the bow, fading once it's down
@@ -370,6 +406,7 @@ export const piercingShot: InstantSkill = {
       },
       dispose() { G.scene.remove(trace); mat.dispose(); },
     });
-    if (full) sfx.pierce(); else sfx.bow();
+    sfx.lancewood(pull, full);
+    reloadSound(player, def.castTime);
   },
 };

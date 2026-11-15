@@ -1131,6 +1131,32 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  heard: {
+    help: 'the sounds each skill plays as its key is held as a player holds it (a drawn shot to full, a channel for '
+      + 'seconds, or --hold), at foes stood where it strikes: every sound the game asks for caught, its name, what it '
+      + 'was given and when from the press, a held sound\'s start and stop; a skill that plays nothing, a held sound '
+      + 'never stopped and a sound the skill is known to play missing are problems (heard nockShot,arrowRain --class '
+      + 'ranger); what each sounds like is sound\'s',
+    argument: 'skills',
+    options: {
+      hold: { kind: 'number', usage: 's', help: 'how long each skill\'s key is held (else as a player holds it)' },
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome he stands in (the lobby\'s by default): an arrow glances off the crypt\'s stone floor and '
+          + 'sticks in the forest\'s earth',
+      },
+      awake: {
+        kind: 'switch',
+        help: 'the foes left awake once risen (dazed otherwise): they come at the hero, or at his lure and strike it '
+          + '(heard strawman --awake: its blows)',
+      },
+      canary: { kind: 'switch', help: 'plant the fault the checks must catch: a held sound started and never stopped' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   hits: {
     help: 'each skill\'s blows as they land: foes stood dazed where it strikes (as death stands them), living past '
       + 'every blow, and it cast at them as the player casts it, every hit caught as it lands (a blow: the hits within '

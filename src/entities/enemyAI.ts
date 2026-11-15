@@ -148,7 +148,7 @@ export const FX = {
   /** a blow landing on a lure (combat/lures.ts) */
   lureHit(x: number, z: number) {
     lureAt(x, z)?.struck();
-    sfx.thud();
+    sfx.strawHit();
   },
   summon(x: number, z: number, color: number) {
     shockwave({ x, z }, { color, intensity: 3, from: 1, to: 8, life: 0.8 });

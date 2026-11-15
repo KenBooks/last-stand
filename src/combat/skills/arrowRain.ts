@@ -20,7 +20,7 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW } from '../../entities/models/bow';
 import { clamp, rand, smooth } from '../../util';
-import { arrowBlow, arrowMat, arrowMesh, intoGround, intoProp, intoFoe, intoWater, inWater, FWD, streakGeo, streakMat } from './ranger';
+import { arrowBlow, arrowMat, arrowMesh, intoGround, intoProp, intoFoe, intoWater, inWater, fetchSound, reloadSound, FWD, streakGeo, streakMat } from './ranger';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -39,6 +39,8 @@ const PITCH = 0.45, SPLIT_H = 5.5, RISE = 0.4;
 /** how far apart a shower's arrows leave the split (s, all of them within it), how they come down (m/s at the split,
  *  gathering speed at m/s²: slow out of the burst, so the split is seen) */
 const SPREAD = 0.12, FALL_V0 = 6, FALL_A = 45;
+/** a shower's fall from the split to the floor under it (s) */
+const FALL_TIME = (Math.sqrt(FALL_V0 * FALL_V0 + 2 * FALL_A * SPLIT_H) - FALL_V0) / FALL_A;
 /** the most arrows in the air at once from one rain (two showers) */
 const MAX_FALLING = 64;
 /** how fast the area follows the aim (m/s) */
@@ -64,6 +66,8 @@ interface RainState {
   gone: boolean;
   /** the foes that have seen it coming (each judged once a channel: entities/evade.ts) */
   judged: Set<Enemy>;
+  /** the bow's creak as the volley under way is drawn, until it's loosed (the archer's own ears alone) */
+  hush?: () => void;
 }
 
 /** a streak's longest (m) */
@@ -92,7 +96,7 @@ function loose(s: RainState): void {
   const mesh = arrowMesh(); mesh.position.copy(p0); mesh.quaternion.setFromUnitVectors(FWD, u);
   G.scene.add(mesh);
   s.rising.push({ mesh, p0: p0.clone(), c: p0.clone().addScaledVector(u, p0.distanceTo(p1) * 0.55), p1, t: 0 });
-  sfx.bow();
+  sfx.volley();
 }
 
 /** It splits into its shower: from the split, each arrow to a spot anywhere in the area as it is now, all of them leaving
@@ -100,7 +104,8 @@ function loose(s: RainState): void {
 function split(s: RainState, at: THREE.Vector3): void {
   burst(at, { count: 26, color: LEAF, speed: 4, up: 0, life: 0.4, size: 0.1, gravity: 1, drag: 3 });
   burst(at, { count: 8, color: 0xf3f0d0, speed: 1.5, up: 0, life: 0.25, size: 0.16, gravity: 0, drag: 4 });
-  sfx.split();
+  // (heard whistling down until it lands: its fall from the split, and half its arrows' spread)
+  sfx.split(FALL_TIME + SPREAD / 2);
   const R = s.def.radius, arrows: Falling[] = [];
   for (let i = 0; i < s.def.missiles; i++) {
     const a = rand(0, Math.PI * 2), d = R * Math.sqrt(Math.random());
@@ -138,6 +143,7 @@ const skill: ChannelSkill<RainState> = {
     const q = player.cls.quiver;
     const s: RainState = { player, def, center: aimOf(player, def, new THREE.Vector3()), cyc: 0, loosed: false,
       fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false, judged: new Set() };
+    if (s.fetch) fetchSound(player, s.fetch, 1);
     // the area on the floor, and the showers' arrows as they fall (one instanced mesh)
     const ringMat = additive(LEAF, 1.2, 0), fillMat = additive(LEAF, 0.35, 0);
     const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 1, 128);
@@ -191,13 +197,12 @@ const skill: ChannelSkill<RainState> = {
               hitEnemy(hit, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
               intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
-              sfx.boltHit();
+              sfx.arrowHit(0.8);
               sh.arrows.splice(i, 1);
               continue;
             }
             if (inWater(_a)) {
               intoWater(_a, vel);
-              if (Math.random() < 0.3) sfx.thud();
               sh.arrows.splice(i, 1);
               continue;
             }
@@ -205,14 +210,12 @@ const skill: ChannelSkill<RainState> = {
             if (prop && !intoProp(prop, _a, vel)) (f.past ??= new Set()).add(prop);
             else if (prop) {
               hurtPropsIn(player, _a.x, _a.z, 0.3, PROP_DAMAGE.bolt);
-              if (Math.random() < 0.3) sfx.thud();
               sh.arrows.splice(i, 1);
               continue;
             }
             if (along >= f.len) {
               intoGround(f.to.clone(), vel);
               debris(f.to, { count: 3, color: 0x4a3a28, speed: 1.4, size: 0.07, life: 0.5 });
-              if (Math.random() < 0.3) sfx.thud();
               hurtPropsIn(player, f.to.x, f.to.z, 0.3, PROP_DAMAGE.bolt);
               sh.arrows.splice(i, 1);
               continue;
@@ -247,10 +250,11 @@ const skill: ChannelSkill<RainState> = {
     const sp = pace(player), D = DRAW / sp, A = AFTER / sp;
     s.cyc += dt;
     if (s.fetch && !s.loosed && s.cyc >= s.fetch) player.nocked = 1;
-    if (!s.loosed && s.cyc >= s.fetch + D) { s.loosed = true; player.nocked = 0; loose(s); }
+    if (!s.loosed && !s.hush && s.cyc >= s.fetch && player.local && !player.quiet) s.hush = sfx.bowDraw(s.fetch + D - s.cyc, 0);
+    if (!s.loosed && s.cyc >= s.fetch + D) { s.loosed = true; player.nocked = 0; s.hush?.(); s.hush = undefined; loose(s); reloadSound(player, AFTER); }
     if (s.loosed && s.cyc >= s.fetch + D + A) { s.cyc -= s.fetch + D + A; s.fetch = 0; s.loosed = false; player.nocked = 1; }
   },
-  stop(_player, _def, s) { s.done = true; },
+  stop(_player, _def, s) { s.done = true; s.hush?.(); s.hush = undefined; },
   pose(player, _def, s, action) {
     const sp = pace(player), D = DRAW / sp, A = AFTER / sp, c = s.cyc - s.fetch;
     // (as a shot is posed: the hand at the quiver first, then the draw, then what follows the loose)
