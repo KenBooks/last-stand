@@ -12,6 +12,7 @@ import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
+import { runsEnds } from './coopEnds.mjs';
 import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
 import { OUT } from './paths.mjs';
 
@@ -598,6 +599,9 @@ export async function runCoop(side, options) {
     throw labError('coop: colours runs alone, without combat');
   }
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
+  if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
+    throw labError('coop: ends runs alone, on a pair (no --party)');
+  }
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -629,6 +633,10 @@ export async function runCoop(side, options) {
       lines.push(`canary: the host told no guest readies ${caught ? 'caught' : 'went unseen'}`);
       if (!caught) problems.push('coop: the canary\'s wave without the guest went unseen');
       else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(SLOW_GUEST_CANARY)));
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'ends') {
+      problems.push(...await runsEnds(pair, callPage, lines, { tags: PARTY_TAGS.slice(0, 2), canary, pictures }));
+      return { text: lines.join('\n'), problems };
     }
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);

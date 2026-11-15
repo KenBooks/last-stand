@@ -16,6 +16,15 @@ export const isHost = (): boolean => role.current === 'host';
 /** The guests a host started a run with that aren't in it yet (still readying it: net/session.ts), by name. */
 export const readying = { guests: [] as string[] };
 
+/**
+ * Whether this game, its own player out of the run, still runs the fight for partners playing on: the host's, until
+ * the run is over. It can't go back to the lobby before them (it did, from the pause menu's Leave the run held a
+ * second time: the guests' fight stopped where it stood, no wave to come and no end to send them back).
+ */
+export const runsOthersFight = (): boolean =>
+  role.current === 'host' && G.mode === 'run' && !!G.run && G.run.phase !== 'over' && !G.player.inRun
+  && G.players.some((p) => !p.local && p.inRun);
+
 /** This game runs the world: always in the lobby (each practises on its own dummies), in a run unless a guest. */
 export const simulates = (): boolean => G.mode === 'menu' || role.current !== 'guest';
 

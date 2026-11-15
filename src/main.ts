@@ -98,7 +98,7 @@ import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun, sendDuelStart } from './net/session';
-import { isCoop, isGuest, isHost, simulates } from './net/role';
+import { isCoop, isGuest, isHost, runsOthersFight, simulates } from './net/role';
 import { updateChat } from './ui/chat';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
@@ -467,6 +467,8 @@ let cameThrough: (typeof BIOME_IDS)[number] | null = null;
 
 /** the last run was a duel: the hero comes back by the weapons rack, not out of a portal */
 let fromDuel = false;
+/** how far apart a party's heroes come out of a portal, side by side (m: four fit well within the way's gap) */
+const EXIT_APART = 1.2;
 
 /** The lobby. `keepSummary`: a co-op run's summary shown as it ended stays over it until closed (`checkRunOver`). */
 function enterMenu(keepSummary = false) {
@@ -498,7 +500,12 @@ function enterMenu(keepSummary = false) {
     faceCamera(facing);
   } else if (VILLAGE && cameThrough) {
     const exit = G.arena.village.exits[cameThrough];
-    G.player.place(exit.at, exit.facing);
+    // (a party side by side across the way, by slot: each game put its hero on the one spot, all standing in one another)
+    const beside = isCoop() ? (G.player.slot - (COOP.maxPlayers - 1) / 2) * EXIT_APART : 0;
+    const at = exit.at.clone();
+    at.x += Math.cos(exit.facing) * beside;
+    at.z -= Math.sin(exit.facing) * beside;
+    G.player.place(at, exit.facing);
     faceCamera(exit.facing);
   }
   G.player.sandbox = true;   // lobby: try skills freely in the yard while a panel is up
@@ -778,6 +785,8 @@ function abandon() {
   openPause(false);
   // (a duel left: a fighter's side gives the match up, game/duel.ts)
   if (G.mode === 'run' && G.run?.duel) { quitDuel(); return; }
+  // (the host out of the run, a guest playing on: his game runs their fight, and goes back with them at its end)
+  if (runsOthersFight()) return;
   if (!isCoop() || G.mode !== 'run' || !G.run || G.run.phase === 'over' || !G.player.inRun) { toMenu(); return; }
   if (isGuest()) sendControl({ t: 'abandon' });
   if (G.player.alive) G.player.die();

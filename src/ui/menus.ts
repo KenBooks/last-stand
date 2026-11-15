@@ -42,7 +42,7 @@ import { initBeta, renderBetaOptions } from './beta';
 import { whenWarm } from '../game/warm';
 import { heldHour, holdHour, hourNow } from '../game/clock';
 import { READYING } from './readying';
-import { isCoop, isGuest, isHost } from '../net/role';
+import { isCoop, isGuest, isHost, runsOthersFight } from '../net/role';
 import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
@@ -1353,13 +1353,17 @@ export function showPause(v: boolean): void {
     $('.hour-row').classList.toggle('hidden', G.arena.place !== 'village' || G.mode === 'run');
     renderHourOption();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
-    $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
+    // (nor for a host out of it already whose partners play on: his game runs their fight until it ends)
+    $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run' || runsOthersFight());
     // (the village's Install is the lobby's: on a phone held sideways its row took 38 px of the pages' cell in a run;
     // the lobby without the village has it on its own panel)
     document.querySelector('#pause .pb-links')?.classList.toggle('hidden', G.mode === 'run');
     // (short beside the title: what it costs is its tooltip)
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run' : 'Abandon run';
     $('.pause-note').classList.toggle('hidden', !isCoop() || G.mode !== 'run');
+    $('.pause-note').textContent = runsOthersFight()
+      ? 'Your partners fight on: you go back to the sanctuary with them when the run ends.'
+      : 'Playing together, the game goes on: your hero stands still until you resume.';
   }
   $('#pause').classList.toggle('hidden', !v);
 }

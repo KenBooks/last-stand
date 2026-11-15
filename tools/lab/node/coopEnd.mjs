@@ -45,7 +45,7 @@ const AIM_KEY = '3';
  * Runs frames on every page until `done(states)` (each page's state, the host's first), at most `limit`. Returns the
  * last states and whether it came, never throwing: a game that doesn't is a problem to say, not a failed command.
  */
-async function waitFor(pair, done, limit) {
+export async function waitFor(pair, done, limit) {
   let states = [];
   for (let frames = 0; frames < limit; frames += pair.turnFrames) {
     states = await pair.turn(pair.turnFrames);
