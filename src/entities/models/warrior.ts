@@ -32,7 +32,7 @@ import {
 } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import { FANGS, HEAVE } from '../../data/balance';
-import { FIST, fistGuard, fistPunch, fistHeave, fistPound } from './warriorFists';
+import { FIST, fistGuard, fistPunch, fistHeave, fistPound, fistWhirl } from './warriorFists';
 import {
   TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_FORE_ROW, ONE_BACK_CUT, ONE_BACK_OUT,
   CUT_TURN, TWO_CUT_TURN, DUAL_CUT, DUAL_CUT_TURN,
@@ -1871,7 +1871,7 @@ export function* warriorSteps(): ModelSteps {
     // (a move begun from the shoulder carry, `shouldered` still last frame's, fades in slower: in 0.14 s Power Strike
     // flicked the axe off the shoulder into its raise, its tip's way turning 37 cm in a frame)
     if (began) fade.cut(chain && alternates(raw.name) ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : 0.14, legsFade);
-    else if (ended && !inTail) { fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
+    else if (ended && !inTail) { fade.cut(lastName === 'spin' || lastName === 'whirl' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
     if (raw) backOut = false;
     // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
     // a third of a second, from its rest sooner: faded in 0.14 s, it was still fading as the blow came, and an axe's
@@ -2344,6 +2344,17 @@ export function* warriorSteps(): ModelSteps {
       } else if (a.name === 'pound') {
         // Groundbreaker: both fists overhead, then down onto the floor ahead
         aw = 1; fistPound(j, k, fp); feet = WIDE_FEET;
+      } else if (a.name === 'whirl') {
+        // Living Flail: turning on both feet as Steel Tempest does, the arms out before him round what they swing
+        const pivots = a.under?.name !== 'charge';
+        aw = 1; legOwn = pivots ? 1 : 0;
+        j.body.rotation.y += a.turn ?? 0;
+        fistWhirl(j, k, fp);
+        if (pivots) {
+          j.thighL.rotation.set(-0.35, 0, 0.22); j.thighR.rotation.set(-0.35, 0, -0.22);
+          j.kneeL.rotation.x = 0.6; j.kneeR.rotation.x = 0.6; j.ankleL.rotation.set(-0.25, 0, -0.2); j.ankleR.rotation.set(-0.25, 0, 0.2);
+          j.body.position.y += -0.1;
+        }
       } else if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
         aw = w;
@@ -2357,7 +2368,7 @@ export function* warriorSteps(): ModelSteps {
     // pump), let down to hang once the fight has left him
     fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP ? 1 : 0, 6, dt) : 0;
     if (bare && !a && st.dead < 0) fistGuard(j, fistsUp * (1 - runK), t, fp);
-    const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : fistsUp;
+    const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' || a?.name === 'whirl' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : fistsUp;
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)

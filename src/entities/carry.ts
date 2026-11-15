@@ -14,7 +14,12 @@ import type { Player } from './player';
 /** A foe carried before a charge: by whom, the charge's way (along the ground, its length 1), until when by the clock
  *  (`G.time`), the dash it rides as its game plays it (none seen yet: by the clock alone), and how hard it is thrown
  *  as it's let go, as a multiple of a charge's throw (`carryOf`). */
-export interface Carry { by: Player; way: XZ; until: number; dash: Player['dash']; power: number }
+export interface Carry {
+  by: Player; way: XZ; until: number; dash: Player['dash']; power: number;
+  /** swung round its hero by its feet (Living Flail): how far it's tipped back (rad, its top away from him) and how
+   *  high it's held (m), set by each game's own tick of the skill */
+  swung?: { tilt: number; lift: number };
+}
 
 /**
  * A carry along `way`, whose length says how hard its throw is: 1 a charge's, more a harder one (Heave's). Co-op
@@ -37,6 +42,11 @@ export function carrying(carry: Carry): boolean {
   if (!dash) return G.time < carry.until;
   return carry.by.dash === dash && dash.t < dash.dur && G.time < carry.until + CARRY.late;
 }
+
+/** A carry given this long or less (s) is let go at once (`Enemy.carry`): a foe swung, as its hero lets go. More than
+ *  nothing, as co-op's report of a carry with no time is no carry at all (`net/sync.ts`): given none, the host never
+ *  heard a guest let go, and threw the foe when its own carry ran out, half a second on and another way. */
+export const LET_GO = 0.02;
 
 /** A foe thrown through the air: its height over the ground and its rise (m, m/s), its way along the ground (m/s),
  *  and how long it's been up and will be (s). */

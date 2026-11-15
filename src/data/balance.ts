@@ -215,3 +215,11 @@ export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
  *  hands; and how hard it throws, as a multiple of a charge's throw (from play: "lets make the push lauch them
  *  further away"). */
 export const HEAVE = { step: 0.24, hold: 0.36, throw: 1.75 };
+
+/** Living Flail (combat/skills/livingFlail): the foe he can take up is no bigger than `lifts` (m, its radius: a
+ *  Cinder Brute's and a Barkhide Hulk's is 1) and within `reach` of his hands (m past its own size); it's swung
+ *  `arm` m clear of his body, tipped back `tilt` rad and `lift` m off the ground, its carry kept up every `renew` s
+ *  for `carry` s, and thrown `throw` times as hard as a charge throws as he lets go. His fists alone reach `fists` m
+ *  and strike `bare` of a strike with a foe in hand, which is what the foe swung takes too. Seized, it's drawn into
+ *  his hands over `takes` s. */
+export const FLAIL = { lifts: 0.7, reach: 1.1, arm: 0.2, tilt: -1.25, lift: 0.95, renew: 0.25, carry: 0.6, throw: 1.75, fists: 1.7, bare: 0.4, takes: 0.25 };

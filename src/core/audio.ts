@@ -1271,6 +1271,17 @@ function heaveLand(): void {
   v.start(); v.stopAt(v.t + 1);
 }
 
+/** Living Flail going round once: the air a body swung at arm's length moves (`weight` 1), low and broad, or his
+ *  arms alone (0), lighter and higher. */
+function flailAir(weight: number): void {
+  const v = voice(0, 0.12);
+  const k = 0.9 + Math.random() * 0.2, top = weight ? 620 : 1100, peak = weight ? 0.3 : 0.16;
+  const across = crossing(v, 0.5, -0.5, 0, 0.3);
+  const air = glide(v, 'lowpass', 0.8, [[0, 200 * k], [0.14, top * k], [0.32, 180 * k]]);
+  v.loop(air); air.connect(drive(3)).connect(swellAt(v, 0, 0.14, peak, 0.24, across));
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
 /** Groundbreaker: both fists raised and brought down `lead` s in. The air drawn up with the arms, then the floor
  *  breaking under them: its smash, the earth's weight, the ground's answer and the stones it threw coming down. */
 function groundPound(lead: number): void {
@@ -1957,6 +1968,8 @@ export const sfx = {
   heave: guard((step: number) => { heaveStep(step); }),
   heaveGrab: guard(() => { heaveGrab(); }),
   heaveLand: guard(() => { heaveLand(); }),
+  /** Living Flail going round once, a foe in hand (1) or none (0) */
+  flailAir: guard((weight: number) => { flailAir(weight); }),
   /** Groundbreaker: the fists raised and brought down `lead` s on */
   pound: guard((lead: number) => { groundPound(lead); }),
   /** a prop chipped by a blow: timber (`wood`, `shroom`) or stone */

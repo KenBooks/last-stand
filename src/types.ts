@@ -61,7 +61,7 @@ export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
 /** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
  *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | 'punch' | 'heave' | 'pound' | null;
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | 'punch' | 'heave' | 'pound' | 'whirl' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {

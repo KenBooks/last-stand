@@ -9,7 +9,7 @@ import { reachOf, type Reach } from './models/hulls';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { AI, fx, lured } from './enemyAI';
-import { carrying, carryOf, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
+import { carrying, carryOf, flown, HAND_OFF, LET_GO, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
 import { lures, type Lure } from '../combat/lures';
 import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
@@ -369,6 +369,14 @@ export class Enemy {
   carry(by: Player, way: XZ, seconds: number): void {
     if (!this.alive || this.def.dummy) return;
     this.carried = carryOf(by, way, G.time + seconds);
+    // (given no time to speak of, let go at once: thrown from before its hero on that way, as far from him as this game had it.
+    // A foe swung round him, Living Flail's, is at another point of its turn on each game as it's let go, and thrown
+    // from there it came down 1 to 2 m apart on a guest's screen and the host's, the guest's copy sliding over after)
+    if (seconds <= LET_GO) {
+      const c = this.carried;
+      const out = Math.max(Math.hypot(this.pos.x - by.pos.x, this.pos.z - by.pos.z), by.radius + this.radius + CARRY.gap);
+      this.pos.x = by.pos.x + c.way.x * out; this.pos.z = by.pos.z + c.way.z * out;
+    }
     this.tossed = null;
     this.knock.set(0, 0, 0);
     this.daze(seconds);
@@ -379,9 +387,19 @@ export class Enemy {
   toss(vx: number, vz: number, vy: number): void {
     // (a copy its own game carried throws itself as the host does: the host's throw of it comes after)
     if (!this.alive || (this.net && (this.carried || this.ownFor >= 0))) return;
+    // (it flies on from the height it's drawn at: a foe swung off the ground, Living Flail's, let go; by what each
+    // game had set on its carry, the host threw a guest's from the floor and it came down 1.5 m short of the guest's)
+    const up = this.heldUp();
     this.carried = null;
     this.tossed = tossOf(vx, vz, vy);
+    this.tossed.y = up;
     this.cancelAction();
+  }
+
+  /** How high over the ground it's held as drawn (m: a swung foe's lift; 0 on its feet). */
+  private heldUp(): number {
+    const up = this.obj.position.y - groundHeight(this.pos.x, this.pos.z);
+    return up > 0.05 ? up : 0;
   }
 
   /** Carried before a charge or flying off it: placed by it alone, thinking of nothing. */
@@ -416,7 +434,7 @@ export class Enemy {
       this.carried = null;
       this.ownFor = 0;
       const { vx, vz, vy } = throwOf(this.pos, this.radius, c);
-      if (!this.hero && !this.boss) this.tossed = tossOf(vx, vz, vy);
+      if (!this.hero && !this.boss) { const up = this.heldUp(); this.tossed = tossOf(vx, vz, vy); this.tossed.y = up; }
     }
     if (this.ownFor < 0) return false;
     this.ownFor += dt;
@@ -620,7 +638,9 @@ export class Enemy {
     this.obj.position.x = this.pos.x;
     this.obj.position.z = this.pos.z;
     const ground = groundHeight(this.pos.x, this.pos.z);
+    const swung = this.carried?.swung;
     if (this.tossed) this.obj.position.y = ground + this.tossed.y;
+    else if (swung) this.obj.position.y = damp(this.obj.position.y, ground + swung.lift, 14, G.dt);
     else if (!this.spawning) {
       // (ducked, drawn down into the ground but for its top: entities/evade.ts)
       this.obj.position.y = damp(this.obj.position.y + this.sunk, ground, 12, G.dt);
@@ -628,7 +648,8 @@ export class Enemy {
       this.obj.position.y -= this.sunk;
     }
     // (thrown, tipped back about its own side as it flies: turned first, then tipped)
-    this.model.root.rotation.set(this.tossed ? tipOf(this.tossed) : 0, this.facing, 0, 'YXZ');
+    // (swung by its feet, held tipped back as far)
+    this.model.root.rotation.set(this.tossed ? tipOf(this.tossed) : swung ? damp(this.model.root.rotation.x, swung.tilt, 14, G.dt) : 0, this.facing, 0, 'YXZ');
     // the leg IK only where its feet are seen: in view and (on Low) near the player
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
     const q = QUALITY[qualityLevel()];

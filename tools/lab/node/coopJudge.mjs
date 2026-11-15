@@ -546,6 +546,26 @@ export function judgeRush(host, guest) {
   })).filter((foe) => foe.here?.carried);
 }
 
+/**
+ * The guest's swing (Living Flail): the foe it took up on its own screen, whether the host's screen carried it too
+ * and each threw it as it was let go.
+ */
+function describeFlail(host, guest) {
+  const swung = judgeRush(host, guest);
+  const line = `the guest's swing took up ${swung.length} foe(s) on its screen, ` +
+    `${swung.filter((foe) => foe.there?.carried).length} carried on the host's, thrown ` +
+    `${swung.filter((foe) => foe.here.thrown).length} on its screen and ` +
+    `${swung.filter((foe) => foe.there?.thrown).length} on the host's`;
+  const problems = [];
+  if (swung.length !== 1) problems.push(`the guest's swing took up ${swung.length} foes on its screen, not one`);
+  for (const foe of swung) {
+    if (!foe.there?.carried) problems.push(`foe ${foe.id}, swung on the guest's screen, wasn't carried on the host's`);
+    if (!foe.here.thrown) problems.push(`foe ${foe.id} wasn't thrown on the guest's screen`);
+    if (foe.there && !foe.there.thrown) problems.push(`foe ${foe.id} wasn't thrown on the host's screen`);
+  }
+  return { line, problems };
+}
+
 function describeRush(host, guest) {
   const met = judgeRush(host, guest);
   const ends = (screen) => met.map((foe) => (foe[screen] ? `${foe[screen].ended.toFixed(2)} m` : 'unshown'));
@@ -903,6 +923,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));
   if (name === 'staffs') add(describeStaffs(host, guest));
   if (name === 'rush' || name === 'strike' || name === 'heave') add(describeRush(host, guest));
+  if (name === 'flail') add(describeFlail(host, guest));
   if (name === 'strike') add(describeStrike(host, guest));
   if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));
   if (name === 'ghosts') add(describeGhosts(host, guest, frameMs));

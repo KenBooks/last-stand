@@ -56,6 +56,14 @@ const warrior: ClassDef = {
       icon: { glyph: '⤴', color: '#e8c89a' },
     },
     {
+      key: '1', impl: 'livingFlail', name: 'Living Flail',
+      desc: 'Turn on the spot with your arms out. The first foe your hands meet is seized by the legs and swung round you as a club, striking everything in its reach; let go and it flies off. With no foe in hand your fists strike what stands close. Bosses, elites and foes too big to lift cannot be taken up. Drains Energy while held.',
+      tags: ['physical'], cost: 28, cooldown: 0, castTime: 0, channel: true,
+      damage: 140, radius: 3, moveMult: 0.75, spin: 11,
+      needs: 'bare',
+      icon: { glyph: '↻', color: '#d8c8b0' },
+    },
+    {
       key: '3', impl: 'groundbreaker', name: 'Groundbreaker',
       desc: 'Raise both fists and drive them into the ground before you. The floor breaks, and every foe round the blow is struck and thrown back.',
       tags: ['physical'], cost: 35, cooldown: 6, castTime: 0.75, fireAt: 0.62,   // (on Power Strike's key: the fists' heavy blow)
@@ -106,7 +114,7 @@ const warrior: ClassDef = {
       desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held. A two-handed weapon spins slower and hits harder.',
       tags: ['physical'], cost: 30, cooldown: 0, castTime: 0, channel: true,
       damage: 150, radius: 2.9, moveMult: 0.8, spin: 15,
-      needs: 'armed',
+      needs: 'armed', fallback: { bare: 'livingFlail' },
       // (as Rending Cleave's swings: a great weapon's weight slows it as much, the same damage a second)
       styles: { twoHanded: { spin: 10.5 } },
       icon: { glyph: '✺', color: '#e8eef8' },

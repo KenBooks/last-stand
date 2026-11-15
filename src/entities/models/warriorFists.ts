@@ -149,3 +149,17 @@ export function fistPound(j: Joints, k: number, eyes: boolean): void {
   place(j, true, _far.set(_mid.x + x, _mid.y + y, _mid.z + z), w);
   place(j, false, _far.set(_mid.x - x, _mid.y + y, _mid.z + z), w);
 }
+
+/**
+ * Living Flail: both arms out before him at the hips' height, the hands together round what they swing (or reaching
+ * for it), the trunk leaning back against its weight as a hammer thrower's does. The body's turn and the legs under
+ * it are the model's own (Steel Tempest's pivot).
+ */
+export function fistWhirl(j: Joints, k: number, eyes: boolean): void {
+  const w = smooth(ramp(k, 0, 1));
+  if (!eyes) { j.spine.rotation.x += -0.2 * w; j.chest.rotation.x += -0.06 * w; j.neck.rotation.x += 0.12 * w; }
+  between(j, _mid);
+  const y = eyes ? -0.3 : -0.22, z = eyes ? 0.55 : 0.52;
+  place(j, true, _far.set(_mid.x + 0.07, _mid.y + y, _mid.z + z), w);
+  place(j, false, _far.set(_mid.x - 0.07, _mid.y + y, _mid.z + z), w);
+}

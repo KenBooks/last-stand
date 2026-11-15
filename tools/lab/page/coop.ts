@@ -477,6 +477,26 @@ function heaveInput(frame: number): Frame {
   return key === 'mouse2' ? { m2: true, aim } : key === 'mouse0' ? { m0: true, aim } : { keys: [key], aim };
 }
 
+/** how long the guest holds its swing in `flail` (frames) */
+const FLAIL_HELD = 70;
+
+/** The guest in `flail` (#400): its hands emptied, it holds Living Flail from `RUSH_AT`, taking up the foe beside
+ *  it and swinging it at the other, and lets go `FLAIL_HELD` frames on. */
+function flailInput(frame: number): Frame {
+  const hero = G.player;
+  const [x, z] = rushAhead(HEAVE_AHEAD);
+  const aim = new THREE.Vector3(x, 0, z);
+  if (frame === 0) {
+    hero.gear = { ...hero.gear, weapon: null, twoHanded: false, shield: false, offWeapon: null };
+    hero.fitToGear();
+    hero.model.setGear?.(hero.gear);
+  }
+  const key = keyOf('livingFlail');
+  if (!key || frame < RUSH_AT || frame >= RUSH_AT + FLAIL_HELD) return { aim };
+  if (frame === RUSH_AT) hero.energy = hero.stats.maxEnergy;
+  return key === 'mouse2' ? { m2: true, aim } : key === 'mouse0' ? { m0: true, aim } : { keys: [key], aim };
+}
+
 /** `staffs` (#402): the foes the guest burns and the frames of its two halves. The guest holds a fire staff and
  *  casts at the foes until `STAFFS.mend`, then a healing staff, its beam held on the host from `STAFFS.beam`. */
 const STAFFS = { foes: [[14, 17], [16, 16.5], [15, 15.5]] as XZ[], mend: 300, beam: 320, hostLife: 800, hostHurt: 300 };
@@ -707,6 +727,20 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [RUSH_AT + 12, RUSH_AT + 32, RUSH_AT + 70],
     hostInput: () => ({}),
     guestInput: heaveInput,
+  },
+  flail: {
+    about: 'the guest, a warrior with both hands empty, takes up a dazed foe, swings it round at another and lets it go, the host standing off',
+    frames: 240,
+    host: [-4, 22],
+    guest: RUSH_FROM,
+    foes: [
+      { type: 'thornling', at: rushAhead(1.3), dazed: true },
+      { type: 'mossback', at: rushAhead(-2.4), dazed: true },
+    ],
+    skill: 'bullRush',
+    pictures: [RUSH_AT + 30, RUSH_AT + 60, RUSH_AT + FLAIL_HELD + 20],
+    hostInput: () => ({}),
+    guestInput: flailInput,
   },
   ping: {
     about: 'the guest pings a foe and a spot with Left Shift, then a foe held first over the floor, then a spot by a finger held on the minimap, and the '
