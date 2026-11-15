@@ -1820,6 +1820,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  photo: {
+    each(side, options) {
+      return side.command('photo', { canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('photo'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   behind: {
     each(side, options) {
       return side.command('behind', { canary: Boolean(options.canary) });

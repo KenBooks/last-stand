@@ -12,7 +12,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import {
-  WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU, setSceneSamples,
+  WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU,
+  setBloomStrengthOnWebGPU, setSceneSamples,
   setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
 } from './webgpu';
 import { G } from '../state';
@@ -111,6 +112,17 @@ export function setBloomShare(share: number): void {
   leaveBloomOut();
   if (WEBGPU) setBloomShareOnWebGPU(share);
 }
+/** Bloom's strength (photo mode's, `core/photoLook.ts`; `BLOOM_STRENGTH` the game's own): its composite's uniform on
+ *  WebGL, its node's on WebGPU, so nothing compiles. */
+export function setBloomStrength(strength: number): void {
+  if (bloomPass) bloomPass.strength = strength;
+  if (WEBGPU) setBloomStrengthOnWebGPU(strength);
+}
+/** Whether bloom is drawn now: Very low draws none, and a harness may hold it off. */
+export const bloomDrawn = (): boolean => !bloomHeld && bloomShare > 0;
+/** The grade's uniforms as the pass holds them (its own copies of `GradeShader`'s): photo mode's look sets them. */
+export const gradeUniforms = (): typeof GradeShader.uniforms => grade.uniforms as unknown as typeof GradeShader.uniforms;
+
 /** The pixels bloom's passes draw into its own targets a frame (the lab's): its bright pass, each level's blur
  *  across and down, its composite. (Its blend over the frame is the scene's size at any share.) */
 export function bloomPixels(): number {
@@ -146,6 +158,11 @@ const SCENE_READ = VILLAGE ? /* glsl */`
   }`;
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
+/** bloom's strength as the game draws it (three's `UnrealBloomPass.strength`, a uniform of its composite) */
+export const BLOOM_STRENGTH = 0.85;
+/** photo mode's focus blur at its most: the disc's radius, a share of the frame's height, and its taps */
+const PHOTO_BLUR_MOST = 0.014;
+const PHOTO_BLUR_TAPS = 24;
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -159,6 +176,11 @@ const GradeShader = {
     uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
     uCap: { value: HI_CAP - HI_KNEE },
     uHdr: { value: 0 }, uPaper: { value: 1 }, uPeak: { value: 1 },
+    // photo mode's look (core/photoLook.ts), read only while it's on (`uPhoto`): neutral and left out otherwise
+    uPhoto: { value: 0 }, uExposure: { value: 1 }, uContrast: { value: 1 }, uSaturation: { value: 1 },
+    uFilterLo: { value: new THREE.Matrix3() }, uFilterHi: { value: new THREE.Matrix3() }, uFilterMix: { value: 0 },
+    uBlur: { value: 0 }, uFocusY: { value: 0.5 }, uFocusBand: { value: 0.1 },
+    uSceneTexel: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
@@ -167,9 +189,28 @@ const GradeShader = {
     uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
     uniform float uCap; uniform float uHdr; uniform float uPaper; uniform float uPeak;
     uniform sampler2D tBloom;
+    uniform float uPhoto; uniform float uExposure; uniform float uContrast; uniform float uSaturation;
+    uniform mat3 uFilterLo; uniform mat3 uFilterHi; uniform float uFilterMix;
+    uniform float uBlur; uniform float uFocusY; uniform float uFocusBand; uniform vec2 uSceneTexel;
     varying vec2 vUv;
     ${SCENE_READ}
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+    // photo mode's focus blur (a tilt-shift: the frame's depth isn't kept outside the village): the scene and its
+    // bloom read over a disc round the pixel, the wider the further it lies above or below the band in focus
+    vec4 photoBlurred(vec2 uv) {
+      float away = max(abs(uv.y - uFocusY) - uFocusBand, 0.0);
+      float radius = uBlur * smoothstep(0.0, 0.3, away) * ${PHOTO_BLUR_MOST.toFixed(3)};
+      if (radius < uSceneTexel.y * 0.5) return sceneAt(tDiffuse, uv) + texture2D(tBloom, uv);
+      vec2 aspect = vec2(uSceneTexel.x / uSceneTexel.y, 1.0);
+      vec4 sum = vec4(0.0);
+      for (int i = 0; i < ${PHOTO_BLUR_TAPS}; i++) {
+        float r = sqrt((float(i) + 0.5) / ${PHOTO_BLUR_TAPS.toFixed(1)}) * radius;
+        float a = float(i) * 2.39996;
+        vec2 at = uv + vec2(cos(a), sin(a)) * r * aspect;
+        sum += sceneAt(tDiffuse, at) + texture2D(tBloom, at);
+      }
+      return sum / ${PHOTO_BLUR_TAPS.toFixed(1)};
+    }
     // the power of the light over the base that brings an area's average down to its target
     float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
     // and a pixel adapts to it as far as it's as bright as it: from half the area's average light up (a pixel much
@@ -178,12 +219,16 @@ const GradeShader = {
     float adaptAt(float avg, float target, float lum){ return mix(1.0, adapt(avg, target), smoothstep(${ADAPT_ALIKE[0].toFixed(2)}, ${ADAPT_ALIKE[1].toFixed(2)}, lum / max(avg, 1e-4))); }
     void main(){
       // the scene and bloom added over it (as its blend added it, at its composite's own pixels)
-      vec4 c = sceneAt(tDiffuse, vUv) + texture2D(tBloom, vUv);
+      vec4 c;
+      if (uPhoto > 0.5 && uBlur > 0.0) c = photoBlurred(vUv);
+      else c = sceneAt(tDiffuse, vUv) + texture2D(tBloom, vUv);
       // the eye adapts to a bright area, so a big effect doesn't wash out the view
       const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
       float lum = dot(c.rgb, LUM);
       float g = min(adaptAt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall, lum), adaptAt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge, lum));
       if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
+      // photo mode's exposure: the light as the eye adapted to it, before the highlights are compressed
+      if (uPhoto > 0.5) c.rgb *= uExposure;
       // glare (bloom's blurriest level): how large a bright spot is
       vec3 gl = texture2D(tGlare, vUv).rgb;
       float glare = max(gl.r, max(gl.g, gl.b));
@@ -200,6 +245,15 @@ const GradeShader = {
       float keep = smoothstep(${HUE_FROM.toFixed(2)}, ${HUE_TO.toFixed(2)}, m) * smoothstep(${GLARE_FROM.toFixed(2)}, ${GLARE_TO.toFixed(2)}, glare);
       c.rgb = mix(toneMapping(c.rgb), hue, keep);
       c = linearToOutputTexel(c);
+      // photo mode's contrast, saturation and colour filter, on the frame as shown (sRGB): the filter's shadows and
+      // highlights each by a matrix of their own (the cinematic look's teal and orange), mixed in by its strength
+      if (uPhoto > 0.5) {
+        vec3 p = (c.rgb - 0.5) * uContrast + 0.5;
+        float pl = dot(p, vec3(0.2126, 0.7152, 0.0722));
+        p = mix(vec3(pl), p, uSaturation);
+        vec3 tinted = mix(uFilterLo * p, uFilterHi * p, smoothstep(0.15, 0.75, pl));
+        c.rgb = max(mix(p, tinted, uFilterMix), 0.0);
+      }
       vec2 d = vUv - 0.5;
       float r = dot(d, d);
       float vig = 1.0 - smoothstep(0.12, 0.75, r * uVignette);
@@ -783,7 +837,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
   // Every pass reads the scene's target itself (`SCENE_READ`), cleaned and fogged as it reads it: the composer's own
   // buffers are read by none
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), BLOOM_STRENGTH, 0, 0.9);
   // each blur level's weight, tightest to widest (radius 0: used as they are). The widest levels spread a
   // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
   bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM_LEVELS;
@@ -1409,6 +1463,23 @@ const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THRE
 export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {} };
+/** whether the world's overlays are drawn over the frame (photo mode leaves them out: `showOverlays`) */
+let overlaysShown = true;
+/** The world's overlays (labels, names, bars, damage numbers) drawn over the frame, or left out (photo mode). */
+export function showOverlays(on: boolean): void { overlaysShown = on; }
+/**
+ * What takes the next frame as it's drawn (photo mode's picture, ui/photo.ts): called once with the canvas in the
+ * frame's own task, right after the post chain drew it and before anything is drawn over it, so the canvas still holds
+ * it (no `preserveDrawingBuffer`). That frame is graded for an SDR screen (in HDR the canvas holds extended sRGB).
+ */
+export const frameShot = { take: null as ((canvas: HTMLCanvasElement) => void) | null };
+/** The frame handed to the shot waiting for it, if one is. */
+function shotTaken(): void {
+  const take = frameShot.take;
+  if (!take) return;
+  frameShot.take = null;
+  take(gl.domElement);
+}
 
 /** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
  *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
@@ -1438,11 +1509,15 @@ export function render(): void {
   u.uPaper.value = hdr.paper;
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
+  // (a photo's frame graded for an SDR screen: the picture is saved as one)
+  if (frameShot.take) u.uHdr.value = 0;
+  u.uSceneTexel.value.set(1 / sceneRT.width, 1 / sceneRT.height);
   sunShadowInTurns();
   aimSight(G.camera);
   if (WEBGPU) {
     renderWebGPU();
-    overFrame.draw();
+    shotTaken();
+    if (overlaysShown) overFrame.draw();
     return;
   }
   // (its depth read back from above alone: in every other view no pixel reads it)
@@ -1458,7 +1533,8 @@ export function render(): void {
   gl.render(G.scene, G.camera);
   if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();
+  shotTaken();
   gpuMarks.mark('overlay');
-  overFrame.draw();
+  if (overlaysShown) overFrame.draw();
   presentHdr();
 }

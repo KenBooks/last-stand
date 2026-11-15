@@ -79,6 +79,7 @@ import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
 import type { SeamsOptions } from './seams';
 import type { LabelsOptions } from './labels';
+import type { PhotoOptions } from './photo';
 import type { BehindOptions } from './behind';
 import type { GuideOptions } from './guideOpen';
 import type { PosesOptions } from './poses';
@@ -166,6 +167,14 @@ export async function poses(lab: Lab, command: PosesOptions): Promise<Report> {
  *  problem. */
 export async function labels(lab: Lab, command: LabelsOptions): Promise<Report> {
   const { labels: follow } = await import('./labels');
+  return follow(lab, command);
+}
+
+/** `lab photo`: photo mode used as a player uses it in the village and both battlegrounds; the page's UI or the
+ *  world's overlays shown, the game going on, a look that compiled, a photo not saved as it should be, or a canary
+ *  missed, is a problem. */
+export async function photo(lab: Lab, command: PhotoOptions): Promise<Report> {
+  const { photo: follow } = await import('./photo');
   return follow(lab, command);
 }
 

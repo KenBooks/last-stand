@@ -92,7 +92,9 @@ async function overTheShoulder(lab: Lab, facing: number): Promise<void> {
 }
 
 /** The hero put at (x, z) on the village's ground, still, seen over the shoulder looking `look`'s way. */
-async function standInVillage(lab: Lab, [x, z]: readonly number[], facing: number, look = facing): Promise<void> {
+export async function standInVillage(
+  lab: Lab, [x, z]: readonly number[], facing: number, look = facing,
+): Promise<void> {
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
   await overTheShoulder(lab, look);
@@ -210,7 +212,7 @@ async function stash(lab: Lab): Promise<Pictured> {
 }
 
 /** A fight's scene: where, how seen, the skill cast and how long after its press it's pictured. */
-interface Fight {
+export interface Fight {
   biome: BiomeId;
   view: renderer.ViewMode;
   skill: string;
@@ -230,7 +232,7 @@ const ahead = (): THREE.Vector3 => new THREE.Vector3(Math.sin(G.player.facing), 
 
 /** The local hero's skill pressed and held for `held` frames, aimed `reach` m ahead of him, then let go for `after`
  *  more (a skill aimed by holding casts as it's let go). */
-async function castAhead(lab: Lab, skill: string, held: number, after: number, reach: number): Promise<void> {
+export async function castAhead(lab: Lab, skill: string, held: number, after: number, reach: number): Promise<void> {
   const hero = G.player;
   const { key } = skillNamed(skill);
   const aim = hero.pos.clone().add(ahead().multiplyScalar(reach));
@@ -241,10 +243,10 @@ async function castAhead(lab: Lab, skill: string, held: number, after: number, r
 }
 
 /** how far ahead of the hero a fight's skill is aimed (m: where `foesAhead` raises its foes) */
-const AIM_AHEAD = 7;
+export const AIM_AHEAD = 7;
 
 /** The hero in `fight`'s battleground, its foes risen ahead of him and the wave fought as a run fights it. */
-async function fightScene(lab: Lab, fight: Fight): Promise<void> {
+export async function fightScene(lab: Lab, fight: Fight): Promise<void> {
   G.arena.restoreProps();
   const { biome, view, at, zoom, facing = 0 } = fight;
   await standIn(lab, { biome, view, at, zoom, facing, rarity: 'legendary' } as never);
@@ -272,7 +274,7 @@ async function fought(lab: Lab, label: ShotName, fight: Fight): Promise<Pictured
 
 /** The skill a class's fight shows, by class. */
 const SHOWN_SKILL: Record<string, string> = { mage: 'Starfall', warrior: 'Rending Cleave', ranger: 'Briarflight' };
-const shownSkill = (): string => SHOWN_SKILL[G.player.cls.id] ?? G.player.cls.skills[0].name;
+export const shownSkill = (): string => SHOWN_SKILL[G.player.cls.id] ?? G.player.cls.skills[0].name;
 /** how each is cast for its picture: frames held, and frames from letting go to the picture (Starfall's crystals
  *  landing, the cleave's blow struck, the fan in flight) */
 const SHOWN_CAST: Record<string, { held: number; after: number }> = {
@@ -280,7 +282,7 @@ const SHOWN_CAST: Record<string, { held: number; after: number }> = {
   warrior: { held: 20, after: 0 },
   ranger: { held: 45, after: 6 },
 };
-const shownCast = (): { held: number; after: number } => SHOWN_CAST[G.player.cls.id] ?? { held: 20, after: 0 };
+export const shownCast = (): { held: number; after: number } => SHOWN_CAST[G.player.cls.id] ?? { held: 20, after: 0 };
 
 /** The Thornwood over the shoulder. */
 function forest(lab: Lab): Promise<Pictured> {

@@ -32,6 +32,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `coop`: two games playing together, a host's and a guest's, over a link of a high ping and jitter: what each shows of the other's heroes and foes and whether the hits counted, parties of 3 and 4, colours, trade, chat, pings, the run's end and spectating (`--scenarios`; in full in `commands/coop.md`)
 - `guide`: the guide's first opening by G and a walk through every page, till its pictures are made (each frame and the page's long tasks by the browser's clock, at most 100 ms; the game's renderer links nothing; `--canary` makes every picture again at once)
 - `behind`: the heroes built behind the lobby a piece a frame (the hall's heroes and the spares let go and built again: each frame's building by the browser's clock, at most 30 ms, the slowest pieces named; then the hall opened and another hero chosen, building none)
+- `photo`: photo mode as a player uses it (the village, its pause menu's button, both battlegrounds: opened by P, the page's UI and the world's overlays left out, the solo game still, the camera flown and turned, the look set with no program compiled, Hide hero, a photo saved at the canvas's pixels under a dated name, letterboxed, Esc putting all back; pictured with its panel and a shot set up)
 - `labels`: a world label a full atlas kept out (the atlas filled with name tags until one finds no slot, a few given back, too few to pack it again: the tag drawn within 3 frames)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
 - `gait`: the walk judged as a person's, on level ground and the steps, drawn and not, tapping, turning and circling: each foot's time on the ground, the steps' rate, length and width, hops and gallops, the hips, the hands' swing, the jerks (in full in `commands/gait.md`)
@@ -151,7 +152,7 @@ the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command gets its line in Commands at a glance above and its entry there. The largest entries are
 notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`,
-`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`), a line in `COMMANDS.md` pointing to each, as
+`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`), a line in `COMMANDS.md` pointing to each, as
 `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 

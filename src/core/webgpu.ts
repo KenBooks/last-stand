@@ -52,14 +52,23 @@ function sizeBloom(): void {
 /** Bloom drawn at `share` of its pixels each way, as WebGL's is (`setBloomShare` in core/renderer.ts: Low's half). */
 export function setBloomShareOnWebGPU(share: number): void {
   // (none: its glow added at no strength, its passes at the size they had; WebGL leaves its pass out)
-  if (bloomStrength) bloomStrength.value = share > 0 ? BLOOM_STRENGTH : 0;
+  bloomOff = share <= 0;
+  if (bloomStrength) bloomStrength.value = bloomOff ? 0 : bloomStrengthWanted;
   if (share <= 0) return;
   bloomShareNow = share;
   sizeBloom();
 }
+/** Bloom's strength (photo mode's), its node's uniform: none while the quality draws no bloom. */
+export function setBloomStrengthOnWebGPU(strength: number): void {
+  bloomStrengthWanted = strength;
+  if (bloomStrength) bloomStrength.value = bloomOff ? 0 : strength;
+}
 /** bloom's strength as the game has it, and its node's uniform */
 const BLOOM_STRENGTH = 0.85;
 let bloomStrength: { value: number } | null = null;
+/** the strength asked for (`setBloomStrengthOnWebGPU`), and whether the quality draws none */
+let bloomStrengthWanted = BLOOM_STRENGTH;
+let bloomOff = false;
 /** the scene's samples, chosen once (`setSceneSamples`); null until they are */
 let samplesChosen: number | null = null;
 /** the scene's pass as far as its samples go */
