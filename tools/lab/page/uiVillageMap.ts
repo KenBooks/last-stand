@@ -6,14 +6,28 @@
 // And walked with it open, it's seen through, and opaque again once he stops (from play: "make map semi-transparent if
 // user opens a map and attempts to walk... if not attempt to walk, then keep opaque as current"): its opacity read
 // standing, walking and stopped, and the hero checked to have walked. Its canary walks again with the map held opaque.
+//
+// And its style button pressed through every look (from the owner: "for maps, let the user choose the style"): each
+// press the next look drawn, the button naming it, the pick kept in its cookie, the buttons within the sheet and over
+// no name, the names apart, each look pictured. Its canary lays the buttons over a name.
 import { setVillageMap } from '../../../src/ui/villageMap';
-import type { Lab } from './lab';
+import { STYLE_NAMES, type MapStyle } from '../../../src/ui/villageMapLooks';
+import { readCookie } from '../../../src/core/cookies';
+import type { Lab, Pictured } from './lab';
 import type { TouchFound } from './uiTouch';
 
 /** the canary's problem, and what it plants */
 export const VILLAGE_MAP_CANARY = { name: 'lies over', what: 'one name laid on another' };
 /** the walk's canary's problem, and what it plants */
 export const VILLAGE_MAP_WALK_CANARY = { name: 'not seen through walking', what: 'the map held opaque as he walks' };
+/** the style button's canary's problem, and what it plants */
+export const VILLAGE_MAP_STYLE_CANARY = { name: 'lies under the buttons', what: 'the map\'s buttons laid over a name' };
+/** the looks in the order the button steps through them, from the first a fresh visit shows */
+const STYLE_ORDER: readonly MapStyle[] = ['now', 'a', 'b', 'c'];
+/** the cookie the pick is kept in (`ui/villageMapLooks.ts`) */
+const STYLE_COOKIE = 'last-stand-map-style';
+/** frames after a press for the sheet to be drawn again and its names laid */
+const STYLE_FRAMES = 2;
 /** frames for the map to unfold or fold (`FOLD_TIME` in `ui/villageMap.ts`, and some) */
 const FOLD_FRAMES = 60;
 /** how far a pointer's tip may stand from its place on the map (css px) */
@@ -116,6 +130,103 @@ function namesFound(): TouchFound {
   return { lines, problems };
 }
 
+/** Each look as the style button left it, pictured, until `villageMapPictures` takes them. */
+let stylePictures: Pictured[] = [];
+
+/** The map's style as drawn, the button, and the buttons' box. */
+const mapRoot = (): HTMLElement => document.querySelector<HTMLElement>('#vmap')!;
+const styleButton = (): HTMLElement => document.querySelector<HTMLElement>('#vmap .vm-style')!;
+const toolsBox = (): DOMRect => document.querySelector('#vmap .vm-tools')!.getBoundingClientRect();
+
+/** The buttons against the sheet and the names: within it, and over none. */
+function toolsFound(look: string): string[] {
+  const sheet = document.querySelector('#vmap .vm-sheet')!.getBoundingClientRect();
+  const tools = toolsBox();
+  const problems: string[] = [];
+  if (tools.left < sheet.left || tools.right > sheet.right || tools.top < sheet.top || tools.bottom > sheet.bottom) {
+    problems.push(`villageMap: ${look}: the buttons reach past the sheet`);
+  }
+  for (const name of names()) {
+    if (overlap(tools, name.getBoundingClientRect())) {
+      problems.push(`villageMap: ${look}: "${name.textContent}" ${VILLAGE_MAP_STYLE_CANARY.name}`);
+    }
+  }
+  return problems;
+}
+
+/** One look as the button left it: drawn, named, kept, its buttons and names checked, pictured. */
+async function lookFound(lab: Lab, wanted: MapStyle, pressed: boolean): Promise<TouchFound> {
+  const drawn = mapRoot().dataset.style;
+  const said = styleButton().textContent ?? '';
+  const kept = readCookie(STYLE_COOKIE);
+  const problems: string[] = [];
+  if (drawn !== wanted) problems.push(`villageMap: drawn in "${drawn}", where "${wanted}" was due`);
+  if (said !== `Style: ${STYLE_NAMES[wanted]}`) problems.push(`villageMap: the style button says "${said}"`);
+  if (pressed && kept !== wanted) problems.push(`villageMap: "${wanted}" picked, the cookie keeps "${kept}"`);
+  problems.push(...toolsFound(wanted), ...namesFound().problems.map((problem) => `${problem} (${wanted})`));
+  const tools = toolsBox();
+  stylePictures.push(await lab.screen(`villageMap-${wanted}`, [said]));
+  const lines = [`  ${said}: the buttons ${tools.width.toFixed(0)} by ${tools.height.toFixed(0)} px, kept as ${kept}`];
+  return { lines, problems };
+}
+
+/**
+ * The style button pressed through every look and back to the first, each look checked and pictured; the slow-game
+ * prompt set aside meanwhile (the lab's boot on a loaded PC asks it, and on a phone's screen it lay over the buttons
+ * and took the presses: no player meets it but after a slow minute, and it goes at a tap).
+ */
+async function stylesFound(lab: Lab): Promise<TouchFound> {
+  stylePictures = [];
+  const ask = document.getElementById('perf-ask');
+  const askHeld = ask?.style.display ?? '';
+  if (ask) ask.style.display = 'none';
+  try {
+    return await stepThroughStyles(lab);
+  } finally {
+    if (ask) ask.style.display = askHeld;
+  }
+}
+
+/** Each look in turn by the style button, from the one shown. */
+async function stepThroughStyles(lab: Lab): Promise<TouchFound> {
+  const found: TouchFound = { lines: [], problems: [] };
+  for (const [i, wanted] of [...STYLE_ORDER.slice(1), STYLE_ORDER[0]].entries()) {
+    if (i === 0) {
+      const first = await lookFound(lab, STYLE_ORDER[0], false);
+      found.lines.push(...first.lines);
+      found.problems.push(...first.problems);
+    }
+    await lab.clickOn(styleButton());
+    await lab.step(STYLE_FRAMES);
+    const look = await lookFound(lab, wanted, true);
+    found.lines.push(...look.lines);
+    found.problems.push(...look.problems);
+  }
+  stylePictures.pop();
+  return found;
+}
+
+/** The buttons laid over the first name: the style button's canary, which must be found. */
+function toolsOverName(): string[] {
+  const tools = document.querySelector<HTMLElement>('#vmap .vm-tools')!;
+  const name = names()[0].getBoundingClientRect();
+  const sheet = document.querySelector('#vmap .vm-sheet')!.getBoundingClientRect();
+  const held = tools.style.cssText;
+  tools.style.right = 'auto';
+  tools.style.left = `${name.left - sheet.left}px`;
+  tools.style.top = `${name.top - sheet.top}px`;
+  const problems = toolsFound('canary');
+  tools.style.cssText = held;
+  return problems;
+}
+
+/** The looks the style button stepped through, pictured (`ui`'s `pictures`), taken once. */
+export function villageMapPictures(): Pictured[] {
+  const pictures = stylePictures;
+  stylePictures = [];
+  return pictures;
+}
+
 /** A walk with the map open, held opaque by a style over the game's own: the walk's canary. */
 async function walkHeldOpaque(lab: Lab): Promise<WalkedWith> {
   const held = document.createElement('style');
@@ -131,8 +242,13 @@ async function walkHeldOpaque(lab: Lab): Promise<WalkedWith> {
 export async function villageMapShown(canary: boolean, lab: Lab): Promise<TouchFound> {
   const named = namesFound();
   const walk = walkFound(walkedWith);
-  const found = { lines: [...named.lines, ...walk.lines], problems: [...named.problems, ...walk.problems] };
+  const styles = await stylesFound(lab);
+  const found = {
+    lines: [...named.lines, ...walk.lines, ...styles.lines],
+    problems: [...named.problems, ...walk.problems, ...styles.problems],
+  };
   if (!canary) return found;
+  const overName = toolsOverName();
   const heldWalk = walkFound(await walkHeldOpaque(lab));
   const [first, second] = names();
   const heldLeft = second.style.left;
@@ -142,5 +258,8 @@ export async function villageMapShown(canary: boolean, lab: Lab): Promise<TouchF
   const planted = namesFound();
   second.style.left = heldLeft;
   second.style.top = heldTop;
-  return { lines: found.lines, problems: [...found.problems, ...planted.problems, ...heldWalk.problems] };
+  return {
+    lines: found.lines,
+    problems: [...found.problems, ...planted.problems, ...heldWalk.problems, ...overName],
+  };
 }

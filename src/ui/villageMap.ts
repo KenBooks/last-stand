@@ -14,7 +14,7 @@ import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { COTTAGE, PODIUM, SQUARE_EDGE, TOMB, WAY, footpathOf, fromGap, palisadePolygon, roadLines } from '../world/villagePlan';
 import { canvasOf, ctx2d } from '../core/textures';
 import { FOUNTAIN } from '../world/fountain';
-import { LOOKS, mapStyle, type Look } from './villageMapLooks';
+import { LOOKS, STYLE_NAMES, mapStyle, nextMapStyle, type Look } from './villageMapLooks';
 import { sfx } from '../core/audio';
 import { completeStep } from '../game/training';
 import { input, isDown } from '../core/input';
@@ -41,7 +41,7 @@ export interface VillageMapHooks {
 }
 
 let hooks: VillageMapHooks;
-let root: HTMLElement, sheet: HTMLElement, you: HTMLElement;
+let root: HTMLElement, sheet: HTMLElement, you: HTMLElement, styleButton: HTMLElement;
 const panels: { el: HTMLElement; canvas: HTMLCanvasElement; shade: HTMLElement }[] = [];
 /** whether it's wanted open, how far it's open (0 folded away, 1 flat), and the size it was last drawn at */
 let wanted = false, open = 0, drawnAt = '';
@@ -107,6 +107,15 @@ export function initVillageMap(h: VillageMapHooks): void {
   names.append(yard);
   you = sheet.querySelector<HTMLElement>('.vm-you')!;
   root.querySelector<HTMLElement>('.vm-close')!.addEventListener('click', () => setVillageMap(false));
+  // (the style it's drawn in: the next on a click, kept, drawn again at once)
+  styleButton = root.querySelector<HTMLElement>('.vm-style')!;
+  styleButton.addEventListener('click', () => {
+    sfx.click();
+    nextMapStyle();
+    drawnAt = '';
+    drawSheet();
+    layNames();
+  });
   // (a click on the parchment's margin, off the sheet, folds it away)
   root.addEventListener('click', (e) => { if (e.target === root) setVillageMap(false); });
   addEventListener('resize', () => {
@@ -273,6 +282,10 @@ function drawSheet(): void {
   const w = Math.round(sheet.clientWidth * ratio), h = Math.round(sheet.clientHeight * ratio);
   const style = mapStyle();
   root.dataset.style = style;
+  // (its name left off on a short screen, where it lay over the hall of heroes' name: `lab ui --states villageMap`)
+  styleButton.replaceChildren('Style', Object.assign(document.createElement('span'), {
+    className: 'vm-style-name', textContent: `: ${STYLE_NAMES[style]}`,
+  }));
   if (!w || !h || drawnAt === `${w}x${h}:${style}`) return;
   drawnAt = `${w}x${h}:${style}`;
   const whole = canvasOf(w, h);

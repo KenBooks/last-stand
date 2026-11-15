@@ -1,11 +1,13 @@
 // The village map's looks (ui/villageMap.ts), while one is chosen: the map as it stands (`now`), an explorer's chart
 // on aged parchment (`a`), a gilded war table's map on dark leather (`b`) and a painted watercolour map (`c`). Each is
 // its colours and its own way of drawing the ground, the trees, a building's roof, the frame, the compass and the
-// title; the map's plan is drawn by ui/villageMap.ts the same for all. Chosen by `?mapStyle=a|b|c` or the lab's
-// `--tune villageMap.style=0|1|2|3`. (Exploratory: one is kept, the rest go.)
+// title; the map's plan is drawn by ui/villageMap.ts the same for all. The player picks one with the button beside the
+// map's Close (kept in the cookie `last-stand-map-style`); `?mapStyle=now|a|b|c` and the lab's
+// `--tune villageMap.style=0|1|2|3` override it.
 import type { BiomeId } from '../data/biomes';
 import { mulberry } from '../util';
 import { tunable } from '../core/tuning';
+import { readCookie, writeCookie } from '../core/cookies';
 
 export type MapStyle = 'now' | 'a' | 'b' | 'c';
 const STYLES: readonly MapStyle[] = ['now', 'a', 'b', 'c'];
@@ -13,11 +15,33 @@ const STYLES: readonly MapStyle[] = ['now', 'a', 'b', 'c'];
 /** the lab's switch (0 the map as it stands, 1 to 3 the looks a to c), read as the map is drawn */
 const CHOSEN = tunable('villageMap', { style: -1 });
 
-/** The look chosen: the lab's, else the address's `?mapStyle=`, else the map as it stands. */
+/** the cookie the player's pick is kept in */
+const COOKIE = 'last-stand-map-style';
+/** each look's name, as the button beside Close shows it */
+export const STYLE_NAMES: Record<MapStyle, string> = { now: 'Classic', a: "Explorer's chart", b: 'War table', c: 'Watercolour' };
+
+const isStyle = (v: string | null): v is MapStyle => STYLES.includes(v as MapStyle);
+
+/** The look chosen: the lab's, else the address's `?mapStyle=`, else the player's pick, else the map as it stands. */
 export function mapStyle(): MapStyle {
   if (CHOSEN.style >= 0) return STYLES[Math.round(CHOSEN.style)] ?? 'now';
   const asked = new URLSearchParams(location.search).get('mapStyle');
-  return STYLES.includes(asked as MapStyle) ? asked as MapStyle : 'now';
+  if (isStyle(asked)) return asked;
+  const kept = readCookie(COOKIE);
+  return isStyle(kept) ? kept : 'now';
+}
+
+/** The look after the one shown, picked and kept (the address's and the lab's choice are dropped for it). */
+export function nextMapStyle(): MapStyle {
+  const next = STYLES[(STYLES.indexOf(mapStyle()) + 1) % STYLES.length];
+  writeCookie(COOKIE, next);
+  CHOSEN.style = -1;
+  const url = new URL(location.href);
+  if (url.searchParams.has('mapStyle')) {
+    url.searchParams.delete('mapStyle');
+    history.replaceState(history.state, '', url);
+  }
+  return next;
 }
 
 /** How a building's box is filled: inked flat, hatched in ink, a raised token, or washed in paint. */

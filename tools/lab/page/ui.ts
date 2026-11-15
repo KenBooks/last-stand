@@ -61,8 +61,10 @@ import { closePerfParty, openPerfParty, PERF_PARTY_CANARY, perfPartyChecked } fr
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
 import { closeVillageHud, openVillageHud, VILLAGE_HUD_CANARY, villageHudShown } from './uiVillageHud';
 import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
-import { closeVillageMap, openVillageMap, VILLAGE_MAP_CANARY, VILLAGE_MAP_WALK_CANARY, villageMapShown }
-  from './uiVillageMap';
+import {
+  closeVillageMap, openVillageMap, VILLAGE_MAP_CANARY, VILLAGE_MAP_STYLE_CANARY, VILLAGE_MAP_WALK_CANARY,
+  villageMapPictures, villageMapShown,
+} from './uiVillageMap';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
@@ -1013,7 +1015,9 @@ const STEPS: Record<UiState, Steps> = {
   betaNotice: { open: openBetaNotice, close: closeBetaNotice, check: betaNoticeShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   villageHud: { open: (lab) => openVillageHud(lab, false), close: closeVillageHud, check: villageHudShown },
-  villageMap: { open: openVillageMap, close: closeVillageMap, check: villageMapShown },
+  villageMap: {
+    open: openVillageMap, close: closeVillageMap, check: villageMapShown, pictures: async () => villageMapPictures(),
+  },
   villageHudTouch: { open: (lab) => openVillageHud(lab, true), close: closeVillageHud, check: villageHudShown },
   heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
@@ -1234,7 +1238,7 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
   if (state === 'villageMap') {
-    for (const canary of [VILLAGE_MAP_CANARY, VILLAGE_MAP_WALK_CANARY]) {
+    for (const canary of [VILLAGE_MAP_CANARY, VILLAGE_MAP_WALK_CANARY, VILLAGE_MAP_STYLE_CANARY]) {
       const caught = found.problems.some((problem) => problem.includes(canary.name));
       lines.push(`  canary: ${canary.what} ${caught ? 'caught' : 'went unseen'}`);
       if (!caught) missed.push(`${state}: the canary's ${canary.what} went unseen`);
