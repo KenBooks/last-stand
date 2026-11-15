@@ -309,7 +309,7 @@ async function measureAttack(lab: Lab, options: EvadeOptions, wanted: string): P
     // the shot graze past it)
     const fixture: Fixture = { at: SPOT, facing: (FACING * Math.PI) / 180, view: 'third', ...options.fixture };
     // (a skill that needs only something in a hand is cast as the boot dressed him)
-    fixture.gear = def.needs === 'armed' ? undefined : def.needs;
+    fixture.gear = def.needs === 'armed' || def.needs === 'weapon' ? undefined : def.needs === 'fist' ? 'bare' : def.needs;
     await lab.setup(fixture);
     bindKnown(wanted);
     const skill = skillNamed(wanted);

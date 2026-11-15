@@ -146,8 +146,9 @@ export interface SkillDef {
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
   /** only works with a shield, a two-handed weapon, a weapon in each hand, something in a hand (`armed`: a weapon or
-   *  a shield) or nothing in either (`bare`); otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare';
+   *  a shield), nothing in either (`bare`), a weapon in the main hand (`weapon`) or none there (`fist`: whatever the
+   *  other holds); otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare' | 'weapon' | 'fist';
   fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string; bare?: string };
   /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
    *  lighter ones): `loot/loadout.ts` `forStyle` */

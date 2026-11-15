@@ -55,7 +55,7 @@ WITH = {
     'arcane': 'Arcane staff', 'fire': 'Fire staff', 'lightning': 'Lightning staff', 'healing': 'Healing staff',
     'shield': 'With a shield', 'twoHanded': 'Two-handed weapon', 'dual': 'A weapon in each hand',
     # (a skill of any weapon's, `armed`, needs no word; with both hands empty the warrior fights with his fists)
-    'armed': '', 'bare': 'Empty hands',
+    'armed': '', 'weapon': '', 'bare': 'Empty hands', 'fist': 'No weapon',
 }
 
 # a few words on each skill, by impl

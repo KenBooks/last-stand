@@ -67,17 +67,18 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number): void {
 /** `mid` moved by `off` (to his left, up, ahead). */
 const from = (mid: THREE.Vector3, off: readonly number[], out: THREE.Vector3): THREE.Vector3 => out.set(mid.x + off[0], mid.y + off[1], mid.z + off[2]);
 
-/** The guard by `w` of the way from the pose's own arms: both fists up before him, breathing with `t`. */
-export function fistGuard(j: Joints, w: number, t: number, eyes: boolean): void {
+/** The guard by `w` of the way from the pose's own arms: both fists up before him, breathing with `t` (`shielded`:
+ *  the right alone, the left arm left to the shield on it). */
+export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shielded = false): void {
   if (w <= 0) return;
   const G = eyes ? GUARD_EYES : GUARD, breath = 0.008 * Math.sin(t * 1.8);
   between(j, _mid); _mid.y += breath;
-  place(j, true, from(_mid, G.lead, _far), w);
+  if (!shielded) place(j, true, from(_mid, G.lead, _far), w);
   place(j, false, from(_mid, G.rear, _far), w);
   // (the wrists straight behind the knuckles, the forearms turned so the palms face each other: unturned, the palms
   // faced ahead and from the front the fists read as open claws)
-  j.handL.rotation.x = lerp(j.handL.rotation.x, 0, w); j.handR.rotation.x = lerp(j.handR.rotation.x, 0, w);
-  fistLine.L.fromArray(LINE.guard.L); fistLine.R.fromArray(LINE.guard.R);
+  if (!shielded) { j.handL.rotation.x = lerp(j.handL.rotation.x, 0, w); fistLine.L.fromArray(LINE.guard.L); }
+  j.handR.rotation.x = lerp(j.handR.rotation.x, 0, w); fistLine.R.fromArray(LINE.guard.R);
 }
 
 /** How far a punch is out at `k` of its cast: thrown out fast, landed at its middle, drawn back to the guard. */
@@ -85,9 +86,10 @@ const thrown = (k: number): number => smooth(ramp(k, 0.06, 0.46)) * (1 - smooth(
 
 /**
  * A punch at `k` of its cast: the lead hand's jab (`lead`) or the rear hand's cross, over the guard. `still`: how far
- * he stands (moving, the legs are stepping and the weight stays over them).
+ * he stands (moving, the legs are stepping and the weight stays over them); `shielded`: a shield on the left arm,
+ * which keeps its own pose (every punch is then the right hand's cross).
  */
-export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t: number, eyes: boolean): void {
+export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t: number, eyes: boolean, shielded = false): void {
   const out = thrown(k), ws = out * (0.4 + 0.6 * still);
   // the trunk behind the fist: a jab's lead shoulder sent after it; a cross turned through from the hips, the weight
   // onto the front foot; the head stays on the foe
@@ -98,7 +100,7 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
     j.spine.rotation.x += (lead ? 0.05 : 0.12) * out;
     j.body.position.z += (lead ? 0.03 : 0.07) * ws; j.body.position.y += (lead ? -0.01 : -0.03) * ws;
   }
-  fistGuard(j, 1, t, eyes);
+  fistGuard(j, 1, t, eyes, shielded);
   // the fist straight out at the middle line from where the guard held it, the arm a little short of locked
   const shoulder = lead ? j.shoulderL : j.shoulderR;
   between(j, _mid);
@@ -111,7 +113,7 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   line.set(lerp(line.x, punch[0], out), lerp(line.y, punch[1], out), lerp(line.z, punch[2], out));
   // (the other fist drawn in to the jaw as this one goes)
   const other = lead ? j.elbowR : j.elbowL;
-  if (!eyes) other.rotation.x += -0.12 * out;
+  if (!eyes && !shielded) other.rotation.x += -0.12 * out;
 }
 
 /**

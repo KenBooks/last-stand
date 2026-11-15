@@ -39,10 +39,13 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'knuckles', name: 'Bare Knuckles',
-      desc: 'Quick punches, left then right, at what stands close before you. Each hit restores Energy. Shorter of reach and lighter than a weapon, and faster than any.',
+      desc: 'Quick punches, left then right, at what stands close before you. Each hit restores Energy. Shorter of reach and lighter than a weapon, and faster than any. With a shield and no weapon, your free hand punches alone, a little lighter.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.24, fireAt: 0.5,
       damage: 30, range: 2.4, arc: 1.3, knock: 1.2, gain: 4,
-      needs: 'bare',
+      // (a shield on the other arm: the right hand alone, each punch a cross, lighter; from play, "have it punch as
+      // well like if there was no sword, but not as much damage though")
+      styles: { shield: { damage: 22, gain: 3 } },
+      needs: 'fist',
       color: 0xd8c8b0,
       icon: { glyph: '✊︎', color: '#ffb85a' },
     },
@@ -77,7 +80,7 @@ const warrior: ClassDef = {
       desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.42,
       damage: 62, range: 3.3, arc: 2.2, knock: 2.2, gain: 4,
-      needs: 'armed', fallback: { bare: 'knuckles' },
+      needs: 'weapon', fallback: { bare: 'knuckles' },
       // (each about as much damage and energy a second: a great weapon's weight in each blow, two blades' pace)
       styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 } },
       color: 0xffd9a0,
