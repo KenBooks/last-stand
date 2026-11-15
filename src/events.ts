@@ -23,6 +23,14 @@ export interface GameEvents {
   dummyHit: [];
   /** the first visit's training moved on: a step done, finished or skipped (`game/training.ts`) */
   trainingChanged: [];
+  /** the village's tutorial moved on: a station begun or left, a step done (`game/tutorial.ts`) */
+  tutorialChanged: [];
+  /** the local player threw an item on the lobby's floor, took one off it, put one on from the stash */
+  itemThrown: [item: Item];
+  itemTaken: [item: Item];
+  itemEquipped: [item: Item];
+  /** the local hero began a skill (a cast, a draw or a channel), by its behaviour (`SkillDef.impl`) */
+  skillUsed: [impl: string];
 }
 
 type Handler<K extends keyof GameEvents> = (...args: GameEvents[K]) => void;

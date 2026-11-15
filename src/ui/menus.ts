@@ -3,7 +3,9 @@
 import { dialog } from './dialogs';
 import { G } from '../state';
 import { holdToConfirm, resetHold } from './holdButton';
-import { restartTraining, trainingPending } from '../game/training';
+import { trainingPending } from '../game/training';
+import { restartTutorial, startStation, stationDone, stationSteps, tutorialStepDone } from '../game/tutorial';
+import { TUTORIAL } from '../data/tutorial';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
@@ -376,10 +378,6 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('[data-guide-open]').forEach((b) => {
     b.onclick = () => { sfx.click(); hooks.guide(b.dataset.guideOpen as GuideSection); };
   });
-  $('#btn-help-restart').onclick = () => {
-    restartTraining();
-    hideHelp();
-  };
   $('#btn-reset').onclick = () => {
     const name = CLASSES[G.profile.classId].name;
     if (!confirm(`Reset the ${name} of save slot ${saveSlot()}? Their stash, equipment and records will be erased (other classes and slots keep theirs).`)) return;
@@ -507,8 +505,41 @@ export function showMenu(v: boolean): void {
 /** How to play (the notice board's, whose `board` offers the training again, or the pause menu's link). */
 export function showHelp(board = false): void {
   renderControlsHelp();
-  $('#btn-help-restart').classList.toggle('hidden', !board);
+  if (VILLAGE) renderTour(board);
   $('#help').classList.remove('hidden');
+}
+
+/** The tutorial on the notice board (`board`; game/tutorial.ts): its stations above the controls, each with how far it
+ *  was walked, and one button at the foot beside Got it, where the first visit's Restart training stood: Start the
+ *  tutorial, Go on with it from the first station not walked, or Walk it again from the start once every one is done.
+ *  From review: "remove one of the Start/Restart buttons, showing 2 at the same time is lame" (a button at the top, a
+ *  link for each station and Restart training at the foot had all started something). */
+function renderTour(board: boolean): void {
+  const tour = $('.help-tour'), go = $('#btn-tour');
+  tour.classList.toggle('hidden', !board);
+  go.classList.toggle('hidden', !board);
+  if (!board) return;
+  const next = TUTORIAL.find((s) => !stationDone(s.id));
+  go.textContent = !next ? 'Walk it again' : next === TUTORIAL[0] && !TUTORIAL[0].steps.some((t) => tutorialStepDone(t.id))
+    ? 'Start the tutorial' : 'Go on with the tutorial';
+  go.onclick = () => {
+    sfx.click();
+    if (next) startStation(next.id);
+    else restartTutorial();
+    hideHelp();
+  };
+  $('.ht-stations', tour).replaceChildren(...TUTORIAL.map((s) => {
+    const steps = stationSteps(s), walked = steps.filter((t) => tutorialStepDone(t.id)).length;
+    const row = document.createElement('div');
+    row.className = 'ht-station';
+    row.classList.toggle('done', walked === steps.length);
+    const name = document.createElement('b'), covers = document.createElement('span'), state = document.createElement('i');
+    name.textContent = s.name;
+    covers.textContent = s.covers;
+    state.textContent = walked === steps.length ? 'Done' : walked ? `${walked} of ${steps.length}` : '';
+    row.append(name, covers, state);
+    return row;
+  }));
 }
 
 /** How to play laid out under the loading screen (`on`) and put away (not), so its first raster builds Chrome's Skia

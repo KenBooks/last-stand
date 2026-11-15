@@ -30,6 +30,7 @@ import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
 import { on } from '../events';
 import { standHeroes } from './hall';
+import { dropNameAt } from './groundItems';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
 import { lampReachBy, lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
@@ -317,7 +318,9 @@ function bindPointer(): void {
   });
   window.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    const o = over(e);
+    // (a thrown item's name over an object is the floor's to take: both hear the press, and the object, used, opened
+    // over the name before the press lifted, so the item was never picked up)
+    const o = dropNameAt(e.clientX, e.clientY) ? null : over(e);
     if (!o) return;
     e.preventDefault();
     e.stopPropagation();

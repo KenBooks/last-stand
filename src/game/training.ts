@@ -56,7 +56,8 @@ export function skipTraining(): void {
   emit('trainingChanged');
 }
 
-/** The training begun afresh, as a new player's (the notice board's Restart training; a harness's look at it). */
+/** The training begun afresh, as a new player's (a harness's look at it; the notice board offers the tutorial in its
+ *  stead: two ways to start over read as one, "why do we need 2 ways to restart training?"). */
 export function restartTraining(): void {
   state = 'training';
   done.clear();

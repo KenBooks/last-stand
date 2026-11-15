@@ -97,6 +97,11 @@ let logSink: ((hit: LoggedHit) => void) | null = null;
 /** Where the hits go for the battle log (null while it's off: nothing is made for it). */
 export function setLogSink(fn: typeof logSink): void { logSink = fn; }
 
+let sparSink: ((p: Player, from: THREE.Vector3 | null, foe: Enemy | null) => void) | null = null;
+/** Where a harmless foe's blows at the local hero go outside a run (the village's tutorial spars by them:
+ *  game/tutorial.ts). */
+export function setSparSink(fn: typeof sparSink): void { sparSink = fn; }
+
 /** A damage number over an enemy. */
 export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType): void {
   const p = enemy.pos;
@@ -147,7 +152,11 @@ export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): 
 export function hurtPlayer(
   p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null, by: Attacker | null = null,
 ): number {
-  if (!p.active || !p.local || G.run?.training || by?.foe?.training) return 0;
+  if (!p.active || !p.local) return 0;
+  if (G.run?.training || by?.foe?.training) {
+    if (!G.run) sparSink?.(p, from, by?.foe ?? null);
+    return 0;
+  }
   const s = p.stats;
   const reduce = type === 'physical' ? s.armor : s.resist;
   const r = p.takeDamage(amount * (1 - reduce / 100), type, from);

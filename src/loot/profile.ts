@@ -12,6 +12,7 @@ import { seedPr499Gear } from './pr499Gear'; // PR 499's test gear: to remove, u
 import { seedPr527Gear } from './pr527Gear'; // PR 527's test gear: to remove, unbind these lines only
 import { seedPr487Staffs } from './pr487Staffs'; // PR 487's test staffs: to remove, unbind these lines only
 import type { Item, Profile, Slot } from '../types';
+import { emit } from '../events';
 
 const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
 /** the single profile from before there were classes to choose from: the mage's (in slot 1) */
@@ -166,6 +167,7 @@ export function equipFromStash(p: Profile, itemId: string, to?: Slot): void {
   if (bumped) { delete p.equipped[clash!]; p.stash.unshift(bumped); }
   p.equipped[slot] = item;
   saveProfile(p);
+  emit('itemEquipped', item);
 }
 
 export function unequip(p: Profile, slot: Slot): void {

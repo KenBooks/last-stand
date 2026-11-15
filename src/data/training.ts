@@ -16,5 +16,6 @@ export const TRAINING: readonly { id: TrainingStep; text: string; key?: string; 
   { id: 'dummy', text: 'Strike a training dummy' },
   { id: 'map', text: 'Open the map', key: 'M' },
   { id: 'stash', text: 'Open the stash at the chest' },
-  { id: 'notice', text: 'Read the notice board' },
+  // (the board offers the tutorial, game/tutorial.ts: a new player meets it here once, and may leave it be)
+  { id: 'notice', text: 'Notice board: the tutorial' },
 ];

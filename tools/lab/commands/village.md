@@ -143,7 +143,7 @@ screen kept the lock and the mouse was gone over its cards, from play); the firs
 (`restartTraining`: the lab's boots are a returning player's), each step taken as a player takes it (the yard walked
 into, the middle dummy struck by the basic attack held and let go, as the ranger's bow looses only as it's let go,
 M pressed, the chest and the notice board used) and ticked, the crypt's portal card warning with no Enter till it's
-done, the notice board's Restart training clicked (under way afresh, every step to do, the tracker out, the board put away; none offered from the pause menu's How to play; pictured; its canary doesn't click it), and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
+done, the notice board's tutorial begun by its one button at the foot (a station under way, the tracker out, the board put away, no second restart beside it; none of it offered from the pause menu's How to play; pictured; its canary doesn't click it), and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
 no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
 the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the rings'
 middle moved 20 m in a frame, a walk round a cottage and one from a portal walked straight (`routing.on`), an orb far
