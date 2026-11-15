@@ -856,7 +856,8 @@ function reportClosed() {
 }
 
 /** Photo mode (P, the pause menu's button: ui/photo.ts), from the pause menu (which it goes back to) or the game; never
- *  over the hero selection screen or the save slots, which stage the camera themselves, nor over the bug report's form. */
+ *  over the hero selection screen or the save slots, which stage the camera themselves, nor over the bug report's
+ *  form. */
 function openPhoto(): void {
   if (photoOn() || !photoAllowed() || heroSelectOpen() || savesOpen() || profiling() || bugReportOpen()) return;
   const fromPause = G.menuOpen;

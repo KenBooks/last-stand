@@ -15,6 +15,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
+import { photoAllowed } from './photo';
 import { skillArt, skillIconHTML } from './skillArt';
 import { renderLoadoutEditor, openBook } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
@@ -1364,6 +1365,10 @@ function renderHourOption(): void {
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
+    // (photo mode is the village's and the time between waves': its button says so during a fight)
+    const photo = $<HTMLButtonElement>('#btn-photo'), allowed = photoAllowed();
+    photo.disabled = !allowed;
+    photo.title = allowed ? 'Hide the UI, set up a shot and save it (P)' : 'Not during a fight: in the village or between waves';
     showBuildStatus($('#pause .build-status'));
     refreshColourPickers();
     pauseTab(keptPauseTab());

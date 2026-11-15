@@ -115,8 +115,13 @@ export const photoOn = (): boolean => state.on;
 export const photoCamera = (): PhotoCamera => state.camera;
 export type { PhotoCamera };
 
-/** Whether photo mode can open now: in the lobby or a run the hero is in (not watching a co-op run's end). */
-export const photoAllowed = (): boolean => G.mode === 'menu' || (G.mode === 'run' && G.player.inRun);
+/** Whether a wave is being fought (foes on the field: not the count before it, nor the choice after it). */
+const fighting = (): boolean => G.mode === 'run' && G.run?.phase === 'fighting';
+
+/** Whether photo mode can open now: in the lobby (the village), or in a run the hero is in (not watching a co-op
+ *  run's end) between its waves, never during a fight (from play: "make unavailable during battles, in village, and
+ *  between waves it works though"). */
+export const photoAllowed = (): boolean => G.mode === 'menu' || (G.mode === 'run' && G.player.inRun && !fighting());
 
 /** Whether the time of day can be set where he is: the village's hour (a battleground keeps its own light). */
 const hourSettable = (): boolean => VILLAGE && G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
@@ -306,6 +311,8 @@ function placeCamera(): void {
 /** A frame of photo mode, after the game's own (`dt`: the browser's, as the game may stand frozen). */
 export function photoFrame(dt: number): void {
   if (!state.on) return;
+  // (a wave begun while it's open, as a co-op partner's count runs out: back to the fight at once)
+  if (fighting()) { leavePhoto(); return; }
   G.player.idle = true;
   flyByKeys(dt);
   if (state.hourChanged && G.paused) relightHour(dt);

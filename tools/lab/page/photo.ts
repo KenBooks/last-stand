@@ -4,7 +4,9 @@
 // buttons with no program compiled, hide the hero by his layers, and save a PNG at the canvas's own pixels under a
 // dated name (with the letterbox's bars black in it). Esc must put everything back as it found it, and opened from the
 // pause menu's button it goes back to the pause menu. Each place is pictured as the player sees it: the panel open, and
-// a shot set up with the panel hidden.
+// a shot set up with the panel hidden. In a battleground it is the time before a wave it opens in; during a fight
+// (the run's phase held at `fighting`) P must open nothing, the pause menu's button must be disabled, and a wave begun
+// while it is open must close it.
 //
 // `--canary` plants two faults the checks must catch: the page's UI shown again (`body.photo` taken off) and the
 // world's overlays drawn over the frame again.
@@ -394,6 +396,55 @@ async function fromPauseMenu(lab: Lab, where: string): Promise<Found> {
   return { lines: [`${where}: opened from the pause menu's button`, ...left.lines], problems: [...problems, ...left.problems] };
 }
 
+/** how far from him the fight's one foe stands (m) */
+const FOE_OFF = 12;
+
+/** During a fight (the run's phase held at `fighting` before every frame): P opens nothing and the pause menu's
+ *  button is disabled; and open before the wave, the fight beginning closes it. */
+async function notInAFight(lab: Lab, where: string): Promise<Found> {
+  const run = G.run;
+  if (!run) return { lines: [], problems: [`${where}: no run to fight in`] };
+  const before = run.phase, problems: string[] = [];
+  const hold = (): void => { run.phase = 'fighting'; };
+  // (a foe on the field, well off him: with none, the run calls the wave cleared within the frame)
+  const foe = lab.spawnFoe('dummy', G.player.pos.clone().add(new THREE.Vector3(0, 0, FOE_OFF)));
+  // (open before the wave, then the fight begins)
+  await lab.press('KeyP');
+  await lab.step(READ_FRAMES);
+  const openedBefore = photoOn();
+  // (the lab's set-up holds the run in the count before its wave, every frame: let go, for the fight to stand)
+  lab.letWavesCome();
+  lab.beforeFrame.push(hold);
+  try {
+    await lab.step(READ_FRAMES);
+    const closedByFight = !photoOn();
+    // (left open, P would close it: closed first, so the press is read as one to open it)
+    if (!closedByFight) { await lab.press('Escape'); await lab.step(READ_FRAMES); }
+    await lab.press('KeyP');
+    await lab.step(READ_FRAMES);
+    const openedInFight = photoOn();
+    await lab.press('Escape');
+    await lab.step(READ_FRAMES);
+    const button = document.getElementById('btn-photo') as HTMLButtonElement;
+    const pauseShown = !document.getElementById('pause')!.classList.contains('hidden');
+    const disabled = button.disabled;
+    if (pauseShown) await lab.press('Escape');
+    await lab.step(READ_FRAMES);
+    if (!openedBefore) problems.push(`${where}: P opened no photo mode before the wave`);
+    if (!closedByFight) problems.push(`${where}: photo mode stayed open as the fight began`);
+    if (openedInFight) problems.push(`${where}: P opened photo mode during a fight`);
+    if (!pauseShown) problems.push(`${where}: Esc opened no pause menu during the fight`);
+    else if (!disabled) problems.push(`${where}: the pause menu's Photo mode button is enabled during a fight`);
+    const said = `${where}: open before the wave, ${closedByFight ? 'closed' : 'LEFT OPEN'} as the fight began; during it P`
+      + ` ${openedInFight ? 'OPENED it' : 'opened nothing'}, the pause menu's button ${disabled ? 'disabled' : 'ENABLED'}`;
+    return { lines: [said], problems };
+  } finally {
+    lab.beforeFrame.splice(lab.beforeFrame.indexOf(hold), 1);
+    run.phase = before;
+    foe.die();
+  }
+}
+
 /** A shot set up with the panel hidden: the letterbox, a filter, the vignette and the time of day where settable. */
 async function shotSetUp(lab: Lab, filter: string, hour: number | null): Promise<void> {
   await lab.clickOn(document.getElementById('ph-letterbox')!);
@@ -438,7 +489,8 @@ export async function photo(lab: Lab, options: PhotoOptions): Promise<Report> {
   const forest = await inPlace(lab, 'forest', canary, false, { filter: 'warm' });
   await standIn(lab, { biome: 'crypt', view: 'third', facing: 0 });
   const crypt = await inPlace(lab, 'crypt', canary, false, { filter: 'mono' });
-  const places = [village, pause, forest, crypt];
+  const fight = await notInAFight(lab, 'crypt');
+  const places = [village, pause, forest, crypt, fight];
   const lines = places.flatMap((place) => place.lines);
   let problems = places.flatMap((place) => place.problems);
   if (canary) {
