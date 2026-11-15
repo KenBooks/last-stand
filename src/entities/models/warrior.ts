@@ -245,6 +245,9 @@ const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry
 const FISTS_UP = 4;
 /** both hands empty, moving: how far the hands close (of a fist) and how far the wrists let them hang (rad) */
 const WALK_FIST = 0.45, WALK_DROOP = 0.3;
+/** and how much further the elbows bend as he moves (rad: to about 45 degrees, the owner's "bend elbows a tiny bit
+ *  more, like 45 degress"; hanging at 20 to 30 they read as stiff) */
+const WALK_BEND = 0.35;
 /** both hands empty: how much of a runner's pump his arms have at a run (of 1: bent near a right angle) */
 const BARE_PUMP = 0.12;
 const alternates = (name: string | undefined): boolean => name === 'swing' || name === 'punch';
@@ -2379,7 +2382,7 @@ export function* warriorSteps(): ModelSteps {
     if (bare && !a && st.dead < 0) fistGuard(j, fistsUp * (1 - runK), t, fp);
     const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' || a?.name === 'whirl' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : Math.max(fistsUp, WALK_FIST * Math.min(1, move * 2));
     // (and as he moves the wrists let the hands hang a little, the knuckles down)
-    if (bare && !a && !fp && st.dead < 0) { const droop = WALK_DROOP * Math.min(1, move * 2) * (1 - fistsUp); j.handL.rotation.x += droop; j.handR.rotation.x += droop; }
+    if (bare && !a && !fp && st.dead < 0) { const going = Math.min(1, move * 2) * (1 - fistsUp), droop = WALK_DROOP * going; j.handL.rotation.x += droop; j.handR.rotation.x += droop; j.elbowL.rotation.x -= WALK_BEND * going; j.elbowR.rotation.x -= WALK_BEND * going; }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)
