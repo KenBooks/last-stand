@@ -207,3 +207,8 @@ export const CARRY = {
  *  wielder's basic attack cuts every 0.3 s; the fangs 0.36 s apart, at 0.27 and 0.63 s of 0.9, were the owner's "too
  *  slow": "both hits in a rapid succession", "faster than regular LMB" (`lab hits twinFangs --than cleave`). */
 export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
+
+/** Heave's timing (s), the skill's (combat/skills/heave: its step in, as it takes hold) and the warrior's pose keyed
+ *  to it (entities/models/warriorFists): the step, and the follow-through standing after it as the throw leaves his
+ *  hands. */
+export const HEAVE = { step: 0.24, hold: 0.36 };

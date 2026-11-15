@@ -66,7 +66,8 @@ const SETUP_OPTIONS = {
     choices: [...WEAPON_STYLES, ...SCHOOL_STYLES],
     usage: [...WEAPON_STYLES, ...SCHOOL_STYLES].join('|'),
     help: 'the hero holding his weapons this way (a class with more than one; as rolled by default), or a staff of '
-      + 'this school, or none (bare), for a class whose weapons have schools',
+      + 'this school, or none (bare): for a class whose weapons have schools, and for one whose skills go by the '
+      + 'gear held (the warrior with both hands empty)',
   },
   weapon: {
     kind: 'text',
@@ -330,9 +331,9 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'heave'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
-          + 'down, blink (a mage), rush and strike (a warrior), throws; ends alone: the ways a run ends that left a '
+          + 'down, blink (a mage), rush, strike and heave (a warrior; heave with his hands emptied), throws; ends alone: the ways a run ends that left a '
           + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
           + '(a marker over its door, the minimap, the map)',
       },

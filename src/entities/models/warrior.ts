@@ -31,7 +31,8 @@ import {
   cutTurnAt, swingAt, swingHeldAt, swingShoulder, swingShoulderAt, turnWithTrunk, type ArmBones, type ViewSwing,
 } from '../viewSwing';
 import { tunable } from '../../core/tuning';
-import { FANGS } from '../../data/balance';
+import { FANGS, HEAVE } from '../../data/balance';
+import { FIST, fistGuard, fistPunch, fistHeave, fistPound } from './warriorFists';
 import {
   TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_FORE_ROW, ONE_BACK_CUT, ONE_BACK_OUT,
   CUT_TURN, TWO_CUT_TURN, DUAL_CUT, DUAL_CUT_TURN,
@@ -238,7 +239,11 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, smite: 0.5, buff: 0.6, flurry: 0.35 };
+const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry: 0.15, pound: 0.25 }, TAIL_OUT: Record<string, number> = { chop: 0.55, smite: 0.5, buff: 0.6, flurry: 0.35, pound: 0.45 };
+/** both hands empty (models/warriorFists.ts): how long after a move the fists stay up in their guard (s), and the
+ *  moves that alternate hands, a weapon's cut and a punch */
+const FISTS_UP = 4;
+const alternates = (name: string | undefined): boolean => name === 'swing' || name === 'punch';
 /** Through the eyes, a cut's end held this long (s) for another attack to follow it, the way back to rest after it
  *  (s), and a cut begun within the hold the next of a row: the other way round, from where the last left the blade;
  *  one after it, the first again (each turned the other way from the last, whatever the pause, an attack out of the
@@ -1099,6 +1104,8 @@ export function* warriorSteps(): ModelSteps {
   };
   /** when the last attack was: the feet keep the fighting stance a while after it */
   let fightT = -9;
+  /** both hands empty: how far the fists are up in their guard */
+  let fistsUp = 0;
   /** where an action puts the feet this frame (standing): the left foot's spot and turn, then the right's (LegIK.stance); null the fighting stance */
   let feet: readonly number[] | null = null;
   /** through the eyes, how far Power Strike's blow is still held after the cast (1 at the end, fading) */
@@ -1686,6 +1693,8 @@ export function* warriorSteps(): ModelSteps {
     const move = st.move;
     const dir = st.moveDir ?? 1;
     const two = held?.off != null;
+    // (both hands empty: no weapon, no shield; he fights with his fists, models/warriorFists.ts)
+    const bare = !held && !offHeld && !shield.visible;
     twoHold.k = 0;
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
@@ -1728,13 +1737,13 @@ export function* warriorSteps(): ModelSteps {
     // (the body leans into its stride, models/ik.ts: the hands are held where this pose puts them through it, `holdArms`, so the weapon and shield keep their angle)
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     // (at a run the arm's own pump bends it: held forward and bent too, it stood out before the body unmoving)
-    else { j.shoulderR.rotation.x += -0.3 * (1 - runK); j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8 * (1 - runK) - RUN_BEND * runK; }
+    else if (!bare) { j.shoulderR.rotation.x += -0.3 * (1 - runK); j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8 * (1 - runK) - RUN_BEND * runK; }
     // shield carried low at the side, the arm held a little out so it clears the leg, and bent further at a run; a
     // second weapon held like the first, mirrored
     if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35 - RUN_SHIELD_BEND * runK; }
     else if (offHeld) { j.shoulderL.rotation.x += -0.3 * (1 - runK); j.shoulderL.rotation.z += 0.1; j.elbowL.rotation.x += -0.8 * (1 - runK) - RUN_BEND * runK; }
     // through the eyes the weapons are held higher and further out, or the hands sit below the frame
-    if (fp) {
+    if (fp && !bare) {
       // (a two-hander, held upright in both hands, would split the view: it rests low on the right, blade out)
       const S = two ? FP_STANCE_TWO : FP_STANCE;
       j.shoulderR.rotation.x += S[0]; j.elbowR.rotation.x += S[1]; j.handR.rotation.x += S[2]; j.handR.rotation.z += S[3]; j.shoulderR.rotation.z += S[4];
@@ -1745,7 +1754,7 @@ export function* warriorSteps(): ModelSteps {
     if (!fp) {
       const ia = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.7) * 0.03;
       if (two) { j.shoulderR.rotation.x += (REST_TWO[0] + sway) * ia; j.elbowR.rotation.x += REST_TWO[1] * ia; j.handR.rotation.x += REST_TWO[2] * ia; j.shoulderR.rotation.y += REST_TWO[3] * ia; }
-      else { j.shoulderR.rotation.x += (REST_ARM[0] + sway) * ia; j.shoulderR.rotation.z += 0.08 * ia; j.elbowR.rotation.x += REST_ARM[1] * ia; j.handR.rotation.x += REST_ARM[2] * ia; }
+      else if (!bare) { j.shoulderR.rotation.x += (REST_ARM[0] + sway) * ia; j.shoulderR.rotation.z += 0.08 * ia; j.elbowR.rotation.x += REST_ARM[1] * ia; j.handR.rotation.x += REST_ARM[2] * ia; }
       if (shield.visible) { j.shoulderL.rotation.x += (-0.3 - sway) * ia; j.shoulderL.rotation.z += -0.12 * ia; j.elbowL.rotation.x += -0.95 * ia; guard = 0.45 * ia; }
       else if (offHeld) { j.shoulderL.rotation.x += (REST_ARM[0] - sway) * ia; j.shoulderL.rotation.z += -0.08 * ia; j.elbowL.rotation.x += REST_ARM[1] * ia; j.handL.rotation.x += REST_ARM[2] * ia; }
     }
@@ -1847,8 +1856,8 @@ export function* warriorSteps(): ModelSteps {
     }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
-    if ((ended || began) && lastName === 'swing') swingEnd = t;
-    if (began && raw.name === 'swing') {
+    if ((ended || began) && alternates(lastName)) swingEnd = t;
+    if (began && alternates(raw.name)) {
       inRow = t - swingEnd < SWING_HOLD;
       side = inRow ? -side : 1;
       chain = t - swingEnd < 0.25;
@@ -1861,7 +1870,7 @@ export function* warriorSteps(): ModelSteps {
     const charged = raw?.name === 'charge' || raw?.under?.name === 'charge', legsFade = !(charged && lastCharged);
     // (a move begun from the shoulder carry, `shouldered` still last frame's, fades in slower: in 0.14 s Power Strike
     // flicked the axe off the shoulder into its raise, its tip's way turning 37 cm in a frame)
-    if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : 0.14, legsFade);
+    if (began) fade.cut(chain && alternates(raw.name) ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : 0.14, legsFade);
     else if (ended && !inTail) { fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
     if (raw) backOut = false;
     // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
@@ -2326,6 +2335,15 @@ export function* warriorSteps(): ModelSteps {
         j.body.position.y += -0.05 * reel;
         j.kneeL.rotation.x += 0.35 * hit + 0.2 * reel; j.kneeR.rotation.x += 0.15 * hit + 0.2 * reel;
         j.thighR.rotation.x += 0.35 * hit;
+      } else if (a.name === 'punch') {
+        // Bare Knuckles: the lead hand's jab, then the rear hand's cross, over the guard
+        aw = 1; fistPunch(j, k, side > 0, still, t, fp);
+      } else if (a.name === 'heave') {
+        // Heave: bent in to take hold through the step, then straightened up and thrown
+        aw = 1; legOwn = fistHeave(j, k, HEAVE.step / (HEAVE.step + HEAVE.hold), a.under?.name !== 'charge', fp);
+      } else if (a.name === 'pound') {
+        // Groundbreaker: both fists overhead, then down onto the floor ahead
+        aw = 1; fistPound(j, k, fp); feet = WIDE_FEET;
       } else if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
         aw = w;
@@ -2335,6 +2353,11 @@ export function* warriorSteps(): ModelSteps {
     // (a skill cast as the charge runs: the charge's legs under its arms, as they are under the charge's own, both
     // legs its own; posed by the skill alone, the legs stepped at a walk's pace as the body sped off at 26 m/s)
     if (a?.under?.name === 'charge') { legOwn = Math.max(legOwn, chargeLegs(a.under.t)); ownL = ownR = 0; }
+    // both hands empty: the fists up in their guard for a while after a move (standing or walking: at a run the arms
+    // pump), let down to hang once the fight has left him
+    fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP ? 1 : 0, 6, dt) : 0;
+    if (bare && !a && st.dead < 0) fistGuard(j, fistsUp * (1 - runK), t, fp);
+    const fisted = !bare ? 0 : a?.name === 'punch' || a?.name === 'pound' ? 1 : a?.name === 'heave' ? 0.4 : a ? 0 : fistsUp;
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)
@@ -2642,11 +2665,11 @@ export function* warriorSteps(): ModelSteps {
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held) hold(handR, along(grip), held.r, undefined, slantR);
-    else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
+    else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fisted), lerp(0.1, FIST.spread, fisted));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
-    else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+    else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 
     if (dt > 0) for (const f of furs) f.update(dt);
 
@@ -2672,7 +2695,7 @@ export function* warriorSteps(): ModelSteps {
     },
     // (the fight forgotten too: a hall's hero chosen away from as his showcase's strike landed stood on its dais finishing
     // it, the end of the blow held on one bent knee, "warrior is dancing on one leg like irish dancer")
-    reset: () => { legs.reset(); fade.reset(); fightT = -9; lastName = ''; lastK = 1; tailT = 0; chopTail = 0; },
+    reset: () => { legs.reset(); fade.reset(); fightT = -9; fistsUp = 0; lastName = ''; lastK = 1; tailT = 0; chopTail = 0; },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     armsFov: () => EYES.fov,
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; },

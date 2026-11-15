@@ -208,6 +208,11 @@ export function skillTooltip(raw: SkillDef, ofHero = true): () => TooltipContent
       const sh = alt(def.fallback?.shield), one = alt(def.fallback?.oneHanded);
       const alts = [sh && `${sh} with a shield`, one && `${one} with a one-handed weapon`].filter(Boolean);
       html += `<div class="tt-foot">Needs a two-handed weapon.${alts.length ? ` Without one this key uses ${alts.join(', or ')}.` : ''}</div>`;
+    } else if (def.needs === 'armed') {
+      const bare = alt(def.fallback?.bare);
+      html += `<div class="tt-foot">Needs a weapon.${bare ? ` With both hands empty this key uses ${bare}.` : ''}</div>`;
+    } else if (def.needs === 'bare') {
+      html += `<div class="tt-foot">Needs both hands empty: no weapon, no shield.</div>`;
     }
     html += '</div>';
     return { html, color: def.icon.color };

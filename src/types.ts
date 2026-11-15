@@ -61,7 +61,7 @@ export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
 /** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
  *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | 'punch' | 'heave' | 'pound' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -145,9 +145,10 @@ export interface SkillDef {
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
-  /** only works with a shield, a two-handed weapon or a weapon in each hand; otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'twoHanded' | 'dual';
-  fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string };
+  /** only works with a shield, a two-handed weapon, a weapon in each hand, something in a hand (`armed`: a weapon or
+   *  a shield) or nothing in either (`bare`); otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare';
+  fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string; bare?: string };
   /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
    *  lighter ones): `loot/loadout.ts` `forStyle` */
   styles?: Partial<Record<HeldStyle, StyleTuning>>;
@@ -179,8 +180,8 @@ export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 /** The school of magic a weapon is attuned to (the mage's staffs): it sets the spell the weapon itself casts. */
 export type School = 'arcane' | 'fire' | 'lightning' | 'healing';
 
-/** What a loadout is kept under: how the weapons are held, the school of the one held, or `bare`, none held by a
- *  class whose weapons have schools. */
+/** What a loadout is kept under: how the weapons are held, the school of the one held, or `bare`: none held by a
+ *  class whose weapons have schools, or both hands empty (no weapon, no shield) for one whose skills go by the gear. */
 export type HeldStyle = WeaponStyle | School | 'bare';
 
 /** The hands a hero with none full casts a channel from (`SkillDef.both`): one of its keys held is a hand, the

@@ -902,7 +902,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));
   if (name === 'staffs') add(describeStaffs(host, guest));
-  if (name === 'rush' || name === 'strike') add(describeRush(host, guest));
+  if (name === 'rush' || name === 'strike' || name === 'heave') add(describeRush(host, guest));
   if (name === 'strike') add(describeStrike(host, guest));
   if (name === 'wave') add(describeDrawnFoes(host, guest, frameMs));
   if (name === 'ghosts') add(describeGhosts(host, guest, frameMs));

@@ -32,12 +32,44 @@ const warrior: ClassDef = {
   // Right click raises the shield; with a two-hander instead it looses the crescent (Thunder Crescent), with a weapon in
   // each hand it strikes with both (Twin Fangs), and with a lone one-hander it is empty until the player
   // binds something. A key's default is the last skill listing it.
+  // With both hands empty (no weapon, no shield) he fights with his fists, a style with a bar of its own (#400): the
+  // weapon's skills give way to the fists' on their keys (`fallback.bare`), and the fists' need empty hands. Quicker and
+  // lighter than a weapon: more blows and more Energy a second, foes seized and thrown, less in each blow. The names
+  // and numbers are working ones, the owner's to settle.
   skills: [
+    {
+      key: 'mouse0', impl: 'knuckles', name: 'Bare Knuckles',
+      desc: 'Quick punches, left then right, at what stands close before you. Each hit restores Energy. Shorter of reach and lighter than a weapon, and faster than any.',
+      tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.24, fireAt: 0.5,
+      damage: 30, range: 2.4, arc: 1.3, knock: 1.2, gain: 4,
+      needs: 'bare',
+      color: 0xd8c8b0,
+      icon: { glyph: '✊︎', color: '#e8d2b0' },
+    },
+    {
+      key: 'mouse2', impl: 'heave', name: 'Heave',
+      desc: 'Step in, seize the first foe before you and hurl it the way you aim. It is struck as you take hold, and again where it lands, with every foe it lands among. Elites and bosses are too heavy to throw: they are struck and driven back.',
+      tags: ['physical'], cost: 20, cooldown: 4, castTime: 0,
+      damage: 110, range: 2.2, radius: 2.4, knock: 5,
+      needs: 'bare',
+      color: 0xd8c0a0,
+      icon: { glyph: '⤴', color: '#e8c89a' },
+    },
+    {
+      key: '1', impl: 'groundbreaker', name: 'Groundbreaker',
+      desc: 'Raise both fists and drive them into the ground before you. The floor breaks, and every foe round the blow is struck and thrown back.',
+      tags: ['physical'], cost: 35, cooldown: 6, castTime: 0.75, fireAt: 0.62,
+      damage: 260, radius: 4, knock: 9,
+      needs: 'bare',
+      color: 0xffb060,
+      icon: { glyph: '⤓', color: '#ffb060' },
+    },
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
       desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.42,
       damage: 62, range: 3.3, arc: 2.2, knock: 2.2, gain: 4,
+      needs: 'armed', fallback: { bare: 'knuckles' },
       // (each about as much damage and energy a second: a great weapon's weight in each blow, two blades' pace)
       styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 } },
       color: 0xffd9a0,
@@ -66,7 +98,7 @@ const warrior: ClassDef = {
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs' },
+      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', bare: 'heave' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {
@@ -74,6 +106,7 @@ const warrior: ClassDef = {
       desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held. A two-handed weapon spins slower and hits harder.',
       tags: ['physical'], cost: 30, cooldown: 0, castTime: 0, channel: true,
       damage: 150, radius: 2.9, moveMult: 0.8, spin: 15,
+      needs: 'armed', fallback: { bare: 'groundbreaker' },
       // (as Rending Cleave's swings: a great weapon's weight slows it as much, the same damage a second)
       styles: { twoHanded: { spin: 10.5 } },
       icon: { glyph: '✺', color: '#e8eef8' },
@@ -105,6 +138,7 @@ const warrior: ClassDef = {
       desc: 'Gather your strength for a moment and a half, then bring your weapon down in a crushing overhead blow.',
       tags: ['physical'], cost: 35, cooldown: 5, castTime: 1.5, fireAt: 0.9,
       damage: 520, range: 3.9, arc: 1.2, knock: 9,
+      needs: 'armed',
       color: 0xffc070,
       icon: { glyph: '⚒', color: '#ffc070' },
     },

@@ -456,6 +456,27 @@ function rushInput(frame: number): Frame {
   return { keys: [key], aim };
 }
 
+/** how far ahead the guest aims its throw in `heave` (m), along `rush`'s lane */
+const HEAVE_AHEAD = 5;
+
+/** The guest in `heave` (#400): its hands emptied as equipping nothing would have them (its bar and its look), it
+ *  seizes the foe before it once and throws it on along the lane, its cooldown and energy made ready first. */
+function heaveInput(frame: number): Frame {
+  const hero = G.player;
+  const [x, z] = rushAhead(HEAVE_AHEAD);
+  const aim = new THREE.Vector3(x, 0, z);
+  if (frame === 0) {
+    hero.gear = { ...hero.gear, weapon: null, twoHanded: false, shield: false, offWeapon: null };
+    hero.fitToGear();
+    hero.model.setGear?.(hero.gear);
+  }
+  const key = keyOf('heave');
+  if (!key || frame !== RUSH_AT) return { aim };
+  hero.cooldowns.clear();
+  hero.energy = hero.stats.maxEnergy;
+  return key === 'mouse2' ? { m2: true, aim } : key === 'mouse0' ? { m0: true, aim } : { keys: [key], aim };
+}
+
 /** `staffs` (#402): the foes the guest burns and the frames of its two halves. The guest holds a fire staff and
  *  casts at the foes until `STAFFS.mend`, then a healing staff, its beam held on the host from `STAFFS.beam`. */
 const STAFFS = { foes: [[14, 17], [16, 16.5], [15, 15.5]] as XZ[], mend: 300, beam: 320, hostLife: 800, hostHurt: 300 };
@@ -671,6 +692,21 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [RUSH_AT + 20, RUSH_AT + 40, RUSH_AT + 120],
     hostInput: () => ({}),
     guestInput: rushInput,
+  },
+  heave: {
+    about: 'the guest, a warrior with both hands empty, seizes a dazed foe and throws it on at another, the host standing off',
+    frames: 200,
+    host: [-4, 22],
+    guest: RUSH_FROM,
+    foes: [
+      { type: 'mossback', at: rushAhead(1.7), dazed: true },
+      { type: 'thornling', at: rushAhead(5.2), dazed: true },
+    ],
+    // (a warrior's: its fists' skills come onto its keys as its hands are emptied)
+    skill: 'bullRush',
+    pictures: [RUSH_AT + 12, RUSH_AT + 32, RUSH_AT + 70],
+    hostInput: () => ({}),
+    guestInput: heaveInput,
   },
   ping: {
     about: 'the guest pings a foe and a spot with Left Shift, then a foe held first over the floor, then a spot by a finger held on the minimap, and the '

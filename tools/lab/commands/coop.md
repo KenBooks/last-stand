@@ -26,7 +26,8 @@ that chases the host; `evade`, played by a hero with a shot (a ranger or a mage)
 Witch and a Sporecaller in turn, which may blink or duck out of its shots as its own game judges them; `dodge`: the
 guest running from every other blow as it sees it coming; `down`: a foe bringing
 the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
-blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
+blinking between two spots as foes close on it; `heave` (#400), the warrior's hands emptied, a dazed foe seized and thrown on at another, judged as `rush`'s carry
+and throw are; `rush`, played only by a hero with Bull Rush, `--class warrior`:
 the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
 charge cast over it 0.35 s from its blow; `throws`: a Cinder Brute 15.5 m off and a Barkhide Hulk 11 m off
 throwing at the guest, which stands, walking only while a vine holds it, the host far off: the Brute's first chunk
