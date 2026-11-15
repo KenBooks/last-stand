@@ -23,8 +23,8 @@ import { skipTraining } from '../../../src/game/training';
 import { sparringShade, stationDone, stationSteps, tutorialStation, tutorialStep } from '../../../src/game/tutorial';
 import { villageObject } from '../../../src/game/village';
 import { project } from '../../../src/ui/floaters';
-import { panelsOpen } from '../../../src/ui/menus';
 import { heroSelectOpen } from '../../../src/ui/heroSelect';
+import { panelsOpen } from '../../../src/ui/menus';
 import { untilInRealTime } from './villageWaits';
 import { labelAt } from '../../../src/ui/overlay/layer';
 import { groundHeight } from '../../../src/world/ground';
@@ -63,6 +63,8 @@ const STEP_ROUND: readonly [number, number][] = [[-3, 0], [3, 0], [0, -3], [0, 3
 const TAP_AT = { x: 0.4, y: 0.45 };
 /** where the hero stands in the yard (its own frame), the dummies before him */
 const IN_YARD: [number, number] = [0, 1.3];
+/** frames a finger's tap on a skill button lasts */
+const TAP_FRAMES = 8;
 /** frames the main attack is held before it's let go: a bow's draw, nocked first */
 const DRAW_FRAMES = 100;
 /** where he stands back to shoot from (the yard's own frame), and the tries at arm's length before he does */
@@ -93,14 +95,31 @@ function under(at: { x: number; y: number }): string {
   return found ? `${found.tagName.toLowerCase()}.${found.className} in #${found.closest('[id]')?.id}` : 'nothing';
 }
 
-const rectText = (r: DOMRect): string => `${r.width.toFixed(0)}x${r.height.toFixed(0)} at ${r.left.toFixed(0)}, ${r.top.toFixed(0)}`;
 /** The page's transitions over (a panel slid or faded in), as a player waits to see what he presses. */
 async function settled(): Promise<void> {
   const sliding = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
   await Promise.all(sliding.map((animation) => animation.finished.catch(() => undefined)));
 }
 
+const rectText = (r: DOMRect): string => `${r.width.toFixed(0)}x${r.height.toFixed(0)} at ${r.left.toFixed(0)}, ${r.top.toFixed(0)}`;
+
 const overlap = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** What's wrong with the ring as the step `step` points at `selector`: it must show, round that part of the page. */
+function ringProblems(step: string, selector: string): string[] {
+  const ring = document.querySelector<HTMLElement>('#tut-ring');
+  const target = document.querySelector<HTMLElement>(selector);
+  if (!target?.checkVisibility(SHOWN)) return [`${step}: ${selector}, which the step points at, isn't shown`];
+  if (!ring?.classList.contains('on')) {
+    const t = target.getBoundingClientRect();
+    return [`${step}: nothing rings ${selector} (it stands at ${t.left.toFixed(0)}, ${t.top.toFixed(0)}, ${t.width.toFixed(0)}x${t.height.toFixed(0)})`];
+  }
+  const r = ring.getBoundingClientRect(), t = target.getBoundingClientRect();
+  const middle = { x: t.left + t.width / 2, y: t.top + t.height / 2 };
+  const round = r.left <= t.left && r.top <= t.top && r.right >= t.right && r.bottom >= t.bottom
+    && middle.x > r.left && middle.x < r.right && middle.y > r.top && middle.y < r.bottom;
+  return round ? [] : [`${step}: the ring stands at ${r.left.toFixed(0)}, ${r.top.toFixed(0)} (${r.width.toFixed(0)}x${r.height.toFixed(0)}), not round ${selector}`];
+}
 
 /** What's wrong with where the tracker stands as it asks for `step`. */
 function trackerProblems(step: string): string[] {
@@ -319,8 +338,11 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   if (await asked('strike')) {
     if (touch) {
       for (let tries = 0; tries < 8 && tutorialStep()?.id === 'strike'; tries++) {
-        await tap(element('#touch-skills .tk-mouse0'));
-        await lab.step(60);
+        // (a shot flies past a dummy at arm's length: he steps back from it, as with the mouse)
+        if (tries === STAND_BACK_AFTER) await stand(yardToWorld(...BACK_IN_YARD), Math.atan2(dummy.x - yardToWorld(...BACK_IN_YARD)[0], dummy.z - yardToWorld(...BACK_IN_YARD)[1]));
+        // (a finger's tap lasts a few frames: pressed and lifted within one, the attack held while pressed never began)
+        await hold('mouse0', dummy, () => tutorialStep()?.id !== 'strike', TAP_FRAMES);
+        await lab.step(60, REST);
       }
     } else {
       // (held a moment and let go, again and again: a bow's shot is loosed as its key lifts)
@@ -381,16 +403,28 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   }
 
   // --- your hero ---
-  if (await asked('bind')) {
+  if (await asked('pick')) {
     if (touch) await press(element('#touch-village .tv-bag'));
     else await lab.step(1, () => ({ keys: ['i'] }));
     await lab.step(SHOW_FRAMES, REST);
     // (a short screen shows one of the bag's panels at a time: its skills picked on the rail)
     // (the bag faded in first: its rail counts as shown only then)
     await settled();
+    // (frames after the fade, for the ring to look again: the lab's frames outrun the browser's clock the fade runs on)
+    await lab.step(SHOW_FRAMES, REST);
     const skillsTab = document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]');
-    if (skillsTab?.checkVisibility(SHOWN)) await press(skillsTab);
+    if (skillsTab?.checkVisibility(SHOWN)) {
+      problems.push(...ringProblems('pick', '#lobby-rail [data-lt="skills"]'));
+      await press(skillsTab);
+    }
+    await lab.step(SHOW_FRAMES, REST);
+    problems.push(...ringProblems('pick', '#loadout-bar'));
+    moments.push(await lab.screen('tutorial-pick-ringed'));
     await press(element('#loadout-bar').children[BOUND_KEY]);
+    await lab.step(SHOW_FRAMES, REST);
+  }
+  if (await asked('bind')) {
+    problems.push(...ringProblems('bind', '#spellbook'));
     await press(element('#spellbook').firstElementChild!);
     if (touch) await press(element('#rail-close'));
     else await lab.step(1, () => ({ keys: ['i'] }));

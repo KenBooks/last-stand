@@ -29,6 +29,8 @@ export interface GameEvents {
   itemThrown: [item: Item];
   itemTaken: [item: Item];
   itemEquipped: [item: Item];
+  /** a key picked on the loadout's bar, its book opened for a skill to put on it */
+  skillKeyPicked: [];
   /** the local hero's skill put on a key or taken off one (the loadout's editor) */
   skillBound: [];
   /** a run's spoils banked into the stash (`loot/profile.ts` `bankItems`) */

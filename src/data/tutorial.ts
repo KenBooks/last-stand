@@ -12,11 +12,11 @@ export type StationId = 'items' | 'combat' | 'hero' | 'runs' | 'together';
 export type TutorialStepId =
   | 'bag' | 'throw' | 'take' | 'stash' | 'wear'
   | 'yard' | 'strike' | 'skills' | 'block' | 'break' | 'daze' | 'lure' | 'draught'
-  | 'bind' | 'hall' | 'chronicle' | 'portal' | 'bank' | 'campfire';
+  | 'pick' | 'bind' | 'hall' | 'chronicle' | 'portal' | 'bank' | 'campfire';
 
 /** Where a step's marker stands over the village: the training yard, the sparring shade, or one of the village's
  *  objects by its id (data/village.ts `VILLAGE_OBJECTS`: the stash's chest, the hall, a portal...). */
-export type TutorialPlace = 'yard' | 'shade' | 'chest' | 'hall' | 'chronicle' | 'crypt' | 'campfire';
+export type TutorialPlace = 'yard' | 'shade' | 'drop' | 'chest' | 'hall' | 'chronicle' | 'crypt' | 'campfire';
 
 export interface TutorialStep {
   id: TutorialStepId;
@@ -37,6 +37,12 @@ export interface TutorialStep {
   skills?: readonly string[];
   /** the sparring shade spars with him while it's the step */
   shade?: boolean;
+  /** the parts of the page it points at, ringed on the screen (ui/training.ts): the first of the list that shows and
+   *  isn't `.active` (a tab already picked); `{key:impl}` in one is the key of the hero's skill. From play, of a step
+   *  that named "the bar at its foot" with nothing on the screen marking it: "this step is confusing". */
+  mark?: readonly string[];
+  /** the same on touch, where it differs */
+  touchMark?: readonly string[];
   /** how many times it's done before it's ticked */
   count?: number;
 }
@@ -51,17 +57,18 @@ export const TUTORIAL: readonly Station[] = [
     steps: [
       {
         id: 'bag', title: 'Open your bag',
-        how: 'Press I.', touch: 'Tap the bag button.',
+        how: 'Press I.', touch: 'Tap Bag, at the top right.', touchMark: ['#touch-village .tv-bag'],
         why: 'What you wear, your attributes and your skills are in it. It opens anywhere in the village.',
       },
       {
         id: 'throw', title: 'Throw an item on the ground',
-        how: 'Drag an item you wear out of the bag and let it go over the ground.',
-        touch: 'Tap an item you wear, then Drop.',
+        how: 'In the bag, drag one of the items your hero wears (round the outline of your hero) out onto the ground, and let go.',
+        touch: 'Tap one of the items your hero wears (round the outline of your hero), then Drop.',
+        mark: ['#equip'], touchMark: ['#lobby-rail [data-lt="gear"]', '#equip'],
         why: 'Gear on the ground can be picked up again, by you or by a friend. Whatever lies there when a run starts is lost.',
       },
       {
-        id: 'take', title: 'Pick it up again',
+        id: 'take', title: 'Pick it up again', at: 'drop',
         how: 'Click its name on the ground.', touch: 'Tap its name on the ground, then tap it again. Under the move stick\'s half of the screen it takes no tap: step round it.',
         why: 'It goes into your stash, not back onto you.',
       },
@@ -73,7 +80,9 @@ export const TUTORIAL: readonly Station[] = [
       },
       {
         id: 'wear', title: 'Wear it again',
-        how: 'Right-click it in the stash, or drag it onto its slot.', touch: 'Tap it in the stash, then Equip.',
+        how: 'It is in the stash, on the right: right-click it, or drag it onto your hero.',
+        touch: 'It is in the stash: tap it, then Equip.',
+        mark: ['#stash .sitem[draggable="true"]'], touchMark: ['#lobby-rail [data-lt="gear"]', '#stash .sitem[draggable="true"]'],
         why: 'An item\'s card compares it with what you wear.',
       },
     ],
@@ -88,25 +97,29 @@ export const TUTORIAL: readonly Station[] = [
       },
       {
         id: 'strike', title: 'Strike a dummy',
-        how: 'Aim with the mouse and press {attack}.', drawn: 'Hold it to draw, let it go to loose.',
+        how: 'Point the mouse at a dummy and press {attack}.', drawn: 'Hold it to draw, let go to shoot.',
         touch: 'Tap the largest button. Drag it to aim, let go to strike.',
+        mark: ['#hotbar > :first-child'], touchMark: ['#touch-skills .tk-mouse0'],
         why: 'The plate over a dummy counts the damage you do each second.',
       },
       {
         id: 'skills', title: 'Use three other skills', count: 3,
-        how: 'They are on the bar below: {keys}. Hover one to read it.',
+        how: 'They are on the bar at the bottom of the screen: {keys}. Point at a dummy and press them. Rest the mouse on one to read it.',
         touch: 'They are the smaller buttons: tap one, or drag it to aim.',
+        mark: ['#hotbar'], touchMark: ['#touch-skills'],
         why: 'Each skill waits out its own cooldown, and a held one drains Energy.',
       },
       {
         id: 'block', title: 'Block a blow', at: 'shade', shade: true, skills: ['raiseShield'],
         how: 'Hold {key:raiseShield} ({name:raiseShield}) and face the sparring shade as it strikes.',
         touch: 'Hold the {name:raiseShield} button and face the sparring shade as it strikes.',
+        touchMark: ['#touch-skills .tk-{key:raiseShield}'],
         why: 'A raised shield stops every blow from the front, for three times your Block Amount. It drains Energy and slows your step. Lowered, it still blocks now and then, by your Block chance.',
       },
       {
         id: 'break', title: 'Have your guard broken', at: 'shade', shade: true, skills: ['raiseShield'],
         how: 'Keep the shield up: the shade\'s next blows are too heavy to hold.',
+        touchMark: ['#touch-skills .tk-{key:raiseShield}'],
         why: 'A blow bigger than the shield can hold breaks your guard. You stagger for a moment and a half: you can walk, but not block, strike or cast. Step out of the heaviest blows.',
       },
       {
@@ -118,11 +131,13 @@ export const TUTORIAL: readonly Station[] = [
         id: 'lure', title: 'Lure the shade away', at: 'shade', shade: true, skills: ['strawman'],
         how: 'Cast {name:strawman} ({key:strawman}) a few steps from you.',
         touch: 'Drag the {name:strawman} button to a spot a few steps from you.',
+        touchMark: ['#touch-skills .tk-{key:strawman}'],
         why: 'Foes leave you for it for a few seconds: time to step back and shoot. Elites and bosses ignore it.',
       },
       {
         id: 'draught', title: 'Drink your draught', skills: ['potion'],
         how: 'Press {key:potion}.', touch: 'Tap the {name:potion} button.',
+        mark: ['#hotbar > :last-child'], touchMark: ['#touch-skills .tk-q'],
         why: 'It heals at once, then needs a long while before the next. Keep it for when it counts.',
       },
     ],
@@ -131,10 +146,18 @@ export const TUTORIAL: readonly Station[] = [
     id: 'hero', name: 'Your hero', covers: 'Your keys, the three heroes, the save slots',
     steps: [
       {
-        id: 'bind', title: 'Put a skill on another key',
-        how: 'Open your bag (I). Click a key on the bar at its foot, then a skill in the book that opens.',
-        touch: 'Tap Bag, then Skills. Tap a key, then a skill in the book.',
-        why: 'A skill can sit on several keys, which share its cooldown. Your keys are kept from visit to visit.',
+        id: 'pick', title: 'Click a key on your skill bar',
+        how: 'Open your bag (I). Your skill bar is the row of keys at the bottom of the screen, ringed in gold: click one of them.',
+        touch: 'Tap Bag, then Skills. Your skill bar is the row of keys ringed in gold: tap one of them.',
+        why: 'The key you pick lights up, and the book of your skills opens over the row.',
+        mark: ['#loadout-bar'], touchMark: ['body:has(#menu.stowed) #touch-village .tv-bag', '#lobby-rail [data-lt="skills"]', '#loadout-bar'],
+      },
+      {
+        id: 'bind', title: 'Pick a skill for that key',
+        how: 'Click a skill in the book, ringed in gold above the row: it goes onto the lit key.',
+        touch: 'Tap a skill in the book, ringed in gold: it goes onto the lit key.',
+        why: 'A skill can sit on several keys, which share its cooldown. Your keys are kept from visit to visit; Reset to defaults puts them back.',
+        mark: ['#spellbook'],
       },
       {
         id: 'hall', title: 'Visit the Hall of Heroes', at: 'hall',

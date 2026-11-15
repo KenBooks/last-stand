@@ -18,10 +18,17 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { sfx } from '../core/audio';
 import { input } from '../core/input';
 import { KEY_LABEL } from './hud';
-/** how often the tracker, out of its column, looks again for where it stands (s): a layout read, so not every frame */
-const PLACE_EVERY = 0.2;
+import type { SkillKey } from '../types';
+
+/** a key said in words in a step (the mouse's buttons by name: "LMB" meant nothing to a new player) */
+const KEY_WORDS: Partial<Record<SkillKey, string>> = { mouse0: 'the left mouse button', mouse2: 'the right mouse button' };
+const keyWords = (key: SkillKey): string => KEY_WORDS[key] ?? KEY_LABEL[key];
+/** how often the ring looks again for what it rings and where it stands (s): a layout read, so not every frame */
+const RING_EVERY = 0.2;
 /** how far the tracker stands off what it's placed beside, out of its column (css px) */
 const AFLOAT_GAP = 10;
+/** how far the ring stands out round what it rings (css px) */
+const RING_PAD = 4;
 /** what counts as shown: `visibility: hidden` and a panel faded out too */
 const SHOWN = { visibilityProperty: true, opacityProperty: true };
 
@@ -37,8 +44,8 @@ let shown = false, finishing = 0;
 let touchSaid = false, comingSaid = false;
 /** where it stands in the page (the minimap's column), and whether it has left it for the page's own box (`afloat`) */
 let home: HTMLElement, afloat = false;
-/** when the tracker, out of its column, last looked for where it stands */
-let placeT = 0;
+/** the ring round the part of the page the step points at, when it last looked, and where it was put */
+let ring: HTMLElement, ringT = 0, ringAt = 'boot';
 /** a short screen (a phone held sideways: src/ui/AGENTS.md), where the bag's panels fill the screen */
 const SHORT = matchMedia('(max-height: 520px)');
 
@@ -56,6 +63,13 @@ export function initTrainingTracker(): void {
     else skipTraining();
   });
   initTutorial();
+  // (shown under the loading screen at first, as the tracker is, so its first raster is there and not mid-walk)
+  ring = document.createElement('div');
+  ring.id = 'tut-ring';
+  ring.setAttribute('aria-hidden', 'true');
+  ring.className = 'on';
+  document.body.append(ring);
+  on('tutorialChanged', () => { ringT = 0; });
   render();
   // (shown under the loading screen, so its first raster builds Chrome's Skia programs there: shown first at the
   // reveal, a first visit's held Chrome's GPU process 0.3 to 0.4 s; the first frame after it hides it if it's done)
@@ -106,13 +120,14 @@ export function updateTrainingTracker(dt: number, visible: boolean, up = visible
     (afloat ? document.body : home).append(root);
     root.classList.toggle('afloat', afloat);
     if (!afloat) root.style.right = '';
-    else placeT = 0;
+    else ringT = 0;
   }
   root.classList.toggle('over-bag', touring && bag);
-  placeT -= dt;
-  if (placeT <= 0) {
-    placeT = PLACE_EVERY;
+  ringT -= dt;
+  if (ringT <= 0) {
+    ringT = RING_EVERY;
     if (afloat) placeAfloat();
+    placeRing(touring && up ? markedNow() : null);
   }
   const show = touring ? up : visible && (trainingPending() || finishing > 0);
   if (show === shown) return;
@@ -156,6 +171,21 @@ function howOf(step: TutorialStep): string {
   return step.drawn && G.player.skillAt('mouse0')?.def.draw ? `${step.how} ${step.drawn}` : step.how;
 }
 
+/** The part of the page the step to take now points at (`TutorialStep.mark`): the first of its list that shows and
+ *  isn't a tab already picked. */
+function markedNow(): HTMLElement | null {
+  const step = tutorialStep();
+  const marks = (input.touchMode ? step?.touchMark ?? step?.mark : step?.mark) ?? [];
+  for (const mark of marks) {
+    const selector = mark.replace(/\{key:(\w+)\}/g, (_, impl: string) => SKILL_KEYS.find((k) => G.player.skillAt(k)?.def.impl === impl) ?? 'none');
+    const el = document.querySelector<HTMLElement>(selector);
+    if (!el || el.classList.contains('active') || !el.checkVisibility(SHOWN)) continue;
+    const box = el.getBoundingClientRect();
+    if (box.width >= 1 && box.height >= 1 && box.bottom > 0 && box.top < innerHeight) return el;
+  }
+  return null;
+}
+
 /** Out of its column (the bag open, which puts the column away), the tracker stands on the right beside the bag's
  *  panels, at the top. In its column the rest of the time, where the first visit's checklist stood (from review, "Lets
  *  keep tutorial on the right like it was originally": it had stood out of it, in the top left corner, then left of the
@@ -171,6 +201,18 @@ function placeAfloat(): void {
   const zoom = parseFloat(getComputedStyle(root).zoom) || 1;
   const right = `${Math.round((innerWidth - beside + AFLOAT_GAP) / zoom)}px`;
   if (root.style.right !== right) root.style.right = right;
+}
+
+/** The ring put round `el` (none: hidden), written only when where it stands changes. */
+function placeRing(el: HTMLElement | null): void {
+  const box = el?.getBoundingClientRect();
+  const at = box ? [box.left - RING_PAD, box.top - RING_PAD, box.width + 2 * RING_PAD, box.height + 2 * RING_PAD].map(Math.round).join(',') : '';
+  if (at === ringAt) return;
+  ringAt = at;
+  ring.classList.toggle('on', !!at);
+  if (!at) return;
+  const [x, y, w, h] = at.split(',');
+  Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
 }
 
 function line(cls: string, text: string): HTMLElement {
@@ -189,15 +231,15 @@ function said(text: string, step: TutorialStep): string {
   return text.replace(/\{(\w+)(?::(\w+))?\}/g, (_, word: string, impl?: string) => {
     if (word === 'attack') {
       const s = p.skillAt('mouse0');
-      return s ? `${KEY_LABEL.mouse0} (${s.def.name})` : 'your attack';
+      return s ? `${keyWords('mouse0')} (${s.def.name})` : 'your attack';
     }
     if (word === 'keys') {
-      return SKILL_KEYS.filter((k) => k !== 'mouse0' && p.skillAt(k) && p.skillAt(k)!.def.impl !== 'potion').map((k) => KEY_LABEL[k]).join(', ');
+      return SKILL_KEYS.filter((k) => k !== 'mouse0' && p.skillAt(k) && p.skillAt(k)!.def.impl !== 'potion').map(keyWords).join(', ');
     }
     if (word === 'skills') {
       return anyOf([...new Set(boundSkills(p).filter((s) => step.skills?.includes(s.def.impl)).map((s) => s.def.name))]);
     }
-    if (word === 'key' && impl) { const k = keyOf(impl); return k ? KEY_LABEL[k] : 'its key'; }
+    if (word === 'key' && impl) { const k = keyOf(impl); return k ? keyWords(k) : 'its key'; }
     if (word === 'name' && impl) return nameOf(impl);
     return '';
   });

@@ -21,6 +21,7 @@ import { anchorLabel, floatText, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
 import { inYard, villageObject } from './village';
+import { groundDrops } from './groundItems';
 import { isWarm, want } from './warm';
 
 const COOKIE = 'last-stand-tutorial';
@@ -78,7 +79,9 @@ export function initTutorial(): void {
   on('itemTaken', () => tutorialDid('take'));
   on('itemEquipped', () => tutorialDid('wear'));
   on('skillUsed', (impl) => skillUsed(impl));
-  on('skillBound', () => tutorialDid('bind'));
+  on('skillKeyPicked', () => tutorialDid('pick'));
+  // (a skill dragged straight onto a key picks the key and binds it at once)
+  on('skillBound', () => { tutorialDid('pick'); tutorialDid('bind'); });
   on('hallShown', () => tutorialDid('hall'));
   on('spoilsBanked', () => tutorialDid('bank'));
   setSparSink(sparred);
@@ -205,11 +208,11 @@ let shown = false;
  *  tall: its marker stands where the hero's eye is) (m) */
 const MARKER_OVER = 0.6, MARKER_MOST = 2.4;
 /** the yard's and the shade's markers: what each says, and how high it stands (m) */
-const MARKER = { yard: { says: 'Training yard', high: 2.8 }, shade: { says: SHADE.name, high: 2.6 } };
+const MARKER = { yard: { says: 'Training yard', high: 2.8 }, shade: { says: SHADE.name, high: 2.6 }, drop: { says: 'Your item', high: 1.4 } };
 
 /** What the marker over `at` says: the place's name. */
 const markerSays = (at: TutorialPlace): string =>
-  (at === 'yard' || at === 'shade' ? MARKER[at].says : villageObject(at)?.name ?? '');
+  (at === 'yard' || at === 'shade' || at === 'drop' ? MARKER[at].says : villageObject(at)?.name ?? '');
 
 /** Where the marker stands: over the step's place, while the tutorial shows and he isn't there yet. */
 function markerAt(): { x: number; y: number; z: number } | null {
@@ -218,6 +221,10 @@ function markerAt(): { x: number; y: number; z: number } | null {
   if (at === 'shade') {
     const e = sparringShade();
     return e ? { x: e.pos.x, y: e.obj.position.y + MARKER.shade.high, z: e.pos.z } : null;
+  }
+  if (at === 'drop') {
+    const d = groundDrops()[0];
+    return d ? { x: d.x, y: groundHeight(d.x, d.z) + MARKER.drop.high, z: d.z } : null;
   }
   if (at === 'yard') return { x: YARD.x, y: groundHeight(YARD.x, YARD.z) + MARKER.yard.high, z: YARD.z };
   const o = villageObject(at);

@@ -56,6 +56,15 @@ body.touch .tr-skip { padding: 10px 14px 10px 0; }
   #training.over-bag :is(.tr-do, .tr-how) { display: inline; margin: 0 6px 0 0; }
 }
 
+/* the ring round the part of the page the tutorial's step points at (ui/training.ts `placeRing`): placed only as
+   that part moves, its pulse its opacity alone, slow (a breath every 2.8 s), still for reduced motion */
+#tut-ring { position: fixed; z-index: 45; left: 0; top: 0; width: 1px; height: 1px; box-sizing: border-box; pointer-events: none;
+  border: 2px solid var(--highlight); border-radius: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 0 10px rgba(255, 200, 90, .55);
+  opacity: 0; will-change: opacity; }
+#tut-ring.on { animation: tut-ring 1.4s ease-in-out infinite alternate; }
+@keyframes tut-ring { from { opacity: 1; } to { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { #tut-ring.on { animation: none; opacity: 1; } }
+
 /* a portal's card while the training is unfinished: its warning and its skip in Enter's place */
 .vc-training { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .vc-training.hidden { display: none; }
