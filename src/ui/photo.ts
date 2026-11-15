@@ -31,16 +31,17 @@ export interface PhotoHooks {
 
 /** the camera's bounds: how close to and far from what it turns round (m), how far up and down it looks (rad), its
  *  lens (vertical degrees) and roll (degrees) */
-const DISTANCE = { least: 0.3, most: 30 };
+const DISTANCE = { least: 0.2, most: 60 };
 const PITCH_MOST = 1.45;
 const FOV = { least: 15, most: 100 };
 const ROLL_MOST = 45;
-/** how far from where the hero stood what it turns round may go (m), the arena's own edge in a battleground, and how
- *  far over the ground the camera stays (m) */
-const LEASH = 24;
+/** how far from where the hero stood what it turns round may go in the village (m: the village is some 110 m across;
+ *  at 24, from play, it "has limited space to fly"), the arena's own edge in a battleground, how near the ground the
+ *  camera and what it turns round may come (m: at 0.15 it "does not go low to the ground"), and how high */
+const LEASH = 70;
 const ARENA_EDGE = ARENA.radius + 1;
-const OVER_GROUND = 0.15;
-const TARGET_HIGHEST = 25;
+const OVER_GROUND = 0.04;
+const TARGET_HIGHEST = 50;
 /** how fast it flies (m/s), Shift's share more, how far a dragged pixel turns it (rad), and a roll key's speed (deg/s) */
 const FLY_SPEED = 4;
 const FLY_FAST = 3;
@@ -243,7 +244,9 @@ function keepTarget(target: THREE.Vector3): void {
   const home = state.kept?.home ?? G.player.pos;
   const dx = target.x - home.x, dz = target.z - home.z;
   const away = Math.hypot(dx, dz);
-  if (away > LEASH) target.set(home.x + (dx / away) * LEASH, target.y, home.z + (dz / away) * LEASH);
+  if (G.arena.place === 'village' && away > LEASH) {
+    target.set(home.x + (dx / away) * LEASH, target.y, home.z + (dz / away) * LEASH);
+  }
   if (G.arena.place !== 'village') {
     const edge = Math.hypot(target.x, target.z);
     if (edge > ARENA_EDGE) target.set((target.x / edge) * ARENA_EDGE, target.y, (target.z / edge) * ARENA_EDGE);

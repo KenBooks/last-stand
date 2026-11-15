@@ -5,7 +5,10 @@
 @use 'theme' as *;
 @use 'mixins' as *;
 
-body.photo > :not(#game, #photo, #rotate, #alt-cursor, script, svg) { visibility: hidden !important; }
+// (its descendants too: one that sets `visibility: visible` itself shows through its parent's hidden, as the
+// class card's name and tagline do, from play: "text did not dissapear from here (charecter name and desc)")
+body.photo > :not(#game, #photo, #rotate, #alt-cursor, script, svg),
+body.photo > :not(#game, #photo, #rotate, #alt-cursor, script, svg) * { visibility: hidden !important; }
 #photo.hidden, #photo .hidden { display: none !important; }
 #photo { position: fixed; inset: 0; z-index: 48; }
 #photo .ph-pad { position: absolute; inset: 0; touch-action: none; cursor: $cursor-hand; }

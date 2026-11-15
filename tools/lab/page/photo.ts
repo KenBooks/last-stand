@@ -79,6 +79,43 @@ function shownElements(): string[] {
   return shown;
 }
 
+/** An element of the page that sets `visibility: visible` itself (as the class card's name and tagline do), planted
+ *  under the lobby's panels: it must be hidden too. */
+function overridesHidden(where: string): Found {
+  const planted = document.createElement('div');
+  planted.textContent = 'planted';
+  planted.style.cssText = 'visibility: visible; position: fixed; left: 10px; top: 10px; background: #f00;';
+  document.getElementById('menu')!.append(planted);
+  const shown = getComputedStyle(planted).visibility === 'visible';
+  planted.remove();
+  const problems = shown ? [`${where}: an element that sets its own visibility shows in photo mode`] : [];
+  return { lines: [`${where}: an element that sets its own visibility ${shown ? 'shown' : 'hidden'}`], problems };
+}
+
+/** how far the camera must fly from where the hero stood (m), and how near the ground it must come (m) */
+const FLIES_FAR = 40;
+const COMES_LOW = 0.1;
+
+/** The camera flown far off (in the village; to the wall in a battleground) and down by Q to the ground. */
+async function cameraRoom(lab: Lab, where: string, village: boolean): Promise<Found> {
+  const camera = photoCamera();
+  const home = camera.target.clone();
+  camera.target.set(home.x + (village ? FLIES_FAR : 0), home.y, home.z + (village ? 0 : 0));
+  await lab.step(1, () => ({ keys: ['w'] }));
+  const flew = Math.hypot(camera.target.x - home.x, camera.target.z - home.z);
+  camera.target.copy(home);
+  await lab.step(FLY_FRAMES * 2, () => ({ keys: ['q'] }));
+  const ground = G.arena.groundHeight(camera.target.x, camera.target.z);
+  const low = camera.target.y - ground;
+  camera.target.copy(home);
+  await lab.step(1);
+  const problems: string[] = [];
+  if (village && flew < FLIES_FAR - 1) problems.push(`${where}: the camera was held ${flew.toFixed(1)} m from him`);
+  if (low > COMES_LOW) problems.push(`${where}: Q brought the camera no lower than ${low.toFixed(2)} m over the ground`);
+  const far = village ? `kept ${flew.toFixed(1)} m out, ` : '';
+  return { lines: [`${where}: ${far}Q brought it ${low.toFixed(2)} m over the ground`], problems };
+}
+
 /** Photo mode opened by P from the game: on, the game held still (solo), the look's branch of the grade on. */
 async function openedByKey(lab: Lab, where: string): Promise<Found> {
   await lab.press('KeyP');
@@ -372,9 +409,10 @@ async function inPlace(lab: Lab, where: string, canary: boolean, settable: boole
   Promise<Found & { moments: Pictured[] }> {
   const parts: Found[] = [await openedByKey(lab, where)];
   const moments = [await lab.screen(`${where}-panel`, ['photo mode as it opens'])];
-  parts.push(panelFits(where), uiHidden(where, canary));
+  parts.push(panelFits(where), uiHidden(where, canary), overridesHidden(where));
   parts.push(await overlaysLeftOut(lab, where, canary), await heldStill(lab, where));
-  parts.push(await flownAndTurned(lab, where), await lookSet(lab, where, settable));
+  parts.push(await flownAndTurned(lab, where), await cameraRoom(lab, where, settable));
+  parts.push(await lookSet(lab, where, settable));
   parts.push(await heroHiddenAndShown(lab, where), await photoTaken(lab, where, false));
   await shotSetUp(lab, shot.filter, settable ? DUSK : null);
   moments.push(await lab.screen(`${where}-shot`, [`the panel hidden, letterboxed, ${shot.filter}`]));
