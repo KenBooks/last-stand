@@ -3,6 +3,14 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
+Production, every state (#595): no state may reach production's host (`node/production.mjs`: the saves service, the
+co-op relay, the traces service). Each state's report ends with what it asked there, refused by the lab's guard (`asked
+of production: nothing`), and each ask is a problem of that state's; asks made as the page booted are the boot's. The
+save slots screen (`saves`) asks the saves service for its health as it opens, answered by the lab in production's
+place (no Google sign-in): asked of production itself, it was refused a page on localhost (CORS) and failed the whole
+run. `--canary` lifts that answer for the run, so the save slots ask production's host again, which must be caught at
+`saves` (refused, so nothing reaches it; a run without `saves` says the canary wasn't judged).
+
 `behindProps`: the dummies' labels behind a prop (#288: they showed through an obelisk). A column is planted half way
 along the line from the camera to each label (an obstacle, `G.arena.obstacles`, for a frame): every label must hide,
 and every one show again with the columns gone. `--canary` plants each column 3 m beside its line, where at least one
