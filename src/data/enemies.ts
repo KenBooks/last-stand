@@ -137,7 +137,7 @@ export const BELL_WARDEN = {
   lastEvery: 3,
   down: 6,
   shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
-  grab: { reach: 1.3, under: 2.7, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 8, grace: 6 },
+  grab: { reach: 2.2, under: 3.4, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 6, grace: 4.5 },
 };
 
 // Elite ("hero") modifiers applied on top of a base archetype.
