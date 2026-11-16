@@ -238,7 +238,9 @@ const GradeShader = {
         if (top > K) v *= (K + (1.0 - K) * u / (1.0 - u * (1.0 - a))) / top;
         c.rgb = sRGBTransferOETF(vec4(v * uPaper, 1.0)).rgb;
       }
-      gl_FragColor = c;
+      // (the frame is opaque: the scene's alpha is 1 and one more for each layer of added light over it, 3 through
+      // the forest's shafts of light, and in HDR the canvas keeps it: a Mac's screen multiplied the colour by it, #575)
+      gl_FragColor = vec4(c.rgb, 1.0);
     }`,
 };
 

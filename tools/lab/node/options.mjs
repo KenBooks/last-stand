@@ -548,7 +548,7 @@ export const COMMANDS = {
       hdr: {
         kind: 'switch',
         help: 'each frame drawn again in HDR (on any display) and checked against the SDR one: under the knee as an '
-          + 'SDR screen shows it at the paper white, nothing past the peak, the canvas shown the frame drawn',
+          + 'SDR screen shows it at the paper white, nothing past the peak, the canvas shown the frame drawn, its alpha 1',
       },
       paper: { kind: 'number', usage: 'n', help: 'with --hdr, the paper white: a share of the screen\'s white (1)' },
       peak: { kind: 'number', usage: 'n', help: 'with --hdr, the brightest highlight: a share of its white (3)' },

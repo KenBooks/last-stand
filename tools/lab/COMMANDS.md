@@ -153,7 +153,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   pictured (`out/light/`; `--pictures=false` for the numbers alone). With `--hdr` (`--paper`, `--peak`), the same
   moment is drawn again in HDR, on any display, and checked against the SDR frame: every pixel under the knee as the
   SDR screen shows it at the paper white, nothing past the peak, and the canvas shown (the WebGPU one, read back) the
-  frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
+  frame drawn, its alpha 1 everywhere (#575: the forest's shafts of light, added, left 2 and 3 there, up to 8.7 by
+  its portals, which a Mac's screen multiplied the colour by). `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
   **At every quality level, on demand** (`--levels high,medium,low,verylow`, `--resolutions 1,0.5,0.25`): the same
