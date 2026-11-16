@@ -107,7 +107,7 @@ const warrior: ClassDef = {
     },
     {
       key: 'mouse2', impl: 'collarCut', name: 'Collar and Cut',
-      desc: 'Seize the nearest foe before you by the collar with your free hand, holding it still, and cut it away: one heavy blow that launches it far through the air. Bosses, elites and foes too big to hold are shoved back and cut for less.',
+      desc: 'Seize the nearest foe before you by the collar with your free hand, holding it still, and cut it away: one heavy blow that launches it through the air, small foes far, bigger ones less. Bosses, elites and foes too big to hold are shoved back and cut for less.',
       tags: ['physical'], cost: 20, cooldown: 3.5, castTime: 0.42,
       damage: 160, range: 0.6, duration: 1.2, knock: 4,   // (range: past his hand's reach, the foe's body this near)
       needs: 'free',
