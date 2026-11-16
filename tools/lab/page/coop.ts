@@ -47,6 +47,8 @@ export {
   coopOutCanary, coopOutSeen, coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopTwist, coopWatching,
   coopWorldAngle,
 } from './coopEnd';
+import { togetherNow, type Together } from './coopEnds';
+export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
 /** Which game a page plays. */
 export type Role = 'host' | 'guest';
@@ -155,7 +157,7 @@ export interface Sample {
 }
 
 /** Where a page's co-op stands, for the lab to wait on. */
-export interface CoopState {
+export interface CoopState extends Together {
   mode: string;
   status: string;
   /** the partners' heroes it has */
@@ -715,6 +717,12 @@ function wireTime(): number {
   return window.__labClock.t - wire.start;
 }
 
+/** This page's time on the link now, ms since it opened or joined the room: what its messages' times count from (a
+ *  page that joins later counts from later, `Pair.add`). */
+export function coopLinkTime(): number {
+  return wireTime();
+}
+
 /** Stands in for the browser's BroadcastChannel, which the game's `?net=local` link talks over. */
 class LabChannel {
   onmessage: ((event: { data: unknown }) => void) | null = null;
@@ -946,6 +954,7 @@ function stateNow(): CoopState {
     timer: G.run ? G.run.timer : null,
     maxLife: G.player.stats.maxLife,
     duel: duelNow(),
+    ...togetherNow(),
   };
 }
 

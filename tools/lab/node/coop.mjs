@@ -12,6 +12,7 @@ import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
+import { runsEnds } from './coopEnds.mjs';
 import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
 import { OUT } from './paths.mjs';
 
@@ -185,14 +186,36 @@ export class Pair {
   constructor({ pages, ping, jitter, frameMs }) {
     this.pages = pages;
     this.frameMs = frameMs;
-    const random = seededRandom(LINK_SEED);
+    this.random = seededRandom(LINK_SEED);
+    this.link = { delay: ping / 2, jitter };
     // (one way from each page to each other, all drawing from one stream: with two, the host's way to the guest
     // and back, as a pair has always had them)
-    this.ways = pages.map((_, from) => pages.map((__, to) => (
-      from === to ? null : new Way({ delay: ping / 2, jitter, random }))));
+    this.ways = pages.map((_, from) => pages.map((__, to) => (from === to ? null : this.way())));
     this.inboxes = pages.map(() => []);
+    // (how far behind the host's each page's time on the link runs, ms: a page counts from when it joined)
+    this.behind = pages.map(() => 0);
     // (a turn's messages are handed over after it, so none may be due before the next turn ends)
     this.turnFrames = Math.max(1, Math.min(MOST_TURN, Math.floor(ping / 2 / frameMs)));
+  }
+
+  /** A way of the link, drawing its delays from the party's one stream. */
+  way() {
+    return new Way({ ...this.link, random: this.random });
+  }
+
+  /**
+   * Another game stepped with the party's from now on, a way to and from each of the others (a player who comes
+   * later: `coopEnds.mjs`'s joiner in the middle of a run). It has just joined the room, so its time on the link
+   * counts from now and the host's from long before: each message's times are carried in the host's and handed over
+   * in the page's own (left in the host's, the joiner's welcome was due a minute after it came and never read).
+   */
+  async add(page) {
+    const [hostTime, pageTime] = await Promise.all([this.host, page].map((each) => callPage(each, 'coopLinkTime')));
+    for (const ways of this.ways) ways.push(this.way());
+    this.pages.push(page);
+    this.ways.push(this.pages.map((_, to) => (to === this.pages.length - 1 ? null : this.way())));
+    this.inboxes.push([]);
+    this.behind.push(hostTime - pageTime);
   }
 
   get host() {
@@ -232,8 +255,10 @@ export class Pair {
       return callPage(page, 'coopFrames', { arriving, frames, scenario });
     }));
     turns.forEach((turn, from) => {
+      const sent = turn.sent.map((message) => ({ ...message, at: message.at + this.behind[from] }));
       this.ways[from].forEach((way, to) => {
-        if (way) this.inboxes[to].push(...way.carry(turn.sent));
+        if (!way) return;
+        this.inboxes[to].push(...way.carry(sent).map((message) => ({ ...message, due: message.due - this.behind[to] })));
       });
     });
     return turns.map((turn) => turn.state);
@@ -598,6 +623,9 @@ export async function runCoop(side, options) {
     throw labError('coop: colours runs alone, without combat');
   }
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
+  if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
+    throw labError('coop: ends runs alone, on a pair (no --party)');
+  }
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -629,6 +657,16 @@ export async function runCoop(side, options) {
       lines.push(`canary: the host told no guest readies ${caught ? 'caught' : 'went unseen'}`);
       if (!caught) problems.push('coop: the canary\'s wave without the guest went unseen');
       else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(SLOW_GUEST_CANARY)));
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'ends') {
+      const late = {
+        tag: PARTY_TAGS[2],
+        open: () => side.openPartner(side.heroClass),
+        opening: { role: 'guest', tag: PARTY_TAGS[2], colour: PARTY_PICKS[2], extra: 0, ping, jitter },
+      };
+      const ends = { tags: PARTY_TAGS.slice(0, 2), canary, pictures, late };
+      problems.push(...await runsEnds(pair, callPage, lines, ends));
+      return { text: lines.join('\n'), problems };
     }
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);

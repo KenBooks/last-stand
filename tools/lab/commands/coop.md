@@ -118,6 +118,22 @@ proof asked for when the lobby's turn was reported again, 2026-11-15, the report
 again over its lobby and pads the watching bar a window tall: each must be caught. Each lobby's middle drag says what
 lies over its canvas there (a middle press there turns nothing): a party of 4's lobby has what a pair's has.
 
+`--scenarios ends` (alone, a pair's; `node/coopEnds.mjs`, `page/coopEnds.ts`): the ways a run ends that
+left a player apart from the party. The host leaves the run, closes his summary to watch the guest play on, and opens
+the pause menu to leave again: his game runs the guest's fight, so it must still be in the run 4 s later (main offered
+Leave the run again and went to the lobby: the guest stood in a stopped fight, no wave to come and no end to send him
+back, the host's lobby 26.7 m away and not showing him); then the guest leaves, and every game must be back in the
+lobby by itself. Then a second run in which the whole party falls (the guest struck down, then the host, each by a
+deadly blow judged on its own game): every game back by itself again. Each time the heroes must stand together on
+every screen, each game showing its partner, within 6 m and not in one another (0.6 m at least: in the village each
+game put its hero on the portal's one spot, 0.0 m apart). Then a third run that a third player joins in the middle of
+(his page opened then and added to the party's, `Pair.add`: his time on the link counts from his joining): he must be
+let in and wait in the lobby, the run going on for the two in it, and once they have left it every game must be in
+the lobby by itself, each showing both of the others (where he stands isn't judged: he waits where he joined, the two
+come out by the portal). `--pictures`: every screen as the host has left again, once back together, as the third has
+joined and once the party has met him (`out/coop/ends-<moment>-<host|guest|joiner>.png`). `--canary` drops the host's
+game out of the run behind its back as the guest plays on, which must be caught. About 100 s.
+
 `wave` (`spawnsLost: 360`): the host lets wave 4 come for real, its foes rising at the gates and fighting, and the
 lab's link drops every spawn the host reports to the guest for its first 6 s, as a guest whose run started late
 heard of none. Each screen's risen foes are held to being drawn (none undrawn past 250 ms, with the reason the game
