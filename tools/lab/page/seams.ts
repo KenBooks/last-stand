@@ -6,6 +6,10 @@
 // where the armpit area is... visible when the archer does any movement for drawing a bow or shooting it" (the coat's
 // armhole kept to the chest under the shoulder joint and the sleeve's top went up with the arm: 5 cm of forest seen
 // through the coat behind the drawing arm). The canary moves one sewn piece's points a centimetre for a frame's measure.
+// A seam sewn shut can still show as a line where the light breaks across it: each piece shaded by normals of its own,
+// the two at a shared point turned apart (the warrior's sleeve's top ring, its normals its own faces' alone, met the
+// gambeson's, the surface's own, up to tens of degrees apart round the shoulder). So each seam's points are also read as
+// built for how far apart the pieces' normals there are turned: more than `SHADE_FROM` is a problem.
 import * as THREE from 'three';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { G } from '../../../src/state';
@@ -22,6 +26,8 @@ export interface SeamsOptions {
 
 /** two pieces further apart than this at a point they share are an open seam (m): a pixel of the close views */
 const GAP_FROM = 0.002;
+/** two pieces' normals at a point they share turned further apart than this (degrees) shade the seam as a line */
+const SHADE_FROM = 6;
 /** points nearer than this as built are one point (m): two pieces' own arithmetic of the same place */
 const SAME_PLACE = 5e-5;
 /** frames standing and walking, the attack held, and each skill's cast followed once its key is let go */
@@ -34,7 +40,7 @@ const FRAME_SECONDS = 1 / 60;
 const CANARY_FRAME = 10;
 const CANARY_MOVE = 0.01;
 /** the heroes with sleeves set into their coats (`SetInShoulders`): one with no seam found measured nothing */
-const SEWN = ['ranger', 'mage'];
+const SEWN = ['ranger', 'mage', 'warrior'];
 
 /** A sewn piece: a skinned mesh with points it shares with another, and where its vertices are this frame. */
 interface Piece {
@@ -48,6 +54,8 @@ interface Stitch {
   ends: { piece: Piece; vertex: number }[];
   /** its height over the hero's feet as built (m) */
   height: number;
+  /** how far apart the pieces' normals there are turned as built (degrees): each piece's own copies of it averaged */
+  bend: number;
 }
 
 /** A seam: the stitches between the same pieces, and its worst gap so far. */
@@ -59,6 +67,30 @@ interface Seam {
 }
 
 const mm = (metres: number): string => (metres * 1000).toFixed(1);
+
+/** the normal of a mesh's vertex as built, in the frame it was bound in (unnormalised: summed over a piece's copies) */
+function builtNormal(mesh: THREE.SkinnedMesh, vertex: number, out: THREE.Vector3): THREE.Vector3 {
+  const normal = mesh.geometry.attributes.normal;
+  if (!normal) return out.set(0, 0, 0);
+  return out.fromBufferAttribute(normal, vertex).applyMatrix3(new THREE.Matrix3().getNormalMatrix(mesh.bindMatrix)).normalize();
+}
+
+/** how far apart the pieces' normals at a place are turned (degrees): each geometry's copies of the point averaged,
+ *  the widest angle between any two geometries' */
+function bendAt(place: number[], points: { mesh: number; vertex: number }[], meshes: THREE.SkinnedMesh[]): number {
+  const byGeometry = new Map<THREE.BufferGeometry, THREE.Vector3>();
+  const one = new THREE.Vector3();
+  for (const index of place) {
+    const mesh = meshes[points[index].mesh];
+    const sum = byGeometry.get(mesh.geometry) ?? new THREE.Vector3();
+    sum.add(builtNormal(mesh, points[index].vertex, one));
+    byGeometry.set(mesh.geometry, sum);
+  }
+  const normals = [...byGeometry.values()].filter((n) => n.lengthSq() > 1e-12).map((n) => n.normalize());
+  let widest = 0;
+  for (let a = 0; a < normals.length; a++) for (let b = a + 1; b < normals.length; b++) widest = Math.max(widest, normals[a].angleTo(normals[b]));
+  return THREE.MathUtils.radToDeg(widest);
+}
 
 /** the hero's skinned meshes' vertices as built, in the frame they were bound in: [mesh, vertex, x, y, z] a point */
 function builtPoints(meshes: THREE.SkinnedMesh[]): { mesh: number; vertex: number; at: THREE.Vector3 }[] {
@@ -156,7 +188,7 @@ function findSeams(lab: Lab): { seams: Seam[]; pieces: Piece[] } {
       seam = { name, stitches: [], worst: 0, worstIn: '' };
       seams.set(name, seam);
     }
-    seam.stitches.push({ ends, height: points[place[0]].at.y - feet });
+    seam.stitches.push({ ends, height: points[place[0]].at.y - feet, bend: bendAt(place, points, meshes) });
   }
   return { seams: [...seams.values()], pieces: [...pieces.values()] };
 }
@@ -260,11 +292,19 @@ export async function seams(lab: Lab, options: SeamsOptions): Promise<Report> {
   lines.push(`followed standing, walking and casting ${cast.join(', ') || 'nothing'}`);
 
   const sorted = [...found].sort((a, b) => b.worst - a.worst);
+  /** a seam's worst and median turn between its pieces' normals as built (degrees) */
+  const bends = (seam: Seam) => {
+    const all = seam.stitches.map((stitch) => stitch.bend).sort((a, b) => a - b);
+    return { worst: all[all.length - 1] ?? 0, median: all[Math.floor(all.length / 2)] ?? 0 };
+  };
   for (const seam of options.each ? sorted : sorted.slice(0, 4)) {
-    lines.push(`  ${seam.name} (${seam.stitches.length} points): at most ${mm(seam.worst)} mm apart${seam.worstIn ? ` (${seam.worstIn})` : ''}`);
+    const bend = bends(seam);
+    lines.push(`  ${seam.name} (${seam.stitches.length} points): at most ${mm(seam.worst)} mm apart${seam.worstIn ? ` (${seam.worstIn})` : ''}; its normals turned apart up to ${bend.worst.toFixed(1)}° (median ${bend.median.toFixed(1)}°)`);
   }
   for (const seam of sorted) {
     if (seam.worst > GAP_FROM) problems.push(`the seam ${seam.name} opens ${mm(seam.worst)} mm (${seam.worstIn})`);
+    const bend = bends(seam).worst;
+    if (bend > SHADE_FROM) problems.push(`the seam ${seam.name} shades as a line: its pieces' normals turned ${bend.toFixed(1)}° apart`);
   }
   if (options.canary) {
     lines.push(`canary: ${canaryPiece.label} moved ${mm(CANARY_MOVE)} mm, its seams read ${mm(planted)} mm apart`);
