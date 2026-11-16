@@ -364,10 +364,8 @@ export function initMenus(h: MenuHooks): void {
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
-  // (the guide's doors: How to play's, the panels' lobby's link, the pause menu's Guide tab)
+  // (the guide's doors: How to play's and the pause menu's Guide tab; G anywhere, main.ts)
   $('#btn-help-guide').onclick = () => { sfx.click(); hideHelp(); hooks.guide(); };
-  const guideLink = document.getElementById('btn-guide-link');
-  if (guideLink) guideLink.onclick = () => { sfx.click(); hooks.guide(); };
   document.querySelectorAll<HTMLElement>('[data-guide-open]').forEach((b) => {
     b.onclick = () => { sfx.click(); hooks.guide(b.dataset.guideOpen as GuideSection); };
   });
