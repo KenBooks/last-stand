@@ -743,6 +743,7 @@ export async function runCoop(side, options) {
       if (party > 2) problems.push(...await fightPartyDuel(pair, callPage, lines, { pictures }));
       else problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures }));
       return { text: lines.join('\n'), problems };
+    }
     if (scenarios?.length === 1 && scenarios[0] === 'looks') {
       return await changeLooks(pair, { ping, jitter }, lines, canary, pictures);
     }
