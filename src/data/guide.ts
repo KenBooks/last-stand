@@ -169,15 +169,15 @@ export const STYLE_NOTES: Record<string, StyleNote> = {
   },
   shieldBare: {
     name: 'Shield and no weapon',
-    how: 'A shield on one arm and an empty fist: the shield still blocks, and the free hand fights with its own skills.',
-    strengths: ['Blocks like any shield.'],
-    weaknesses: ['No weapon damage behind your blows.'],
+    how: 'A shield on one arm and an empty fist: left click punches with the free hand, a little lighter than two fists, and right click still raises the shield. The safest way to fight, if the slowest to kill.',
+    strengths: ['Raise Shield and the shield\'s own chance to block, as with a weapon.', 'Quick punches that keep your Energy coming.'],
+    weaknesses: ['The lightest blows of any style: no weapon damage behind them.', 'Short reach: you must stand right on top of a foe.'],
   },
   bare: {
     name: 'Bare hands',
-    how: 'Nothing in either hand: the weapon skills give way to the fists\' own.',
-    strengths: ['Skills of its own that no weapon has.'],
-    weaknesses: ['No block and no weapon damage bonus.'],
+    how: 'Nothing in either hand: the weapon skills give way to the fists\' own. Quick punches, foes seized and hurled, a foe swung round as a club, and both fists driven into the ground.',
+    strengths: ['The fastest attacks and the most Energy a second.', 'Throws: Heave and Living Flail move foes where you want them.', 'Groundbreaker hits everything round the blow and throws it back.'],
+    weaknesses: ['No block.', 'Less damage in each blow and a short reach.', 'Elites and bosses are too heavy to seize or swing.'],
   },
 };
 
@@ -247,12 +247,17 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       powerStrike: 'Start it before the foe arrives: the blow lands after the wind-up.',
       ironBellow: 'Use it when surrounded, or just before a hit you cannot avoid.',
       potion: 'You can move while drinking. Drink early rather than late.',
+      knuckles: 'Fast and short: step right up to the foe. Each punch refills Energy, as Rending Cleave does.',
+      heave: 'Throw a foe into the pack: it hurts the one you throw and everything it lands among.',
+      livingFlail: 'Seize a light foe and swing it through the pack, then let go towards the next group. Bigger foes hit harder.',
+      groundbreaker: 'Your heaviest blow with empty hands: wait for the pack to close in, then break the ground under them.',
     },
     loadouts: [
       { name: 'The bulwark', keys: { mouse0: 'cleave', mouse2: 'raiseShield', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'Sword and shield: block the big hits, spin through packs, and keep Iron Bellow for emergencies. The easiest way to survive deep waves.' },
       { name: 'The executioner', keys: { mouse0: 'cleave', mouse2: 'crescent', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'A two-handed weapon: rush in, Power Strike the gathered pack, and clean up with Thunder Crescent.' },
       { name: 'The whirlwind', keys: { mouse0: 'cleave', mouse2: 'twinFangs', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'Two weapons: quick swings keep Energy topped up for Steel Tempest, Twin Fangs to reach the casters.' },
       { name: 'The brawler', keys: { mouse0: 'knuckles', mouse2: 'heave', '1': 'livingFlail', '2': 'bullRush', '3': 'groundbreaker', '4': 'ironBellow' }, why: 'Bare hands: grab, swing and throw foes, and break the ground under the pack.' },
+      { name: 'The shieldbearer', keys: { mouse0: 'knuckles', mouse2: 'raiseShield', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'A shield and no weapon: punch for Energy, block the big hits, and let Bull Rush and Iron Bellow do the heavy work.' },
     ],
     combos: [
       { name: 'Rush and crush', steps: ['powerStrike', 'bullRush'], how: 'Start Power Strike, then Bull Rush while it winds up: you charge in carrying the pack, and the blow lands on them as the charge ends.' },
@@ -260,6 +265,8 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       { name: 'Gather and sweep', steps: ['bullRush', 'cleave'], how: 'Bull Rush throws everything it swept up together where you stop: turn and Cleave the whole heap, refilling your Energy.' },
       { name: 'Breathing room', steps: ['ironBellow', 'potion'], how: 'Surrounded and low: Iron Bellow hurls them back and wards you, then drink while they come back.' },
       { name: 'The double punch', steps: ['groundbreaker', 'bullRush'], how: 'Bare hands: start Groundbreaker, then Bull Rush while the fists rise: you charge in and both fists come down on what you carried.' },
+      { name: 'Throw and break', steps: ['heave', 'groundbreaker'], how: 'Bare hands: Heave a foe into the pack, walk in after it, and drive both fists into the ground among them.' },
+      { name: 'Living battering ram', steps: ['livingFlail', 'bullRush'], how: 'Bare hands: swing a foe round you to clear space, throw it at the next group, and Bull Rush in behind it.' },
     ],
   },
   mage: {
