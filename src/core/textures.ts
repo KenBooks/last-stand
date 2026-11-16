@@ -69,8 +69,12 @@ function paint(maps: PBRCanvases, d: PBRData, key: string): void {
   for (const [c, data] of [[maps.albedo, d.albedo], [maps.normal, d.normal], [maps.rough, d.rough]] as const) {
     c.width = d.size; c.height = h;
     ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0);
-    // (flat, its texel made again from what it now holds: asked for before it came, it was blank)
-    if (flatOf.delete(c)) showFlat(c, c === maps.normal);
+    // (its flat texel made again from what it now holds: asked for before it came, it was blank)
+    const image = images.get(c);
+    if (image?.flat) {
+      image.flat.data = flatten(c, image.normal);
+      image.flat.needsUpdate = true;
+    }
   }
   if (PAINTED_FROM.has(key)) albedos.set(key, new ImageData(d.albedo, d.size, h));
 }
@@ -279,10 +283,16 @@ interface MapTextures { map: THREE.Texture; normalMap: THREE.Texture; roughnessM
 const mapTextures = new WeakMap<PBRCanvases, Map<string, MapTextures>>();
 
 // --- flat maps (Low and Very low) ------------------------------------------------------------------
-/** each map canvas a texture was made from, and the texture's source (one a canvas: a repeat's copy shares it) */
-const sources = new Map<HTMLCanvasElement, THREE.Texture['source']>();
-/** each canvas's single texel of its own average, made as the maps go flat (and again as a map arrives) */
-const flatOf = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+/** A map canvas textures are made from: its own source (the canvas, a repeat's copy sharing it), the source of a single
+ *  texel of its average (made as it first goes flat, and again as its map arrives), and every texture drawn from it. */
+interface MapImage {
+  whole: THREE.Texture['source'];
+  flat: THREE.Texture['source'] | null;
+  textures: Set<THREE.Texture>;
+  normal: boolean;
+}
+/** each map canvas a texture was made from */
+const images = new Map<HTMLCanvasElement, MapImage>();
 /** whether the maps are flat (`setFlatMaps`) */
 let flat = false;
 /** a normal map's flat texel: straight out */
@@ -312,16 +322,31 @@ function flatten(canvas: HTMLCanvasElement, normal: boolean): HTMLCanvasElement 
   return out;
 }
 
-/** `canvas`'s texture shown flat or whole, as the level has it. */
-function showFlat(canvas: HTMLCanvasElement, normal: boolean): void {
-  const source = sources.get(canvas);
-  if (!source || keptWhole(canvas)) return;
-  let one = flatOf.get(canvas);
-  if (flat && !one) flatOf.set(canvas, one = flatten(canvas, normal));
-  const want = flat ? one! : canvas;
-  if (source.data === want) return;
-  source.data = want;
-  source.needsUpdate = true;
+/** `image`'s flat texel as a source of its own, made as it's first wanted. */
+function flatSource(canvas: HTMLCanvasElement, image: MapImage): THREE.Texture['source'] {
+  if (!image.flat) {
+    image.flat = new THREE.Source(flatten(canvas, image.normal));
+    image.flat.needsUpdate = true;
+  }
+  return image.flat;
+}
+
+/**
+ * `canvas`'s textures shown flat or whole, as the level has it: each one let go of its upload and given the other
+ * source, so the renderer makes it anew at that size. An image swapped inside a texture's own source is copied into
+ * its upload as that was first made, at the first image's size: a 1x1 texel went into one pixel of a 1024 map, which
+ * went on showing the map once the level was switched (from play: "it just stayed the same"), and a whole map into a
+ * texel's upload once switched back.
+ */
+function showFlat(canvas: HTMLCanvasElement): void {
+  const image = images.get(canvas);
+  if (!image || keptWhole(canvas)) return;
+  const want = flat ? flatSource(canvas, image) : image.whole;
+  for (const texture of image.textures) {
+    if (texture.source === want) continue;
+    texture.dispose();
+    texture.source = want;
+  }
 }
 
 /**
@@ -335,19 +360,19 @@ function showFlat(canvas: HTMLCanvasElement, normal: boolean): void {
 export function setFlatMaps(on: boolean): void {
   if (on === flat) return;
   flat = on;
-  for (const [canvas] of sources) showFlat(canvas, normalCanvases.has(canvas));
+  for (const [canvas] of images) showFlat(canvas);
 }
 
-/** the canvases that are normal maps */
-const normalCanvases = new WeakSet<HTMLCanvasElement>();
-
-/** A map's textures made: its canvases' sources kept, to show flat as the level has it. */
+/** A map's textures made: each kept with its canvas, to show flat or whole as the level has it. */
 function keepSources(maps: PBRCanvases, tex: MapTextures): void {
   for (const [canvas, t] of [[maps.albedo, tex.map], [maps.normal, tex.normalMap], [maps.rough, tex.roughnessMap]] as const) {
-    if (sources.has(canvas)) continue;
-    sources.set(canvas, t.source);
-    if (canvas === maps.normal) normalCanvases.add(canvas);
-    showFlat(canvas, canvas === maps.normal);
+    let image = images.get(canvas);
+    if (!image) {
+      image = { whole: t.source, flat: null, textures: new Set(), normal: canvas === maps.normal };
+      images.set(canvas, image);
+    }
+    image.textures.add(t);
+    showFlat(canvas);
   }
 }
 
