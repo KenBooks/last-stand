@@ -36,7 +36,8 @@ interface Bearer {
 }
 
 export function buildBellWarden(): Model {
-  const kit = createKit(0xc8d8ff);
+  // (its edge as it dissolves a deep blue: the pale toll's light at three times strength blew its fall out white)
+  const kit = createKit(0x3a5cff);
   const g = pbrMaterialMaps(grunge(), 2, 1);
   // cast bronze gone brown and green, its cracks glowing pale from within (bright as it tolls)
   const bronze = kit.std({

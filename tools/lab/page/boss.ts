@@ -20,7 +20,7 @@
 // one near it, a shield that stops nothing, chains that take no harm, a program compiled in the fight, and an attack
 // that deals nothing.
 import * as THREE from 'three';
-import type { Fixture, Lab, Pictured, Report } from './lab';
+import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -441,41 +441,90 @@ async function untilAction(lab: Lab, boss: Enemy, name: string, share: number): 
 }
 
 /**
- * The Bell-Warden in each of its moments, for the eye (no verdicts): standing, its bell swung back and glowing as a
- * toll's warning, its ring rolling out, its second phase's shards on the floor, its chains broken and the bell down,
- * and its last phase's bearers kneeling.
+ * The Bell-Warden at every stage of its fight, for the eye (no verdicts), each as the player sees it (the game's view
+ * with the HUD and its banners) or close up: coming on, a toll's warning, its ring, the hero stunned with husks
+ * rising, a chain broken, all four and the bell down, back up, its second phase's banner, a double toll and shards,
+ * its last phase's banner and its bearers kneeling, and its fall.
  */
 async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promise<Pictured[]> {
   await standIn(lab, options.fixture, 'crypt');
-  const boss = await bossAt(lab, 'bellwarden', 11, false);
+  // (the hero set up again facing where it will stand, so the player's view looks at it)
+  const spot = clearSpot(12, ENEMIES.bellwarden.radius);
+  await lab.setup({ ...options.fixture, at: SPOT, facing: Math.atan2(spot.x - SPOT[0], spot.z - SPOT[1]) });
+  const hero = G.player;
+  const boss = await bossAt(lab, 'bellwarden', 12, false);
   const moments: Pictured[] = [];
-  await lab.step(40);
-  moments.push(pictureBoss(lab, boss, 'the Bell-Warden', ['phase 1, standing']));
+  const close = (label: string, note: string, views: ViewName[] = ['left']): void => {
+    const at = boss.pos.clone().setY(PICTURE_Y);
+    moments.push(lab.picture(label, views, [note], { at, distance: PICTURE_FROM }));
+  };
+  const seen = async (label: string, note: string): Promise<void> => { moments.push(await lab.screen(label, [note])); };
+  const still = (): void => { boss.dazed = 1e4; boss.cancelAction(); };
+  const sides = boss.def.bossKit!.parts!;
+  const breakChain = (i: number): void => {
+    const way = boss.facing + sides.angles[i];
+    const from = { x: boss.pos.x + Math.sin(way) * 5, z: boss.pos.z + Math.cos(way) * 5 };
+    boss.takeDamage(sides.life * boss.maxLife * 1.05, { from });
+  };
+
+  // 1. it comes on, shuffling under its bell, its toll held off
   boss.dazed = 0;
+  boss.cd = 99;
+  await lab.step(80);
+  await seen('1 it comes', 'the Bell-Warden shuffling in, as the player sees it');
+  close('1 it comes (close)', 'four ghoul bearers under the frame, the pale clapper light inside');
+  // 2-4. a toll: its warning, its ring, the hero stunned; this toll (its second) raises husks round the arena
+  boss.brain.tolls = 1;
   boss.cd = 0;
   await untilAction(lab, boss, 'toll', 0.4);
-  moments.push(pictureBoss(lab, boss, 'toll: its warning', ['the bell swung back, its cracks glowing']));
-  await untilAction(lab, boss, 'toll', 0.62);
-  moments.push(pictureBoss(lab, boss, 'toll: its ring', ['the ring rolling out over the floor']));
-  boss.takeDamage(boss.life - 0.55 * boss.maxLife, {});
-  for (const way of [0.4, 2.2, 4.1]) {
-    const x = boss.pos.x + Math.sin(way) * 5, z = boss.pos.z + Math.cos(way) * 5;
+  close('2 toll warning (close)', 'the bell swung back, its cracks and clapper glowing, creaking: about 1 s to get away or raise a shield');
+  await seen('2 toll warning', 'the warning as the player sees it');
+  await untilAction(lab, boss, 'toll', 0.6);
+  await seen('3 the ring', 'the toll\'s ring rolling out over the floor');
+  await lab.until(() => hero.stunned, TOLL_FRAMES, 'the hero was never stunned');
+  await lab.step(20);
+  await seen('4 stunned', 'the ring reached the hero: stunned 2 s (stars over his head); Hollow Husks rising round the arena');
+  // 5-7. the chains, one broken, then all four: the bell down for its window, then up again
+  still();
+  breakChain(0);
+  await lab.step(30);
+  close('5 one chain broken', 'a chain struck from its side until it snapped hangs loose from the frame', ['back', 'left']);
+  for (let i = 1; i < sides.angles.length; i++) breakChain(i);
+  await lab.step(90);
+  close('6 bell down (close)', 'all four chains broken: the bell rests on the ground for 6 s, taking double damage (the gold ring)');
+  await seen('6 bell down', 'the weak-spot window as the player sees it');
+  boss.dazed = 0;
+  boss.cd = 99;
+  await lab.until(() => boss.broken === 0, 600, 'the chains were never whole again');
+  await lab.step(80);
+  close('7 back up', 'its window over: the bearers up, the chains whole, the bell lifted');
+  // 8-10. phase 2: its banner, a double toll, shards on the floor
+  boss.takeDamage(boss.life - 0.58 * boss.maxLife, {});
+  // (its hit's flash faded first: a hit of half its life lit it flat)
+  await lab.step(30);
+  await seen('8 phase 2', 'under 60%: the bell splits, and tolls twice from now on');
+  boss.cd = 0;
+  await untilAction(lab, boss, 'doubleToll', 0.75);
+  await seen('9 double toll', 'two rings: a fast one, and a slow one after it');
+  still();
+  for (const way of [0.6, 2.3, 4.4]) {
+    const x = boss.pos.x + Math.sin(way) * 5.5, z = boss.pos.z + Math.cos(way) * 5.5;
     fx('shard', boss.id, boss.pos.x, boss.pos.z, x, z, 0);
   }
-  boss.dazed = 1e4;
-  boss.cancelAction();
   await lab.step(50);
-  moments.push(pictureBoss(lab, boss, 'phase 2: shards', ['bronze shards broken off, lying on the floor']));
-  for (let i = 0; i < 4; i++) fx('bossPart', boss.id, i, 1);
+  close('10 shards', 'bronze shards broken off as it\'s hit, lying on the floor a few seconds: standing on them hurts', ['left', 'above']);
+  // 11-12. phase 3: its banner, the bearers kneeling
+  boss.takeDamage(boss.life - 0.22 * boss.maxLife, {});
+  // (its hit's flash faded first: a hit of half its life lit it flat)
+  await lab.step(30);
+  await seen('11 phase 3', 'under 25%: it stops and tolls every 3 s');
   await lab.step(90);
-  moments.push(pictureBoss(lab, boss, 'chains broken: the bell down', ['its weak-spot window: double damage']));
-  for (let i = 0; i < 4; i++) fx('bossPart', boss.id, i, 0);
-  boss.weak = 0;
-  boss.brain.down = 0;
-  boss.takeDamage(boss.life - 0.2 * boss.maxLife, {});
-  await lab.step(90);
-  moments.push(pictureBoss(lab, boss, 'phase 3: kneeling', ['the bearers down on their knees, tolling every 3 s']));
-  lines.push(`pictures: ${moments.length} moments (out/probes/boss/sheet.png)`);
+  close('12 kneeling', 'the bearers down on their knees, the frame lowered');
+  // 13. its fall
+  boss.takeDamage(boss.life + 1, {});
+  await lab.step(45);
+  close('13 its fall', 'killed: the bell crashes down, the bearers collapse');
+  lines.push(`pictures: ${moments.length} moments`);
   return moments;
 }
 

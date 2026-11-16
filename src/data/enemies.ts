@@ -49,7 +49,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     life: 4600, damage: 110, damageType: 'physical', speed: 1.5, radius: 3,
     range: 5, windup: 1, recover: 1, cooldown: 4.2,
     summon: 'husk',
-    cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0xc8d8ff,
+    cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x5a7cff,
     bossKit: {
       phases: [
         { below: 1 },
