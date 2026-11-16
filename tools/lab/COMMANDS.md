@@ -114,7 +114,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   flicker. A stand whose shot was never drawn, or whose aim never met the prop, is a problem too. Aimed from the arrow
   as posed, the pose's angle moved the arrow to where the next frame's turned it back (#317): main turned back on 59
   to 138 of the 140 frames against the crypt's stone and wood and the forest's stone and mushrooms, the arrow's
-  middle up to 1.07 m and the bow's tip 1.29 m in a frame, now none, 2 to 6 cm a frame at most. `--canary` aims the
+  middle up to 1.07 m and the bow's tip 1.29 m in a frame, now none, 2 to 6 cm a frame at most. From the same frame
+  on, the aim preview shown (`laserPaths` in `src/fx/aimLaser.ts`) may run no more than 0.3 m past the prop's far side
+  where the prop stands over the arrow: loosed from the arrow pressed into the prop, it went on through it (#640, from
+  Victor: "laser goes through, it should not"; 2 to 150 frames of a hold, 94 m past it), now loosed from over his feet
+  where a prop stands between him and the arrow (`loosedFrom`), every stand stops at it. `--canary` aims the
   pose from the arrow as posed again (`shotFrom.steady=0`), which must flicker; `--pictures` films four frames running
   round the arrow's largest move in each biome's first stand (played again to it), the whole body from his right and
   from above behind, each with the arrow's height (`tools/lab/out/bowprop`).

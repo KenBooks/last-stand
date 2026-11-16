@@ -179,6 +179,9 @@ export function showLaser(paths: { pts: THREE.Vector3[]; end: THREE.Vector3 | nu
   write();
 }
 
+/** The paths shown this frame (none once a frame passes without a call): what `tools/lab`'s `bowprop` reads. */
+export const laserPaths = (): readonly { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[] => (G.time - shownAt < 0.05 ? asked : []);
+
 function start(): void {
   [line, dots] = warmLaser() as [THREE.Mesh, THREE.Mesh];
   line.renderOrder = dots.renderOrder = 5;

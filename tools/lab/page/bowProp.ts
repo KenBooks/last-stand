@@ -18,6 +18,7 @@ import { input } from '../../../src/core/input';
 import { inObstacle } from '../../../src/world/collision';
 import * as ranger from '../../../src/combat/skills/ranger';
 import type { Player } from '../../../src/entities/player';
+import { laserPaths } from '../../../src/fx/aimLaser';
 
 /** What `lab bowprop` is given. */
 export interface BowPropOptions {
@@ -73,6 +74,9 @@ interface Stand {
   parts: PartRead[];
   drawn: boolean;
   onProp: boolean;
+  /** frames the aim preview ran on past the prop it was aimed into, and the farthest past it it went (m) */
+  through: number;
+  farthest: number;
 }
 
 /** The parts read: the nocked arrow's middle, the bow's upper tip, and the hero himself. */
@@ -166,6 +170,27 @@ function aimOn(prop: Obstacle): boolean {
   return across < prop.r * 1.3 + 0.1 && input.ground.y > 0.2;
 }
 
+/** how far past a prop's far side the aim preview may reach and still be met by it (m: its drawn shape) */
+const THROUGH_SLACK = 0.3;
+
+/**
+ * How far the aim preview shown now runs past `prop`'s far side, from `hero` (m; 0 if it ends at or before it, or flies
+ * over a prop lower than the arrow): the farthest of its points, along the line from him through the prop's middle,
+ * beyond the prop's circle. Pressed against a prop, the arrow loosed from in it went through it (#640, from Victor:
+ * "laser goes through, it should not").
+ */
+function pastProp(prop: Obstacle, hero: THREE.Vector3): number {
+  const way = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
+  const farSide = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).dot(way) + prop.r;
+  let most = 0;
+  for (const path of laserPaths()) {
+    // (a prop whose top is under the arrow's line it flies over, as it should: a log, a low fire)
+    if (!path.pts.length || prop.h <= path.pts[0].y) continue;
+    for (const p of path.pts) most = Math.max(most, (p.x - hero.x) * way.x + (p.z - hero.z) * way.z - farSide);
+  }
+  return most;
+}
+
 /** The set-up of a stand against `prop` from `gap`: his spot, and the point on the prop aimed at. */
 async function standBy(lab: Lab, fixture: Fixture, prop: Obstacle, gap: number): Promise<THREE.Vector3> {
   const at = standAt(prop, gap);
@@ -181,9 +206,13 @@ async function standAgainst(lab: Lab, fixture: Fixture, prop: Obstacle, gap: num
   const counts = parts.map(() => new ReversalCount());
   let drawn = false;
   let onProp = false;
+  let through = 0, farthest = 0;
   await lab.step(HOLD_FRAMES, () => holding(target), (frame) => {
     drawn ||= !!lab.player.casting?.drawT;
     onProp ||= aimOn(prop);
+    // (from when he has turned onto it, as the parts are read: turning, the line passes beside it)
+    const past = frame >= MEASURED_FROM ? pastProp(prop, lab.player.pos) : 0;
+    if (past > THROUGH_SLACK) { through++; farthest = Math.max(farthest, past); }
     if (frame >= MEASURED_FROM) parts.forEach((part, index) => counts[index].observe(part.at(), frame));
   });
   await letGoAway(lab, standAt(prop, gap), prop);
@@ -191,7 +220,7 @@ async function standAgainst(lab: Lab, fixture: Fixture, prop: Obstacle, gap: num
     name: part.name, reversals: counts[index].reversals, largestMove: counts[index].largestMove,
     largestAt: counts[index].largestAt,
   }));
-  return { label, parts: read, drawn, onProp };
+  return { label, parts: read, drawn, onProp, through, farthest };
 }
 
 /**
@@ -223,7 +252,12 @@ function judged(stand: Stand): { line: string; problems: string[] } {
       + `${HOLD_FRAMES - MEASURED_FROM} frames (at most ${REVERSALS_MOST}): it flickers`);
   if (!stand.drawn) problems.push(`${stand.label}: the shot was never drawn`);
   if (!stand.onProp) problems.push(`${stand.label}: the aim never met the prop`);
-  return { line: `${stand.label}: ${parts.join('; ')}`, problems };
+  if (stand.through) {
+    problems.push(`${stand.label}: the aim preview went through the prop on ${stand.through} frames, `
+      + `${stand.farthest.toFixed(2)} m past it`);
+  }
+  const preview = stand.through ? `preview THROUGH it on ${stand.through} frames` : 'preview stopped at it';
+  return { line: `${stand.label}: ${parts.join('; ')}; ${preview}`, problems };
 }
 
 /** `lab bowprop`: the level draw, then every stand in each biome. */
