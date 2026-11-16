@@ -8,6 +8,7 @@
 // that move, so nothing compiles after the village's warm-up. What of its light is the sky's (the caustics, the falling
 // water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
 import { WEBGPU } from '../core/webgpu';
+import { compiledThoughHidden } from '../core/shaders';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import * as THREE from 'three';
@@ -91,6 +92,33 @@ const WATER_LIT_SHINE = 0.3;
  *  lay a white blot across the basin to anyone looking at it from the sun's far side */
 const GLINT_MOST = 0.8;
 
+// --- the simple fountain (Low and Very low) ---------------------------------------------------------
+/** the fountain's detail a simple one leaves out (the caustics' floor, the foam, the spouts' arcs and their splashes),
+ *  and what it shows in its place (the basin's floor in plain stone) */
+const detail: THREE.Object3D[] = [], plain: THREE.Object3D[] = [];
+/** whether the fountain is simple (`setFountainSimple`) */
+let simple = false;
+
+/**
+ * Whether the fountain is drawn simple (Low's and Very low's): its basin's floor plain stone, with no caustics drifting
+ * over it, no foam round the curtain's foot and no spouts' arcs or splashes; the tiers, the water's surface, the curtains
+ * and the jet kept (from play: "significantly remove detail for fountain on low and very low, especially the bottom
+ * textures, leave it simple"). What shows is chosen alone, live; every part's program is compiled at load all the same
+ * (`compiledThoughHidden`), so a level climbing back compiles nothing.
+ */
+export function setFountainSimple(on: boolean): void {
+  simple = on;
+  for (const o of detail) o.visible = !on;
+  for (const o of plain) o.visible = on;
+}
+
+// (the parts hidden at this level shown while the warm-ups compile, on WebGPU, which compiles only what's shown)
+compiledThoughHidden(() => {
+  const hidden = [...detail, ...plain].filter((o) => !o.visible);
+  for (const o of hidden) o.visible = true;
+  return () => { for (const o of hidden) o.visible = false; };
+});
+
 /** The fountain's light set for how much of the day's there is (0 by night, 1 by full day). */
 export type FountainLight = (day: number) => void;
 
@@ -123,6 +151,10 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   skyLight = sunlit;
   const floorMat = causticFloor(time, sunlit);
   flat(g, octagon(inside), floor, floorMat);
+  detail.push(g.children.at(-1)!);
+  // (the simple fountain's floor: the basin's own stone, a program the basin compiled already)
+  flat(g, octagon(inside), floor, M.coping);
+  plain.push(g.children.at(-1)!);
   const pools = [waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78)];
   flat(g, octagon(inside), water, pools[0]);
   // the pedestal, its four spouts
@@ -153,7 +185,11 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.03, 0.4, 8, 1, true), jetMat);
   jet.position.y = TOP.tip + 0.2;
   g.add(jet);
-  for (let k = 0; k < 4; k++) g.add(arc(k * Math.PI / 2, jetMat));
+  for (let k = 0; k < 4; k++) {
+    const spray = arc(k * Math.PI / 2, jetMat);
+    g.add(spray);
+    detail.push(spray);
+  }
   // the foam where the curtain strikes the basin, and where each arc lands, turning slowly
   const foamMat = new THREE.MeshStandardMaterial({
     color: 0xeef6f8, emissive: FALLING_GLOW, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
@@ -163,6 +199,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   const foam = new THREE.Mesh(new THREE.RingGeometry(BOWL.r + 0.12, BOWL.r + 0.75, 48, 1).rotateX(-Math.PI / 2), foamMat);
   foam.position.y = water + 0.006;
   g.add(foam);
+  detail.push(foam);
   const splashes: THREE.Mesh[] = [];
   for (let k = 0; k < 4; k++) {
     const a = k * Math.PI / 2 + Math.PI / 4;
@@ -170,6 +207,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     splash.position.set(Math.sin(a) * SPOUT.lands, water + 0.008, Math.cos(a) * SPOUT.lands);
     g.add(splash);
     splashes.push(splash);
+    detail.push(splash);
   }
   const falling = new Set<THREE.Material>([curtain, jetMat, foamMat]);
   g.traverse((o) => {
@@ -178,7 +216,9 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     }
   });
   const tiers = g.children.filter((o): o is THREE.Mesh => !walls.includes(o) && o instanceof THREE.Mesh
-    && (o.material === M.stone || o.material === M.coping));
+    && !plain.includes(o) && (o.material === M.stone || o.material === M.coping));
+  for (const o of plain) o.visible = simple;
+  for (const o of detail) o.visible = !simple;
   // (its stone drawn as one a material: the basin's wall, the tiers' coping and their stone)
   const wall = asOne(g, walls as THREE.Mesh[]);
   const tiersAsOne = [M.coping, M.stone].map((m) => asOne(g, tiers.filter((o) => o.material === m)));

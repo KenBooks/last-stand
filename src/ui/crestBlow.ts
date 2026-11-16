@@ -5,6 +5,7 @@
 // made as it blew, a first visit's blow came in the fight's warm-up after Start and its reads waited behind its
 // compiles, the page held 840 ms (`npm run stalls -- --scenario boot`, from Start).
 import { logoWindOff, prepareBlow, windAhead, windLinked, type WindContext } from './logoWind';
+import { qualityLevel } from '../core/quality';
 
 /** how long the crest stays over the village before the wind takes it (s) */
 const STAYS = 8;
@@ -15,7 +16,10 @@ let shownFor = 0, state: 'up' | 'blowing' | 'gone' = 'up';
 /** the next blow's context, made ahead (none where it fades) */
 let wind: WindContext | null = null;
 
-const plainBlow = (): boolean => logoWindOff() || matchMedia('(prefers-reduced-motion: reduce)').matches;
+// (Low and Very low too, as the loading screen's exit does: hundreds of thousands of points drawn for a few seconds over
+// the village, from play: "text animation for village and loading screen for low and very low")
+const plainBlow = (): boolean => logoWindOff() || matchMedia('(prefers-reduced-motion: reduce)').matches
+  || qualityLevel() === 'low' || qualityLevel() === 'verylow';
 /** The next blow's context made, where it will blow. */
 function windForNext(): void {
   if (!wind && !plainBlow()) wind = windAhead();
