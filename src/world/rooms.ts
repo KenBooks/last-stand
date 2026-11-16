@@ -17,6 +17,7 @@ import { bannerGeo, CRYPT_ENV } from './crypt';
 import { buildFire, emberMat, type FireLog } from './fire';
 import { boxWithUV, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
+import { buildLibrary } from './library';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -55,7 +56,7 @@ export interface Room {
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */
-const ROOM_LOOK: BiomeLook = {
+export const ROOM_LOOK: BiomeLook = {
   background: 0x0a0604,
   fog: { color: 0x0a0604, near: 18, far: 40 },
   hemi: { sky: 0x8a6a50, ground: 0x3a2618, intensity: 0.55 },
@@ -73,11 +74,11 @@ const WALL_THICK = 0.3, WAINSCOT = 1.05, DOOR = { half: 0.6, high: 2.2 }, WINDOW
 /** the fires' light: the hearth's (soft close to, as the village's bonfire), a chandelier's, a candle's, a lantern's */
 const HEARTH = { color: 0xff9448, intensity: 40, reach: 12, soft: 6 };
 const CHANDELIER = { color: 0xffc27a, intensity: 30, reach: 11 };
-const CANDLE = { color: 0xffb060, intensity: 2.4, reach: 3.6 };
-const LANTERN = { color: 0xffa860, intensity: 6.5, reach: 6.5 };
+export const CANDLE = { color: 0xffb060, intensity: 2.4, reach: 3.6 };
+export const LANTERN = { color: 0xffa860, intensity: 6.5, reach: 6.5 };
 
 /** what a room's materials are */
-interface Mats {
+export interface Mats {
   floor: THREE.MeshStandardMaterial; plaster: THREE.MeshStandardMaterial; timber: THREE.MeshStandardMaterial;
   panel: THREE.MeshStandardMaterial; oak: THREE.MeshStandardMaterial; stone: THREE.MeshStandardMaterial;
   hearthStone: THREE.MeshStandardMaterial; iron: THREE.MeshStandardMaterial; brass: THREE.MeshStandardMaterial;
@@ -111,7 +112,7 @@ function makeMats(): Mats {
 }
 
 /** A box `w` x `h` x `d` standing on (x, y, z) (its foot's middle), casting and taking shadows, added to `g`. */
-function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material,
+export function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material,
   grained = true): THREE.Mesh {
   const mesh = new THREE.Mesh(boxWithUV(w, h, d, 0.5, grained), m);
   mesh.position.set(x, y + h / 2, z);
@@ -121,7 +122,7 @@ function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y: n
 }
 
 /** A cylinder standing on (x, y, z), added to `g`. */
-function drum(g: THREE.Object3D, rTop: number, rFoot: number, h: number, x: number, y: number, z: number, m: THREE.Material,
+export function drum(g: THREE.Object3D, rTop: number, rFoot: number, h: number, x: number, y: number, z: number, m: THREE.Material,
   sides = 14): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rFoot, h, sides), m);
   mesh.position.set(x, y + h / 2, z);
@@ -143,7 +144,7 @@ function flameGeometry(r: number, h: number): THREE.BufferGeometry {
 const FLAME = flameGeometry(0.014, 0.06), HALO = flameGeometry(0.03, 0.11);
 
 /** A candle on (x, y, z): wax, a flame and its glow; and its light, if it has one (one of the room's ten). */
-function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16, light?: typeof CANDLE): void {
+export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16, light?: typeof CANDLE): void {
   drum(g, 0.022, 0.025, high, x, y, z, M.wax, 8).castShadow = false;
   const flame = new THREE.Mesh(FLAME, M.flame);
   flame.position.set(x, y + high + 0.004, z);
@@ -157,7 +158,7 @@ function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, hig
 }
 
 /** A wall lantern on the wall at (x, y, z), its arm out along (dx, dz): an iron frame round a glowing pane, its light. */
-function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, dx: number, dz: number, lit = LANTERN): void {
+export function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, dx: number, dz: number, lit = LANTERN): void {
   box(g, Math.abs(dz) > 0 ? 0.08 : 0.04, 0.3, Math.abs(dx) > 0 ? 0.08 : 0.04, x, y - 0.15, z, M.iron).castShadow = false;
   box(g, Math.abs(dx) * 0.32 + 0.04, 0.04, Math.abs(dz) * 0.32 + 0.04, x + dx * 0.16, y + 0.05, z + dz * 0.16, M.iron).castShadow = false;
   const at = new THREE.Vector3(x + dx * 0.32, y - 0.2, z + dz * 0.32);
@@ -173,7 +174,7 @@ function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, dx
 }
 
 /** A chandelier hung at (x, high, z): an iron wheel on chains, candles round it, its light (casting). */
-function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, z: number): THREE.PointLight {
+export function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, z: number): THREE.PointLight {
   const y = high - 0.65;
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
   ring.position.set(x, y, z);
@@ -282,7 +283,7 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
 
 /** A hearth in the middle of a wall (the wall's frame: `side`, 0 its middle, facing +z): a stone chimney breast, its
  *  opening, logs on firedogs, its fire, a mantel; the fire's light (casting). Its circle into `obstacles`. */
-function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number, high: number, updaters: Updater[],
+export function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number, high: number, updaters: Updater[],
   obstacles: Obstacle[]): void {
   const h = new THREE.Group();
   h.position.copy(at);
@@ -327,7 +328,7 @@ function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number, high: 
 }
 
 /** A rug laid on the floor at (x, z), `w` by `d`, in a woven pattern of `colours`. */
-function rug(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, colours: readonly string[], seed: number): void {
+export function rug(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, colours: readonly string[], seed: number): void {
   const c = canvasOf(256, 256 * (d / w) | 0), cx = ctx2d(c), rng = mulberry(seed);
   const W = c.width, H = c.height;
   cx.fillStyle = colours[0]; cx.fillRect(0, 0, W, H);
@@ -354,8 +355,8 @@ function rug(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: num
 }
 
 /** A surface written on: a canvas `w` by `h` px on a plane `pw` by `ph` m, its material and how to write it. */
-interface Writing { mesh: THREE.Mesh; write(draw: (cx: CanvasRenderingContext2D, w: number, h: number) => void): void }
-function writing(M: Mats, w: number, h: number, pw: number, ph: number): Writing {
+export interface Writing { mesh: THREE.Mesh; write(draw: (cx: CanvasRenderingContext2D, w: number, h: number) => void): void }
+export function writing(M: Mats, w: number, h: number, pw: number, ph: number): Writing {
   const c = canvasOf(w, h), texture = textureFromCanvas(c);
   texture.anisotropy = 4;
   const m = M.paper.clone();
@@ -373,10 +374,10 @@ function writing(M: Mats, w: number, h: number, pw: number, ph: number): Writing
   };
 }
 
-const DISPLAY = "'Cinzel', Georgia, serif", BODY = "'Alegreya Sans', 'Segoe UI', sans-serif";
+export const DISPLAY = "'Cinzel', Georgia, serif", BODY = "'Alegreya Sans', 'Segoe UI', sans-serif";
 
 /** A parchment's ground: warm paper, darker at its edges, speckled. */
-function parchment(cx: CanvasRenderingContext2D, w: number, h: number, seed: number): void {
+export function parchment(cx: CanvasRenderingContext2D, w: number, h: number, seed: number): void {
   const g = cx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7);
   g.addColorStop(0, '#f1e2bc'); g.addColorStop(1, '#b89462');
   cx.fillStyle = g; cx.fillRect(0, 0, w, h);
@@ -423,14 +424,14 @@ function writeBoard(cx: CanvasRenderingContext2D, w: number, h: number, b: Board
 }
 
 /** A frame of dark timber round a board hung on a wall (in the wall's frame, facing +z): its board's middle at (x, y). */
-function framed(g: THREE.Object3D, M: Mats, writing: Writing, x: number, y: number, pw: number, ph: number): void {
+export function framed(g: THREE.Object3D, M: Mats, writing: Writing, x: number, y: number, pw: number, ph: number): void {
   box(g, pw + 0.16, ph + 0.16, 0.05, x, y - ph / 2 - 0.08, 0.025, M.timber);
   writing.mesh.position.set(x, y, 0.052);
   g.add(writing.mesh);
 }
 
 /** A wall's frame in the room: x along it from its middle, its inner face at z = 0, facing into the room. */
-function onWall(g: THREE.Group, id: RoomId, side: 'back' | 'front' | 'west' | 'east', along = 0): THREE.Group {
+export function onWall(g: THREE.Group, id: RoomId, side: 'back' | 'front' | 'west' | 'east', along = 0): THREE.Group {
   const [hx, hz] = HOUSES[id].half, frame = new THREE.Group();
   if (side === 'back') { frame.position.set(along, 0, -hz); }
   if (side === 'front') { frame.position.set(-along, 0, hz); frame.rotation.y = Math.PI; }
@@ -476,7 +477,7 @@ function bookcase(g: THREE.Object3D, M: Mats, x: number, w: number, high: number
 }
 
 /** A table on its legs at (x, z), `w` by `d` and `high`, its top oak. Its circles into `obstacles`. */
-function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, obstacles: Obstacle[], high = 0.76,
+export function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, obstacles: Obstacle[], high = 0.76,
   round = false): void {
   if (round) {
     drum(g, w / 2, w / 2, 0.06, x, high - 0.06, z, M.oak, 24);
@@ -496,7 +497,7 @@ function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: n
 }
 
 /** A bench at (x, z), `w` long along x (turned `turn`). */
-function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn = 0): void {
+export function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn = 0): void {
   const b = new THREE.Group();
   b.position.set(x, 0, z);
   b.rotation.y = turn;
@@ -506,7 +507,7 @@ function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn
 }
 
 /** A stool at (x, z). */
-function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): void {
+export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): void {
   drum(g, 0.17, 0.17, 0.05, x, high - 0.05, z, M.oak, 12);
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2;
@@ -519,7 +520,7 @@ function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): vo
 }
 
 /** A barrel on its side or standing at (x, y, z): staves and iron hoops. */
-function barrel(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, lying = false, turn = 0): void {
+export function barrel(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, lying = false, turn = 0): void {
   const b = new THREE.Group();
   b.position.set(x, y, z);
   b.rotation.set(lying ? Math.PI / 2 : 0, turn, 0);
@@ -553,7 +554,7 @@ function tankard(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, me
 }
 
 /** A banner hung from an iron rod at (x, top) on a wall (its frame), in `base` velvet. */
-function banner(g: THREE.Object3D, M: Mats, x: number, top: number, base: readonly number[], rng: () => number, scale = 0.8): void {
+export function banner(g: THREE.Object3D, M: Mats, x: number, top: number, base: readonly number[], rng: () => number, scale = 0.8): void {
   const cloth = bannerCloth(256, 512, base);
   const velvet = new THREE.MeshPhysicalMaterial({
     map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.6, 1.6, 1.6),
@@ -671,7 +672,7 @@ function chronicleStand(g: THREE.Object3D, M: Mats): void {
 }
 
 /** A page of the Chronicle in a scribe's hand: a red initial on the left page, rows of ink as words, a rule or two. */
-function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, initial: boolean, seed: number): void {
+export function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, initial: boolean, seed: number): void {
   const rng = mulberry(seed);
   const ground = cx.createLinearGradient(initial ? w : 0, 0, initial ? 0 : w, 0);
   ground.addColorStop(0, '#d8c498'); ground.addColorStop(0.15, '#efe2c0'); ground.addColorStop(1, '#e8d8b0');
@@ -959,17 +960,17 @@ function writePlaque(h: Hung): void {
 const SIDE_NAMES = ['back', 'front', 'west', 'east', 'ceiling'] as const;
 
 /** What both rooms share as they're built. */
-interface Build { g: THREE.Group; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
+export interface Build { g: THREE.Group; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
   sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[] }
 
-function begin(id: RoomId, group: THREE.Group, seed: number): Build {
+export function begin(id: RoomId, group: THREE.Group, seed: number): Build {
   const M = makeMats(), wall = new Wall('village');
   const { sides } = shell(group, M, id, wall);
   return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides };
 }
 
 /** A room as built, its walls sealed. */
-function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
+export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
   b.wall.seal();
   const [hx, hz] = HOUSES[id].half;
   // (motes of dust drifting in the firelight)
@@ -1291,7 +1292,7 @@ function drawPartyBoard(cx: CanvasRenderingContext2D, w: number, h: number): voi
 
 /** Both rooms built, each into a group of its own (hidden till shown). */
 export function buildRooms(): Record<RoomId, Room> {
-  const builders: Record<RoomId, (g: THREE.Group) => Room> = { records: buildRecords, tavern: buildTavern };
+  const builders: Record<RoomId, (g: THREE.Group) => Room> = { records: buildRecords, tavern: buildTavern, library: buildLibrary };
   const rooms = {} as Record<RoomId, Room>;
   for (const id of ROOM_IDS) {
     const group = new THREE.Group();

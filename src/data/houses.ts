@@ -6,8 +6,8 @@
 import type { EnemyId } from './enemies';
 import { COTTAGES, type VillageObject } from './village';
 
-export type RoomId = 'records' | 'tavern';
-export const ROOM_IDS: readonly RoomId[] = ['records', 'tavern'];
+export type RoomId = 'records' | 'tavern' | 'library';
+export const ROOM_IDS: readonly RoomId[] = ['records', 'tavern', 'library'];
 
 /** A house: the cottage it is (its index in `COTTAGES`), its name, its room's inner half width and depth and height to
  *  its beams (m). Its door is the cottage's own, the middle of the room's front wall inside. */
@@ -19,6 +19,9 @@ export const HOUSES: Record<RoomId, House> = {
   // (the cottage east of the square, its door on the road to the Crypt's portal, where a party passes on its way to a
   // run: from play, the owner's pick on the village's map)
   tavern: { id: 'tavern', cottage: 5, name: 'The Ember & Oak', half: [5.4, 4.0], high: 3.2 },
+  // (the cottage south of the square, between the campfire and the training yard: where a new hero learns, the yard
+  // a few steps off; its door toward the square. From play: "add library to one of the village houses")
+  library: { id: 'library', cottage: 4, name: 'The Library', half: [5.6, 4.2], high: 3.8 },
 };
 
 /** How far in from the room's front wall a hero comes in (m), and how far out from the cottage's door he comes out. */
@@ -62,9 +65,9 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
       name: 'Door', verb: 'Go out',
     };
   };
-  const [rx, rz] = HOUSES.records.half, [tx, tz] = HOUSES.tavern.half;
+  const [rx, rz] = HOUSES.records.half, [tx, tz] = HOUSES.tavern.half, [, lz] = HOUSES.library.half;
   return [
-    ...doors, way('records'), way('tavern'),
+    ...doors, ...ROOM_IDS.map(way),
     // (the great ledger on its lectern, before the trophies)
     { id: 'ledger', use: 'records', room: 'records', at: [0, -0.9], reach: 1.9, stand: [0, 0.4], label: 1.45, tall: 1.6,
       name: 'Great Ledger', verb: 'Read the records' },
@@ -77,6 +80,9 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
     // (a board by the door, its notices the parties forming: the same)
     { id: 'partyBoard', use: 'coop', room: 'tavern', at: [tx - 0.15, tz - 1.7], reach: 1.8, stand: [tx - 1.3, tz - 1.7],
       label: 1.75, tall: 2.2, name: 'Party Board', verb: 'Play together' },
+    // (the library's great book on its lectern before the back wall's shelves: the in-game guide)
+    { id: 'codex', use: 'guide', room: 'library', at: [0, -lz + 1.6], reach: 1.9, stand: [0, -lz + 2.9], label: 1.55, tall: 1.7,
+      name: 'Codex of Wardenhollow', verb: 'Read the guide' },
   ];
 })();
 

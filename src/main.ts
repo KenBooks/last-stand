@@ -567,6 +567,7 @@ function useObject(o: VillageObject): void {
     case 'enter': showVillageCard(null); openPanels(null); if (o.into) enterRoom(o.into); return;
     case 'leave': showVillageCard(null); openPanels(null); leaveRoom(); return;
     case 'records': openPanels(null); writeRecords(); showVillageCard(o); return;
+    case 'guide': showVillageCard(null); openPanels(null); showGuide(); return;
   }
 }
 
@@ -583,6 +584,7 @@ function objectShows(o: VillageObject): boolean {
   switch (o.use) {
     case 'portal': case 'chronicle': case 'training': case 'pvp': case 'records': return villageCardOf() === o;
     case 'enter': case 'leave': return false;
+    case 'guide': return guideOpen();
     case 'stash': return panelsOpen() === 'chest';
     case 'coop': return coopOpen();
     case 'help': return helpOpen();
