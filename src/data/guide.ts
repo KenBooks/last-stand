@@ -3,7 +3,7 @@
 // these notes say how and why, never how much. A foe without a note fails the typecheck (`FOE_NOTES`); a skill,
 // class or weapon style without one still shows from its data, and a dev build warns of it (`ui/guide/index.ts`).
 // Any change adding or changing a foe, boss, skill, weapon style, item base or mechanic updates these notes in the
-// same PR (root AGENTS.md).
+// same PR (root AGENTS.md); the tips' own words are in ui/guide/tips.ts, written round the figures they show.
 import type { EnemyId } from './enemies';
 import type { SkillKey } from '../types';
 

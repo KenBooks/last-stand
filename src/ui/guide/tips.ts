@@ -1,6 +1,7 @@
 // The guide's tips: how a run works and what helps, each with its figures from the game's data (the run's and the
 // loot's rules, block, co-op, the skills that daze, freeze or slow), so none goes stale as the tuning moves.
-import { BLOCK, COOP, PARTY, RUN } from '../../data/balance';
+import { BLOCK, COOP, PARTY, PVP, RUN } from '../../data/balance';
+import { DUEL_WINS, WINS_USUAL } from '../../game/duel';
 import { LOOT, WAVES } from '../../data/waves';
 import { HERO, ENEMIES } from '../../data/enemies';
 import { RARITIES, STATS } from '../../data/items';
@@ -140,6 +141,28 @@ export const TIPS_PAGES: Tip[] = [
       'Hold Left Shift to ping a spot or a foe for your party, and press Enter to chat.',
       'A mage with a healing staff keeps everyone standing; a warrior with a shield draws the blows; a ranger marks the biggest threat for all.',
     ]),
+  },
+  {
+    id: 'duels', title: 'Duels',
+    html: () => para('Heroes can fight each other at the <b>weapons rack</b> in the village, by the training yard. A duel is fought within a party: open a room at the campfire first. Nothing is won or lost, and nothing is saved.')
+      + points('Setting one up', [
+        "The room's host picks the battleground, 1 v 1 or 2 v 2, how many rounds win the match "
+          + `(${DUEL_WINS.map((w) => `first to ${w}`).join(', ')}; first to ${WINS_USUAL} unless chosen), and whether your gear counts or everyone fights with none.`,
+        'Each player clicks or taps a free place on a side, or Watching. Clicking a place someone holds asks them to give it up.',
+        'Every fighter says they are ready, then the host begins.',
+      ])
+      + points('A round', [
+        `It starts from the gates after a ${secs(PVP.countdown)} count, and lasts at most ${secs(PVP.roundTime)}: then the side with more of its Health left takes it.`,
+        `It ends when a side is all down. If both fall within ${secs(PVP.trade)} of each other, it is a draw.`,
+        `Everyone is whole again for the next round, ${secs(PVP.between)} later.`,
+        `You may drink ${PVP.draughts} Healing Draught${PVP.draughts === 1 ? '' : 's'} a round.`,
+      ])
+      + points('How skills work on heroes', [
+        `Skills deal ${pct(PVP.damage)} of their damage to a hero (burns and other damage over time too): they are tuned for foes with many times a hero's Health.`,
+        `A freeze, a daze or being carried holds a hero for ${pct(PVP.hold)} as long, and then they can't be held again for ${secs(PVP.holdRest)}.`,
+        "A charge shoves a hero aside instead of carrying them. A chill slows a hero as it slows a foe.",
+        'Blocks, wards and dodges work as they do against foes: a raised shield still turns a blow from the front.',
+      ], 'plain'),
   },
   {
     id: 'controls', title: 'Controls',
