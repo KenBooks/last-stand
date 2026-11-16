@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  canaryVerdict, isProduction, isRefusedLine, ProductionGuard, SAVES_HEALTH, withAsks,
+  canaryVerdict, isProduction, isRefusedLine, ProductionGuard, SAVES_HEALTH, SLOW_REPORTS, withAsks,
 } from '../node/production.mjs';
 
 /** A route as Playwright hands one over, keeping what was done with it. */
@@ -60,6 +60,18 @@ test('the guard answers the saves service\'s health and refuses and keeps the re
   const asks = ['POST https://ls.wellscoped.dev/saves/account', 'WebSocket wss://ls.wellscoped.dev/room'];
   assert.deepEqual(guard.take(), asks);
   assert.deepEqual(guard.take(), []);
+});
+
+test('a slow-game report is answered with nothing and kept as no ask; a bug report is refused', async () => {
+  const guard = new ProductionGuard();
+  const report = fakeRoute(SLOW_REPORTS, 'POST');
+  await guard.onRequest(report);
+  assert.equal(report.done[0].fulfilled.status, 204);
+  assert.equal(report.done[0].fulfilled.headers['access-control-allow-origin'], '*');
+  const bug = fakeRoute(`${SLOW_REPORTS}/reports`, 'POST');
+  await guard.onRequest(bug);
+  assert.deepEqual(bug.done, [{ aborted: 'blockedbyclient' }]);
+  assert.deepEqual(guard.take(), [`POST ${SLOW_REPORTS}/reports`]);
 });
 
 test('with the lab\'s answer lifted (the canary), the health is refused and kept too', async () => {

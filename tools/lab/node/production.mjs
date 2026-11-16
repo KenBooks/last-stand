@@ -2,7 +2,8 @@
 // service, the co-op relay and the traces service (src/loot/cloudApi.ts, src/net/transport.ts: `VITE_COOP_SERVER`,
 // else `ls.wellscoped.dev`), and a page of the lab's is a dev build of it on localhost: whatever it asks of that host
 // never leaves the browser. The save slots' health is answered by the lab in production's place (no Google sign-in,
-// as a service with no Google client says); every other request, and every WebSocket, is refused and kept as an ask,
+// as a service with no Google client says), and so is a slow-game report (nothing: a lab page's report belongs nowhere,
+// and one sent as a slow stretch is met is no fault of the command's); every other request, and every WebSocket, is refused and kept as an ask,
 // which fails the command that made it (session.mjs, and `ui` state by state: commands.mjs). A command with services
 // of its own (`cloud`, `recorder`, `profile`) points the page at them on localhost, which this never touches.
 
@@ -15,6 +16,8 @@ const ON_PRODUCTION = /^(?:https?|wss?):\/\/ls\.wellscoped\.dev(?::\d+)?(?:[/?#]
 export const SAVES_HEALTH = `https://${PRODUCTION_HOST}/saves/health`;
 /** the lab's answer in its place: no Google sign-in */
 const NO_GOOGLE = { google: false };
+/** where the game sends a slow-game report (src/perf/upload.ts, server/traces) */
+export const SLOW_REPORTS = `https://${PRODUCTION_HOST}/traces`;
 /** what the browser logs for a request the guard refused (the ask is reported in its place) */
 const REFUSED = 'net::ERR_BLOCKED_BY_CLIENT';
 
@@ -46,10 +49,14 @@ export class ProductionGuard {
     await context.routeWebSocket(ON_PRODUCTION, (socket) => this.onSocket(socket));
   }
 
-  /** A request to production: the health answered while the lab answers it, anything else refused and kept. */
+  /**
+   * A request to production: the health answered while the lab answers it, a slow-game report answered with nothing,
+   * anything else refused and kept.
+   */
   onRequest(route) {
     const request = route.request();
     if (this.answersHealth && request.url() === SAVES_HEALTH) return answerHealth(route);
+    if (request.url() === SLOW_REPORTS) return answerReport(route);
     this.asks.push(`${request.method()} ${request.url()}`);
     return route.abort('blockedbyclient');
   }
@@ -94,6 +101,17 @@ export function canaryVerdict(states, reports) {
   const caught = reports[at].asked > 0;
   const line = `  canary: the save slots' health sent to production: ${caught ? 'caught' : 'went unseen'}`;
   return caught ? { line } : { line, problem: `${CANARY_STATE}: the canary's request to production went unseen` };
+}
+
+/**
+ * The lab's answer to a slow-game report, readable from the page's origin: nothing (204: the game reads no code in it
+ * and counts the report not sent). Sent by the game itself as a co-op run or a `ui` state meets a slow stretch, it was
+ * refused by production's CORS before the guard, a page error in the command (from Victor on #635: "we don't want any
+ * fake page errors"), and refused by the guard it would fail the command as an ask: neither is the command's fault. A
+ * bug report, sent only when the player asks, goes to /traces/reports and is still refused and kept.
+ */
+function answerReport(route) {
+  return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } });
 }
 
 /** The lab's answer to the saves service's health, readable from the page's origin. */
