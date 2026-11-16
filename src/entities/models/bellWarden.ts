@@ -1,6 +1,7 @@
 // The Bell-Warden (entities/bellWarden.ts): a cracked bronze bell taller than a house, hung in a wooden frame on two
 // carrying poles, borne by four ghouls, one at each end of each pole, each chained by an iron collar to the frame. A pale
-// light swings inside the bell as its clapper. It shuffles, swaying; for a toll the bell swings back on its headstock,
+// light swings inside the bell as its clapper, and ghosts circle it (models/bellGhosts.ts). It shuffles, swaying; for
+// a toll the bell swings back on its headstock,
 // its cracks and its clapper glowing, and comes down through the warning (`ActionState.hit`). What its fight shows
 // (`AnimState.boss`): a chain broken hangs loose from the frame, all four broken the frame sinks and the bell rests on
 // the ground (its weak-spot window, the clapper beating at a pulse a second), in the last phase the bearers kneel.
@@ -11,6 +12,7 @@ import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
 import { Sculpt, lathe, limb, organic, skipping, taperTube } from './shapes';
 import { mulberry } from '../../util';
+import { bellGhosts, type GhostCue } from './bellGhosts';
 import type { AnimState, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -141,6 +143,9 @@ export function buildBellWarden(): Model {
     chains.push({ j, to: b });
   });
   S.build();
+  // the ghosts haunting it (models/bellGhosts.ts): its own meshes, not its crowd's
+  const ghosts = bellGhosts(root);
+  const cue: GhostCue = { rush: 0, burst: 0, scatter: 0, count: 2, bell: new THREE.Vector3() };
 
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, -1, 0), _q = new THREE.Quaternion();
   const _inv = new THREE.Matrix4();
@@ -164,9 +169,14 @@ export function buildBellWarden(): Model {
 
     // the bell: swinging gently as it goes; for a toll swung back through the warning and brought through on the hit
     let swingX = Math.sin(t * 1.1) * 0.04 + Math.sin(ph) * 0.06 * walk, glow = 0.12;
+    cue.rush = 0;
+    cue.burst = 0;
     if (a && (a.name === 'toll' || a.name === 'doubleToll')) {
       const h = a.hit ?? 0.5, back = ramp(a.t, 0, h * 0.85), through = ramp(a.t, h * 0.85, h);
       const after = ramp(a.t, h, 1);
+      // (the ghosts drawn into the bell over the warning's second half, thrown out of it as it tolls)
+      cue.rush = ramp(a.t, h * 0.35, h * 0.95) * (a.t < h ? 1 : 0);
+      cue.burst = a.t >= h ? Math.min(1, ramp(a.t, h, Math.min(1, h + 0.3)) + 1e-3) : 0;
       swingX = -0.55 * back * (1 - through) + 0.32 * through * (1 - after) + Math.sin(a.t * 18) * 0.04 * after * (1 - after) * 4;
       // (its cracks brighten over the warning and fade after: once a toll, no faster than the root's flash rule)
       glow = 0.12 + 3.2 * back * (1 - after) ** 2;
@@ -184,6 +194,12 @@ export function buildBellWarden(): Model {
 
     // the bearers: a hunched shuffle under the poles, kneeling in the last phase and slumped with the bell down
     bearers.forEach((b, i) => poseBearer(b, t, ph + b.lag * Math.PI * 2, walk, Math.max(kneel, down), dead, i));
+
+    // the ghosts: round the bell, into it for a toll, scattered while it's down or as it falls, three in the last phase
+    cue.scatter = Math.max(down, dead);
+    cue.count = (look?.phase ?? 0) >= 2 ? 3 : 2;
+    cue.bell.set(0, frame.position.y + BEAM_Y - HEAD_DROP - BELL_H * 0.6, 0);
+    ghosts.update(t, dt, cue);
 
     // the chains: aimed from the frame's ring at the collar, or hanging loose once broken
     root.updateMatrixWorld(true);
@@ -205,8 +221,8 @@ export function buildBellWarden(): Model {
 
   return {
     root, kit, animate, height: 3.2,
-    reset() { sink = kneel = down = 0; hang = [0, 0, 0, 0]; },
-    dispose() { kit.dispose(); },
+    reset() { sink = kneel = down = 0; hang = [0, 0, 0, 0]; ghosts.reset(); },
+    dispose() { kit.dispose(); ghosts.dispose(); },
   };
 }
 
