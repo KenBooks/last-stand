@@ -9,6 +9,7 @@
 //   (faded: not stunned), and with a warrior's shield raised towards it (not stunned: `--class warrior --gear shield`).
 // - `chains`: each chain struck from its own side until it breaks: broken one by one, all four dropping the bell for
 //   its weak-spot window (double damage taken, nothing tolled), then the chains whole again and the bell up.
+// - `stand`: the hero walked into the Bell-Warden: it gives way a hair, and he's held off its body.
 // - `compiles`: every effect the Bell-Warden's fight draws (a toll, a double toll, a shard, the bell dropped), drawn:
 //   no program compiled meanwhile.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
@@ -17,7 +18,7 @@
 // - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye.
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
-// one near it, a shield that stops nothing, chains that take no harm, a program compiled in the fight, and an attack
+// one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, a program compiled in the fight, and an attack
 // that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
@@ -38,8 +39,8 @@ import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'compiles' | 'ttk' | 'pictures';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'compiles', 'ttk'];
+export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'compiles' | 'ttk' | 'pictures';
+export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'compiles', 'ttk'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -322,6 +323,41 @@ async function chains(lab: Lab, options: BossOptions, lines: string[], problems:
   }
 }
 
+// --- standing its ground -----------------------------------------------------------------------------------
+
+/** how long the hero walks into the boss (s), and how far it may give way meanwhile (m) */
+const PRESS_FOR = 3;
+const GIVES_MOST = 0.3;
+
+/**
+ * The hero walked into the Bell-Warden for `PRESS_FOR` s (from play: "you should not be able to move the boss by just
+ * walking towards it... maybe move it but a tiny little bit"): how far it gave way, and that he reached it and was
+ * held off it. Every foe yielded the whole overlap, and a boss was walked across the arena.
+ */
+async function stand(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+  await standIn(lab, options.fixture, 'crypt');
+  const boss = await bossAt(lab, 'bellwarden', 6, false);
+  const hero = G.player;
+  if (options.canary) Object.defineProperty(boss, 'boss', { value: false, configurable: true });
+  const from = boss.pos.clone();
+  let nearest = Infinity;
+  await lab.step(PRESS_FOR * FPS, () => {
+    hero.walkTo = boss.pos.clone();
+    boss.desired.set(0, 0, 0);
+    return {};
+  }, () => {
+    nearest = Math.min(nearest, Math.hypot(hero.pos.x - boss.pos.x, hero.pos.z - boss.pos.z));
+  });
+  hero.walkTo = null;
+  const gave = Math.hypot(boss.pos.x - from.x, boss.pos.z - from.z);
+  const reach = boss.radius + hero.radius;
+  lines.push(`stand: walked into it ${PRESS_FOR} s: it gave ${fixed(gave)} m, the hero came within ${fixed(nearest)} m of `
+    + `its middle (its body and his ${fixed(reach)})`);
+  if (nearest > reach + 0.3) problems.push(`stand: the hero never reached it (${fixed(nearest)} m from its middle)`);
+  if (nearest < reach - 0.2) problems.push(`stand: the hero walked into it, ${fixed(reach - nearest)} m inside its body`);
+  if (gave > GIVES_MOST) problems.push(`stand: walked into, it gave way ${fixed(gave)} m (at most ${GIVES_MOST})`);
+}
+
 // --- the programs ------------------------------------------------------------------------------------------
 
 /** Every effect of the Bell-Warden's fight drawn (each toll, a shard, the bell dropped): no program compiled. */
@@ -473,6 +509,12 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
   await lab.step(80);
   await seen('1 it comes', 'the Bell-Warden shuffling in, as the player sees it');
   close('1 it comes (close)', 'four ghoul bearers under the frame, the pale clapper light inside');
+  // (a ghost haunting it, framed on its own: models/bellGhosts.ts)
+  const ghost = boss.obj.getObjectByName('bell ghost');
+  if (ghost) {
+    const at = ghost.getWorldPosition(new THREE.Vector3());
+    moments.push(lab.picture('1 a ghost', ['back', 'left'], ['a ghost circling the bell, its arms out, its hem swept back'], { at, distance: 3.2 }));
+  }
   // 2-4. a toll: its warning, its ring, the hero stunned; this toll (its second) raises husks round the arena
   boss.brain.tolls = 1;
   boss.cd = 0;
@@ -532,7 +574,7 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures'>, typeof ladder> = { ladder, phases, toll, chains, compiles, ttk };
+  const run: Record<Exclude<BossPart, 'pictures'>, typeof ladder> = { ladder, phases, toll, chains, stand, compiles, ttk };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {

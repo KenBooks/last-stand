@@ -1397,14 +1397,14 @@ export const COMMANDS = {
       + 'rung and the banner\'s line (ladder); the Bell-Warden\'s life taken over and under each phase\'s share '
       + '(phases); its toll at the hero near it (stunned for its time, after its warning), far off (faded) and with a '
       + 'shield raised (--class warrior --gear shield) (toll); each chain struck from its side, all four dropping the '
-      + 'bell for its window and whole again after (chains); its fight\'s effects drawn, no program compiled '
+      + 'bell for its window and whole again after (chains); walked into, it gives way a hair (stand); its fight\'s effects drawn, no program compiled '
       + '(compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
     options: {
       parts: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['ladder', 'phases', 'toll', 'chains', 'compiles', 'ttk', 'pictures'],
-        help: 'the parts (all but pictures by default): ladder, phases, toll, chains, compiles, ttk, pictures (the '
+        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'compiles', 'ttk', 'pictures'],
+        help: 'the parts (all but pictures by default): ladder, phases, toll, chains, stand, compiles, ttk, pictures (the '
           + 'Bell-Warden in each of its moments, a sheet for the eye)',
       },
       canary: {

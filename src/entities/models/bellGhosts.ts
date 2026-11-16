@@ -1,14 +1,19 @@
 // The Bell-Warden's ghosts (models/bellWarden.ts): pale spirits circling the haunted bell, drifting round it and
-// swooping low over its bearers, each a wisp of added light with two bright eyes and a tail of fading motes along the
-// way it came. They rush into the bell as a toll's warning builds (a second warning beside the bell's swing) and
-// burst out of it as it tolls; they scatter and fade while the bell lies dropped, and come back as the bearers rise;
-// in the last phase a third joins them. A look alone: they touch nothing.
+// swooping low over its bearers. Each is a shroud of added light hooded over a head, its arms reaching out before it
+// and its ragged hem swept back by its flight, a cold heart glowing in its chest, two bright eyes and a wailing mouth
+// in its hood, a faint halo round it and a tail of fading motes along the way it came. They rush into the bell as a
+// toll's warning builds (a second warning beside the bell's swing) and burst out of it as it tolls; they scatter and
+// fade while the bell lies dropped, and come back as the bearers rise; in the last phase a third joins them. A look
+// alone: they touch nothing, and arrows and the aim pass through them (added light is no solid).
 //
 // Their meshes are the model's own, not its crowd's (models/crowd.ts draws solid kit materials alone): see-through
-// added light, as an effect's, in `additive` materials (nearGlow, the shockwave's program: nothing new to compile),
-// their own per body, made with the model and let go with it.
+// added light, as an effect's, in `additive` materials (nearGlow: the shockwave's program, and its instanced twin for
+// the motes, compiled with the boss's warm-up), their own per body, made with the model and let go with it. A ghost
+// is four draws (shroud, halo, face, heart) and every ghost's motes one: a mesh a mote was 30 draws for three ghosts.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { additive } from '../../core/materials';
+import { mulberry } from '../../util';
 
 /** what the ghosts are told each frame: how far a toll's rush into the bell has gone (0..1) and its burst out after
  *  (0..1), how scattered they are (0..1: the bell down, or its fall), how many show (2, 3 in the last phase), and
@@ -23,7 +28,7 @@ export interface GhostCue {
 
 /** how many ghosts there are at most, and the motes of a tail */
 const MOST = 3;
-const MOTES = 6;
+const MOTES = 7;
 /** frames of each ghost's way kept, and how many apart its tail's motes are taken */
 const MOTE_EVERY = 4;
 const KEPT = MOTES * MOTE_EVERY + 1;
@@ -31,75 +36,103 @@ const KEPT = MOTES * MOTE_EVERY + 1;
  *  fast they go round (rad/s) and swoop (rad/s) */
 const RING = 3.6, RING_SWAY = 0.9, HIGH = 5.4, LOW = 1.9, TURN = 0.75, SWOOP = 0.9;
 /**
- * the ghosts' light: their pale colour; the sheet's strength and how much of it shows; the halo round it, fainter;
- * the tail's motes; the eyes'. Seen through: drawn near-solid, a ghost read as a white dart.
+ * the ghosts' light: their pale colour; the shroud's strength and how much of it shows; the halo round it, fainter;
+ * the heart's; the tail's motes; the face's (eyes and mouth). Seen through: drawn near-solid, a ghost read as a white
+ * dart; drawn as one plain sheet, "a bit simple".
  */
-const PALE = 0xc4e2ff, BODY = 0.9, HEAD_SEE = 0.3, VEIL_SEE = 0.09, MOTE_SEE = 0.16, EYES = 3.2;
+const PALE = 0xc4e2ff, BODY = 0.9, SHROUD_SEE = 0.26, HALO_SEE = 0.07, HEART = 2.4, HEART_SEE = 0.5;
+const MOTE_SEE = 0.5, FACE = 3.2;
+/** how far a ghost leans into the way it flies (rad), how much larger its halo is than it, how fast its hem ripples
+ *  (rad/s) */
+const LEAN = 0.4, HALO = 1.28, RIPPLE = 3.2;
 
-/** A ghost: its body, eyes and tail's motes, and its way so far (the model's space, newest first). */
+/**
+ * A ghost's shroud: a hood over a round head, shoulders, and a robe widening to a ragged hem of tongues, each its own
+ * length, swept back behind it (its profile lathed bottom to top, so its faces point out; its back is -z), and its two
+ * arms, thin and tapering, reaching out before it and a little down.
+ */
+function shroudGeometry(): THREE.BufferGeometry {
+  const r = mulberry(17);
+  const profile = [[0.42, -1.05], [0.4, -0.75], [0.35, -0.45], [0.33, -0.15], [0.36, 0.05], [0.3, 0.18], [0.26, 0.3],
+    [0.25, 0.42], [0.18, 0.55], [0.01, 0.6]];
+  const robe = new THREE.LatheGeometry(profile.map(([x, y]) => new THREE.Vector2(x, y)), 30);
+  // (nine tongues round the hem, each its own length, and the lower the robe the further its flight sweeps it back)
+  const tongues = Array.from({ length: 9 }, () => 0.15 + r() * 0.3);
+  const at = robe.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < at.count; i++) {
+    const x = at.getX(i), y = at.getY(i), z = at.getZ(i);
+    const below = Math.max(0, -0.35 - y) / 0.7;
+    const a = (Math.atan2(x, z) / (Math.PI * 2) + 1) * tongues.length;
+    const k = Math.floor(a) % tongues.length, f = a - Math.floor(a);
+    // (a tongue's point at its middle, the cut between two tongues higher)
+    const ragged = tongues[k] * Math.sin(f * Math.PI) - 0.12;
+    at.setXYZ(i, x * (1 + below * 0.15), y - ragged * below * below, z - below ** 1.5 * 0.45);
+  }
+  const arms = [-1, 1].map((side) => {
+    const arm = new THREE.ConeGeometry(0.075, 0.62, 8, 3, true).rotateX(Math.PI / 2 + 0.5);
+    return arm.rotateY(-side * 0.25).translate(side * 0.27, 0.0, 0.3);
+  });
+  const shroud = mergeGeometries([robe.toNonIndexed(), ...arms.map((arm) => arm.toNonIndexed())])!;
+  robe.dispose();
+  for (const arm of arms) arm.dispose();
+  shroud.computeVertexNormals();
+  return shroud;
+}
+
+/** Its face, in the front of its hood: two eyes and a mouth opened in a wail. */
+function faceGeometry(): THREE.BufferGeometry {
+  const eyes = [-0.085, 0.085].map((x) => new THREE.SphereGeometry(0.04, 8, 6).scale(1, 1.35, 0.6).translate(x, 0.33, 0.22));
+  const mouth = new THREE.TorusGeometry(0.045, 0.015, 6, 12).scale(1, 1.5, 1).translate(0, 0.2, 0.235);
+  const face = mergeGeometries([...eyes, mouth].map((g) => g.toNonIndexed()))!;
+  for (const g of [...eyes, mouth]) g.dispose();
+  return face;
+}
+
+/** A ghost: its body (shroud, halo, face, heart), its way so far (the model's space, newest first), how much of it
+ *  shows, and the turn of its ripple. */
 interface Ghost {
   body: THREE.Group;
-  motes: THREE.Mesh[];
+  halo: THREE.Mesh;
+  heart: THREE.Mesh;
   way: THREE.Vector3[];
   shown: number;
 }
 
-/**
- * A ghost's shape: a sheet hung from a round head, widening to a hem that waves (its profile lathed bottom to top,
- * so its faces point out). Drawn as a long teardrop along its flight it read as a white dart; a sheet's head and hem
- * read as a ghost from above and from the side.
- */
-function sheetGeometry(): THREE.BufferGeometry {
-  const profile = [[0.44, -0.95], [0.41, -0.62], [0.35, -0.28], [0.3, 0.02], [0.28, 0.22], [0.2, 0.4], [0.01, 0.47]];
-  const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 20);
-  const at = geo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < at.count; i++) {
-    const y = at.getY(i);
-    // (its hem in five tongues, lifting and falling round it)
-    if (y < -0.5) at.setY(i, y + Math.sin(Math.atan2(at.getX(i), at.getZ(i)) * 5) * 0.12 * (-0.5 - y) / 0.45);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
-
-/** how far a ghost leans into the way it flies (rad), and how much larger its halo is than it */
-const LEAN = 0.4, HALO = 1.3;
-
 /** The ghosts of one Bell-Warden, hung on `root`: posed each frame by `update`, let go by `dispose`. */
 export function bellGhosts(root: THREE.Object3D) {
-  const sheet = sheetGeometry();
-  const eyeGeo = new THREE.SphereGeometry(0.04, 8, 6);
-  const moteGeo = new THREE.SphereGeometry(0.22, 10, 8);
-  const headMat = additive(PALE, BODY, HEAD_SEE);
-  const veilMat = additive(PALE, BODY, VEIL_SEE);
-  const eyeMat = additive(0xeef4ff, EYES, 0.95);
-  /** a mote's share of the tail's light, fading along it */
-  const moteSee = (j: number): number => MOTE_SEE * (1 - j / MOTES) ** 1.5;
-  // (a material a mote of the tail: every ghost's mote there shares it)
-  const moteMats = Array.from({ length: MOTES }, (_, j) => additive(PALE, BODY, moteSee(j)));
+  const shroud = shroudGeometry();
+  const face = faceGeometry();
+  const heartGeo = new THREE.SphereGeometry(0.07, 12, 8);
+  const moteGeo = new THREE.SphereGeometry(0.2, 10, 8);
+  const shroudMat = additive(PALE, BODY, SHROUD_SEE);
+  const haloMat = additive(PALE, BODY, HALO_SEE);
+  const heartMat = additive(0xdff0ff, HEART, HEART_SEE);
+  const faceMat = additive(0xeef4ff, FACE, 0.95);
+  const moteMat = additive(PALE, BODY, MOTE_SEE);
+  // (every ghost's motes one instanced mesh, each mote fading along its tail by its colour: added light, so a darker
+  // colour is a fainter mote)
+  const motes = new THREE.InstancedMesh(moteGeo, moteMat, MOST * MOTES);
+  motes.name = 'bell ghosts\' tails';
+  motes.frustumCulled = false;
+  const _c = new THREE.Color();
+  for (let i = 0; i < MOST * MOTES; i++) motes.setColorAt(i, _c.setScalar(0));
+  root.add(motes);
   const ghosts: Ghost[] = [];
   for (let i = 0; i < MOST; i++) {
     const body = new THREE.Group();
     body.name = 'bell ghost';
-    body.add(new THREE.Mesh(sheet, headMat));
-    const halo = new THREE.Mesh(sheet, veilMat);
+    body.add(new THREE.Mesh(shroud, shroudMat));
+    const halo = new THREE.Mesh(shroud, haloMat);
     halo.scale.setScalar(HALO);
-    body.add(halo);
-    for (const x of [-0.09, 0.09]) {
-      const eye = new THREE.Mesh(eyeGeo, eyeMat);
-      eye.position.set(x, 0.2, 0.25);
-      body.add(eye);
-    }
+    const heart = new THREE.Mesh(heartGeo, heartMat);
+    heart.position.set(0, -0.28, 0.04);
+    body.add(halo, heart, new THREE.Mesh(face, faceMat));
     root.add(body);
-    const motes = moteMats.map((mat, j) => {
-      const mote = new THREE.Mesh(moteGeo, mat);
-      root.add(mote);
-      return mote;
-    });
-    ghosts.push({ body, motes, way: [], shown: i < 2 ? 1 : 0 });
+    ghosts.push({ body, halo, heart, way: [], shown: i < 2 ? 1 : 0 });
   }
 
-  const _at = new THREE.Vector3(), _dir = new THREE.Vector3();
+  const _at = new THREE.Vector3(), _dir = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
+  const _q = new THREE.Quaternion();
 
   /** Where ghost `i` drifts at time `t` with no toll or scatter: round the ring, swooping between its heights. */
   function drifting(i: number, t: number, out: THREE.Vector3): THREE.Vector3 {
@@ -109,15 +142,25 @@ export function bellGhosts(root: THREE.Object3D) {
     return out.set(Math.sin(a) * r, LOW + (HIGH - LOW) * k * k, Math.cos(a) * r);
   }
 
+  /** Ghost `g`'s tail: its motes along the way it came, each smaller and fainter, at instance `from` on. */
+  function tail(g: Ghost, from: number, size: number, light: number, t: number): void {
+    for (let j = 0; j < MOTES; j++) {
+      const at = g.way[Math.min(g.way.length - 1, (j + 1) * MOTE_EVERY)] ?? g.body.position;
+      const s = Math.max(1e-3, size * (1 - j / (MOTES + 1)) * (0.85 + 0.25 * Math.sin(t * 3 + j)));
+      motes.setMatrixAt(from + j, _m.compose(at, _q, _s.setScalar(s)));
+      motes.setColorAt(from + j, _c.setScalar(light * (1 - j / MOTES) ** 1.6));
+    }
+  }
+
   /** The ghosts posed for the frame: drifting, rushing into the bell or bursting out, scattered, shown or faded. */
   function update(t: number, dt: number, cue: GhostCue): void {
     // (the whole light: brighter as they rush in and flare out, once a toll; faded as they scatter)
     const flare = 1 + cue.rush * 0.8 + cue.burst * (1 - cue.burst) * 2.4;
     const fade = 1 - cue.scatter;
-    headMat.opacity = HEAD_SEE * flare * fade;
-    veilMat.opacity = VEIL_SEE * flare * fade;
-    eyeMat.opacity = 0.95 * fade;
-    moteMats.forEach((mat, j) => { mat.opacity = moteSee(j) * flare * fade; });
+    shroudMat.opacity = SHROUD_SEE * flare * fade;
+    haloMat.opacity = HALO_SEE * flare * fade;
+    heartMat.opacity = HEART_SEE * flare * fade;
+    faceMat.opacity = 0.95 * fade;
     ghosts.forEach((g, i) => {
       g.shown += ((i < cue.count ? 1 : 0) - g.shown) * Math.min(1, dt * 1.5);
       drifting(i, t, _at);
@@ -127,33 +170,32 @@ export function bellGhosts(root: THREE.Object3D) {
       if (cue.burst > 0) _at.addScaledVector(_dir.copy(_at).sub(cue.bell).setY(0).normalize(), cue.burst * (1 - cue.burst) * 3);
       const last = g.way[0];
       g.way.unshift((g.way.length >= KEPT ? g.way.pop()! : new THREE.Vector3()).copy(_at));
-      // (facing the way it goes; its tail the motes along the way it came)
-      // (upright, turned to the way it goes and leaning into it, nosing down as it swoops down)
+      // (upright, turned to the way it goes and leaning into it, nosing down as it swoops down, rocking a little)
       if (last && last.distanceToSquared(_at) > 1e-8) {
         _dir.copy(_at).sub(last);
-        g.body.rotation.set(LEAN - Math.atan2(_dir.y, Math.hypot(_dir.x, _dir.z)) * 0.5, Math.atan2(_dir.x, _dir.z), 0, 'YXZ');
+        const pitch = LEAN - Math.atan2(_dir.y, Math.hypot(_dir.x, _dir.z)) * 0.5;
+        g.body.rotation.set(pitch, Math.atan2(_dir.x, _dir.z), Math.sin(t * 1.6 + i) * 0.12, 'YXZ');
       }
       g.body.position.copy(_at);
       const size = g.shown * (1 - cue.rush * 0.55);
       g.body.scale.setScalar(Math.max(1e-3, size));
       g.body.visible = size > 0.02;
-      g.motes.forEach((mote, j) => {
-        const at = g.way[Math.min(g.way.length - 1, (j + 1) * MOTE_EVERY)];
-        mote.position.copy(at);
-        mote.visible = g.body.visible;
-        mote.scale.setScalar(Math.max(1e-3, size * (1 - j / (MOTES + 1)) * (0.9 + 0.2 * Math.sin(t * 3 + j))));
-      });
+      // (its halo breathing and its heart beating slowly, each its own: no faster than the root's flash rule)
+      g.halo.scale.set(HALO + Math.sin(t * RIPPLE + i) * 0.05, HALO + Math.sin(t * RIPPLE * 0.7 + i) * 0.04, HALO);
+      g.heart.scale.setScalar(1 + 0.25 * Math.max(0, Math.sin(t * 2.2 + i * 1.3)) ** 3);
+      tail(g, i * MOTES, g.body.visible ? size : 0, fade * flare, t);
     });
+    motes.instanceMatrix.needsUpdate = true;
+    motes.instanceColor!.needsUpdate = true;
   }
 
   /** Their ways forgotten (a model reset: they'd draw a tail across the arena). */
   function reset(): void { for (const g of ghosts) g.way.length = 0; }
 
   function dispose(): void {
-    sheet.dispose();
-    eyeGeo.dispose();
-    moteGeo.dispose();
-    for (const mat of [headMat, veilMat, eyeMat, ...moteMats]) mat.dispose();
+    for (const geo of [shroud, face, heartGeo, moteGeo]) geo.dispose();
+    for (const mat of [shroudMat, haloMat, heartMat, faceMat, moteMat]) mat.dispose();
+    motes.dispose();
   }
 
   return { update, reset, dispose };
