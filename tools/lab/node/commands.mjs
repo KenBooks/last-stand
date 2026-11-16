@@ -1811,6 +1811,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  guide: {
+    each(side, options) {
+      return side.command('guide', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   seams: {
     each(side, options) {
       return side.command('seams', { each: Boolean(options.each), canary: Boolean(options.canary) });

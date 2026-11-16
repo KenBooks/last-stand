@@ -9,7 +9,7 @@ import { sfx } from '../../core/audio';
 import { foePage, foes, type Foe } from './foes';
 import { heroPage, missingNotes } from './heroes';
 import { TIPS_PAGES } from './tips';
-import { hurryPortrait, portrait, portraitMade, type Who } from './portraits';
+import { hurryPortrait, portrait, portraitMade, queuePortraitsBehind, type Who } from './portraits';
 
 export type GuideSection = 'foes' | 'bosses' | 'heroes' | 'tips';
 const SECTIONS: { id: GuideSection; label: string }[] = [
@@ -128,9 +128,8 @@ export function openGuide(at?: { section: GuideSection; entry?: string }, closed
   onClose = closed ?? null;
   $('#guide').classList.remove('hidden');
   render();
-  // (every foe's picture asked for, the one shown first: they're made behind, a foe a frame)
-  for (const f of [...foes().common, ...foes().bosses]) void portrait(f.id);
-  for (const id of CLASS_IDS) void portrait(`hero:${id}`);
+  // (its pictures made behind the lobby if they aren't yet: ui/guide/portraits.ts; nothing is made here)
+  queuePortraitsBehind();
   if (import.meta.env.DEV) warnMissing();
 }
 

@@ -78,6 +78,7 @@ import type { CoatOptions } from './coat';
 import type { SeamsOptions } from './seams';
 import type { LabelsOptions } from './labels';
 import type { BehindOptions } from './behind';
+import type { GuideOptions } from './guideOpen';
 import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
 import type { ParityOptions } from './parity';
@@ -170,6 +171,14 @@ export async function labels(lab: Lab, command: LabelsOptions): Promise<Report> 
  *  as the hall opens or one is chosen, or a canary missed, is a problem. */
 export async function behind(lab: Lab, command: BehindOptions): Promise<Report> {
   const { heroesBehind: follow } = await import('./behind');
+  return follow(lab, command);
+}
+
+/** `lab guide`: the guide's first opening and a walk through every page, each frame and the page's long tasks timed
+ *  by the browser's clock; a moment past its limit, a program the game's renderer linked, a picture never made, or a
+ *  canary missed, is a problem. */
+export async function guide(lab: Lab, command: GuideOptions): Promise<Report> {
+  const { guideOpen: follow } = await import('./guideOpen');
   return follow(lab, command);
 }
 
