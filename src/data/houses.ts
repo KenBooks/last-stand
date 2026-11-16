@@ -118,4 +118,6 @@ export const TROPHIES: Partial<Record<EnemyId, TrophyDef>> = {
   colossus: { name: "The Hollow Colossus's Mask", look: 'mask', colour: 0xd8d0c4, trim: 0xb070ff },
   // (the Elder Thornheart's crown of thorned antlers, a green heartwood knot at its root)
   thornheart: { name: "The Elder Thornheart's Crown", look: 'antlers', colour: 0xb89068, trim: 0x7aff50 },
+  // (the Bell-Warden's crest: cracked bronze and its toll's pale light)
+  bellwarden: { name: "The Bell-Warden's Crest", look: 'crest', colour: 0xa0702e, trim: 0xc8d8ff },
 };

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, TROPHIES, type RoomId } from '../data/houses';
-import { BIOMES, BIOME_IDS } from '../data/biomes';
+import { BIOMES, BIOME_IDS, bossesOf } from '../data/biomes';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { RARITIES } from '../data/items';
@@ -160,7 +160,8 @@ export function recordsShown(): RecordsShown {
       ...RARITIES.map((x) => [`· ${x.name}`, num(c.bankedBy[x.id] ?? 0)] as const),
     ],
   };
-  const bosses = [...new Set([...BIOME_IDS.map((b) => BIOMES[b].boss), ...(Object.keys(TROPHIES) as EnemyId[])])];
+  // (every boss of every battleground's ladder, then any other with a trophy)
+  const bosses = [...new Set([...BIOME_IDS.flatMap((b) => bossesOf(b)), ...(Object.keys(TROPHIES) as EnemyId[])])];
   const right: Board = {
     title: 'Bosses Slain',
     rows: [
