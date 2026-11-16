@@ -123,7 +123,7 @@ const skill: InstantSkill = {
     debris({ x: pos.x, y: floor + 0.8, z: pos.z }, { count: 10, color: STRAW, speed: 2.5, size: 0.07, life: 0.9 });
     // (how far it calls them from)
     shockwave(pos, { color: STRAW, intensity: 0.55, from: 0.6, to: def.radius, life: 0.6 });
-    sfx.straw();
+    sfx.straw(RISE);
     let t = 0, sunk = false;
     addEffect({
       update(dt) {
@@ -136,6 +136,7 @@ const skill: InstantSkill = {
           }
         } else if (!sunk) {
           sunk = true; unlure();
+          sfx.strawSink(SINK);
           debris({ x: pos.x, y: floor + 0.6, z: pos.z }, { count: 12, color: STRAW, speed: 2, size: 0.07, life: 0.8 });
           debris({ x: pos.x, y: floor, z: pos.z }, { count: 8, color: 0x4a3a28, speed: 2.5, size: 0.1, life: 0.7 });
         }

@@ -1356,6 +1356,341 @@ function draught(): void {
   v.start(); v.stopAt(v.t + 2.2);
 }
 
+// The ranger's sounds: wood, string, air and straw, each the thing it shows (before, a shot was a hiss and a
+// triangle note falling from 180 Hz, the full draw two sine notes, an arrow in a foe the wizard's old tick, Quarry
+// Mark a note gliding up and its refresh three notes of a chord; an arrow into the ground, the draw and the
+// scarecrow under blows played nothing of their own). Noise alone, as the wizard's and the warrior's: a bow's limbs
+// creaking as sparse clicks through a narrow band (`creak`), wood struck as a short knock (`knock`: short and high is
+// what reads as wooden, the warrior's first steel), a string or a shaft trembling as a band of noise shaken some
+// tens of times a second, never at the same rate twice (`shiver`), and an arrow's air (`arrowAway`).
+
+type Voice = ReturnType<typeof voice>;
+
+/** Wood struck, `at` s in: a narrow band of noise round `hz` (a little apart each time), driven, gone in `decay` s. */
+function knock(v: Voice, at: number, hz: number, peak: number, decay: number, to: AudioNode = v.out): void {
+  const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz * (0.9 + 0.2 * Math.random()); f.Q.value = 3;
+  v.loop(f); f.connect(drive(3)).connect(blowAt(v, at, peak, decay, to, 0.001));
+}
+
+/** Something taut trembling, `at` s in: a band of noise round `hz` whose level is shaken about `rate` times a second
+ *  (drawn anew each time), dying over `decay` s. A string let go, a shaft quivering where it stuck: a thrum with no
+ *  pitch, as the shaking is of noise. */
+function shiver(v: Voice, at: number, hz: number, rate: number, peak: number, decay: number, to: AudioNode = v.out, q = 1.6, k = 0): void {
+  const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = q;
+  const shake = v.c.createGain(); shake.gain.value = 0.5;
+  v.lfo(rate * (0.8 + 0.4 * Math.random()), 0.5, shake.gain);
+  v.loop(f); f.connect(shake);
+  (k ? shake.connect(drive(k)) : shake).connect(blowAt(v, at, peak, decay, to, 0.002));
+}
+
+/** A gain silent until `from` s in, there at `low` and rising to `peak` at `peakAt` s, then dying over `fall` s, into
+ *  `to`: something coming, heard all the way in (`swellAt` rises from nothing, so over more than a tenth of a second
+ *  all but its end is silence: the shower's whistle and the mark's breath in were first heard only as they ended). */
+function riseAt(v: Voice, from: number, low: number, peakAt: number, peak: number, fall: number, to: AudioNode = v.out): GainNode {
+  const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t);
+  g.gain.setValueAtTime(0.0001, v.t + from); g.gain.exponentialRampToValueAtTime(low, v.t + from + 0.02);
+  g.gain.exponentialRampToValueAtTime(peak, v.t + peakAt); g.gain.exponentialRampToValueAtTime(0.0001, v.t + peakAt + fall);
+  g.connect(to); return g;
+}
+
+/** Wood creaking into `to`: the crackle slowed until its clicks stand apart (`from` to `full` of its rate over `dur`
+ *  s: fibres giving one by one, quicker as the strain grows), through a narrow band round `hz`. Returns its source
+ *  and its level, for what follows the strain. */
+function creak(v: Voice, hz: number, from: number, full: number, dur: number, level: [number, number], to: AudioNode = v.out): { src: AudioBufferSourceNode; g: GainNode } {
+  const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = 3;
+  const g = v.c.createGain(); g.gain.setValueAtTime(level[0], v.t); g.gain.exponentialRampToValueAtTime(level[1], v.t + dur); g.connect(to);
+  const src = v.crackle(f, from); src.playbackRate.setValueAtTime(from, v.t); src.playbackRate.exponentialRampToValueAtTime(full, v.t + dur);
+  f.connect(g);
+  return { src, g };
+}
+
+/** An arrow leaving, `at` s in: its air, a band of noise leaping up as it passes the bow and falling as it goes
+ *  away over `long` s, lightly flanged, the hiss of its fletching over it, moving from `pan0` to `pan1`. */
+function arrowAway(v: Voice, at: number, peak: number, k: number, pan0: number, pan1: number, long = 0.3): void {
+  const way = crossing(v, pan0, pan1, at, at + long);
+  const air = glide(v, 'bandpass', 1.6, [[0, 1600 * k], [at, 1600 * k], [at + 0.04, 5000 * k], [at + long, 1900 * k]]);
+  v.loop(air); air.connect(v.flange(swellAt(v, at, at + 0.03, peak, long, way), 1.2, 0.8, 6, 0.4));
+  const hiss = v.c.createBiquadFilter(); hiss.type = 'highpass'; hiss.frequency.value = 6500;
+  v.loop(hiss); hiss.connect(swellAt(v, at, at + 0.03, peak * 0.12, long * 0.7, way));
+}
+
+/** A bowstring let go, `at` s in (`size`: how hard, `k`: its colour): its slap on the bracer, the string's thrum
+ *  dying in a fifth of a second (`shiver`, driven so its weight is in the mids), and the limbs' knock and thump as
+ *  they spring back. */
+function stringLoose(v: Voice, at: number, size: number, k: number, to: AudioNode = v.out): void {
+  crack(v, at, 0.2 * size, to, 2400 * k);
+  shiver(v, at, 320 * k, 90, 0.36 * size, 0.2 + 0.1 * size, to, 0.9, 4);
+  shiver(v, at, 1100 * k, 140, 0.1 * size, 0.12, to, 1.4);
+  knock(v, at, 560 * k, 0.14 * size, 0.07, to);
+  thump(v, at, 1000 * k, 160, 0.2 * size, 0.2, to, 3.5);
+}
+
+/** A bow drawn over `dur` s and held (`heavy`: 0 one arrow, 1 a sheaf or a lancewood shaft): its limbs creaking,
+ *  slowly at first and quicker as they bend, the string's fibres tightening over them and the glove's leather; at
+ *  full it settles to a creak now and then, as long as it's held. Quiet: it's the archer's own ears that hear it.
+ *  Returns a stop() (the shot's own sounds take over, or it's let down). */
+function bowDraw(dur: number, heavy: number): () => void {
+  const v = voice(0.03, 0.08);
+  const { c, t } = v;
+  const k = (0.92 + 0.16 * Math.random()) * (1 - 0.18 * heavy), loud = 1 + 0.35 * heavy, long = Math.max(0.15, dur);
+  const limbs = creak(v, 640 * k, 0.09, 0.3, long, [0.16 * loud, 0.85 * loud], v.lane(1, -0.15));
+  const body = creak(v, 330 * k, 0.07, 0.2, long, [0.16 * loud, 0.7 * loud], v.lane(1, -0.1));
+  const fibres = creak(v, 1700 * k, 0.2, 0.6, long, [0.015 * loud, 0.14 * loud], v.lane(1, 0.25));
+  const leather = v.sweep('bandpass', 1800, 2800, long, 0.8);
+  const lg = c.createGain(); lg.gain.setValueAtTime(0.002, t); lg.gain.exponentialRampToValueAtTime(0.014 * loud, t + long); lg.connect(v.out);
+  v.loop(leather); leather.connect(lg);
+  // held at full: the strain settles, a creak now and then
+  for (const [{ src, g }, held] of [[limbs, 0.2], [body, 0.2], [fibres, 0.01]] as const) {
+    g.gain.setTargetAtTime(held * loud, t + long, 0.25);
+    src.playbackRate.setTargetAtTime(0.02, t + long, 0.3);
+  }
+  lg.gain.setTargetAtTime(0.0001, t + long, 0.2);
+  v.start();
+  let done = false;
+  return () => { if (!done) v.end(0.05); done = true; };
+}
+
+/** The bow come to full draw, the sign a shot will strike its hardest: the limbs' last hard creak, two ticks of
+ *  wood, and the glint gathering on the arrowhead, a breath of bright air. No note (it was two sine tones, 1560 and
+ *  2340 Hz). */
+function drawFull(): void {
+  const v = voice(0, 0.2);
+  crack(v, 0, 0.07, v.out, 3200);
+  knock(v, 0, 950, 0.3, 0.07); knock(v, 0.05, 1400, 0.2, 0.06);
+  const glint = v.c.createBiquadFilter(); glint.type = 'highpass'; glint.frequency.value = 5200;
+  v.loop(glint); glint.connect(v.flange(v.hit(0.07, 0.4, v.out, 0.04), 1.5, 1, 7, 0.5));
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** An arrow taken from the quiver and laid on the string, on it `delay` s from now (`n`: how many): the shafts
+ *  sliding out past the others, and the nock's small click on the string. */
+function nockArrow(delay: number, n: number): void {
+  const v = voice(0, 0.05);
+  const at = Math.max(0.14, delay), lane = v.lane(1, 0.2);
+  const slide = glide(v, 'bandpass', 1.5, [[0, 2000], [at - 0.14, 2000], [at - 0.03, 4000]]);
+  v.loop(slide); slide.connect(swellAt(v, at - 0.14, at - 0.05, 0.05, 0.06, lane));
+  for (let i = 1; i < Math.min(n, 5); i++) knock(v, at - 0.13 + i * 0.022, 1300 + Math.random() * 900, 0.06, 0.04, lane);
+  knock(v, at, 1900, 0.13, 0.04, lane);
+  crack(v, at, 0.03, lane, 4000);
+  v.start(); v.stopAt(v.t + at + 0.25);
+}
+
+/** Nockshot loosed (`pull`: how far it was drawn, 0..1 of the bow's strength): the string let go and one arrow
+ *  away, harder, brighter and longer the further it was drawn, each a little apart in colour and place. */
+function nockLoose(pull: number): void {
+  const v = voice(0, 0.12);
+  const k = 0.93 + Math.random() * 0.14, size = 0.5 + 0.5 * pull, side = Math.random() * 0.5 - 0.25;
+  stringLoose(v, 0, size, k, v.lane(1, side * 0.4));
+  arrowAway(v, 0.004, 0.42 * size, k * (0.8 + 0.2 * pull), side * 0.3, side * 1.6, 0.2 + 0.14 * pull);
+  v.start(); v.stopAt(v.t + 0.9);
+}
+
+/** Briarflight loosed: a heavier slap of the string, as it drives five shafts, and the five leaving one after
+ *  another across the ears, left to right, as the fan spreads. */
+function fanLoose(pull: number): void {
+  const v = voice(0, 0.15);
+  const k = 0.9 + Math.random() * 0.1, size = 0.6 + 0.6 * pull;
+  stringLoose(v, 0, size, k * 0.9);
+  for (let i = 0; i < 5; i++) {
+    const side = (i - 2) / 2;
+    arrowAway(v, 0.004 + i * 0.011, 0.22 * size, k * (0.85 + 0.12 * Math.random()), side * 0.3, side * 0.9, 0.2 + 0.1 * pull);
+  }
+  v.start(); v.stopAt(v.t + 0.9);
+}
+
+/** Lancewood Shot loosed (`full`: at full draw, when it strikes half again as hard): the heaviest slap and thrum
+ *  the bow has, and a heavy shaft tearing the air, lower and longer than an arrow's hiss; at full, a punch of air
+ *  off the bow and the tear driven. */
+function lanceLoose(pull: number, full: boolean): void {
+  const v = voice(0, full ? 0.3 : 0.18);
+  const k = 0.78 + Math.random() * 0.08, size = (0.6 + 0.55 * pull) * (full ? 1.25 : 1);
+  stringLoose(v, 0, size, k);
+  if (full) whump(v, 0, 0.34, 0.3);
+  // the shaft tearing away
+  const long = full ? 0.6 : 0.4, way = crossing(v, 0, Math.random() < 0.5 ? -0.5 : 0.5, 0, long);
+  const tear = glide(v, 'bandpass', 1.1, [[0, 900], [0.05, 3600 * k], [long, 650]]);
+  v.loop(tear); tear.connect(drive(full ? 3 : 2)).connect(v.flange(swellAt(v, 0, 0.05, 0.3 * size, long, way), 3, 2, 3.2, 0.6));
+  arrowAway(v, 0.004, 0.3 * size, k, 0, 0, 0.3);
+  v.start(); v.stopAt(v.t + 1.2);
+}
+
+/** A Hailfletch volley loosed, its arrow sent up high over the field: the string, and the arrow's air climbing away
+ *  and thinning as it rises. */
+function volleyLoose(): void {
+  const v = voice(0, 0.2);
+  const k = 0.9 + Math.random() * 0.14;
+  stringLoose(v, 0, 0.85, k);
+  const air = glide(v, 'bandpass', 1.6, [[0, 1500 * k], [0.05, 4200 * k], [0.4, 5200 * k]]);
+  const far = v.sweep('lowpass', 9000, 2400, 0.4, 0.6);
+  v.loop(air); air.connect(far).connect(v.flange(swellAt(v, 0, 0.035, 0.34, 0.42), 1.4, 1, 5, 0.4));
+  v.start(); v.stopAt(v.t + 0.9);
+}
+
+/** The volley's arrow bursting into its shower, up over the field: the shaft splitting (a dry crack, a knock, its
+ *  splinters), and the shower whistling down in both ears, falling and swelling until it lands some `fall` s later
+ *  (its arrows' landings and strikes are their own sounds). */
+function rainSplit(fall: number): void {
+  const v = voice(0, 0.4);
+  crack(v, 0, 0.14, v.out, 2000);
+  knock(v, 0, 1150, 0.3, 0.06);
+  grit(v, 9, 0.005, 0.14, 1400, 5200, 0.14);
+  const puff = v.sweep('bandpass', 700, 2200, 0.15, 0.8);
+  v.loop(puff); puff.connect(v.hit(0.12, 0.22, v.out, 0.01));
+  for (const [pan, rate] of [[-0.6, 2.3], [0.6, 3.1]]) {
+    const f = glide(v, 'bandpass', 2.2, [[0, 5600], [0.08, 5600], [fall, 2000]]);
+    v.loop(f); f.connect(v.flange(riseAt(v, 0.04, 0.05, fall, 0.42, 0.14, v.lane(1, pan)), 2, 1.4, rate, 0.5));
+  }
+  v.start(); v.stopAt(v.t + fall + 0.5);
+}
+
+/** An arrow into a body (`size`: how hard; `through`: a lancewood shaft going on out the far side): a small sharp
+ *  tick of the head, the meat of the blow under it and the shaft quivering where it lodged; driven through, no
+ *  quiver but the rip of it leaving. Each in its own place. */
+function arrowHit(size: number, through: boolean): void {
+  const v = voice(0, 0.18);
+  const lane = v.lane(1, Math.random() * 0.7 - 0.35), k = 0.9 + Math.random() * 0.2;
+  crack(v, 0, 0.12 * size, lane, 2800);
+  crunch(v, 0, 0.16 * size, 0.1, lane);
+  thump(v, 0, 1300 * k, 150, 0.26 * size, 0.2, lane, 3.5);
+  if (through) {
+    const rip = v.sweep('bandpass', 3200 * k, 700, 0.14, 1);
+    v.loop(rip); rip.connect(drive(3)).connect(v.flange(v.hit(0.14 * size, 0.2, lane, 0.004), 1.5, 1, 6, 0.4));
+  } else shiver(v, 0.01, 1200 * k, 48, 0.07 * size, 0.16, lane, 2.5);
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** What an arrow comes down into */
+export type ArrowLanding = 'earth' | 'wood' | 'water';
+
+/** An arrow coming to rest: into earth, a soft dull blow, a spit of dirt and the shaft quivering; into wood (a
+ *  log, a stump, a tree), a thock and a longer quiver; into water, a plop, its splash and a hiss of drops. */
+function arrowLand(into: ArrowLanding): void {
+  const v = voice(0, 0.15);
+  const { c } = v;
+  const lane = v.lane(1, Math.random() * 1.0 - 0.5), k = 0.88 + Math.random() * 0.24;
+  if (into === 'water') {
+    const plop = glide(v, 'bandpass', 3, [[0, 520 * k], [0.09, 1500 * k]]);
+    v.loop(plop); plop.connect(v.hit(0.5, 0.12, lane, 0.004));
+    whump(v, 0, 0.14, 0.1, lane);
+    const drops = c.createBiquadFilter(); drops.type = 'highpass'; drops.frequency.value = 3200;
+    v.crackle(drops, 1.6); drops.connect(blowAt(v, 0.03, 0.3, 0.3, lane, 0.02));
+    const splash = v.sweep('bandpass', 2600, 1200, 0.2, 0.7);
+    v.loop(splash); splash.connect(v.hit(0.07, 0.22, lane, 0.008));
+  } else if (into === 'wood') {
+    crack(v, 0, 0.09, lane, 2600);
+    knock(v, 0, 400 * k, 0.4, 0.12, lane);
+    knock(v, 0, 1100 * k, 0.12, 0.05, lane);
+    thump(v, 0, 900, 150, 0.16, 0.16, lane, 3);
+    shiver(v, 0.008, 1300 * k, 55, 0.1, 0.24, lane, 2.5);
+  } else {
+    whump(v, 0, 0.3, 0.13, lane);
+    const dirt = c.createBiquadFilter(); dirt.type = 'bandpass'; dirt.frequency.value = 1100 * k; dirt.Q.value = 0.7;
+    v.loop(dirt); dirt.connect(v.hit(0.09, 0.09, lane, 0.002));
+    shiver(v, 0.008, 1000 * k, 42, 0.06, 0.16, lane, 2.5);
+  }
+  v.start(); v.stopAt(v.t + 0.6);
+}
+
+/** An arrow glancing off stone: the head's tick (steel on stone, two thin bands drawn anew, gone in a twentieth of
+ *  a second, so no note: it was a triangle tone at 2100 to 3000 Hz), a short scrape, and the shaft clattering down
+ *  on the floor. */
+function arrowGlance(): void {
+  const v = voice(0, 0.2);
+  const lane = v.lane(1, Math.random() * 0.8 - 0.4);
+  crack(v, 0, 0.34, lane, 3400);
+  iron(v, 0, 2, 3000, 6500, 0.07, 0.08, lane);
+  const scrape = v.sweep('bandpass', 2800, 1500, 0.07, 1.4);
+  v.loop(scrape); scrape.connect(v.hit(0.16, 0.09, lane, 0.003));
+  let at = 0.14 + Math.random() * 0.08;
+  for (let i = 0; i < 3; i++) { knock(v, at, 900 + Math.random() * 900, 0.34 / (i + 1), 0.05, lane); at += 0.07 + Math.random() * 0.07; }
+  v.start(); v.stopAt(v.t + 0.8);
+}
+
+/** Quarry Mark set on a foe: the hunter's eye closing on it, air drawn in from both sides to a point, and a snare's
+ *  dry snap as it's caught: a crack, two knocks of wood and a small blow. No note (it was a triangle tone gliding
+ *  from 660 to 990 Hz). */
+function quarrySnap(): void {
+  const v = voice(0, 0.25);
+  const at = 0.15;
+  for (const side of [-1, 1]) {
+    const f = glide(v, 'bandpass', 2, [[0, 900], [at, 3600]]);
+    v.loop(f); f.connect(riseAt(v, 0, 0.05, at, 0.3, 0.04, crossing(v, side * 0.8, 0, 0, at)));
+  }
+  crack(v, at, 0.24, v.out, 2200);
+  knock(v, at, 1250, 0.4, 0.07); knock(v, at + 0.025, 720, 0.26, 0.09);
+  thump(v, at, 1100, 200, 0.2, 0.18, v.out, 3);
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** A marked quarry killed, the cooldowns back: arrows rattling back into the quiver, a run of small knocks of
+ *  wood, and a breath drawn in, rising and easing. No notes (it was three of a chord, 784, 988 and 1175 Hz). */
+function quiverBack(): void {
+  const v = voice(0, 0.25);
+  let at = 0.02;
+  for (let i = 0; i < 7; i++) {
+    knock(v, at, 900 + Math.random() * 1500, 0.3 * (0.6 + 0.4 * Math.random()), 0.05, v.lane(1, Math.random() * 0.8 - 0.4));
+    at += 0.025 + Math.random() * 0.03;
+  }
+  for (const [pan, rate] of [[-0.5, 1.4], [0.5, 1.9]]) {
+    const f = glide(v, 'bandpass', 0.8, [[0, 500], [0.32, 2600], [0.8, 900]]);
+    v.loop(f); f.connect(v.flange(riseAt(v, 0, 0.03, 0.32, 0.2, 0.45, v.lane(1, pan)), 3, 2, rate, 0.45));
+  }
+  v.start(); v.stopAt(v.t + 1);
+}
+
+/** Straw rustling, from `from` s in, loudest at `peakAt` and dying over `fall` s: dense dry crackle, bright, and a
+ *  fluttering hiss of the stalks over it. */
+function rustle(v: Voice, from: number, peakAt: number, peak: number, fall: number, to: AudioNode = v.out): void {
+  const dry = v.c.createBiquadFilter(); dry.type = 'bandpass'; dry.frequency.value = 3400; dry.Q.value = 0.6;
+  v.crackle(dry, 2.2); dry.connect(swellAt(v, from, peakAt, peak, fall, to));
+  const stalks = v.c.createBiquadFilter(); stalks.type = 'highpass'; stalks.frequency.value = 4200;
+  const flutter = v.c.createGain(); flutter.gain.value = 0.6; v.lfo(19 + Math.random() * 8, 0.4, flutter.gain);
+  v.loop(stalks); stalks.connect(flutter).connect(swellAt(v, from, peakAt, peak * 0.07, fall, to));
+}
+
+/** Cloth flapping, `at` s in: a soft puff of dark air, closing. */
+function flap(v: Voice, at: number, peak: number, to: AudioNode = v.out): void {
+  const f = glide(v, 'lowpass', 0.7, [[0, 1500], [at, 1500], [at + 0.1, 380]]);
+  v.loop(f); f.connect(blowAt(v, at, peak, 0.16, to, 0.02));
+}
+
+/** The Strawman raised, up out of the ground in `rise` s: the earth breaking round its pole, its straw rustling
+ *  as it comes, its coat's cloth flapping, and the pole knocking and creaking as it rocks to a stand. */
+function strawRise(rise: number): void {
+  const v = voice(0, 0.3);
+  whump(v, 0, 0.4, 0.32);
+  thump(v, 0, 800, 150, 0.26, 0.35, v.out, 3.5);
+  grit(v, 9, 0, 0.26, 300, 1600, 0.26);
+  rustle(v, 0, rise * 0.7, 0.8, 0.55);
+  flap(v, rise * 0.4, 0.3, v.lane(1, -0.3)); flap(v, rise + 0.06, 0.24, v.lane(1, 0.3));
+  knock(v, rise, 430, 0.34, 0.12);
+  const pole = v.c.createBiquadFilter(); pole.type = 'bandpass'; pole.frequency.value = 700; pole.Q.value = 3;
+  v.crackle(pole, 0.22); pole.connect(swellAt(v, rise * 0.8, rise + 0.12, 1.6, 0.4));
+  v.start(); v.stopAt(v.t + rise + 1);
+}
+
+/** A blow on the Strawman: a dull thud on its sack, the straw crunching and scattering, and its pole knocking as it
+ *  rocks. Each in its own place and colour: a pack strikes at it together. */
+function strawHit(): void {
+  const v = voice(0, 0.2);
+  const lane = v.lane(1, Math.random() * 0.8 - 0.4), k = 0.85 + Math.random() * 0.3;
+  whump(v, 0, 0.24, 0.16, lane);
+  rustle(v, 0, 0.012, 0.7, 0.16, lane);
+  knock(v, 0.01, 410 * k, 0.14, 0.1, lane);
+  v.start(); v.stopAt(v.t + 0.5);
+}
+
+/** The Strawman sinking back into the ground over `sink` s: its straw rustling down, a last flap of its coat, and
+ *  the earth closing over it. */
+function strawSink(sink: number): void {
+  const v = voice(0, 0.3);
+  rustle(v, 0, sink * 0.4, 0.5, sink);
+  flap(v, sink * 0.3, 0.2);
+  grit(v, 6, sink * 0.5, sink * 0.7, 300, 1400, 0.18);
+  whump(v, sink * 0.8, 0.26, 0.3);
+  v.start(); v.stopAt(v.t + sink + 0.9);
+}
+
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
  *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
  *  s, landed by about 2.95). Timed to it, and soft, as the first sound a visit hears (from the owner's review of
@@ -1424,23 +1759,37 @@ function whenRunning(play: () => void, late: number): void {
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
 const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
-  bow: guard(() => { if (throttle('bow', 60)) return; noise({ dur: 0.12, freq: 2800, sweep: 1200, q: 2, gain: 0.1 }); tone({ freq: 180, to: 80, dur: 0.16, type: 'triangle', gain: 0.08 }); }),
-  /** a bow drawn to full: a glint on the arrowhead */
-  bowReady: guard(() => { tone({ freq: 1560, dur: 0.35, gain: 0.04, type: 'sine' }); tone({ freq: 2340, dur: 0.25, gain: 0.02, type: 'sine', delay: 0.03 }); }),
-  /** an arrow driven through foes: a heavier string and a tearing hiss */
-  pierce: guard(() => { noise({ dur: 0.22, freq: 2000, sweep: 600, q: 1.6, gain: 0.16 }); tone({ freq: 140, to: 60, dur: 0.2, type: 'triangle', gain: 0.1 }); }),
-  /** an arrow bursting into a shower over the area */
-  split: guard(() => { noise({ dur: 0.3, freq: 1800, sweep: 4200, q: 1.2, gain: 0.1 }); noise({ dur: 0.5, freq: 3200, sweep: 900, q: 0.8, gain: 0.05, attack: 0.08 }); }),
-  /** an arrow into the ground, a blow on wood and straw */
+  /** a bow drawn over `dur` s and held (`heavy`: 1 a sheaf or a lancewood shaft): returns its stop() */
+  bowDraw: guard((dur: number, heavy: number) => bowDraw(dur, heavy)),
+  /** a bow come to full draw: the glint on the arrowhead */
+  bowReady: guard(() => { drawFull(); }),
+  /** `n` arrows taken from the quiver, on the string `delay` s from now */
+  nock: guard((delay: number, n: number = 1) => { nockArrow(delay, n); }),
+  /** Nockshot loosed (`pull` 0..1: how hard the bow drove it) */
+  bow: guard((pull: number = 1) => { if (throttle('bow', 60)) return; nockLoose(pull); }),
+  /** Briarflight's five loosed */
+  fan: guard((pull: number = 1) => { fanLoose(pull); }),
+  /** Lancewood Shot loosed (`full`: at full draw) */
+  lancewood: guard((pull: number = 1, full: boolean = true) => { lanceLoose(pull, full); }),
+  /** a Hailfletch volley's arrow loosed up over the field, and bursting into its shower, which lands `fall` s on */
+  volley: guard(() => { if (throttle('volley', 60)) return; volleyLoose(); }),
+  split: guard((fall: number = 0.45) => { if (throttle('split', 60)) return; rainSplit(fall); }),
+  /** an arrow into a foe (`size`: how hard; `through`: a lancewood shaft driven on through it) */
+  arrowHit: guard((size: number = 1, through: boolean = false) => { if (throttle('arrowHit', 45)) return; arrowHit(size, through); }),
+  /** an arrow come to rest in the ground, in wood or in water */
+  arrowLand: guard((into: ArrowLanding) => { if (throttle('arrowLand', 50)) return; arrowLand(into); }),
+  /** a blow on wood and straw (a foe's thrown thing landing, a blow dodged) */
   thud: guard(() => { if (throttle('thud', 70)) return; noise({ dur: 0.08, freq: 500, type: 'lowpass', gain: 0.22 }); noise({ dur: 0.05, freq: 2600, q: 2, gain: 0.04 }); }),
-  /** an arrow glancing off stone: a short clink and a scrape */
-  ricochet: guard(() => { if (throttle('ricochet', 70)) return; tone({ freq: 2100 + Math.random() * 900, to: 1500, dur: 0.07, type: 'triangle', gain: 0.05 }); noise({ dur: 0.06, freq: 4200, q: 3, gain: 0.07 }); }),
+  /** an arrow glancing off stone: its head's tick, a scrape, the shaft clattering down */
+  ricochet: guard(() => { if (throttle('ricochet', 70)) return; arrowGlance(); }),
   /** a foe marked as quarry */
-  mark: guard(() => { tone({ freq: 660, to: 990, dur: 0.25, gain: 0.05, type: 'triangle' }); noise({ dur: 0.2, freq: 3500, q: 4, gain: 0.05 }); }),
+  mark: guard(() => { quarrySnap(); }),
   /** a marked foe's kill: the cooldowns come back */
-  refresh: guard(() => { [784, 988, 1175].forEach((f, i) => tone({ freq: f, dur: 0.4, gain: 0.045, type: 'triangle', delay: i * 0.05 })); }),
-  /** a straw figure rising out of the ground */
-  straw: guard(() => { noise({ dur: 0.45, freq: 1200, sweep: 500, q: 1.2, gain: 0.16 }); tone({ freq: 110, to: 70, dur: 0.18, type: 'triangle', gain: 0.12 }); }),
+  refresh: guard(() => { quiverBack(); }),
+  /** the Strawman raised out of the ground in `rise` s, struck by a foe, and sinking back over `sink` s */
+  straw: guard((rise: number = 0.3) => { strawRise(rise); }),
+  strawHit: guard(() => { if (throttle('strawHit', 70)) return; strawHit(); }),
+  strawSink: guard((sink: number = 0.45) => { strawSink(sink); }),
   /** Splintering Bolt cast, at every cast (a held button casts again and again) */
   bolt: guard(() => { if (throttle('bolt', 60)) return; boltCast(); }),
   /** a Splintering Bolt bursting on a foe: the bolt itself, splitting (`split`), or one of its splits */

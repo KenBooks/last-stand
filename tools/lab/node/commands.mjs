@@ -1128,6 +1128,26 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  heard: {
+    keepsPage: 'own',
+    check(options) {
+      if (options.hold !== undefined && !(options.hold > 0)) throw labError('heard --hold: more than 0 s');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options._[0].split(','),
+        hold: options.hold,
+        biome: options.biome,
+        awake: Boolean(options.awake),
+        canary: Boolean(options.canary),
+      };
+      return side.command('heard', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   hits: {
     keepsPage: 'own',
     check(options) {

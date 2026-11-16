@@ -19,13 +19,15 @@ export interface SoundOptions {
 }
 
 /** A call at a moment of a scene: the first of `sound`'s names the game has (a sound renamed since), with `args`;
- *  what it returns (a held sound's stop) kept as `keep`. Or a kept stop called. */
+ *  what it returns (a held sound's stop) kept as `keep`. Or a kept stop called. `optional`: a sound an older game
+ *  (the other side of an `--ab`) didn't have and played nothing for, skipped there quietly, as its stop is. */
 interface Cue {
   at: number;
   sound?: string[];
   args?: unknown[];
   keep?: string;
   stop?: string;
+  optional?: boolean;
 }
 
 /** A scene: its cues, and the stretch its spectrum is taken over (a channel's hold). It renders until the hall's
@@ -159,6 +161,173 @@ const WARRIOR: Record<string, Scene> = {
   draught: { what: 'Healing Draught drunk', cues: [{ at: 0, sound: ['draught'] }] },
 };
 
+/** The ranger's paces (s, `data/classes/ranger.ts`): each drawn shot's time to full draw and what follows its
+ *  release, an arrow's flight to a foe some 15 m off, Hailfletch's volley (its draw, what follows, its arrow's rise
+ *  to the split and its shower's fall), the Strawman's rise, stand and sinking. */
+const NOCK = { draw: 1.1, after: 0.9 };
+const BRIAR = { draw: 1.3, after: 0.95 };
+const LANCEWOOD = { draw: 1.5, after: 0.95 };
+const ARROW_FLIGHT = 0.25;
+const HAIL = { draw: 0.9, after: 0.8, rise: 0.4, fall: 0.47, arrows: 24, spread: 0.12 };
+const STRAW = { rise: 0.3, stands: 3, sink: 0.45 };
+/** the share of what follows a shot at which the next arrow is on the string (`RELOADED_AT` in skills/ranger.ts) */
+const RELOADED = 0.7;
+
+/** A drawn shot's cues from `at`: the bow drawn `draw` s (`heavy`: a sheaf or a lancewood shaft) and held `held` s
+ *  more at full (its glint as it comes there), then `loose` played and the next arrow nocked. An older game drew in
+ *  silence and nocked in silence. Returns the cues and when it's loosed. */
+function drawnShot(at: number, pace: { draw: number; after: number }, heavy: number, held: number, loose: Cue): { cues: Cue[]; loosed: number } {
+  const loosed = at + pace.draw + held;
+  const cues: Cue[] = [
+    { at, sound: ['bowDraw'], args: [pace.draw, heavy], keep: `draw${at}`, optional: true },
+    { at: at + pace.draw * 0.97, sound: ['bowReady'] },
+    { at: loosed, stop: `draw${at}`, optional: true },
+    { ...loose, at: loosed },
+    { at: loosed, sound: ['nock'], args: [pace.after * RELOADED], optional: true },
+  ];
+  return { cues, loosed };
+}
+
+/** Nockshot held to full and let go three times: into a foe twice, then into the ground. */
+function nockshotCues(): Cue[] {
+  return [0, 1, 2].flatMap((shot) => {
+    const { cues, loosed } = drawnShot(shot * (NOCK.draw + 0.3 + NOCK.after), NOCK, 0, 0.3, { at: 0, sound: ['bow'], args: [1] });
+    const lands: Cue = shot < 2
+      ? { at: loosed + ARROW_FLIGHT, sound: ['arrowHit', 'boltHit'], args: [1] }
+      : { at: loosed + ARROW_FLIGHT * 1.6, sound: ['arrowLand'], args: ['earth'], optional: true };
+    return [...cues, lands];
+  });
+}
+
+/** Nockshot loosed as soon as it can be, four times (its least draw, half of full): into the ground, a foe, a log,
+ *  and off a stone. */
+function nockshotQuickCues(): Cue[] {
+  const draw = NOCK.draw * 0.5, pace = draw + NOCK.after;
+  const lands: Cue[] = [
+    { at: 0, sound: ['arrowLand'], args: ['earth'], optional: true },
+    { at: 0, sound: ['arrowHit', 'boltHit'], args: [0.75] },
+    { at: 0, sound: ['arrowLand'], args: ['wood'], optional: true },
+    { at: 0, sound: ['ricochet'] },
+  ];
+  return lands.flatMap((land, shot): Cue[] => [
+    { at: shot * pace, sound: ['bowDraw'], args: [NOCK.draw, 0], keep: `quick${shot}`, optional: true },
+    { at: shot * pace + draw, stop: `quick${shot}`, optional: true },
+    { at: shot * pace + draw, sound: ['bow'], args: [0.55] },
+    { at: shot * pace + draw, sound: ['nock'], args: [NOCK.after * RELOADED], optional: true },
+    { ...land, at: shot * pace + draw + ARROW_FLIGHT * 1.4 },
+  ]);
+}
+
+/** A Hailfletch volley's cues from `at`: drawn, loosed, split over the field, and its shower's arrows down one
+ *  after another over its spread, a third of them into foes, one into a log and the rest into the ground (an older
+ *  game played a thud for three in ten that missed). */
+function volleyCues(at: number): Cue[] {
+  const loosed = at + HAIL.draw, split = loosed + HAIL.rise, down = split + HAIL.fall - HAIL.spread / 2;
+  const shower = Array.from({ length: HAIL.arrows }, (_, arrow): Cue => {
+    const lands = down + (arrow / HAIL.arrows) * HAIL.spread;
+    if (arrow % 3 === 0) return { at: lands, sound: ['arrowHit', 'boltHit'], args: [0.8] };
+    const into = arrow === 10 ? 'wood' : 'earth';
+    return arrow % 3 === 1 && arrow % 2 === 0
+      ? { at: lands, sound: ['arrowLand', 'thud'], args: [into] }
+      : { at: lands, sound: ['arrowLand'], args: [into], optional: true };
+  });
+  return [
+    { at, sound: ['bowDraw'], args: [HAIL.draw, 0], keep: `volley${at}`, optional: true },
+    { at: loosed, stop: `volley${at}`, optional: true },
+    { at: loosed, sound: ['volley', 'bow'] },
+    { at: loosed, sound: ['nock'], args: [HAIL.after * RELOADED], optional: true },
+    { at: split, sound: ['split'], args: [HAIL.fall] },
+    ...shower,
+  ];
+}
+
+const HAIL_PACE = HAIL.draw + HAIL.after;
+
+const RANGER: Record<string, Scene> = {
+  nockshot: { what: 'Nockshot held to full and let go three times: two into a foe, one into the ground', cues: nockshotCues() },
+  nockshotQuick: { what: 'Nockshot loosed at its least draw four times: into the ground, a foe, a log, off a stone', cues: nockshotQuickCues() },
+  nockshotHeld: {
+    what: 'Nockshot drawn and held at full for 4 s, then loosed into a foe',
+    cues: [
+      ...drawnShot(0, NOCK, 0, 4, { at: 0, sound: ['bow'], args: [1] }).cues,
+      { at: NOCK.draw + 4 + ARROW_FLIGHT, sound: ['arrowHit', 'boltHit'], args: [1] },
+    ],
+    held: [NOCK.draw + 0.5, NOCK.draw + 4],
+  },
+  briar: {
+    what: 'Briarflight drawn to full and loosed: five arrows, three into foes and two into the ground',
+    cues: (() => {
+      const { cues, loosed } = drawnShot(0, BRIAR, 1, 0.3, { at: 0, sound: ['fan', 'bow'], args: [1] });
+      const lands = loosed + ARROW_FLIGHT;
+      return [
+        ...cues,
+        { at: lands, sound: ['arrowHit', 'boltHit'], args: [1] },
+        { at: lands + 0.03, sound: ['arrowHit', 'boltHit'], args: [1] },
+        { at: lands + 0.07, sound: ['arrowHit', 'boltHit'], args: [1] },
+        { at: lands + 0.16, sound: ['arrowLand'], args: ['earth'], optional: true },
+        { at: lands + 0.2, sound: ['arrowLand'], args: ['earth'], optional: true },
+      ];
+    })(),
+  },
+  lancewood: {
+    what: 'Lancewood Shot drawn to full and loosed: through three foes and into a tree',
+    cues: (() => {
+      const { cues, loosed } = drawnShot(0, LANCEWOOD, 1, 0.3, { at: 0, sound: ['lancewood', 'pierce'], args: [1, true] });
+      return [
+        ...cues,
+        { at: loosed + 0.14, sound: ['arrowHit', 'boltHit'], args: [1.3, true] },
+        { at: loosed + 0.2, sound: ['arrowHit', 'boltHit'], args: [1.3, true] },
+        { at: loosed + 0.27, sound: ['arrowHit', 'boltHit'], args: [1.3, true] },
+        { at: loosed + 0.42, sound: ['arrowLand'], args: ['wood'], optional: true },
+      ];
+    })(),
+  },
+  lancewoodShort: {
+    what: 'Lancewood Shot loosed at half its draw: through a foe and into the ground',
+    cues: [
+      { at: 0, sound: ['bowDraw'], args: [LANCEWOOD.draw, 1], keep: 'draw', optional: true },
+      { at: LANCEWOOD.draw * 0.5, stop: 'draw', optional: true },
+      { at: LANCEWOOD.draw * 0.5, sound: ['lancewood', 'bow'], args: [0.6, false] },
+      { at: LANCEWOOD.draw * 0.5 + 0.2, sound: ['arrowHit', 'boltHit'], args: [0.94, true] },
+      { at: LANCEWOOD.draw * 0.5 + 0.5, sound: ['arrowLand'], args: ['earth'], optional: true },
+    ],
+  },
+  hail: {
+    what: 'Hailfletch held for three volleys, each splitting into its shower of 24 over a pack',
+    cues: [0, 1, 2].flatMap((volley) => volleyCues(volley * HAIL_PACE)),
+  },
+  rangerMany: {
+    what: 'the loudest a ranger gets: two in co-op, one holding Hailfletch as the other looses Briarflight and a full Lancewood Shot into the same pack',
+    cues: [
+      ...[0, 1].flatMap((volley) => volleyCues(volley * HAIL_PACE)),
+      { at: HAIL.draw + HAIL.rise + HAIL.fall - 0.25, sound: ['fan', 'bow'], args: [1] },
+      { at: HAIL.draw + HAIL.rise + HAIL.fall + 0.02, sound: ['arrowHit', 'boltHit'], args: [1] },
+      { at: HAIL.draw + HAIL.rise + HAIL.fall - 0.1, sound: ['lancewood', 'pierce'], args: [1, true] },
+      { at: HAIL.draw + HAIL.rise + HAIL.fall + 0.06, sound: ['arrowHit', 'boltHit'], args: [1.3, true] },
+    ],
+  },
+  quarry: {
+    what: 'Quarry Mark set on a foe, then the marked foe killed and the cooldowns back',
+    cues: [{ at: 0, sound: ['mark'] }, { at: 1.4, sound: ['refresh'] }],
+  },
+  strawman: {
+    what: `the Strawman raised, struck by a pack for ${STRAW.stands} s, and sinking back`,
+    cues: [
+      { at: 0, sound: ['straw'], args: [STRAW.rise] },
+      ...Array.from({ length: 11 }, (_, blow): Cue => ({ at: 0.7 + blow * 0.21 + (blow % 3) * 0.04, sound: ['strawHit', 'thud'] })),
+      { at: STRAW.stands, sound: ['strawSink'], args: [STRAW.sink], optional: true },
+    ],
+  },
+  glance: {
+    what: 'three arrows glancing off stone',
+    cues: [0, 0.6, 1.2].map((at): Cue => ({ at, sound: ['ricochet'] })),
+  },
+  arrowLands: {
+    what: 'an arrow into the ground, into wood and into water, each twice',
+    cues: ['earth', 'earth', 'wood', 'wood', 'water', 'water'].map((into, i): Cue => ({ at: i * 0.6, sound: ['arrowLand'], args: [into], optional: true })),
+  },
+};
+
 const SCENES: Record<string, Scene> = {
   bolt: {
     what: 'Splintering Bolt held: four casts, each bursting on a foe and its two splits on two others',
@@ -212,6 +381,7 @@ const SCENES: Record<string, Scene> = {
     held: [1, THREAD_HELD],
   },
   ...WARRIOR,
+  ...RANGER,
   lanceEarly: {
     what: 'Void Lance let go as its portal is drawn, before the beam',
     cues: [
@@ -280,13 +450,13 @@ function plantCanary(c: BaseAudioContext): void {
 function playCue(cue: Cue, kept: Map<string, Play>): string | null {
   if (cue.stop) {
     const stop = kept.get(cue.stop);
-    if (!stop) return `no ${cue.stop} to stop at ${cue.at} s`;
+    if (!stop) return cue.optional ? null : `no ${cue.stop} to stop at ${cue.at} s`;
     stop();
     return null;
   }
   const sounds = sfx as unknown as Record<string, Play | undefined>;
   const name = cue.sound?.find((sound) => sounds[sound]);
-  if (!name) return `the game has no ${cue.sound?.join(' or ')}`;
+  if (!name) return cue.optional ? null : `the game has no ${cue.sound?.join(' or ')}`;
   const result = sounds[name]!(...(cue.args ?? []));
   if (cue.keep) {
     if (typeof result !== 'function') return `${name} returned no stop`;
