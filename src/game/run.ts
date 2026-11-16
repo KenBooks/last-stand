@@ -252,7 +252,8 @@ function bossOf(w: number): SpawnUnit[] | null {
   const rung = bossOfWave(G.arena.biome, w);
   if (!rung) return null;
   const guards = Array.from({ length: rung.guards?.count ?? 0 }, (_, i) => ({ type: rung.guards!.id, hero: false, guard: true, at: rung.guards!.at?.[i] }));
-  return [{ type: rung.id, hero: false }, ...guards];
+  const twin = rung.twin ? [{ type: rung.twin, hero: false }] : [];
+  return [{ type: rung.id, hero: false }, ...twin, ...guards];
 }
 
 function startWave(): void {
@@ -344,6 +345,9 @@ function spawnGroup(group: SpawnUnit[]): void {
   const bosses = group.every((u) => !!ENEMIES[u.type].boss);
   const sizes = bosses ? group.map(() => 1) : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
   const gates = bosses ? shuffle(portals.map((_, i) => i)).slice(0, group.length) : gatesFor(r, sizes.length);
+  // (a boss's twin rises by its brother's gate, beside him: their chain holds them within reach of each other)
+  const twinOf = (i: number): number => (bosses ? group.findIndex((u, j) => j < i && ENEMIES[group[i].type].shares === u.type) : -1);
+  if (bosses) group.forEach((_, i) => { if (twinOf(i) >= 0) gates[i] = gates[twinOf(i)]; });
   const reaches: number[] = [];
   const party = partyScale(r.party);
   r.pending += group.length;
@@ -357,6 +361,12 @@ function spawnGroup(group: SpawnUnit[]): void {
       portal.pulse();
       // (an encounter's guard rises at its rung's spot for it, where it has one: rising at a gate, it came anywhere)
       const pos = u.at ? new THREE.Vector3(u.at[0], 0, u.at[1]) : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      if (twinOf(next - 1) >= 0 || group.some((v, i) => i >= next && ENEMIES[v.type].shares === u.type)) {
+        // (the twins abreast, 3.5 m either side of the gate's middle)
+        const side = twinOf(next - 1) >= 0 ? 1 : -1;
+        pos.addScaledVector(new THREE.Vector3(-portal.dir.z, 0, portal.dir.x), side * 3.5);
+        resolveWorld(pos, def.radius);
+      }
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
       pendingUnits.add(u);
       schedule(j * SPAWN_GAP, () => {
@@ -634,7 +644,8 @@ function onEnemyKilled(e: Enemy): void {
   // a boss pays everyone standing (an encounter's guard a drop, its main boss the whole); any other kill pays whoever
   // landed it
   if (e.boss) {
-    const drops = e.guard ? 1 : LOOT.bossDrops;
+    // (the Twins pay once: the one that fell at half, or fell with its brother, pays nothing)
+    const drops = e.guard ? 1 : e.noSpoils ? 0 : LOOT.bossDrops;
     for (const p of G.players) {
       if (!p.active) continue;
       for (let i = 0; i < drops; i++) schedule(i * 0.25, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave + 1, 0.8)); });

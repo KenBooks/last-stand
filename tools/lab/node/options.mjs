@@ -1400,21 +1400,24 @@ export const COMMANDS = {
       + 'bell for its window and whole again after (chains); walked into, it gives way a hair (stand); its ghosts seizing a hero near and dropping him, not one far off (grab); the Ossuary Cantor and its two guards: '
       + 'warded while a guard stands, its casts ringed first, no two bosses\' hits within its beat, its heart bared '
       + '(encounter); its fight\'s effects drawn, no program compiled '
-      + '(compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
+      + '(compiles); the Ossuary Twins: one life between them, the chain snapping past its reach, the collapse at half, '
+      + 'a mend that a stun breaks (twins); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
     options: {
       parts: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk', 'pictures', 'encounterPictures', 'cantorLook'],
+        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'twins', 'compiles', 'ttk', 'pictures',
+          'encounterPictures', 'cantorLook', 'twinsPictures'],
         help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, encounter, '
-          + 'compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
-          + '(the Cantor\'s encounter in each of its moments), cantorLook (the Cantor alone from every side and its '
-          + 'skull close, its triangles held to 45k)',
+          + 'twins, compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
+          + '(the encounter of the Cantor in each of its moments), cantorLook (the Cantor alone from every side and its '
+          + 'skull close, its triangles held to 45k), twinsPictures (the Ossuary Twins in each of theirs)',
       },
       canary: {
         kind: 'switch',
         help: 'plant a fault each part must catch: the Crypt\'s ladder turned round, a phase\'s share moved, a toll '
-          + 'that stuns no one near, a shield that stops nothing, chains that take no harm, a program compiled, an '
+          + 'that stuns no one near, a shield that stops nothing, chains that take no harm, Twins that share nothing, '
+          + 'a chain that never snaps, no collapse at half, a mend that mends nothing, a program compiled, an '
           + 'attack that deals nothing',
       },
       ...SETUP_OPTIONS,

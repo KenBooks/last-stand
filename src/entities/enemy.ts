@@ -51,7 +51,7 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 import { joinCrowd, leaveCrowd } from './models/crowd';
-import { bossFrame, bossLook, checkPhase, partHit, telegraphShare, weakLooks } from './bossKit';
+import { bossFrame, bossLook, checkPhase, partHit, shareHit, telegraphShare, weakLooks } from './bossKit';
 
 /** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
 const OWN_EVADE_ECHO = 1.5;
@@ -209,6 +209,10 @@ export class Enemy {
   readonly partLife: number[] = [];
   /** an encounter's main boss warded by its guards (`BossKitDef.ward`, told by enemyAI's `bossWard` fx) */
   warded = false;
+  /** a boss sharing its life with another (`EnemyDef.shares`): what of the pair's life hits on it took (the host's) */
+  taken = 0;
+  /** its fall pays no spoils (one of a pair sharing a life, fallen at half or with its brother: game/run.ts) */
+  noSpoils = false;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -702,6 +706,8 @@ export class Enemy {
     if (!this.alive) return 0;
     const before = this.life;
     if (!this.meter) this.life -= amount;
+    // (a boss sharing its life: its partner's follows it, entities/bossKit.ts)
+    if (this.def.shares && !this.meter) shareHit(this, amount);
     hitFlash(this, G.time);
     if (info.by) this.killer = info.by;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);

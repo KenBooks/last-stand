@@ -792,21 +792,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   warded, at least one cast landed, its heart bared after one (`weak`); every one of the Cantor's hits landed 0.9 to
   3 s after a ring of its own; the guards tolled, and no two bosses' warned hits (tolls, grave hands, dirges) landed
   closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards that walk with their bearers, rising
-  at the gates and raising the dead every 3 s, their tolls a whole bell's. `compiles`: its tolls, a shard, the
+  at the gates and raising the dead every 3 s, their tolls a whole bell's. `twins` (`page/bossTwins.ts`): the Ossuary Twins risen abreast at wave 15's
+  strength: a tenth of their life struck off each, both at 0.8 of it (one life); Reliquary set past the chain's reach
+  across the hero: the chain must snap within 40 frames, hurt him (counted as it lands, the set-up keeping him whole)
+  and drag them at least 2 m nearer; Slab struck three times and Reliquary twice past half: Slab alone falls, paying
+  nothing, and Reliquary enters its phase; the pair thinking, hurt through Reliquary alone, the hero 24 m off:
+  Reliquary's mend raises the pair's life by its `heal` (both alike), and the next, dazed a second in, raises it by
+  under half of that. `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, the Cantor's grave hands, a dirge, a ring, its ward and its heart bared,
   drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
   Bell-Warden alone at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
   its life is dealt (a best case: a hero who never circles it breaks one chain, not four), and the Cantor's
   encounter at 10: its two guards one after the other (each `asGuard.life` of a Bell-Warden's, their bells dropped
-  the same way), then the Cantor with its heart bared `bared` s of every `every` (its weak window's `taken`). With the lab's starting
+  the same way), then the Cantor with its heart bared `bared` s of every `every` (its weak window's `taken`); and
+  the Ossuary Twins at 15, their one life at the hero's damage, no mend counted. With the lab's starting
   gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
   plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
-  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a ward that wards nothing, a program compiled, an attack that deals
+  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a ward that wards nothing, Twins that share nothing, a chain that never snaps, no collapse at half, a mend that mends nothing, a program compiled, an attack that deals
   nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`. `pictures` (asked
   for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its moments, `cantorLook`
   the Cantor alone from its front, back and sides and its skull close, its triangles held to 45k (`page/bossCantor.ts`;
-  `tools/lab/out/boss`).
+  `tools/lab/out/boss`), `twinsPictures` the Twins at each of theirs.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

@@ -23,6 +23,7 @@ import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
 import { partChanged, phaseBegun } from './bossKit';
 import { bellDropped, bellSwung, bellWardenAI, shardAt, tollAt } from './bellWarden';
 import { cantorAI, cantorChanted, dirgeFrom, graveHandsAt } from './cantor';
+import { chainSnapped, chargeRan, mendBegun, mendDone, skullsLoosed, twinFell, twinsAI } from './twins';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
@@ -207,6 +208,17 @@ export const FX = {
   graveHands(id: number, x: number, z: number, damage: number) { graveHandsAt(id, x, z, damage); },
   /** the Cantor `id`'s dirge marching out from (ox, oz) along `angle`, its rings bursting in turn */
   dirge(id: number, ox: number, oz: number, angle: number, damage: number) { dirgeFrom(id, ox, oz, angle, damage); },
+  /** the Ossuary Twins' Slab `id` charging from (ox, oz) to (tx, tz), each game's hero judged as it passes (entities/twins.ts) */
+  twinCharge(id: number, ox: number, oz: number, tx: number, tz: number, damage: number) { chargeRan(id, ox, oz, tx, tz, damage); },
+  /** `n` skulls from the twin `id` at (ox, oz) curving in on (tx, tz) */
+  skullVolley(id: number, ox: number, oz: number, tx: number, tz: number, n: number, damage: number) { skullsLoosed(id, ox, oz, tx, tz, n, damage); },
+  /** the Twins' chain snapping tight between (ax, az) and (bx, bz), each game's hero judged against its line */
+  chainSnap(id: number, ax: number, az: number, bx: number, bz: number, damage: number) { chainSnapped(id, ax, az, bx, bz, damage); },
+  /** Reliquary `id` mending the pair over `warn` s, and done */
+  twinMend(_id: number, _slab: number, warn: number) { mendBegun(warn); },
+  twinMended(id: number, slab: number) { mendDone(id, slab); },
+  /** twin `id` collapsing at half, paying nothing */
+  twinFall(id: number) { twinFell(id); },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
@@ -274,6 +286,7 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
   idle() {},
   bellWarden: (e) => bellWardenAI(e),
   cantor: (e) => cantorAI(e),
+  twins: (e) => twinsAI(e),
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     const p = e.target!.pos;

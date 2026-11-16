@@ -20,6 +20,9 @@
 // - **Encounters** (data/biomes.ts `BossRung.guards`): a main boss with lesser bosses as its guards (`Enemy.guard`, at
 //   their `EnemyDef.asGuard` life and damage), warded while any stands (`wardWhileGuarded`, `BossKitDef.ward`: it takes
 //   `taken` times the damage, told to every game), and the fight's warned hits kept apart (`claimBeat`).
+// - **A shared life** (data/biomes.ts `BossRung.twin`, `EnemyDef.shares`): two bosses rising together, each given the
+//   pair's whole life, a hit on either taking it from both (`shareHit`), each counting what it took (`Enemy.taken`);
+//   a killing blow fells both, the second paying no spoils (`Enemy.noSpoils`), so the pair pays once.
 import { G } from '../state';
 import { fx } from './enemyAI';
 import type { Enemy } from './enemy';
@@ -42,6 +45,8 @@ export function phaseAt(e: Enemy, share: number): number {
 export function checkPhase(e: Enemy, amount = 0): void {
   if (!e.def.bossKit || e.net || !e.alive) return;
   if (amount > 0) hooksOf(e.type)?.hurt?.(e, amount);
+  // (its hurt may have felled it: the Twins' collapse at half)
+  if (!e.alive) return;
   // (an encounter's guard keeps its first phase: no banner, no cue, nothing harder of its own)
   const to = e.guard ? 0 : phaseAt(e, e.life / e.maxLife);
   while (e.bossPhase < to) fx('bossPhase', e.id, e.bossPhase + 1);
@@ -186,6 +191,21 @@ export function restoreParts(e: Enemy): void {
 /** Each frame a boss lives, on every game: its own `frame` (`BossHooks.frame`). */
 export function bossFrame(e: Enemy, dt: number): void {
   hooksOf(e.type)?.frame?.(e, dt);
+}
+
+/** The boss sharing `e`'s life (`EnemyDef.shares`), while it stands. */
+export const partnerOf = (e: Enemy): Enemy | null =>
+  (e.def.shares ? G.enemies.find((x) => x.alive && x.type === e.def.shares) ?? null : null);
+
+/** On every game, as a hit of `amount` takes `e`'s life (before its death is decided): its partner's life made its own,
+ *  the hit counted against it, its last unhit time kept; a killing blow fells the partner too, which pays nothing. */
+export function shareHit(e: Enemy, amount: number): void {
+  const p = partnerOf(e);
+  if (!p) return;
+  e.taken += amount;
+  e.brain.hitAt = G.time;
+  p.life = Math.max(0, e.life);
+  if (e.life <= 0) { p.noSpoils = true; p.die(); }
 }
 
 /** What a boss's model is told of its fight this frame (`AnimState.boss`). */

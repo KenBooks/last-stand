@@ -6,6 +6,7 @@ import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityCounts } from '../loot/items';
 import { BIOMES, bossOfWave } from '../data/biomes';
+import { partnerOf } from '../entities/bossKit';
 import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
@@ -341,7 +342,8 @@ function updateTarget() {
   if (!e) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   box.classList.toggle('boss', e.boss);
-  setText(h('#target .t-name'), e.name);
+  // (a pair sharing one life shows one bar under the pair's name while both stand: entities/bossKit.ts)
+  setText(h('#target .t-name'), e.def.pair && partnerOf(e) ? e.def.pair : e.name);
   setText(h('#target .t-sub'), e.boss ? 'Boss' : e.hero ? 'Hero' : '');
   const k = pct(e.life / e.maxLife);
   setStyle(h('#target .t-fill'), 'width', k);

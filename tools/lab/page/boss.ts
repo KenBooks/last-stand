@@ -19,12 +19,14 @@
 //   before its hands burst; no two bosses' warned hits closer than its beat; its heart bared after a cast once the
 //   guards are down; the guards a lesser bell's size, rising at their two spots (bossGuardSpots.ts) and standing
 //   where they rose.
+// - `twins`: the Crypt's third rung, the Ossuary Twins (`bossTwins.ts`): one life between them, the chain snapping past
+//   its reach, the collapse at half, Reliquary's mend and a stun breaking it.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
 //   takes at the wave it comes on (the Colossus at 5, the Bell-Warden alone and the Cantor's encounter at 10), with
 //   and without its weak windows.
 //
 // - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye;
-//   `encounterPictures` the Cantor's encounter in each of its.
+//   `encounterPictures` the Cantor's encounter in each of its, `twinsPictures` the Twins in each of theirs.
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
 // one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts
@@ -50,13 +52,15 @@ import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
+import { twins, twinsPictures, twinsTime } from './bossTwins';
 
 /** The parts the command runs, in order. */
 export type BossPart =
-  'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'compiles' | 'ttk' | 'pictures' | 'encounterPictures' | 'cantorLook';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk'];
+  'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'twins' | 'compiles' | 'ttk' | 'pictures'
+  | 'encounterPictures' | 'cantorLook' | 'twinsPictures';
+export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'twins', 'compiles', 'ttk'];
 /** the parts that are pictures for the eye, with no verdicts */
-const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures', 'cantorLook'];
+const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures', 'cantorLook', 'twinsPictures'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -99,7 +103,7 @@ const CLEAR_STEP = 0.15;
  * A spot `away` m from the hero, nearest the way to the arena's middle, where a boss of `radius` stands clear of the
  * props with nothing between it and him: an obelisk between them took the mage's bolts, his damage a second 11.
  */
-function clearSpot(away: number, radius: number): THREE.Vector3 {
+export function clearSpot(away: number, radius: number): THREE.Vector3 {
   const hero = G.player.pos;
   const inward0 = inward();
   for (let turn = 0; turn <= CLEAR_MOST; turn += CLEAR_STEP) {
@@ -114,7 +118,7 @@ function clearSpot(away: number, radius: number): THREE.Vector3 {
 }
 
 /** The hero set up in `biome`, at the spot, facing the arena's middle. */
-async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
+export async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
   const facing = Math.atan2(-SPOT[0], -SPOT[1]);
   await lab.setup({ at: SPOT, facing, ...fixture });
@@ -156,6 +160,8 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
           problems.push(`${biome} wave ${wave}: the run sent guards [${sent.guards.join(', ')}], its rung's are [${guards.join(', ')}]`);
         }
         if (guards.length) met[met.length - 1] += ` with ${guards.length} ${guards[0]}`;
+        if (sent.twin !== shipped.twin) problems.push(`${biome} wave ${wave}: the run sent the twin ${sent.twin ?? 'none'}, its rung's is ${shipped.twin ?? 'none'}`);
+        if (sent.twin) met[met.length - 1] += ` and its twin ${sent.twin}`;
         if (!sent.banner.includes(shipped.banner)) problems.push(`${biome} wave ${wave}: the banner said "${sent.banner}", not its boss's line "${shipped.banner}"`);
         const label = bossOfWave(biome, wave)?.short;
         if (label !== wanted.short) problems.push(`${biome} wave ${wave}: the Continue button would name ${label}`);
@@ -169,7 +175,7 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let
  *  start: the boss its run holds for it, and the banner's line. */
-async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; guards: EnemyId[]; banner: string }> {
+async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; guards: EnemyId[]; twin?: EnemyId; banner: string }> {
   const run = G.run!;
   run.wave = wave;
   startNextWave();
@@ -179,12 +185,13 @@ async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId |
   await lab.until(() => run.phase === 'fighting', WAVE_FRAMES, `wave ${wave} never started`);
   const boss = run.boss?.[0]?.type;
   const guards = (run.boss ?? []).filter((unit) => unit.guard).map((unit) => unit.type);
+  const twin = (run.boss ?? []).slice(1).find((unit) => !unit.guard)?.type;
   // (the wave stopped before it sends anyone, back to a countdown held for the next)
   run.queue.length = 0;
   run.boss = null;
   run.phase = 'countdown';
   run.timer = 1e4;
-  return { boss, guards, banner };
+  return { boss, guards, twin, banner };
 }
 
 // --- the phases -------------------------------------------------------------------------------------------
@@ -767,6 +774,16 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
     await lab.step(20);
     fx('bossWard', cantor.id, 0);
     fx('bossWeak', cantor.id, 2);
+    // (the Twins': the chain drawn, its snap, a skull volley, a charge, a slam, a mend)
+    const slab = await bossAt(lab, 'twinslab', NEAR + 2, false);
+    const reliquary = await bossAt(lab, 'twinreliquary', FAR - 3, false);
+    await lab.step(4);
+    fx('chainSnap', slab.id, slab.pos.x, slab.pos.z, reliquary.pos.x, reliquary.pos.z, 0);
+    fx('skullVolley', reliquary.id, reliquary.pos.x, reliquary.pos.z, x, z, 5, 0);
+    fx('twinCharge', slab.id, slab.pos.x, slab.pos.z, x, z, 0);
+    fx('slam', x + 1, z + 1, 3.4, 0xffb060, 1, 0, 4, slab.id);
+    fx('twinMend', reliquary.id, slab.id, 2);
+    fx('twinMended', reliquary.id, slab.id);
     if (options.canary) {
       const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), new THREE.MeshPhongMaterial({ color: 0x123456, flatShading: true }));
       odd.position.copy(boss.pos).setY(2);
@@ -776,7 +793,7 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
     }
     await lab.step(60);
     const compiled = (G.renderer.info.programs ?? []).length - before;
-    lines.push(`compiles: ${compiled} programs compiled drawing its tolls, a shard, the bell dropped and the Cantor's casts`);
+    lines.push(`compiles: ${compiled} programs compiled drawing its tolls, a shard, the bell dropped, the Cantor's casts and the Twins'`);
     if (compiled > 0) problems.push(`compiles: ${compiled} programs compiled in the Crypt's bosses' fights`);
   } finally {
     lab.drawing = drawing;
@@ -858,6 +875,7 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   lines.push(`ttk: the Cantor's encounter at wave 10 (two guards of ${fixed(guard, 0)} life, the Cantor ${fixed(cantor, 0)}): `
     + `${fixed(guards, 0)} s for the guards, ${fixed(cantorTime, 0)} s for the Cantor, ${fixed(whole, 0)} s in all `
     + `(${fixed(whole / first, 2)}x the Colossus's)`);
+  lines.push(twinsTime(dps, first, whole));
 }
 
 // --- pictures ----------------------------------------------------------------------------------------------
@@ -1130,8 +1148,8 @@ async function cantorAlone(lab: Lab, options: BossOptions, lines: string[], prob
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures' | 'cantorLook'>, typeof ladder> = {
-    ladder, phases, toll, chains, stand, grab, encounter, compiles, ttk,
+  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures' | 'cantorLook' | 'twinsPictures'>, typeof ladder> = {
+    ladder, phases, toll, chains, stand, grab, encounter, twins, compiles, ttk,
   };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
@@ -1140,6 +1158,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       if (part === 'pictures') moments.push(...await pictures(lab, options, lines));
       else if (part === 'encounterPictures') moments.push(...await encounterPictures(lab, options, lines));
       else if (part === 'cantorLook') moments.push(...await cantorAlone(lab, options, lines, problems));
+      else if (part === 'twinsPictures') moments.push(...await twinsPictures(lab, options, lines));
       else await run[part](lab, options, lines, problems);
     }
   } finally {

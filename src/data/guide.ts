@@ -102,6 +102,30 @@ export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
       ranger: 'Keep moving between shots: the hands rise where you stand, not where you were.',
     },
   },
+  twinslab: {
+    role: 'Third boss of the Crypt, with his twin',
+    does: 'Slab, the broad one of the Ossuary Twins: a hulking skeleton in battered iron, a tombstone for a weapon. He and his brother Reliquary share one life, bound by a glowing chain of bone. He lifts the tombstone and brings it down on whoever is before him, and shoulders his way across the floor at the nearest hero.',
+    strengths: ['One life with his brother: every blow on either wears down both.', 'His grave slam crushes everything in the ring before him.', 'A short shoulder charge reaches a hero who backs off.', 'Drift the twins too far apart and their chain snaps tight, dragging them together and hurting anyone between.', 'At half, whichever twin took more falls and the other grows faster and takes up his brother\'s attack.'],
+    weaknesses: ['The slam is warned: a ring lies before him while the tombstone is raised for a second.', 'The charge\'s line is ringed before he runs.', 'He is slow and stays close to his brother.'],
+    beat: ['Step out of the ring as the tombstone rises.', 'Never stand on the line between the twins.', 'Wear both down evenly, so the one left standing is no stronger than the other.'],
+    vs: {
+      warrior: 'Hold the shield up to the slam and punish the long recovery after it.',
+      mage: 'Keep your distance: he has no reach but his charge.',
+      ranger: 'Kite him in a circle; side-step the charge\'s ringed line.',
+    },
+  },
+  twinreliquary: {
+    role: 'Third boss of the Crypt, with his twin',
+    does: 'Reliquary, the thin one of the Ossuary Twins: a hooded skeleton holding a bronze reliquary, five skulls circling it. It shares one life with its brother Slab, looses volleys of skulls that curve in on you, and mends the pair if Slab is left hurt and untouched.',
+    strengths: ['A volley of three to five skulls, each curving in on its own arc to where you stood.', 'Leave Slab hurt and unhit for five seconds and it mends the pair\'s life.', 'It keeps its distance, backing off from a hero who closes in.', 'Left alone at half, it takes up its brother\'s slam too.'],
+    weaknesses: ['A stun or a freeze breaks its mend.', 'Its skulls fly at where you stood: keep moving and they miss.', 'Its body is thin and frail-looking, and it shares the life you take from Slab.'],
+    beat: ['Keep hitting Slab now and then so the mend never starts.', 'Save a stun for the moment it raises its casket to mend.', 'Move across the volley rather than away from it.'],
+    vs: {
+      warrior: 'Charge in to break its distance, and stun it as it mends.',
+      mage: 'Freeze it mid-mend; your bolts outrange its retreat.',
+      ranger: 'Your shots reach it wherever it backs off to: keep it busy while Slab is held at bay.',
+    },
+  },
   thornling: {
     role: 'Swarmer',
     does: 'Small, darting creatures of thorn and bark that rush in packs and scratch at you from every side.',

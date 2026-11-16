@@ -7,6 +7,7 @@ import type { Dye } from './entities/models/dye';
 import type { HeroLook } from './data/heroLooks';
 import type { Hand } from './entities/models/hands';
 import type { BiomeId } from './data/biomes';
+import type { EnemyId } from './data/enemies';
 
 // ---------------------------------------------------------------------------
 // Damage & stats
@@ -301,7 +302,7 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 // Enemies
 
-export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'bellWarden' | 'cantor' | 'idle';
+export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'bellWarden' | 'cantor' | 'twins' | 'idle';
 
 /** What a hero's attack is, as a foe sees it coming (entities/evade.ts): a shot (an arrow, a bolt), a wave along the
  *  ground (a crescent), a charge, a beam, or an area coming down (a rain of arrows, falling stars). */
@@ -413,6 +414,11 @@ export interface EnemyDef {
   /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life, damage and size
    *  then, as shares of its own, and whether it stands where it rises (`stands`: it never walks, and no foe shoves it) */
   asGuard?: { life: number; damage: number; size: number; stands?: boolean };
+  /** a boss that shares its life with another of a ladder's rung (data/biomes.ts `BossRung.twin`): a hit on either
+   *  takes it from both (entities/twins.ts) */
+  shares?: EnemyId;
+  /** the pair's name, on the target frame while both stand */
+  pair?: string;
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says

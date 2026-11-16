@@ -2,7 +2,7 @@
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
-import { BELL_WARDEN, BOSS_AI, CANTOR, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
+import { BELL_WARDEN, BOSS_AI, CANTOR, ENEMIES, HERO, SCALING, TWINS, type EnemyId } from '../../data/enemies';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -49,7 +49,8 @@ const asGuard = (def: EnemyDef): EnemyDef => ({
 function metAt(id: EnemyId): { biome: BiomeId; from: number; guards?: EnemyId } | null {
   for (const biome of BIOME_IDS) {
     const ladder = BIOMES[biome].bosses;
-    const rung = ladder.findIndex((boss) => boss.id === id);
+    // (a rung's twin is met with its brother, on the same wave)
+    const rung = ladder.findIndex((boss) => boss.id === id || boss.twin === id);
     if (rung >= 0) return { biome, from: WAVES.bossEvery * (rung + 1) };
     const guarded = ladder.findIndex((boss) => boss.guards?.id === id);
     if (guarded >= 0) return { biome, from: WAVES.bossEvery * (guarded + 1), guards: ladder[guarded].id };
@@ -106,7 +107,7 @@ function figures(foe: Foe): string {
 function comes(foe: Foe): [string, string] {
   const ladder = BIOMES[foe.biome].bosses;
   const every = WAVES.bossEvery * ladder.length;
-  const beside = foe.guards ? `, guarding ${ENEMIES[foe.guards].name}` : '';
+  const beside = foe.guards ? `, guarding ${ENEMIES[foe.guards].name}` : foe.def.shares ? `, with ${ENEMIES[foe.def.shares].name}` : '';
   return [`wave ${foe.from}`, `then every ${every} waves${beside} · ${BIOMES[foe.biome].title}`];
 }
 
@@ -130,6 +131,7 @@ function attacks(foe: Foe): string[] {
   }
   if (d.ai === 'bellWarden') out.push(...(foe.guards ? guardBellAttacks(foe) : bellWardenAttacks(foe)));
   if (d.ai === 'cantor') out.push(...cantorAttacks(foe));
+  if (d.ai === 'twins') out.push(...twinsAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -200,6 +202,27 @@ function cantorAttacks(foe: Foe): string[] {
     `<b>Its bell-heart:</b> with its guards down, each cast leaves its ribs open and its heart bared for ${secs(c.bared)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
     `<b>Never together:</b> its casts and its guards' tolls land at least ${secs(c.beat)} apart.`,
   ].filter(Boolean);
+}
+
+/** One of the Ossuary Twins' fight, each with its figures (data/enemies.ts `TWINS` and its boss kit): its own attacks,
+ *  and what the pair shares (one life, the chain). */
+function twinsAttacks(foe: Foe): string[] {
+  const d = foe.def, t = TWINS, kit = d.bossKit!, hit = damage(d, foe.from);
+  const brother = d.shares ? ENEMIES[d.shares].name : 'its brother';
+  const slab = foe.id === 'twinslab';
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const own = slab ? [
+    `<b>Grave slam:</b> he lifts the tombstone for ${secs(warn('slam'))} over a ring ${metres(t.slam.radius * 2)} across, ${metres(t.slam.ahead)} before him, then brings it down for ${whole(hit)} ${typed(d)} damage.`,
+    `<b>Shoulder charge:</b> at a hero up to ${metres(t.charge.reach)} away: its line is ringed for ${secs(warn('charge'))}, then he runs it at ${num(t.charge.speed)} m/s for ${whole(hit * t.charge.hurt)} damage to whoever he meets.`,
+  ] : [
+    `<b>Skull volley:</b> ${t.volley.least} to ${t.volley.most} skulls after ${secs(warn('volley'))}, each curving in on its own arc to where you stood, at ${num(t.volley.speed)} m/s, ${whole(hit)} damage each. It keeps 9 to 13 m off you.`,
+    `<b>Mend:</b> once ${brother} has stood hurt and unhit for ${secs(t.mend.untouched)}, it raises its casket for ${secs(warn('mend'))} and mends the pair by ${pct(t.mend.heal)} of their life. A stun or a freeze breaks it.`,
+  ];
+  return [
+    `<b>One life:</b> it shares its life with ${brother}: every hit on either takes it from both. At ${pct(0.5)} the one that has taken more falls, and the other moves ${pct(t.alone.faster - 1)} faster, attacks sooner and takes up its brother's attack too.`,
+    ...own,
+    `<b>The chain:</b> if the two drift more than ${metres(t.chain.max)} apart it snaps tight, dragging them together and dealing ${whole(damage(ENEMIES.twinslab, foe.from) * t.chain.hurt)} damage to a hero within ${metres(t.chain.reach)} of its line.`,
+  ];
 }
 
 /** Elites: any common foe may come as one, from the wave they start to show. */

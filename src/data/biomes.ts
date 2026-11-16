@@ -17,6 +17,8 @@ export interface BossRung {
   banner: string;
   /** an encounter's guards: who and how many, and where each rises (x, z in m), the same every time where given */
   guards?: { id: EnemyId; count: number; at?: [number, number][] };
+  /** a second boss rising with it, its equal, the two sharing one life (`EnemyDef.shares`): the Ossuary Twins */
+  twin?: EnemyId;
 }
 
 /** Where the Ossuary Cantor's two guards rise: on the crypt's ring walk (18.5 m out, world/crypt.ts `ringWalk`), across
@@ -61,6 +63,8 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
       // (the second rung is an encounter: the Ossuary Cantor and two Bell-Wardens, its choir and its guards)
       { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2, at: CANTOR_GUARDS } },
+      // (the third: the Ossuary Twins, Slab and Reliquary, one life between them, a chain of bone between them)
+      { id: 'twinslab', short: 'Ossuary Twins', banner: 'Two rise, bound in bone…', twin: 'twinreliquary' },
     ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
@@ -93,9 +97,13 @@ export function bossOfWave(biome: BiomeId, wave: number): BossRung | null {
   return ladder[(wave / WAVES.bossEvery - 1) % ladder.length];
 }
 
-/** Every boss a run in `biome` can meet (its ladder's and their guards, once each). */
+/** Every boss a run in `biome` can meet (its ladder's, their guards and twins, once each). */
 export const bossesOf = (biome: BiomeId): EnemyId[] =>
-  [...new Set(BIOMES[biome].bosses.flatMap((rung) => (rung.guards ? [rung.id, rung.guards.id] : [rung.id])))];
+  [...new Set(BIOMES[biome].bosses.flatMap((rung) => [rung.id, ...(rung.guards ? [rung.guards.id] : []), ...(rung.twin ? [rung.twin] : [])]))];
+
+/** A rung's twin, `id`'s pair counts as its rung's boss (a record, a trophy): the rung's boss for a twin, else `id`. */
+export const rungBoss = (id: EnemyId): EnemyId =>
+  BIOME_IDS.flatMap((b) => BIOMES[b].bosses).find((rung) => rung.twin === id)?.id ?? id;
 
 /** A place the arena shows: a biome a run is fought in, or the village the lobby stands in (data/village.ts). */
 export type PlaceId = BiomeId | 'village';

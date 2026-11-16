@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, TROPHIES, type RoomId } from '../data/houses';
-import { BIOMES, BIOME_IDS, bossesOf } from '../data/biomes';
+import { BIOMES, BIOME_IDS, bossesOf, rungBoss } from '../data/biomes';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { RARITIES } from '../data/items';
@@ -161,11 +161,12 @@ export function recordsShown(): RecordsShown {
     ],
   };
   // (every boss of every battleground's ladder, then any other with a trophy)
-  const bosses = [...new Set([...BIOME_IDS.flatMap((b) => bossesOf(b)), ...(Object.keys(TROPHIES) as EnemyId[])])];
+  // (a twin is its rung's boss's row: the pair by its name)
+  const bosses = [...new Set([...BIOME_IDS.flatMap((b) => bossesOf(b)), ...(Object.keys(TROPHIES) as EnemyId[])])].filter((b) => rungBoss(b) === b);
   const right: Board = {
     title: 'Bosses Slain',
     rows: [
-      ...bosses.map((b) => [ENEMIES[b]?.name ?? b, String(slain[b] ?? 0)] as const),
+      ...bosses.map((b) => [ENEMIES[b]?.pair ?? ENEMIES[b]?.name ?? b, String(slain[b] ?? 0)] as const),
       ['By this hero', String(Object.values(c.bosses).reduce((a, n) => a + n, 0))],
       ['Damage over all runs', num(c.dealt)],
       ['Heroes of this slot', String(heroes.length)],

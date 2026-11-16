@@ -3,6 +3,7 @@
 // saved with the profile (`records.chronicle`, loot/profile.ts). Nothing here has gameplay effect.
 import { G } from '../state';
 import { on } from '../events';
+import { rungBoss } from '../data/biomes';
 import { isCoop } from '../net/role';
 import { mine } from './stats';
 import type { ChronicleRecords, Item, Profile } from '../types';
@@ -42,10 +43,11 @@ export function recordRunEnd(kind: 'banked' | 'dead', waves: number, seconds: nu
 }
 
 // (a boss slain counts for every hero still in the run, on each game: a boss is the party's, as its drops are)
+// (a pair sharing a life counts once, under its rung's boss: the twin that pays the spoils)
 on('enemyKilled', (e) => {
-  if (!e.boss || e.training || !counting()) return;
-  const bosses = chronicleOf(G.profile).bosses;
-  bosses[e.type] = (bosses[e.type] ?? 0) + 1;
+  if (!e.boss || e.training || e.noSpoils || !counting()) return;
+  const bosses = chronicleOf(G.profile).bosses, kind = rungBoss(e.type);
+  bosses[kind] = (bosses[kind] ?? 0) + 1;
 });
 
 /** The skill a hero cast most in runs (its `impl`), or null. */

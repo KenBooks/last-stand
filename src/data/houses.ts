@@ -122,4 +122,6 @@ export const TROPHIES: Partial<Record<EnemyId, TrophyDef>> = {
   bellwarden: { name: "The Bell-Warden's Crest", look: 'crest', colour: 0xa0702e, trim: 0xc8d8ff },
   // (the Ossuary Cantor's long skull, its grave light still in the sockets)
   cantor: { name: "The Ossuary Cantor's Skull", look: 'mask', colour: 0xcfc4a4, trim: 0x5fe8a8 },
+  // (the Ossuary Twins' link of their chain of bone, its gold light still in it: one trophy for the pair, Slab's)
+  twinslab: { name: "The Ossuary Twins' Bone Link", look: 'crest', colour: 0xd2c6a4, trim: 0xffd890 },
 };
