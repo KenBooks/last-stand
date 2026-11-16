@@ -250,8 +250,12 @@ function styleFigures(figures: Map<HeldStyle, Map<string, number>>): Found {
   if (!own) return found;
   const compared: StyleFigure[] = [];
   for (const def of G.player.cls.skills) {
-    const base = own.get(def.name);
+    // (the one-hander's figure back to the skill's own damage where a one-hander tunes it too: a lone one-hander's
+    // Rending Cleave, quicker and lighter, #666)
+    const ownTuned = def.styles?.[OWN_STYLE]?.damage, held = own.get(def.name);
+    const base = held === undefined || !ownTuned || !def.damage ? held : held * (def.damage / ownTuned);
     for (const [style, tuning] of Object.entries(def.styles ?? {}) as [HeldStyle, StyleTuning][]) {
+      if (style === OWN_STYLE) continue;
       const figure = figures.get(style)?.get(def.name);
       if (!tuning.damage || !def.damage || base === undefined || figure === undefined) continue;
       const share = tuning.damage / def.damage;
