@@ -1392,6 +1392,31 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  boss: {
+    help: 'the bosses\' fights: each battleground\'s boss waves set off, the boss the run sends against its ladder\'s '
+      + 'rung and the banner\'s line (ladder); the Bell-Warden\'s life taken over and under each phase\'s share '
+      + '(phases); its toll at the hero near it (stunned for its time, after its warning), far off (faded) and with a '
+      + 'shield raised (--class warrior --gear shield) (toll); each chain struck from its side, all four dropping the '
+      + 'bell for its window and whole again after (chains); its fight\'s effects drawn, no program compiled '
+      + '(compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
+    options: {
+      parts: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['ladder', 'phases', 'toll', 'chains', 'compiles', 'ttk', 'pictures'],
+        help: 'the parts (all but pictures by default): ladder, phases, toll, chains, compiles, ttk, pictures (the '
+          + 'Bell-Warden in each of its moments, a sheet for the eye)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault each part must catch: the Crypt\'s ladder turned round, a phase\'s share moved, a toll '
+          + 'that stuns no one near, a shield that stops nothing, chains that take no harm, a program compiled, an '
+          + 'attack that deals nothing',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   throws: {
     help: 'what the slamming foes throw at a hero too far off to slam, the thrower held to its spot and throwing as '
       + 'its AI has it, a throw a case: the Cinder Brute\'s lava at him stood still (it must land where he stood as '

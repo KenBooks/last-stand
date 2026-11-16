@@ -52,6 +52,7 @@ import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
 import type { ThrowsOptions } from './throws';
+import type { BossOptions } from './boss';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
@@ -652,6 +653,16 @@ export async function evade(lab: Lab, command: EvadeOptions): Promise<Report> {
 export async function throws(lab: Lab, command: ThrowsOptions): Promise<Report> {
   const { throws: throwsRound } = await import('./throws');
   return throwsRound(lab, command);
+}
+
+/**
+ * `lab boss`: the bosses' fights: each battleground's ladder sending the right boss on each boss wave, the Bell-Warden's
+ * phases at their shares, its toll stunning a hero near it and not one far off or behind a raised shield, its chains
+ * dropping the bell for its window, no program compiled in its fight, and the time each boss takes the hero.
+ */
+export async function boss(lab: Lab, command: BossOptions): Promise<Report> {
+  const { boss: bossRound } = await import('./boss');
+  return bossRound(lab, command);
 }
 
 /**

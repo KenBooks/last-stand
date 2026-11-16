@@ -81,7 +81,7 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
+import { bossNeed, hurry, isAllWarm, isWarming, want, whenWarm, type Need } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
 import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
@@ -90,7 +90,7 @@ import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, commandsDone, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
-import { initBiome, rollBiome } from './game/biome';
+import { biomeSetting, initBiome, randomPool, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, seeThroughLoading, stillLoading } from './ui/loading';
@@ -284,7 +284,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide });
+  initMenus({ start: whenWarm(() => runNeeds(), start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
   // of a first visit's GPU process)
@@ -453,9 +453,10 @@ async function loadDevMode(): Promise<void> {
   const preview = /^(pr|c)-[a-z0-9-]+\.ls\.wellscoped\.dev$/.test(host) || host === 'localhost' || host === '127.0.0.1';
   if (!import.meta.env.DEV && !preview) return;
   const { initDev } = await import('./dev/index');
-  const fightWarm = whenWarm(['fight'], (fn: () => void) => fn(), READYING.fight);
+  const fightWarm = whenWarm(() => runNeeds(G.arena.biome), (fn: () => void) => fn(), READYING.fight);
+  const biomeWarm = whenWarm((...run) => runNeeds(run[0]), (_biome: BiomeId, fn: () => void) => fn(), READYING.fight);
   dev = initDev({
-    startWave: (wave, biome, training) => fightWarm(() => {
+    startWave: (wave, biome, training) => biomeWarm(biome, () => {
       const heldAlt = ['altleft', 'altright'].filter((key) => input.down.has(key));
       if (G.mode === 'run') toMenu();
       if (G.mode !== 'menu' || heroSelectOpen()) return;
@@ -644,6 +645,13 @@ function buildNextRunAhead(): void {
 /** the pause between two pieces of the next run's props built ahead (ms): one a frame or so */
 const AHEAD_PAUSE_MS = 16;
 
+/** What a run started now needs warm (game/warm.ts): the fight's programs and the bosses of the battleground it will
+ *  be in, `biome` (a co-op guest's, the host's), the lobby's own, or on the panels' Random every one it may roll. */
+function runNeeds(biome?: BiomeId): Need[] {
+  const may = biome ? [biome] : !VILLAGE && biomeSetting() === 'random' ? randomPool(startBests(), selectedWave()) : [G.arena.biome];
+  return ['fight', ...may.map(bossNeed)];
+}
+
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
@@ -698,7 +706,7 @@ function guestStarted(biome: BiomeId, wave: number, seed: number, training: bool
   hideHelp();
   joinWhenWarm(biome, wave, seed, training);
 }
-const joinWhenWarm = whenWarm(['fight'], (biome: BiomeId, wave: number, seed: number, training: boolean) => {
+const joinWhenWarm = whenWarm((...run) => runNeeds(run[0]), (biome: BiomeId, wave: number, seed: number, training: boolean) => {
   joinAsked = { biome, wave, seed, training, frames: JOIN_SHOWN_FRAMES };
 }, READYING.join);
 

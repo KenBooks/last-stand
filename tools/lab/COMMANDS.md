@@ -763,6 +763,27 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
+- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`), in parts
+  (`--parts`, all by default). `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their
+  countdown as the run sets one off (its wave and timer), the boss the run holds for it (`RunState.boss`) against its
+  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, Bell-Warden, Colossus,
+  Bell-Warden; the Thornwood's Thornheart), the banner's line and the Continue button's name. `phases`: a Bell-Warden
+  held still, its life taken to a hundredth over and under each phase's share: in the phase before, then the next,
+  and the next's banner shown. `toll`: a Bell-Warden left to think and toll at the hero 7 m off (he must be stunned,
+  for its `stun` within 0.1 s, its ring reaching him no sooner than its warning's end after the bell began its swing),
+  19 m off (past where its ring fades, `stunsTo`: never stunned), and with his shield raised towards it (a warrior
+  with `--gear shield`: never stunned; the part says so where the hero has none); the hero is turned to it and kept
+  where he stands, the set-up keeping him whole. `chains`: each chain struck from its own side (5 m off, a share of
+  its life and a little more): each must break, all four drop the bell for its window (`down` s within 0.1, `taken`
+  times the damage), it mustn't toll while down, and the chains are whole after. `compiles`: its tolls, a shard, the
+  chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
+  Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
+  Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
+  its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
+  gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
+  plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
+  stuns no one, a shield that stops nothing, chains that take no harm, a program compiled, an attack that deals
+  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

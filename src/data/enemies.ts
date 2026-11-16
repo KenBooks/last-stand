@@ -3,7 +3,7 @@
 // Stats are wave-1 values; see SCALING for per-wave growth.
 import type { EnemyDef } from '../types';
 
-export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus'
+export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus' | 'bellwarden'
   | 'thornling' | 'mossback' | 'sporecaller' | 'barkhulk' | 'thornheart' | 'dummy';
 
 export const ENEMIES: Record<EnemyId, EnemyDef> = {
@@ -42,8 +42,27 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     summon: 'imp',
     cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, heft: 6, boss: true, accent: 0xb070ff,
   },
-
-  // --- forest ---
+  // the Crypt's second boss (data/biomes.ts): a cracked bronze bell on a yoke, borne by four chained ghouls
+  // (entities/bellWarden.ts, models/bellWarden.ts); its numbers past the kit's are `BELL_WARDEN`
+  bellwarden: {
+    name: 'The Bell-Warden', model: 'bellwarden', ai: 'bellWarden',
+    life: 4600, damage: 110, damageType: 'physical', speed: 1.5, radius: 3,
+    range: 5, windup: 1, recover: 1, cooldown: 4.2,
+    summon: 'husk',
+    cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0xc8d8ff,
+    bossKit: {
+      phases: [
+        { below: 1 },
+        { below: 0.6, banner: 'The bell splits · It tolls twice' },
+        { below: 0.25, banner: 'The bearers kneel · It tolls without pause' },
+      ],
+      // (a toll's warning is the bell swung back, glowing and creaking; a double toll's the same, then its slow ring)
+      attacks: { toll: { warn: 1.05, recover: 1.0 }, doubleToll: { warn: 1.05, recover: 1.5 } },
+      weak: { taken: 2, edge: 0xffd27a },
+      // (the four bearers' chains, at the yoke's corners: front left, front right, back left, back right)
+      parts: { angles: [0.55, -0.55, 2.59, -2.59], life: 0.035, share: 1 },
+    },
+  },
   thornling: {
     name: 'Thornling', model: 'thornling', ai: 'melee',
     life: 62, damage: 13, damageType: 'physical', speed: 6.6, radius: 0.42,
@@ -96,6 +115,25 @@ export const BOSS_AI = {
   summonFirst: 6, summonEvery: 14, summonCount: 4, summonRing: 3.5, crowd: 14,
   slamReach: 1.5, volleyReach: 18, volleyCooldown: 1.3,
   volleys: [{ bolts: 7, apart: 0.14 }, { bolts: 5, apart: 0.2 }],
+};
+
+/**
+ * The Bell-Warden's own numbers (entities/bellWarden.ts). `toll`: its ring rolls out at `speed` (m/s) to `reach` (m),
+ * fading as it goes; a hero it reaches is stunned `stun` s and hurt `hurt` of its damage, unless his shield is raised
+ * towards it, he's in a dash or a leap, or it has rolled past `stunsTo` (m), faded. A double toll's fast ring goes at
+ * `fast` (m/s), its slow one at `slow` and a moment after. Every `raiseEvery` tolls it raises `raise` [least, most]
+ * Hollow Husks from round the arena, while fewer than `aliveMost` foes stand. Phase 1 `cooldown` (s) between tolls;
+ * the last phase stands still and tolls every `lastEvery` s. Its chains all broken, the bell is down for `down` s
+ * (its weak-spot window), then its bearers rise and the chains are whole again. From the second phase a hero's hit
+ * may break a shard off (`shards`: at most one each `every` s, `chance` a hit), thrown `throw` m [least, most] to lie
+ * `lies` s, hurting `hurt` of its damage every `tick` s whoever stands within `radius` m.
+ */
+export const BELL_WARDEN = {
+  toll: { speed: 9, reach: 24, stunsTo: 15, stun: 2, hurt: 0.45, band: 0.6, fast: 15, slow: 6.5, slowAfter: 0.25 },
+  raiseEvery: 2, raise: [3, 4] as [number, number], aliveMost: 16,
+  lastEvery: 3,
+  down: 6,
+  shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
 };
 
 // Elite ("hero") modifiers applied on top of a base archetype.

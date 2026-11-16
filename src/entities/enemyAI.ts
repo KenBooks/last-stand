@@ -20,6 +20,8 @@ import { lures, lureAt, type Lure } from '../combat/lures';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
+import { partChanged, phaseBegun } from './bossKit';
+import { bellDropped, bellSwung, bellWardenAI, shardAt, tollAt } from './bellWarden';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
@@ -36,7 +38,7 @@ function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reac
 }
 
 /** Head for the target, around whatever stands between. */
-function chase(e: Enemy, speedMul = 1): void {
+export function chase(e: Enemy, speedMul = 1): void {
   const p = e.target!;
   navTarget(e.pos.x, e.pos.z, e.radius, p.pos.x, p.pos.z, p.slot, _way);
   // the line to the waypoint is already clear: look no further than it
@@ -169,6 +171,30 @@ export const FX = {
   vine(kind: number, ox: number, oz: number, angle: number, length: number) {
     vineAt(ENEMY_IDS[kind], ox, oz, angle, length);
   },
+  // --- the bosses (entities/bossKit.ts, and each boss's own) ---
+  /** boss `id` entered phase `phase` (its banner, its cue; its own gameplay where it's simulated) */
+  bossPhase(id: number, phase: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) phaseBegun(e, phase);
+  },
+  /** boss `id`'s weak-spot window opened for `seconds` */
+  bossWeak(id: number, seconds: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.weak = seconds;
+  },
+  /** boss `id`'s breakable part `part` broken (`on` 1) or whole again (0) */
+  bossPart(id: number, part: number, on: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) partChanged(e, part, on);
+  },
+  /** the Bell-Warden's bell swung back over the first `warn` s of a toll (entities/bellWarden.ts) */
+  bellSwing(_id: number, warn: number) { bellSwung(warn); },
+  /** the Bell-Warden `id`'s toll from (x, z): its ring (two for a double), each game's hero judged as it reaches him */
+  toll(id: number, x: number, z: number, double: number, damage: number) { tollAt(id, x, z, double, damage); },
+  /** a shard broken off the Bell-Warden `id` over (ox, oz), lying at (tx, tz), hurting whoever stands on it */
+  shard(id: number, ox: number, oz: number, tx: number, tz: number, damage: number) { shardAt(ox, oz, tx, tz, damage, id); },
+  /** the Bell-Warden's bell dropped at (x, z), its chains all broken */
+  bellDown(x: number, z: number) { bellDropped(x, z); },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
@@ -234,6 +260,7 @@ function slamRing(e: Enemy, x: number, z: number, radius: number, dur: number, c
 
 export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
   idle() {},
+  bellWarden: (e) => bellWardenAI(e),
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     const p = e.target!.pos;

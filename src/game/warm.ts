@@ -4,12 +4,19 @@
 // what needs them waits, pressed early, and goes ahead once they're warm, the fight's loading bar shown meanwhile
 // (ui/readying.ts), saying what it readies: Start and a biome pick need the fight's; a class pick the heroes'; a save
 // slot pick and a co-op room, both (a partner's hero is any class, and a guest's run starts with the host's).
+// Each battleground's bosses are a need of their own (`bossNeed`): warmed behind the fight's where they come from a
+// cache, else as a run in that battleground starts (its Start waits for them too), so the loading a boss costs is paid
+// only by a run that can meet it, and a new boss on one ladder adds nothing to the others' or to the lobby's.
 
 import { G } from '../state';
+import { BIOME_IDS, type BiomeId } from '../data/biomes';
 
-/** what's warmed after the lobby shows: the fight's programs, the other heroes', the village's houses' rooms */
-export type Need = 'fight' | 'heroes' | 'rooms';
-const NEEDS: Need[] = ['fight', 'heroes', 'rooms'];
+/** what's warmed after the lobby shows: the fight's programs, the other heroes', the village's houses' rooms, each
+ *  battleground's bosses */
+export type Need = 'fight' | 'heroes' | 'rooms' | `bosses:${BiomeId}`;
+/** the need of the bosses a run in `biome` can meet (data/biomes.ts `bossesOf`) */
+export const bossNeed = (biome: BiomeId): Need => `bosses:${biome}`;
+const NEEDS: Need[] = ['fight', 'heroes', 'rooms', ...BIOME_IDS.map(bossNeed)];
 
 /** One need's state: warm, wanted now, how far its warm-up has got (0 to 1), and the acts waiting for it. */
 interface NeedState {
@@ -29,7 +36,7 @@ function needState(): NeedState {
   return state;
 }
 
-const needs: Record<Need, NeedState> = { fight: needState(), heroes: needState(), rooms: needState() };
+const needs = Object.fromEntries(NEEDS.map((need) => [need, needState()])) as Record<Need, NeedState>;
 const listeners: (() => void)[] = [];
 
 /** What a press waiting for its needs readies, as the fight's loading bar says it (`Readying the heroes`, ui/readying.ts
@@ -102,16 +109,17 @@ export function chill(need: Need): void {
 }
 
 /**
- * `act`, done at once if what it needs (`of`) is warm, else as soon as it is: pressed again meanwhile, its last
+ * `act`, done at once if what it needs (`of`, or `of` of what was pressed) is warm, else as soon as it is: pressed again meanwhile, its last
  * asking alone. Meanwhile the fight's loading bar says what it readies (`label`, of what was asked last).
  */
 export function whenWarm<A extends unknown[]>(
-  of: Need[], act: (...args: A) => void, label: ReadyingLabel<A>,
+  of: Need[] | ((...args: NoInfer<A>) => Need[]), act: (...args: A) => void, label: ReadyingLabel<A>,
 ): (...args: A) => void {
   let asked: A | null = null;
   const press = {};
   return (...args: A) => {
-    const cold = of.filter((need) => !needs[need].warm);
+    // (what it needs may hang on what was pressed: a run's start needs its battleground's bosses)
+    const cold = (typeof of === 'function' ? of(...args) : of).filter((need) => !needs[need].warm);
     if (!cold.length) { act(...args); return; }
     const first = asked === null;
     asked = args;

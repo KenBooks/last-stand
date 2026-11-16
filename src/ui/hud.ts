@@ -5,8 +5,7 @@ import { VILLAGE } from '../core/beta';
 import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityCounts } from '../loot/items';
-import { WAVES } from '../data/waves';
-import { BIOMES } from '../data/biomes';
+import { BIOMES, bossOfWave } from '../data/biomes';
 import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
@@ -204,7 +203,7 @@ export function showDecision(): void {
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();
     $('.cont-label', box).textContent = waiting ? 'Waiting for the others…'
-      : r.training ? `Repeat wave ${r.wave}` : next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
+      : r.training ? `Repeat wave ${r.wave}` : bossOfWave(G.arena.biome, next) ? `Face wave ${next} (${bossOfWave(G.arena.biome, next)!.short})` : `Continue to wave ${next}`;
     $<HTMLButtonElement>('.cont', box).disabled = waiting;
     const party = partyDecision();
     $('.dc-party', box).textContent = party;

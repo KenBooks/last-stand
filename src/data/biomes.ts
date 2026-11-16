@@ -1,11 +1,19 @@
-// Biomes: each has its own arena (world/), enemy roster and boss. The wave rules
+// Biomes: each has its own arena (world/), enemy roster and ladder of bosses. The wave rules
 // (budget, groups, loot) in waves.ts are shared.
 import type { EnemyId } from './enemies';
 import type { TrackId } from './music';
+import { WAVES } from './waves';
 
 export type BiomeId = 'crypt' | 'forest';
 /** the player's choice in the lobby: a biome, or a random one each run */
 export type BiomeSetting = BiomeId | 'random';
+
+/** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave. */
+export interface BossRung {
+  id: EnemyId;
+  short: string;
+  banner: string;
+}
 
 export interface BiomeDef {
   /** short label for the lobby picker */
@@ -14,11 +22,9 @@ export interface BiomeDef {
   title: string;
   /** enemy pool unlocked at wave `w`, as [enemy, weight] */
   pool(w: number): [EnemyId, number][];
-  boss: EnemyId;
-  /** short boss name for the Continue button */
-  bossShort: string;
-  /** banner subtitle on boss waves */
-  bossBanner: string;
+  /** its bosses in the order the boss waves meet them: the first on the first boss wave (`WAVES.bossEvery`), the
+   *  second on the next, and round again from the first when the list runs out (each time harder, by `SCALING`) */
+  bosses: BossRung[];
   /** minimap: shape of the boundary and colour of the spawn gates */
   minimap: { wall: 'octagon' | 'circle'; portal: string };
   /** what the floor (off the dais, which is stone) is made of: an arrow glances off stone and sticks in the rest (the wall's
@@ -37,7 +43,10 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['brute', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
+    bosses: [
+      { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
+      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+    ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
     music: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
@@ -50,7 +59,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['barkhulk', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
+    bosses: [{ id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' }],
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth' },
     music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
@@ -58,6 +67,19 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
 };
 
 export const BIOME_IDS = Object.keys(BIOMES) as BiomeId[];
+
+/** Whether wave `wave` is a boss wave. */
+export const isBossWave = (wave: number): boolean => wave > 0 && wave % WAVES.bossEvery === 0;
+
+/** The boss of `biome`'s boss wave `wave` (its ladder's rung for the wave, round again past its end), null on any other. */
+export function bossOfWave(biome: BiomeId, wave: number): BossRung | null {
+  if (!isBossWave(wave)) return null;
+  const ladder = BIOMES[biome].bosses;
+  return ladder[(wave / WAVES.bossEvery - 1) % ladder.length];
+}
+
+/** Every boss a run in `biome` can meet (its ladder's, once each). */
+export const bossesOf = (biome: BiomeId): EnemyId[] => [...new Set(BIOMES[biome].bosses.map((rung) => rung.id))];
 
 /** A place the arena shows: a biome a run is fought in, or the village the lobby stands in (data/village.ts). */
 export type PlaceId = BiomeId | 'village';

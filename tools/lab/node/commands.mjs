@@ -1267,6 +1267,23 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  boss: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        canary: Boolean(options.canary),
+        ...(options.parts ? { parts: options.parts } : {}),
+      };
+      return side.command('boss', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('boss'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   throws: {
     each(side, options) {
       const command = {

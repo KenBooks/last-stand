@@ -10,7 +10,7 @@ import { G } from '../state';
 import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES, HERO, SCALING } from '../data/enemies';
-import { BIOMES } from '../data/biomes';
+import { BIOMES, bossOfWave, isBossWave } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { inObstacle, resolveWorld } from '../world/collision';
 import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
@@ -132,6 +132,11 @@ export function initRun(uiHooks: RunUI): void {
   ui = uiHooks;
   on('enemyKilled', onEnemyKilled);
   on('playerDied', onPlayerDied);
+  // (a boss's phase begun, on every game: its banner, by its name, where its phase has a line: entities/bossKit.ts)
+  on('bossPhase', (boss, phase) => {
+    const line = boss.def.bossKit?.phases[phase]?.banner;
+    if (line) ui.banner(boss.name, line);
+  });
 }
 
 function cleanupWorld(): void {
@@ -175,7 +180,7 @@ export function startRun(wave = 1, training = false, duel: DuelSetup | null = nu
   const biome = BIOMES[G.arena.biome];
   ui.banner(`${training ? 'Training · ' : ''}Wave ${wave}`, training
     ? 'Holographic enemies · No damage, loot or score'
-    : wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
+    : bossOfWave(G.arena.biome, wave)?.banner ?? `${biome.title} · Survive the onslaught`);
 }
 
 /** A run at its start. */
@@ -226,7 +231,7 @@ function buildWave(w: number): SpawnUnit[][] {
   // a party meets more foes (and more life on each: `spawnGroup`)
   let budget = WAVES.budget(w) * partyScale(r.party).foes;
   const units: SpawnUnit[] = [];
-  if (w % WAVES.bossEvery === 0) budget *= 0.55;
+  if (isBossWave(w)) budget *= 0.55;
   while (budget > 0) {
     const type = weighted(pool);
     budget -= ENEMIES[type].cost;
@@ -240,9 +245,10 @@ function buildWave(w: number): SpawnUnit[][] {
   return out.filter((g) => g.length);
 }
 
-/** The wave's boss, on a boss wave. */
+/** The wave's boss, on a boss wave: its biome's ladder's for the wave (data/biomes.ts `bossOfWave`). */
 function bossOf(w: number): SpawnUnit | null {
-  return w % WAVES.bossEvery === 0 ? { type: BIOMES[G.arena.biome].boss, hero: false } : null;
+  const rung = bossOfWave(G.arena.biome, w);
+  return rung ? { type: rung.id, hero: false } : null;
 }
 
 function startWave(): void {
@@ -489,10 +495,10 @@ export function startNextWave(): void {
   r.votes.clear();
   G.arena.setCalm(0);
   ui.hideDecision();
-  const boss = r.wave % WAVES.bossEvery === 0;
+  const boss = bossOfWave(G.arena.biome, r.wave);
   ui.banner(`${r.training ? 'Training · ' : ''}Wave ${r.wave}`, r.training
     ? 'Holographic enemies · No damage, loot or score'
-    : boss ? BIOMES[G.arena.biome].bossBanner : 'Hold the line');
+    : boss?.banner ?? 'Hold the line');
 }
 
 /** The local player banks: out of the run with the spoils (the others may carry on). */

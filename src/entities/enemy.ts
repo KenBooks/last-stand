@@ -51,6 +51,7 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 import { joinCrowd, leaveCrowd } from './models/crowd';
+import { bossLook, checkPhase, partHit, telegraphShare, weakLooks } from './bossKit';
 
 /** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
 const OWN_EVADE_ECHO = 1.5;
@@ -196,6 +197,12 @@ export class Enemy {
   /** how its kill threw it, and its body from then (entities/corpse.ts) */
   fling: Fling | null = null;
   corpse: Corpse | null = null;
+  /** a boss with a fight in phases (`EnemyDef.bossKit`, entities/bossKit.ts): its phase (0 the first), the seconds
+   *  left of its weak-spot window, its breakable parts broken (a bit each) and the life each has left (where simulated) */
+  bossPhase = 0;
+  weak = 0;
+  broken = 0;
+  readonly partLife: number[] = [];
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -521,6 +528,7 @@ export class Enemy {
     if (dazed) this.dazed = Math.max(0, this.dazed - dt);
     this.ducked = Math.max(0, this.ducked - dt);
     this.forming = Math.max(0, this.forming - dt);
+    this.weak = Math.max(0, this.weak - dt);
 
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
@@ -601,6 +609,7 @@ export class Enemy {
     this.paintBar();
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
+    weakLooks(this);
     return true;
   }
 
@@ -648,7 +657,7 @@ export class Enemy {
       t, dt, phase: this.phase, move,
       // (from the data, so a co-op guest's copy has it too)
       action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur), hit: this.hitShare(this.action.name) } : null,
-      hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 0.8) : -1,
+      hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 0.8) : -1, boss: bossLook(this),
     });
     this.lookAtTarget(dt);
   }
@@ -656,6 +665,8 @@ export class Enemy {
   /** the head follows its target (the players in the fight, for a co-op guest's copy too) */
   /** the share of action `name` its blow lands at: a throw's own windup (`EnemyDef.throws`), else the data's */
   private hitShare(name: string): number {
+    const telegraphed = telegraphShare(this, name);
+    if (telegraphed !== null) return telegraphed;
     const w = name === 'throw' && this.def.throws ? this.def.throws : this.def;
     return w.windup / Math.max(0.01, w.windup + w.recover);
   }
@@ -691,6 +702,11 @@ export class Enemy {
       debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });
     } else if (this.life <= 0) {
       this.die(info.fling ?? flingOf(this, amount - before, info.type ?? 'physical', this.frozen > 0, info.from ?? info.by?.pos, info.blow));
+    } else if (this.def.bossKit && !this.net) {
+      // (a boss's parts take the hit from the side it came from, and its phase follows its life: entities/bossKit.ts)
+      const from = info.from ?? info.by?.pos;
+      if (from) partHit(this, from, amount);
+      checkPhase(this, amount);
     }
     return amount;
   }

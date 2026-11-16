@@ -19,7 +19,7 @@ import { compilePasses, sceneTarget } from '../core/renderer';
 import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
-import { BIOME_IDS } from '../data/biomes';
+import { BIOME_IDS, bossesOf, type BiomeId } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
@@ -45,7 +45,7 @@ import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
 import { buildHallAhead, prepareSpareHero } from './hall';
-import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
+import { bossNeed, heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -252,18 +252,15 @@ interface Built {
   done(): void;
 }
 
-/**
- * The fight's parts: each foe (a plain one and a hero one of its kind, built away from the arena, where the lobby's
- * camera never looks, never let act, and kept out of the scene and their crowd till drawn: a crowd draws its kind
- * whatever the camera sees, and the lobby's frames linked its programs as they drew it, each waiting for its link),
- * the foes' shots, each other biome. The training dummy is the lobby's own.
- */
-function fightParts(): Part[] {
-  const ids = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
-  const foes = ids.map((id): Part => ({
+/** Foe `id`'s part: a plain one and, where it can be one, a hero one of its kind (a boss never is), built away from the
+ *  arena, where the lobby's camera never looks, never let act, and kept out of the scene and their crowd till drawn
+ *  (a crowd draws its kind whatever the camera sees, and the lobby's frames linked its programs as they drew it, each
+ *  waiting for its link). */
+function foePart(id: EnemyId): Part {
+  return {
     name: id,
     build() {
-      const pair = [new Enemy(id, { pos: AWAY }), new Enemy(id, { pos: AWAY, hero: true })];
+      const pair = ENEMIES[id].boss ? [new Enemy(id, { pos: AWAY })] : [new Enemy(id, { pos: AWAY }), new Enemy(id, { pos: AWAY, hero: true })];
       for (const e of pair) { G.scene.remove(e.obj); leaveCrowd(e); }
       const roots = pair.map((e) => e.obj);
       const slots = crowdSlots(pair[0].model);
@@ -272,7 +269,17 @@ function fightParts(): Part[] {
       const done = (): void => { for (const e of pair) e.dispose(); };
       return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, hide, done };
     },
-  }));
+  };
+}
+
+/**
+ * The fight's parts: each foe but the bosses (`foePart`), the foes' shots, each other biome. The training dummy is the
+ * lobby's own; each battleground's bosses are a need of their own (`bossParts`), so a boss added to one ladder adds
+ * nothing to the loading of the rest.
+ */
+function fightParts(): Part[] {
+  const ids = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy && !ENEMIES[id].boss);
+  const foes = ids.map(foePart);
   const shots: Part = {
     name: 'shots',
     build() {
@@ -290,6 +297,12 @@ function fightParts(): Part[] {
   }));
   return [...foes, shots, ...biomes];
 }
+
+/** The bosses a run in `biome` can meet (its ladder's), a part each: not built before the lobby shows, nor warmed
+ *  with the fight, but as their own need (game/warm.ts `bossNeed`). What a boss's own attacks draw is made of the
+ *  effects the lobby warms (the Bell-Warden's ring is the shockwave's program, its shards the rubble's and the lava
+ *  pool's), or its part must add samples of it. */
+const bossParts = (biome: BiomeId): Part[] => bossesOf(biome).map(foePart);
 
 /** the fight's parts, made once: built ahead before the lobby shows, warmed after */
 let fight: Part[] | undefined;
@@ -683,7 +696,16 @@ export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: P
     await Promise.race([heroes, wanted('rooms')]);
     return cached;
   }) : Promise.resolve(markWarm('rooms'));
-  return { fight: fightWarm, all: Promise.all([fightWarm, heroes, rooms]).then(() => {}) };
+  // (each battleground's bosses behind the fight's where they come from the GPU's cache, else as a run there starts;
+  // the lobby's own battleground's first)
+  const bossesBehind = async (): Promise<boolean> => {
+    const cached = await behind();
+    await fightWarm;
+    return cached;
+  };
+  const order = [G.arena.biome, ...BIOME_IDS.filter((id) => id !== G.arena.biome)];
+  const bosses = order.map((biome) => warmNeed(bossNeed(biome), bossParts(biome), bossesBehind));
+  return { fight: fightWarm, all: Promise.all([fightWarm, heroes, rooms, ...bosses]).then(() => {}) };
 }
 
 /** how much shorter the compile's slice gets after a frame that missed the screen's refresh, and how much longer

@@ -301,7 +301,7 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 // Enemies
 
-export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'idle';
+export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'bellWarden' | 'idle';
 
 /** What a hero's attack is, as a foe sees it coming (entities/evade.ts): a shot (an arrow, a bolt), a wave along the
  *  ground (a crescent), a charge, a beam, or an area coming down (a rain of arrows, falling stars). */
@@ -408,6 +408,45 @@ export interface EnemyDef {
   evade?: EvadeDef;
   /** what it throws at a hero too far off for its slam */
   throws?: ThrowDef;
+  /** a boss's fight in phases, its telegraphed attacks and its weak-spot window (entities/bossKit.ts) */
+  bossKit?: BossKitDef;
+}
+
+/** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
+ *  as it begins (none: no banner, its cue alone). */
+export interface BossPhaseDef {
+  below: number;
+  banner?: string;
+}
+
+/** A telegraphed attack: its warning (s: the boss shows it coming, the hit landing as it ends) and its recovery after
+ *  (s). The action's `hit` share is `warn / (warn + recover)`, for its model too (`ActionState.hit`). */
+export interface TelegraphDef {
+  warn: number;
+  recover: number;
+}
+
+/**
+ * The shared boss toolkit's data (entities/bossKit.ts): the phases by life share, entered in order where the fight is
+ * simulated and told to every game (a banner, a cue, `BossHooks.enter`); its telegraphed attacks by action name; and
+ * its weak-spot window, a time it takes `taken` times the damage, its body edged in `edge` meanwhile.
+ */
+export interface BossKitDef {
+  phases: BossPhaseDef[];
+  attacks?: Record<string, TelegraphDef>;
+  weak?: { taken: number; edge: number };
+  /** parts of it a hero breaks apart from its life (the Bell-Warden's chains): each at `angles` round it from its
+   *  facing (rad, to its left), struck by a hero's hit from that side (the part nearest the way the hit came from),
+   *  taking `share` of the hit's damage, each with `life` of its own (a share of its most life) */
+  parts?: { angles: number[]; life: number; share: number };
+}
+
+/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window
+ *  is left (s), and its parts' state (a bit each, set: broken; the Bell-Warden's chains). */
+export interface BossLook {
+  phase: number;
+  weak: number;
+  broken: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +488,8 @@ export interface AnimState {
   blockHit?: number;
   /** -1 = alive, otherwise 0..1 death progress */
   dead: number;
+  /** a boss with a fight in phases (`EnemyDef.bossKit`): what its model shows of it */
+  boss?: BossLook;
   charge?: number;
   /** a bow's hero: how many arrows are on the string (`Player.nocked`) */
   nocked?: number;

@@ -161,7 +161,7 @@ async function packOf(lab: Lab, pack: Pack, at: THREE.Vector3, facing: number, t
   const { forward, left } = waysOf(facing);
   const foes = pack.foes.map((placed) => {
     const spot = at.clone().addScaledVector(forward, placed.ahead).addScaledVector(left, placed.across);
-    const kind = pack.boss ? BIOMES[G.arena.biome].boss : foeKind();
+    const kind = pack.boss ? BIOMES[G.arena.biome].bosses[0].id : foeKind();
     return lab.spawnFoe(kind, spot, { hero: Boolean(pack.elite) });
   });
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the foes never rose');
