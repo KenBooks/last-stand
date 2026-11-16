@@ -118,6 +118,62 @@ function reachingPart(name: string, lights: THREE.PointLight[]): Part {
   };
 }
 
+/** the material slots `mapsPart` gives a texel: every map that colours, bumps or roughens a surface (not an alpha map,
+ *  which would change what's drawn) */
+const MAP_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'emissiveMap'] as const;
+
+/** A texture's single texel twin: its settings kept (so its program is the same), its image one pixel. */
+function texelOf(texture: THREE.Texture): THREE.Texture {
+  const pixel = document.createElement('canvas');
+  pixel.width = 1;
+  pixel.height = 1;
+  const context = pixel.getContext('2d');
+  if (context) {
+    context.fillStyle = 'rgb(128, 128, 255)';
+    context.fillRect(0, 0, 1, 1);
+  }
+  const twin = texture.clone();
+  twin.source = new THREE.Source(pixel);
+  twin.source.needsUpdate = true;
+  return twin;
+}
+
+/** Whether a texture holds an image of more than one texel. */
+function wholeMap(texture: THREE.Texture | null | undefined): texture is THREE.Texture {
+  const data = texture?.source.data as { width?: number } | null | undefined;
+  return Boolean(texture && !(texture as THREE.CubeTexture).isCubeTexture && data && (data.width ?? 0) > 1);
+}
+
+/**
+ * A part that gives every surface's maps back or a texel of their own in their place (Low's flat maps, as #672 tried
+ * them, at their most: every map of every shown material, a face's too): the same programs, each twin uploaded
+ * before the turns, so what it takes is the maps' own reads across their mipmaps.
+ */
+function mapsPart(): Part {
+  type Slots = Record<string, THREE.Texture | null>;
+  const swaps: { material: Slots; slot: string; whole: THREE.Texture; texel: THREE.Texture }[] = [];
+  const twins = new Map<THREE.Texture, THREE.Texture>();
+  const materials = new Set<THREE.Material>();
+  G.scene.traverseVisible((object) => {
+    if ((object as THREE.Mesh).isMesh) for (const material of materialsOf(object as THREE.Mesh)) materials.add(material);
+  });
+  for (const material of materials) {
+    const slots = material as unknown as Slots;
+    for (const slot of MAP_SLOTS) {
+      const whole = slots[slot];
+      if (!wholeMap(whole)) continue;
+      if (!twins.has(whole)) twins.set(whole, texelOf(whole));
+      swaps.push({ material: slots, slot, whole, texel: twins.get(whole)! });
+    }
+  }
+  return {
+    name: `the surfaces' maps, against a texel each (${twins.size} maps)`,
+    change: (on) => {
+      for (const swap of swaps) swap.material[swap.slot] = on ? swap.whole : swap.texel;
+    },
+  };
+}
+
 /** The materials of a mesh, as a list. */
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -157,6 +213,7 @@ function partsOfScene(): Part[] {
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints)),
     shownPart('the hero', [G.player.obj]),
     boundsPart(),
+    mapsPart(),
   ];
 }
 
