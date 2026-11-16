@@ -118,7 +118,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   on, the aim preview shown (`laserPaths` in `src/fx/aimLaser.ts`) may run no more than 0.3 m past the prop's far side
   where the prop stands over the arrow: loosed from the arrow pressed into the prop, it went on through it (#640, from
   Victor: "laser goes through, it should not"; 2 to 150 frames of a hold, 94 m past it), now loosed from over his feet
-  where a prop stands between him and the arrow (`loosedFrom`), every stand stops at it. `--canary` aims the
+  where a prop stands between him and the arrow (`loosedFrom`), every stand stops at it. And in each biome a training
+  dummy 0.1 and 0.3 m off his reach, held on its chest the same way: the preview must stop at it (it went 1.35 m on
+  through it, from Victor on #640; a foe between him and the arrow looses it from over his feet too). `--canary` aims the
   pose from the arrow as posed again (`shotFrom.steady=0`), which must flicker; `--pictures` films four frames running
   round the arrow's largest move in each biome's first stand (played again to it), the whole body from his right and
   from above behind, each with the arrow's height (`tools/lab/out/bowprop`).

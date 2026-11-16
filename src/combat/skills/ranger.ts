@@ -89,8 +89,8 @@ export function shotFrom(player: Player): THREE.Vector3 {
 }
 
 /**
- * Where a shot is loosed from: the nocked arrow (`castPoint`), or, where a prop stands between his body and the arrow
- * (he's pressed against it, the arrow's middle at or past its near face), the point over his feet at the arrow's height,
+ * Where a shot is loosed from: the nocked arrow (`castPoint`), or, where a prop or a foe stands between his body and the
+ * arrow (he's pressed against it, the arrow's middle at or past its near face), the point over his feet at the arrow's height,
  * so the flight starts outside the prop and meets it. Loosed from inside it, the drawn-surface test (`propSurface`,
  * cast from the arrow) found no face before it, and the arrow and its aim preview went on through the prop (from
  * Victor on #640: "laser goes through, it should not"; `lab bowprop`).
@@ -100,6 +100,12 @@ export function loosedFrom(player: Player): THREE.Vector3 {
   for (const o of G.arena.obstacles) {
     if (o.h <= arrow.y) continue;
     if (entry(bx, bz, dx, dz, o.x, o.z, o.r) >= 0) return _loosed.set(bx, arrow.y, bz);
+  }
+  // (a foe he stands against as well, its body as tall as the arrow is high: a training dummy close by, from Victor and
+  // play, "should not go through when standing close")
+  for (const e of G.enemies) {
+    if (!e.alive || e.height <= arrow.y - e.obj.position.y) continue;
+    if (entry(bx, bz, dx, dz, e.pos.x, e.pos.z, e.radius) >= 0) return _loosed.set(bx, arrow.y, bz);
   }
   return arrow;
 }

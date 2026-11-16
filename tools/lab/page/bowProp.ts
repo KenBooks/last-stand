@@ -14,6 +14,7 @@ import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import type { Obstacle } from '../../../src/types';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
+import { ENEMIES } from '../../../src/data/enemies';
 import { input } from '../../../src/core/input';
 import { inObstacle } from '../../../src/world/collision';
 import * as ranger from '../../../src/combat/skills/ranger';
@@ -243,6 +244,37 @@ async function filmStand(lab: Lab, fixture: Fixture, prop: Obstacle, gap: number
   return moments;
 }
 
+/** how far off a training dummy's body he stands for the close stand (m), and the dummies' spot in from the middle */
+const DUMMY_GAPS = [0.1, 0.3];
+
+/**
+ * A stand against a training dummy, `gap` m off its body, the shot held on its chest: the aim preview must stop at it
+ * (from Victor on #640, a dummy close by: the line went on through it). Where the arena's middle has room for it.
+ */
+async function standAgainstDummy(lab: Lab, fixture: Fixture, gap: number): Promise<{ line: string; problems: string[] }> {
+  const label = `${G.arena.biome}, a training dummy, ${gap} m off it`;
+  // (he's set up first: a set-up clears the foes)
+  const spot = new THREE.Vector3(2, 0, -6), radius = ENEMIES.dummy.radius;
+  const at = standAt({ x: spot.x, z: spot.z, r: radius, h: 2 }, gap);
+  const target = new THREE.Vector3(spot.x, AIM_HEIGHT, spot.z);
+  await lab.setup({ ...fixture, at: [at.x, at.z], facing: facingTo(at, target), nocked: true });
+  const dummy = lab.spawnFoe('dummy', spot);
+  await lab.until(() => dummy.spawning <= 0, 360, 'the dummy never rose');
+  const body: Obstacle = { x: dummy.pos.x, z: dummy.pos.z, r: dummy.radius, h: dummy.height };
+  let drawn = false, through = 0, farthest = 0;
+  await lab.step(HOLD_FRAMES, () => holding(target), (frame) => {
+    drawn ||= !!lab.player.casting?.drawT;
+    const past = frame >= MEASURED_FROM ? pastProp(body, lab.player.pos) : 0;
+    if (past > THROUGH_SLACK) { through++; farthest = Math.max(farthest, past); }
+  });
+  await letGoAway(lab, at, body);
+  dummy.die();
+  const problems: string[] = [];
+  if (!drawn) problems.push(`${label}: the shot was never drawn`);
+  if (through) problems.push(`${label}: the aim preview went through the dummy on ${through} frames, ${farthest.toFixed(2)} m past it`);
+  return { line: `${label}: ${through ? `preview THROUGH it on ${through} frames` : 'preview stopped at it'}`, problems };
+}
+
 /** A stand's line, and its problems. */
 function judged(stand: Stand): { line: string; problems: string[] } {
   const parts = stand.parts.map((part) => `${part.name} ${part.reversals} reversals, `
@@ -287,6 +319,11 @@ export async function bowProp(lab: Lab, options: BowPropOptions): Promise<Report
     const props = propsOfEachKind();
     if (!props.length) problems.push(`${biome}: no prop the bow can reach into with room to stand by it`);
     let first = options.pictures;
+    for (const gap of DUMMY_GAPS) {
+      const read = await standAgainstDummy(lab, fixture, gap);
+      lines.push(read.line);
+      problems.push(...read.problems);
+    }
     for (const prop of props) {
       for (const gap of GAPS) {
         const label = `${biome}, ${prop.prop!.kind} prop (r ${prop.r.toFixed(2)} m), ${gap} m off it`;
