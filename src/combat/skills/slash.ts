@@ -10,7 +10,7 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
   return portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) }, uProg: { value: 0 }, uFade: { value: 1 }, uDir: { value: 1 },
-      uStart: { value: 0 }, uLen: { value: 1 }, uInner: { value: 0.3 }, uEven: { value: 0 },
+      uStart: { value: 0 }, uLen: { value: 1 }, uInner: { value: 0.3 }, uEven: { value: 0 }, uTrail: { value: 5 },
     },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -18,7 +18,7 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
       void main(){ vP = vec2(position.x, -position.z); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */`
       varying vec2 vP;
-      uniform vec3 uColor; uniform float uProg, uFade, uDir, uStart, uLen, uInner, uEven;
+      uniform vec3 uColor; uniform float uProg, uFade, uDir, uStart, uLen, uInner, uEven, uTrail;
       void main(){
         // vP is the ring's own plane (the geometry was laid flat): position along the arc (0..1, in
         // the sweep direction) and across it (inner 0 .. outer 1); the inner radius is > 0, so atan
@@ -28,8 +28,8 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
         float r = clamp((length(vP) - uInner) / (1.0 - uInner), 0.0, 1.0);
         float behind = uProg - a;
         if (behind < 0.0) discard;
-        // a sweep fades behind its head; an even arc (a travelling crescent) glows all along
-        float trail = mix(exp(-behind * 5.0), 1.0, uEven);
+        // a sweep fades behind its head (uTrail: how quickly); an even arc (a travelling crescent) glows all along
+        float trail = mix(exp(-behind * uTrail), 1.0, uEven);
         float edge = pow(r, 3.0) * 1.4 + r * 0.25;
         float tips = smoothstep(0.0, 0.08, a) * (1.0 - smoothstep(0.92, 1.0, a));
         float i = trail * edge * tips * uFade;
@@ -37,20 +37,20 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
       }`,
   })), ({ wgslFn, positionGeometry, vec2, varying }, u) => ({
     fragment: wgslFn(`fn slashArc(p: vec2f, color: vec3f, prog: f32, fade: f32, dir: f32, start: f32, len: f32,
-      inner: f32, even: f32) -> vec4f {
+      inner: f32, even: f32, trailLen: f32) -> vec4f {
       var a = clamp((atan2(p.y, p.x) - start) / len, 0.0, 1.0);
       if (dir < 0.0) { a = 1.0 - a; }
       let r = clamp((length(p) - inner) / (1.0 - inner), 0.0, 1.0);
       let behind = prog - a;
       if (behind < 0.0) { discard; }
-      let trail = mix(exp(-behind * 5.0), 1.0, even);
+      let trail = mix(exp(-behind * trailLen), 1.0, even);
       let edge = pow(r, 3.0) * 1.4 + r * 0.25;
       let tips = smoothstep(0.0, 0.08, a) * (1.0 - smoothstep(0.92, 1.0, a));
       let i = trail * edge * tips * fade;
       return vec4f(mix(color, vec3f(1.0), trail * r * 0.3) * i * 1.3, i);
     }`)({
       p: varying(vec2(positionGeometry.x, positionGeometry.z.negate())), color: u.uColor, prog: u.uProg,
-      fade: u.uFade, dir: u.uDir, start: u.uStart, len: u.uLen, inner: u.uInner, even: u.uEven,
+      fade: u.uFade, dir: u.uDir, start: u.uStart, len: u.uLen, inner: u.uInner, even: u.uEven, trailLen: u.uTrail,
     }),
   }));
 }
