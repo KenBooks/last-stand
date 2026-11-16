@@ -23,6 +23,8 @@ import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { buildVillage, VILLAGE_ENV, type Village } from './village';
 import { buildHeroHall } from './heroHall';
+import { buildRooms, type Room } from './rooms';
+import type { RoomId } from '../data/houses';
 import { restoreProps, state as propState } from './destructible';
 import { emit } from '../events';
 import { G } from '../state';
@@ -138,12 +140,24 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   // (none of the places moves: a matrix made again each frame marks all under it changed, `standStill` in props.ts)
   hallGroup.matrixAutoUpdate = false;
   scene.add(hallGroup);
+  // (the village's houses walked into, each a room shown in its place: `showRoom`)
+  const rooms = VILLAGE ? buildRooms() : null;
+  for (const r of Object.values(rooms ?? {}) as Room[]) {
+    await painted();
+    bakeStaticShadows(r.group);
+    trimShadowCasters(r.group, shadowCameraFor(moon, r.look));
+    r.group.visible = false;
+    r.group.matrixAutoUpdate = false;
+    r.group.updateMatrixWorld(true);
+    scene.add(r.group);
+  }
+  const roomGroups = Object.values(rooms ?? {}).map((r) => (r as Room).group);
   // (on WebGPU their point lights are drawn by one rig: its lit pipelines are keyed by its lights' ids)
-  const groups = [...Object.values(places).map((place) => place.group), hallGroup];
+  const groups = [...Object.values(places).map((place) => place.group), hallGroup, ...roomGroups];
   rigPointLights(scene, groups);
   stillForMeshlets(...groups);
   if (import.meta.env.DEV) {
-    const groups = [...Object.values(places).map((p) => p.group), hallGroup];
+    const groups = [...Object.values(places).map((p) => p.group), hallGroup, ...roomGroups];
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Places must have the same number of point lights (switching recompiles every shader): ${lights}`);
     // (and as many casting: each is written out in every lit program, `loopPointLights`)
@@ -160,7 +174,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let shown: PlaceId = VILLAGE ? 'village' : biome;
   let active = places[shown].b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0, sun: '' };
+  const stillDrawn = { place: null as PlaceId | 'hall' | RoomId | null, rev: -1, lamps: 0, sun: '' };
   /** with no village, the props' revision each biome's (and the hall's) still shadows were last drawn at: each keeps
    *  its own lights' maps, so a biome shown again with its props as they were needn't draw them again (closing the
    *  hall of heroes drew the biome's again, 9 ms of the frame after a first visit's hero was chosen) */
@@ -172,6 +186,10 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   const breakablesAt = new Map<PlaceId, number>();
   /** whether the hall of heroes' room stands in the place's stead */
   let hallShown = false;
+  /** the house's room standing in the village's stead, if one does (`showRoom`) */
+  let room: RoomId | null = null;
+  /** what's drawn now in the place's stead, or the place */
+  const shownGroup = (): THREE.Group => (room ? rooms![room].group : hallShown ? hallGroup : places[shown].group);
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
   const villageLook: BiomeLook | null = village ? { ...village.look } : null;
   let hour = FIRST_HOUR;
@@ -187,7 +205,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     shown = place;
     active = places[place].b;
     // (chosen while the hall is up, a co-op host's pick: shown as it's taken down)
-    if (hallShown) return;
+    if (hallShown || room) return;
     setRelief(active.relief ?? null);
     for (const k of Object.keys(places) as PlaceId[]) places[k].group.visible = k === place;
     hallGroup.visible = false;
@@ -234,7 +252,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     get biome() { return biome; },
     /** the place shown: the village (the lobby), or the run's biome */
     get place(): PlaceId { return shown; },
-    get obstacles() { return active.obstacles; },
+    get obstacles() { return room ? rooms![room].obstacles : active.obstacles; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */
@@ -253,13 +271,21 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** spawn gates: {pos, dir (into the arena), pulse()} */
     get portals() { return active.portals; },
     /** the wall as drawn, which bodies walk up to and what flies meets (`world/wall.ts`) */
-    get wall() { return active.wall; },
+    get wall() { return room ? rooms![room].wall : active.wall; },
     moon,
     radius: ARENA.radius,
     groundHeight,
     setBiome,
     /** The village shown (the lobby), or the run's biome (`on` false). Each has as many lights, so it compiles nothing. */
-    showVillage(on: boolean) { show(on && VILLAGE ? 'village' : biome); },
+    showVillage(on: boolean) {
+      // (a run's start takes the hero out of a house's room: the run's biome shown in its stead at once)
+      if (!on && room) {
+        rooms![room].group.visible = false;
+        room = null;
+        emit('roomShown', null);
+      }
+      show(on && VILLAGE ? 'village' : biome);
+    },
     /** whether the hall of heroes' room is shown in the place's stead (its stage has no props; `obstacles` stay the
      *  place's) */
     get hallShown() { return hallShown; },
@@ -276,6 +302,24 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     },
     /** the hall of heroes' room (hidden but while it's shown): what the heroes' warm-up shows */
     hallGroup,
+    /** the house's room shown in the village's stead (null: none) */
+    get room(): RoomId | null { return room; },
+    /** The house's room `id` shown in the village's stead, or the village back (null): its floor the relief, its look
+     *  the scene's, its wall and circles what bodies meet. Its lights are as many as a place's, so it compiles nothing. */
+    showRoom(id: RoomId | null) {
+      if (!rooms || id === room) return;
+      if (room) rooms[room].group.visible = false;
+      room = id;
+      if (!id) { show(shown); emit('roomShown', null); return; }
+      for (const k of Object.keys(places) as PlaceId[]) places[k].group.visible = false;
+      hallGroup.visible = false;
+      rooms[id].group.visible = true;
+      setRelief(rooms[id].relief);
+      setLook(rooms[id].look);
+      emit('roomShown', id);
+    },
+    /** the houses' rooms as built (none without the village) */
+    rooms,
     /** the village as built: its portals' ways out, its chest (none where the lobby isn't the village: read only
      *  while `place` is the village, or behind `VILLAGE`) */
     village: village as Village,
@@ -285,17 +329,18 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     groupOf(id: PlaceId): THREE.Group { return places[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) places[id].b.setCalm(v); },
     update(dt: number, t: number) {
-      if (hallShown) hall.update(dt, t); else active.update(dt, t);
+      if (room) rooms![room].update(dt, t);
+      else if (hallShown) hall.update(dt, t); else active.update(dt, t);
       if (!VILLAGE) {
         drawStill(true);
         return;
       }
-      if (shown === 'village' && !hallShown) {
+      if (shown === 'village' && !hallShown && !room) {
         village!.daylight(hour, villageLook!);
         setColours(villageLook!);
       }
       // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
-      const now = hallShown ? 'hall' : shown;
+      const now = room ?? (hallShown ? 'hall' : shown);
       // (and a lamp's, as it takes a casting light: `lampShadow`)
       const lamps = lampShadowsAsked();
       // (and the sun's where it's kept: as it goes round, a redraw every 20 s or so)
@@ -308,12 +353,12 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       const lampsMoved = stillDrawn.lamps !== lamps, sunMoved = stillDrawn.sun !== sun;
       if (all || lampsMoved || sunMoved) {
         // (and its breakables' shadows cast as one, each standing prop's, a frame before: `world/breakableShadows.ts`)
-        if (!hallShown && breakablesAt.get(shown) !== propState.rev) {
+        if (!hallShown && !room && breakablesAt.get(shown) !== propState.rev) {
           places[shown].breakables?.refresh();
           breakablesAt.set(shown, propState.rev);
           return;
         }
-        drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow,
+        drawStillShadows(renderer, scene, G.camera, shownGroup(), moon.shadow,
           { lights: all || lampsMoved, sun: all || sunMoved });
         stillDrawn.place = now;
         stillDrawn.rev = propState.rev;
@@ -324,7 +369,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       // (a lamp's cube at the lamp its light moved to, a face a frame: `drawLampShadows`)
       const next = nextLampFace();
       if (next) {
-        drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow,
+        drawStillShadows(renderer, scene, G.camera, shownGroup(), moon.shadow,
           { lights: [next.light], sun: false, face: next.face });
         lampFaceDrawn(next.light, next.face);
       }

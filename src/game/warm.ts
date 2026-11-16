@@ -7,9 +7,9 @@
 
 import { G } from '../state';
 
-/** what's warmed after the lobby shows: the fight's programs, the other heroes' */
-export type Need = 'fight' | 'heroes';
-const NEEDS: Need[] = ['fight', 'heroes'];
+/** what's warmed after the lobby shows: the fight's programs, the other heroes', the village's houses' rooms */
+export type Need = 'fight' | 'heroes' | 'rooms';
+const NEEDS: Need[] = ['fight', 'heroes', 'rooms'];
 
 /** One need's state: warm, wanted now, how far its warm-up has got (0 to 1), and the acts waiting for it. */
 interface NeedState {
@@ -29,7 +29,7 @@ function needState(): NeedState {
   return state;
 }
 
-const needs: Record<Need, NeedState> = { fight: needState(), heroes: needState() };
+const needs: Record<Need, NeedState> = { fight: needState(), heroes: needState(), rooms: needState() };
 const listeners: (() => void)[] = [];
 
 /** What a press waiting for its needs readies, as the fight's loading bar says it (`Readying the heroes`, ui/readying.ts

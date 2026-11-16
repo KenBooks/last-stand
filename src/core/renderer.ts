@@ -1389,7 +1389,7 @@ export function render(): void {
   sceneRT.resolveDepthBuffer = VILLAGE && SIGHT.uSightOn.value > 0;
   // (the ghosts over each pixel, for each to keep less where they lie one over another: what blends thins in the
   // village alone)
-  const ghosts = G.arena.place === 'village' && !G.arena.hallShown && rig.view !== 'first';
+  const ghosts = G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room && rig.view !== 'first';
   if (ghosts) gpuMarks.mark('ghosts');
   countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
   gl.setRenderTarget(sceneRT);

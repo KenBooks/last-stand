@@ -24,6 +24,7 @@ import { particles, col } from '../fx/particles';
 import { rollDrop, rarityOf, rarityIndex } from '../loot/items';
 import { pr499WaveReward } from '../loot/pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
 import { bankItems, saveProfile } from '../loot/profile';
+import { recordRunEnd } from './chronicle';
 import { clearFloaters, floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
 import { schedule, clearTimers } from '../core/timers';
@@ -90,6 +91,8 @@ export interface RunState {
   /** the local player's summary was shown with the run going on for others: it goes with the run's end
    *  (main.ts `checkRunOver`) */
   watched: boolean;
+  /** the wave it started at (the house of records' most waves in a run) */
+  first: number;
   /** game time at the start, and whether the run's time and kills went into the records yet */
   started: number;
   tallied: boolean;
@@ -181,7 +184,7 @@ const blankRun = (wave: number, training: boolean): RunState => ({
   bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
   queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
   pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
-  started: G.time, tallied: false,
+  started: G.time, tallied: false, first: wave,
 });
 
 export function abandonRun(): void {
@@ -570,6 +573,9 @@ function finishLocal(kind: 'banked' | 'dead', note?: string): void {
   }
   if (!r.training) {
     rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));
+    // (the waves cleared: a bank comes after its wave is won, a death during it)
+    const cleared = r.wave - r.first + (kind === 'banked' ? 1 : 0);
+    recordRunEnd(kind, cleared, G.time - r.started, kind === 'banked' ? r.bag.filter((i) => !extra.lost?.includes(i)) : []);
     if (!r.tallied) tally(r);
     saveProfile(G.profile);
   }

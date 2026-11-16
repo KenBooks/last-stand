@@ -269,6 +269,16 @@ export interface Item {
   school?: School;
 }
 
+/** The house of records' numbers for one hero (game/chronicle.ts), counted from the day it was built: runs that ended in
+ *  death and in a bank, the most waves cleared in one run, the longest run (s), the most foes slain and damage dealt in one
+ *  run, damage over all, partners raised, runs played in a party, each skill's casts in runs (by its `impl`), items banked
+ *  by rarity (by its id), and each boss slain (by its enemy id). */
+export interface ChronicleRecords {
+  deaths: number; banks: number; mostWaves: number; longestRun: number; mostKills: number; mostDealt: number;
+  dealt: number; revives: number; coopRuns: number;
+  casts: Record<string, number>; bankedBy: Record<string, number>; bosses: Record<string, number>;
+}
+
 /** One class's saved progress: every class keeps its own gear, stash and records. */
 export interface Profile {
   classId: string;
@@ -276,7 +286,9 @@ export interface Profile {
   stash: Item[];
   /** bestReached: highest attempted normal wave per biome (including deaths); bestWave: best wave cleared in any biome; bestBanked: per biome, the best wave whose spoils were banked
    *  (the lobby's starting-wave range); kills and time (seconds) over every run, counted since save slots came */
-  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; bestReached: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number; kills?: number; time?: number };
+  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; bestReached: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number; kills?: number; time?: number;
+    /** what the house of records shows besides (game/chronicle.ts), counted since it came */
+    chronicle?: ChronicleRecords };
   /** when it was last saved (ms since the epoch): shown as "last played" on the save slots screen */
   saved?: number;
 }

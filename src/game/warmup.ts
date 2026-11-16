@@ -370,6 +370,18 @@ function hallPart(): Part {
   };
 }
 
+/** The village's houses' rooms, each drawn in the village's place with every part of it shown (world/rooms.ts). */
+function roomParts(): Part[] {
+  return Object.values(G.arena.rooms ?? {}).map((room): Part => ({
+    name: `room ${room.id}`,
+    build() {
+      room.showAll();
+      const swap: Swap = { show: room.group, hide: G.arena.groupOf(G.arena.place), alone: lampsLetGo };
+      return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
+    },
+  }));
+}
+
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
 function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
@@ -665,7 +677,13 @@ export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: P
     return cached;
   };
   const heroes = warmNeed('heroes', heroParts(), heroesBehind);
-  return { fight: fightWarm, all: Promise.all([fightWarm, heroes]).then(() => {}) };
+  // (the houses' rooms behind the heroes': walked into after; with no village there are none)
+  const rooms = VILLAGE ? warmNeed('rooms', roomParts(), async () => {
+    const cached = await behind();
+    await Promise.race([heroes, wanted('rooms')]);
+    return cached;
+  }) : Promise.resolve(markWarm('rooms'));
+  return { fight: fightWarm, all: Promise.all([fightWarm, heroes, rooms]).then(() => {}) };
 }
 
 /** how much shorter the compile's slice gets after a frame that missed the screen's refresh, and how much longer

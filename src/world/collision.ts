@@ -224,6 +224,8 @@ export function separateEnemies(ownOnly = false): void {
       }
     }
     if (!moves(a)) continue;
+    // (in a house's room the lobby's foes stand in the village's frame, unseen: none meets the hero there)
+    if (G.arena.room) continue;
     for (const p of G.players) {
       if (!p.active) continue;
       const dx = a.pos.x - p.pos.x, dz = a.pos.z - p.pos.z;
