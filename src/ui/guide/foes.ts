@@ -10,7 +10,7 @@ import { CLASSES } from '../../data/classes/index';
 import { G } from '../../state';
 import type { EnemyDef } from '../../types';
 import { css, head, metres, num, para, pct, points, secs, tile, tiles, whole } from './parts';
-import { bars, partyBars, summonTimeline, telegraph } from './diagrams';
+import { bars, partyBars, summonTimeline } from './diagrams';
 
 /** the wave a foe's figures are shown at besides the first, to show how it grows */
 const LATER = 10;
@@ -181,8 +181,7 @@ export function foePage(foe: Foe): string {
     + `<div class="gd-sub">${note.role} · ${BIOMES[foe.biome].title}</div>`
     + `<p class="gd-p">${note.does}</p>`
     + `<p class="gd-ai">${AI_NOTES[d.ai] ?? ''}</p></div></div>`;
-  const summon = d.summon && d.summon in ENEMIES ? ENEMIES[d.summon as EnemyId].name : '';
-  html += `<div class="gd-pair"><div>${glance(foe)}</div><div>${head('Its attacks, seen from above')}${telegraph(d, summon)}</div></div>`;
+  html += `<div class="gd-glance">${glance(foe)}</div>`;
   html += head('Figures') + figures(foe);
   if (you) html += para(`<b>Its blow against you now:</b> ${you} at wave ${foe.from}.`);
   html += points('Attacks', attacks(foe));

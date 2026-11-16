@@ -1,12 +1,10 @@
 // The guide's diagrams, drawn from the game's data as a page opens, never pictures: bars of a figure against the
-// largest of its kind, a foe's attacks seen from above (its reach, its slam's ring, its throws, a boss's volleys and
-// summons) to scale, a boss's calls for help along a fight's first minute, a combo as the game's key caps with arrows,
+// largest of its kind, a boss's calls for help along a fight's first minute, a combo as the game's key caps with arrows,
 // and a run's loop (a wave, then Bank or Continue). Their colours are the theme's custom properties, so they follow it.
 import { BOSS_AI } from '../../data/enemies';
 import { WAVES } from '../../data/waves';
 import { RUN } from '../../data/balance';
-import type { EnemyDef } from '../../types';
-import { esc, metres, pct, secs } from './parts';
+import { esc, pct, secs } from './parts';
 
 /** One bar: what it is, its value as a share of the largest of its kind, the figure written beside it, and a mark
  *  along it (the hero's own speed on a foe's). */
@@ -19,103 +17,6 @@ export function bars(rows: Bar[]): string {
     const mark = r.mark ? `<i class="gd-mark" style="--at:${Math.min(1, r.mark.share) * 100}%" title="${esc(r.mark.label)}"><span>${esc(r.mark.label)}</span></i>` : '';
     return `<div class="gd-bar"><span class="gd-bl">${r.label}</span><span class="gd-track"><b style="--v:${fill * 100}%${r.colour ? `;--c:${r.colour}` : ''}"></b>${mark}</span><span class="gd-bv">${r.text}</span></div>`;
   }).join('')}</div>`;
-}
-
-// --- a foe's attacks from above -------------------------------------------------------------------------------------
-
-/** an SVG number: to two places, as short as it goes */
-const f = (v: number): string => String(Number(v.toFixed(2)));
-
-/**
- * A foe's attacks seen from above, to scale: the foe at the middle facing up, and round it what it does (its blow's
- * reach, where it keeps away, its slam's ring, how far it throws and what lands, a boss's volleys and summons), a
- * hero's body for its size, and a scale bar. Each is labelled; the viewBox is sized to the furthest of them.
- */
-export function telegraph(def: EnemyDef, summonName = ''): string {
-  const parts: string[] = [], labels: { x: number; y: number; text: string; cls: string }[] = [];
-  const hero = 0.5;   // a hero's body's radius (m): for the scale of things
-  let far = def.radius + def.range + 1;
-  const ring = (r: number, cls: string, x = 0, y = 0): void => { parts.push(`<circle class="${cls}" cx="${f(x)}" cy="${f(y)}" r="${f(r)}"/>`); };
-  const line = (x1: number, y1: number, x2: number, y2: number, cls: string): void => {
-    parts.push(`<line class="${cls}" x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}"/>`);
-  };
-  const say = (x: number, y: number, text: string, cls = ''): void => { labels.push({ x, y, text, cls }); };
-
-  if (def.ai === 'melee') {
-    const reach = def.radius + def.range;
-    ring(reach, 'gd-t-reach');
-    say(0, -reach, `blow ${metres(def.range)}`, 'up');
-    far = reach + hero * 2 + 1.2;
-  }
-  if (def.ai === 'ranged') {
-    const keep = def.keepAway ?? 8;
-    ring(def.range, 'gd-t-far');
-    ring(keep, 'gd-t-keep');
-    line(0, 0, 0, -def.range + 0.6, 'gd-t-shot');
-    say(0, -def.range, `throws up to ${metres(def.range)}`, 'up');
-    say(keep * 0.72, keep * 0.72, `backs off inside ${metres(keep)}`, 'side');
-    far = def.range + 1.5;
-  }
-  if (def.ai === 'slam') {
-    const at = def.range * 0.6, r = def.slamRadius ?? 3;
-    ring(r, 'gd-t-slam', 0, -at);
-    say(0, -at, `slam ${metres(r)}`, 'mid');
-    const th = def.throws;
-    if (th) {
-      parts.push(`<circle class="gd-t-band" cx="0" cy="0" r="${f((th.from + th.reach) / 2)}" stroke-width="${f(th.reach - th.from)}"/>`);
-      if (th.what === 'lava' && th.splash && th.pool) {
-        const y = -(th.from + th.reach) / 2;
-        ring(th.pool[0], 'gd-t-pool', -th.reach * 0.35, y);
-        ring(th.splash[0], 'gd-t-slam', -th.reach * 0.35, y);
-        say(-th.reach * 0.35, y + th.splash[0] + 1.2, 'lava lands, a pool burns', 'down');
-      } else if (th.what === 'vine') {
-        line(def.radius * 0.8, 0, th.reach * 0.55, -th.reach * 0.83, 'gd-t-vine');
-        say(th.reach * 0.55, -th.reach * 0.83, 'vine creeps', 'up');
-      }
-      say(-th.reach, 0, `throws ${metres(th.from)}–${metres(th.reach)}`, 'leftward');
-      far = th.reach + 1.5;
-    } else far = at + r + 1.5;
-  }
-  if (def.ai === 'boss') {
-    const r = def.slamRadius ?? 5;
-    for (const [i, v] of BOSS_AI.volleys.entries()) {
-      const mid = (v.bolts - 1) / 2;
-      for (let b = 0; b < v.bolts; b++) {
-        const a = (b - mid) * v.apart + (i ? 0.07 : 0), len = BOSS_AI.volleyReach * (i ? 0.88 : 1);
-        line(0, 0, Math.sin(a) * len, -Math.cos(a) * len, i ? 'gd-t-shot two' : 'gd-t-shot');
-      }
-    }
-    ring(r, 'gd-t-slam');
-    for (let s = 0; s < BOSS_AI.summonCount; s++) {
-      const a = (s / BOSS_AI.summonCount) * Math.PI * 2 + Math.PI / 4;
-      ring(0.45, 'gd-t-summon', Math.cos(a) * BOSS_AI.summonRing, Math.sin(a) * BOSS_AI.summonRing);
-    }
-    say(0, -BOSS_AI.volleyReach, `volleys up to ${metres(BOSS_AI.volleyReach)}`, 'up');
-    say(r + 0.6, 0, `slam ${metres(r)}`, 'side');
-    if (summonName) say(0, r + 2.2, `${BOSS_AI.summonCount} ${summonName}s called round it`, 'down');
-    far = BOSS_AI.volleyReach + 1.5;
-  }
-  // (the foe itself, facing up, and a hero beside it for scale)
-  ring(def.radius, 'gd-t-foe');
-  line(0, -def.radius * 0.2, 0, -def.radius * 0.95, 'gd-t-face');
-  const hx = Math.max(def.radius + hero + 0.4, (def.ai === 'melee' ? def.radius + def.range * 0.75 : 0));
-  if (def.ai === 'boss') ring(hero, 'gd-t-hero', -(def.slamRadius ?? 5) - 2.5, (def.slamRadius ?? 5) * 0.4);
-  else if (def.ai === 'slam') ring(hero, 'gd-t-hero', (def.slamRadius ?? 3) + hero + 0.6, -def.range * 0.6);
-  else ring(hero, 'gd-t-hero', def.ai === 'melee' ? 0 : hx * 0.9, def.ai === 'melee' ? -hx : hx * 0.25);
-  // (a scale bar of a round length, a fifth of the drawing or so)
-  const unit = [1, 2, 5, 10][[1, 2, 5, 10].findIndex((u) => u >= far * 0.3)] ?? 10;
-  const sx = -far + far * 0.08, sy = far - far * 0.08;
-  parts.push(`<path class="gd-t-scale" d="M${f(sx)} ${f(sy - far * 0.025)}V${f(sy)}H${f(sx + unit)}V${f(sy - far * 0.025)}"/>`);
-  say(sx + unit / 2, sy - far * 0.05, `${unit} m`, 'scale');
-  const fs = far * 0.065;
-  const text = labels.map((l) => {
-    const dy = l.cls === 'up' ? -fs * 0.5 : l.cls === 'down' ? fs * 0.4 : l.cls === 'mid' ? fs * 0.35 : 0;
-    const anchor = l.cls === 'side' ? 'start' : l.cls === 'leftward' ? 'start' : 'middle';
-    return `<text x="${f(l.x)}" y="${f(l.y + dy)}" text-anchor="${anchor}" font-size="${f(l.cls === 'scale' ? fs * 0.8 : fs)}">${esc(l.text)}</text>`;
-  }).join('');
-  return `<figure class="gd-fig gd-tele"><svg viewBox="${f(-far)} ${f(-far)} ${f(far * 2)} ${f(far * 2)}" role="img" aria-label="${esc(def.name)}'s attacks seen from above">`
-    + `<circle class="gd-t-ground" r="${f(far)}"/>${parts.join('')}${text}</svg>`
-    + `<figcaption>Seen from above, to scale: <i class="k foe"></i>${esc(def.name)} <i class="k hero"></i>a hero <i class="k slam"></i>where a blow lands</figcaption></figure>`;
 }
 
 /** A boss's calls for help over a fight's first `span` seconds: a tick each time, while few foes stand. */
