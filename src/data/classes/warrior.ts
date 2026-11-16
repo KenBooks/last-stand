@@ -77,12 +77,13 @@ const warrior: ClassDef = {
     },
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
-      desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter.',
+      desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter, a lone one-hander a little quicker.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.42,
       damage: 62, range: 3.3, arc: 2.2, knock: 2.2, gain: 4,
       needs: 'weapon', fallback: { bare: 'knuckles' },
       // (each about as much damage and energy a second: a great weapon's weight in each blow, two blades' pace)
-      styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 } },
+      // (a one-hander with the other hand free, quicker: from play, "make him quicker")
+      styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 }, oneHanded: { castTime: 0.36, damage: 56 } },
       color: 0xffd9a0,
       icon: { glyph: '⚔', color: '#ffd9a0' },
     },
@@ -105,11 +106,20 @@ const warrior: ClassDef = {
       icon: { glyph: '✕', color: '#bfe0ff' },
     },
     {
+      key: 'mouse2', impl: 'collarCut', name: 'Collar and Cut',
+      desc: 'Seize the nearest foe before you by the collar with your free hand, holding it still, and cut it down: one heavy blow on that foe alone. Bosses, elites and foes too big to hold are shoved and cut for less.',
+      tags: ['physical'], cost: 20, cooldown: 3.5, castTime: 0.42,
+      damage: 200, range: 0.6, duration: 1.2, knock: 4,   // (range: past his hand's reach, the foe's body this near)
+      needs: 'free',
+      color: 0xffd9a0,
+      icon: { glyph: '✋', color: '#ffc27a' },
+    },
+    {
       key: 'mouse2', impl: 'raiseShield', name: 'Raise Shield',
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', bare: 'heave' },
+      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', oneHanded: 'collarCut', bare: 'heave' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {

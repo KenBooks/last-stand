@@ -44,6 +44,7 @@ export function usableWith(def: SkillDef, gear: Gear): boolean {
   if (def.needs === 'armed') return !emptyHanded(gear);
   if (def.needs === 'weapon') return !!gear.weapon;
   if (def.needs === 'fist') return !gear.weapon;
+  if (def.needs === 'free') return !!gear.weapon && !gear.twoHanded && !gear.shield && !gear.offWeapon;
   return def.needs === 'shield' ? gear.shield : def.needs === 'twoHanded' ? gear.twoHanded : def.needs === 'dual' ? !!gear.offWeapon : true;
 }
 

@@ -147,8 +147,8 @@ export interface SkillDef {
   block?: number;
   /** only works with a shield, a two-handed weapon, a weapon in each hand, something in a hand (`armed`: a weapon or
    *  a shield), nothing in either (`bare`), a weapon in the main hand (`weapon`) or none there (`fist`: whatever the
-   *  other holds); otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare' | 'weapon' | 'fist';
+   *  other holds), or a one-handed weapon and the other hand empty (`free`); otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare' | 'weapon' | 'fist' | 'free';
   fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string; bare?: string };
   /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
    *  lighter ones): `loot/loadout.ts` `forStyle` */
@@ -418,6 +418,8 @@ export interface ActionState {
   name: string; t: number; hit?: number; time?: number; open?: number;
   /** a channel cast with no weapon held: the hands it's cast from (`Player.hands`) */
   hands?: CastHands;
+  /** a cut with the free hand taking hold of a foe first (Collar and Cut): the other arm reaches out, then yanks in */
+  grab?: boolean;
   /** a spin: how far round the body has turned since it began (rad, to the left) */
   turn?: number;
   /** a bow: how far it is drawn (0..1, of the full draw's time) and, once loosed, the seconds since, and the arrow's

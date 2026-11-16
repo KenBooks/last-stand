@@ -20,6 +20,7 @@ import { addShake } from '../../core/renderer';
 import { blastCorpses } from '../../entities/corpse';
 import { swingOn, swingWay } from '../fling';
 import { fistMark } from './knuckles';
+import { heldUp } from './heave';
 import { FLAIL } from '../../data/balance';
 import { LET_GO } from '../../entities/carry';
 import type { ChannelSkill, Needs } from './types';
@@ -52,7 +53,7 @@ const SWIRL = 1.3;
 
 /** Whether `e` can be taken up and swung: a living foe a man could lift, in no one's hands. */
 function liftable(e: Enemy): boolean {
-  return e.alive && !e.boss && !e.hero && !e.def.dummy && !e.invulnerable && e.radius <= FLAIL.lifts && !e.carried && !e.tossed;
+  return heldUp(e) && !e.invulnerable && !e.carried && !e.tossed;
 }
 
 /** The foe his hands meet first: the nearest that can be lifted within their reach. */

@@ -21,7 +21,7 @@ import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { blastCorpses } from '../../entities/corpse';
 import { fistMark } from './knuckles';
 import { angleBetween } from './slash';
-import { HEAVE } from '../../data/balance';
+import { FLAIL, HEAVE } from '../../data/balance';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -41,7 +41,7 @@ const WATCHED = 3;
  * him, the way he's turned to cast (`HEAVE.before` either side of the aim: the half of the ground the click is in),
  * or with none there the nearest all round.
  */
-function markOf(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
+export function markOf(player: Player, def: Needs<'range'>, target: THREE.Vector3): Enemy | null {
   const p = player.pos;
   const aimed = Math.hypot(target.x - p.x, target.z - p.z) > 1e-3 ? Math.atan2(target.x - p.x, target.z - p.z) : player.facing;
   let before: Enemy | null = null, any: Enemy | null = null, leastBefore = Infinity, leastAny = Infinity;
@@ -54,6 +54,10 @@ function markOf(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
   }
   return before ?? any;
 }
+
+/** Whether a man could take `e` up and hold it: no boss, elite or training dummy, none bigger than `FLAIL.lifts`
+ *  (a Cinder Brute's and a Barkhide Hulk's radius is 1). */
+export const heldUp = (e: Enemy): boolean => e.alive && !e.boss && !e.hero && !e.def.dummy && e.radius <= FLAIL.lifts;
 
 /** The landing: the thrown foe and all round where it came down struck, the ground answering. */
 function land(player: Player, def: Def, thrown: Enemy): void {

@@ -176,3 +176,15 @@ export function fistWhirl(j: Joints, k: number, eyes: boolean): void {
   place(j, true, _far.set(_mid.x + 0.07, _mid.y + y, _mid.z + z), w);
   place(j, false, _far.set(_mid.x - 0.07, _mid.y + y, _mid.z + z), w);
 }
+
+/**
+ * Collar and Cut's free (left) hand at `k` of the cast: out before him at the chest's height as the cut winds up,
+ * taking hold, then yanked in towards him as the blade comes through, let go as the cast ends. Returns how far the hand
+ * is closed (its grip on the collar).
+ */
+export function fistGrab(j: Joints, k: number, eyes: boolean): number {
+  const w = smooth(ramp(k, 0, 0.2)) * (1 - smooth(ramp(k, 0.8, 1))), pull = smooth(ramp(k, 0.4, 0.62));
+  between(j, _mid);
+  place(j, true, _far.set(_mid.x + 0.12, _mid.y + (eyes ? -0.24 : -0.12), _mid.z + lerp(0.62, 0.3, pull)), w);
+  return smooth(ramp(k, 0.15, 0.3)) * w;
+}

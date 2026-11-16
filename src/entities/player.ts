@@ -1232,6 +1232,7 @@ export class Player {
     else if (this.casting) {
       const c = this.casting, impl = c.skill.impl;
       action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      if (!impl.channel) impl.pose?.(this, c.skill.def, action);
       if (impl.anim === 'bow' && !impl.channel) {
         // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
         const nk = c.nockT ?? 0, draw = c.fired ? (c.power ?? 1) : Math.min(1, Math.max(0, c.t - nk) / Math.max(1e-3, c.drawT ?? c.fireAt - nk));

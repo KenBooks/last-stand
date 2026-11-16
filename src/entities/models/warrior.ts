@@ -32,7 +32,7 @@ import {
 } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import { FANGS, HEAVE } from '../../data/balance';
-import { FIST, fistGuard, fistPunch, fistHeave, fistPound, fistWhirl, fistLine } from './warriorFists';
+import { FIST, fistGuard, fistPunch, fistHeave, fistPound, fistWhirl, fistGrab, fistLine } from './warriorFists';
 import {
   TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_FORE_ROW, ONE_BACK_CUT, ONE_BACK_OUT,
   CUT_TURN, TWO_CUT_TURN, DUAL_CUT, DUAL_CUT_TURN,
@@ -1706,6 +1706,8 @@ export function* warriorSteps(): ModelSteps {
     // and punches. Posed as a sword arm, its forearm stood out before him at the waist and its wrist was cocked,
     // gripping nothing: from play, "the hand looks weird with no sword ... wrist up and zombie like walking")
     const freeR = !held;
+    // (and the left hand empty beside a one-hander: hung and swung free, as the right is with no sword)
+    const freeL = !!held && !two && !offHeld && !shield.visible;
     fistLine.L.set(0, 0, 0); fistLine.R.set(0, 0, 0);
     twoHold.k = 0;
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
@@ -1732,11 +1734,11 @@ export function* warriorSteps(): ModelSteps {
     // (both hands empty, the arms hang and swing from the shoulders, nearly straight: pumped as a runner's, bent to a
     // right angle, from play, "the arms are at a 90 degree angle when walking, they should be relaxed, since he is not
     // holding anything")
-    const pump = fp || two ? 0 : freeR ? BARE_PUMP : RUN_PUMP, pumpL = fp ? 0 : bare ? BARE_PUMP : two ? shouldered : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
+    const pump = fp || two ? 0 : freeR ? BARE_PUMP : RUN_PUMP, pumpL = fp ? 0 : bare || freeL ? BARE_PUMP : two ? shouldered : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
     // (a hand round a grip or a shield's is held steady by its wrist; a free one flops)
     // (both hands empty, they're loose fists held in line with the forearms: flopping open on the wrists as he ran,
     // from play, "his writs are not relaxed, they are up ... like a vampire walk")
-    const looseR = 0, looseL = shield.visible || offHeld || bare ? 0 : 1;
+    const looseR = 0, looseL = 0;
     const swung = walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true, pump, pumpL, looseR, looseL });
     const runK = fp ? 0 : runShareOf(move);
     // (the wrists against each forearm's swing, the shoulder's and the elbow's together)
@@ -2398,6 +2400,9 @@ export function* warriorSteps(): ModelSteps {
       j.handR.rotation.x += droop; j.elbowR.rotation.x -= WALK_BEND * going;
       if (bare) { j.handL.rotation.x += droop; j.elbowL.rotation.x -= WALK_BEND * going; }
     }
+    if (freeL && !a && !fp && st.dead < 0) { const going = Math.min(1, move * 2); j.handL.rotation.x += WALK_DROOP * going; j.elbowL.rotation.x -= WALK_BEND * going; }
+    // Collar and Cut: the free hand out to take hold through the wind-up, then yanked in as the blade comes through
+    const grabbing = a?.grab && freeL ? fistGrab(j, a.t, fp) : 0;
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)
@@ -2721,7 +2726,7 @@ export function* warriorSteps(): ModelSteps {
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     else if (fisted > FIST.from) hold(handL, knuckles(gripL, j.handL, fistLine.L), FIST.r);
-    else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
+    else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, Math.max(fisted, grabbing)), lerp(0.08, FIST.spread, Math.max(fisted, grabbing)));
 
     if (dt > 0) for (const f of furs) f.update(dt);
 
