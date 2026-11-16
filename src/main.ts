@@ -37,6 +37,7 @@ import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerO
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
+import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
@@ -270,7 +271,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged });
+  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
   // of a first visit's GPU process)
@@ -943,6 +944,15 @@ function syncView(): void {
 /** Whether Play together or how to play is up (the campfire's, the notice board's, the pause menu's links). */
 const dialogOpen = (): boolean => coopOpen() || helpOpen();
 
+/** The guide (ui/guide/), on `section` if given, opened over the pause menu: the menu opened under it if it wasn't (the
+ *  game held as the pause menu holds it, and the pointer free), and put away with it then. */
+function showGuide(section?: GuideSection): void {
+  hideHelp();
+  if (G.menuOpen) { openGuide(section && { section }); return; }
+  openPause(true);
+  openGuide(section && { section }, () => { if (G.menuOpen) openPause(false); });
+}
+
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
   // the bug report's form takes the keys: Esc closes it, back to what it was opened over
@@ -950,6 +960,10 @@ function handleGlobalKeys() {
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
   // screen too, which opens it
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
+  // (the guide takes the keys while it's up: Esc or G puts it away, over the pause menu it came over)
+  if (guideOpen()) { if (wasPressed('escape') || wasPressed('g')) closeGuide(); return; }
+  // (G opens it anywhere but over the hero selection screen, and a run's end, whose summary has no pause)
+  if (wasPressed('g') && !heroSelectOpen() && !(G.mode === 'run' && G.run && !G.player.inRun)) { showGuide(); return; }
   // Escape reaches Settings before a first hero is chosen too; pause keeps the hall and its selection underneath.
   if (heroSelectOpen()) {
     if (wasPressed('escape')) openPause(!G.menuOpen);

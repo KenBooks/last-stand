@@ -53,6 +53,7 @@ import { recorder } from '../perf/recorder';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 import { showBuildStatus } from './buildStatus';
 import { overlaysPlaced } from './overlayPlace';
+import type { GuideSection } from './guide/index';
 
 import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
@@ -76,6 +77,8 @@ export interface MenuHooks {
   lobbyChanged(): void;
   /** the inventory or the stash opened or put away (`open`: which, or null): the chest's lid follows it */
   panels(open: Panels): void;
+  /** the guide opened (ui/guide/), on a section if given, over the pause menu */
+  guide(section?: GuideSection): void;
 }
 
 /** What the lobby's panels show: the inventory (equipment, attributes and skills), the stash's chest (the inventory
@@ -92,7 +95,7 @@ export function renderControlsHelp(): void {
   if (isTouch()) {
     const rows = [['Left half', 'Drag to move'], ['Big button', 'Attack (hold to keep attacking)'],
       ['Skill buttons', 'Tap: cast at the nearest foe'], ['', 'Drag, then let go: cast where you aim'], ['', 'Hold a channelled skill to keep it going'],
-      ['Pinch', 'Zoom'], ['❚❚', 'Pause'],
+      ['Pinch', 'Zoom'], ['❚❚', 'Pause'], ['Guide', "Every foe, hero and tip: the pause menu's Guide tab"],
       ...(VILLAGE && G.mode === 'menu'
         ? [['Use', 'What the hero is near (a tap on it walks him there)'], ['Bag', 'The inventory'], ['Map', "The village's map"]]
         : [['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']])];
@@ -121,6 +124,9 @@ const CONTROL_ICONS = {
     + 'M10.5 12.5h3v3.2a1.5 1.5 0 0 1-3 0Z'),
   /** Ping: a map's pin */
   ping: drawn('M12 2.5a7 7 0 0 0-7 7c0 5 7 12 7 12s7-7 7-12a7 7 0 0 0-7-7ZM12 6.8a2.7 2.7 0 1 0 0 5.4a2.7 2.7 0 1 0 0-5.4Z'),
+  /** Guide: an open book */
+  guide: drawn('M12 6.2C10 4.6 7.3 4 3.5 4.3V18.5c3.6-.3 6.3.3 8.5 1.9 2.2-1.6 4.9-2.2 8.5-1.9V4.3C16.7 4 14 4.6 12 6.2Z'
+    + 'M11.2 7.6c-1.8-1.1-3.8-1.6-6.2-1.5v10.6c2.4 0 4.4.5 6.2 1.4ZM12.8 7.6v10.5c1.8-.9 3.8-1.4 6.2-1.4V6.1c-2.4-.1-4.4.4-6.2 1.5Z'),
   /** Use: an open hand (drawn as the others are: the emoji came in the system's own colours, a yellow hand among them) */
   use: drawn('M7 13.6V5.2a1.2 1.2 0 0 1 2.4 0V11h.7V3.7a1.2 1.2 0 0 1 2.4 0V11h.7V4.7a1.2 1.2 0 0 1 2.4 0V11h.7V7.1a1.1 1.1 0 0 1 2.2 0V15.5'
     + 'a6 6 0 0 1-6 6h-1.2c-2 0-3.4-1-4.6-2.8L3.3 13.7a1.35 1.35 0 0 1 2.2-1.55Z'),
@@ -143,6 +149,7 @@ function keyboardDiagram(): string {
     shift: { icon: CONTROL_ICONS.ping, cap: 'Ping', tip: 'Ping the party (co-op), the left one: held, the mark follows the cursor onto a foe or the ground; let go, it pings there', hold: true },
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
+    g: { icon: CONTROL_ICONS.guide, cap: 'Guide', tip: 'The guide: every foe, boss and hero, and tips' },
   };
   // (in the village E uses what the hero is near, I and M open the inventory and the map; a run's keys shown still,
   // as the game's: left out there, B and C were missed beside the rules' Bank and Continue)
@@ -357,6 +364,13 @@ export function initMenus(h: MenuHooks): void {
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
+  // (the guide's doors: How to play's, the panels' lobby's link, the pause menu's Guide tab)
+  $('#btn-help-guide').onclick = () => { sfx.click(); hideHelp(); hooks.guide(); };
+  const guideLink = document.getElementById('btn-guide-link');
+  if (guideLink) guideLink.onclick = () => { sfx.click(); hooks.guide(); };
+  document.querySelectorAll<HTMLElement>('[data-guide-open]').forEach((b) => {
+    b.onclick = () => { sfx.click(); hooks.guide(b.dataset.guideOpen as GuideSection); };
+  });
   $('#btn-help-restart').onclick = () => {
     restartTraining();
     hideHelp();
@@ -1293,11 +1307,11 @@ function renderRendererOptions(): void {
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
 }
 
-/** the pause menu's pages: the controls, the settings, performance (the quality, the reports, the profiler) and the
- *  betas to try (ui/beta.ts) */
-export type PauseTab = 'controls' | 'settings' | 'performance' | 'beta';
+/** the pause menu's pages: the controls, the settings, performance (the quality, the reports, the profiler), the
+ *  betas to try (ui/beta.ts) and the guide's doors (ui/guide/) */
+export type PauseTab = 'controls' | 'settings' | 'performance' | 'beta' | 'guide';
 /** every pause tab, in the menu's order */
-const PAUSE_TABS: PauseTab[] = ['controls', 'settings', 'performance', 'beta'];
+const PAUSE_TABS: PauseTab[] = ['controls', 'settings', 'performance', 'beta', 'guide'];
 /** the tab the pause menu opens on: the one chosen last (from play: "default to tab in pause screen that was open
  *  before... not always controls... persists between reloads"), Controls until one is */
 export const PAUSE_TAB_COOKIE = 'last-stand-pause-tab';

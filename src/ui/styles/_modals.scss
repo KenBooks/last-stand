@@ -121,7 +121,7 @@ body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1));
 .pb-title svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .pb-title .logo-glow { opacity: .75; }
 .pb-rule { @include diamond-rule; width: min(420px, 80%); margin: -4px auto 2px; }
-.pb-tabs { width: min(420px, 100%); margin: 0 auto 4px; }
+.pb-tabs { width: min(520px, 100%); margin: 0 auto 4px; }
 /* both pages share one cell, so the box keeps the taller page's height on either tab */
 .pb-pages { display: grid; text-align: left; min-height: 0; }
 .pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; }

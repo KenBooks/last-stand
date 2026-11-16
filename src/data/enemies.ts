@@ -88,6 +88,16 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   },
 };
 
+/** How a boss fights (entities/enemyAI.ts `boss`): its first call for help `summonFirst` s in and then every
+ *  `summonEvery` s, `summonCount` of its `summon` each time, while fewer than `crowd` foes stand; it slams when within its
+ *  reach and `slamReach` m more; within `volleyReach` m, with a clear line, two volleys (`volleys`: the bolts in each,
+ *  `apart` rad between them, the second aimed ahead of the hero), `volleyCooldown` times its cooldown before the next. */
+export const BOSS_AI = {
+  summonFirst: 6, summonEvery: 14, summonCount: 4, summonRing: 3.5, crowd: 14,
+  slamReach: 1.5, volleyReach: 18, volleyCooldown: 1.3,
+  volleys: [{ bolts: 7, apart: 0.14 }, { bolts: 5, apart: 0.2 }],
+};
+
 // Elite ("hero") modifiers applied on top of a base archetype.
 export const HERO = {
   lifeMult: 3.2,
