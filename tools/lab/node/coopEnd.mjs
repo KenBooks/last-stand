@@ -378,13 +378,28 @@ async function coverLine(page, call, tag) {
   return `${tag}'s lobby: over its canvas ${parts.length ? parts.join(', ') : 'nothing'}`;
 }
 
+/** The guest's screen in the lobby `when` ('before', 'after') its middle drag (`--pictures`), drawn as the game draws
+ *  it. */
+async function pictureLobby(pair, call, lines, when) {
+  const guest = pair.pages[1];
+  mkdirSync(BAR_PICTURES, { recursive: true });
+  const picture = join(BAR_PICTURES, `lobby-turn-guest-${when}.png`);
+  await call(guest, 'coopDrawing', { on: true });
+  await pair.run(1);
+  await guest.screenshot({ path: picture });
+  await call(guest, 'coopDrawing', { on: false });
+  lines.push(`the lobby ${when} the guest's middle drag: its screen pictured in ${picture}`);
+}
+
 /**
  * The lobby's camera turned by a middle drag on every game, as a player turns it in a co-op lobby's top-down view
  * (from play, four in a lobby: a player couldn't turn it). Returns the problems.
  */
-export async function lobbyTurns(pair, call, lines, { tags, when, onName = false, pages = pair.pages }) {
+export async function lobbyTurns(pair, call, lines, { tags, when, onName = false, pages = pair.pages, pictures = false }) {
   const turns = [];
   for (const page of pages) {
+    const pictured = pictures && page === pair.pages[1];
+    if (pictured) await pictureLobby(pair, call, lines, 'before');
     const before = await call(page, 'coopWatching');
     if (!await call(page, 'coopDrag', { px: DRAG_PX, onName })) {
       return [`${tags[pair.pages.indexOf(page)]}'s lobby showed no name on its floor to drag from`];
@@ -394,6 +409,7 @@ export async function lobbyTurns(pair, call, lines, { tags, when, onName = false
     await pair.run(SETTLE_FRAMES);
     const after = await call(page, 'coopWatching');
     turns.push(turned(before.yaw, after.yaw));
+    if (pictured) await pictureLobby(pair, call, lines, 'after');
   }
   const said = turns.map((by, index) => `${tags[index]} ${by.toFixed(2)} rad`);
   lines.push(`a middle drag in the lobby (${when}): ${said.join(', ')}`);

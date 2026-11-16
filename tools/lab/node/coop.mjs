@@ -452,7 +452,7 @@ const SETTLE_LOBBY_FRAMES = 30;
 async function backToLobby(pair, lines, canary, pictures) {
   const tags = PARTY_TAGS.slice(0, pair.pages.length);
   const problems = await firstRunsEnd(pair, callPage, lines, { canary, tags });
-  problems.push(...await lobbyTurns(pair, callPage, lines, { tags, when: 'its panels shown' }));
+  problems.push(...await lobbyTurns(pair, callPage, lines, { tags, when: 'its panels shown', pictures }));
   for (const page of pair.pages) await callPage(page, 'coopPractiseAgain');
   problems.push(...await lobbyTurns(pair, callPage, lines, { tags, when: 'practising' }));
   await pair.run(SETTLE_LOBBY_FRAMES);
