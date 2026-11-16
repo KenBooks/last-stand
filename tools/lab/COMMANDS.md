@@ -775,14 +775,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with `--gear shield`: never stunned; the part says so where the hero has none); the hero is turned to it and kept
   where he stands, the set-up keeping him whole. `chains`: each chain struck from its own side (5 m off, a share of
   its life and a little more): each must break, all four drop the bell for its window (`down` s within 0.1, `taken`
-  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `compiles`: its tolls, a shard, the
+  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
   Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
   its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
   gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
   plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
-  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, a program compiled, an attack that deals
+  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled, an attack that deals
   nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to

@@ -88,6 +88,18 @@ function faceGeometry(): THREE.BufferGeometry {
   return face;
 }
 
+/** What the game asks of a Bell-Warden's ghosts (entities/bellWarden.ts: a ghost seizes a hero who comes too near),
+ *  kept on its model's root as `userData.ghosts`. */
+export interface GhostsSeen {
+  /** how many ghosts there can be */
+  readonly most: number;
+  /** ghost `i`'s place in the world into `out`, or null where it isn't free to seize anyone (not shown, rushing into
+   *  the bell or bursting out of it, scattered) */
+  freeAt(i: number, out: THREE.Vector3): THREE.Vector3 | null;
+  /** ghost `i` held at a place in the world (carrying a hero over his head), or let go (null) */
+  hold(i: number, at: THREE.Vector3 | null): void;
+}
+
 /** A ghost: its body (shroud, halo, face, heart), its way so far (the model's space, newest first), how much of it
  *  shows, and the turn of its ripple. */
 interface Ghost {
@@ -96,6 +108,8 @@ interface Ghost {
   heart: THREE.Mesh;
   way: THREE.Vector3[];
   shown: number;
+  /** where something holds it (the world), or null */
+  held: THREE.Vector3 | null;
 }
 
 /** The ghosts of one Bell-Warden, hung on `root`: posed each frame by `update`, let go by `dispose`. */
@@ -128,11 +142,13 @@ export function bellGhosts(root: THREE.Object3D) {
     heart.position.set(0, -0.28, 0.04);
     body.add(halo, heart, new THREE.Mesh(face, faceMat));
     root.add(body);
-    ghosts.push({ body, halo, heart, way: [], shown: i < 2 ? 1 : 0 });
+    ghosts.push({ body, halo, heart, way: [], shown: i < 2 ? 1 : 0, held: null });
   }
 
   const _at = new THREE.Vector3(), _dir = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
   const _q = new THREE.Quaternion();
+  /** the last frame's cue: whether a ghost is free to seize (no toll's rush or burst, not scattered) */
+  let free = true;
 
   /** Where ghost `i` drifts at time `t` with no toll or scatter: round the ring, swooping between its heights. */
   function drifting(i: number, t: number, out: THREE.Vector3): THREE.Vector3 {
@@ -161,6 +177,7 @@ export function bellGhosts(root: THREE.Object3D) {
     haloMat.opacity = HALO_SEE * flare * fade;
     heartMat.opacity = HEART_SEE * flare * fade;
     faceMat.opacity = 0.95 * fade;
+    free = cue.rush === 0 && cue.burst === 0 && cue.scatter < 0.05;
     ghosts.forEach((g, i) => {
       g.shown += ((i < cue.count ? 1 : 0) - g.shown) * Math.min(1, dt * 1.5);
       drifting(i, t, _at);
@@ -168,6 +185,8 @@ export function bellGhosts(root: THREE.Object3D) {
       _at.multiplyScalar(1 + cue.scatter * 1.6).add(_dir.set(0, cue.scatter * 2.5, 0));
       _at.lerp(cue.bell, cue.rush * cue.rush);
       if (cue.burst > 0) _at.addScaledVector(_dir.copy(_at).sub(cue.bell).setY(0).normalize(), cue.burst * (1 - cue.burst) * 3);
+      // (held: where its hold has it, carrying a hero, in the model's space)
+      if (g.held) root.worldToLocal(_at.copy(g.held));
       const last = g.way[0];
       g.way.unshift((g.way.length >= KEPT ? g.way.pop()! : new THREE.Vector3()).copy(_at));
       // (upright, turned to the way it goes and leaning into it, nosing down as it swoops down, rocking a little)
@@ -189,8 +208,21 @@ export function bellGhosts(root: THREE.Object3D) {
     motes.instanceColor!.needsUpdate = true;
   }
 
-  /** Their ways forgotten (a model reset: they'd draw a tail across the arena). */
-  function reset(): void { for (const g of ghosts) g.way.length = 0; }
+  /** Their ways forgotten (a model reset: they'd draw a tail across the arena), and every hold let go. */
+  function reset(): void { for (const g of ghosts) { g.way.length = 0; g.held = null; } }
+
+  const seen: GhostsSeen = {
+    most: MOST,
+    freeAt(i, out) {
+      const g = ghosts[i];
+      if (!free || !g || g.held || g.shown < 0.9 || !g.body.visible) return null;
+      return g.body.getWorldPosition(out);
+    },
+    hold(i, at) {
+      const g = ghosts[i];
+      if (g) g.held = at ? (g.held ?? new THREE.Vector3()).copy(at) : null;
+    },
+  };
 
   function dispose(): void {
     for (const geo of [shroud, face, heartGeo, moteGeo]) geo.dispose();
@@ -198,5 +230,5 @@ export function bellGhosts(root: THREE.Object3D) {
     motes.dispose();
   }
 
-  return { update, reset, dispose };
+  return { update, reset, dispose, seen };
 }

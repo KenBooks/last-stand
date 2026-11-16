@@ -18,6 +18,9 @@ export interface BossHooks {
   allBroken?(e: Enemy): void;
   /** a hero's hit of `amount` taken (and not its last), where the fight is simulated */
   hurt?(e: Enemy, amount: number): void;
+  /** each frame it lives, on every game: what its look does to this game's own hero, judged as its screen shows it
+   *  (the Bell-Warden's ghosts seizing a hero who comes too near) */
+  frame?(e: Enemy, dt: number): void;
 }
 
 const HOOKS: Partial<Record<EnemyId, BossHooks>> = {};

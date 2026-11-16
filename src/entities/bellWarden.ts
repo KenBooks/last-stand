@@ -11,6 +11,8 @@
 //   `down` s, taking double damage, then the bearers rise and the chains are whole again.
 // - **Phase 2**: a double toll (a fast ring, then a slow one), and bronze shards break off as it's hit, lying on the
 //   floor a while, hurting whoever stands on them (enemyAI's `shard` fx).
+// - **Its ghosts** (models/bellGhosts.ts) seize a hero who comes too near one as it swoops low: carried up and out
+//   from the bell and dropped for damage (`BELL_WARDEN.grab`), each game its own hero as its screen shows them.
 // - **Phase 3**: the bearers kneel; it stands where it is and tolls every `lastEvery` s.
 import * as THREE from 'three';
 import { G } from '../state';
@@ -23,7 +25,8 @@ import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
-import { inObstacle } from '../world/collision';
+import { inObstacle, resolveWorld } from '../world/collision';
+import type { GhostsSeen } from './models/bellGhosts';
 import { rand, randInt } from '../util';
 import { schedule } from '../core/timers';
 
@@ -196,6 +199,93 @@ export function bellDropped(x: number, z: number): void {
   smokePuff({ x, y: 0, z }, { count: 14, color: 0x2a2620, size: 1.4, sizeEnd: 3.6, speed: 3 });
 }
 
+// --- its ghosts seizing a hero (every game its own hero, as its screen shows the ghosts) -----------------------
+
+/** A hero being carried off by a ghost: which, where from and to, how long it's been, and the bell he was seized by. */
+interface Seized { ghost: number; from: THREE.Vector3; to: THREE.Vector3; t: number; foe: Enemy }
+/** this game's hero's seizing, if he's being carried; each Bell-Warden's ghosts' rests (s); his grace after a drop */
+let seized: Seized | null = null;
+const rests = new WeakMap<Enemy, number[]>();
+let graceUntil = -Infinity;
+const _ghost = new THREE.Vector3(), _held = new THREE.Vector3();
+
+/**
+ * Each frame on every game: a ghost of the bell seizes this game's hero if he's come within its reach as it swoops low,
+ * carries him up and out from the bell and drops him, hurting him as he lands (`BELL_WARDEN.grab`). Judged as this
+ * game shows the ghosts, as each game judges its own hero's hits: no message carries it. A partner's copy isn't shown
+ * carried (its game's reports place it on the ground).
+ */
+function haunt(e: Enemy, dt: number): void {
+  const ghosts = e.model.root.userData.ghosts as GhostsSeen | undefined;
+  if (!ghosts) return;
+  const rest = rests.get(e) ?? Array.from({ length: ghosts.most }, () => 0);
+  rests.set(e, rest);
+  for (let i = 0; i < rest.length; i++) rest[i] = Math.max(0, rest[i] - dt);
+  // (a bell cleared away without dying, a run left, lets go of the hero it carried)
+  if (seized && !G.enemies.includes(seized.foe)) { G.player.lift = 0; seized = null; }
+  if (seized?.foe === e) { carry(seized, ghosts, dt); return; }
+  const p = G.player, g = B.grab;
+  if (seized || !p.active || p.held || p.stunned || p.dash || G.time < graceUntil || e.training) return;
+  for (let i = 0; i < ghosts.most; i++) {
+    if (rest[i] > 0 || !ghosts.freeAt(i, _ghost)) continue;
+    const over = _ghost.y - p.obj.position.y;
+    if (over > g.under || Math.hypot(_ghost.x - p.pos.x, _ghost.z - p.pos.z) > g.reach) continue;
+    if (!p.hold(g.carry + g.fall)) return;
+    rest[i] = g.every;
+    seized = { ghost: i, from: p.pos.clone(), to: dropSpot(e, p.pos), t: 0, foe: e };
+    e.onDeath.push(() => letGoOf(e));
+    sfx.ghostGrab();
+    return;
+  }
+}
+
+/** Where a hero seized at `at` is dropped: `away` m on out from the bell, inside the arena and clear of the props. */
+function dropSpot(e: Enemy, at: THREE.Vector3): THREE.Vector3 {
+  const out = new THREE.Vector3(at.x - e.pos.x, 0, at.z - e.pos.z);
+  if (out.lengthSq() < 1e-6) out.set(0, 0, 1);
+  out.normalize().multiplyScalar(B.grab.away).add(at);
+  const r = Math.hypot(out.x, out.z), most = ARENA.radius - 1.5;
+  if (r > most) out.multiplyScalar(most / r);
+  out.y = 0;
+  resolveWorld(out, G.player.radius);
+  return out;
+}
+
+/** A seized hero carried on by `dt`: up and out under his ghost, then let fall, hurt as he lands. */
+function carry(s: Seized, ghosts: GhostsSeen, dt: number): void {
+  const p = G.player, g = B.grab;
+  s.t += dt;
+  if (!p.active) { letGoOf(s.foe); return; }
+  const k = Math.min(1, s.t / g.carry), ease = k * k * (3 - 2 * k);
+  p.pos.lerpVectors(s.from, s.to, ease);
+  p.vel.set(0, 0, 0);
+  if (s.t < g.carry) {
+    p.lift = g.rise * Math.sin(k * Math.PI / 2);
+    // (the ghost over him, holding him by the shoulders)
+    ghosts.hold(s.ghost, _held.set(p.pos.x, p.obj.position.y + p.lift + 1.75, p.pos.z));
+    return;
+  }
+  ghosts.hold(s.ghost, null);
+  const f = Math.min(1, (s.t - g.carry) / g.fall);
+  p.lift = g.rise * (1 - f * f);
+  if (f < 1) return;
+  // (landed: hurt, a thud, dust; not seized again for a while)
+  hurtPlayer(p, s.foe.damage * g.hurt, 'physical', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe: s.foe, attack: 'grab' });
+  smokePuff({ x: p.pos.x, y: 0, z: p.pos.z }, { count: 8, color: 0x2a2620, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.8, speed: 1.6 });
+  addShake(0.25);
+  sfx.bodyFall(1);
+  letGoOf(s.foe);
+  graceUntil = G.time + g.grace;
+}
+
+/** The seized hero let go (landed, the bell dead, he fell): on the ground again, his ghost free. */
+function letGoOf(e: Enemy): void {
+  if (seized?.foe !== e) return;
+  (e.model.root.userData.ghosts as GhostsSeen | undefined)?.hold(seized.ghost, null);
+  G.player.lift = 0;
+  seized = null;
+}
+
 // --- its phases and parts (entities/bossKit.ts) ------------------------------------------------------
 
 bossHooks('bellwarden', {
@@ -223,5 +313,8 @@ bossHooks('bellwarden', {
   },
   hurt(e) {
     shardOff(e);
+  },
+  frame(e, dt) {
+    haunt(e, dt);
   },
 });

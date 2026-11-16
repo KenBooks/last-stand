@@ -126,7 +126,10 @@ export const BOSS_AI = {
  * the last phase stands still and tolls every `lastEvery` s. Its chains all broken, the bell is down for `down` s
  * (its weak-spot window), then its bearers rise and the chains are whole again. From the second phase a hero's hit
  * may break a shard off (`shards`: at most one each `every` s, `chance` a hit), thrown `throw` m [least, most] to lie
- * `lies` s, hurting `hurt` of its damage every `tick` s whoever stands within `radius` m.
+ * `lies` s, hurting `hurt` of its damage every `tick` s whoever stands within `radius` m. A ghost circling it seizes a
+ * hero who comes within `grab.reach` m of it as it swoops under `grab.under` m: carried up `rise` m and `away` m out
+ * from the bell over `carry` s, dropped from there (`fall` s) for `hurt` of its damage; that ghost seizes no one for
+ * `every` s, and the hero isn't seized again for `grace` s.
  */
 export const BELL_WARDEN = {
   toll: { speed: 9, reach: 24, stunsTo: 15, stun: 2, hurt: 0.45, band: 0.6, fast: 15, slow: 6.5, slowAfter: 0.25 },
@@ -134,6 +137,7 @@ export const BELL_WARDEN = {
   lastEvery: 3,
   down: 6,
   shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
+  grab: { reach: 1.3, under: 2.7, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 8, grace: 6 },
 };
 
 // Elite ("hero") modifiers applied on top of a base archetype.

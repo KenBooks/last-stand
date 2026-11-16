@@ -145,6 +145,8 @@ export function buildBellWarden(): Model {
   S.build();
   // the ghosts haunting it (models/bellGhosts.ts): its own meshes, not its crowd's
   const ghosts = bellGhosts(root);
+  // (where the game finds them: a ghost seizes a hero who comes too near, entities/bellWarden.ts)
+  root.userData.ghosts = ghosts.seen;
   const cue: GhostCue = { rush: 0, burst: 0, scatter: 0, count: 2, bell: new THREE.Vector3() };
 
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, -1, 0), _q = new THREE.Quaternion();

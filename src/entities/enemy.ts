@@ -51,7 +51,7 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 import { joinCrowd, leaveCrowd } from './models/crowd';
-import { bossLook, checkPhase, partHit, telegraphShare, weakLooks } from './bossKit';
+import { bossFrame, bossLook, checkPhase, partHit, telegraphShare, weakLooks } from './bossKit';
 
 /** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
 const OWN_EVADE_ECHO = 1.5;
@@ -610,6 +610,7 @@ export class Enemy {
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
     weakLooks(this);
+    if (this.def.bossKit && dt > 0) bossFrame(this, dt);
     return true;
   }
 

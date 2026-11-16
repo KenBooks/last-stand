@@ -143,6 +143,11 @@ export function restoreParts(e: Enemy): void {
   for (let i = 0; i < partsOf(e); i++) if (e.broken & (1 << i)) fx('bossPart', e.id, i, 0);
 }
 
+/** Each frame a boss lives, on every game: its own `frame` (`BossHooks.frame`). */
+export function bossFrame(e: Enemy, dt: number): void {
+  hooksOf(e.type)?.frame?.(e, dt);
+}
+
 /** What a boss's model is told of its fight this frame (`AnimState.boss`). */
 export function bossLook(e: Enemy): BossLook | undefined {
   return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak, broken: e.broken } : undefined;

@@ -10,6 +10,8 @@
 // - `chains`: each chain struck from its own side until it breaks: broken one by one, all four dropping the bell for
 //   its weak-spot window (double damage taken, nothing tolled), then the chains whole again and the bell up.
 // - `stand`: the hero walked into the Bell-Warden: it gives way a hair, and he's held off its body.
+// - `grab`: a hero at the ghosts' ring seized, lifted, carried out and hurt as he lands, not again within his grace;
+//   one well out of it never seized.
 // - `compiles`: every effect the Bell-Warden's fight draws (a toll, a double toll, a shard, the bell dropped), drawn:
 //   no program compiled meanwhile.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
@@ -18,7 +20,7 @@
 // - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye.
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
-// one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, a program compiled in the fight, and an attack
+// one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled in the fight, and an attack
 // that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
@@ -39,8 +41,8 @@ import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'compiles' | 'ttk' | 'pictures';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'compiles', 'ttk'];
+export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'compiles' | 'ttk' | 'pictures';
+export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'compiles', 'ttk'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -358,6 +360,80 @@ async function stand(lab: Lab, options: BossOptions, lines: string[], problems: 
   if (gave > GIVES_MOST) problems.push(`stand: walked into, it gave way ${fixed(gave)} m (at most ${GIVES_MOST})`);
 }
 
+// --- its ghosts seizing a hero -----------------------------------------------------------------------------
+
+/** the most frames waited for a ghost to seize the hero at its ring, and how long one far off is watched (s) */
+const SEIZE_FRAMES = 30 * 60;
+const FAR_WATCH = 10;
+/** where the hero stands for each case, from the bell's middle (m): at its ghosts' ring, and well out of it */
+const AT_RING = 3.7;
+const FAR_OFF = 9;
+
+/** What became of the hero by a held bell's ghosts: the frame he was seized, how high he was lifted, how far he was
+ *  carried, what he took as he landed, and whether he was seized again within his grace. */
+interface SeizeCase { seizedAt: number; highest: number; carried: number; hurt: number; again: boolean }
+
+/** The hero stood `away` m from a held Bell-Warden for up to `frames`, its ghosts circling: what they did to him. */
+async function seizeCase(lab: Lab, options: BossOptions, away: number, frames: number): Promise<SeizeCase> {
+  await standIn(lab, options.fixture, 'crypt');
+  const boss = await bossAt(lab, 'bellwarden', 12, false);
+  const hero = G.player;
+  // (put where the case wants him from its middle, on his own side of it)
+  const out = hero.pos.clone().sub(boss.pos).setY(0).normalize();
+  hero.pos.copy(boss.pos).addScaledVector(out, away).setY(0);
+  const result: SeizeCase = { seizedAt: -1, highest: 0, carried: 0, hurt: 0, again: false };
+  const takeDamage = hero.takeDamage.bind(hero);
+  hero.takeDamage = (amount, type, from) => {
+    if (result.seizedAt >= 0) result.hurt += amount;
+    return takeDamage(amount, type, from);
+  };
+  let from: THREE.Vector3 | null = null;
+  let landedAt = -1;
+  try {
+    await lab.step(frames, () => ({}), (frame) => {
+      if (hero.held && result.seizedAt < 0) {
+        result.seizedAt = frame;
+        from = hero.pos.clone();
+      } else if (hero.held && landedAt >= 0 && frame - landedAt < BELL_WARDEN.grab.grace * FPS) result.again = true;
+      result.highest = Math.max(result.highest, hero.lift);
+      if (from && !hero.held && landedAt < 0 && result.seizedAt >= 0) {
+        landedAt = frame;
+        result.carried = Math.hypot(hero.pos.x - from.x, hero.pos.z - from.z);
+      }
+    });
+  } finally {
+    hero.takeDamage = takeDamage;
+  }
+  return result;
+}
+
+/** A hero at the ghosts' ring seized, lifted, carried out and hurt as he lands, not again within his grace; one well
+ *  out of it never seized. */
+async function grab(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+  const g = BELL_WARDEN.grab;
+  const reach = g.reach;
+  if (options.canary) g.reach = 0;
+  try {
+    const near = await seizeCase(lab, options, AT_RING, SEIZE_FRAMES);
+    if (near.seizedAt < 0) {
+      lines.push(`grab: at its ghosts' ring (${AT_RING} m) for ${fixed(SEIZE_FRAMES / FPS, 0)} s: never seized`);
+      problems.push(`grab: a hero ${AT_RING} m from its middle was never seized in ${fixed(SEIZE_FRAMES / FPS, 0)} s`);
+    } else {
+      lines.push(`grab: at its ghosts' ring (${AT_RING} m): seized after ${fixed(secondsOf(near.seizedAt), 1)} s, lifted `
+        + `${fixed(near.highest)} m, carried ${fixed(near.carried)} m, hurt ${fixed(near.hurt, 0)} as he landed`);
+      if (near.highest < g.rise * 0.8) problems.push(`grab: lifted ${fixed(near.highest)} m, not ${g.rise}`);
+      if (Math.abs(near.carried - g.away) > 0.6) problems.push(`grab: carried ${fixed(near.carried)} m, not ${g.away}`);
+      if (!(near.hurt > 0)) problems.push('grab: dropped, he took no harm');
+      if (near.again) problems.push(`grab: seized again within his grace of ${g.grace} s`);
+    }
+  } finally {
+    g.reach = reach;
+  }
+  const far = await seizeCase(lab, options, FAR_OFF, FAR_WATCH * FPS);
+  lines.push(`grab: well out of its ghosts' ring (${FAR_OFF} m) for ${FAR_WATCH} s: ${far.seizedAt < 0 ? 'never seized' : 'seized'}`);
+  if (far.seizedAt >= 0) problems.push(`grab: a hero ${FAR_OFF} m from its middle was seized`);
+}
+
 // --- the programs ------------------------------------------------------------------------------------------
 
 /** Every effect of the Bell-Warden's fight drawn (each toll, a shard, the bell dropped): no program compiled. */
@@ -503,6 +579,18 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
     boss.takeDamage(sides.life * boss.maxLife * 1.05, { from });
   };
 
+  // 0. a ghost seizing the hero who stands at its ring, carrying him up and out
+  const out = hero.pos.clone().sub(boss.pos).setY(0).normalize();
+  const stoodAt = hero.pos.clone();
+  hero.pos.copy(boss.pos).addScaledVector(out, AT_RING).setY(0);
+  const lifted = (): boolean => hero.held && hero.lift > BELL_WARDEN.grab.rise * 0.75;
+  await lab.until(lifted, SEIZE_FRAMES, 'no ghost seized the hero for the pictures');
+  const carriedAt = hero.pos.clone().setY(2.2);
+  moments.push(lab.picture('0 seized (close)', ['back', 'left'], ['a ghost carrying the hero up and out, to drop him'], { at: carriedAt, distance: 6 }));
+  await seen('0 seized', 'a ghost carrying the hero off, as the player sees it');
+  await lab.until(() => !hero.held, 120, 'the hero was never dropped');
+  await lab.step(30);
+  hero.pos.copy(stoodAt);
   // 1. it comes on, shuffling under its bell, its toll held off
   boss.dazed = 0;
   boss.cd = 99;
@@ -574,7 +662,7 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures'>, typeof ladder> = { ladder, phases, toll, chains, stand, compiles, ttk };
+  const run: Record<Exclude<BossPart, 'pictures'>, typeof ladder> = { ladder, phases, toll, chains, stand, grab, compiles, ttk };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {

@@ -1816,6 +1816,17 @@ function bellDrop(): void {
   v.start(); v.stopAt(v.t + 2.5);
 }
 
+/** A ghost seizing a hero: a rush of cold air rising and falling through a slow flanger, a breathy wail with no pitch
+ *  (a band of noise swept, not a note), and a hiss as it lifts. */
+function ghostGrab(): void {
+  const v = voice(0.02, 0.5);
+  const wail = glide(v, 'bandpass', 6, [[0, 500], [0.35, 1400], [0.9, 700]]);
+  v.loop(wail); wail.connect(v.flange(swellAt(v, 0, 0.3, 0.2, 0.7), 4, 3, 0.7, 0.55));
+  const rush = glide(v, 'bandpass', 1, [[0, 300], [0.25, 2200], [0.8, 600]]);
+  v.loop(rush); rush.connect(swellAt(v, 0, 0.2, 0.12, 0.6));
+  v.start(); v.stopAt(v.t + 1.6);
+}
+
 /** A shard of bronze breaking off the bell: a crack and a small high ring. */
 function shardBreak(): void {
   const v = voice(0, 0.2);
@@ -1902,6 +1913,8 @@ export const sfx = {
   chainSnap: guard(() => { if (throttle('chainSnap', 80)) return; chainSnap(); }),
   bellDrop: guard(() => { if (throttle('bellDrop', 500)) return; bellDrop(); }),
   shardBreak: guard(() => { if (throttle('shardBreak', 90)) return; shardBreak(); }),
+  /** a Bell-Warden's ghost seizing the hero */
+  ghostGrab: guard(() => { if (throttle('ghostGrab', 300)) return; ghostGrab(); }),
   slam: guard(() => { noise({ dur: 0.8, freq: 120, type: 'lowpass', gain: 0.7 }); tone({ freq: 60, to: 28, dur: 0.6, gain: 0.5 }); }),
   /** a prop breaking: rock and timber giving way */
   crumble: guard(() => { noise({ dur: 0.55, freq: 700, sweep: 140, type: 'lowpass', q: 1.2, gain: 0.5 }); noise({ dur: 0.2, freq: 2400, q: 2, gain: 0.12 }); tone({ freq: 90, to: 40, dur: 0.4, gain: 0.3 }); }),
