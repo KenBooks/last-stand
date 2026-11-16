@@ -517,7 +517,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   ferns.receiveShadow = true;
   ferns.name = 'ferns';
   scene.add(...cullInCells(ferns, FLOOR_CELLS));
-  asClutter(ferns);
+  asClutter(ferns, true);
 
   // roots snaking out of the thicket across the floor, half sunk in it
   // (each a tube's samples as well, the floor's relief: feet step onto them, `world/ground.ts`)
@@ -558,6 +558,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   litter.count = li;
   litter.receiveShadow = true;
   scene.add(litter);
+  asClutter(litter, true);
 
   // sunbeams slanting down through gaps in the canopy onto the edges of the clearing
   const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new THREE.Color(0.075, 0.065, 0.035));

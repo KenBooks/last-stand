@@ -526,6 +526,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   weeds.receiveShadow = true;
   weeds.name = 'weeds';
   scene.add(...asGrass(weeds));
+  asClutter(weeds, true);
 
   // --- Small dead trees on the floor: wood an arrow goes into -------------------------
   // (after the weeds, which are placed round the obstacles; from streams of their own)
