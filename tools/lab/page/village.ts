@@ -67,6 +67,7 @@ import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { housesBesideFence, housesPastFence } from './villageFence';
 import { heroBehindProps, wallsStayWhole } from './villageHeroInView';
+import { eavesClosed } from './villageEaves';
 import {
   doorLineSteady, hallFacesSteady, hallWallsSteady, hallFloorSteady, hallSillsSteady,
 } from './villageHallSteady';
@@ -248,6 +249,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     housesPastFence: () => housesPastFence(lab, options.canary),
     heroBehindProps: () => heroBehindProps(lab, options.canary),
     wallsStayWhole: () => wallsStayWhole(lab, options.canary),
+    eavesClosed: () => eavesClosed(lab, options.canary),
     training: () => training(lab, options.canary),
     portalAtNight: () => portalAtNight(lab, options.canary),
     heroPickedNear: () => heroPickedNear(lab, options.canary),

@@ -2219,9 +2219,14 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   g.position.set(c.x, 0, c.z);
   g.rotation.y = c.facing;
   g.scale.setScalar(c.size);
-  const { w, d, h, rise, eave } = COTTAGE;
+  const { w, d, h, rise, eave, slate } = COTTAGE;
+  // (the roof's slopes rise from their eaves, past the walls: where they cross the walls' faces, their slates' middle)
+  const roofAtWall = rise * eave / (d / 2 + eave);
   block(g, w + 0.2, 0.5, d + 0.2, 0, 0, 0, M.ashlar);
-  const body = block(g, w, h - 0.5, d, 0, 0.5, 0, M.plaster, 1);
+  // (the walls carried up past their plate into the slopes: stopped at the plate, a band under each eave opened into
+  // the empty roof and out the other side, the sky seen through it from beside the house, "should not be able to peek
+  // under house roof"; `lab village --only eavesClosed`)
+  const body = block(g, w, h - 0.5 + roofAtWall, d, 0, 0.5, 0, M.plaster, 1);
   // the frame: posts at the corners and between, a sill and a plate along each face
   for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.51, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
   // (a sill and a plate stand a hair proud of the posts they cross: in one plane, the two fought where they crossed)
@@ -2259,13 +2264,17 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   const roofParts: THREE.Mesh[] = [];
   for (const sz of [-1, 1]) {
     // (one a hair wider: their ends, in one plane, fought where the slopes overlap at the ridge)
-    const slab = block(g, w + eave * 2 + (sz > 0 ? 0.02 : 0), 0.14, slope, 0, 0, 0, M.roof);
+    const slab = block(g, w + eave * 2 + (sz > 0 ? 0.02 : 0), slate, slope, 0, 0, 0, M.roof);
     slab.position.set(0, h + rise / 2, sz * (d / 2 + eave) / 2);
     slab.rotation.x = sz * pitch;
     roofParts.push(slab);
   }
-  const gable = new THREE.Shape();
-  gable.moveTo(-d / 2, 0); gable.lineTo(d / 2, 0); gable.lineTo(0, rise); gable.lineTo(-d / 2, 0);
+  // (its top along the slopes' middle, from the walls' tops to the ridge: from the walls' plate to the ridge, steeper
+  // than the roof, a sliver stood open over each slope into the roof; its upright edges a hair in from the walls'
+  // faces, which in one plane they fought)
+  const gable = new THREE.Shape(), half = d / 2 - 0.01;
+  gable.moveTo(-half, 0); gable.lineTo(half, 0); gable.lineTo(half, roofAtWall); gable.lineTo(0, rise);
+  gable.lineTo(-half, roofAtWall); gable.lineTo(-half, 0);
   for (const sx of [-1, 1]) {
     const tri = new THREE.ExtrudeGeometry(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
     solid(g, tri, M.gable).position.set(sx * (w / 2) - 0.05, h, 0);
