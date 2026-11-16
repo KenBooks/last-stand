@@ -36,6 +36,17 @@ function within(x: number, y: number, z: number, lift: number): number {
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = curve(TUNIC_P, y);
   return Math.abs(x / X) ** e + Math.abs((z - necklineBack(y)) / Z) ** e;
 }
+const _na = new THREE.Vector3(), _nb = new THREE.Vector3(), _nda = new THREE.Vector3(), _ndy = new THREE.Vector3();
+/** the tunic's own normal at angle `a` round it and height `y` (`onTunic`'s terms), facing out: the cut's, and the
+ *  sleeve's top ring's where it's sewn into the cut */
+function surfaceNormal(a: number, y: number, out = new THREE.Vector3()): THREE.Vector3 {
+  onTunic(a + 1e-3, y, 0, _na); onTunic(a - 1e-3, y, 0, _nb); _nda.subVectors(_na, _nb);
+  onTunic(a, y + 1e-3, 0, _na); onTunic(a, y - 1e-3, 0, _nb); _ndy.subVectors(_na, _nb);
+  out.crossVectors(_nda, _ndy).normalize();
+  onTunic(a, y, 0, _na);
+  return out.dot(_nb.set(_na.x, _na.y - 0.1, _na.z)) < 0 ? out.negate() : out;
+}
+
 /** the step `outOfTunic` reads the way out by (m) */
 const OUT_STEP = 0.002;
 
@@ -129,12 +140,7 @@ export function* tunicCutSteps(
       P.push(col); A.push(ac);
     }
     // the surface's own normal at each point, facing out
-    const N = A.map((col, i) => col.map(([a, y], k) => {
-      onTunic(a + 1e-3, y, 0, p); onTunic(a - 1e-3, y, 0, q); da.subVectors(p, q);
-      onTunic(a, y + 1e-3, 0, p); onTunic(a, y - 1e-3, 0, q); dy.subVectors(p, q);
-      const n = new THREE.Vector3().crossVectors(da, dy).normalize(), c = P[i][k];
-      return n.dot(q.set(c.x, c.y - 0.1, c.z)) < 0 ? n.negate() : n;
-    }));
+    const N = A.map((col) => col.map(([a, y]) => surfaceNormal(a, y)));
     const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
     const put = (i: number, k: number) => { const c = P[i % around][k], n = N[i % around][k], [a, y] = A[i % around][k]; pos.push(c.x, c.y, c.z); nrm.push(n.x, n.y, n.z); uv.push(uAt(a), vAt(y)); };
     for (let i = 0; i < around; i++) for (let k = 0; k < rows; k++) {
@@ -223,14 +229,18 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
     const i = f * M, i0 = Math.floor(i) % M, i1 = (i0 + 1) % M, end = down[i0][NC] + (down[i1][NC] - down[i0][NC]) * (i - Math.floor(i));
     return end + rows[k][Math.round(f * rows[k].length) % rows[k].length].distanceTo(rows[NC][Math.round(f * M) % M]) / TILE;
   };
-  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], ct: number[] = [], sy: number[] = [];
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], ct: number[] = [], sy: number[] = [], _top = new THREE.Vector3();
   for (let t = 0; t < tris.length; t += 3) {
     const vs = flip ? [tris[t], tris[t + 2], tris[t + 1]] : [tris[t], tris[t + 1], tris[t + 2]];
     // (a triangle across the seam round the back: its points past it counted on round from there)
     const fs = vs.map((v) => frac[v]), wrap = Math.max(...fs) - Math.min(...fs) > 0.5;
     vs.forEach((v, q) => {
       const f = flip ? -1 : 1;
-      pos.push(flat[v * 3], flat[v * 3 + 1], flat[v * 3 + 2]); nrm.push(N.getX(v) * f, N.getY(v) * f, N.getZ(v) * f);
+      pos.push(flat[v * 3], flat[v * 3 + 1], flat[v * 3 + 2]);
+      // (the top ring shaded as the cloth it's sewn into: its own faces' normals alone met the cut's up to 15 degrees
+      // apart round the shoulder, the seam a line in the light though its points were shared)
+      if (rowOf[v] === 0) { const [a, y] = armholeAt(s, Math.round(frac[v] * M) % M / M * H_TAU); surfaceNormal(a, y, _top); nrm.push(_top.x, _top.y, _top.z); }
+      else nrm.push(N.getX(v) * f, N.getY(v) * f, N.getZ(v) * f);
       uv.push((wrap && fs[q] < 0.5 ? fs[q] + 1 : fs[q]) * ring, vAt(v)); ct.push(capT[rowOf[v]]);
       sy.push(rowOf[v] <= NC ? caps[Math.round(frac[v] * M) % M][0].y : S.y);
     });
