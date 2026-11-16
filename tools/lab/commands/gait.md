@@ -14,7 +14,10 @@ other), the gallops (a foot leaving within 0.3 of a stride of the other's, the l
 leaves half a stride after it; the hops missed the set-off's, its second foot 6 frames after the first), a foot
 dance's short steps, the hips' rise and fall a step and their height in the air, on one foot and on both, a planted
 foot dragged (its leg short of it even on its toes) and one up on its toes out of a flat foot's reach (a push off),
-each hand's swing fore and aft against its own side's knee (a person's arm swings against the hip's swing, about
+the trunk against the legs as `form` reads it (`page/trunkSwing.ts`: said, not judged, as going round, zigzagging
+and strafing turn the trunk for the way as well as the stride; `--tune trunk.drop=0` and the rest of `trunk.*` take
+each part of it out, as `form --tune` does), each hand's swing fore and aft against its own
+side's knee (a person's arm swings against the hip's swing, about
 -1; the ankle trails the thigh as the knee folds, so no arm reads -1 against it), over the whole and over each
 half second (the median and the worst stretch, with its frames; a hand that hardly moves is held, a bow drawn, and
 left out), the rhythm (how many strides leave near their window's start, in step with the walk cycle, and which

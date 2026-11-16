@@ -379,6 +379,7 @@ export const COMMANDS = {
         help: 'each scenario from these starts, a run each on one page: its first move so many frames longer '
           + '(its turns at other points of a stride; 0 alone by default)',
       },
+      tune: SETUP_OPTIONS.tune,
       ...COMMON_OPTIONS,
     },
   },
@@ -402,6 +403,7 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'picture the run: stick figures, and the hero run again for him (=false: the numbers alone)',
       },
+      tune: SETUP_OPTIONS.tune,
       ...COMMON_OPTIONS,
     },
   },
