@@ -301,7 +301,7 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 // Enemies
 
-export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'bellWarden' | 'idle';
+export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'bellWarden' | 'cantor' | 'idle';
 
 /** What a hero's attack is, as a foe sees it coming (entities/evade.ts): a shot (an arrow, a bolt), a wave along the
  *  ground (a crescent), a charge, a beam, or an area coming down (a rain of arrows, falling stars). */
@@ -410,6 +410,9 @@ export interface EnemyDef {
   throws?: ThrowDef;
   /** a boss's fight in phases, its telegraphed attacks and its weak-spot window (entities/bossKit.ts) */
   bossKit?: BossKitDef;
+  /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life and damage then, as
+   *  shares of its own */
+  asGuard?: { life: number; damage: number };
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
@@ -439,14 +442,19 @@ export interface BossKitDef {
    *  facing (rad, to its left), struck by a hero's hit from that side (the part nearest the way the hit came from),
    *  taking `share` of the hit's damage, each with `life` of its own (a share of its most life) */
   parts?: { angles: number[]; life: number; share: number };
+  /** warded while its guards stand (an encounter's main boss, data/biomes.ts `BossRung.guards`): it takes `taken` times
+   *  the damage until the last of them falls, its aura in `edge` meanwhile */
+  ward?: { taken: number; edge: number };
 }
 
 /** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window
- *  is left (s), and its parts' state (a bit each, set: broken; the Bell-Warden's chains). */
+ *  is left (s), its parts' state (a bit each, set: broken; the Bell-Warden's chains), and whether its guards ward it. */
 export interface BossLook {
   phase: number;
   weak: number;
   broken: number;
+  /** warded by its guards (`BossKitDef.ward`) */
+  warded: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -8,11 +8,14 @@ export type BiomeId = 'crypt' | 'forest';
 /** the player's choice in the lobby: a biome, or a random one each run */
 export type BiomeSetting = BiomeId | 'random';
 
-/** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave. */
+/** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave; and its
+ *  guards, if it comes as an encounter: lesser bosses rising with it (`count` of `id`), each at the life and damage its
+ *  own `EnemyDef.asGuard` gives, warding it while they stand (`BossKitDef.ward`). */
 export interface BossRung {
   id: EnemyId;
   short: string;
   banner: string;
+  guards?: { id: EnemyId; count: number };
 }
 
 export interface BiomeDef {
@@ -45,7 +48,8 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     },
     bosses: [
       { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
-      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+      // (the second rung is an encounter: the Ossuary Cantor and two Bell-Wardens, its choir and its guards)
+      { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2 } },
     ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
@@ -78,8 +82,9 @@ export function bossOfWave(biome: BiomeId, wave: number): BossRung | null {
   return ladder[(wave / WAVES.bossEvery - 1) % ladder.length];
 }
 
-/** Every boss a run in `biome` can meet (its ladder's, once each). */
-export const bossesOf = (biome: BiomeId): EnemyId[] => [...new Set(BIOMES[biome].bosses.map((rung) => rung.id))];
+/** Every boss a run in `biome` can meet (its ladder's and their guards, once each). */
+export const bossesOf = (biome: BiomeId): EnemyId[] =>
+  [...new Set(BIOMES[biome].bosses.flatMap((rung) => (rung.guards ? [rung.id, rung.guards.id] : [rung.id])))];
 
 /** A place the arena shows: a biome a run is fought in, or the village the lobby stands in (data/village.ts). */
 export type PlaceId = BiomeId | 'village';

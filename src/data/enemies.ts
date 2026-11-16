@@ -3,7 +3,7 @@
 // Stats are wave-1 values; see SCALING for per-wave growth.
 import type { EnemyDef } from '../types';
 
-export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus' | 'bellwarden'
+export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus' | 'bellwarden' | 'cantor'
   | 'thornling' | 'mossback' | 'sporecaller' | 'barkhulk' | 'thornheart' | 'dummy';
 
 export const ENEMIES: Record<EnemyId, EnemyDef> = {
@@ -50,6 +50,8 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     range: 5, windup: 1, recover: 1, cooldown: 4.2,
     summon: 'husk',
     cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x5a7cff,
+    // (as the Ossuary Cantor's guard: about a quarter of its life and three quarters of its damage, two of them at once)
+    asGuard: { life: 0.26, damage: 0.75 },
     bossKit: {
       phases: [
         { below: 1 },
@@ -61,6 +63,25 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
       weak: { taken: 2, edge: 0xffd27a },
       // (the four bearers' chains, at the yoke's corners: front left, front right, back left, back right)
       parts: { angles: [0.55, -0.55, 2.59, -2.59], life: 0.035, share: 1 },
+    },
+  },
+  // the Crypt's second rung's main boss (data/biomes.ts, guarded by two Bell-Wardens): a towering skeletal cantor of
+  // the ossuary (entities/cantor.ts, models/cantor.ts); its numbers past the kit's are `CANTOR`
+  cantor: {
+    name: 'The Ossuary Cantor', model: 'cantor', ai: 'cantor',
+    life: 3800, damage: 120, damageType: 'vitality', speed: 1.3, radius: 2.4,
+    range: 9, windup: 1.3, recover: 0.9, cooldown: 6.5,
+    cost: 0, score: 110, knockbackResist: 1, freezeResist: 0.8, boss: true, accent: 0x5fe8a8,
+    bossKit: {
+      phases: [
+        { below: 1 },
+        { below: 0.55, banner: 'The Cantor sings the dirge' },
+        { below: 0.25, banner: 'The ossuary answers' },
+      ],
+      // (grave hands: a ring of grave light under each hero, then bone hands; the dirge: a line of them marching out)
+      attacks: { graveHands: { warn: 1.3, recover: 1.0 }, dirge: { warn: 1.0, recover: 1.4 } },
+      weak: { taken: 2, edge: 0xc8ffe4 },
+      ward: { taken: 0.25, edge: 0xe8e0c8 },
     },
   },
   thornling: {
@@ -138,6 +159,24 @@ export const BELL_WARDEN = {
   down: 6,
   shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
   grab: { reach: 2.2, under: 3.4, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 6, grace: 4.5 },
+};
+
+/**
+ * The Ossuary Cantor's own numbers (entities/cantor.ts). `hands`: grave hands under every hero, a ring of `radius` m,
+ * hurting `hurt` of its damage. `dirge` (from its second phase): `count` rings `apart` m along a line out to a hero,
+ * each `step` s after the last. Once its guards have fallen, each cast leaves its ribs open, its bell-heart bared, for
+ * `bared` s (its weak-spot window). `every` s between casts, `lastEvery` in its last phase. It keeps `keepAt` m from its
+ * target, gliding. `beat` (s): no two warned hits of any boss in the fight land closer than this (a toll's stun chained
+ * into a hit no one could dodge).
+ */
+export const CANTOR = {
+  hands: { radius: 1.7, hurt: 0.7 },
+  dirge: { count: 6, apart: 2.8, step: 0.14, radius: 1.3, hurt: 0.55 },
+  bared: 4.5,
+  every: 6.5,
+  lastEvery: 4,
+  keepAt: 7,
+  beat: 2.4,
 };
 
 // Elite ("hero") modifiers applied on top of a base archetype.

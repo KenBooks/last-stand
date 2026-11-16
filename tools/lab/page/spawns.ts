@@ -119,7 +119,7 @@ class Canaries {
     await beginWave(lab, fixture, wave);
     const run = G.run!;
     if (run.boss) {
-      run.queue.unshift([run.boss]);
+      run.queue.unshift(run.boss);
       run.boss = null;
     }
     this.bossFirst = await readWave(lab, wave);

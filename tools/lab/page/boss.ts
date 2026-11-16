@@ -14,14 +14,20 @@
 //   one well out of it never seized.
 // - `compiles`: every effect the Bell-Warden's fight draws (a toll, a double toll, a shard, the bell dropped), drawn:
 //   no program compiled meanwhile.
+// - `encounter`: the Crypt's second rung as it comes, the Ossuary Cantor and its two Bell-Warden guards fighting the
+//   hero: warded (a quarter of the damage) while a guard stands and not after; each of its casts ringed on the floor
+//   before its hands burst; no two bosses' warned hits closer than its beat; its heart bared after a cast once the
+//   guards are down.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
-//   takes at the wave it comes on (the Colossus at 5, the Bell-Warden at 10), with and without its weak windows.
+//   takes at the wave it comes on (the Colossus at 5, the Bell-Warden alone and the Cantor's encounter at 10), with
+//   and without its weak windows.
 //
-// - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye.
+// - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye;
+//   `encounterPictures` the Cantor's encounter in each of its.
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
-// one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled in the fight, and an attack
-// that deals nothing.
+// one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts
+// that seize no one, a ward that wards nothing, a program compiled in the fight, and an attack that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -30,10 +36,10 @@ import type { EnemyId } from '../../../src/data/enemies';
 import type { SkillKey } from '../../../src/types';
 import { G } from '../../../src/state';
 import { BIOMES, BIOME_IDS, bossOfWave } from '../../../src/data/biomes';
-import { BELL_WARDEN, ENEMIES, SCALING } from '../../../src/data/enemies';
+import { BELL_WARDEN, CANTOR, ENEMIES, SCALING } from '../../../src/data/enemies';
 import { WAVES } from '../../../src/data/waves';
 import { damageTaken } from '../../../src/entities/bossKit';
-import { fx } from '../../../src/entities/enemyAI';
+import { fx, setFxSink, type FxName } from '../../../src/entities/enemyAI';
 import { startNextWave } from '../../../src/game/run';
 import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
@@ -41,8 +47,11 @@ import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'compiles' | 'ttk' | 'pictures';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'compiles', 'ttk'];
+export type BossPart =
+  'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'compiles' | 'ttk' | 'pictures' | 'encounterPictures';
+export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk'];
+/** the parts that are pictures for the eye, with no verdicts */
+const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -137,6 +146,11 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
         // (judged against the ladder as the game ships it: the canary turned the Crypt's round)
         const shipped = options.canary && biome === 'crypt' ? [...ladderOf].reverse()[rung % ladderOf.length] : wanted;
         if (sent.boss !== shipped.id) problems.push(`${biome} wave ${wave}: the run sent ${sent.boss ?? 'no boss'}, its ladder's rung is ${shipped.id}`);
+        const guards = Array.from({ length: shipped.guards?.count ?? 0 }, () => shipped.guards!.id);
+        if (sent.guards.join() !== guards.join()) {
+          problems.push(`${biome} wave ${wave}: the run sent guards [${sent.guards.join(', ')}], its rung's are [${guards.join(', ')}]`);
+        }
+        if (guards.length) met[met.length - 1] += ` with ${guards.length} ${guards[0]}`;
         if (!sent.banner.includes(shipped.banner)) problems.push(`${biome} wave ${wave}: the banner said "${sent.banner}", not its boss's line "${shipped.banner}"`);
         const label = bossOfWave(biome, wave)?.short;
         if (label !== wanted.short) problems.push(`${biome} wave ${wave}: the Continue button would name ${label}`);
@@ -150,7 +164,7 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let
  *  start: the boss its run holds for it, and the banner's line. */
-async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; banner: string }> {
+async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; guards: EnemyId[]; banner: string }> {
   const run = G.run!;
   run.wave = wave;
   startNextWave();
@@ -158,13 +172,14 @@ async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId |
   run.phase = 'countdown';
   run.timer = 0;
   await lab.until(() => run.phase === 'fighting', WAVE_FRAMES, `wave ${wave} never started`);
-  const boss = run.boss?.type;
+  const boss = run.boss?.[0]?.type;
+  const guards = (run.boss ?? []).filter((unit) => unit.guard).map((unit) => unit.type);
   // (the wave stopped before it sends anyone, back to a countdown held for the next)
   run.queue.length = 0;
   run.boss = null;
   run.phase = 'countdown';
   run.timer = 1e4;
-  return { boss, banner };
+  return { boss, guards, banner };
 }
 
 // --- the phases -------------------------------------------------------------------------------------------
@@ -434,6 +449,119 @@ async function grab(lab: Lab, options: BossOptions, lines: string[], problems: s
   if (far.seizedAt >= 0) problems.push(`grab: a hero ${FAR_OFF} m from its middle was seized`);
 }
 
+// --- the Cantor's encounter --------------------------------------------------------------------------------
+
+/** how long the encounter is fought with its guards up, and after (s) */
+const GUARDED_FOR = 28;
+const UNGUARDED_FOR = 24;
+/** how far apart two warned hits may land under the beat (s): a frame each way */
+const BEAT_SLACK = 2 / FPS;
+
+/** A warned hit as it landed: which boss's, what, and when (s, the game's clock). */
+interface Landed { id: number; what: string; at: number }
+
+/** The fx that are a boss's warned hits landing, as the encounter keeps them apart (`claimBeat`). */
+const WARNED_HITS: FxName[] = ['toll', 'graveHands', 'dirge'];
+
+/** The Ossuary Cantor and its two guards risen round the hero, all thinking, as the wave sends them. */
+async function encounterAt(lab: Lab): Promise<{ cantor: Enemy; guards: Enemy[] }> {
+  const wave = WAVES.bossEvery * 2;
+  const cantor = lab.spawnFoe('cantor', clearSpot(12, ENEMIES.cantor.radius), { wave });
+  const guards = [-1, 1].map((side) => {
+    const way = inward().applyAxisAngle(new THREE.Vector3(0, 1, 0), side * 1.2);
+    const at = G.player.pos.clone().addScaledVector(way, 11).setY(0);
+    return lab.spawnFoe('bellwarden', inObstacle(at, 3) ? clearSpot(14, 3) : at, { wave, guard: true });
+  });
+  const all = [cantor, ...guards];
+  await lab.until(() => all.every((boss) => boss.spawning <= 0), RISE_FRAMES, 'the encounter never rose');
+  return { cantor, guards };
+}
+
+/** Frames of the fight with the hero kept whole, every warned hit and ring that lands kept. */
+async function fight(lab: Lab, seconds: number, landed: Landed[], rings: Landed[], each?: () => void): Promise<void> {
+  setFxSink((name, args) => {
+    if (WARNED_HITS.includes(name)) landed.push({ id: args[0], what: name, at: G.time });
+    if (name === 'tele') rings.push({ id: args[0], what: 'ring', at: G.time });
+  });
+  try {
+    await lab.step(Math.round(seconds * FPS), () => {
+      const hero = G.player;
+      hero.life = hero.stats.maxLife;
+      each?.();
+      return {};
+    });
+  } finally {
+    setFxSink(null);
+  }
+}
+
+/** The closest two different bosses' warned hits landed (s), and which. */
+function closestHits(landed: Landed[]): { gap: number; pair: string } {
+  let gap = Infinity, pair = 'none';
+  for (let i = 0; i < landed.length; i++) {
+    for (let j = i + 1; j < landed.length; j++) {
+      const a = landed[i], b = landed[j];
+      if (a.id === b.id) continue;
+      const apart = Math.abs(a.at - b.at);
+      if (apart < gap) {
+        gap = apart;
+        pair = `${a.what} and ${b.what}`;
+      }
+    }
+  }
+  return { gap, pair };
+}
+
+/**
+ * The Cantor and its guards fought: warded while a guard stands, not after; its casts ringed before they land; no
+ * two bosses' warned hits within its beat; its heart bared after a cast once the guards are down.
+ */
+async function encounter(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+  await standIn(lab, options.fixture, 'crypt');
+  const ward = ENEMIES.cantor.bossKit!.ward!;
+  const taken = ward.taken;
+  if (options.canary) ward.taken = 1;
+  try {
+    const { cantor, guards } = await encounterAt(lab);
+    const landed: Landed[] = [], rings: Landed[] = [];
+    let wardedFrames = 0, frames = 0, wardTaken = 1;
+    await fight(lab, GUARDED_FOR, landed, rings, () => {
+      frames++;
+      if (cantor.warded) wardedFrames++;
+      wardTaken = Math.min(wardTaken, damageTaken(cantor));
+    });
+    lines.push(`encounter: guards up ${GUARDED_FOR} s: warded ${fixed(wardedFrames / frames, 2)} of the frames, `
+      + `taking ${fixed(wardTaken, 2)} of the damage`);
+    if (wardedFrames < frames - 2) problems.push(`encounter: the Cantor warded ${wardedFrames} of ${frames} frames with its guards up`);
+    if (Math.abs(wardTaken - taken) > 1e-6) problems.push(`encounter: warded, the Cantor took ${fixed(wardTaken, 2)} of the damage, not ${taken}`);
+    for (const guard of guards) guard.takeDamage(guard.life + 1, {});
+    let unwarded = 0, bared = 0;
+    const afterAt = landed.length;
+    await fight(lab, UNGUARDED_FOR, landed, rings, () => {
+      if (!cantor.warded) unwarded++;
+      if (cantor.weak > 0) bared++;
+    });
+    const casts = landed.slice(afterAt).filter((hit) => hit.id === cantor.id).length;
+    lines.push(`encounter: guards down ${UNGUARDED_FOR} s: unwarded ${unwarded} frames, ${casts} casts landed, `
+      + `its heart bared ${fixed(bared / FPS, 1)} s`);
+    if (unwarded < UNGUARDED_FOR * FPS - 2) problems.push('encounter: the Cantor stayed warded with its guards fallen');
+    if (casts === 0) problems.push('encounter: the Cantor cast nothing in its fight');
+    else if (bared === 0) problems.push('encounter: its heart was never bared after a cast');
+    // (each cast's hit lands after a ring of its own laid at least its warning before)
+    const cantorHits = landed.filter((hit) => hit.id === cantor.id);
+    const unwarned = cantorHits.filter((hit) => !rings.some((ring) => ring.id === cantor.id && hit.at - ring.at >= 0.9 && hit.at - ring.at < 3));
+    lines.push(`encounter: ${cantorHits.length} of the Cantor's hits, ${unwarned.length} without a ring before them`);
+    if (unwarned.length) problems.push(`encounter: ${unwarned.length} of the Cantor's hits landed with no ring first`);
+    const tolls = landed.filter((hit) => hit.what === 'toll').length;
+    const closest = closestHits(landed.slice(0, afterAt));
+    lines.push(`encounter: ${tolls} tolls with the guards up; two bosses' warned hits ${fixed(closest.gap, 2)} s apart at the closest (${closest.pair})`);
+    if (tolls === 0) problems.push('encounter: the guards never tolled');
+    if (closest.gap < CANTOR.beat - BEAT_SLACK) problems.push(`encounter: two bosses' warned hits ${fixed(closest.gap, 2)} s apart, under the beat ${CANTOR.beat} s`);
+  } finally {
+    ward.taken = taken;
+  }
+}
+
 // --- the programs ------------------------------------------------------------------------------------------
 
 /** Every effect of the Bell-Warden's fight drawn (each toll, a shard, the bell dropped): no program compiled. */
@@ -452,6 +580,15 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
     fx('shard', boss.id, x, z, x + 3, z, 0);
     fx('bellDown', x, z);
     for (let i = 0; i < 4; i++) fx('bossPart', boss.id, i, 1);
+    // (the Cantor's: its grave hands, a dirge, a ring, its ward and its heart bared)
+    const cantor = await bossAt(lab, 'cantor', FAR, false);
+    fx('tele', cantor.id, x + 2, z, CANTOR.hands.radius, 0.5, 0x5fe8a8);
+    fx('graveHands', cantor.id, x - 2, z, 0);
+    fx('dirge', cantor.id, cantor.pos.x, cantor.pos.z, 0.3, 0);
+    fx('bossWard', cantor.id, 1);
+    await lab.step(20);
+    fx('bossWard', cantor.id, 0);
+    fx('bossWeak', cantor.id, 2);
     if (options.canary) {
       const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), new THREE.MeshPhongMaterial({ color: 0x123456, flatShading: true }));
       odd.position.copy(boss.pos).setY(2);
@@ -461,8 +598,8 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
     }
     await lab.step(60);
     const compiled = (G.renderer.info.programs ?? []).length - before;
-    lines.push(`compiles: ${compiled} programs compiled drawing its tolls, a shard and the bell dropped`);
-    if (compiled > 0) problems.push(`compiles: ${compiled} programs compiled in the Bell-Warden's fight`);
+    lines.push(`compiles: ${compiled} programs compiled drawing its tolls, a shard, the bell dropped and the Cantor's casts`);
+    if (compiled > 0) problems.push(`compiles: ${compiled} programs compiled in the Crypt's bosses' fights`);
   } finally {
     lab.drawing = drawing;
   }
@@ -530,8 +667,19 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   const first = timeToKill(colossus, dps);
   lines.push(`ttk: ${cls}: ${fixed(dps, 0)} damage a second with ${G.player.skillAt('mouse0')!.def.name} and the starting gear`);
   lines.push(`ttk: the Colossus at wave 5 (${fixed(colossus, 0)} life): ${fixed(first, 0)} s`);
-  lines.push(`ttk: the Bell-Warden at wave 10 (${fixed(bell, 0)} life): ${fixed(plain, 0)} s, ${fixed(dropped, 0)} s dropping the bell `
+  lines.push(`ttk: the Bell-Warden alone at wave 10 (${fixed(bell, 0)} life): ${fixed(plain, 0)} s, ${fixed(dropped, 0)} s dropping the bell `
     + `each time its chains break (${fixed(dropped / first, 2)}x the Colossus's)`);
+  // the encounter at wave 10: its guards first (each its share of a Bell-Warden's life, their bells dropped too), then
+  // the Cantor with its heart bared for `bared` s of each cast's `every`
+  const guard = bell * ENEMIES.bellwarden.asGuard!.life;
+  const guards = 2 * timeToKill(guard, dps, windows);
+  const cantor = ENEMIES.cantor.life * SCALING.life(10);
+  const heart = ENEMIES.cantor.bossKit!.weak!.taken;
+  const cantorTime = cantor / (dps * (1 + (heart - 1) * CANTOR.bared / CANTOR.every));
+  const whole = guards + cantorTime;
+  lines.push(`ttk: the Cantor's encounter at wave 10 (two guards of ${fixed(guard, 0)} life, the Cantor ${fixed(cantor, 0)}): `
+    + `${fixed(guards, 0)} s for the guards, ${fixed(cantorTime, 0)} s for the Cantor, ${fixed(whole, 0)} s in all `
+    + `(${fixed(whole / first, 2)}x the Colossus's)`);
 }
 
 // --- pictures ----------------------------------------------------------------------------------------------
@@ -658,16 +806,87 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
   return moments;
 }
 
+/**
+ * The Cantor's encounter at every stage, for the eye (no verdicts): coming on with its guards, warded, its grave hands'
+ * rings and their burst, its guards down, its heart bared, its dirge, its last phase and its fall.
+ */
+async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]): Promise<Pictured[]> {
+  await standIn(lab, options.fixture, 'crypt');
+  const spot = clearSpot(12, ENEMIES.cantor.radius);
+  await lab.setup({ ...options.fixture, at: SPOT, facing: Math.atan2(spot.x - SPOT[0], spot.z - SPOT[1]) });
+  const { cantor, guards } = await encounterAt(lab);
+  const hero = G.player;
+  const moments: Pictured[] = [];
+  const keepWhole = (): Record<string, never> => {
+    hero.life = hero.stats.maxLife;
+    return {};
+  };
+  const close = (label: string, note: string, views: ViewName[] = ['back', 'left']): void => {
+    const at = cantor.pos.clone().setY(3.6);
+    moments.push(lab.picture(label, views, [note], { at, distance: 13 }));
+  };
+  const seen = async (label: string, note: string): Promise<void> => { moments.push(await lab.screen(label, [note])); };
+  const castUntil = async (name: string, share: number): Promise<void> => {
+    cantor.cd = 0;
+    const reached = (): boolean => cantor.action?.name === name && cantor.action.t / cantor.action.dur >= share;
+    await lab.until(reached, TOLL_FRAMES, `the Cantor never reached ${share} of its ${name}`, keepWhole);
+  };
+  // 1. it comes, its guards with it, warded
+  for (const guard of guards) guard.cd = 99;
+  cantor.cd = 99;
+  await lab.step(90, keepWhole);
+  await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
+  close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)');
+  close('1 the Cantor (front)', 'its face, its ribs and its bell-heart', ['front']);
+  // 2-3. grave hands: the rings under the hero, then the hands
+  await castUntil('graveHands', 0.35);
+  await seen('2 grave hands warning', 'arms raised, chanting: a ring of grave light under the hero, about 1.3 s to step out');
+  close('2 arms raised (close)', 'its arms raised over the warning, its jaw open in the chant');
+  await castUntil('graveHands', 0.6);
+  await lab.step(4, keepWhole);
+  await seen('3 grave hands', 'bone hands tearing up through the floor where the ring was');
+  // 4. the guards fallen: the ward gone
+  for (const guard of guards) guard.takeDamage(guard.life + 1, {});
+  await lab.step(80, keepWhole);
+  await seen('4 its guards fallen', 'both Bell-Wardens down: the ward is gone, the Cantor takes full damage');
+  // 5. its heart bared after a cast
+  await castUntil('graveHands', 0.62);
+  await lab.step(30, keepWhole);
+  close('5 heart bared (close)', 'after each cast its ribs swing open and its bell-heart is bared for 4.5 s, taking double damage', ['front', 'left']);
+  // 6. phase 2: the dirge
+  cantor.takeDamage(cantor.life - 0.5 * cantor.maxLife, {});
+  await lab.step(30, keepWhole);
+  await seen('6 phase 2', 'under 55%: the Cantor sings the dirge');
+  cantor.brain.casts = 1;
+  await castUntil('dirge', 0.4);
+  await seen('7 dirge warning', 'a line of rings marching out from it to the hero, each bursting in turn');
+  await castUntil('dirge', 0.6);
+  await lab.step(5, keepWhole);
+  await seen('8 the dirge', 'the dirge bursting along its line');
+  // 9. its last phase, and its fall
+  cantor.takeDamage(cantor.life - 0.2 * cantor.maxLife, {});
+  await lab.step(40, keepWhole);
+  await seen('9 phase 3', 'under 25%: the ossuary answers, a dirge at every hero, casting faster');
+  cantor.takeDamage(cantor.life + 1, {});
+  await lab.step(45, keepWhole);
+  close('10 its fall', 'killed: it sinks and tips forward into the dark');
+  lines.push(`encounterPictures: ${moments.length} moments`);
+  return moments;
+}
+
 /** `lab boss`: each part asked for, in turn. */
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures'>, typeof ladder> = { ladder, phases, toll, chains, stand, grab, compiles, ttk };
+  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures'>, typeof ladder> = {
+    ladder, phases, toll, chains, stand, grab, encounter, compiles, ttk,
+  };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {
     for (const part of options.parts ?? BOSS_PARTS) {
       if (part === 'pictures') moments.push(...await pictures(lab, options, lines));
+      else if (part === 'encounterPictures') moments.push(...await encounterPictures(lab, options, lines));
       else await run[part](lab, options, lines, problems);
     }
   } finally {
@@ -676,7 +895,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   if (options.canary) {
     const caught = problems.length;
     lines.push(`canary: ${caught} faults caught`);
-    const judged = (options.parts ?? BOSS_PARTS).filter((part) => part !== 'pictures');
+    const judged = (options.parts ?? BOSS_PARTS).filter((part) => !PICTURE_PARTS.includes(part));
     return { text: lines.join('\n'), problems: canaryMissed(judged, problems), moments };
   }
   return { text: lines.join('\n'), problems, moments };

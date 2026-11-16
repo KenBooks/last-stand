@@ -763,11 +763,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
-- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`), in parts
+- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`,
+  `src/entities/cantor.ts`), in parts
   (`--parts`, all by default). `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their
   countdown as the run sets one off (its wave and timer), the boss the run holds for it (`RunState.boss`) against its
-  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, Bell-Warden, Colossus,
-  Bell-Warden; the Thornwood's Thornheart), the banner's line and the Continue button's name. `phases`: a Bell-Warden
+  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, the Ossuary Cantor with
+  two Bell-Wardens, Colossus, the Cantor again; the Thornwood's Thornheart), the rung's guards among the units it
+  holds, the banner's line and the Continue button's name. `phases`: a Bell-Warden
   held still, its life taken to a hundredth over and under each phase's share: in the phase before, then the next,
   and the next's banner shown. `toll`: a Bell-Warden left to think and toll at the hero 7 m off (he must be stunned,
   for its `stun` within 0.1 s, its ring reaching him no sooner than its warning's end after the bell began its swing),
@@ -775,15 +777,25 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with `--gear shield`: never stunned; the part says so where the hero has none); the hero is turned to it and kept
   where he stands, the set-up keeping him whole. `chains`: each chain struck from its own side (5 m off, a share of
   its life and a little more): each must break, all four drop the bell for its window (`down` s within 0.1, `taken`
-  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `compiles`: its tolls, a shard, the
-  chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
+  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `encounter`: the Ossuary Cantor and two Bell-Wardens as its guards
+  risen round the hero at wave 10's strength and left to fight him (kept whole) for 28 s: the Cantor warded every
+  frame (2 frames' slack) and taking the ward's `taken` of the damage; then the guards killed and 24 s more: never
+  warded, at least one cast landed, its heart bared after one (`weak`); every one of the Cantor's hits landed 0.9 to
+  3 s after a ring of its own; the guards tolled, and no two bosses' warned hits (tolls, grave hands, dirges) landed
+  closer than `CANTOR.beat`, two frames' slack. `compiles`: its tolls, a shard, the
+  chains broken and the bell dropped, the Cantor's grave hands, a dirge, a ring, its ward and its heart bared,
+  drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
-  Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
-  its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
+  Bell-Warden alone at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
+  its life is dealt (a best case: a hero who never circles it breaks one chain, not four), and the Cantor's
+  encounter at 10: its two guards one after the other (each `asGuard.life` of a Bell-Warden's, their bells dropped
+  the same way), then the Cantor with its heart bared `bared` s of every `every` (its weak window's `taken`). With the lab's starting
   gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
   plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
-  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled, an attack that deals
-  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
+  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a ward that wards nothing, a program compiled, an attack that deals
+  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`. `pictures` (asked
+  for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its
+  (`tools/lab/out/boss`).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

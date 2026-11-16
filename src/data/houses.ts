@@ -120,4 +120,6 @@ export const TROPHIES: Partial<Record<EnemyId, TrophyDef>> = {
   thornheart: { name: "The Elder Thornheart's Crown", look: 'antlers', colour: 0xb89068, trim: 0x7aff50 },
   // (the Bell-Warden's crest: cracked bronze and its toll's pale light)
   bellwarden: { name: "The Bell-Warden's Crest", look: 'crest', colour: 0xa0702e, trim: 0xc8d8ff },
+  // (the Ossuary Cantor's long skull, its grave light still in the sockets)
+  cantor: { name: "The Ossuary Cantor's Skull", look: 'mask', colour: 0xcfc4a4, trim: 0x5fe8a8 },
 };

@@ -22,6 +22,7 @@ import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
 import { partChanged, phaseBegun } from './bossKit';
 import { bellDropped, bellSwung, bellWardenAI, shardAt, tollAt } from './bellWarden';
+import { cantorAI, cantorChanted, dirgeFrom, graveHandsAt } from './cantor';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
@@ -31,7 +32,7 @@ const _dir = new THREE.Vector3();
 const _way = { x: 0, z: 0 };
 
 /** Move along (dx, dz), bent round any obstacle ahead within `reach` (by default ~1s of walking). */
-function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reach = e.speed * speedMul): void {
+export function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reach = e.speed * speedMul): void {
   if (dist < 1e-3) return;
   steerClear(e.pos.x, e.pos.z, e.radius, dx / dist, dz / dist, Math.max(reach, e.radius + 1), _way);
   e.desired.set(_way.x * e.speed * speedMul, 0, _way.z * e.speed * speedMul);
@@ -182,6 +183,11 @@ export const FX = {
     const e = G.enemies.find((x) => x.id === id);
     if (e) e.weak = seconds;
   },
+  /** boss `id` warded by its guards (`on` 1) or no longer (0) */
+  bossWard(id: number, on: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.warded = !!on;
+  },
   /** boss `id`'s breakable part `part` broken (`on` 1) or whole again (0) */
   bossPart(id: number, part: number, on: number) {
     const e = G.enemies.find((x) => x.id === id);
@@ -195,6 +201,12 @@ export const FX = {
   shard(id: number, ox: number, oz: number, tx: number, tz: number, damage: number) { shardAt(ox, oz, tx, tz, damage, id); },
   /** the Bell-Warden's bell dropped at (x, z), its chains all broken */
   bellDown(x: number, z: number) { bellDropped(x, z); },
+  /** the Ossuary Cantor `id` chanting over a cast's `warn` s (entities/cantor.ts) */
+  cantorChant(_id: number, warn: number) { cantorChanted(warn); },
+  /** the Cantor `id`'s grave hands bursting at (x, z), each game's hero judged as they do */
+  graveHands(id: number, x: number, z: number, damage: number) { graveHandsAt(id, x, z, damage); },
+  /** the Cantor `id`'s dirge marching out from (ox, oz) along `angle`, its rings bursting in turn */
+  dirge(id: number, ox: number, oz: number, angle: number, damage: number) { dirgeFrom(id, ox, oz, angle, damage); },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
@@ -261,6 +273,7 @@ function slamRing(e: Enemy, x: number, z: number, radius: number, dur: number, c
 export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
   idle() {},
   bellWarden: (e) => bellWardenAI(e),
+  cantor: (e) => cantorAI(e),
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     const p = e.target!.pos;

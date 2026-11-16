@@ -17,6 +17,9 @@
 // - **Breakable parts** (`BossKitDef.parts`): pieces of it with a life of their own, each struck by a hero's hits from
 //   its side, broken one at a time (`BossHooks.broke`, every one broken `allBroken`) and made whole again
 //   (`restoreParts`), each told to every game (`Enemy.broken`, a bit a part, which its model shows).
+// - **Encounters** (data/biomes.ts `BossRung.guards`): a main boss with lesser bosses as its guards (`Enemy.guard`, at
+//   their `EnemyDef.asGuard` life and damage), warded while any stands (`wardWhileGuarded`, `BossKitDef.ward`: it takes
+//   `taken` times the damage, told to every game), and the fight's warned hits kept apart (`claimBeat`).
 import { G } from '../state';
 import { fx } from './enemyAI';
 import type { Enemy } from './enemy';
@@ -91,13 +94,47 @@ export function openWeak(e: Enemy, seconds: number): void {
   fx('bossWeak', e.id, seconds);
 }
 
-/** How many times its damage a foe takes from a hero's hit now: its weak-spot window's, else 1. */
-export const damageTaken = (e: Enemy): number => (e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1);
+/** How many times its damage a foe takes from a hero's hit now: warded by its guards, the ward's; else its weak-spot
+ *  window's; else 1. */
+export const damageTaken = (e: Enemy): number =>
+  e.warded ? e.def.bossKit?.ward?.taken ?? 1 : e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1;
+
+/** Where simulated: an encounter's main boss warded while any of its guards stands, let go as the last falls, told to
+ *  every game (enemyAI's `bossWard` fx). */
+export function wardWhileGuarded(e: Enemy): void {
+  if (e.net || !e.def.bossKit?.ward) return;
+  const guarded = G.enemies.some((x) => x.alive && x.guard);
+  if (guarded !== e.warded) fx('bossWard', e.id, guarded ? 1 : 0);
+}
+
+/** When the fight's last warned hits land (G.time, from and to), across every boss in it (`claimBeat`). */
+const beat = { from: -Infinity, to: -Infinity };
+
+/**
+ * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
+ * landing within `gap` s of them? Taken if so (the next must keep clear of it). An encounter's bosses hit in turn,
+ * never two at once: a toll's stun chained into grave hands no one could step out of.
+ */
+export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
+  const from = G.time + hitIn, to = from + span;
+  if (from < beat.to + gap && to > beat.from - gap) return false;
+  beat.from = from; beat.to = to;
+  return true;
+}
+
+/** The fight's warned hits as taken (the lab's encounter check reads them). */
+export const beatTaken = (): Readonly<typeof beat> => beat;
 
 /** A boss's aura through its weak-spot window: the window's colour, swelling once a second; its own colour after. */
 export function weakLooks(e: Enemy): void {
   const kit = e.def.bossKit?.weak;
   if (!kit || !e.auraMat || !e.aura) return;
+  // (warded: the ward's colour, steady and close in; it takes little then)
+  if (e.warded && e.def.bossKit?.ward) {
+    e.auraMat.color.setHex(e.def.bossKit.ward.edge).multiplyScalar(1.2);
+    e.aura.scale.setScalar(e.radius * 1.35);
+    return;
+  }
   const on = e.weak > 0, beat = on ? 0.5 + 0.5 * Math.sin(G.time * Math.PI * 2) : 0;
   e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : 1.6);
   e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : 1.6));
@@ -150,5 +187,5 @@ export function bossFrame(e: Enemy, dt: number): void {
 
 /** What a boss's model is told of its fight this frame (`AnimState.boss`). */
 export function bossLook(e: Enemy): BossLook | undefined {
-  return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak, broken: e.broken } : undefined;
+  return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak, broken: e.broken, warded: e.warded } : undefined;
 }

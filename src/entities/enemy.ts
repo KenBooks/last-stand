@@ -99,6 +99,8 @@ export interface EnemyOpts {
   id?: number;
   name?: string;
   maxLife?: number;
+  /** a boss come as another's guard (data/biomes.ts `BossRung.guards`): its `EnemyDef.asGuard` life and damage */
+  guard?: boolean;
   /** a body that stands in for something else (a duel's rival for a hero, entities/rival.ts): its own definition and
    *  a body to be met by, drawn by nothing and in no crowd */
   standIn?: { def: EnemyDef; model: Model; reach: Reach };
@@ -114,6 +116,8 @@ export class Enemy {
   /** stands in for a hero in a duel (entities/rival.ts): no foe of the fight's, never reported as one */
   readonly standIn: boolean;
   readonly boss: boolean;
+  /** come as an encounter's guard (`EnemyOpts.guard`) */
+  readonly guard: boolean;
   readonly name: string;
   readonly maxLife: number;
   life: number;
@@ -203,6 +207,8 @@ export class Enemy {
   weak = 0;
   broken = 0;
   readonly partLife: number[] = [];
+  /** an encounter's main boss warded by its guards (`BossKitDef.ward`, told by enemyAI's `bossWard` fx) */
+  warded = false;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -228,7 +234,7 @@ export class Enemy {
   /** training dummies meter damage instead of losing life */
   meter: DamageMeter | null = null;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn }: EnemyOpts) {
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, guard = false, standIn }: EnemyOpts) {
     const def = standIn?.def ?? ENEMIES[typeId];
     this.standIn = !!standIn;
     this.type = typeId;
@@ -236,12 +242,14 @@ export class Enemy {
     this.hero = hero;
     this.training = training;
     this.boss = !!def.boss;
+    this.guard = guard && !!def.asGuard;
+    const asGuard = this.guard ? def.asGuard! : { life: 1, damage: 1 };
     this.id = id ?? nextId++;
     this.lifeMult = lifeMult;
     this.name = name ?? (hero ? `${pick(HERO.prefixes)} ${def.name}` : def.name);
-    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult;
+    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult * asGuard.life;
     this.life = this.maxLife;
-    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1);
+    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1) * asGuard.damage;
     this.speed = def.speed * SCALING.speed(wave) * rand(0.92, 1.08);
     this.radius = def.radius * (hero ? HERO.scale : 1);
     this.mass = this.radius * this.radius * (this.boss ? 10 : 1);

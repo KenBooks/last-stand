@@ -14,6 +14,7 @@ import { buildMossback } from './mossback';
 import { buildSporecaller } from './sporecaller';
 import { buildTreant } from './treant';
 import { buildBellWarden } from './bellWarden';
+import { buildCantor } from './cantor';
 
 import type { Model } from '../../types';
 
@@ -27,6 +28,7 @@ export const MODELS: Record<string, () => Model> = {
   brute: () => buildBrute('brute'),
   colossus: () => buildBrute('colossus'),
   bellwarden: buildBellWarden,
+  cantor: buildCantor,
   thornling: buildThornling,
   mossback: buildMossback,
   sporecaller: buildSporecaller,

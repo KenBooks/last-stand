@@ -39,7 +39,7 @@ import type { Player } from '../entities/player';
 import type { EnemyDef, Item } from '../types';
 import type { Portal } from '../world/props';
 
-interface SpawnUnit { type: EnemyId; hero: boolean }
+interface SpawnUnit { type: EnemyId; hero: boolean; guard?: boolean }
 const pendingUnits = new Set<SpawnUnit>();
 
 /** Retarget enemies still queued or waiting between a gate pulse and their rise. */
@@ -47,7 +47,7 @@ export function remapWaveSpawns(map: (type: EnemyId) => EnemyId): void {
   const r = G.run;
   if (!r) return;
   for (const group of r.queue) for (const unit of group) unit.type = map(unit.type);
-  if (r.boss) r.boss.type = map(r.boss.type);
+  for (const unit of r.boss ?? []) unit.type = map(unit.type);
   for (const unit of pendingUnits) unit.type = map(unit.type);
 }
 
@@ -78,8 +78,9 @@ export interface RunState {
   /** the packs of foes each gate has sent this wave (by the arena's portals), and how many foes have come */
   packs: number[];
   dealt: number;
-  /** the wave's boss while it is still to come, and the seconds it comes in once the wave's first group has come */
-  boss: SpawnUnit | null;
+  /** the wave's boss while it is still to come (an encounter's main boss and its guards), and the seconds it comes in
+   *  once the wave's first group has come */
+  boss: SpawnUnit[] | null;
   bossT: number;
   pending: number;
   remaining: number;
@@ -245,10 +246,13 @@ function buildWave(w: number): SpawnUnit[][] {
   return out.filter((g) => g.length);
 }
 
-/** The wave's boss, on a boss wave: its biome's ladder's for the wave (data/biomes.ts `bossOfWave`). */
-function bossOf(w: number): SpawnUnit | null {
+/** The wave's boss, on a boss wave: its biome's ladder's for the wave (data/biomes.ts `bossOfWave`), and its guards
+ *  where it comes as an encounter. */
+function bossOf(w: number): SpawnUnit[] | null {
   const rung = bossOfWave(G.arena.biome, w);
-  return rung ? { type: rung.id, hero: false } : null;
+  if (!rung) return null;
+  const guards = Array.from({ length: rung.guards?.count ?? 0 }, () => ({ type: rung.guards!.id, hero: false, guard: true }));
+  return [{ type: rung.id, hero: false }, ...guards];
 }
 
 function startWave(): void {
@@ -329,16 +333,16 @@ function gatesFor(r: RunState, count: number): number[] {
  * A group comes by a gate whole, or split over two, three or four, at random, in packs of random sizes, each pack
  * rising at its gate as the others do; the gates the wave has used least first, so none stands idle for a wave
  * (picked at random, two a group, often one twice, two or three were; dealt round all four one foe a gate, every group
- * came alike). The boss alone comes by any gate.
+ * came alike). The boss comes by any gate, an encounter's bosses each by a gate of its own.
  */
 function spawnGroup(group: SpawnUnit[]): void {
   const portals = G.arena.portals;
   const r = G.run!;
   // (the wave's first group sets the boss's time)
   const first = r.dealt === 0 && r.boss !== null;
-  const lone = group.length === 1 && !!ENEMIES[group[0].type].boss;
-  const sizes = lone ? [1] : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
-  const gates = lone ? [randInt(0, portals.length - 1)] : gatesFor(r, sizes.length);
+  const bosses = group.every((u) => !!ENEMIES[u.type].boss);
+  const sizes = bosses ? group.map(() => 1) : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
+  const gates = bosses ? shuffle(portals.map((_, i) => i)).slice(0, group.length) : gatesFor(r, sizes.length);
   const reaches: number[] = [];
   const party = partyScale(r.party);
   r.pending += group.length;
@@ -356,7 +360,7 @@ function spawnGroup(group: SpawnUnit[]): void {
       schedule(j * SPAWN_GAP, () => {
         pendingUnits.delete(u);
         r.pending--;
-        if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult: def.boss ? party.boss : party.life });
+        if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, guard: u.guard, lifeMult: def.boss ? party.boss : party.life });
       });
     }
   });
@@ -395,9 +399,9 @@ export function updateRun(dt: number): void {
     // all come and none of it stands
     if (r.boss && r.dealt > 0) {
       r.bossT -= dt;
-      if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup([r.boss]); r.boss = null; }
+      if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup(r.boss); r.boss = null; }
     }
-    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0) + (r.boss ? 1 : 0);
+    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0) + (r.boss?.length ?? 0);
     if (r.remaining === 0) waveCleared();
   } else if (r.phase === 'cleared') {
     // on to the next wave once everyone still standing chose to (a partner leaving counts too)
@@ -625,11 +629,13 @@ function onEnemyKilled(e: Enemy): void {
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;
   if (++r.multKills >= RUN.killsPerMultiplier && r.multiplier < RUN.multiplierMax) { r.multiplier++; r.multKills = 0; }
-  // a boss pays everyone standing; any other kill pays whoever landed it
+  // a boss pays everyone standing (an encounter's guard a drop, its main boss the whole); any other kill pays whoever
+  // landed it
   if (e.boss) {
+    const drops = e.guard ? 1 : LOOT.bossDrops;
     for (const p of G.players) {
       if (!p.active) continue;
-      for (let i = 0; i < LOOT.bossDrops; i++) schedule(i * 0.25, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave + 1, 0.8)); });
+      for (let i = 0; i < drops; i++) schedule(i * 0.25, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave + 1, 0.8)); });
     }
     return;
   }

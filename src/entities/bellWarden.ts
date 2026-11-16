@@ -16,7 +16,7 @@
 // - **Phase 3**: the bearers kneel; it stands where it is and tolls every `lastEvery` s.
 import * as THREE from 'three';
 import { G } from '../state';
-import { BELL_WARDEN } from '../data/enemies';
+import { BELL_WARDEN, CANTOR } from '../data/enemies';
 import { ARENA, BLOCK, partyScale } from '../data/balance';
 import { hurtPlayer } from '../combat/damage';
 import { addEffect, soundRing, lavaPool, shockwave } from '../fx/effects';
@@ -32,7 +32,7 @@ import { schedule } from '../core/timers';
 
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 import { spawnEnemy } from './spawner';
-import { openWeak, restoreParts, telegraphed, telegraphTime } from './bossKit';
+import { claimBeat, openWeak, restoreParts, telegraphShare, telegraphed, telegraphTime } from './bossKit';
 import { bossHooks } from './bossHooks';
 import { chase, fx } from './enemyAI';
 import type { Enemy } from './enemy';
@@ -57,6 +57,9 @@ export function bellWardenAI(e: Enemy): void {
   e.faceTo(p.pos.x, p.pos.z);
   const last = e.bossPhase >= 2;
   if (e.cd <= 0) {
+    // (in an encounter, its toll waits its turn: no two bosses' warned hits land together)
+    const name = e.bossPhase >= 1 ? 'doubleToll' : 'toll';
+    if (!claimBeat(telegraphTime(e, name) * telegraphShare(e, name)!, CANTOR.beat)) { e.cd = 0.25; return; }
     toll(e);
     // (its last phase tolls every `lastEvery` s, start to start)
     e.cd = last ? Math.max(0.2, B.lastEvery - telegraphTime(e, 'doubleToll')) : e.def.cooldown * rand(0.9, 1.1);
@@ -75,7 +78,8 @@ function toll(e: Enemy): void {
   telegraphed(e, name, () => {
     fx('toll', e.id, e.pos.x, e.pos.z, double ? 1 : 0, e.damage);
     e.brain.tolls = (e.brain.tolls ?? 0) + 1;
-    if (e.brain.tolls % B.raiseEvery === 0) raiseHusks(e);
+    // (a guard raises none: its Cantor's choir is the encounter's crowd)
+    if (!e.guard && e.brain.tolls % B.raiseEvery === 0) raiseHusks(e);
   });
 }
 

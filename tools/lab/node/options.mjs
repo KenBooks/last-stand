@@ -1397,15 +1397,18 @@ export const COMMANDS = {
       + 'rung and the banner\'s line (ladder); the Bell-Warden\'s life taken over and under each phase\'s share '
       + '(phases); its toll at the hero near it (stunned for its time, after its warning), far off (faded) and with a '
       + 'shield raised (--class warrior --gear shield) (toll); each chain struck from its side, all four dropping the '
-      + 'bell for its window and whole again after (chains); walked into, it gives way a hair (stand); its ghosts seizing a hero near and dropping him, not one far off (grab); its fight\'s effects drawn, no program compiled '
+      + 'bell for its window and whole again after (chains); walked into, it gives way a hair (stand); its ghosts seizing a hero near and dropping him, not one far off (grab); the Ossuary Cantor and its two guards: '
+      + 'warded while a guard stands, its casts ringed first, no two bosses\' hits within its beat, its heart bared '
+      + '(encounter); its fight\'s effects drawn, no program compiled '
       + '(compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
     options: {
       parts: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'compiles', 'ttk', 'pictures'],
-        help: 'the parts (all but pictures by default): ladder, phases, toll, chains, stand, grab, compiles, ttk, pictures (the '
-          + 'Bell-Warden in each of its moments, a sheet for the eye)',
+        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk', 'pictures', 'encounterPictures'],
+        help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, encounter, '
+          + 'compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
+          + '(the Cantor\'s encounter in each of its)',
       },
       canary: {
         kind: 'switch',
