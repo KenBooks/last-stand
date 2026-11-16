@@ -6,6 +6,7 @@
 // Its paving and what's built are each drawn whole in one colour on a layer of their own, and the layer laid on at its
 // share: each road, the square and the terrace laid on at their share one over another, every place two met was darker
 // than either, rings round the square and seams down the roads (from play, "fix minimap topology, make it proper").
+import { HOUSES, ROOM_IDS } from '../data/houses';
 import { BIOME_IDS, BIOMES } from '../data/biomes';
 import { COTTAGES, ENTRANCES, GAP_HALF, HALL, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace } from '../data/village';
 import { FOUNTAIN } from '../world/fountain';
@@ -25,6 +26,8 @@ const MARGIN = 6;
 const SHARP = 2;
 /** how wide a way out's road is drawn (m), and the dots of a portal and of what's used (px) */
 const WAY_WIDTH = 3, PORTAL_DOT = 3.5, USED_DOT = 2;
+/** how wide a house walked into is marked (px) */
+const HOUSE_MARK = 9;
 /** how wide a cottage's footpath is drawn (m) */
 const FOOTPATH_WIDTH = 1.2;
 
@@ -147,6 +150,29 @@ function drawVillage(c: CanvasRenderingContext2D, s: number): void {
     if (!object.biome) dot(c, s, object.at[0], object.at[1], USED_DOT, USED);
   }
   for (const id of BIOME_IDS) dot(c, s, portalPlace(id).x, portalPlace(id).z, PORTAL_DOT, BIOMES[id].minimap.portal);
+  // (each house walked into: a little house on its roof)
+  for (const id of ROOM_IDS) {
+    const cottage = COTTAGES[HOUSES[id].cottage];
+    house(c, s, cottage.x, cottage.z, HOUSE_MARK, USED);
+  }
+}
+
+/** A little house at (x, z), `size` px across: a gable on a block, a dark door in it. */
+function house(c: CanvasRenderingContext2D, s: number, x: number, z: number, size: number, fill: string): void {
+  const h = size / 2, cx = x * s, cy = z * s;
+  c.fillStyle = fill;
+  c.beginPath();
+  c.moveTo(cx - h, cy);
+  c.lineTo(cx, cy - h);
+  c.lineTo(cx + h, cy);
+  c.lineTo(cx + h * 0.75, cy);
+  c.lineTo(cx + h * 0.75, cy + h);
+  c.lineTo(cx - h * 0.75, cy + h);
+  c.lineTo(cx - h * 0.75, cy);
+  c.closePath();
+  c.fill();
+  c.fillStyle = 'rgba(40,28,16,.85)';
+  c.fillRect(cx - h * 0.2, cy + h * 0.3, h * 0.4, h * 0.7);
 }
 
 /** The village drawn on a minimap `width` px across, turned as the caller has turned `c` round its middle. */
