@@ -22,7 +22,8 @@ import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
-import { copyPerfReportAt } from './perfHud';
+import { copyPerfReportAt, perfHudAt } from './perfHud';
+import { dragOverlays, dropOverlays, grabOverlays } from './overlayPlace';
 import { VILLAGE } from '../core/beta';
 import type { SkillDef, SkillKey } from '../types';
 import type { VillageObject } from '../data/village';
@@ -41,11 +42,16 @@ const AUTO_RANGE = 22, AHEAD = 6;
 /** a released cast keeps its key down this long, in case the character is still busy */
 const RELEASE_HOLD = 0.35;
 
-interface Stick { id: number; x0: number; y0: number; t0: number; far: boolean }
+/** a finger on the stick's pad: where and when it went down, whether it went far, whether it went down on the
+ *  performance overlay, and whether it holds the overlays now (it moves them, not the hero) */
+interface Stick { id: number; x0: number; y0: number; t0: number; far: boolean; onPerf: boolean; holds: boolean }
 /** a touch on the stick's pad that stayed this near (css px) and was let go this soon (ms) is a tap: over the
  *  performance overlay, which lets touches through to the pad, it copies a report */
 const TAP_NEAR = 12;
 const TAP_MS = 350;
+/** a touch on the performance overlay held this near this long (ms) lifts the overlays, to be moved with the finger
+ *  (#245): no tap's, and a finger that walks the hero from the panel moves before then */
+const HOLD_MS = 450;
 interface Press {
   id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean;
   /** held as its key is, the hero showing its own preview (`SkillDef.aimed`) */
@@ -119,13 +125,15 @@ export function initTouch(v: TouchVillage): void {
     e.preventDefault();
     if (stick) return;
     pad.setPointerCapture(e.pointerId);
-    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), far: false };
+    const onPerf = perfHudAt(e.clientX, e.clientY);
+    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), far: false, onPerf, holds: false };
     base.style.left = `${e.clientX}px`; base.style.top = `${e.clientY}px`;
     base.classList.add('on');
     knob.style.transform = '';
   });
   pad.addEventListener('pointermove', (e) => {
     if (stick?.id !== e.pointerId) return;
+    if (stick.holds) { dragOverlays(e.clientX, e.clientY); return; }
     const dx = e.clientX - stick.x0, dy = e.clientY - stick.y0;
     const d = Math.hypot(dx, dy);
     if (d > TAP_NEAR) stick.far = true;
@@ -146,11 +154,12 @@ export function initTouch(v: TouchVillage): void {
     stick = null;
     input.stick.x = input.stick.y = 0;
     base.classList.remove('on');
+    dropOverlays();
   };
   pad.addEventListener('pointerup', (e) => {
     // (a tap over the performance overlay copies its report: the panel lets touches through to the stick, its frame
     // rate alone a button, and the owner tapped the panel as before and copied nothing)
-    const tapped = stick?.id === e.pointerId && !stick.far && performance.now() - stick.t0 < TAP_MS;
+    const tapped = stick?.id === e.pointerId && !stick.far && !stick.holds && performance.now() - stick.t0 < TAP_MS;
     if (tapped) copyPerfReportAt(stick!.x0, stick!.y0);
     endStick(e);
   });
@@ -165,7 +174,7 @@ export function initTouch(v: TouchVillage): void {
     if (e.touches.length !== 2 || presses.size) return;
     pinch = { d: dist(e.touches), a: angle(e.touches), twist: 0 };
     // (a second finger makes it a gesture: the first, on the stick's pad, walks the hero no further)
-    if (stick) { stick = null; input.stick.x = input.stick.y = 0; base.classList.remove('on'); }
+    if (stick) { stick = null; input.stick.x = input.stick.y = 0; base.classList.remove('on'); dropOverlays(); }
   }, { passive: true });
   window.addEventListener('touchmove', (e) => {
     if (!pinch || e.touches.length !== 2) return;
@@ -203,7 +212,7 @@ export function initTouch(v: TouchVillage): void {
 }
 
 /**
- * The full screen icon under the pause button, as the pause menu's Fullscreen: the browser's bars take a lot of a
+ * The full screen icon beside the pause button, as the pause menu's Fullscreen: the browser's bars take a lot of a
  * phone's screen (from play, "lets also add full screen button near bag, just the icon"). Its arrows say which way it
  * goes, and it's left out where the page can't go full screen (an iPhone's).
  */
@@ -366,6 +375,16 @@ function updateVillageRow(on: boolean): void {
   use.classList.toggle('hidden', !says);
 }
 
+/** A finger held still on the performance overlay `HOLD_MS` lifts the overlays: from then on it moves them, and the
+ *  stick it started lets the hero stand (a finger held still makes no event, so it's seen from the frame). */
+function holdOverlays(): void {
+  if (!stick?.onPerf || stick.far || stick.holds || performance.now() - stick.t0 < HOLD_MS) return;
+  stick.holds = true;
+  input.stick.x = input.stick.y = 0;
+  $('#touch-stick').classList.remove('on');
+  grabOverlays(stick.x0, stick.y0);
+}
+
 export function updateTouch(dt: number): void {
   const menu = $('#menu');
   const show = input.touchMode && !G.menuOpen && (G.mode === 'run'
@@ -379,7 +398,9 @@ export function updateTouch(dt: number): void {
     presses.clear();
     for (const button of buttons) button.el.classList.remove('pressed');
     released = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();
+    dropOverlays();
   }
+  if (show) holdOverlays();
 
   input.aim = null;
   ring.visible = false;

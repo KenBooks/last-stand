@@ -139,10 +139,11 @@ lines made them taller), the battle log with each skill on a key struck at the f
 listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as
 wide as the screen, no row wider than the panel, its head on one line; and the same in touch mode, put in it by a finger's tap, where its lines must
 let a touch through: on a phone the panel first lay over the scores button under the pause button), the run's HUD
-in touch mode (`page/uiTouch.ts`: the top corners' controls at the window's edges, the pause button and the minimap
-24 px in at the most, whatever the safe area's insets, and none of the corners' controls over another; on the owner's
-phone held sideways, its camera cutout's 34 px inset and a margin stood the pause button 44 px in, and the bars at 85;
-`--canary` moves the pause button 40 px in, which must be found), the choice after a wave in touch mode with a rare
+in touch mode (`page/uiTouch.ts`: the top corners' controls at the window's edges, the minimap 24 px in at the most,
+whatever the safe area's insets, the pause button 24 px from the minimap at the most (#245: in the top left corner it
+lay under the performance overlay), and none of the corners' controls over another; on the owner's phone held
+sideways, its camera cutout's 34 px inset and a margin stood the pause button 44 px in, and the bars at 85;
+`--canary` moves the pause button 40 px away from the minimap, which must be found), the choice after a wave in touch mode with a rare
 and a common in the bag (on a short screen, 520 px high or less, down to 30% of the window's height at the most; its
 buttons 28 px tall at least; over none of the corners' controls: on the owner's phone it reached 41.6% down, over the
 bars, on a 1024x700 touch screen it lay over them too, and an upright tablet's buttons were 26 px tall; `--canary` pads it twice over, which must be found), each pictured

@@ -17,10 +17,10 @@ body.touch .stow-hint kbd { display: none; }
   // (stowed, the rail is gone from sight but for its Practice button, and lets every other tap through: it took the
   // pause and full screen buttons' under it, which did nothing on a phone)
   #{$panels} #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
-  // (and its Practice, Back now, stands in the touch HUD's corner under the pause button, where the run has its
+  // (and its Practice, Back now, stands in the touch HUD's left corner a button down, where the run has its
   // scores: half way down the rail, the overlays down the left lay over it, and stood aside for it they left the
   // edge. Its panel's zoom, `--ui`, scales its offsets too, so they're the screen's divided by it: as they were, on
-  // a phone of a high ratio it lay half over the pause button, `lab ui --states buttonsTouch`)
+  // a phone of a high ratio it lay half over the pause button, then in that corner, `lab ui --states buttonsTouch`)
   #{$panels} #menu.stowed #rail-practice { position: fixed; left: calc(#{$touch-edge} / var(--ui, 1));
     top: calc((10px + 52px * var(--touch, 1)) / var(--ui, 1)); pointer-events: auto; }
   #{$panels} #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }

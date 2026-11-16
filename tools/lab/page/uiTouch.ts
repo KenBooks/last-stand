@@ -2,10 +2,12 @@
 // - hudTouch: the touch HUD's corners against the screen's edges. The top corners sit at the edge, clear of a camera
 //   cutout's safe area (a cutout sits in the middle of a phone's short side held sideways, and the minimap's corner
 //   never took it): on the owner's phone the pause button, the menu button and the bars stood a cutout's inset and a
-//   margin in from the left edge, the minimap a margin from the right. And none of the corners' controls over another.
+//   margin in from the left edge, the minimap a margin from the right. The pause button stands beside the minimap
+//   (#245: in the top left corner it lay under the performance overlay). And none of the corners' controls over
+//   another.
 // - decisionTouch: the choice after a wave on a short screen (height 520 or less): within the window's top share, its
 //   buttons a finger's height. It covered the top 40% of the owner's phone, over the hero.
-// A canary each: the pause button moved a cutout's inset in, the choice's padding doubled.
+// A canary each: the pause button moved a cutout's inset away from the minimap, the choice's padding doubled.
 import { G } from '../../../src/state';
 import { showDecision } from '../../../src/ui/hud';
 import { makeItem } from '../../../src/loot/items';
@@ -21,8 +23,10 @@ export interface TouchFound {
 
 /** the most a top corner's control may stand in from its edge of the window (css px) */
 const EDGE_PX = 24;
+/** the most the pause button may stand from the minimap's side (css px) */
+const BESIDE_PX = 24;
 /** the touch HUD's controls round the screen's corners, which none may lie over another */
-const CORNERS = ['#btn-pause', '#btn-full', '#btn-scores', '#bottombar', '#minimap-wrap', '#touch-skills'];
+const CORNERS = ['#btn-pause', '#btn-full', '#btn-view', '#btn-scores', '#bottombar', '#minimap-wrap', '#touch-skills'];
 /** a short screen's height (css px; the short-screen layout, src/ui/AGENTS.md) */
 const SHORT_SCREEN = 520;
 /** the most of a short screen's height the choice after a wave may reach down */
@@ -35,12 +39,12 @@ const TAP_AT = { x: 0.5, y: 0.4 };
 const TOUCH_FRAMES = 2;
 /** the run's bag as the choice shows it: a rare and a common, as on the owner's phone (their chips beside the risk) */
 const BAG: RarityId[] = ['rare', 'common'];
-/** what the canaries plant: the pause button a cutout's inset further in, the choice's padding doubled */
+/** what the canaries plant: the pause button a cutout's inset away from the minimap, the choice's padding doubled */
 const CANARY_INSET_PX = 40;
 const CANARY_PADDING = '40px 22px';
 /** the problems each canary must raise */
 export const TOUCH_CANARIES = {
-  hudTouch: { name: 'stands in from', what: 'the pause button moved in from the edge' },
+  hudTouch: { name: 'from the minimap', what: 'the pause button moved away from the minimap' },
   decisionTouch: { name: 'reaches down', what: 'the choice padded twice over' },
 };
 
@@ -88,23 +92,30 @@ function overlapping(): string[] {
   return pairs;
 }
 
+/** The pause button beside the minimap, in the top right corner: its line added to `lines`, and its problems. */
+function pauseBeside(lines: string[]): string[] {
+  const pause = boxOf('#btn-pause');
+  const minimap = boxOf('#minimap-wrap');
+  if (!pause) return ['hudTouch: no pause button shown'];
+  if (!minimap) return ['hudTouch: no minimap shown'];
+  const gap = minimap.left - pause.right;
+  lines.push(`  #btn-pause from the minimap: ${gap.toFixed(1)} px`);
+  if (gap <= BESIDE_PX) return [];
+  return [`hudTouch: the pause button stands ${gap.toFixed(1)} px from the minimap (${BESIDE_PX} at most)`];
+}
+
 /** The touch HUD's top corners against the window's edges: lines and problems. */
 function cornersFound(): TouchFound {
   const insets = safeArea();
   const lines = [`  the safe area's insets: ${insets.left} px left, ${insets.right} px right`];
   const problems: string[] = [];
   if (!document.body.classList.contains('touch')) problems.push('hudTouch: the tap left the page out of touch mode');
-  for (const selector of ['#btn-pause', '#btn-full', '#btn-scores', '#bottombar']) {
+  for (const selector of ['#btn-view', '#btn-scores', '#bottombar']) {
     const box = boxOf(selector);
     if (!box) continue;
     lines.push(`  ${selector} from the left edge: ${box.left.toFixed(1)} px`);
   }
-  const pause = boxOf('#btn-pause');
-  if (!pause) problems.push('hudTouch: no pause button shown');
-  else if (pause.left > EDGE_PX) {
-    const inFrom = pause.left.toFixed(1);
-    problems.push(`hudTouch: the pause button stands in from the left edge ${inFrom} px (${EDGE_PX} at most)`);
-  }
+  problems.push(...pauseBeside(lines));
   const map = boxOf('#minimap');
   if (map) {
     const gap = innerWidth - map.right;
@@ -125,9 +136,9 @@ export function hudTouchShown(canary: boolean): TouchFound {
   const found = cornersFound();
   if (!canary) return found;
   const pause = document.getElementById('btn-pause')!;
-  pause.style.marginLeft = `${CANARY_INSET_PX}px`;
+  pause.style.marginRight = `${CANARY_INSET_PX}px`;
   const planted = cornersFound();
-  pause.style.marginLeft = '';
+  pause.style.marginRight = '';
   return { lines: found.lines, problems: [...found.problems, ...planted.problems] };
 }
 

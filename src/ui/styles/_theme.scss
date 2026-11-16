@@ -50,11 +50,13 @@ $outline: 0 1px 2px #000, 0 0 6px #000;
 $panels: ':where(html[data-lobby="panels"])';     // the panels over the battleground
 $village: ':where(html[data-lobby="village"])';   // the village
 
-// the touch HUD's top-left corner: its round buttons (pause, scores) at the screen's edge, the bars, buffs and
-// partners' frames beside them. No safe-area inset: a phone held sideways has its camera cutout in the middle of its
-// short side, and the inset (34 px on an S25 Edge) stood them that far in from the edge, the minimap's corner never
-// taking it
+// the touch HUD's top corners: their round buttons at the screen's edge (the left's the view and the scores, the
+// right's pause and full screen, beside the minimap in a run), the bars, buffs and partners' frames beside the left's.
+// No safe-area inset: a phone held sideways has its camera cutout in the middle of its short side, and the inset (34 px
+// on an S25 Edge) stood them that far in from the edge, the minimap's corner never taking it
 $touch-edge: 10px;
-// (beside the pause button; in the village beside the view button too, side by side in the corner: `--touch-corner`,
-// set with the village's other touch sizes in _touch.scss)
-$touch-beside: calc(#{$touch-edge} + var(--touch-corner, 54px) * var(--touch, 1));
+// (beside the left corner's column of buttons, one button wide)
+$touch-beside: calc(#{$touch-edge} + 54px * var(--touch, 1));
+// (the right corner's buttons from the right: pause at the edge, or beside the minimap where one shows, full screen
+// beside it, a button further in)
+$touch-next: calc(54px * var(--touch, 1));

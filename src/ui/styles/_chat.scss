@@ -62,7 +62,7 @@ body.touch .chat-send { min-height: 40px; min-width: 64px; font-size: 15px; just
 body.touch .chat-enter { display: none; }
 body.touch .chat-line { font-size: touch(14px); }
 
-// on touch: a button under the scores button (the pause and full screen buttons' column)
+// on touch: a button under the scores button (the top left corner's column)
 #btn-chat { position: fixed; top: calc(118px * var(--touch, 1)); left: $touch-edge; width: 44px; height: 44px; z-index: 13;
   display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba($frame, .6);
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }

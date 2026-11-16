@@ -35,7 +35,7 @@
   #scoreboard .sb-graph { width: hud(64px); }
 }
 
-// on touch: a button under the pause button and the full screen one
+// on touch: a button in the top left corner's column, a button down (under the village's view button)
 #btn-scores { position: absolute; top: calc(62px * var(--touch, 1)); left: $touch-edge; width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }
