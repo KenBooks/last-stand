@@ -52,3 +52,11 @@ scenario is measured, then run again to film it from the side round its first ho
 a picture every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
 an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
 A/B compares the reports.
+
+Every scenario is set up with the top-down camera turned to the battleground's own (`Fixture.yaw` 0: `d` runs +x, `w`
+-z), as the keys go by the camera and the boot's differs by class (the village opens at a spot of its own: the
+warrior's boot faced it a half turn round from the ranger's, and its `run` went -x into the crypt's wall). The `run`
+goes +x along z -8.5 past the dais's side, the floor's clearest lane (along z 14 a prop at -5.6, 13.9 stood in it),
+or the nearest clear lane beside it should a prop come within 1.5 m (`page/straightRun.ts`), and says how straight it
+held: it fails when the facing lies over 3 degrees off +x or turns over 3 degrees across its frames, with a canary of
+made-up runs (held straight, turning 10 degrees, the other way) it must judge right.

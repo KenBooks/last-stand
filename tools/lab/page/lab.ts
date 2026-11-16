@@ -259,6 +259,17 @@ function lookAlong(facing: number): void {
   renderer.lookBy(-turn / CAMERA.lookSpeed, 0);
 }
 
+/** The top-down camera turned at once to `yaw` (rad), on `focus`: brought to rest first, so the turn is from where it
+ *  is drawn, not from a glide's way there (a commit from before `settleCamera` turns it as it glides). */
+function turnTopDown(yaw: number, focus: THREE.Vector3): void {
+  renderer.settleCamera?.(focus);
+  renderer.turnBy(wrapAngle(yaw - renderer.cameraYaw()));
+  renderer.settleCamera?.(focus);
+}
+
+/** An angle brought within a half turn either way (rad). */
+const wrapAngle = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
+
 /** One frame's input, as a player would give it. */
 export interface Frame {
   /** keys held down this frame (`w`, `1`...) */
@@ -304,6 +315,10 @@ export interface Fixture {
   /** every item he wears of this rarity, as its look shows it (Rare and up glow: models/itemGlow.ts); as the boot
    *  rolled them by default */
   rarity?: RarityId;
+  /** the top-down camera turned to this yaw (rad: 0 the battleground's own, screen-up -z, so `d` runs +x), for a run
+   *  whose keys must go one way in the world; as the boot left it by default, which is the village's opening spot's
+   *  and differs by class (the warrior's boot faced it a half turn round: `d` ran -x, `page/straightRun.ts`) */
+  yaw?: number;
 }
 
 /** the armour a hero can be seen wearing (`Gear`'s flags) */
@@ -635,6 +650,7 @@ export class Lab {
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
+    if (fixture.yaw !== undefined) turnTopDown(fixture.yaw, spot);
     // (standing still: an older tree's `place` kept the velocity, and the hero glided on from his spot)
     this.player.vel.set(0, 0, 0);
     this.player.facing = facing;

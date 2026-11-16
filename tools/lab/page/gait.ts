@@ -20,6 +20,7 @@ import { bodyBreaches, describeBreach } from './range';
 import { LegTrace, planOf, traceSpanOf, type TracedFrame, type TraceSpan } from './legTrace';
 import { FootfallWatch, footfallLines } from './footfalls';
 import { judgeTrunk, trunkLine, trunkSampleOf, type TrunkSample } from './trunkSwing';
+import { setUpClear, straightCanary, straightLine, straightProblems } from './straightRun';
 import {
   evennessLine, runnerCanary, stepPairsOf, ThighSwings, TogetherWatch, togetherLine, unevenOf, type StepPair,
 } from './alternation';
@@ -40,6 +41,9 @@ interface GaitScenario {
   aim: [number, number] | null;
   legs: GaitLeg[];
   film: ViewName;
+  /** a run that must go straight this way (rad, as the hero faces: 0 along +z), checked frame by frame
+   *  (`page/straightRun.ts`) */
+  straight?: number;
 }
 
 const legOf = (keys: string[], attack: GaitLeg['attack'], frames: number): GaitLeg => ({ keys, attack, frames });
@@ -52,8 +56,13 @@ const TAP_UP = 12;
  *  the point a drawn one aims at (along +z) */
 const LEVEL: [number, number] = [14, 14];
 const LEVEL_AIM: [number, number] = [14, 40];
-/** where a long run starts (open ground: along z 14 to the dais's side, every prop at least 1.5 m off it) */
-const LONG_RUN: [number, number] = [-20, 14];
+/** where a long run starts: along z -8.5 past the dais's side (the floor's clearest lane: along z 14 a prop stood in
+ *  it), or the nearest lane beside it clear of every prop (`setUpClear`); `d` runs +x with the camera at `YAW`, the
+ *  way it faces (the boot's camera ran the warrior the other way, into the wall: `page/straightRun.ts`) */
+const LONG_RUN: [number, number] = [-20.6, -8.5];
+/** the top-down camera every walk is set up with (the battleground's own: `d` runs +x, `w` -z), so its keys go the
+ *  same way in the world whatever the boot left it at (`Fixture.yaw`) */
+const YAW = 0;
 /** where the walks over the steps start (on the dais, near its middle), and the point a drawn one aims at */
 const DAIS: [number, number] = [1.5, 0.3];
 const DAIS_AIM: [number, number] = [1.5, 25];
@@ -93,6 +102,7 @@ const SCENARIOS: GaitScenario[] = [
     aim: null,
     legs: [legOf(['d'], false, 200)],
     film: 'left',
+    straight: Math.PI / 2,
   },
   {
     name: 'drawn',
@@ -303,6 +313,9 @@ interface GaitRun {
   stillFor: number[];
   /** each frame's feet, as a film's note has them (`_` down, `^` up) */
   feetAt: string[];
+  /** the way he faces each frame (rad), for a run that must go straight, and where it started (x, z) */
+  facings: number[];
+  from: [number, number];
 }
 
 /** The film to take: from which frame, what it is round, and its pictures so far. */
@@ -506,10 +519,16 @@ async function runScenario(
   tune?: Record<string, number[]>,
 ): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
-  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true, tune });
+  const fixture = {
+    at: scenario.start, facing, yaw: YAW, nocked: Boolean(lab.player.cls.quiver), fresh: true, tune,
+  };
+  const seconds = window.__labClock.frame / 1000;
+  const frames = lengthened(scenario.legs, offset).reduce((sum, leg) => sum + leg.frames, 0);
+  let from = scenario.start;
+  if (scenario.straight === undefined) await lab.setup(fixture);
+  else from = await setUpClear(lab, fixture, scenario.straight, frames * seconds);
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
-  const seconds = window.__labClock.frame / 1000;
   const tracer = trace ? new LegTrace(lab, legs, trace) : null;
   const run: GaitRun = {
     frames: 0,
@@ -548,6 +567,8 @@ async function runScenario(
     lastWay: [],
     stillFor: [],
     feetAt: [],
+    facings: [],
+    from,
   };
   const shapes = shapesOf(lab, legs, [lab.joints.ankleL, lab.joints.ankleR]);
   const steps = new StepWatch(legs);
@@ -558,6 +579,7 @@ async function runScenario(
   const thighs = new ThighSwings();
   const measure = () => {
     const frame = run.frames++;
+    if (scenario.straight !== undefined) run.facings.push(lab.player.facing);
     const at = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
     const moved = at.distanceTo(lastAt);
     lastAt.copy(at);
@@ -1142,6 +1164,10 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
       if (run.heldUp) {
         report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
       }
+      if (scenario.straight !== undefined) {
+        report.lines.push(`  ${straightLine(run.facings, scenario.straight, run.from)}`);
+        report.problems.push(...straightProblems(`gait: ${scenario.name}`, run.facings, scenario.straight));
+      }
       if (options.films === false) continue;
       const gallops = gallopsOf(run.steps, seconds).map((gallop) => gallop.left);
       const film = filmFor([...run.hopFrames, ...gallops].sort((a, b) => a - b));
@@ -1153,6 +1179,7 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
   const canary = runnerCanary();
   report.problems.push(...canary.missed.map((missed) => `gait: the alternation's canary missed: ${missed}`));
   report.lines.push(canary.said);
+  report.problems.push(...straightCanary().map((missed) => `gait: the straight run's canary missed: ${missed}`));
   report.lines.push(
     'a person: walks to about 2 m/s with a foot always down and both down 15 to 25% of the time, the hips highest on'
       + ' one foot; runs above, in the air more the faster (20 to 35% at a jog, about half at 7 m/s), the hips 5 to 9'
