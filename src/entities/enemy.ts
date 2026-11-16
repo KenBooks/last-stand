@@ -390,7 +390,7 @@ export class Enemy {
     if (c && !carrying(c)) this.letGo(c);
     else if (c) {
       placeBefore(this.pos, this.radius, c);
-      resolveWorld(this.pos, this.radius);
+      this.keepInWorld();
       this.facing = Math.atan2(c.by.pos.x - this.pos.x, c.by.pos.z - this.pos.z);
     }
     if (this.tossed) this.fly(dt, true);
@@ -450,7 +450,7 @@ export class Enemy {
     if (moves) {
       this.pos.x += f.vx * dt;
       this.pos.z += f.vz * dt;
-      resolveWorld(this.pos, this.radius);
+      this.keepInWorld();
     }
     if (!flown(f, dt)) return;
     this.tossed = null;
@@ -484,6 +484,14 @@ export class Enemy {
     const a = Math.atan2(x - this.pos.x, z - this.pos.z);
     const d = Math.abs(((a - this.facing + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
     return d < arc;
+  }
+
+  /** Kept in the world's walls and off its props: never while the hero is in a house's room, whose walls and furniture
+   *  they are then while the lobby's foes stand in the village's frame (kept in them, the yard's dummies were shoved
+   *  into the room's corner, by the fountain, and left there: `lab houses`). */
+  private keepInWorld(): void {
+    if (G.arena.room) return;
+    resolveWorld(this.pos, this.radius);
   }
 
   // --- update ------------------------------------------------------------------
@@ -534,7 +542,7 @@ export class Enemy {
     this.pos.x += (this.vel.x + this.knock.x) * dt;
     this.pos.z += (this.vel.z + this.knock.z) * dt;
     this.knock.multiplyScalar(Math.exp(-dt * 6));
-    resolveWorld(this.pos, this.radius);
+    this.keepInWorld();
 
     if (!frozen) this.facing = angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;

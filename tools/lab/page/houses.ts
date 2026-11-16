@@ -4,19 +4,23 @@
 // outside of cut away from above and none through the close views (the camera kept inside them), a walk at the back
 // wall held in; the house of records' trophies shown for the bosses beaten alone, its great ledger's card opened by E with its
 // pages fitting the window; the tavern's party table opening Play together; and the door inside by E putting him back
-// before the cottage's door, the village shown again and the room hidden. Each in another of the views.
+// before the cottage's door, the village shown again and the room hidden, the yard's dummies still on their spots. Each
+// in another of the views.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { HOUSES, ROOM_IDS, insideOf, outsideOf, type RoomId } from '../../../src/data/houses';
 import { objectNear, villageObject } from '../../../src/game/village';
 import { chronicleOf } from '../../../src/game/chronicle';
-import { viewMode, type ViewMode } from '../../../src/core/renderer';
+import { faceCamera, settleCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { toVillage } from './village';
-import type { VillageObject } from '../../../src/data/village';
+import { YARD_DUMMIES, type VillageObject } from '../../../src/data/village';
+import { resolveWorld } from '../../../src/world/collision';
+import type { Enemy } from '../../../src/entities/enemy';
 
-/** `--canary`: a program compiled as the first room comes in, and the room left shown as he comes out. */
+/** `--canary`: a program compiled as the first room comes in, the yard's dummies kept in its walls as if they stood
+ *  there, and the room left shown as he comes out. */
 export interface HousesOptions {
   canary: boolean;
 }
@@ -31,6 +35,9 @@ const PLACED_WITHIN = 0.3;
 const KEPT_IN = 0.1;
 /** where across each room (x, m) a walk from the door to the back wall meets nothing standing in it */
 const LANES: Record<RoomId, number> = { records: -1.6, tavern: 2.2 };
+/** how far a yard dummy may stand from its spot after a visit (m): the lobby's foes stand in the village's frame, and
+ *  kept in the room's walls as he stood inside, they were shoved into its corner by the fountain and left there */
+const DUMMY_KEPT = 0.05;
 /** each visit: the house and the view it's walked in */
 const VISITS: readonly { id: RoomId; view: ViewMode }[] = [
   { id: 'records', view: 'top' },
@@ -47,6 +54,49 @@ interface Visit {
 }
 
 const programs = (): number => G.renderer.info.programs?.length ?? 0;
+const yardDummies = (): Enemy[] => G.enemies.filter((e) => e.def.dummy);
+
+/** How far each of the yard's dummies stands from its spot (`YARD_DUMMIES`, in the order they were stood). */
+function dummiesOffSpots(): number[] {
+  return yardDummies().map((dummy, i) => {
+    const [x, z] = YARD_DUMMIES[i];
+    return Math.hypot(dummy.pos.x - x, dummy.pos.z - z);
+  });
+}
+
+/** The yard's dummies against their spots after a visit to `id`: its line and what's wrong. */
+function dummyProblems(id: RoomId): { line: string; problems: string[] } {
+  const off = dummiesOffSpots();
+  const problems: string[] = [];
+  if (off.length !== YARD_DUMMIES.length) problems.push(`${id}: ${off.length} yard dummies of ${YARD_DUMMIES.length}`);
+  const moved = off.filter((d) => d > DUMMY_KEPT);
+  if (moved.length) {
+    const most = Math.max(...moved).toFixed(2);
+    problems.push(`${id}: out of it, ${moved.length} yard dummies off their spots, by up to ${most} m`);
+  }
+  const line = `${id}: the yard's dummies off their spots by ${off.map((d) => d.toFixed(2)).join(', ')} m`;
+  return { line, problems };
+}
+
+/** Where the square and the training yard are pictured from after the visits: south of the fountain, over the
+ *  shoulder toward the yard (x, z, m), and the way he faces (rad about y). */
+const YARD_SEEN_FROM: readonly [number, number] = [-1.5, -6.5];
+const YARD_SEEN_FACING = Math.atan2(7, 19);
+
+/** The square and the training yard over the shoulder, the yard's dummies where the visits left them. */
+async function yardPicture(lab: Lab): Promise<Pictured> {
+  await viewAs(lab, 'third');
+  await stand(lab, YARD_SEEN_FROM, YARD_SEEN_FACING);
+  faceCamera(YARD_SEEN_FACING);
+  settleCamera(G.player.pos);
+  await lab.step(SETTLE);
+  return lab.screen('houses-yard-after');
+}
+
+/** The canary's fault: each yard dummy kept in the world's walls and off its props, the room's while he's in one. */
+function keepDummiesInWorld(): void {
+  for (const dummy of yardDummies()) resolveWorld(dummy.pos, dummy.radius);
+}
 const villageShown = (): boolean => G.arena.groupOf('village').visible;
 const roomShown = (id: RoomId): boolean => G.arena.rooms![id].group.visible;
 
@@ -179,7 +229,10 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   await lab.until(() => G.arena.room === id, DOOR_FRAMES, `${id}'s door never took him in`);
   // (the canary's program: a material of its own, compiled as the room is first drawn)
   const planted = canary ? plantProgram(id) : null;
-  await lab.step(SETTLE);
+  await lab.step(SETTLE, () => {
+    if (canary) keepDummiesInWorld();
+    return {};
+  });
   planted?.removeFromParent();
   const into = insideOf(id);
   const placed = Math.hypot(G.player.pos.x - into.x, G.player.pos.z - into.z);
@@ -229,7 +282,11 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   if (leftShown && !canary) problems.push(`${id}: out of it, the room is still drawn`);
   if (programs() !== leaving) problems.push(`${id}: ${programs() - leaving} programs compiled going out`);
   if (canary) G.arena.rooms![id].group.visible = false;
-  return { lines, problems, caught: canary ? caught === true && leftShown : undefined };
+  const dummies = dummyProblems(id);
+  lines.push(dummies.line);
+  const dummiesMoved = dummies.problems.length > 0;
+  if (!canary) problems.push(...dummies.problems);
+  return { lines, problems, caught: canary ? caught === true && leftShown && dummiesMoved : undefined };
 }
 
 /** The canary's program: a mesh in a material no other program has, added to room `id` for its next draw. */
@@ -259,10 +316,11 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   for (const [i, { id, view }] of VISITS.entries()) {
     visits.push(await visit(lab, id, view, options.canary && i === 0, moments));
   }
+  moments.push(await yardPicture(lab));
   const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...visits.flatMap((v) => v.lines)];
   const problems = visits.flatMap((v) => v.problems);
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const caught = visits[0].caught === true;
-  lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the room left drawn going out)`);
+  lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's walls, the room left drawn going out)`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }
