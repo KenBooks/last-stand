@@ -83,7 +83,7 @@ NOTES = {
     'heave': 'Seize the nearest foe and hurl it',
     'livingFlail': 'Swing a foe round you as a club',
     'groundbreaker': 'Both fists into the ground',
-    'collarCut': 'Seize a foe, cut it down',
+    'collarCut': 'Seize a foe, launch it off the blade',
     'nockShot': 'Draw further for a harder shot',
     'fanShot': 'Five arrows loosed in a fan',
     'piercingShot': 'An arrow through every foe in line',
