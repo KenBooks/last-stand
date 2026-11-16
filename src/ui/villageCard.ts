@@ -11,6 +11,7 @@ import { isGuest } from '../net/role';
 import { sfx } from '../core/audio';
 import { on } from '../events';
 import { skipTraining } from '../game/training';
+import { recordsShown } from '../game/rooms';
 import type { VillageObject } from '../data/village';
 import type { BiomeId } from '../data/biomes';
 import { renderPvp } from './pvpMenu';
@@ -46,7 +47,7 @@ export function showVillageCard(o: VillageObject | null): void {
   card.classList.toggle('hidden', !o);
   // (closed, the duel's menu gives back an ask's prompt it held to the screen's top)
   if (!o) { renderPvp(); return; }
-  const page = o.use === 'portal' || o.use === 'training' ? 'portal' : o.use === 'pvp' ? 'pvp' : 'chronicle';
+  const page = o.use === 'portal' || o.use === 'training' ? 'portal' : o.use === 'pvp' ? 'pvp' : o.use === 'records' ? 'records' : 'chronicle';
   $('.vc-grounds', card).classList.toggle('hidden', o.use !== 'training');
   card.dataset.page = page;
   card.querySelectorAll<HTMLElement>('.vc-page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== page));
@@ -63,10 +64,22 @@ export function showVillageCard(o: VillageObject | null): void {
     $('.vc-title', card).textContent = 'A Duel';
     $('.vc-sub', card).textContent = 'Hero against hero, no foes between them.';
     renderPvp();
+  } else if (o.use === 'records') {
+    $('.vc-title', card).textContent = o.name;
+    $('.vc-sub', card).textContent = `The deeds of save slot ${saveSlot()}`;
+    renderBook($('.rec-book', card));
   } else {
     $('.vc-title', card).textContent = o.name;
     $('.vc-sub', card).textContent = `${CLASSES[G.profile.classId].name} of save slot ${saveSlot()}`;
   }
+}
+
+/** The great ledger's pages as the house of records shows them (game/rooms.ts `recordsShown`), each a board of rows. */
+function renderBook(book: HTMLElement): void {
+  const shown = recordsShown();
+  const esc = (t: string) => t.replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  book.innerHTML = [shown.feats, shown.left, shown.right, shown.bests].map((b) => `<section><h3>${esc(b.title)}</h3><dl>${
+    b.rows.map(([words, figure]) => `<dt>${esc(words)}</dt><dd>${esc(figure)}</dd>`).join('')}</dl></section>`).join('');
 }
 
 /** The object whose card is shown, if any. */

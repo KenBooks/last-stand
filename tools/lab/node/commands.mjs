@@ -1879,6 +1879,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  houses: {
+    each(side, options) {
+      return side.command('houses', { canary: Boolean(options.canary) });
+    },
+    // (its moments written: each room as it shows in each view)
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('houses'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   training: {
     each(side, options) {
       if (options.coop) return runTrainingCoop(side, options);

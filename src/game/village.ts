@@ -12,6 +12,7 @@ import {
 import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
+import { HOUSE_OBJECTS } from '../data/houses';
 import { input, wasPressed, cylinder } from '../core/input';
 import { viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
@@ -79,6 +80,11 @@ const TORCHLIGHT = { intensity: 6, distance: 9, dais: 2, daisIntensity: 16, dais
 const LAMP_SHADOWS = 2;
 
 let hooks: VillageHooks;
+/** every object to use: the village's, its houses' doors and what stands in their rooms (each used only where it
+ *  stands: `here`) */
+const OBJECTS: readonly VillageObject[] = [...VILLAGE_OBJECTS, ...HOUSE_OBJECTS];
+/** Whether `o` stands where the hero is: in the room he's in, or in the village with him. */
+const here = (o: VillageObject): boolean => (o.room ?? null) === (G.arena?.room ?? null);
 /** the object the hero is near (the one E uses), the pointer's (top view), the one he's walking to use, and the one
  *  whose panel or card is open */
 let near: VillageObject | null = null, pointed: VillageObject | null = null, going: VillageObject | null = null;
@@ -124,7 +130,7 @@ export function heroLookedAt(): number {
 /** The village's objects set going: their names over them, the pointer's picks. */
 export function initVillage(h: VillageHooks): void {
   hooks = h;
-  for (const o of VILLAGE_OBJECTS) {
+  for (const o of OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => {
       if (!named(o)) return null;
       // (on the hero he looks at, not the dais's middle, his own empty plinth there as often as not)
@@ -145,7 +151,7 @@ const floorAt = (o: VillageObject): number => groundHeight(o.at[0], o.at[1]);
 /** Whether `o`'s name shows: the hero is near it or walking to it, or the pointer is on it. On touch the Use button
  *  names the one near, and its name over it stood under the button in the screen's corner. */
 const named = (o: VillageObject): boolean => {
-  if (!hooks.active() || opened === o) return false;
+  if (!hooks.active() || opened === o || !here(o)) return false;
   if (o === near) return !input.touchMode;
   return o === pointed || o === going;
 };
@@ -179,7 +185,8 @@ function wakeByHero(on: boolean): void {
 /** The object the hero is near enough to use (the nearest), or null. */
 function nearest(): VillageObject | null {
   let best: VillageObject | null = null, bestD = Infinity;
-  for (const o of VILLAGE_OBJECTS) {
+  for (const o of OBJECTS) {
+    if (!here(o)) continue;
     const d = distanceTo(o);
     if (d < o.reach && d < bestD) { best = o; bestD = d; }
   }
@@ -189,7 +196,8 @@ function nearest(): VillageObject | null {
 /** The object whose column a ray from the eye enters first, or null. */
 function objectAlong(r: THREE.Ray): VillageObject | null {
   let best: VillageObject | null = null, bestT = Infinity;
-  for (const o of VILLAGE_OBJECTS) {
+  for (const o of OBJECTS) {
+    if (!here(o)) continue;
     const y0 = floorAt(o), rad = Math.min(PICK_MOST, o.reach * PICK_SHARE);
     const t = cylinder(r, o.at[0], o.at[1], rad, y0, y0 + o.tall + 0.3);
     if (t < bestT) { best = o; bestT = t; }
@@ -258,7 +266,7 @@ export function closedFrom(o?: VillageObject): void { if (!o || opened === o) op
 export const objectNear = (): VillageObject | null => (hooks?.active() ? near : null);
 
 /** The village's object of `id` (the lab, a panel naming where it was opened from). */
-export const villageObject = (id: string): VillageObject | undefined => VILLAGE_OBJECTS.find((o) => o.id === id);
+export const villageObject = (id: string): VillageObject | undefined => OBJECTS.find((o) => o.id === id);
 
 let armedAnywhere = false;
 /** The hero armed wherever he stands (`lab village --only fountainStopsArrows`: there's no fountain in the yard). */
@@ -299,7 +307,7 @@ function bindPointer(): void {
 export function updateVillage(dt = 0): void {
   lightLamps(dt);
   // (from above alone: there the camera sees what he can't, and in any other view it stands where he does)
-  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room;
   if (!sightTold) {
     sightTold = true;
     const sight = G.arena.village.sight;
@@ -311,7 +319,7 @@ export function updateVillage(dt = 0): void {
   const on = hooks.active();
   const p = G.player;
   for (const hero of G.players) hero.shine = on ? VILLAGE_SHINE : 0;
-  wakeByHero(on);
+  wakeByHero(on && !G.arena.room);
   p.armed = !on || armedAnywhere || inYard(p.pos.x, p.pos.z);
   // (the touch skills shown where he can cast alone: on the square they showed and did nothing, from play)
   document.body.classList.toggle('unarmed', !p.armed);
@@ -354,7 +362,7 @@ export function updateVillage(dt = 0): void {
  *  are warm (readied as he nears it). */
 function hallInside(dt: number): void {
   const village = G.arena.village, p = G.player;
-  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room;
   const inside = lobby && inHall(p.pos.x, p.pos.z) && p.obj.position.y > TERRACE.high - 0.1;
   // (from above alone, in the hall and on its portico: over the shoulder the camera stands on his side of them, which
   // shows the room and a wall as a wall, from play "still seeing through walls from inside"; on the portico a hole round
@@ -960,7 +968,7 @@ function lightLamps(dt: number): void {
     placeTheLamps();
     lampsPlaced = true;
   }
-  const shown = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+  const shown = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room;
   if (!shown) {
     castFromLamps(false);
     for (const s of lampLights) release(s);
@@ -1040,6 +1048,8 @@ function castOnNearest(near: number[], dt: number): void {
 // (at once: E at the dais opens the hall in this update, after `lightLamps`, and the frame drawn with the room's two
 // casting lights and these compiled what it drew for four, 7.3 s, "choose hero in hall freezes for like 10sec")
 on('hallShown', () => castFromLamps(false));
+// (and a house's room shown: it brings its own two casting lights, as the hall's does)
+on('roomShown', (room) => { if (room) castFromLamps(false); });
 
 /**
  * The lamps' casting lights off for a draw of another place (a warm-up's), returning their undoing. By night, a biome
@@ -1070,7 +1080,7 @@ function castFromLamps(on: boolean): void {
 /** Each object's name painted with what it says now: its name, or near it what using it does and how (E: on touch
  *  the one near has none, `named`). */
 function syncLabels(): void {
-  for (const o of VILLAGE_OBJECTS) {
+  for (const o of OBJECTS) {
     const l = labels.get(o.id)!;
     const says = o === near ? o.verb : o.name;
     if (says === l.says) continue;

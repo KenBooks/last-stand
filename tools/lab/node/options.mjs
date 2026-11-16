@@ -2252,6 +2252,19 @@ export const COMMANDS = {
       canary: { kind: 'switch', help: 'plant a shield that fails to lower for an attack and detect it' },
     },
   },
+  houses: {
+    help: "the village's houses walked into and out of by E at their doors, in each view: the room shown in the "
+      + "village's stead with no program compiled and the yard's dummies gone, its cut away walls, a walk held in "
+      + "by its back wall, the house of records' trophies for the bosses beaten alone and its ledger's card, the "
+      + "tavern's party table opening Play together, and out again before the cottage's door",
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'compile a program going in and leave the room drawn going out, which must be caught',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   training: {
     help: 'training grounds: reached-wave saves and migration, host choices, harmless holograms, no rewards, '
       + 'repeat and leave; includes a normal-run damage control',

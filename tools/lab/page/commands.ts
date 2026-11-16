@@ -794,6 +794,12 @@ export async function training(lab: Lab, command: { canary: boolean }): Promise<
   return measure(lab, command);
 }
 
+/** The village's houses walked into and out of: each room shown in the village's stead, compiling nothing. */
+export async function houses(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { houses: measure } = await import('./houses');
+  return measure(lab, command);
+}
+
 /** A bank on Random: its wave in the save and offered by the lobby, the dice rolling where it is unlocked. */
 export async function bank(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { bank: measure } = await import('./bank');

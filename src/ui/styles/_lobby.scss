@@ -282,6 +282,17 @@ body.touch .menu-links .link { min-height: calc(28px / var(--ui, 1)); }
 .vc-page.hidden { display: none; }
 .vc-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .vc-close { align-self: center; }
+/* the great ledger's pages (the house of records' Read the records): its boards side by side, as many as fit, the
+   card wider for them and scrolled where the screen is short */
+#vcard[data-page="records"] { width: 760px; max-height: calc(100vh / var(--ui, 1) - 40px); }
+.rec-book { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 16px; text-align: left;
+  overflow-y: auto; min-height: 0; max-height: calc(100vh / var(--ui, 1) - 190px); padding-right: 4px; }
+#vcard[data-page="records"] .vc-page[data-page="records"] { min-height: 0; flex: 1 1 auto; }
+.rec-book section { padding: 8px 10px; background: rgba(255, 231, 176, .05); border: 1px solid rgba($frame, .3); }
+.rec-book h3 { margin: 0 0 6px; font-family: var(--font-display); font-size: 15px; color: #ffe7b0; letter-spacing: .5px; }
+.rec-book dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin: 0; font-size: 14px; }
+.rec-book dt { color: var(--ink-dim); }
+.rec-book dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
 
 /* the duel's menu, the weapons rack's page (ui/pvpMenu.ts): its sides face to face, who watches under them */
 .pvp-choices { display: flex; flex-direction: column; gap: 12px; }

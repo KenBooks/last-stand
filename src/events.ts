@@ -15,6 +15,8 @@ export interface GameEvents {
   biomeChanged: [biome: BiomeId];
   /** the hall of heroes' room shown in the place's stead */
   hallShown: [];
+  /** a house's room shown in the village's stead, or the village back (null: `Arena.showRoom`) */
+  roomShown: [room: import('./data/houses').RoomId | null];
   /** a training dummy struck (its meter heard the hit) */
   dummyHit: [];
   /** the first visit's training moved on: a step done, finished or skipped (`game/training.ts`) */

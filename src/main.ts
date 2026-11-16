@@ -43,6 +43,7 @@ import { initPvp, renderPvp } from './ui/pvpMenu';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
+import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
 import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
@@ -243,7 +244,7 @@ async function boot() {
 
   initHud();
   initTouch({
-    active: villageActive, near: objectNear, use: goUse, map: () => setVillageMap(!villageMapOpen()),
+    active: villageActive, near: objectNear, use: goUse, map: () => { if (!G.arena.room) setVillageMap(!villageMapOpen()); },
     inventory: () => openPanels(panelsOpen() ? null : 'inventory'),
   });
   initPerfHud(renderer);
@@ -276,6 +277,8 @@ async function boot() {
   if (VILLAGE) {
     renderMenu();
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
+    // (in or out of a house: what was open put away, the partners told and shown only where they stand)
+    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
     initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
@@ -552,6 +555,9 @@ function useObject(o: VillageObject): void {
     case 'coop': openCoop(true); return;
     case 'chronicle': case 'pvp': openPanels(null); showVillageCard(o); return;
     case 'help': showHelp(true); completeStep('notice'); return;
+    case 'enter': showVillageCard(null); openPanels(null); if (o.into) enterRoom(o.into); return;
+    case 'leave': showVillageCard(null); openPanels(null); leaveRoom(); return;
+    case 'records': openPanels(null); writeRecords(); showVillageCard(o); return;
   }
 }
 
@@ -566,7 +572,8 @@ function leaveObject(o: VillageObject): void {
 /** Whether what `o` opened is still up. */
 function objectShows(o: VillageObject): boolean {
   switch (o.use) {
-    case 'portal': case 'chronicle': case 'training': case 'pvp': return villageCardOf() === o;
+    case 'portal': case 'chronicle': case 'training': case 'pvp': case 'records': return villageCardOf() === o;
+    case 'enter': case 'leave': return false;
     case 'stash': return panelsOpen() === 'chest';
     case 'coop': return coopOpen();
     case 'help': return helpOpen();
@@ -944,7 +951,7 @@ function handleGlobalKeys() {
   // (the inventory, anywhere in the village: its equipment, attributes and skills; I again puts it away)
   if (VILLAGE && G.mode === 'menu' && !G.menuOpen && wasPressed('i')) openPanels(panelsOpen() ? null : 'inventory');
   // (the village's map, M again or Esc folding it away)
-  if (G.mode === 'menu' && !G.menuOpen && G.arena.place === 'village' && wasPressed('m')) setVillageMap(!villageMapOpen());
+  if (G.mode === 'menu' && !G.menuOpen && G.arena.place === 'village' && !G.arena.room && wasPressed('m')) setVillageMap(!villageMapOpen());
   if (VILLAGE && villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
   // (and Play together or how to play, wherever they were opened from: from play, "esc on play together should close
   // play together, not open keys menu")
@@ -1044,12 +1051,13 @@ function update(dt: number): void {
   if (VILLAGE) {
     // (the village: what the hero is near and walks to, and whether he may cast there)
     updateVillage(dt);
+    updateRooms();
     updateGhost(G.time, dt);
     // (the village's ground a hero can stand on, for his walks to a spot, made behind it once it shows: game/village.ts
     // goTo; in the boot's task it was 120 to 176 ms of a return's loading)
     if (revealed && villageActive()) prepareWalks(HERO_RADIUS);
     updateVillageMap(dt);
-    const villageOut = villageActive() && !panelsOpen() && !villageCardOf();
+    const villageOut = villageActive() && !panelsOpen() && !villageCardOf() && !G.arena.room;
     updateTrainingTracker(dt, villageOut);
     updateVillageMinimap(dt, villageOut);
     betaNoticeWhile(villageClear());

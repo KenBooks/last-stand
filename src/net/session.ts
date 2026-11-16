@@ -5,6 +5,7 @@
 // little behind the freshest, so its character moves smoothly and casts in step with its body
 // whatever the link's jitter. The host hands out the party slots (0 is the host) and starts the
 // runs. Built for up to COOP.maxPlayers.
+import { ROOM_IDS } from '../data/houses';
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
@@ -35,7 +36,7 @@ import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 34;
+const PROTOCOL = 35;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -52,6 +53,8 @@ export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
  *  it did). */
 interface Peer {
   id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
+  /** the village's house it stands in (its room's index in `ROOM_IDS` + 1), 0 the village itself */
+  room: number;
   /** its player's name tag (net/nameTag) */
   tag: string;
   /** the colour its hero wears (net/heroColour: the host gave it) */
@@ -697,7 +700,7 @@ function onLook(from: string, look: Look): void {
 
 /** A player's own state: its clock (ms), where it is, the way it goes and faces, its aim, whether it's in the run and
  *  holding the revive key, its energy's share and its life. */
-interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number; av?: string | null }
+interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number; av?: string | null; rm?: number }
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
 
@@ -709,6 +712,14 @@ function onState(from: string, m: StateMsg): void {
     hooks.changed();
   }
   peer.clock.heard(m.t);
+  // (gone into a house or out of one: its place in the other frame, never a slide across from the last)
+  const room = m.rm ?? 0;
+  if (room !== peer.room) {
+    peer.room = room;
+    peer.track = new Track();
+    peer.smooth = new Smoother();
+    syncAway();
+  }
   peer.track.add(m.t, { x: m.x, z: m.z, vx: m.vx, vz: m.vz, f: m.f }, m);
   const inRun = m.run === 1;
   if (inRun !== peer.inRun) { peer.inRun = inRun; syncAway(); hooks.changed(); }
@@ -794,7 +805,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 function addPeer(id: string, slot: number, look: Look, tag: string, colour: HeroColourId | null): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, tag, colour, player: null, look, inRun: false, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, tag, colour, player: null, look, inRun: false, room: 0, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [],
   };
   session.peers.set(id, peer);
@@ -855,12 +866,16 @@ function placeSpawns(): void {
   for (const p of G.players) p.spawn.set((p.slot - (n - 1) / 2) * SPAWN_APART, 0, 3);
 }
 
+/** The village's house this game's hero stands in, as the state says it: its room's index in `ROOM_IDS` + 1, or 0. */
+const roomIndex = (): number => (G.mode === 'run' || !G.arena?.room ? 0 : ROOM_IDS.indexOf(G.arena.room) + 1);
+
 /** A partner in the other place (the lobby while we're in a run, or the other way round) isn't shown. */
 export function syncAway(): void {
   for (const peer of session.peers.values()) {
     const p = peer.player;
     if (!p) continue;
-    p.away = peer.inRun !== (G.mode === 'run');
+    // (and in the lobby, one in another of the village's places: a house's room or the village outside it)
+    p.away = peer.inRun !== (G.mode === 'run') || (G.mode !== 'run' && peer.room !== roomIndex());
     p.show(!p.away && p.out !== 'banked');
   }
 }
@@ -931,7 +946,7 @@ export function updateSession(dt: number, reviving: boolean): void {
     const r2 = (v: number) => Math.round(v * 100) / 100;
     send('pl', {
       t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
-      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p),
+      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p), rm: roomIndex(),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

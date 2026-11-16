@@ -406,6 +406,8 @@ lists Chrome's layers at each picture, and where the sides' differ.
 - `npm run lab -- carry --ab=HEAD` and `sheet --ab=HEAD`: a commit against itself must agree, line for line and pixel
   for pixel; anything else is a cause of runs that differ, to be found and removed as above.
 
+- `houses`: the village's houses walked into and out of by E at their doors in each view (the room shown, the village and the yard's dummies not, every frame drawn and no program compiled, its cut away walls, a walk held in by its back wall, the trophies for the bosses beaten alone, the ledger's card within the window, the party table opening Play together, out before the cottage's door); `--canary` compiles a program going in and leaves the room drawn going out.
+
 - `training`: Training grounds (#405): attempted-wave persistence/migration, the village's ghost talked to and its card's battleground and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage and a solid ghost.
 
 - A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.

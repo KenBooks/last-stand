@@ -5,6 +5,7 @@
 // accordion, each shaded by how far it's turned from the light, and folds back the same way as it's put away. The
 // fold is stepped by the game's frames (`updateVillageMap`), a transform a panel; the sheet is drawn once, as it opens
 // at a size it hasn't been drawn at.
+import { HOUSES, HOUSE_OBJECTS } from '../data/houses';
 import { G } from '../state';
 import {
   CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, RACK, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
@@ -67,6 +68,11 @@ const STICK_WALKS = 0.1;
 /** Whether the player is walking him now: a walking key held, or the touch stick pushed. */
 const walking = (): boolean => WALK_KEYS.some(isDown) || Math.hypot(input.stick.x, input.stick.y) > STICK_WALKS;
 
+/** A house, a door in it (inline SVG, in the name's colour): a house to go into. */
+const HOUSE_ICON = '<svg class="vm-house" viewBox="0 0 16 16" aria-hidden="true">'
+  + '<path d="M1.5 8 8 2l6.5 6h-2v6h-9V8z" fill="currentColor"/>'
+  + '<path d="M6.5 14v-4h3v4z" fill="#f0e2c4"/></svg>';
+
 /** The map's markup filled in: its panels, its names, its mark. */
 export function initVillageMap(h: VillageMapHooks): void {
   hooks = h;
@@ -92,6 +98,27 @@ export function initVillageMap(h: VillageMapHooks): void {
     if (o.biome) b.dataset.biome = o.biome;
     b.textContent = o.name;
     const [u, v] = toSheet(o.at[0], o.at[1]);
+    b.style.left = `${u * 100}%`;
+    b.style.top = `${v * 100}%`;
+    b.addEventListener('click', () => {
+      sfx.click();
+      setVillageMap(false);
+      hooks.go(o);
+    });
+    names.append(b);
+  }
+  // (the houses walked into, a house drawn before each name: from play, "something that indicates that you can go in
+  // it"; its tail on the house's middle, a click walking him to its door and in)
+  for (const o of HOUSE_OBJECTS) {
+    if (o.room || !o.into) continue;
+    const b = document.createElement('button');
+    b.className = 'vm-name';
+    b.dataset.use = o.use;
+    b.innerHTML = `${HOUSE_ICON}<span></span>`;
+    b.querySelector('span')!.textContent = o.name;
+    b.setAttribute('aria-label', `${o.name}: go in`);
+    const cottage = COTTAGES[HOUSES[o.into].cottage];
+    const [u, v] = toSheet(cottage.x, cottage.z);
     b.style.left = `${u * 100}%`;
     b.style.top = `${v * 100}%`;
     b.addEventListener('click', () => {

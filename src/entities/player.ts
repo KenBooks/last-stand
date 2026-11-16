@@ -1,4 +1,5 @@
 // The player character: input -> movement/skills, resources, damage, animation.
+import { countCast } from '../game/chronicle';
 import * as THREE from 'three';
 import { VILLAGE } from '../core/beta';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
@@ -712,6 +713,8 @@ export class Player {
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
     // Only a cast that can actually start lowers the shield; failed cooldown/energy/target checks keep it up.
     if (this.channel?.skill.def.block) this.stopChannel();
+    // (the house of records' favourite skill: the local hero's casts in a run)
+    if (this.local) countCast(s.def.impl);
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)

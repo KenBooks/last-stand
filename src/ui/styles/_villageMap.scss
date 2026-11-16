@@ -36,6 +36,9 @@
 .vm-name:hover, .vm-name:focus-visible { background: #fff3d6; color: #1a0f04; }
 .vm-name[data-biome="crypt"] { color: #5a1f86; }
 .vm-name[data-biome="forest"] { color: #1f6a32; }
+/* a house walked into: a house before its name, in a hearth's brown */
+.vm-name[data-use="enter"] { display: inline-flex; align-items: center; gap: ui(5px); color: #7a3412; }
+.vm-house { width: ui(14px); height: ui(14px); flex: none; }
 /* the hero: an arrow the way he faces */
 .vm-you { position: absolute; left: 0; top: 0; width: ui(22px); height: ui(22px); margin: ui(-11px) 0 0 ui(-11px);
   will-change: transform; }

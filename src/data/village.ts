@@ -4,9 +4,10 @@
 // round it, its roads wind, its cottages stand each its own way, and its two ways out are places of their own, the
 // crypt's sunken entrance north-east and a grove of the Thornwood south-west, each with its portal before it.
 import type { BiomeId } from './biomes';
+import type { RoomId } from './houses';
 
 /** What an object does when the hero uses it (game/village.ts `use`). */
-export type VillageUse = 'portal' | 'stash' | 'heroes' | 'coop' | 'chronicle' | 'help' | 'training' | 'pvp';
+export type VillageUse = 'portal' | 'stash' | 'heroes' | 'coop' | 'chronicle' | 'help' | 'training' | 'pvp' | 'enter' | 'leave' | 'records';
 
 /** An object of the village the hero walks to and uses: where it stands (its middle, x and z), how near he must be
  *  to use it (m, from that middle), where he stands to use it (x, z), the height its name hangs at (m), its name and
@@ -16,6 +17,10 @@ export interface VillageObject {
   use: VillageUse;
   /** the portal's battleground (`use: 'portal'`) */
   biome?: BiomeId;
+  /** the room it stands in (data/houses.ts: its `at` and `stand` in the room's frame), or none: the village's */
+  room?: RoomId;
+  /** the room its door leads into (`use: 'enter'`) */
+  into?: RoomId;
   at: [number, number];
   reach: number;
   stand: [number, number];
