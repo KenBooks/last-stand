@@ -391,12 +391,12 @@ async function seizeCase(lab: Lab, options: BossOptions, away: number, frames: n
   let landedAt = -1;
   try {
     await lab.step(frames, () => ({}), (frame) => {
-      if (hero.held && result.seizedAt < 0) {
+      if (hero.seized && result.seizedAt < 0) {
         result.seizedAt = frame;
         from = hero.pos.clone();
-      } else if (hero.held && landedAt >= 0 && frame - landedAt < BELL_WARDEN.grab.grace * FPS) result.again = true;
+      } else if (hero.seized && landedAt >= 0 && frame - landedAt < BELL_WARDEN.grab.grace * FPS) result.again = true;
       result.highest = Math.max(result.highest, hero.lift);
-      if (from && !hero.held && landedAt < 0 && result.seizedAt >= 0) {
+      if (from && !hero.seized && landedAt < 0 && result.seizedAt >= 0) {
         landedAt = frame;
         result.carried = Math.hypot(hero.pos.x - from.x, hero.pos.z - from.z);
       }
@@ -583,12 +583,12 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
   const out = hero.pos.clone().sub(boss.pos).setY(0).normalize();
   const stoodAt = hero.pos.clone();
   hero.pos.copy(boss.pos).addScaledVector(out, AT_RING).setY(0);
-  const lifted = (): boolean => hero.held && hero.lift > BELL_WARDEN.grab.rise * 0.75;
+  const lifted = (): boolean => hero.seized && hero.lift > BELL_WARDEN.grab.rise * 0.75;
   await lab.until(lifted, SEIZE_FRAMES, 'no ghost seized the hero for the pictures');
   const carriedAt = hero.pos.clone().setY(2.2);
   moments.push(lab.picture('0 seized (close)', ['back', 'left'], ['a ghost carrying the hero up and out, to drop him'], { at: carriedAt, distance: 6 }));
   await seen('0 seized', 'a ghost carrying the hero off, as the player sees it');
-  await lab.until(() => !hero.held, 120, 'the hero was never dropped');
+  await lab.until(() => !hero.seized, 120, 'the hero was never dropped');
   await lab.step(30);
   hero.pos.copy(stoodAt);
   // 1. it comes on, shuffling under its bell, its toll held off

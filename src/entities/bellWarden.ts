@@ -225,12 +225,12 @@ function haunt(e: Enemy, dt: number): void {
   if (seized && !G.enemies.includes(seized.foe)) { G.player.lift = 0; seized = null; }
   if (seized?.foe === e) { carry(seized, ghosts, dt); return; }
   const p = G.player, g = B.grab;
-  if (seized || !p.active || p.held || p.stunned || p.dash || G.time < graceUntil || e.training) return;
+  if (seized || !p.active || p.seized || p.stunned || p.dash || G.time < graceUntil || e.training) return;
   for (let i = 0; i < ghosts.most; i++) {
     if (rest[i] > 0 || !ghosts.freeAt(i, _ghost)) continue;
     const over = _ghost.y - p.obj.position.y;
     if (over > g.under || Math.hypot(_ghost.x - p.pos.x, _ghost.z - p.pos.z) > g.reach) continue;
-    if (!p.hold(g.carry + g.fall)) return;
+    if (!p.seize(g.carry + g.fall)) return;
     rest[i] = g.every;
     seized = { ghost: i, from: p.pos.clone(), to: dropSpot(e, p.pos), t: 0, foe: e };
     e.onDeath.push(() => letGoOf(e));
