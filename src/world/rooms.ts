@@ -1199,9 +1199,9 @@ function buildTavern(group: THREE.Group): Room {
   plateShelf(back, M, -4.3, 1.75, 1.4, rng);
   plateShelf(back, M, -4.3, 2.35, 1.4, rng);
   plateShelf(back, M, 3.0, 1.95, 1.6, rng);
-  // (dried herbs from the beams over the bar and the long table)
+  // (dried herbs from the beams)
+  // (over the bar alone: over the long table they hung before the sign)
   herbs(g, barX - 0.5, high - 0.26, -2.2, 6, rng);
-  herbs(g, lx - 0.8, high - 0.26, lz - 0.1, 5, rng);
   // (a pair of antlers over the west wall, and sacks of grain)
   lantern(west, M, -(hz - 0.6), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.4, 2.4, 0, 0, 1);
