@@ -6,8 +6,8 @@
 import type { EnemyId } from './enemies';
 import { COTTAGES, type VillageObject } from './village';
 
-export type RoomId = 'records' | 'tavern' | 'library';
-export const ROOM_IDS: readonly RoomId[] = ['records', 'tavern', 'library'];
+export type RoomId = 'records' | 'tavern' | 'library' | 'merchant';
+export const ROOM_IDS: readonly RoomId[] = ['records', 'tavern', 'library', 'merchant'];
 
 /** A house: the cottage it is (its index in `COTTAGES`), its name, its room's inner half width and depth and height to
  *  its beams (m). Its door is the cottage's own, the middle of the room's front wall inside. */
@@ -22,6 +22,9 @@ export const HOUSES: Record<RoomId, House> = {
   // (the cottage south of the square, between the campfire and the training yard: where a new hero learns, the yard
   // a few steps off; its door toward the square. From play: "add library to one of the village houses")
   library: { id: 'library', cottage: 4, name: 'The Library', half: [5.6, 4.2], high: 3.8 },
+  // (the cottage on the Thornwood's road by the campfire, where a party passes on its way to the portal and back: from
+  // play, "add merchant in another house... sell gear in exchange for other gear")
+  merchant: { id: 'merchant', cottage: 3, name: "Odo's Wares", half: [4.6, 3.8], high: 3.2 },
 };
 
 /** Brother Hollis's reading table in the library (world/library.ts): where his chair stands (x, z in the room's frame)
@@ -70,7 +73,8 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
       name: 'Door', verb: 'Go out',
     };
   };
-  const [rx, rz] = HOUSES.records.half, [tx, tz] = HOUSES.tavern.half, [, lz] = HOUSES.library.half;
+  const [rx, rz] = HOUSES.records.half, [tx, tz] = HOUSES.tavern.half;
+  const [, lz] = HOUSES.library.half, [, mz] = HOUSES.merchant.half;
   return [
     ...doors, ...ROOM_IDS.map(way),
     // (the great ledger on its lectern, before the trophies)
@@ -94,6 +98,9 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
       return { id: 'scholar', use: 'talk', room: 'library', at: [x + s * 0.1, z + c * 0.1], reach: 2.4,
         stand: [x + s * 1.45, z + c * 1.45], label: 1.62, tall: 1.5, name: 'Brother Hollis', verb: 'Talk' } satisfies VillageObject;
     })(),
+    // (the merchant behind his counter across the back of his shop: gear for gear)
+    { id: 'shopCounter', use: 'merchant', room: 'merchant', at: [0, -mz + 1.5], reach: 2.0, stand: [0, -mz + 2.6], label: 1.9,
+      tall: 2.0, name: 'Odo the Merchant', verb: 'Trade gear' },
   ];
 })();
 

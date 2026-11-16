@@ -826,6 +826,12 @@ export async function scholar(lab: Lab, command: ScholarOptions): Promise<Report
   return measure(lab, command);
 }
 
+/** Odo's trade: a trade refused one short, made with enough, the stock one fewer, and his restock. */
+export async function merchant(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { merchant: measure } = await import('./merchant');
+  return measure(lab, command);
+}
+
 /** A bank on Random: its wave in the save and offered by the lobby, the dice rolling where it is unlocked. */
 export async function bank(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { bank: measure } = await import('./bank');

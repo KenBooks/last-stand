@@ -41,9 +41,9 @@ const PLACED_WITHIN = 0.3;
 /** how far inside its walls' inner faces the hero walked into the back wall must still stand (m) */
 const KEPT_IN = 0.1;
 /** where across each room (x, m) a walk from the door to the back wall meets nothing standing in it */
-const LANES: Record<RoomId, number> = { records: -1.6, tavern: 2.2, library: -1.45 };
+const LANES: Record<RoomId, number> = { records: -1.6, tavern: 2.2, library: -1.45, merchant: -3.2 };
 /** how far from its back wall's face a walk down its lane may stop (m): the library's cases stand out from the wall */
-const BACK_STOP: Record<RoomId, number> = { records: 0.85, tavern: 0.85, library: 1.45 };
+const BACK_STOP: Record<RoomId, number> = { records: 0.85, tavern: 0.85, library: 1.45, merchant: 0.85 };
 /** how far a yard dummy may stand from its spot after a visit (m): the lobby's foes stand in the village's frame, and
  *  kept in the room's walls as he stood inside, they were shoved into its corner by the fountain and left there */
 const DUMMY_KEPT = 0.05;
@@ -55,6 +55,7 @@ const VISITS: readonly { id: RoomId; view: ViewMode }[] = [
   { id: 'tavern', view: 'top' },
   { id: 'library', view: 'third' },
   { id: 'library', view: 'top' },
+  { id: 'merchant', view: 'third' },
 ];
 
 /** What a visit found: its lines, its problems, and whether a canary planted in it was caught. */
