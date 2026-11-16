@@ -8,8 +8,9 @@ import {
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 
-/** a cottage's size: its walls (across, deep, tall), its roof's rise over them and its overhang */
-export const COTTAGE = { w: 6.2, d: 4.6, h: 2.9, rise: 2.1, eave: 0.45 };
+/** a cottage's size: its walls (across, deep, tall: to their plate), its roof's rise over them, its overhang and its
+ *  slates' thickness */
+export const COTTAGE = { w: 6.2, d: 4.6, h: 2.9, rise: 2.1, eave: 0.45, slate: 0.14 };
 /** the square round the fountain: how far out its cobbles reach on average (m) */
 export const SQUARE_R = 7.4;
 /** where the square's edge is drawn and a footpath meets it (m from the middle) */
