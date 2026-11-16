@@ -190,29 +190,21 @@ export function inObstacle(pos: { x: number; z: number }, radius: number): boole
   return G.arena.obstacles.some((o) => Math.hypot(pos.x - o.x, pos.z - o.z) < o.r + radius);
 }
 
-/** the share of a hero's overlap a boss gives way by as he walks into it (the rest pushes him back off it) */
-const BOSS_GIVES = 0.015;
-
 /**
- * A boss stands its ground (from play: "you should not be able to move the boss by just walking towards it... maybe
- * move it but a tiny little bit"): a hero walked into it is held off it, on his own game (`p.local`: a partner's own
- * game holds him), and the boss gives way by `BOSS_GIVES` of the overlap where it's moved here (`moves`). Yielding the
- * whole overlap as the small foes do, a boss was walked across the arena by a hero pressing into it.
+ * A boss stands its ground (from play: "you should not be able to move the boss by just walking towards it", then
+ * "you cant shove the boss when going towards him, its a metal bell after all"): a hero walked into it is held off its
+ * body on his own game (`p.local`: a partner's own game holds him), and it gives way not at all. Yielding the whole
+ * overlap as the small foes do, a boss was walked across the arena by a hero pressing into it; giving 1.5% of it, it
+ * still crept 0.2 m in 3 s.
  */
-function holdOffBoss(boss: Enemy, p: Player, moves: boolean): void {
-  if (!p.active) return;
+function holdOffBoss(boss: Enemy, p: Player): void {
+  if (!p.active || !p.local) return;
   const dx = boss.pos.x - p.pos.x, dz = boss.pos.z - p.pos.z;
   const min = boss.radius + p.radius, d2 = dx * dx + dz * dz;
   if (d2 >= min * min || d2 <= 1e-6) return;
   const d = Math.sqrt(d2), over = min - d, ux = dx / d, uz = dz / d;
-  if (moves) {
-    boss.pos.x += ux * over * BOSS_GIVES;
-    boss.pos.z += uz * over * BOSS_GIVES;
-  }
-  if (!p.local) return;
-  const back = over * (1 - (moves ? BOSS_GIVES : 0));
-  p.pos.x -= ux * back;
-  p.pos.z -= uz * back;
+  p.pos.x -= ux * over;
+  p.pos.z -= uz * over;
   resolveWorld(p.pos, p.radius);
   // (his speed into it let go, as the wall lets it go: kept, his legs strode on in place, a hip past its range)
   const into = p.vel.x * ux + p.vel.z * uz;
@@ -257,7 +249,7 @@ export function separateEnemies(ownOnly = false): void {
       }
     }
     if (a.boss && !a.carried) {
-      for (const p of G.players) holdOffBoss(a, p, moves(a));
+      for (const p of G.players) holdOffBoss(a, p);
       continue;
     }
     if (!moves(a)) continue;

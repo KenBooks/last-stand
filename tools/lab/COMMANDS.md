@@ -775,7 +775,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with `--gear shield`: never stunned; the part says so where the hero has none); the hero is turned to it and kept
   where he stands, the set-up keeping him whole. `chains`: each chain struck from its own side (5 m off, a share of
   its life and a little more): each must break, all four drop the bell for its window (`down` s within 0.1, `taken`
-  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 0.3 m at most, and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `compiles`: its tolls, a shard, the
+  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
   Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of

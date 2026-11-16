@@ -327,11 +327,11 @@ async function chains(lab: Lab, options: BossOptions, lines: string[], problems:
 
 /** how long the hero walks into the boss (s), and how far it may give way meanwhile (m) */
 const PRESS_FOR = 3;
-const GIVES_MOST = 0.3;
+const GIVES_MOST = 0.02;
 
 /**
  * The hero walked into the Bell-Warden for `PRESS_FOR` s (from play: "you should not be able to move the boss by just
- * walking towards it... maybe move it but a tiny little bit"): how far it gave way, and that he reached it and was
+ * walking towards it", "its a metal bell after all"): how far it gave way, and that he reached it and was
  * held off it. Every foe yielded the whole overlap, and a boss was walked across the arena.
  */
 async function stand(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
