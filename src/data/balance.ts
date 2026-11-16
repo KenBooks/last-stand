@@ -84,6 +84,14 @@ export const COOP = {
   sendRate: 20,
 };
 
+/** Trading banked gear between two players of a room, in the lobby (net/trade.ts, ui/trade.ts). */
+export const TRADE = {
+  /** the most items a side may put in an offer (the window shows them all without scrolling) */
+  most: 12,
+  /** how long an ask waits for its answer before it's let go (s) */
+  askFor: 20,
+};
+
 /** A duel, hero against hero (game/duel.ts; #406). */
 export const PVP = {
   /** the share of a skill's damage a hero takes from it: the skills are tuned for foes of many times a hero's life,

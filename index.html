@@ -667,6 +667,12 @@
   </div>
 
   <!-- a partner asks for the local player's place in the duel set up at the weapons rack (ui/pvpMenu.ts) -->
+  <div id="trade-ask" class="hidden" role="alertdialog" aria-labelledby="trade-ask-text">
+    <span id="trade-ask-text"></span>
+    <button class="btn primary" id="trade-ask-yes">Trade</button>
+    <button class="btn" id="trade-ask-no">Decline</button>
+  </div>
+  <div id="trade-note" class="hidden" role="status"></div>
   <div id="duel-ask" class="hidden" role="alertdialog" aria-labelledby="duel-ask-text">
     <span id="duel-ask-text"></span>
     <button class="btn primary" id="duel-ask-yes">Give it up and watch</button>
@@ -907,6 +913,34 @@
   </div></div>
 
   <!-- co-op rooms (ui/coop.ts) -->
+  <!-- trading banked gear with a partner in the lobby (ui/trade.ts, net/trade.ts) -->
+  <div id="trade" class="modal hidden" role="dialog" aria-labelledby="trade-title"><div class="modal-box">
+    <div class="sm-title" id="trade-title">Trade</div>
+    <div class="tr-body">
+      <div class="tr-offers">
+        <section class="tr-side">
+          <div class="tr-h"><span>Your offer</span><span class="tr-count" id="trade-mine-count"></span></div>
+          <div class="tr-grid tr-offer" id="trade-mine"></div>
+          <div class="tr-ok" id="trade-mine-ok"></div>
+        </section>
+        <section class="tr-side">
+          <div class="tr-h"><span id="trade-their-h">Their offer</span><span class="tr-count" id="trade-their-count"></span></div>
+          <div class="tr-grid tr-offer" id="trade-theirs"></div>
+          <div class="tr-ok" id="trade-their-ok"></div>
+        </section>
+      </div>
+      <section class="tr-stash-side">
+        <div class="tr-h"><span>Your stash</span><span class="tr-count" id="trade-stash-count"></span></div>
+        <div class="tr-grid tr-stash" id="trade-stash"></div>
+      </section>
+    </div>
+    <p class="tr-line" id="trade-line" role="status"></p>
+    <div class="tr-buttons">
+      <button class="btn primary" id="trade-accept">Accept</button>
+      <button class="btn" id="trade-cancel">Cancel</button>
+    </div>
+  </div></div>
+
   <div id="coop" class="modal hidden"><div class="modal-box">
     <div class="sm-title">Play together</div>
     <div class="coop-body"></div>

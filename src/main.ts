@@ -106,6 +106,8 @@ import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, se
 import { isCoop, isGuest, isHost, runsOthersFight, simulates } from './net/role';
 import { updateChat } from './ui/chat';
 import { updateHouseMarks } from './ui/houseMarks';
+import { initTrade, tradeOpen, updateTradeUi } from './ui/trade';
+import { cancelTrade, endTrades, onTradeChange, tradeBusy } from './net/trade';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
@@ -316,6 +318,9 @@ async function boot() {
   initSync();
   initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
   initCoop();
+  initTrade();
+  // (a partner's Trade button in Play together's list follows the trade: off while one is under way)
+  onTradeChange(() => { if (coopOpen()) renderCoop(); });
   initBugReport(reportClosed);
   for (const link of document.querySelectorAll<HTMLElement>('.report-link')) link.onclick = () => { sfx.click(); openReport(); };
   // (each look held till it's drawn: replaced after a frame, checking's still held the campfire 0.2 s)
@@ -462,7 +467,8 @@ async function loadDevMode(): Promise<void> {
       if (loaded.mode === 'run') fightWarm(() => beginRun(loaded.wave, nextSeed, loaded.training));
     },
     switchClass: (id) => {
-      if (G.mode !== 'menu' || heroSelectOpen() || id === G.player.cls.id) return;
+      // (and not under a trade: what it moves is this hero's, net/trade.ts)
+      if (G.mode !== 'menu' || heroSelectOpen() || id === G.player.cls.id || tradeBusy()) return;
       saveClass(id);
       swapHero(id);
       renderMenu();
@@ -670,6 +676,7 @@ function guestStart(biome: BiomeId, wave: number, seed: number, training: boolea
 
 function beginRun(wave: number, seed: number, training = false, duel: DuelSetup | null = null) {
   hideBetaNotice();
+  endTrades('a run started');   // a trade in the lobby is off, nothing moved (net/trade.ts)
   clearGround();   // what's left on the lobby floor is lost
   fromDuel = !!duel;
   if (VILLAGE) {
@@ -833,7 +840,7 @@ async function changeHero() {
  *  class never played in this slot keeps the starter gear the screen showed him in. A first visit's choice is kept,
  *  so the next visit opens on the lobby. */
 function chooseHero(id: string, profile: Profile) {
-  if (G.mode !== 'menu') return;
+  if (G.mode !== 'menu' || tradeBusy()) return;
   saveClass(id);
   if (id === G.player.cls.id) return;
   if (!peekProfile(id, saveSlot())) saveProfile(profile);
@@ -851,7 +858,7 @@ function heroSelectClosed() {
 /** Lobby save slot pick (or the slot in play erased): the slot's last hero, or in an empty slot a
  *  fresh one of the class on show. */
 function switchSaveSlot(n: number) {
-  if (G.mode !== 'menu') return;
+  if (G.mode !== 'menu' || tradeBusy()) return;
   setSaveSlot(n);
   const id = savedClass(G.player.cls.id);
   saveClass(id);
@@ -955,7 +962,7 @@ function syncView(): void {
 }
 
 /** Whether Play together or how to play is up (the campfire's, the notice board's, the pause menu's links). */
-const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen();
+const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen() || tradeOpen();
 
 /** The guide (ui/guide/), on `section` if given, opened over the pause menu: the menu opened under it if it wasn't (the
  *  game held as the pause menu holds it, and the pointer free), and put away with it then. */
@@ -968,6 +975,8 @@ function showGuide(section?: GuideSection): void {
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  // the trade window takes the keys: Esc cancels the trade (ui/trade.ts)
+  if (tradeOpen()) { if (wasPressed('escape')) cancelTrade(); return; }
   // the bug report's form takes the keys: Esc closes it, back to what it was opened over
   if (bugReportOpen()) { if (wasPressed('escape')) closeBugReport(); return; }
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
@@ -1132,6 +1141,7 @@ function update(dt: number): void {
   updatePingInput(dt, G.mode === 'run' ? !G.menuOpen : menuStowed() && !savesOpen() && !hallOpen() && !G.menuOpen);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
+  updateTradeUi();
   syncPractice();
   updateNameTags();
   if (VILLAGE) updateHouseMarks();

@@ -6,6 +6,7 @@ import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { saveKey, saveSlot } from './saveSlots';
 import { cloudTouched } from './cloud';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
+import { tradeLocked } from './trade';
 import { seedPr423Gear } from './pr423Gear'; // PR 423's test gear: to remove, unbind these lines only (pr423Gear.ts says why)
 import { seedPr499Gear } from './pr499Gear'; // PR 499's test gear: to remove, unbind these lines only
 import { seedPr527Gear } from './pr527Gear'; // PR 527's test gear: to remove, unbind these lines only
@@ -81,10 +82,11 @@ export function loadProfile(classId: string): Profile {
   return fresh(classId);
 }
 
-export function saveProfile(p: Profile): void {
+/** Saves `p` in the save slot in use, or in `slot` (a trade settled after the player switched slot: loot/trade.ts). */
+export function saveProfile(p: Profile, slot = saveSlot()): void {
   p.saved = Date.now();
-  try { localStorage.setItem(KEY(p.classId), JSON.stringify(p)); } catch { /* ignore */ }
-  if (saveSlot() === 1) cloudTouched();
+  try { localStorage.setItem(KEY(p.classId, slot), JSON.stringify(p)); } catch { /* ignore */ }
+  if (slot === 1) cloudTouched();
 }
 
 /** A class's profile in a save slot as stored, without touching it (null: never played there). */
@@ -132,7 +134,8 @@ export function slotsFor(p: Profile, item: Item): Slot[] {
 // its own, except a one-handed weapon fills an empty off-hand next to another one-hander
 export function equipFromStash(p: Profile, itemId: string, to?: Slot): void {
   const idx = p.stash.findIndex((i) => i.id === itemId);
-  if (idx < 0) return;
+  // (an item in an open trade's offer stays in the stash until the trade is over: loot/trade.ts)
+  if (idx < 0 || tradeLocked.has(itemId)) return;
   const item = p.stash[idx];
   const cls = CLASSES[p.classId];
   const main = p.equipped.weapon;
@@ -160,6 +163,7 @@ export function unequip(p: Profile, slot: Slot): void {
 
 /** Take an item out of the stash (to throw it on the lobby floor). */
 export function discard(p: Profile, itemId: string): Item | undefined {
+  if (tradeLocked.has(itemId)) return undefined;
   const it = p.stash.find((i) => i.id === itemId);
   p.stash = p.stash.filter((i) => i !== it);
   saveProfile(p);

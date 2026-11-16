@@ -1,0 +1,67 @@
+// The trade window between two players (ui/trade.ts): both offers side by side over our stash, the accepts under
+// the offers, the line saying where it stands and Accept and Cancel; on a short screen (a phone held sideways) the
+// stash beside the offers, as under them it ran past the screen's foot. The ask and the last word of a trade stand at
+// the top's middle of the screen, as the duel's ask does.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+#trade .modal-box { width: 600px; gap: 8px; padding: 16px 20px; }
+#trade .sm-title { font-size: 24px; overflow-wrap: anywhere; }
+.tr-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.tr-offers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.tr-h { @include section-head; justify-content: space-between; font-size: 12px; letter-spacing: 2px; margin-bottom: 4px; }
+.tr-h::after { display: none; }
+.tr-h > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-count { font: 400 12px var(--font-body); letter-spacing: 0; color: var(--ink-dim); text-transform: none; }
+.tr-grid { display: grid; gap: 3px; }
+.tr-offer { grid-template-columns: repeat(6, 1fr); padding: 4px; background: rgba(0, 0, 0, .35); border: 1px solid rgba($frame, .35); }
+.tr-stash { grid-template-columns: repeat(12, 1fr); max-height: 196px; overflow-y: auto; padding: 4px; background: rgba(0, 0, 0, .35);
+  border: 1px solid rgba($frame, .35); align-content: start; }
+/* (the stash's squares as the stash panel draws them, no glow's loops: _items.scss) */
+.tr-item.dim { opacity: .35; cursor: $cursor; }
+.tr-item.dim > .item-icon { filter: grayscale(.8); }
+.tr-empty { cursor: $cursor; box-shadow: none; opacity: .5; }
+.tr-ok { margin-top: 4px; font-size: 13px; color: var(--ink-dim); }
+.tr-ok.on { color: $heal; font-weight: 700; }
+.tr-line { margin: 0; min-height: 2.6em; font-size: 14px; color: var(--ink); }
+.tr-buttons { display: flex; justify-content: center; gap: 10px; }
+.tr-buttons .btn { min-width: 140px; }
+/* (Accept refused, its reason on the line over it: it looks off, and shows no lit cursor) */
+.tr-buttons .btn:disabled { opacity: .45; filter: grayscale(.6); cursor: $cursor; }
+.coop-trade { margin-left: auto; padding: 3px 12px; font-size: 13px; }
+.coop-trade:disabled { opacity: .45; cursor: $cursor; }
+body.touch .coop-trade { min-height: calc(36px / var(--ui, 1)); }
+body.touch .tr-buttons .btn { min-height: calc(44px / var(--ui, 1)); }
+
+/* a short screen: the stash beside the offers, the box as tall as the screen lets it be */
+@media (max-height: 520px) {
+  #trade .modal-box { width: 860px; padding: 8px 12px; gap: 4px; }
+  #trade .sm-title { font-size: 18px; }
+  /* (the stash the wider: the offers' squares, sized by their column, stacked two grids tall ran past a 751x298
+     phone's window at an even share) */
+  .tr-body { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; }
+  .tr-stash-side { grid-row: 1; grid-column: 1; min-height: 0; }
+  .tr-offers { grid-template-columns: 1fr; gap: 6px; }
+  .tr-stash { grid-template-columns: repeat(8, 1fr); max-height: calc(64vh / var(--ui, 1)); }
+  .tr-line { min-height: 0; font-size: 13px; }
+  .tr-h { margin-bottom: 2px; }
+  .tr-ok { margin-top: 2px; font-size: 12px; }
+  body.touch .tr-buttons .btn { min-height: calc(36px / var(--ui, 1)); }
+}
+
+/* the ask (asked: Trade or Decline; asking: Cancel) and the last word, at the top's middle, under the room's bar
+   (at the duel's ask's 64 px the word lay over the bar, which a room always shows) */
+:is(#trade-ask, #trade-note) { position: fixed; top: 158px; left: 50%; translate: -50% 0; z-index: 102; box-sizing: border-box;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px;
+  width: max-content; max-width: calc((100vw - 16px) / var(--ui, 1)); padding: 8px 10px 8px 14px; font-size: 14px; color: var(--ink);
+  background: linear-gradient(rgba(20,17,16,.97), rgba(8,7,8,.97)); border: 1px solid var(--accent);
+  box-shadow: 0 6px 18px rgba(0,0,0,.7); zoom: var(--ui, 1); }
+:is(#trade-ask, #trade-note).hidden { display: none; }
+#trade-ask .btn { padding: 5px 12px; font-size: 13px; }
+#trade-ask .btn.hidden { display: none; }
+body.touch #trade-ask .btn { min-height: calc(40px / var(--ui, 1)); }
+.tr-cls { color: var(--ink-dim); }
+#trade-note { padding: 8px 14px; pointer-events: none; }
+#trade-note.done { border-color: $heal; color: $heal; }
+/* the button in an item's pinned tooltip on touch (ui/trade.ts `actFoot`) */
+.tt-footbar .tt-act { display: block; margin: 2px auto; min-height: calc(40px / var(--ui, 1)); font-size: 14px; }

@@ -2,7 +2,8 @@
 // frames and nameplates, the downed state and the revive prompt.
 import { G } from '../state';
 import { COOP } from '../data/balance';
-import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
+import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf } from '../net/session';
+import { askProblem, askTrade } from '../net/trade';
 import { reloadWithVillage, VILLAGE } from '../core/beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
@@ -310,7 +311,7 @@ export function renderCoop(): void {
       ${reportLinks()}`;
   } else {
     const list = [G.player, ...others].map((p) =>
-      `<li>${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}</li>`).join('')
+      `<li>${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}${tradeButton(p)}</li>`).join('')
       + (others.length ? '' : '<li class="coop-wait">Waiting for a friend to join…</li>');
     body.innerHTML = `
       <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
@@ -333,6 +334,24 @@ export function renderCoop(): void {
   bindPortraitPicker(body, renderCoop);
   bindReportLinks(body);
   $('#btn-coop-leave', body).onclick = () => { sfx.click(); leaveRoom(); };
+  body.querySelectorAll<HTMLButtonElement>('.coop-trade').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.peer!;
+      if (askProblem(id)) return;
+      sfx.click();
+      askTrade(id);
+      openCoop(false);
+    };
+  });
+}
+
+/** A partner's Trade button in the room's list (ui/trade.ts): in the lobby alone, off with why where it can't be
+ *  asked now (in a run, a trade under way). */
+function tradeButton(p: Player): string {
+  const id = p.local ? null : peerIdOf(p);
+  if (!id || G.mode !== 'menu') return '';
+  const why = askProblem(id);
+  return `<button class="btn coop-trade" data-peer="${esc(id)}"${why ? ` disabled title="${esc(why)}"` : ''}>Trade</button>`;
 }
 
 /** The lobby's line about the room (hidden solo). */

@@ -14,6 +14,7 @@ import { partnerInHouse } from './coopHouses.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
 import { runsEnds } from './coopEnds.mjs';
+import { tradeTogether } from './coopTrade.mjs';
 import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
 import { OUT } from './paths.mjs';
 
@@ -628,6 +629,7 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
+  if (scenarios?.includes('trade') && scenarios.length !== 1) throw labError('coop: trade runs alone, in the lobby');
   if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
@@ -641,6 +643,13 @@ export async function runCoop(side, options) {
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
     if (scenarios?.length === 1 && scenarios[0] === 'colours') {
       return await changeColours(pair, { ping, jitter }, lines, canary);
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'trade') {
+      // (a trade is the lobby's, no run: node/coopTrade.mjs)
+      if (party > 2) throw labError('coop: trade is for a pair (no --party)');
+      const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
+      problems.push(...await tradeTogether(pair, callPage, lines, { canary, pictures }));
+      return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'duel') {
       // (a duel is a run of its own, set up at the weapons rack: node/coopDuel.mjs)
