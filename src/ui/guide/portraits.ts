@@ -271,6 +271,13 @@ function staged(model: Model): { scene: THREE.Scene; camera: THREE.PerspectiveCa
   return { scene, camera };
 }
 
+/** Where the pictures' making stands, for a harness (`lab guide`): what's still to make, the one being made and how
+ *  far the browser has come with it, and whether the build is queued behind the lobby. */
+export function portraitState(): string {
+  const m = making ? `${making.id} (compiled ${making.compiled}, drawn ${making.drawn}, encoded ${making.encoded}, textures left ${making.textures.length})` : 'none';
+  return `to make: ${pending.join(', ') || 'none'}; being made: ${m}; queued: ${queued(JOB)}`;
+}
+
 /** A harness's planted fault (`lab guide --canary`): every picture forgotten and made again at once, in this task, as
  *  the guide made them before they were made behind the lobby. */
 export function remakeAllNow(): void {

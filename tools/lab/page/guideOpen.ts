@@ -22,9 +22,11 @@ export interface GuideOptions {
 /** the longest a frame or a long task may take over the walk (ms): a frame at 60 a second is 17, and a held frame
  *  much past 100 is seen as a hitch */
 const MOST_MS = 100;
-/** the frames the lobby is left to settle, and the most run for the pictures to be made */
+/** the frames the lobby is left to settle, and the most real time the pictures are given to be made (ms: their
+ *  compiles, encodings and the heads' workers run on the browser's clock, which a busy machine slows; 1500 frames 5 ms
+ *  apart ran out twice on the shared PC, the pictures made in 370 to 540 frames when it was quiet) */
 const SETTLE = 60;
-const MOST_FRAMES = 1500;
+const MOST_REAL_MS = 20000;
 /** the longest moments listed */
 const LISTED = 6;
 
@@ -93,12 +95,14 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
     let waited = 0;
     const pending = (): number => [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe]')].filter((i) => !i.getAttribute('src') && !i.classList.contains('none')).length;
     document.querySelector<HTMLElement>('#guide [data-gs="foes"]')!.click();
-    while (pending() > 0 && waited < MOST_FRAMES) {
+    const giveUp = realNow() + MOST_REAL_MS;
+    while (pending() > 0 && realNow() < giveUp) {
       await timed('a frame as the pictures are made');
       await realWait(5);
       waited++;
     }
     const left = pending();
+    const waitingFor = [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe]')].filter((i) => !i.getAttribute('src') && !i.classList.contains('none')).map((i) => i.dataset.foe);
     const made = [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe][src]')].length;
     // (a long task's report comes in a task after it)
     await realWait(50);
@@ -119,7 +123,7 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
     const longest = all[0] ?? { what: 'nothing', ms: 0 };
     const opening = frames.slice(0, 6).reduce((most, f) => Math.max(most, f.ms), 0);
     const lines = [
-      `the guide opened by G and walked through ${pages} pages; ${made} pictures made, ${left} still waiting after ${waited} frames`,
+      `the guide opened by G and walked through ${pages} pages; ${made} pictures made, ${left} still waiting after ${waited} frames${left ? ` (${waitingFor.join(', ')}; ${portraits.portraitState()})` : ''}`,
       `the opening's longest frame ${opening.toFixed(1)} ms; the walk's longest moment ${longest.ms.toFixed(1)} ms (${longest.what}), at most ${MOST_MS}`,
       `the longest: ${all.slice(0, LISTED).map((m) => `${m.what} ${m.ms.toFixed(1)} ms`).join('; ')}`,
       `long tasks of the page's: ${tasks.length}${before.length ? ` (and ${before.length} begun before G, the lobby's own: ${before.map((t) => `${t.ms.toFixed(0)} ms`).join(', ')})` : ''}; programs the game's renderer linked: ${linked}`,
