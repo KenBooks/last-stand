@@ -50,7 +50,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   limbs blue, the right orange) over a runner's on his lengths (grey, the hips rising and falling as a body flies),
   the hero from both sides, the game's own views and his arms close up, measured first and run again to picture the
   frames chosen. `--frames` lists each leg's cycles (touchdown, push off, the next touchdown) and the curves bin by
-  bin; `--canary` holds the left knee straight through its stances, which the knee's curve must show.
+  bin; `--canary` holds the left knee straight through its stances, which the knee's curve must show. The run goes +x
+  along z -8.5 past the dais's side, `d` with the top-down camera turned to the battleground's own (`Fixture.yaw`), the
+  floor's clearest lane (`page/straightRun.ts`: should a prop come within 1.5 m of it, the nearest clear lane beside it,
+  or the command fails), and says how straight it held: the command fails when the facing lies over 3 degrees off the
+  way set or turns over 3 degrees across the measured frames, with a canary of made-up runs (held straight, turning 10
+  degrees, the other way) it must judge right. Run from the boot's camera along z 14, the warrior's `d` went -x into the
+  crypt's wall and turned 60 to 80 degrees, the side views blocked, and its trunk's numbers measured the turn; turned
+  +x, a prop at -5.6, 13.9 stood in the lane.
 - `coop`: two games playing together: in full in [`commands/coop.md`](commands/coop.md).
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
