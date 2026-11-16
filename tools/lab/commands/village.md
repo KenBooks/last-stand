@@ -108,8 +108,19 @@ moment, with the stash at 0, 1, 30 and 60 of 60, and the vertices it draws growi
 `--canary` stalls a frame) (`heroFaceNotBlinding`: round his head at midnight, before each portal and under the street lamps; `--canary` puts a
 light by his head) (`cameraBeforeWalls`: walked out from the square, the hall, the portico and just inside the door each way to what's
 built, his back to it and along it, then turned round in the doorway, over the shoulder: the camera on his side of what's
-built, its near plane clear of him, his crown in the frame, settled to under 2 cm a frame (0.65 m unfixed), each close
-spot pictured; `--canary` lets it stand behind and leaves it at his shoulder) (`hallFrontFades`: from above, the frame
+built, its near plane clear of him, his crown in the frame, his head's meshes drawn, settled to under 2 cm a frame (0.65
+m unfixed), each close spot pictured; `--canary` lets it stand behind, leaves it at his shoulder and hides his body by
+the camera's nearness alone, as it was: his head hidden at 18 spots) (`cameraOutsideHim`, `page/villageCameraInside.ts`,
+#601, from play "at some angles in 3rd person view (in the hall's door, can see this, bug": over the shoulder in and
+round the hall's door, the camera worked out as the game works it out without a frame drawn (`updateCamera` run to
+where it settles) on a grid 0.25 m apart across the door, its threshold, the terrace and its stair, him pressed against
+what's built where a spot is in it, 8 ways round, looking up, ahead, at the fountain and at his feet, 28,896 spots;
+walked through the door and turned round in it a frame at a time: the camera never nearer his middle line than 0.2 m
+nor his head's middle than 0.4 (at least 0.33 and 0.53); the 8 spots it comes nearest his neck looking down played with
+the game's frames, his head's meshes drawn at every one, the nearest pictured as it was and as it is (a warrior backed
+against the front wall beside the door looking out at the square: his arms and shield and no head, then his crown at
+the frame's foot); `--canary` hides his body by nearness and lets the camera into his head: hidden at 8 of 8, inside him
+at 16 spots) (`hallFrontFades`: from above, the frame
 against the frame with the front wall hidden, 15 to 90% of its share left as a ghost, at most 15% thinner a frame, and over
 the shoulder not thinned; `page/villageHallFade.ts`; `--canary` hides it, as it was) (`firesWhereTheyStand`: each ember
 spawned over 240 frames within 1.5 m of a fire's flames, each fire's shader told its place; 16 strays and 2 shaders

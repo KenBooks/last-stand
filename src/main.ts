@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G } from './state';
 import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
@@ -1117,7 +1117,7 @@ function update(dt: number): void {
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
   const eyes = focus.player === G.player && viewMode() === 'first' && viewSettled();
-  viewArms(G.player.model, eyes, G.camera);
+  viewArms(G.player.model, eyes, G.camera, focus.player === G.player && eyesInGlide());
   // (the weapons' trails in each hero's own space, the arms placed in the view first)
   updateSwingTrails();
 

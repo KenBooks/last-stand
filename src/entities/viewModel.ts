@@ -211,12 +211,23 @@ export function armsLayerOf(m: Model): number {
   return shown.has(m) && m.armsFov ? ARMS_LAYER : WORLD_LAYER;
 }
 
-/** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
-export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
+/** how near his neck the camera gliding to or from the eyes hides his body (m) */
+const NEAR_NECK = 0.8;
+let nearAnyView = false;
+/** For a harness (tools/lab): the body hidden whenever the camera comes near his neck, in any view, as it was (#601). */
+export function hideBodyNearCamera(on: boolean): void { nearAnyView = on; }
+
+/** Show `m` through the camera's eyes (`on`), or as a whole body; `gliding`: the camera is gliding into the eyes or
+ *  out of them. Call after the camera has moved. */
+export function viewArms(m: Model, on: boolean, cam: THREE.Camera, gliding = on): void {
   // (a model that has its arms drawn by their own camera has them on its layer, `armsFov`)
   const ownCamera = on && !!m.armsFov;
-  // Hide the body before the gliding camera enters the head, at any simulation speed.
-  const nearHead = !!m.joints && m.joints.neck.getWorldPosition(_neckWorld).distanceTo(cam.position) < 0.8;
+  // Hide the body before the gliding camera enters the head, at any simulation speed. Only on its way to or from the
+  // eyes: over the shoulder by a wall the camera comes over his head within 0.5 m of his neck and stays, and by nearness
+  // alone his head and body went, his arms and weapons left, as a broken view through the eyes (from play, in the hall's
+  // door, #601)
+  const near = (gliding || nearAnyView) && !!m.joints;
+  const nearHead = near && m.joints!.neck.getWorldPosition(_neckWorld).distanceTo(cam.position) < NEAR_NECK;
   const hideBody = on || nearHead;
   if (hideBody !== bodyHidden.has(m)) {
     for (const o of bodyOf(m)) o.layers.set(hideBody ? HIDDEN_LAYER : WORLD_LAYER);

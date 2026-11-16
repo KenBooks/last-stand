@@ -1040,6 +1040,9 @@ export function setView(v: ViewMode): void {
 }
 /** The first-person view is still gliding in (the body stays visible until the camera reaches the eyes). */
 export const viewSettled = (): boolean => rig.blend >= 1;
+/** The camera is gliding into the eyes or out of them: the only time it comes to his head on its way (over the
+ *  shoulder it comes within a hand's breadth of it, over his head, and stays there, #601). */
+export const eyesInGlide = (): boolean => rig.blend < 1 && (rig.view === 'first' || rig.fromView === 'first');
 /** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
 export const cameraYaw = (): number => rig.yaw;
 /** the top-down view's zoom as drawn (1 the game's own, under it nearer) */
@@ -1182,6 +1185,31 @@ function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number)
   camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
 }
 
+/** how far across from his head's middle the camera stands over it (m), how far over at the middle (m), and where that
+ *  middle is, a share of his height: brought back toward his chest by a wall behind him, the camera stood in his hair,
+ *  0.3 m off his head's middle, and lifted only out of a ball round it, his head stood in the middle of the frame seen
+ *  from behind, his eyes showing through his hair (#601, in the hall's door) */
+const HEAD_CLEAR = 0.7;
+const HEAD_RISE = 0.5;
+const HEAD_AT = 0.88;
+let headKept = true;
+/** For a harness (tools/lab): the camera let come into his head, as it did. */
+export function cameraClearsHead(on: boolean): void { headKept = on; }
+
+/** The camera lifted over his head, short of what's over it: whatever brought it in, it looks over him there, out of
+ *  a dome round his head's middle (so it lifts smoothly as it comes in). */
+function headClear(camera: THREE.Vector3, x: number, head: number, z: number): void {
+  const across = Math.hypot(camera.x - x, camera.z - z);
+  if (!headKept || across >= HEAD_CLEAR) return;
+  let up = head + HEAD_RISE * Math.sqrt(1 - (across / HEAD_CLEAR) ** 2);
+  if (camera.y >= up) return;
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (wall && wall.cast(camera, _boomAt.set(camera.x, up + CAMERA_OFF_WALL, camera.z), _boomHit)) {
+    up = Math.min(up, _boomHit.point.y - CAMERA_OFF_WALL);
+  }
+  camera.y = Math.max(camera.y, up);
+}
+
 /** how close to a wall beside it the camera may stand (m), how far it looks for one, and the near plane as far as it
  *  goes (m) */
 const SIDE_ROOM = 0.2;
@@ -1290,6 +1318,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
       _pivot.y += BOOM_RISE * over;
       cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
       cameraClear(cam.position, focus.x, floor + height * 0.7, focus.z);
+      headClear(cam.position, focus.x, floor + height * HEAD_AT, focus.z);
       near = Math.min(0.5 + (BOOM_NEAR - 0.5) * over, nearClear(cam.position, sy, cy, fov + BOOM_WIDER * over));
       fov += BOOM_WIDER * over;
       cam.position.y = Math.max(floor + 0.4, cam.position.y);
