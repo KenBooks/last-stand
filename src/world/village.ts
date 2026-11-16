@@ -35,7 +35,7 @@ import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, mergeChildren, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
-import { buildMeadow, meadowGround, MeadowMask, setMeadowOccluders, type MaskUniforms } from './meadow';
+import { buildMeadow, setMeadowMask, meadowGround, MeadowMask, setMeadowOccluders, type MaskUniforms } from './meadow';
 import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
   gobletGeometry, keyholeGeometry, lockPlate, plateGeometry, quiltedLining, type LaidCoin,
@@ -694,6 +694,10 @@ export function buildVillage(scene: THREE.Group): Village {
   const trees = treeSpots(rng);
   const mask = meadowMask(trees);
   const maskTexture = mask.texture();
+  // (the grass within the palisade alone, for the levels that draw none beyond it: `setGrassBeyondWalls`)
+  const inside = mask.within(palisadePolygon());
+  grassMasks = { texture: maskTexture, whole: { mask, soft: mask.texture() }, inside: { mask: inside, soft: inside.texture() } };
+  setGrassBeyondWalls(grassBeyond);
   const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
@@ -1201,6 +1205,27 @@ function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed
   mesh.position.y = 0.016;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+/** the meadow's two masks, the whole one and the one within the palisade, and the texture they're shown by */
+let grassMasks: {
+  texture: THREE.Texture;
+  whole: { mask: MeadowMask; soft: THREE.Texture };
+  inside: { mask: MeadowMask; soft: THREE.Texture };
+} | null = null;
+/** whether grass grows beyond the palisade (`setGrassBeyondWalls`) */
+let grassBeyond = true;
+
+/**
+ * Whether the village's grass grows beyond its palisade (Low and Very low draw none there: from play, "remove grass from
+ * outside area for very low and low"): the meadow's mask swapped for one cleared outside the palisade's line, the woods'
+ * floor round the village, the two ways out's, bare ground. Live, no program changed (`setMeadowMask`).
+ */
+export function setGrassBeyondWalls(on: boolean): void {
+  grassBeyond = on;
+  if (!grassMasks) return;
+  const { mask, soft } = on ? grassMasks.whole : grassMasks.inside;
+  setMeadowMask(grassMasks.texture, mask, soft);
 }
 
 /** Where grass grows: everywhere but the roads, the square, what's built and where feet wear it (the footpaths, the

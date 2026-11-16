@@ -287,8 +287,11 @@ const flatOf = new Map<HTMLCanvasElement, HTMLCanvasElement>();
 let flat = false;
 /** a normal map's flat texel: straight out */
 const FLAT_NORMAL = 'rgb(128, 128, 255)';
-/** the maps kept whole at every level: the faces (a face of one colour has no eyes or mouth) */
-const keptWhole = (canvas: HTMLCanvasElement): boolean => (keyOfCanvas.get(canvas) ?? '').startsWith('face(');
+/** the maps kept whole at every level: the faces (a face of one colour has no eyes or mouth), and the rock and the moss,
+ *  whose boulders are faceted as split stone is, each face its own normal (`boulderGeo`): one colour over them, they read
+ *  as a polygon blob (from play, the forest's boulder at Low: "fix what ever this is") */
+const KEPT_WHOLE = ['face(', 'rock(', 'moss('];
+const keptWhole = (canvas: HTMLCanvasElement): boolean => KEPT_WHOLE.some((k) => (keyOfCanvas.get(canvas) ?? '').startsWith(k));
 
 /** `canvas`'s average as one texel: drawn down by the browser's own filter (no read back of the whole map), its
  *  few pixels averaged. A normal map's is straight out. */

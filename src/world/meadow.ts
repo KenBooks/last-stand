@@ -224,6 +224,20 @@ export class MeadowMask {
     return { has, n, cell };
   }
 
+  /** A copy of the mask with no grass outside the closed line `points` (the village's palisade). */
+  within(points: readonly (readonly [number, number])[]): MeadowMask {
+    const copy = new MeadowMask(this.half, this.size), g = copy.g;
+    g.clearRect(0, 0, this.size, this.size);
+    g.drawImage(this.canvas, 0, 0);
+    g.globalCompositeOperation = 'destination-in';
+    g.beginPath();
+    points.forEach(([x, z], i) => (i ? g.lineTo(this.px(x), this.px(z)) : g.moveTo(this.px(x), this.px(z))));
+    g.closePath();
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    return copy;
+  }
+
   /** The mask as a texture, its edges softened (`blur` m): read by the grass and by the ground under it. */
   texture(blur = 0.25): THREE.CanvasTexture {
     const soft = canvasOf(this.size), g = ctx2d(soft);
@@ -918,6 +932,21 @@ export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2
 }
 
 /** The meadow's grass over `mask`'s square, swaying on the game's clock (an updater keeps the time). */
+/** the meadow's grid of where grass grows made again from another mask (set as the meadow is built) */
+let grownFrom: ((mask: MeadowMask) => void) | null = null;
+
+/**
+ * Where the meadow grows taken from `mask`, its texture's image `soft` (made by `mask.texture()`): the texture the grass
+ * and the ground read keeps its object and only its image is swapped, so no program changes; the grid of cells drawn
+ * is made again from the mask (the tiles with no grass left in it aren't drawn at all).
+ */
+export function setMeadowMask(texture: THREE.Texture, mask: MeadowMask, soft: THREE.Texture): void {
+  if (texture.source.data === soft.source.data) return;
+  texture.source.data = soft.source.data;
+  texture.source.needsUpdate = true;
+  grownFrom?.(mask);
+}
+
 export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[]): THREE.Group {
   const group = new THREE.Group();
   group.name = 'meadow';
@@ -929,7 +958,9 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   updaters.push((_dt, t) => { time.value = t; });
   // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
   // drawn as nothing, its vertices shaded all the same)
-  const grown = mask.grassCells(GRASS_GRID.cell, GRASS_GRID.margin);
+  let grown = mask.grassCells(GRASS_GRID.cell, GRASS_GRID.margin);
+  // (another mask put in its place, as a level's grass within the palisade alone: `setMeadowMask`)
+  grownFrom = (other) => { grown = other.grassCells(GRASS_GRID.cell, GRASS_GRID.margin); };
   const anyGrass = (x0: number, z0: number, x1: number, z1: number): boolean => {
     const at = (v: number): number => Math.max(0, Math.min(grown.n - 1, Math.floor((v + mask.half) / grown.cell)));
     for (let cz = at(z0); cz <= at(z1); cz++) {
