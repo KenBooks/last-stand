@@ -958,14 +958,14 @@
   <!-- Odo's trade (ui/merchant.ts): his wares and the hero's stash, filled in by it -->
   <div id="merchant" class="modal hidden"><div class="modal-box mc-box" role="dialog" aria-label="Odo the Merchant">
     <div class="sm-title">Odo the Merchant</div>
-    <p class="mc-sub">Gear for gear, no coin. Pick one of his wares, then what you give for it: he keeps what you give.</p>
+    <p class="mc-sub">Gear for gear, no coin, nothing above epic. Pick one of his wares, then what you give for it: he keeps what you give.</p>
     <div class="mc-head"><span class="mc-label">His wares</span><span class="mc-restock"></span></div>
     <div class="mc-wares"></div>
     <div class="mc-head"><span class="mc-label">Your stash</span><span class="mc-count"></span></div>
     <div class="mc-stash"></div>
     <div class="mc-bar"><div class="mc-fill"></div><span class="mc-sum"></span></div>
     <p class="mc-said" role="status"></p>
-    <div class="mc-row"><button class="btn primary mc-trade" disabled>Trade</button><button class="link mc-close">Leave</button></div>
+    <div class="mc-row"><button class="btn mc-fill-best" disabled title="The fewest of your pieces that pay for it, the best first">Pick fewest</button><button class="btn primary mc-trade" disabled>Trade</button><button class="link mc-close">Leave</button></div>
   </div></div>
 
   <div id="help" class="modal hidden"><div class="modal-box">

@@ -4,7 +4,7 @@
 // (said on the screen); gear thrown on the lobby's floor is another thing. Every piece has its tooltip, by the mouse and
 // by a tap on touch, which also picks it.
 import { G } from '../state';
-import { offer, price, runsToRestock, stockOf, trade, worth } from '../loot/merchant';
+import { fewestFor, offer, price, runsToRestock, stockOf, takes, trade, worth } from '../loot/merchant';
 import { rarityOf } from '../loot/items';
 import { RUN } from '../data/balance';
 import { sfx } from '../core/audio';
@@ -28,6 +28,16 @@ const shown = (v: number): string => (v >= 10 ? String(Math.round(v)) : (Math.ro
 export function initMerchant(onClose: () => void): void {
   closed = onClose;
   $('#merchant .mc-close').onclick = () => { sfx.click(); showMerchant(false); closed(); };
+  $('#merchant .mc-fill-best').onclick = () => {
+    const piece = stockOf(G.profile).find((it) => it.id === wanted);
+    if (!piece) return;
+    sfx.click();
+    given.clear();
+    for (const id of fewestFor(G.profile, piece)) given.add(id);
+    render();
+    // (what it picked shown: the best pieces head the stash, which may be scrolled down past them)
+    $('#merchant .mc-stash').scrollTop = 0;
+  };
   $('#merchant .mc-trade').onclick = () => {
     if (!wanted) return;
     const piece = stockOf(G.profile).find((it) => it.id === wanted);
@@ -81,18 +91,23 @@ function render(): void {
   })));
   if (!stock.length) wares.textContent = 'Sold out: he restocks after your next runs.';
   if (wanted && !stock.some((it) => it.id === wanted)) wanted = null;
+  // (his trade's pieces, the best first, so a few rares are at hand before many commons; none above epic)
   const stash = $('#merchant .mc-stash');
-  stash.replaceChildren(...p.stash.map((it) => tile(it, `worth ${shown(worth(it))}`, given.has(it.id), () => {
+  const tradeable = p.stash.filter(takes).sort((a, b) => worth(b) - worth(a));
+  stash.replaceChildren(...tradeable.map((it) => tile(it, `worth ${shown(worth(it))}`, given.has(it.id), () => {
     if (given.has(it.id)) given.delete(it.id); else given.add(it.id);
     render();
   })));
-  if (!p.stash.length) stash.textContent = 'Your stash is empty: bank some gear first.';
-  $('#merchant .mc-count').textContent = `${p.stash.length} / ${RUN.bagLimit}`;
+  if (!tradeable.length) stash.textContent = 'Nothing in your stash he takes: bank some gear first.';
+  const kept = p.stash.length - tradeable.length;
+  $('#merchant .mc-count').textContent = `${p.stash.length} / ${RUN.bagLimit}`
+    + (kept ? ` · ${kept} legendary or better he won't take` : '');
   const piece = stock.find((it) => it.id === wanted);
   const bar = $('#merchant .mc-bar');
   const fill = $('#merchant .mc-fill');
   const says = $('#merchant .mc-sum');
   const go = $<HTMLButtonElement>('#merchant .mc-trade');
+  $<HTMLButtonElement>('#merchant .mc-fill-best').disabled = !piece || !tradeable.length;
   if (!piece) {
     fill.style.width = '0%';
     bar.classList.remove('enough');

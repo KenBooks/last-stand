@@ -1,21 +1,28 @@
 // `lab merchant`: Odo's trade as a player makes it (`src/loot/merchant.ts`, its screen `src/ui/merchant.ts`, his shop
-// `src/world/shop.ts`). The hero's stash given 25 commons of the first level; walked into the shop and E at the
-// counter: the trade screen up within the window, his full stock shown. His epic picked by a click, one common short of
-// what he asks given: Trade held off, and the trade asked anyway refused, nothing changed. One more common given: Trade
-// clicked, the commons gone, the epic in the stash, the stock one fewer, saved. Then three runs begun: a new stock,
-// full again. `--canary` puts the epic back in his stock after the trade, which the check must find.
+// `src/world/shop.ts`), and his prices against the drop rates. First the rates: for each rarity he sells, from the wave
+// he sells it, a run's lesser gear must be worth no more than he asks for each piece of it the run drops (else trading
+// beats playing), and no stock at any level holds anything above epic or a rarity before its wave. Then the trade: a
+// hero of wave 6 given 40 commons, 6 rares and a legendary walks into the shop and presses E at the counter. The screen
+// is up within the window, his full stock shown, the legendary not offered. His epic picked, one common short given:
+// Trade held off, and the trade asked anyway refused, nothing changed. One more: Trade clicked, the commons gone, the
+// epic in the stash, the stock one fewer, saved. His other epic: Pick fewest pays with a few rares, no epic, enough.
+// Then three runs begun: a new stock, full again. `--canary` puts the epic back in his stock after the trade, which
+// must be caught.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
-import { RESTOCK_RUNS, STOCK_RARITIES } from '../../../src/data/merchant';
+import { RESTOCK_RUNS, STOCK_RARITIES, STOCKED_FROM, TRADED, type TradedRarity } from '../../../src/data/merchant';
 import { outsideOf } from '../../../src/data/houses';
 import { makeItem } from '../../../src/loot/items';
-import { price, stockOf, trade } from '../../../src/loot/merchant';
+import { fewestFor, offer, price, stockedAs, stockOf, takes, trade, worth } from '../../../src/loot/merchant';
 import { loadProfile } from '../../../src/loot/profile';
 import { objectNear, villageObject } from '../../../src/game/village';
 import { enterRoom } from '../../../src/game/rooms';
 import { CLASSES } from '../../../src/data/classes/index';
 import { groundHeight } from '../../../src/world/ground';
+import type { BiomeId } from '../../../src/data/biomes';
+import type { Item } from '../../../src/types';
+import { roadTo, runDrops } from './merchantRates';
 import { toVillage } from './village';
 
 /** `--canary`: the piece bought put back in his stock. */
@@ -23,13 +30,25 @@ export interface MerchantOptions {
   canary: boolean;
 }
 
-/** how many commons the stash is given, and the frames a stand or a click settles for */
-const COMMONS = 25;
+/** the hero's best wave, and what his stash is given: commons, rares and a legendary of that level */
+const WAVE = 6;
+const COMMONS = 40;
+const RARES = 6;
+/** the frames a stand or a click settles for */
 const SETTLE = 10;
+/** the most pieces of one level the dearest ware may cost, against the stash's 60 places */
+const MOST_PIECES = 30;
+/** the runs whose drops are reported, and the biomes they're worked out in */
+const RUNS_REPORTED = [1, 3, 5, 6, 8, 10, 15];
+const BIOMES_RATED: BiomeId[] = ['crypt', 'forest'];
+/** the rarities he sells above magic, whose road is checked */
+const SOLD: TradedRarity[] = ['rare', 'epic'];
 
 const element = (selector: string): HTMLElement => document.querySelector<HTMLElement>(selector)!;
-const tileOf = (box: string, id: string): HTMLElement => element(`#merchant ${box} .mc-item[data-id="${id}"]`);
+const tileOf = (box: string, id: string): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`#merchant ${box} .mc-item[data-id="${id}"]`);
 const stashIds = (): string[] => G.profile.stash.map((it) => it.id);
+const rankOf = (item: Item): number => TRADED.indexOf(item.rarity as TradedRarity);
 
 /** The hero put at (x, z), facing `facing`, and let settle. */
 async function stand(lab: Lab, x: number, z: number, facing: number): Promise<void> {
@@ -44,19 +63,58 @@ function withinWindow(): boolean {
   return box.left >= -1 && box.top >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
 }
 
+/** His prices against the drop rates: lines for the report, and a problem for any rarity he sells sooner than fair. */
+function checkRates(lines: string[], problems: string[]): void {
+  for (const biome of BIOMES_RATED) {
+    for (const rarity of SOLD) {
+      const perPiece = (last: number): string => roadTo(rarity, runDrops(biome, last)).lesserPerPiece.toFixed(1);
+      const row = RUNS_REPORTED.map((last) => `${last}: ${perPiece(last)}`);
+      const asks = roadTo(rarity, runDrops(biome, 1)).asks;
+      lines.push(`${biome}, gear below ${rarity} a run drops for each ${rarity} (run to wave N), he asks ${asks}: `
+        + row.join(', '));
+      const from = STOCKED_FROM[rarity];
+      const road = roadTo(rarity, runDrops(biome, from));
+      if (road.lesserPerPiece > road.asks) {
+        problems.push(`${biome}: from wave ${from} a ${rarity} asks ${road.asks}, but a run there drops `
+          + `${road.lesserPerPiece.toFixed(1)} of lesser gear for each: trading is faster than playing`);
+      }
+    }
+  }
+  for (let level = 1; level <= 20; level++) {
+    const sold = STOCK_RARITIES.map((rarity) => stockedAs(rarity, level));
+    const early = sold.filter((rarity) => STOCKED_FROM[rarity] > level);
+    if (early.length) problems.push(`at wave ${level} he sells ${early.join(', ')} before its wave`);
+  }
+}
+
+/** The stash he's met with: commons and rares of the hero's level, and a legendary he mustn't take. */
+function stashOf(): Item[] {
+  const cls = CLASSES[G.profile.classId];
+  const of = (rarity: Item['rarity'], count: number): Item[] =>
+    Array.from({ length: count }, () => makeItem({ rarity, ilvl: WAVE, cls }));
+  return [...of('common', COMMONS), ...of('rare', RARES), ...of('legendary', 1)];
+}
+
 /** `lab merchant`. */
 export async function merchant(lab: Lab, options: MerchantOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
+  checkRates(lines, problems);
   await toVillage(lab);
-  // (a hero of the first wave, 25 commons in his stash, no stock yet)
+  // (a hero of wave 1 meets no rare or epic)
   const p = G.profile = loadProfile(G.profile.classId);
-  const cls = CLASSES[p.classId];
   p.records.bestReached = { crypt: 1 };
   p.records.runs = 0;
   delete p.merchant;
-  p.stash = Array.from({ length: COMMONS }, () => makeItem({ rarity: 'common', ilvl: 1, cls }));
+  const first = stockOf(p).map((it) => it.rarity);
+  lines.push(`a hero of wave 1 meets: ${first.join(', ')}`);
+  if (first.some((rarity) => rarity !== 'magic')) problems.push(`a hero of wave 1 meets ${first.join(', ')}`);
+  // (a hero of wave 6, his stash as `stashOf` gives it, no stock yet)
+  p.records.bestReached = { crypt: WAVE };
+  delete p.merchant;
+  p.stash = stashOf();
+  const legendary = p.stash.find((it) => it.rarity === 'legendary')!;
   // (into his shop by its door, to his counter)
   const out = outsideOf('merchant');
   await stand(lab, out.x, out.z, out.facing + Math.PI);
@@ -78,15 +136,23 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   if (stock.length !== STOCK_RARITIES.length) {
     problems.push(`his stock holds ${stock.length} pieces, not ${STOCK_RARITIES.length}`);
   }
+  if (stock.some((it) => !takes(it))) problems.push('his stock holds a piece above epic');
   if (shownWares !== stock.length) problems.push(`the screen shows ${shownWares} of his ${stock.length} wares`);
-  const epic = stock.find((it) => it.rarity === 'epic');
-  if (!epic) return { text: lines.join('\n'), problems: [...problems, 'his stock has no epic'], moments };
-  const needed = Math.ceil(price(epic) - 1e-6);
-  lines.push(`his epic (level ${epic.ilvl}) asks ${price(epic).toFixed(2)}: ${needed} commons of the first level`);
+  if (tileOf('.mc-stash', legendary.id)) problems.push('the stash offers him a legendary');
+  const epics = stock.filter((it) => it.rarity === 'epic');
+  if (epics.length < 2) {
+    return { text: lines.join('\n'), problems: [...problems, 'his stock has no two epics'], moments };
+  }
+  const [epic, other] = epics;
+  const common = p.stash.find((it) => it.rarity === 'common')!;
+  const needed = Math.ceil(price(epic) / worth(common) - 1e-6);
+  lines.push(`his epic (level ${epic.ilvl}) asks ${price(epic).toFixed(2)}: ${needed} commons of level ${WAVE}`);
+  if (needed > MOST_PIECES) problems.push(`an epic costs ${needed} commons of its level, over ${MOST_PIECES}`);
+  if (offer(p, epic, [legendary.id]).worth !== 0) problems.push('a legendary counts toward a trade');
   // (one short: Trade held off, and refused when asked anyway)
-  await lab.clickOn(tileOf('.mc-wares', epic.id));
-  const commons = stashIds();
-  for (const id of commons.slice(0, needed - 1)) await lab.clickOn(tileOf('.mc-stash', id));
+  await lab.clickOn(tileOf('.mc-wares', epic.id)!);
+  const commons = p.stash.filter((it) => it.rarity === 'common').map((it) => it.id);
+  for (const id of commons.slice(0, needed - 1)) await lab.clickOn(tileOf('.mc-stash', id)!);
   await lab.step(2);
   const go = element('#merchant .mc-trade') as HTMLButtonElement;
   lines.push(`one short: "${element('#merchant .mc-sum').textContent}", Trade ${go.disabled ? 'held off' : 'offered'}`);
@@ -96,7 +162,7 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   const changed = stashIds().join() !== before || stockOf(p).length !== stock.length;
   if (changed) problems.push('a refused trade changed the stash or the stock');
   // (one more: Trade offered, clicked)
-  await lab.clickOn(tileOf('.mc-stash', commons[needed - 1]));
+  await lab.clickOn(tileOf('.mc-stash', commons[needed - 1])!);
   await lab.step(2);
   lines.push(`enough: "${element('#merchant .mc-sum').textContent}", Trade ${go.disabled ? 'held off' : 'offered'}`);
   moments.push(await lab.screen('merchant-trade'));
@@ -116,6 +182,23 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   }
   const saved = loadProfile(G.profile.classId);
   if (!saved.stash.some((it) => it.id === epic.id)) problems.push('the trade was not saved');
+  // (his other epic: Pick fewest pays with the best of the lesser pieces, never the epic just bought)
+  await lab.clickOn(tileOf('.mc-wares', other.id)!);
+  await lab.clickOn(element('#merchant .mc-fill-best'));
+  await lab.step(2);
+  const picked = [...document.querySelectorAll<HTMLElement>('#merchant .mc-stash .mc-item.picked')]
+    .map((tile) => G.profile.stash.find((it) => it.id === tile.dataset.id)!);
+  const fewest = fewestFor(G.profile, other);
+  const pickedRarities = picked.map((it) => it.rarity).join(', ');
+  lines.push(`Pick fewest for his other epic (asks ${price(other).toFixed(2)}): `
+    + `${picked.length} pieces (${pickedRarities}), "${element('#merchant .mc-sum').textContent}"`);
+  moments.push(await lab.screen('merchant-fewest'));
+  if (picked.length !== fewest.length) problems.push(`Pick fewest picked ${picked.length} tiles, not ${fewest.length}`);
+  if (picked.some((it) => rankOf(it) >= rankOf(other))) problems.push('Pick fewest offered an epic for an epic');
+  if (!offer(G.profile, other, fewest).enough) problems.push('Pick fewest gave less than he asks');
+  if (picked.length > RARES + 1) {
+    problems.push(`Pick fewest gave ${picked.length} pieces with ${RARES} rares at hand`);
+  }
   // (three runs begun: he restocks, full again)
   const ids = stockOf(G.profile).map((it) => it.id).join();
   G.profile.records.runs += RESTOCK_RUNS;
