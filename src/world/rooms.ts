@@ -174,7 +174,7 @@ function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, dx
 
 /** A chandelier hung at (x, high, z): an iron wheel on chains, candles round it, its light (casting). */
 function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, z: number): THREE.PointLight {
-  const y = high - 0.8;
+  const y = high - 0.65;
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
   ring.position.set(x, y, z);
   g.add(ring);
@@ -568,6 +568,138 @@ function banner(g: THREE.Object3D, M: Mats, x: number, top: number, base: readon
   g.add(rod);
 }
 
+/** The Chronicle's lectern, in its frame (its reader at +z): a stepped octagonal base, a turned column with a brass
+ *  name plate, carved brackets under a slanted desk with a lip and cheeks, a thick book open on it (its pages inked, a
+ *  red initial, a ribbon, brass corners), an inkwell and a quill on a ledge, and a candle on a brass arm (its light one
+ *  of the room's ten). */
+function chronicleStand(g: THREE.Object3D, M: Mats): void {
+  // (the base: two octagonal steps, a brass band between)
+  drum(g, 0.3, 0.33, 0.07, 0, 0, 0, M.timber, 8);
+  drum(g, 0.23, 0.26, 0.06, 0, 0.07, 0, M.panel, 8);
+  drum(g, 0.235, 0.235, 0.012, 0, 0.13, 0, M.brass, 8).castShadow = false;
+  // (the column, turned: a foot, a long belly, rings, a neck under the capital)
+  const profile = [[0.0, 0.0], [0.12, 0.0], [0.12, 0.03], [0.085, 0.06], [0.07, 0.12], [0.08, 0.2], [0.09, 0.3], [0.075, 0.42],
+    [0.055, 0.5], [0.07, 0.53], [0.07, 0.56], [0.05, 0.6], [0.05, 0.7], [0.075, 0.73], [0.075, 0.76], [0.05, 0.79], [0.0, 0.79]];
+  const column = new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 16), M.panel);
+  column.position.y = 0.142;
+  column.castShadow = column.receiveShadow = true;
+  g.add(column);
+  for (const y of [0.142 + 0.545, 0.142 + 0.745]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.008, 6, 20).rotateX(Math.PI / 2), M.brass);
+    ring.position.y = y;
+    g.add(ring);
+  }
+  // (a brass plate on its front, the Chronicle's name)
+  const plate = writing(M, 256, 96, 0.13, 0.05);
+  const brass = plate.mesh.material as THREE.MeshStandardMaterial;
+  brass.metalness = 0.6;
+  brass.roughness = 0.4;
+  plate.write((cx, w, h) => {
+    cx.fillStyle = '#c89a4a'; cx.fillRect(0, 0, w, h);
+    cx.strokeStyle = '#6a4a14'; cx.lineWidth = 6; cx.strokeRect(5, 5, w - 10, h - 10);
+    cx.fillStyle = '#3a2408'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.font = `700 40px ${DISPLAY}`;
+    cx.fillText('CHRONICLE', w / 2, h / 2 + 2, w - 24);
+  });
+  plate.mesh.position.set(0, 0.48, 0.093);
+  g.add(plate.mesh);
+  // (the capital and two carved brackets under the desk)
+  box(g, 0.34, 0.05, 0.26, 0, 0.93, 0, M.timber);
+  for (const sx of [-1, 1]) {
+    const bracket = box(g, 0.04, 0.16, 0.18, sx * 0.13, 0.86, 0, M.timber);
+    bracket.rotation.z = sx * 0.35;
+  }
+  // (the desk, slanted to its reader: a board, a lip along its foot, cheeks either side)
+  const desk = new THREE.Group();
+  desk.position.y = 1.03;
+  desk.rotation.x = 0.33;
+  g.add(desk);
+  box(desk, 0.66, 0.035, 0.48, 0, -0.035, 0, M.panel);
+  box(desk, 0.66, 0.06, 0.035, 0, -0.035, 0.24, M.timber);
+  for (const sx of [-1, 1]) box(desk, 0.03, 0.05, 0.48, sx * 0.345, -0.035, 0, M.timber);
+  // (the book: its cover, two thick stacks of pages bowed to the spine, its pages inked)
+  const cover = new THREE.MeshStandardMaterial({ color: 0x5a1814, roughness: 0.6 });
+  box(desk, 0.6, 0.014, 0.4, 0, 0, 0, cover);
+  for (const [sx, cx] of [[-1, -0.3], [1, 0.3]] as const) {
+    for (const cz of [-0.2, 0.2]) box(desk, 0.035, 0.016, 0.035, cx - sx * 0.015, 0.004, cz - Math.sign(cz) * 0.015, M.brass).castShadow = false;
+  }
+  const pageTint = new THREE.MeshStandardMaterial({ color: 0xe6d6b0, roughness: 0.9 });
+  for (const sx of [-1, 1]) {
+    const stack = box(desk, 0.27, 0.04, 0.36, sx * 0.142, 0.012, 0, pageTint);
+    stack.rotation.z = -sx * 0.07;
+    const page = writing(M, 256, 340, 0.265, 0.355);
+    page.mesh.rotation.set(-Math.PI / 2, 0, 0);
+    page.mesh.rotation.y = -sx * 0.07;
+    page.mesh.position.set(sx * 0.142, 0.054 + 0.004, 0);
+    page.write((cx, w, h) => inkedPage(cx, w, h, sx < 0, sx < 0 ? 41 : 43));
+    desk.add(page.mesh);
+  }
+  // (the spine's hollow, and a red ribbon from it down over the lip)
+  box(desk, 0.02, 0.03, 0.36, 0, 0.012, 0, cover);
+  const ribbon = new THREE.MeshStandardMaterial({ color: 0x9a1a1a, roughness: 0.7, side: THREE.DoubleSide });
+  const tail = new THREE.Mesh(new THREE.PlaneGeometry(0.018, 0.2), ribbon);
+  tail.position.set(0.02, 0.02, 0.24);
+  tail.rotation.set(-0.5, 0, 0.05);
+  desk.add(tail);
+  // (a ledge on its left with an inkwell and a quill)
+  box(g, 0.14, 0.025, 0.14, -0.48, 0.98, -0.02, M.timber);
+  box(g, 0.03, 0.08, 0.03, -0.44, 0.9, -0.02, M.timber).rotation.z = 0.6;
+  drum(g, 0.03, 0.035, 0.05, -0.48, 1.005, -0.02, M.dark, 10);
+  drum(g, 0.012, 0.012, 0.012, -0.48, 1.055, -0.02, M.brass, 8);
+  const quill = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.8 }));
+  quill.position.set(-0.51, 1.16, -0.04);
+  quill.rotation.set(0.25, 0, 0.35);
+  quill.castShadow = true;
+  g.add(quill);
+  // (the candle on a brass arm out of the column's right, out past the desk's cheek so its flame stands clear of the
+  // book (under the desk's edge it stood through the pages), wax run down it)
+  const ARM = { x: 0.5, y: 0.8, up: 0.2 };
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, ARM.x - 0.05, 8).rotateZ(Math.PI / 2), M.brass);
+  bar.position.set((ARM.x + 0.05) / 2, ARM.y, 0);
+  g.add(bar);
+  drum(g, 0.012, 0.012, ARM.up, ARM.x, ARM.y, 0, M.brass, 8);
+  const scroll = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 12, Math.PI), M.brass);
+  scroll.position.set(ARM.x - 0.05, ARM.y, 0);
+  scroll.rotation.z = Math.PI;
+  g.add(scroll);
+  const dish = ARM.y + ARM.up;
+  drum(g, 0.055, 0.03, 0.025, ARM.x, dish, 0, M.brass, 12);
+  candle(g, M, ARM.x, dish + 0.025, 0, 0.17, CANDLE);
+  for (const [dx, dz, len] of [[0.02, 0.01, 0.06], [-0.018, 0.012, 0.04], [0.004, -0.022, 0.08]]) {
+    drum(g, 0.006, 0.008, len, ARM.x + dx, dish + 0.025 + 0.17 - len - 0.01, dz, M.wax, 6).castShadow = false;
+  }
+}
+
+/** A page of the Chronicle in a scribe's hand: a red initial on the left page, rows of ink as words, a rule or two. */
+function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, initial: boolean, seed: number): void {
+  const rng = mulberry(seed);
+  const ground = cx.createLinearGradient(initial ? w : 0, 0, initial ? 0 : w, 0);
+  ground.addColorStop(0, '#d8c498'); ground.addColorStop(0.15, '#efe2c0'); ground.addColorStop(1, '#e8d8b0');
+  cx.fillStyle = ground; cx.fillRect(0, 0, w, h);
+  const margin = 26;
+  let top = margin + 10;
+  if (initial) {
+    cx.fillStyle = '#8a1a14';
+    cx.fillRect(margin, top - 6, 46, 50);
+    cx.fillStyle = '#e8c070';
+    cx.font = `700 44px ${DISPLAY}`;
+    cx.textBaseline = 'top';
+    cx.fillText('C', margin + 8, top - 2);
+  }
+  cx.fillStyle = 'rgba(40,24,10,0.82)';
+  for (let row = 0; top < h - margin; row++, top += 14) {
+    const from = initial && row < 4 ? margin + 56 : margin;
+    let x = from;
+    while (x < w - margin - 10) {
+      const word = 8 + rng() * 26;
+      cx.fillRect(x, top + 4 + rng(), Math.min(word, w - margin - x), 2.2);
+      if (rng() < 0.4) cx.fillRect(x + 2, top + 1, 1.5, 4);
+      x += word + 5;
+    }
+    if (rng() < 0.08) top += 8;
+  }
+}
+
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
 function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
   for (const d of [-1, 1]) {
@@ -924,14 +1056,7 @@ function buildRecords(group: THREE.Group): Room {
   chron.position.set(-hx + 0.9, 0, hz - 1.6);
   chron.rotation.y = Math.PI / 2;
   g.add(chron);
-  drum(chron, 0.05, 0.07, 1.05, 0, 0, 0, M.timber, 8);
-  const top = new THREE.Group();
-  top.position.y = 1.08;
-  top.rotation.x = 0.35;
-  chron.add(top);
-  box(top, 0.5, 0.04, 0.38, 0, 0, 0, M.panel);
-  box(top, 0.44, 0.06, 0.32, 0, 0.04, 0, M.leather);
-  candle(chron, M, 0.3, 1.0, 0.0, 0.14, CANDLE);
+  chronicleStand(chron, M);
   obstacles.push({ x: -hx + 0.9, z: hz - 1.6, r: 0.32, h: 1.2 });
   // --- the east wall: the hearth, the board of feats, a reading desk with scrolls ---
   hearth(g, M, new THREE.Vector3(hx, 0, -1.2), -Math.PI / 2, high, b.updaters, obstacles);
@@ -953,7 +1078,8 @@ function buildRecords(group: THREE.Group): Room {
   // would hang in the air)
   lantern(west, M, -(hz - 0.7), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.7, 2.3, 0, 0, 1);
-  chandelier(g, M, 0, high, 1.9);
+  // (off the middle: over the door's way it hung in the camera's from over the shoulder, over the ledger it hid it from above)
+  chandelier(g, M, 1.6, high, 0.1);
   // (a chest of old records by the hearth, and stacks of ledgers on the floor by the bookcases)
   box(g, 0.9, 0.5, 0.5, hx - 0.4, 0, -2.85, M.panel).rotation.y = -0.1;
   box(g, 0.94, 0.06, 0.54, hx - 0.4, 0.5, -2.85, M.timber).rotation.y = -0.1;

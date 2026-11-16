@@ -16,9 +16,9 @@ export interface House { id: RoomId; cottage: number; name: string; half: [numbe
 export const HOUSES: Record<RoomId, House> = {
   // (the cottage nearest the notice board, beside the Thornwood's road: from play, its pick)
   records: { id: 'records', cottage: 0, name: 'House of Records', half: [4.6, 3.6], high: 3.3 },
-  // (the cottage between the square and the campfire, its door toward the square: where players gather, and the
-  // campfire, where a party is formed today, a few steps off)
-  tavern: { id: 'tavern', cottage: 4, name: 'The Ember & Oak', half: [5.4, 4.0], high: 3.2 },
+  // (the cottage east of the square, its door on the road to the Crypt's portal, where a party passes on its way to a
+  // run: from play, the owner's pick on the village's map)
+  tavern: { id: 'tavern', cottage: 5, name: 'The Ember & Oak', half: [5.4, 4.0], high: 3.2 },
 };
 
 /** How far in from the room's front wall a hero comes in (m), and how far out from the cottage's door he comes out. */
