@@ -133,3 +133,125 @@ body.touch .gd-entry, body.touch #btn-guide-close, body.touch .gd-sections .tab 
 .pbg-door:hover, .pbg-door.alt-hover { background: $well-lit; border-color: var(--frame); }
 @media (max-height: 520px) { .pbg-door { padding: 6px 10px; } .pbg-door b { font-size: 15px; } }
 body.touch .pbg-key { display: none; }
+
+// --- the codex: its look over the layout above (later rules win) ---------------------------------------------------
+
+#guide { --life-bar: #d8323a; --energy-bar: #{$energy}; --ally: #{$ally}; }
+// (a bound book: dark tooled leather round the pages, gilt corners)
+.gd-box { position: relative;
+  background: radial-gradient(ellipse 70% 120px at 50% 0, rgba(150, 70, 24, .22), transparent),
+    radial-gradient(ellipse at 50% 60%, #1e1712, #0c0908 75%); }
+.gd-box::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .25);
+  @include corner-brackets; }
+// (the page: warm and dark as old vellum by candlelight, its edge lit, a vignette inward)
+.gd-page { container-type: inline-size; padding: 16px 22px 20px; border: 1px solid rgba($frame, .35);
+  background: radial-gradient(ellipse at 50% 0, rgba(226, 192, 126, .07), transparent 60%), linear-gradient(#17120e, #110d0b);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, .55); }
+// (the entries as a ribbon of bookmarks down the spine)
+.gd-entries { border-right: 1px solid rgba($frame, .3); padding-right: 10px; }
+.gd-entry.active { box-shadow: inset 3px 0 0 var(--highlight); }
+
+// headings: gilt capitals between fading rules
+.gd-h { display: flex; align-items: center; gap: 12px; margin: 22px 0 10px; font: 700 13px var(--font-display);
+  letter-spacing: 3px; text-transform: uppercase; color: var(--accent); text-shadow: 0 0 10px rgba($accent-glow, .35); }
+.gd-h::before, .gd-h::after { content: ''; flex: 1; height: 1px; }
+.gd-h::before { max-width: 40px; background: linear-gradient(90deg, transparent, rgba($frame, .8)); }
+.gd-h::after { background: linear-gradient(90deg, rgba($frame, .8), transparent); }
+.gd-title h2 { text-shadow: 0 2px 0 #000, 0 0 18px rgba($accent-glow, .25); letter-spacing: 1px; }
+
+// the portraits in a gilt frame
+.gd-portrait { border: 2px solid var(--frame-dark);
+  box-shadow: inset 0 0 0 1px $frame, 0 0 0 3px rgba(0, 0, 0, .7), 0 0 0 4px rgba($frame, .55), 0 10px 26px rgba(0, 0, 0, .7); }
+.gd-mini { box-shadow: 0 0 0 1px rgba($frame, .6); }
+
+// two things side by side (a foe's bars and its drawing), one over the other on a narrow page
+.gd-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; align-items: start; }
+@container (max-width: 680px) { .gd-pair { grid-template-columns: minmax(0, 1fr); } }
+.gd-note { margin: 4px 0 0; color: var(--ink-dim); font-size: 12px; }
+
+// bars: a figure against the largest of its kind
+.gd-bars { display: grid; grid-template-columns: auto minmax(60px, 1fr) auto; gap: 9px 12px; align-items: center; }
+.gd-bar { display: contents; }
+.gd-bl { color: var(--ink-dim); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; }
+.gd-bv { font: 700 14px var(--font-display); color: var(--ink); white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.gd-track { position: relative; height: 10px; background: $well; border: 1px solid rgba($frame, .35); }
+.gd-track b { position: absolute; inset: 0 auto 0 0; width: var(--v); transform-origin: left;
+  background: linear-gradient(rgb(from var(--c, var(--accent)) calc(r * 1.25) calc(g * 1.25) calc(b * 1.25)), var(--c, var(--accent)));
+  box-shadow: 0 0 8px rgb(from var(--c, var(--accent)) r g b / .45); animation: gd-grow .5s ease-out both; }
+@keyframes gd-grow { from { transform: scaleX(0); } }
+.gd-mark { position: absolute; left: var(--at); top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--ink); }
+.gd-mark span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font: 700 10px var(--font-body);
+  color: var(--ink); letter-spacing: 1px; text-transform: uppercase; }
+.gd-cell-bar { display: block; height: 4px; width: var(--v); margin-top: 4px; background: var(--danger); }
+.gd-heal { color: $heal; }
+
+// the drawings
+.gd-fig { margin: 0; }
+.gd-fig figcaption { margin-top: 6px; color: var(--ink-dim); font-size: 12px; line-height: 1.4; }
+.gd-fig figcaption i.k { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 8px; border-radius: 50%; vertical-align: -1px; }
+i.k.foe { background: #7a2c22; box-shadow: 0 0 0 1px var(--danger); }
+i.k.hero { background: $ally; }
+i.k.slam { background: rgba(255, 48, 32, .5); box-shadow: 0 0 0 1px #ff3020; }
+.gd-tele svg { display: block; width: 100%; max-width: 360px; margin: 0 auto; overflow: visible; }
+.gd-tele svg * { vector-effect: non-scaling-stroke; }
+.gd-tele text { fill: var(--ink); font-family: var(--font-body); paint-order: stroke; stroke: #000; stroke-width: 3px; stroke-linejoin: round; }
+.gd-t-ground { fill: rgba(0, 0, 0, .35); stroke: rgba($frame, .3); stroke-width: 1px; }
+.gd-t-reach { fill: rgba($accent, .1); stroke: var(--accent); stroke-width: 1.5px; stroke-dasharray: 5 4; }
+.gd-t-far { fill: rgba($ally, .05); stroke: $ally; stroke-width: 1.5px; stroke-dasharray: 6 5; }
+.gd-t-keep { fill: none; stroke: var(--ink-dim); stroke-width: 1px; stroke-dasharray: 2 4; }
+.gd-t-slam { fill: rgba(255, 48, 32, .28); stroke: #ff3020; stroke-width: 2px; }
+.gd-t-pool { fill: rgba(255, 130, 30, .22); stroke: #ff8a3c; stroke-width: 1px; stroke-dasharray: 3 3; }
+.gd-t-band { fill: none; stroke: rgba(255, 150, 60, .12); }
+.gd-t-shot { stroke: var(--danger); stroke-width: 1.5px; }
+.gd-t-shot.two { stroke: rgba(255, 170, 120, .7); stroke-dasharray: 4 3; }
+.gd-t-vine { stroke: #7cff50; stroke-width: 3px; stroke-dasharray: 8 4; }
+.gd-t-summon { fill: rgba(176, 112, 255, .45); stroke: #c79bff; stroke-width: 1px; }
+.gd-t-foe { fill: #7a2c22; stroke: var(--danger); stroke-width: 2px; }
+.gd-t-face { stroke: var(--ink); stroke-width: 2px; }
+.gd-t-hero { fill: $ally; stroke: #fff; stroke-width: 1px; }
+.gd-t-scale { fill: none; stroke: var(--ink); stroke-width: 1.5px; }
+.gd-timeline svg, .gd-flow svg { display: block; width: 100%; height: auto; }
+.gd-timeline svg { max-width: 640px; }
+.gd-timeline text { fill: var(--ink-dim); font: 11px var(--font-body); }
+.gd-tl-axis, .gd-tl-tick { stroke: rgba($frame, .7); stroke-width: 1.5px; }
+.gd-tl-call circle { fill: rgba(176, 112, 255, .35); stroke: #c79bff; stroke-width: 1.5px; }
+.gd-tl-call text { fill: var(--ink); font: 700 11px var(--font-display); }
+.gd-flow svg { max-width: 680px; margin: 4px auto 0; }
+.gd-fl rect, .gd-fl path { fill: #1d1814; stroke: var(--frame); stroke-width: 1.5px; }
+.gd-fl text { fill: var(--ink); font: 700 14px var(--font-display); }
+.gd-fl text.sub { fill: var(--ink-dim); font: 12px var(--font-body); }
+.gd-fl.bank rect { stroke: $heal; }
+.gd-fl.cont rect { stroke: var(--highlight); }
+.gd-fl.die rect { stroke: var(--danger); }
+.gd-fl.choice path { fill: #2a2218; stroke: var(--accent); }
+.gd-fl-arrow { fill: none; stroke: var(--frame); stroke-width: 2px; }
+.gd-fl-arrow.good { stroke: $heal; }
+.gd-fl-arrow.bad { stroke: var(--danger); }
+.gd-fl-arrow.loop { stroke: var(--highlight); stroke-dasharray: 6 4; }
+#gd-arrowhead path { fill: var(--frame); }
+
+// a combo: the game's key caps in order, an arrow between
+.gd-seq { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 8px 0; }
+.gd-cap-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.gd-cap { min-width: 46px; padding: 7px 12px 5px; text-align: center; font: 700 14px var(--font-display); color: var(--accent);
+  white-space: nowrap; border-radius: 6px; border: 1px solid rgba($frame, .75); border-bottom: 4px solid #070504;
+  background: linear-gradient(#3a3026, #15110d); box-shadow: 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .15); }
+.gd-cap-skill { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--c, var(--ink)); }
+.gd-seq-arrow { width: 40px; height: 20px; flex: none; margin-bottom: 26px; fill: none; stroke: var(--accent); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+// things side by side: the warrior's styles, the mage's staffs
+.gd-compare { overflow-x: auto; margin: 10px 0 14px; border: 1px solid rgba($frame, .35); background: rgba(0, 0, 0, .25); }
+.gd-compare table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.gd-compare th, .gd-compare td { padding: 6px 10px; text-align: left; vertical-align: middle; border-bottom: 1px solid rgba($frame, .18); }
+.gd-compare thead th { font: 700 12px var(--font-display); letter-spacing: 1px; color: var(--accent); background: rgba($frame, .1);
+  border-bottom-color: rgba($frame, .5); }
+.gd-compare tbody th { color: var(--ink-dim); font-weight: 400; white-space: nowrap; }
+.gd-compare tr.differs td { background: rgba($highlight, .06); }
+.gd-compare td { min-width: 110px; }
+
+@media (prefers-reduced-motion: reduce) { .gd-track b { animation: none; } }
+@media (max-width: 760px), (max-height: 520px) {
+  .gd-page { padding: 10px 12px 14px; }
+  .gd-seq-arrow { width: 26px; }
+}

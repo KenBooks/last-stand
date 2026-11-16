@@ -12,7 +12,10 @@ import { skillTooltip } from '../tooltip';
 import { skillIconHTML } from '../skillArt';
 import { itemIconSVG } from '../itemIcons';
 import type { ClassDef, Item, Profile, SkillDef, SkillKey } from '../../types';
-import { esc, head, keyCap, num, para, points, secs, tile, tiles, whole } from './parts';
+import { esc, head, keyCap, keyName, num, para, points, secs, whole } from './parts';
+import { bars, keySequence } from './diagrams';
+import { skillHits } from '../skillDamage';
+import { CLASSES } from '../../data/classes/index';
 
 const EMPTY_NOTE: ClassNote = { overview: '', tips: [], skills: {}, loadouts: [], combos: [] };
 
@@ -36,16 +39,19 @@ function keysRow(cls: ClassDef, l: Partial<Loadout>): string {
   return `<div class="gd-keys">${SKILL_KEYS.filter((k) => k in l).map((k) => `<div class="gd-kslot">${keyCap(k)}${chip(skillOf(cls, l[k] ?? null))}</div>`).join('')}</div>`;
 }
 
-/** The class's own figures. */
+/** The class's own figures, each a bar against the largest of every hero's. */
 function baseFigures(cls: ClassDef): string {
   const b = cls.base;
-  return tiles([
-    tile('Health', whole(b.life), `+${num(b.lifeRegen)} a second`),
-    tile('Energy', whole(b.energy), `+${num(b.energyRegen)} a second`),
-    tile('Speed', `${num(b.moveSpeed)} m/s`),
-    tile('Critical hit', `${num(b.crit)}%`, `+${whole(b.critDmg)}% damage`),
-    tile('Armour', `${num(b.armor)}%`, 'less physical damage'),
-    tile('Resistance', `${num(b.resist)}%`, 'less magic damage'),
+  const most = (get: (x: ClassDef['base']) => number): number => Math.max(...Object.values(CLASSES).map((c) => get(c.base)), 1e-6);
+  const bar = (label: string, get: (x: ClassDef['base']) => number, text: string, colour: string) =>
+    ({ label, share: get(b) / most(get), text, colour });
+  return head('Against the other heroes') + bars([
+    bar('Health', (x) => x.life, `${whole(b.life)} · +${num(b.lifeRegen)}/s`, 'var(--life-bar)'),
+    bar('Energy', (x) => x.energy, `${whole(b.energy)} · +${num(b.energyRegen)}/s`, 'var(--energy-bar)'),
+    bar('Speed', (x) => x.moveSpeed, `${num(b.moveSpeed)} m/s`, 'var(--highlight)'),
+    bar('Critical', (x) => x.crit, `${num(b.crit)}% · +${whole(b.critDmg)}%`, 'var(--accent)'),
+    bar('Armour', (x) => x.armor, `${num(b.armor)}% physical`, 'var(--frame)'),
+    bar('Resistance', (x) => x.resist, `${num(b.resist)}% magic`, 'var(--ally)'),
   ]) + (cls.hall ? `<div class="gd-traits">${cls.hall.traits.map((t) => `<span>${t.label} <i style="--v:${t.value}"></i></span>`).join('')}</div>` : '');
 }
 
@@ -94,6 +100,7 @@ function styles(cls: ClassDef): string {
   const shields = basesFor('offhand', cls);
   const seen = new Set<string>();
   const out: string[] = [];
+  const cols: { name: string; l: Loadout }[] = [];
   for (const t of STYLE_TRIES) {
     if ((t.weapon === 'two' && !two.length) || (t.weapon === 'one' && !one.length)) continue;
     if (t.off === 'one' && !(cls.dualWield && one.length)) continue;
@@ -109,6 +116,7 @@ function styles(cls: ClassDef): string {
     if (seen.has(sig)) continue;
     seen.add(sig);
     const note = STYLE_NOTES[t.id] ?? STYLE_NOTES[style];
+    cols.push({ name: note?.name ?? t.id, l });
     const held = [t.weapon === 'two' ? baseRow(cls, 'weapon', two) : t.weapon === 'one' ? baseRow(cls, 'weapon', one) : '',
       t.off === 'shield' ? baseRow(cls, 'offhand', shields) : t.off === 'one' ? '<span class="gd-dim">and a second one-handed weapon</span>' : ''].join('');
     out.push(`<div class="gd-style"><h4>${note?.name ?? esc(t.id)}</h4>${note?.how ? para(note.how) : ''}`
@@ -116,7 +124,9 @@ function styles(cls: ClassDef): string {
       + keysRow(cls, l) + tuned(cls, style, l)
       + `<div class="gd-pros">${points('Strengths', note?.strengths ?? [], 'good')}${points('Weaknesses', note?.weaknesses ?? [], 'bad')}</div></div>`);
   }
-  return out.length ? head('Weapon styles') + para('What you hold changes some of your skills. Equip a different weapon or off-hand and those keys change with it; each style keeps its own loadout.') + out.join('') : '';
+  return out.length ? head('Weapon styles') + para('What you hold changes some of your skills. Equip a different weapon or off-hand and those keys change with it; each style keeps its own loadout.')
+    + compare(cols.map((c) => c.name), SKILL_KEYS.map((k) => ({ label: keyCap(k), cells: cols.map((c) => chip(skillOf(cls, c.l[k] ?? null))), differs: new Set(cols.map((c) => c.l[k])).size > 1 })))
+    + out.join('') : '';
 }
 
 /** A class whose weapons have schools (the mage's staffs): each school's spell, and none held. */
@@ -125,6 +135,7 @@ function schools(cls: ClassDef): string {
   if (!sc) return '';
   const mine = played(cls);
   const bases = basesFor('weapon', cls);
+  const cols: { title: string; colour: string; spell?: SkillDef }[] = [];
   const rows = [...sc.roll, 'bare' as const].map((school) => {
     const equipped: Profile['equipped'] = school === 'bare' ? {} : { weapon: makeItem({ slot: 'weapon', cls, base: bases[0], school }) };
     const l = defaultLoadout(cls, gearOf(cls, equipped));
@@ -133,13 +144,47 @@ function schools(cls: ClassDef): string {
     const colour = school === 'bare' ? 'var(--ink)' : '#' + SCHOOLS[school].color.toString(16).padStart(6, '0');
     const title = school === 'bare' ? 'No staff' : `School of ${SCHOOLS[school].name}`;
     const card = spell ? skillTooltip(spell, mine)().html : '';
+    cols.push({ title, colour, spell });
     return `<div class="gd-style" style="--c:${colour}"><h4 style="color:${colour}">${title}</h4>${note ? para(note.how) : ''}`
       + `<div class="gd-scard">${card}</div>`
       + `<div class="gd-pros">${points('Strengths', note?.strengths ?? [], 'good')}${points('Weaknesses', note?.weaknesses ?? [], 'bad')}</div></div>`;
   });
   return head('Staffs and their schools')
     + para(`Every weapon you find is attuned to a school, shown by its crystal's colour and its tooltip. The school, not the weapon's name, decides the spell on your left click: any of ${bases.join(', ')} can carry any school.`)
-    + baseRow(cls, 'weapon', bases) + rows.join('');
+    + baseRow(cls, 'weapon', bases) + schoolTable(cols)
+    + '<p class="gd-note">A second on one foe: a hit over its cast (a held charge at its fullest), before gear; splits, bursts on a pack and burns add more.</p>'
+    + rows.join('');
+}
+
+/** The schools' spells side by side: what each deals a second on one foe (its first kind of hit as the skill's own code
+ *  states it, `skillHits`, over its cast and draw), how it's cast, how wide, and its cost. */
+function schoolTable(cols: { title: string; colour: string; spell?: SkillDef }[]): string {
+  const hits = (d?: SkillDef): number => {
+    const h = d ? skillHits(d, null)[0] : undefined;
+    if (!d || !h) return 0;
+    return h.rate ? h.base * h.rate : h.base / Math.max(0.1, d.castTime + (d.draw ?? 0));
+  };
+  const most = Math.max(...cols.map((c) => hits(c.spell)), 1);
+  const cast = (d?: SkillDef): string => (!d ? '—' : d.channel ? 'held, a beam' : d.draw ? `held up to ${secs(d.draw)}` : secs(d.castTime));
+  const what = (d?: SkillDef): string => {
+    if (!d) return '—';
+    if (d.heal && !d.damage) return `<span class="gd-heal">heals ${whole(d.heal)}/s</span>`;
+    return `${whole(hits(d))}<span class="gd-cell-bar" style="--v:${(hits(d) / most) * 100}%"></span>`;
+  };
+  return compare(cols.map((c) => `<span style="color:${c.colour}">${c.title.replace('School of ', '')}</span>`), [
+    { label: 'Left click', cells: cols.map((c) => chip(c.spell)) },
+    { label: 'A second, one foe', cells: cols.map((c) => what(c.spell)) },
+    { label: 'Cast', cells: cols.map((c) => cast(c.spell)) },
+    { label: 'Area', cells: cols.map((c) => (c.spell?.radius ? `${num(c.spell.radius)} m round` : c.spell?.width ? `a ${num(c.spell.width)} m line` : c.spell?.splitCount ? `splits in ${c.spell.splitCount}` : 'one target')) },
+    { label: 'Energy', cells: cols.map((c) => (!c.spell?.cost ? 'none' : `${c.spell.cost}${c.spell.channel ? '/s' : ''}`)) },
+  ]);
+}
+
+/** A table of things side by side: a column each, a row each, the rows that differ marked. */
+function compare(titles: string[], rows: { label: string; cells: string[]; differs?: boolean }[]): string {
+  return `<div class="gd-compare"><table><thead><tr><th></th>${titles.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>`
+    + rows.map((r) => `<tr${r.differs ? ' class="differs"' : ''}><th>${r.label}</th>${r.cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
+    + '</tbody></table></div>';
 }
 
 /** The gear the class wears: each slot's bases, and what each slot gives of its own. */
@@ -166,8 +211,8 @@ function loadouts(cls: ClassDef, note: ClassNote): string {
 function combos(cls: ClassDef, note: ClassNote): string {
   const ok = note.combos.filter((c) => c.steps.every((impl) => skillOf(cls, impl)));
   if (!ok.length) return '';
-  const step = (impl: string): string => { const def = skillOf(cls, impl)!; return `${keyCap(def.key as SkillKey)}${chip(def)}`; };
-  return head('Combos') + ok.map((c) => `<div class="gd-combo"><h4>${c.name}</h4><div class="gd-steps">${c.steps.map(step).join('<span class="gd-then">then</span>')}</div>${para(c.how)}</div>`).join('');
+  const step = (impl: string) => { const def = skillOf(cls, impl)!; return { key: keyName(def.key as SkillKey), icon: skillIconHTML(def), name: def.name, colour: def.icon.color }; };
+  return head('Combos') + ok.map((c) => `<div class="gd-combo"><h4>${c.name}</h4>${keySequence(c.steps.map(step))}${para(c.how)}</div>`).join('');
 }
 
 /** A class's page. */

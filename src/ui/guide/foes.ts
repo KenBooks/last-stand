@@ -10,6 +10,7 @@ import { CLASSES } from '../../data/classes/index';
 import { G } from '../../state';
 import type { EnemyDef } from '../../types';
 import { css, head, metres, num, para, pct, points, secs, tile, tiles, whole } from './parts';
+import { bars, partyBars, summonTimeline, telegraph } from './diagrams';
 
 /** the wave a foe's figures are shown at besides the first, to show how it grows */
 const LATER = 10;
@@ -131,11 +132,34 @@ function eliteLine(foe: Foe): string {
   return para(`<b>As an elite</b> (a glowing aura and a title such as "${HERO.prefixes[0]}"), from wave ${first}: ${whole(life(foe.def, Math.max(first, foe.from)) * HERO.lifeMult)} Health and ${whole(damage(foe.def, Math.max(first, foe.from)) * HERO.damageMult)} damage a blow at wave ${Math.max(first, foe.from)}, ${num(HERO.lifeMult)}× the Health and ${num(HERO.damageMult)}× the damage. Elites and bosses are not lured or carried off, and lightning does not daze them.`);
 }
 
-/** A boss's Health with a party. */
+/** A boss's Health with a party, as bars, and its calls for help along a fight's first minute. */
 function bossParty(foe: Foe): string {
   if (!foe.def.boss) return '';
-  const rows = Array.from({ length: COOP.maxPlayers }, (_, i) => `${i + 1} hero${i ? 'es' : ''}: ${whole(life(foe.def, foe.from) * partyScale(i + 1).boss)}`);
-  return para(`<b>Health with a party</b> at wave ${foe.from}: ${rows.join(' · ')}. It grows with each boss wave after.`);
+  const lives = Array.from({ length: COOP.maxPlayers }, (_, i) => life(foe.def, foe.from) * partyScale(i + 1).boss);
+  const summon = foe.def.summon && foe.def.summon in ENEMIES ? ENEMIES[foe.def.summon as EnemyId].name : '';
+  return head(`Health with a party, wave ${foe.from}`) + partyBars(lives)
+    + (summon ? head('Calls for help') + summonTimeline(summon) : '');
+}
+
+/** The foe at a glance: its Health, its blow, how much it deals a second, its speed (the hero's own marked) and its
+ *  reach, each a bar against the largest of its kind (the common foes', or the bosses'), at wave 1. */
+function glance(foe: Foe): string {
+  const all = foes();
+  const peers = (foe.def.boss ? all.bosses : all.common).map((p) => p.def);
+  const most = (get: (d: EnemyDef) => number): number => Math.max(...peers.map(get), 1e-6);
+  const d = foe.def;
+  const dps = (x: EnemyDef): number => x.damage / Math.max(0.1, x.cooldown);
+  const reach = (x: EnemyDef): number => (x.ai === 'slam' && x.throws ? x.throws.reach : x.range);
+  const hero = G.player?.stats.moveSpeed;
+  const fastest = Math.max(most((x) => x.speed), hero ?? 0);
+  return head('At a glance') + bars([
+    { label: 'Health', share: d.life / most((x) => x.life), text: whole(d.life), colour: 'var(--life-bar)' },
+    { label: 'Blow', share: d.damage / most((x) => x.damage), text: whole(d.damage), colour: 'var(--danger)' },
+    { label: 'A second', share: dps(d) / most(dps), text: whole(dps(d)), colour: 'var(--danger)' },
+    { label: 'Speed', share: d.speed / fastest, text: `${num(d.speed)} m/s`, colour: 'var(--highlight)',
+      mark: hero ? { share: hero / fastest, label: 'you' } : undefined },
+    { label: 'Reach', share: reach(d) / most(reach), text: metres(reach(d)), colour: 'var(--ally)' },
+  ]) + `<p class="gd-note">At wave 1, against the ${foe.def.boss ? 'other bosses' : 'other foes'}; damage a second is a blow over the time between attacks.</p>`;
 }
 
 /** The words for each hero against it, the hero played first. */
@@ -157,7 +181,9 @@ export function foePage(foe: Foe): string {
     + `<div class="gd-sub">${note.role} · ${BIOMES[foe.biome].title}</div>`
     + `<p class="gd-p">${note.does}</p>`
     + `<p class="gd-ai">${AI_NOTES[d.ai] ?? ''}</p></div></div>`;
-  html += figures(foe);
+  const summon = d.summon && d.summon in ENEMIES ? ENEMIES[d.summon as EnemyId].name : '';
+  html += `<div class="gd-pair"><div>${glance(foe)}</div><div>${head('Its attacks, seen from above')}${telegraph(d, summon)}</div></div>`;
+  html += head('Figures') + figures(foe);
   if (you) html += para(`<b>Its blow against you now:</b> ${you} at wave ${foe.from}.`);
   html += points('Attacks', attacks(foe));
   html += eliteLine(foe) + bossParty(foe);
