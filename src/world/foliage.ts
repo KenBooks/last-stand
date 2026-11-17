@@ -34,6 +34,14 @@ export function leafClusterTexture(seed = 7): THREE.CanvasTexture {
 }
 /** each cluster painted, by its seed (the forest's and the village's trees share it) */
 const clusters = new Map<number, THREE.CanvasTexture>();
+/** each cluster's flat spots, by its seed: where in its picture one leaf's fill alone shows, and how bright it is */
+const flatSpots = new Map<number, { u: number; v: number; bright: number }[]>();
+
+/** a leaf's width against its length (`paintLeaf`'s `wid`), and how far out from its rib its blade is still whole at
+ *  its middle, as a share of that width (its Béziers' widest is about 0.6) */
+const LEAF_WIDE = 0.36, LEAF_WHOLE = 0.55;
+/** how far (px) round a flat spot nothing else is painted: a texel's bilinear reach and the edges' antialiasing */
+const FLAT_CLEAR = 3;
 
 function paintCluster(seed: number): THREE.CanvasTexture {
   const S = 512, c = canvas(S), g = ctx2d(c), r = mulberry(seed);
@@ -44,14 +52,56 @@ function paintCluster(seed: number): THREE.CanvasTexture {
   }
   // paint back to front: the outer and darker leaves first
   leaves.sort((p, q) => p[4] - q[4]);
+  const warmth: boolean[] = [];
   for (const [x, y, a, len, k] of leaves) {
     const v = 0.45 + k * 0.55, warm = r() < 0.15 ? 30 : 0;
+    warmth.push(warm > 0);
     const fill = `rgb(${Math.round((120 + warm) * v)},${Math.round(200 * v)},${Math.round(90 * v)})`;
-    paintLeaf(g, x - Math.cos(a) * len * 0.5, y - Math.sin(a) * len * 0.5, a, len, len * 0.36, fill, `rgba(30,50,20,${0.35 * v})`);
+    paintLeaf(g, x - Math.cos(a) * len * 0.5, y - Math.sin(a) * len * 0.5, a, len, len * LEAF_WIDE, fill, `rgba(30,50,20,${0.35 * v})`);
   }
+  flatSpots.set(seed, flatSpotsOf(leaves, warmth, S));
   const t = textureFromCanvas(c);
   t.anisotropy = 4;
   return t;
+}
+
+/**
+ * Where each green leaf's fill alone shows (`leafClusterTones`): a point a third of the way out from its rib at its
+ * middle, kept where no leaf painted over it comes near. Worked out from what was painted, not read back from the
+ * canvas (a read waits on the GPU's process).
+ */
+function flatSpotsOf(leaves: [number, number, number, number, number][], warmth: boolean[], S: number): { u: number; v: number; bright: number }[] {
+  const spots: { u: number; v: number; bright: number }[] = [];
+  leaves.forEach(([x, y, a, len, k], i) => {
+    const wide = len * LEAF_WIDE, out = wide * 0.3;
+    if (warmth[i] || wide * LEAF_WHOLE - out < FLAT_CLEAR) return;
+    const px = x - Math.sin(a) * out, py = y + Math.cos(a) * out;
+    // (each leaf painted over it an ellipse round its blade, swollen by the clearance)
+    const covered = leaves.slice(i + 1).some(([ox, oy, oa, olen]) => {
+      const dx = px - ox, dy = py - oy;
+      const along = dx * Math.cos(oa) + dy * Math.sin(oa), side = -dx * Math.sin(oa) + dy * Math.cos(oa);
+      return (along / (olen * 0.5 + FLAT_CLEAR)) ** 2 + (side / (olen * LEAF_WIDE * 0.65 + FLAT_CLEAR)) ** 2 < 1;
+    });
+    // (v up the picture: a canvas texture is flipped as it's sent)
+    if (!covered) spots.push({ u: (Math.round(px) + 0.5) / S, v: 1 - (Math.round(py) + 0.5) / S, bright: 0.45 + k * 0.55 });
+  });
+  return spots;
+}
+
+/**
+ * Spots in a leaf cluster's picture where one flat colour shows, as many as asked, evenly apart in brightness from
+ * `darkest` to `brightest` (of the leaves' fill, 0.45 to 1): a face whose three corners all lie on one spot is drawn in
+ * that colour alone, tinted as the leaves are, and sharp at any distance (its texture coordinates don't change across
+ * it, so its texel is read from the picture itself, not a blurred smaller one). `simpleCrown` in simpleTrees.ts.
+ */
+export function leafClusterTones(count: number, darkest: number, brightest: number, seed = 7): [number, number][] {
+  leafClusterTexture(seed);
+  const spots = flatSpots.get(seed)!;
+  return Array.from({ length: count }, (_, i) => {
+    const want = darkest + ((brightest - darkest) * i) / Math.max(1, count - 1);
+    const best = spots.reduce((p, q) => (Math.abs(q.bright - want) < Math.abs(p.bright - want) ? q : p));
+    return [best.u, best.v];
+  });
 }
 
 /** A fern frond, base at the bottom of the image and tip at the top: a stem with paired leaflets. */
