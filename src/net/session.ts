@@ -64,6 +64,9 @@ interface Peer {
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
+  /** whether its reports have placed its hero yet: made, he stands on the party's spawn by the fountain until his
+   *  timeline reaches his first report, and showed there a moment (from play, "heroes on the fountain briefly") */
+  placed: boolean;
 }
 
 /** What the rest of the game does when the session changes (set by main). */
@@ -788,7 +791,14 @@ export function playSession(dt: number): void {
     if (!p || !peer.clock.started) continue;
     const at = peer.clock.advance();
     if (peer.id === session.hostId) playWorld(at, dt);
-    if (peer.track.at(at, _pose)) playState(p, peer.smooth.follow(_pose, peer.track, dt, _shown), peer.track.dataAt(at)!);
+    if (peer.track.at(at, _pose)) {
+      playState(p, peer.smooth.follow(_pose, peer.track, dt, _shown), peer.track.dataAt(at)!);
+      // (where his reports have him at last: shown from here, never on the spawn he was made on)
+      if (!peer.placed) {
+        peer.placed = true;
+        syncAway();
+      }
+    }
     for (const a of peer.actions.due(at)) if (!p.away) p.replay(a);
   }
 }
@@ -806,7 +816,7 @@ function addPeer(id: string, slot: number, look: Look, tag: string, colour: Hero
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
     id, slot, tag, colour, player: null, look, inRun: false, room: 0, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
-    numbers: freshNumbers(), rtt: null, pings: [],
+    numbers: freshNumbers(), rtt: null, pings: [], placed: false,
   };
   session.peers.set(id, peer);
   makePlayer(peer);
@@ -876,7 +886,7 @@ export function syncAway(): void {
     if (!p) continue;
     // (and in the lobby, one in another of the village's places: a house's room or the village outside it)
     p.away = peer.inRun !== (G.mode === 'run') || (G.mode !== 'run' && peer.room !== roomIndex());
-    p.show(!p.away && p.out !== 'banked');
+    p.show(!p.away && p.out !== 'banked' && peer.placed);
   }
 }
 
