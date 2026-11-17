@@ -28,6 +28,8 @@ const PUBLIC = { kind: 'public', name: 'Crypt crawl, all welcome', password: '',
 const LOCKED = { kind: 'password', name: 'Friends only', password: 'ember-gate', max: 4 };
 const PRIVATE = { kind: 'private', name: 'Quiet room', password: '', max: 2 };
 const WRONG = 'ember-gat';
+/** how long a picture waits for the dialog's fade in to end (ms of the browser's clock) */
+const FADE_MS = 500;
 
 /** Calls `fn` of page/rooms.ts in `page` with `args`; a failure names the call. */
 async function callRooms(page, fn, args = {}) {
@@ -108,6 +110,8 @@ async function relayList(relayUrl, origin) {
 async function picture(game, dir, name) {
   // (a few of the game's frames first: what it puts away by its frames, the beta's notice under a dialog, is gone)
   await game.call('roomsStep', { frames: 3 });
+  // (and the dialog's own fade in let end: it runs on the browser's clock, and the create page was caught half see-through)
+  await new Promise((resolve) => setTimeout(resolve, FADE_MS));
   const cdp = await game.page.context().newCDPSession(game.page);
   try {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
