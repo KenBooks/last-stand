@@ -1027,7 +1027,11 @@
       const asked = new URLSearchParams(location.search).get('village');
       const kept = (document.cookie.match(/(?:^|; )last-stand-beta-village=([01])/) || [])[1];
       if (asked === '1' || asked === '0') document.cookie = `last-stand-beta-village=${asked}; max-age=31536000; path=/; SameSite=Lax`;
-      const lobby = (asked === '1' || asked === '0' ? asked : kept) === '1' ? 'village' : 'panels';
+      // (a PR preview's, or a commit build's, opens on the village unless asked or kept otherwise: from the owner,
+      // "PR previews should default to lobby on... I mean village = default")
+      const preview = /^(pr|c)-[a-z0-9-]+\.ls\.wellscoped\.dev$/.test(location.hostname);
+      const chosen = asked === '1' || asked === '0' ? asked : kept ?? (preview ? '1' : '0');
+      const lobby = chosen === '1' ? 'village' : 'panels';
       document.documentElement.dataset.lobby = lobby;
       for (const part of document.querySelectorAll('[data-lobby]')) {
         if (part !== document.documentElement && part.dataset.lobby !== lobby) part.remove();
