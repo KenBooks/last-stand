@@ -47,6 +47,7 @@ import { scholarTalk } from './world/library';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
+import { initMerchant, merchantOpen, showMerchant } from './ui/merchant';
 import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
@@ -232,7 +233,8 @@ async function boot() {
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
   await Promise.all([heads, engraving]);
-  // (the houses' folk seated, the library's scholar: his head and hands are the heroes', made by now)
+  // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
+  // made by now)
   if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
   G.profile = loadProfile(savedClass());
   G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
@@ -286,10 +288,11 @@ async function boot() {
   if (VILLAGE) {
     renderMenu();
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
+    initMerchant(() => closedFrom(villageObject('shopCounter')));
     // (in or out of a house: what was open put away, the partners told and shown only where they stand)
     // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
     initTalk((on) => { scholarTalk.talking = on; if (!on) closedFrom(villageObject('scholar')); });
-    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); syncAway(); });
+    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
     initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
@@ -582,6 +585,7 @@ function useObject(o: VillageObject): void {
     case 'records': openPanels(null); writeRecords(); showVillageCard(o); return;
     case 'guide': showVillageCard(null); openPanels(null); showGuide(); return;
     case 'talk': showVillageCard(null); openPanels(null); openTalk(o.id); return;
+    case 'merchant': showVillageCard(null); openPanels(null); showMerchant(true); return;
   }
 }
 
@@ -592,6 +596,7 @@ function leaveObject(o: VillageObject): void {
   if (o.use === 'coop') openCoop(false);
   if (o.use === 'help') hideHelp();
   if (o.use === 'talk') closeTalk();
+  if (o.use === 'merchant') showMerchant(false);
 }
 
 /** Whether what `o` opened is still up. */
@@ -601,6 +606,7 @@ function objectShows(o: VillageObject): boolean {
     case 'enter': case 'leave': return false;
     case 'guide': return guideOpen();
     case 'talk': return talkOpen();
+    case 'merchant': return merchantOpen();
     case 'stash': return panelsOpen() === 'chest';
     case 'coop': return coopOpen();
     case 'help': return helpOpen();
@@ -961,8 +967,9 @@ function syncView(): void {
   updateAltCursor();
 }
 
-/** Whether Play together or how to play is up (the campfire's, the notice board's, the pause menu's links). */
-const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen() || tradeOpen();
+/** Whether Play together, how to play, a talk, a trade with a partner or Odo's trade is up (the campfire's, the
+ *  notice board's, the pause menu's links, the village's folk, a partner's ask, his counter). */
+const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen() || tradeOpen() || merchantOpen();
 
 /** The guide (ui/guide/), on `section` if given, opened over the pause menu: the menu opened under it if it wasn't (the
  *  game held as the pause menu holds it, and the pointer free), and put away with it then. */
@@ -1005,6 +1012,7 @@ function handleGlobalKeys() {
     openCoop(false);
     hideHelp();
     closeTalk();
+    showMerchant(false);
     closedFrom();
     return;
   }

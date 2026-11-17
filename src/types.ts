@@ -291,6 +291,8 @@ export interface Profile {
     chronicle?: ChronicleRecords };
   /** when it was last saved (ms since the epoch): shown as "last played" on the save slots screen */
   saved?: number;
+  /** the village's merchant's stock for this hero (loot/merchant.ts), and the runs begun when he last restocked */
+  merchant?: { stock: Item[]; restockedAt: number };
 }
 
 // ---------------------------------------------------------------------------

@@ -1917,6 +1917,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  merchant: {
+    each(side, options) {
+      return side.command('merchant', { canary: Boolean(options.canary) });
+    },
+    // (its moments written: the shop and the trade screen)
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('merchant'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   houses: {
     each(side, options) {
       return side.command('houses', { canary: Boolean(options.canary) });

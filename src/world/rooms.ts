@@ -20,6 +20,7 @@ import { boxWithUV, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
 import { buildLibrary } from './library';
 import { buildDoor, type Door } from './door';
+import { buildShop } from './shop';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -55,7 +56,7 @@ export interface Room {
   showRecords?(shown: RecordsShown): void;
   /** which bosses' trophies hang shown now (the house of records'; tools/lab `houses` reads it) */
   trophiesShown?(): Partial<Record<EnemyId, boolean>>;
-  /** the folk who live in it seated (the library's scholar): built on the heroes' heads and hands, so once their
+  /** the folk who live in it seated (the library's scholar, the merchant's Odo): built on the heroes' heads and hands, so once their
    *  workers have made them (main.ts, before the rooms are warmed) */
   seatFolk?(): void;
   /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */
@@ -565,7 +566,7 @@ export function barrel(g: THREE.Object3D, M: Mats, x: number, y: number, z: numb
 }
 
 /** A tankard at (x, y, z). */
-function tankard(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, metal = false): void {
+export function tankard(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, metal = false): void {
   drum(g, 0.045, 0.05, 0.13, x, y, z, metal ? M.brass : M.oak, 10).castShadow = false;
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 4, 10, Math.PI), metal ? M.brass : M.iron);
   handle.position.set(x + 0.05, y + 0.07, z);
@@ -1328,7 +1329,9 @@ function drawPartyBoard(cx: CanvasRenderingContext2D, w: number, h: number): voi
 
 /** Both rooms built, each into a group of its own (hidden till shown). */
 export function buildRooms(): Record<RoomId, Room> {
-  const builders: Record<RoomId, (g: THREE.Group) => Room> = { records: buildRecords, tavern: buildTavern, library: buildLibrary };
+  const builders: Record<RoomId, (g: THREE.Group) => Room> = {
+    records: buildRecords, tavern: buildTavern, library: buildLibrary, merchant: buildShop,
+  };
   const rooms = {} as Record<RoomId, Room>;
   for (const id of ROOM_IDS) {
     const group = new THREE.Group();

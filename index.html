@@ -955,6 +955,35 @@
     <button class="btn primary" id="btn-install-close">Got it</button>
   </div></div>
 
+  <!-- Odo's trade (ui/merchant.ts): his wares and the hero's stash, filled in by it -->
+  <div id="merchant" class="modal hidden"><div class="modal-box mc-box" role="dialog" aria-label="Odo the Merchant">
+    <div class="sm-title">Odo the Merchant</div>
+    <p class="mc-sub">Gear for gear, no coin. Nothing above epic.</p>
+    <div class="mc-step mc-want" data-step="1">
+      <div class="mc-head"><span class="mc-label"><b class="mc-num">1</b>Choose what you want</span><span class="mc-restock"></span></div>
+      <div class="mc-wares"></div>
+    </div>
+    <div class="mc-step mc-give" data-step="2">
+      <div class="mc-head"><span class="mc-label"><b class="mc-num">2</b>Offer gear for it</span><span class="mc-count"></span></div>
+      <p class="mc-hint"></p>
+      <div class="mc-stash"></div>
+    </div>
+    <div class="mc-step mc-deal" data-step="3">
+      <div class="mc-head"><span class="mc-label"><b class="mc-num">3</b>Make the trade</span></div>
+      <div class="mc-deal-row">
+        <div class="mc-get"><span class="mc-side">You get</span><div class="mc-got"></div></div>
+        <span class="mc-swap" aria-hidden="true">&#8644;</span>
+        <div class="mc-pay"><span class="mc-side">You give <span class="mc-given"></span></span>
+          <div class="mc-bar"><div class="mc-fill"></div><span class="mc-sum"></span></div>
+          <p class="mc-need" role="status"></p>
+        </div>
+      </div>
+    </div>
+    <p class="mc-said" role="status"></p>
+    <div class="mc-row"><button class="btn mc-fill-best" disabled title="Fills your offer with the fewest of your lesser pieces that pay for it, the best first">Auto-fill cheapest</button><button class="btn primary mc-trade" disabled>Trade</button><button class="link mc-close">Leave</button></div>
+    <p class="mc-warn">Odo keeps everything you give him.</p>
+  </div></div>
+
   <div id="help" class="modal hidden"><div class="modal-box">
     <div class="sm-title">How to play</div>
     <div class="help-cols">

@@ -2290,6 +2290,15 @@ export const COMMANDS = {
       canary: { kind: 'switch', help: 'plant a shield that fails to lower for an attack and detect it' },
     },
   },
+  merchant: {
+    help: "Odo's trade at his counter: the screen within the window and his full stock, a trade one common short "
+      + 'held off and refused, one with enough made (the gear given gone, his piece in the stash, the stock one '
+      + 'fewer, saved), and his restock after three runs',
+    options: {
+      canary: { kind: 'switch', help: 'put the piece bought back in his stock, which must be caught' },
+      ...COMMON_OPTIONS,
+    },
+  },
   houses: {
     help: "the village's houses walked into and out of by E at their doors, in each view: the room shown in the "
       + "village's stead with no program compiled and the yard's dummies gone, its cut away walls, a walk held in "

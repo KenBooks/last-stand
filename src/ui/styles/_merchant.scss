@@ -1,0 +1,101 @@
+// Odo's trade (ui/merchant.ts), in three numbered steps: his wares in a row, the hero's stash in a grid under them
+// (dimmed until a ware is chosen), and the deal: what's got beside what's given, the bar of its value against his price
+// and what's missing in words, then Trade. The step to do next is lit (`.now`), the ones before it ticked (`.done`).
+// Each piece a button in its rarity's colour (--rc), its icon, its name and its value as a badge, picked with a gold
+// outline. As wide as a desktop allows; on a short screen the stash scrolls within it and the deal's card is cut short.
+@use 'theme' as *;
+
+// two columns: choosing and offering down the left, the deal and Trade down the right (in one, the box was taller than
+// a 1080p window and scrolled its title away)
+.mc-box { width: 1040px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); column-gap: 12px; row-gap: 8px;
+  grid-template-areas: 'title title' 'sub sub' 'want deal' 'give deal' 'give said' 'give row' 'give warn';
+  grid-template-rows: auto auto auto auto auto auto 1fr; align-items: start; text-align: left; }
+.mc-box .sm-title { grid-area: title; text-align: center; font-size: 28px; }
+.mc-sub { grid-area: sub; }
+.mc-want { grid-area: want; }
+.mc-give { grid-area: give; align-self: stretch; }
+.mc-deal { grid-area: deal; align-self: stretch; }
+.mc-said { grid-area: said; }
+.mc-row { grid-area: row; }
+.mc-warn { grid-area: warn; }
+.mc-sub { margin: 0; text-align: center; font-size: 14px; color: var(--ink-dim); font-style: italic; }
+.mc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mc-label { display: flex; align-items: center; gap: 8px; font: 700 15px var(--font-display); letter-spacing: .05em;
+  text-transform: uppercase; color: #ffe7b0; }
+.mc-restock, .mc-count { font-size: 13px; color: var(--ink-dim); }
+
+// --- the steps: a numbered disc each; the next to do lit, a done one ticked ---
+.mc-step { padding: 8px 10px; border: 1px solid rgba($frame, .25); border-radius: 4px; background: rgba(255, 255, 255, .015);
+  transition: border-color .2s, background-color .2s; }
+.mc-step.now { border-color: rgba(#ffd27a, .7); background: rgba(#ffd27a, .05); }
+.mc-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 700 13px var(--font-display);
+  color: #1a120a; background: rgba($frame, .7); }
+.mc-step.now .mc-num { background: #ffd27a; }
+.mc-step.done .mc-num { background: #46a84a; color: #fff; }
+.mc-step.done .mc-num { font-size: 0; }
+.mc-step.done .mc-num::after { content: '\2713'; font-size: 13px; }
+
+// --- the pieces ---
+.mc-wares, .mc-stash { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px; margin-top: 6px; }
+.mc-stash { max-height: 40vh; overflow-y: auto; padding-right: 4px; }
+.mc-hint { margin: 4px 0 0; font-size: 13px; color: var(--ink-dim); }
+.mc-give.waiting .mc-stash { opacity: .35; pointer-events: none; }
+.mc-give.waiting .mc-hint { color: #ffd27a; }
+.mc-item { position: relative; display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; column-gap: 6px;
+  align-items: center; min-height: 52px; padding: 5px 6px; text-align: left; cursor: $cursor-hand; color: var(--ink);
+  background: rgba(255, 255, 255, .03); border: 1px solid color-mix(in srgb, var(--rc) 45%, transparent); border-radius: 3px; }
+.mc-item:hover, .mc-item:focus-visible { background: rgba(255, 231, 176, .08); }
+// picked: a gold edge and a tick whatever its rarity (in a common's grey, a picked one read as any other)
+.mc-item.picked { border-color: #ffd27a; box-shadow: inset 0 0 0 2px #ffd27a, 0 0 8px rgba(255, 210, 122, .35);
+  background: color-mix(in srgb, #ffd27a 12%, transparent); }
+.mc-item.picked::after { content: '\2713'; position: absolute; top: 2px; right: 5px; font-size: 14px; font-weight: 700; color: #ffd27a; }
+.mc-icon { grid-row: 1 / 3; width: 36px; height: 36px; display: flex; }
+.mc-icon svg { width: 100%; height: 100%; }
+.mc-name { font-size: 13px; line-height: 1.15; color: var(--rc); overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding-right: 12px; }
+// (its value as a badge: one unit for his prices and the stash's values)
+.mc-line { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-dim); text-transform: uppercase;
+  letter-spacing: .04em; }
+.mc-value { padding: 0 6px; border-radius: 9px; font-size: 12px; letter-spacing: 0; color: #1a120a; background: #d8b060;
+  font-variant-numeric: lining-nums tabular-nums; }
+.mc-value::before { content: '\25C6\00A0'; font-size: 9px; }
+
+// --- the deal: what you get beside what you give ---
+.mc-deal-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 6px; }
+.mc-side { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-dim); }
+.mc-got { max-height: 220px; overflow-y: auto; }
+.mc-got .tt-card { width: auto; padding: 6px 8px; font-size: 12px; }
+.mc-none { display: block; padding: 14px 8px; text-align: center; font-size: 13px; color: var(--ink-dim);
+  border: 1px dashed rgba($frame, .4); border-radius: 3px; }
+.mc-swap { justify-self: center; font-size: 22px; line-height: 1; color: #ffd27a; transform: rotate(90deg); }
+.mc-bar { position: relative; height: 28px; border: 1px solid rgba($frame, .6); background: rgba(0, 0, 0, .45); }
+.mc-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #6a4a1a, #b07a2a); transition: width .2s ease; }
+.mc-bar.enough .mc-fill { background: linear-gradient(90deg, #2a6a2a, #46a84a); }
+.mc-sum { position: relative; display: block; text-align: center; line-height: 26px; font-size: 14px;
+  font-variant-numeric: lining-nums tabular-nums; text-shadow: 0 1px 2px #000; }
+.mc-need { min-height: 1.2em; margin: 4px 0 0; font-size: 13px; color: #ffb27a; }
+.mc-need.ok { color: #7ad87e; }
+
+.mc-said { min-height: 1.2em; margin: 0; text-align: center; font-size: 14px; color: #ffe7b0; }
+.mc-row { display: flex; justify-content: center; align-items: center; gap: 16px; flex-wrap: wrap; }
+.mc-trade { min-width: 150px; font-size: 18px; }
+.mc-warn { margin: 0; text-align: center; font-size: 12px; color: var(--ink-dim); }
+
+// --- a short screen (a phone held sideways): tighter, the deal's card cut shorter ---
+@media (max-height: 520px) {
+  .mc-box { gap: 5px; }
+  .mc-box .sm-title { font-size: 22px; }
+  .mc-sub, .mc-warn { display: none; }
+  .mc-step { padding: 5px 8px; }
+  .mc-stash { max-height: 34vh; }
+  .mc-got { max-height: 70px; }
+  .mc-swap { display: none; }
+  .mc-item { min-height: 44px; }
+}
+// --- an upright screen: one column, the deal under the stash ---
+@media (orientation: portrait) and (max-width: 1000px) {
+  .mc-box { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+    grid-template-areas: 'title' 'sub' 'want' 'give' 'deal' 'said' 'row' 'warn'; }
+  .mc-stash { max-height: 26vh; }
+}
+@media (prefers-reduced-motion: reduce) { .mc-fill, .mc-step { transition: none; } }
