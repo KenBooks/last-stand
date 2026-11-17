@@ -117,6 +117,8 @@ const cord = (pts: THREE.Vector3[], r: number, closed = false, segs = 48) =>
 /** how a sleeve hangs: the way down from its arm as he rests (in its joint's frame, across the arm), how far it drops
  *  that way along the arm (m), and how far below the arm its cloth may come before it lies flat (m: on the table) */
 interface Hang { down: THREE.Vector3; droop: (y: number) => number; floor: (y: number) => number }
+/** a sleeve that hangs round its arm as it's cut, dropped nowhere */
+const HANG_FREE: Hang = { down: V(0, 0, -1), droop: () => 0, floor: () => Infinity };
 /** the sides of a lathe's segments, round */
 const SLEEVE_SIDES = 28;
 
@@ -166,6 +168,8 @@ export function buildScholar(book: ScholarBook): Scholar {
   const woven = pbrMaterialMaps(woolMaps(), 1, 1);
   const tabard = kit.rim({ map: tabardMap(), normalMap: woven.normalMap, normalScale: woven.normalScale, roughness: 1, side: THREE.DoubleSide }, 0x7a3a2a, 0.3);
   const trim = kit.rim({ color: 0xa8803a, roughness: 0.6, metalness: 0.35, ...tex(clothMaps(), 1.4) }, 0xc89a4a, 0.3);
+  // (his undershirt's linen, its sleeves to his wrists inside the habit's bells)
+  const linen = kit.rim({ color: 0xc8b898, roughness: 1, ...tex(clothMaps(), 1.2) }, 0xd8c8a8, 0.25);
   const glass = kit.std({ color: 0xffffff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
 
   // --- the rig, sat: hips on the seat, thighs ahead, shins down to the floor ---
@@ -222,7 +226,7 @@ export function buildScholar(book: ScholarBook): Scholar {
     parts.push(m);
     return m;
   };
-  const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass };
+  const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass, linen };
   dressBody(j, add, M);
 
   // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
@@ -417,11 +421,16 @@ export function buildScholar(book: ScholarBook): Scholar {
     bridge.y -= 0.12; bridge.x += 0.02; bridge.z += 0.03;
     tL.lerp(bridge, specs);
     tL.y += lift;
-    // (its fingers lifted off his left page as the turned page comes down on it, the wrist kept there, and laid on the new
-    // page once it lies there: left on the page, the turned page came down over them. Lifted whole, his bell went into
-    // the table)
-    const turnAt = turnA > 0 ? along(t, ...BEATS.turnA) : along(t, ...BEATS.turnB), clear = span(turnAt, 0.56, 1, 0.16);
-    tL.x += clear * 0.03; tL.y += clear * 0.015;
+    // (slid off his left page onto the table beside the book as the turned page comes over, and back onto the new page
+    // once it lies there, hidden: the falling page sweeps all the space over the left page round the spine, and lifting
+    // his fingers left the rest of his hand in its way, the page through it, from play)
+    const turnAt = turnA > 0 ? along(t, ...BEATS.turnA) : along(t, ...BEATS.turnB), clear = span(turnAt, 0.38, 1, 0.18);
+    // (nearer him on the table than on the page, his elbow bent and kept up on the table: reached straight out to the
+    // side, his arm straightened and his elbow dropped below the table's top, its bell through it)
+    tL.x += clear * (book.spine.x + shape.half + 0.11 - tL.x); tL.y += 0.05 * Math.sin(Math.PI * clear); tL.z -= clear * 0.08;
+    restL.x += clear * 0.06;
+    // (on the table a hair higher than on the page, as its sleeve's cuff and his thumb hang lower there)
+    tL.y -= clear * (book.printTop - book.table.top - 0.012);
     // the right: to the page's outer edge, near its corner nearest him, lifting it by the edge and carrying it up past
     // upright, then letting it fall over and going back to rest (he took it from thin air, by the spine, from play:
     // "there is nothing on the edges")
@@ -430,15 +439,21 @@ export function buildScholar(book: ScholarBook): Scholar {
     // (let go of eased out: let go of at once, his hand turned 6.8 degrees in a frame back to the table)
     // (lifted by his hand a third of the way, then let go of to fall over by itself, as a page is turned: held up past
     // upright, his hand turned round 180 degrees letting it go, 7.8 degrees a frame)
-    const reach = smooth(span(turnK, 0.02, 0.76, 0.26)) * turning;
+    // (and kept beyond its edge, where he let it go, till it's over upright, then back to his page: going back at once, his
+    // hand went in under the page still lifted over his right page, through it)
+    const reach = smooth(span(turnK, 0.02, 0.84, 0.24)) * turning;
     // (in his hand till he lets it go)
     holding = pageK <= LET_GO ? reach : 0;
     // (his hand follows the edge only as far as he lifts it, then goes back from there: following it as it fell over, his
     // hand turned with it 6.8 degrees a frame as it let go)
     edgeAt(Math.min(pageK, LET_GO), -D * 0.3, edge, inward, face);
-    // (the wrist out past the edge by a hand's palm and its fingers half curled, so they close on the edge, the pads a
-    // finger's thickness off its face)
-    tmp.copy(edge).addScaledVector(inward, -0.155).addScaledVector(face, 0.04);
+    // (the wrist out past the edge by a hand's length, so only his fingertips are on the page, pinching its edge, and
+    // his hand is beyond it: the falling page sweeps only within its width of the spine. With the hand over the page,
+    // its fingers on the face that leads as it falls, the page ran into them as he let go, from play)
+    // (on top of the edge as he takes it, under it by the time he lets go: the page falls away from his fingers, not
+    // into them)
+    const under = clamp(Math.min(pageK, LET_GO) / LET_GO, 0, 1);
+    tmp.copy(edge).addScaledVector(inward, -0.17).addScaledVector(face, lerp(0.02, -0.022, smooth(under)));
     tR.lerp(tmp, reach);
     // (and over the book in an arc, there and back: brought straight back down, his fingers dug 3 cm into the page)
     tR.y += 0.05 * Math.sin(Math.PI * reach) * (pageK > 0 ? 1 : 0.4);
@@ -456,7 +471,7 @@ export function buildScholar(book: ScholarBook): Scholar {
     j.root.updateMatrixWorld(true);
     // the hands' turns: flat on the table, fingers ahead and in; cupping the beard; a finger to the bridge; on the page
     // (its fingers lifted off the page, the wrist kept on it, as the turned page comes down)
-    handTurn(V(-0.35, 0.06 + clear * 0.9, 1), V(0, -1, -0.06 - clear * 0.9), qa);
+    handTurn(V(-0.35, 0.06, 1), V(0, -1, -0.06), qa);
     handTurn(V(-0.5, 0.75, -0.2), V(0.1, 0, -1), qb); qa.slerp(qb, smooth(beard));
     handTurn(V(-0.2, 0.9, -0.3), V(0.1, 0.2, -1), qb); qa.slerp(qb, smooth(specs));
     setHand(j.handL, qa.clone());
@@ -505,7 +520,7 @@ export function buildScholar(book: ScholarBook): Scholar {
 
 interface BodyMats {
   habit: THREE.Material; habitD: THREE.Material; lining: THREE.Material; rope: THREE.Material;
-  shoe: THREE.Material; tabard: THREE.Material; trim: THREE.Material; brass: THREE.Material;
+  shoe: THREE.Material; tabard: THREE.Material; trim: THREE.Material; brass: THREE.Material; linen: THREE.Material;
 }
 type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
 
@@ -705,12 +720,18 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
       M.habit, shoulder, 'sleeve');
   }
   for (const [elbow, down, s] of [[j.elbowL, fore.L, 1], [j.elbowR, fore.R, -1]] as const) {
-    const hang: Hang = { down, droop: (y) => 0.03 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, 0.028, smooth(clamp(-y / 0.24, 0, 1))) };
+    const hang: Hang = { down, droop: (y) => 0.03 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, 0.02, smooth(clamp(-y / 0.24, 0, 1))) };
     const outer = sleeve(bell, hang, 0.06, 9 + s);
     add(outer.geo, M.habitD, elbow, 'bell');
     const inner = bell.map(([r, y]) => [r - 0.008, y + 0.004] as [number, number]).filter(([, y]) => y < -0.06);
     add(sleeve(inner, { ...hang, floor: (y) => hang.floor(y) - 0.006 }, 0.05, 9 + s).geo, M.lining, elbow, 'lining', false);
     add(cord(outer.rim, 0.005, true, 56), M.trim, elbow, 'trim cuff', false);
+    // (his undershirt's sleeve down his forearm inside the bell to the wrist, its cuff gathered round it a little over
+    // the hand: the hand alone at the end of an empty bell looked cut off at the wrist, from play: "the wrists are
+    // floating, add arms continuing after wrists")
+    const fore = -j.P.foreL;
+    add(sleeve([[0.031, fore - 0.016], [0.035, fore - 0.008], [0.036, fore + 0.004], [0.033, fore + 0.016], [0.036, fore + 0.06],
+      [0.041, -0.12], [0.046, -0.03], [0.047, 0.03]], { ...HANG_FREE }, 0.04, 13 + s).geo, M.linen, elbow, 'undersleeve');
   }
 }
 

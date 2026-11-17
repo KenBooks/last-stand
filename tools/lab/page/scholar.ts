@@ -9,13 +9,16 @@
 // lifted out from under them, "1/4 of it is under another white piece", and landed through the book, from play), and
 // lying flat on the left half as it lands; the book's printed pages reaching the spine on both halves, the halves
 // meeting there ("fill in the pages... they should reach the middle"); his fingers on the page's outer edge while he
-// holds it ("he grabs it from thin air, there is nothing on the edges"); his fingertips resting on the book and the
-// table, not sunk into them. Pictured at points of the
+// holds it ("he grabs it from thin air, there is nothing on the edges"); the page never through either hand, their
+// skinned meshes read against it each frame ("when he flips the page, it goes right through his hand"); his forearms
+// clothed from the elbow to the wrist all through the loop, never an empty bell with a hand at its end ("the wrists
+// are floating"); his fingertips resting on the book and the table, not sunk into them. Pictured at points of the
 // loop (reading, a page turned, the beard stroked, the spectacles pushed up, leaning in) from the front, each side,
 // above and over his shoulder, close up and as the player sees him. `--canary` jumps his loop forward mid-way, a snap
 // that must be found, reads his sleeves against a table 8 cm higher, which they must be found through, turns a page
-// from a spine 1 cm lower, which must be found under the book, and draws the prints 2 cm back from the spine, a gap
-// that must be found.
+// from a spine 1 cm lower, which must be found under the book, draws the prints 2 cm back from the spine, a gap that
+// must be found, lands the page on his left hand as it rests, which must be found through it, and hides his
+// undersleeves, which must be found bare.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
@@ -63,6 +66,18 @@ const LANDED = 0.004;
 const AT_EDGE = 0.05;
 /** the canary's prints: drawn back from the spine this far (m) */
 const DRAWN_BACK = 0.02;
+/** how far into either side of the page a hand may come and still be on one side of it (m): a hand touching it */
+const THROUGH_HAND = 0.0015;
+/** the share of the page by its edge where he pinches it (thumb under, fingers over: not through it) */
+const PINCH = 0.88;
+/** how far from his forearm's axis something must stop each ray out from it (m): his forearm, its sleeve; a wide bell
+ *  round it, empty, hides nothing, and his hand floated at its end */
+const FOREARM = 0.06;
+/** the rays out from each point along his forearm, and the points, from past the elbow to the wrist (shares of it) */
+const ROUND = 8;
+const ALONG_ARM = [0.2, 0.35, 0.5, 0.65, 0.8, 0.9, 0.97];
+/** what clothes a forearm: a sleeve's pieces (not the bell's lining: it's the bell's) */
+const CLOTHES = /undersleeve|sleeve$|bell$/;
 
 /** a page turn of his loop (s, from and to: `BEATS.turnA` in the model) */
 const BEATS_TURN = [20, 24.5] as const;
@@ -149,6 +164,87 @@ function spineGaps(s: Scholar): { print: number; halves: number } {
   return { print, halves: a.distanceTo(b) };
 }
 
+/** Each hand's skinned mesh as posed now, its vertices in the world: the one shown (bare or not), its skeleton's bones
+ *  made again for it (the game does as it draws; the lab poses with no draw). */
+function handPoints(s: Scholar): THREE.Vector3[][] {
+  s.root.updateMatrixWorld(true);
+  return s.hands.map((hand) => {
+    const mesh = hand.bareSkin?.visible ? hand.bareSkin : hand.skin;
+    mesh.skeleton.update();
+    const out: THREE.Vector3[] = [], at = mesh.geometry.attributes.position;
+    for (let i = 0; i < at.count; i++) out.push(mesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld));
+    return out;
+  });
+}
+
+/** The page he turns, as laid now, against each hand (its points, `handPoints`): how far the page cuts into it (m, 0 for
+ *  none: a hand with points more than `THROUGH_HAND` on both sides of the page, over the page and short of the strip by
+ *  its edge where he pinches it). The page's section across it, from the spine to the edge, is the same all along it. */
+function pageThroughHands(s: Scholar, hands: THREE.Vector3[][]): number[] {
+  const page = s.page, frame = page.parent!, at = page.geometry.attributes.position, half = s.book.shape.depth / 2;
+  s.root.updateMatrixWorld(true);
+  // (its section: the row along its +z edge, spine first)
+  const section: THREE.Vector2[] = [];
+  for (let i = 0; i < at.count; i++) if (at.getZ(i) > half - 1e-6) section.push(new THREE.Vector2(at.getX(i), at.getY(i)));
+  const q = new THREE.Vector3(), p = new THREE.Vector2(), d = new THREE.Vector2(), foot = new THREE.Vector2();
+  return hands.map((points) => {
+    let below = 0, above = 0;
+    for (const point of points) {
+      frame.worldToLocal(q.copy(point));
+      if (Math.abs(q.z) > half) continue;
+      p.set(q.x, q.y);
+      // (its nearest point on the section, and which side of it it's on)
+      let best = Infinity, side = 0, along = 0;
+      for (let k = 0; k + 1 < section.length; k++) {
+        d.subVectors(section[k + 1], section[k]);
+        const u = Math.max(0, Math.min(1, p.clone().sub(section[k]).dot(d) / d.lengthSq()));
+        foot.copy(section[k]).addScaledVector(d, u);
+        const dist = foot.distanceTo(p);
+        if (dist < best) { best = dist; side = Math.sign(d.x * (p.y - foot.y) - d.y * (p.x - foot.x)); along = (k + u) / (section.length - 1); }
+      }
+      // (beyond the page's spine or edge, or in the strip he pinches, it's not through it)
+      if (along <= 0 || along >= PINCH || best > 0.05) continue;
+      if (side < 0) below = Math.max(below, best); else above = Math.max(above, best);
+    }
+    return below > THROUGH_HAND && above > THROUGH_HAND ? Math.min(below, above) : 0;
+  });
+}
+
+/** His forearms as posed now: the first point along each (shares of it from the elbow to the wrist) where a ray out from
+ *  its axis meets nothing that clothes it within `FOREARM` (null for none: clothed all along). */
+function forearmBare(s: Scholar, hide = false): (number | null)[] {
+  s.root.updateMatrixWorld(true);
+  // (each cast at as two-sided: three meets only a one-sided mesh's front faces, and a ray out from inside a sleeve
+  // meets its faces' backs, so through one-sided sleeves every forearm read bare)
+  const twoSided = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const clothes = s.parts.filter((m) => CLOTHES.test(m.name) && (!hide || !/undersleeve/.test(m.name))).map((m) => {
+    const stand = new THREE.Mesh(m.geometry, twoSided);
+    stand.matrixWorld.copy(m.matrixWorld);
+    stand.matrixAutoUpdate = false;
+    return stand;
+  });
+  const ray = new THREE.Raycaster(), from = new THREE.Vector3(), to = new THREE.Vector3(), axis = new THREE.Vector3();
+  const across = new THREE.Vector3(), up = new THREE.Vector3(), dir = new THREE.Vector3(), p = new THREE.Vector3();
+  ray.far = FOREARM;
+  return ['L', 'R'].map((side) => {
+    s.root.getObjectByName(`scholar elbow${side}`)!.getWorldPosition(from);
+    s.root.getObjectByName(`scholar hand${side}`)!.getWorldPosition(to);
+    axis.subVectors(to, from).normalize();
+    across.set(0, 1, 0).cross(axis).normalize();
+    up.crossVectors(axis, across);
+    for (const share of ALONG_ARM) {
+      p.copy(from).lerp(to, share);
+      for (let k = 0; k < ROUND; k++) {
+        const a = (k / ROUND) * Math.PI * 2;
+        dir.copy(across).multiplyScalar(Math.cos(a)).addScaledVector(up, Math.sin(a));
+        ray.set(p, dir);
+        if (!ray.intersectObjects(clothes, false).length) return share;
+      }
+    }
+    return null;
+  });
+}
+
 /** How far his right hand's nearest fingertip is from the page's outer edge (m). */
 function fromEdge(s: Scholar): number {
   s.root.updateMatrixWorld(true);
@@ -211,6 +307,8 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
    *  from its edge while he held it (m, and when) */
   const landings: number[] = [];
   let lastOverLeft: number | null = null, wasShown = false, edgeFar = 0, edgeAt = '', heldFrames = 0;
+  /** how far the page cut into either hand at the deepest (m) and when; the first bare stretch of either forearm */
+  let cutDeepest = 0, cutAt = '', bareAt = '', forearmReads = 0;
   /** the stretches of the loop his sleeves were through the table (s, from and to, and the deepest in it, m) */
   const spans: { from: number; to: number; depth: number; mesh: string }[] = [];
   const headTurn = { min: Infinity, max: -Infinity }, handAt = new THREE.Vector3();
@@ -241,6 +339,10 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
       const under = pageUnder(s);
       if (under.depth > pageDeepest) { pageDeepest = under.depth; pageShare = under.share; pageAt = `${t.toFixed(2)} s`; }
       lastOverLeft = under.overLeft;
+      const cut = pageThroughHands(s, handPoints(s));
+      for (const [h, depth] of cut.entries()) {
+        if (depth > cutDeepest) { cutDeepest = depth; cutAt = `${h ? 'right' : 'left'} hand at ${t.toFixed(2)} s`; }
+      }
       // (his fingers on its edge while it's fully in his hand)
       if (s.holding > 0.95) {
         heldFrames++;
@@ -249,6 +351,14 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
       }
     } else if (wasShown && lastOverLeft !== null) landings.push(lastOverLeft);
     wasShown = s.page.visible;
+    // (his forearms clothed, read once a second of the loop)
+    if (f % 60 === 0) {
+      forearmReads++;
+      const bare = forearmBare(s);
+      for (const [h, share] of bare.entries()) {
+        if (share !== null && !bareAt) bareAt = `his ${h ? 'right' : 'left'} forearm ${(share * 100).toFixed(0)}% of the way to the wrist at ${t.toFixed(2)} s`;
+      }
+    }
     const sunk = tipsSunk(s);
     if (sunk.depth > tipDeepest) { tipDeepest = sunk.depth; tipAt = `${sunk.finger} at ${t.toFixed(2)} s`; }
     // (his sleeves against the table, but where the canary's jump has posed him: that's the snap's to find)
@@ -270,7 +380,9 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     `the page he turns, over ${pageFrames} frames: ${pageDeepest > 0 ? `under the page blocks by ${(pageDeepest * 1000).toFixed(1)} mm at the deepest, ${(pageShare * 100).toFixed(0)}% of it under them then (${pageAt})` : 'never under the page blocks'}`,
     `his fingertips: ${tipDeepest > 0 ? `sunk ${(tipDeepest * 1000).toFixed(1)} mm at the deepest (${tipAt})` : 'never sunk into the book or the table'}`,
     `the page landing: ${landings.length ? landings.map((h) => `${(h * 1000).toFixed(1)} mm`).join(', ') : 'never'} over the left half's print at each turn's last frame`,
-    `his fingers on its edge while he holds it (${heldFrames} frames): ${(edgeFar * 100).toFixed(1)} cm from it at the farthest (${edgeAt})`];
+    `his fingers on its edge while he holds it (${heldFrames} frames): ${(edgeFar * 100).toFixed(1)} cm from it at the farthest (${edgeAt})`,
+    `the page against his hands: ${cutDeepest > 0 ? `through one by ${(cutDeepest * 1000).toFixed(1)} mm at the deepest (${cutAt})` : 'never through either'}`,
+    `his forearms, read ${forearmReads} times: ${bareAt ? `bare at ${bareAt}` : `clothed from the elbow to the wrist every time`}`];
   const problems: string[] = [];
   const caught = canary && worst > SNAP;
   if (canary) lines.push(`canary: his loop jumped 20 s at once ${caught ? 'found' : 'unseen'} (${worst.toFixed(0)}° in a frame)`);
@@ -284,6 +396,8 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   for (const h of landings) if (h > LANDED || h < 0) problems.push(`the page doesn't land flat on the left half: ${(h * 1000).toFixed(1)} mm over its print`);
   if (!heldFrames) problems.push('he never had the page in hand');
   if (edgeFar > AT_EDGE) problems.push(`he holds the page away from its edge: his fingers ${(edgeFar * 100).toFixed(1)} cm from it (${edgeAt})`);
+  if (cutDeepest > 0) problems.push(`the page goes through his hand: ${(cutDeepest * 1000).toFixed(1)} mm (${cutAt})`);
+  if (bareAt) problems.push(`a bare stretch of forearm: ${bareAt} (nothing within ${FOREARM * 100} cm of its axis)`);
   // (the canary's other fault: a table 8 cm higher, which his sleeves at rest must be found through)
   if (canary) {
     s.loopAt = 5;
@@ -304,7 +418,25 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     const drawn = spineGaps(s);
     for (const printed of s.book.prints) printed.position.x -= DRAWN_BACK;
     lines.push(`canary: prints drawn ${DRAWN_BACK * 100} cm back stop ${(drawn.print * 1000).toFixed(1)} mm short of the spine`);
-    return { lines, problems, caught: caught && raised.depth > THROUGH.most && lowered.depth > 0 && drawn.print > SPINE_GAP };
+    // (the page landing on his left hand as it rests: his hand read at rest, the page as it comes down)
+    s.loopAt = 5;
+    s.update(0, null, false);
+    const resting = handPoints(s);
+    // (all the way down its fall: near its end the page lies under all of the resting hand but its pads)
+    let landedOn = 0;
+    for (let share = 0.5; share <= 0.8; share += 0.02) {
+      s.loopAt = BEATS_TURN[0] + (BEATS_TURN[1] - BEATS_TURN[0]) * share;
+      s.update(0, null, false);
+      landedOn = Math.max(landedOn, pageThroughHands(s, resting)[0]);
+    }
+    lines.push(`canary: the page landing on his left hand at rest cuts ${(landedOn * 1000).toFixed(1)} mm into it`);
+    // (his undersleeves hidden: his forearms bare in their bells)
+    s.loopAt = 5;
+    s.update(0, null, false);
+    const bareArms = forearmBare(s, true);
+    lines.push(`canary: with no undersleeves his forearms are ${bareArms.every((b) => b !== null) ? 'found bare' : 'found clothed'}`);
+    return { lines, problems, caught: caught && raised.depth > THROUGH.most && lowered.depth > 0 && drawn.print > SPINE_GAP
+      && landedOn > 0 && bareArms.every((b) => b !== null) };
   }
   if (headDeg < MOVES.head) problems.push(`his head hardly moves over the loop: ${headDeg.toFixed(1)}° (at least ${MOVES.head})`);
   for (const [i, went] of handWent.entries()) {
