@@ -403,3 +403,5 @@ body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
   .colour-drop .cc-label { font-size: 13px; }
   .colour-drop summary { gap: 6px; }
 }
+// (the network log's line squeezed to four lines in the foot of an upright tablet's dialog: off under 1100 px wide too)
+@media (max-width: 1100px) { .coop-foot > .coop-netlog { display: none; } }

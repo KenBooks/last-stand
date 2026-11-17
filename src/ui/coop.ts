@@ -377,9 +377,9 @@ function tradeButton(p: Player): string {
 // --- out of a room: the rooms browser, a room of one's own, the hero -------------------------------------------
 /** what each kind of room is, as the create page's choices say it */
 const KINDS: { kind: RoomKind; label: string; says: string }[] = [
-  { kind: 'public', label: 'Public', says: 'Listed for anyone' },
-  { kind: 'private', label: 'Private', says: 'Joined by its code' },
-  { kind: 'password', label: 'Password', says: 'Its code and a password' },
+  { kind: 'public', label: 'Public', says: 'Listed, anyone can join' },
+  { kind: 'private', label: 'Private', says: 'Hidden, joined by code or link' },
+  { kind: 'password', label: 'Password', says: 'Listed, needs a password to join' },
 ];
 const PANES: { pane: Pane; label: string }[] = [
   { pane: 'browse', label: 'Browse rooms' }, { pane: 'create', label: 'Create room' }, { pane: 'hero', label: 'Your hero' },
