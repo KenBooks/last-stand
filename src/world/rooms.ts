@@ -56,7 +56,7 @@ export interface Room {
   showRecords?(shown: RecordsShown): void;
   /** which bosses' trophies hang shown now (the house of records'; tools/lab `houses` reads it) */
   trophiesShown?(): Partial<Record<EnemyId, boolean>>;
-  /** the folk who live in it seated (the library's scholar): built on the heroes' heads and hands, so once their
+  /** the folk who live in it seated (the library's scholar, the merchant's Odo): built on the heroes' heads and hands, so once their
    *  workers have made them (main.ts, before the rooms are warmed) */
   seatFolk?(): void;
   /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */

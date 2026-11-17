@@ -10,7 +10,8 @@ import {
   BODY, CANDLE, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
   writing, type Build, type Mats, type Room,
 } from './rooms';
-import type { Updater } from './props';
+import { G } from '../state';
+import { buildOdo, type Odo } from '../entities/models/merchant';
 
 /** bright steel for what's for sale (the rooms' iron is dark, for brackets and hoops) */
 const steelMat = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 });
@@ -159,93 +160,6 @@ function waresShelf(frame: THREE.Object3D, M: Mats, x: number, y: number, w: num
   }
 }
 
-/** Odo, standing behind his counter at (x, z) facing +z: a long green coat belted at the waist, his hands on the
- *  counter, a grey beard, spectacles, a broad hat with a feather. He breathes and nods, a little. */
-function merchant(g: THREE.Group, M: Mats, x: number, z: number, updaters: Updater[]): void {
-  const odo = new THREE.Group();
-  odo.position.set(x, 0, z);
-  g.add(odo);
-  const coat = new THREE.MeshStandardMaterial({ color: 0x2a4a34, roughness: 0.85 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xd09a74, roughness: 0.7 });
-  const beardMat = new THREE.MeshStandardMaterial({ color: 0xb8b0a4, roughness: 0.95 });
-  const hatMat = new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.8 });
-  const body = new THREE.Group();
-  odo.add(body);
-  const robe = new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [0.3, 0], [0.28, 0.5], [0.24, 0.95], [0.22, 1.25], [0.26, 1.42], [0.14, 1.5], [0, 1.5]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 20), coat);
-  robe.scale.z = 0.75;
-  robe.castShadow = true;
-  body.add(robe);
-  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.025, 6, 20).rotateX(Math.PI / 2), M.leather);
-  belt.scale.z = 0.75;
-  belt.position.y = 0.98;
-  body.add(belt);
-  box(body, 0.06, 0.05, 0.02, 0, 0.955, 0.18, M.brass);
-  const head = new THREE.Group();
-  head.position.y = 1.64;
-  body.add(head);
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 14), skin);
-  skull.scale.set(0.95, 1.08, 1);
-  skull.castShadow = true;
-  head.add(skull);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.06, 6), skin);
-  nose.position.set(0, -0.005, 0.12);
-  nose.rotation.x = Math.PI / 2;
-  head.add(nose);
-  for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), M.dark);
-    eye.position.set(sx * 0.042, 0.025, 0.105);
-    head.add(eye);
-    const lens = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.004, 4, 14), M.brass);
-    lens.position.set(sx * 0.042, 0.025, 0.118);
-    head.add(lens);
-  }
-  box(head, 0.03, 0.004, 0.004, 0, 0.025, 0.118, M.brass);
-  const beard = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.26, 10), beardMat);
-  beard.rotation.x = Math.PI;
-  beard.position.set(0, -0.15, 0.06);
-  beard.castShadow = true;
-  head.add(beard);
-  const moustache = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.014, 6, 10, Math.PI), beardMat);
-  moustache.position.set(0, -0.045, 0.1);
-  moustache.rotation.z = Math.PI;
-  head.add(moustache);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 24), hatMat);
-  brim.position.y = 0.08;
-  brim.rotation.x = -0.08;
-  brim.castShadow = true;
-  head.add(brim);
-  drum(head, 0.11, 0.13, 0.14, 0, 0.085, 0, hatMat, 18);
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.132, 0.132, 0.03, 18, 1, true), M.leather);
-  band.position.y = 0.11;
-  head.add(band);
-  const feather = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.28, 6), new THREE.MeshStandardMaterial({ color: 0x9a2a1a, roughness: 0.9 }));
-  feather.position.set(0.11, 0.2, -0.04);
-  feather.rotation.set(-0.5, 0, -0.6);
-  head.add(feather);
-  // (arms down from his shoulders to his hands, laid on the counter before him)
-  for (const sx of [-1, 1]) {
-    const shoulder = new THREE.Vector3(sx * 0.24, 1.38, 0);
-    const hand = new THREE.Vector3(sx * 0.2, 1.05, 0.42);
-    const len = shoulder.distanceTo(hand);
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, len, 10), coat);
-    arm.position.copy(shoulder).add(hand).multiplyScalar(0.5);
-    arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hand.clone().sub(shoulder).normalize());
-    arm.castShadow = true;
-    body.add(arm);
-    const fist = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), skin);
-    fist.scale.set(1, 0.7, 1.2);
-    fist.position.copy(hand);
-    body.add(fist);
-  }
-  // (a breath, and a slow nod and turn of his head)
-  updaters.push((_dt, t) => {
-    body.position.y = Math.sin(t * 1.4) * 0.006;
-    head.rotation.y = Math.sin(t * 0.37) * 0.25;
-    head.rotation.x = Math.sin(t * 0.53) * 0.06;
-  });
-}
-
 /** The shop's sign over the shelves behind the counter. */
 function shopSign(frame: THREE.Object3D, M: Mats, y: number): void {
   const sign = writing(M, 768, 192, 2.2, 0.55);
@@ -283,7 +197,9 @@ export function buildShop(group: THREE.Group): Room {
   box(g, cw + 0.1, 0.06, 0.7, 0, 1.0, cz, M.oak);
   for (let x = -cw / 2 + 0.3; x < cw / 2; x += 0.7) box(g, 0.05, 0.9, 0.04, x, 0.06, cz + 0.31, M.timber);
   for (let x = -cw / 2 + 0.3; x <= cw / 2 - 0.3 + 1e-6; x += 0.6) b.obstacles.push({ x, z: cz, r: 0.38, h: 1.06 });
-  scale(g, M, -1.1, 1.06, cz);
+  // (his scale at his right hand, his ledger at his left, both within his reach)
+  const ox = 0.1, oz = -hz + 0.85;
+  scale(g, M, ox - 0.55, 1.06, cz - 0.15);
   const ledger = writing(M, 256, 192, 0.42, 0.3);
   ledger.write((cx, w, h) => {
     cx.fillStyle = '#e8d8b0'; cx.fillRect(0, 0, w, h);
@@ -292,9 +208,9 @@ export function buildShop(group: THREE.Group): Room {
     cx.fillRect(w / 2 - 1, 0, 2, h);
   });
   ledger.mesh.rotation.set(-Math.PI / 2, 0, 0.15);
-  ledger.mesh.position.set(0.7, 1.066, cz + 0.05);
+  ledger.mesh.position.set(ox + 0.32, 1.066, cz - 0.2);
   g.add(ledger.mesh);
-  box(g, 0.46, 0.02, 0.34, 0.7, 1.04, cz + 0.05, M.leather).rotation.y = 0.15;
+  box(g, 0.46, 0.02, 0.34, ox + 0.32, 1.04, cz - 0.2, M.leather).rotation.y = 0.15;
   drum(g, 0.06, 0.07, 0.02, 1.5, 1.06, cz - 0.1, M.brass, 10);
   candle(g, M, 1.5, 1.08, cz - 0.1, 0.18, CANDLE);
   const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 6, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), M.oak);
@@ -305,7 +221,21 @@ export function buildShop(group: THREE.Group): Room {
     gem.position.set(-0.3 + (i - 1.5) * 0.035, 1.08, cz + (i % 2) * 0.03);
     g.add(gem);
   });
-  merchant(g, M, 0.1, -hz + 0.85, b.updaters);
+  // (Odo, stood once the heroes' heads and hands are made: he idles behind the counter, glances at a hero come near)
+  let odo: Odo | undefined;
+  const hero = new THREE.Vector3();
+  b.updaters.push((dt) => {
+    if (!odo) return;
+    const me = G.player;
+    odo.update(dt, me ? hero.copy(me.pos) : null);
+  });
+  /** where the counter and what he uses on it stand, in his frame */
+  const counter = {
+    top: 1.06, near: cz - 0.35 - oz,
+    // (the scale's near pan: its post 0.55 to his right, 0.15 nearer him than the counter's middle, the pan 0.21 in)
+    pan: new THREE.Vector3(-0.55 + 0.21, 1.06 + 0.35 - 0.2 + 0.013 + 0.05, cz - 0.15 - oz),
+    ledger: new THREE.Vector3(0.32, 1.066, cz - 0.2 - oz),
+  };
   // --- the west wall: the weapon rack, a lantern over it; crates by the front ---
   const west = onWall(g, id, 'west');
   weaponRack(west, M, steel, 0.2);
@@ -354,5 +284,12 @@ export function buildShop(group: THREE.Group): Room {
   b.obstacles.push({ x: hx - 0.8, z: hz - 0.5, r: 0.6, h: 0.8 });
   // (over the rug, short of the counter: over it, from above it hid Odo)
   chandelier(g, M, 0, high + 0.2, 1.5);
-  return finish(id, b);
+  return finish(id, b, {
+    seatFolk() {
+      if (odo) return;
+      odo = buildOdo(counter);
+      odo.root.position.set(ox, 0, oz);
+      g.add(odo.root);
+    },
+  });
 }

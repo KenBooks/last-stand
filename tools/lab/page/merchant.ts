@@ -5,14 +5,14 @@
 // hero of wave 6 given 40 commons, 6 rares and a legendary walks into the shop and presses E at the counter. The screen
 // is up within the window, his full stock shown, the legendary not offered. His epic picked, one common short given:
 // Trade held off, and the trade asked anyway refused, nothing changed. One more: Trade clicked, the commons gone, the
-// epic in the stash, the stock one fewer, saved. His other epic: Pick fewest pays with a few rares, no epic, enough.
+// epic in the stash, the stock one fewer, saved. His other epic: Auto-fill cheapest pays with a few rares, no epic, enough.
 // Then three runs begun: a new stock, full again. `--canary` puts the epic back in his stock after the trade, which
 // must be caught.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { RESTOCK_RUNS, STOCK_RARITIES, STOCKED_FROM, TRADED, type TradedRarity } from '../../../src/data/merchant';
-import { outsideOf } from '../../../src/data/houses';
+import { HOUSES, outsideOf } from '../../../src/data/houses';
 import { makeItem } from '../../../src/loot/items';
 import { fewestFor, offer, price, stockedAs, stockOf, takes, trade, worth } from '../../../src/loot/merchant';
 import { loadProfile } from '../../../src/loot/profile';
@@ -96,6 +96,51 @@ function stashOf(): Item[] {
 }
 
 /** `lab merchant`. */
+/**
+ * The trade screen's steps as they stand: `now` must be the one lit, those before it ticked, and the stash dimmed and
+ * waiting while no ware is chosen (`waiting`), its hint saying so. `when` names the moment in the lines.
+ */
+function stepsAre(now: number, waiting: boolean, when: string, lines: string[], problems: string[]): void {
+  if (!document.querySelector('#merchant .mc-give')) {
+    problems.push(`${when}: the trade screen has no steps`);
+    return;
+  }
+  const steps = [...document.querySelectorAll<HTMLElement>('#merchant .mc-step')];
+  const lit = steps.filter((step) => step.classList.contains('now')).map((step) => Number(step.dataset.step));
+  const done = steps.filter((step) => step.classList.contains('done')).map((step) => Number(step.dataset.step));
+  const stashWaits = element('#merchant .mc-give').classList.contains('waiting');
+  const hint = element('#merchant .mc-hint').textContent ?? '';
+  lines.push(`${when}: step ${lit.join(',') || 'none'} lit, ${done.join(',') || 'none'} done, the stash `
+    + `${stashWaits ? 'waiting' : 'open'} ("${hint}")`);
+  if (lit.length !== 1 || lit[0] !== now) problems.push(`${when}: step ${lit.join(',') || 'none'} lit, not ${now}`);
+  const doneWanted = Array.from({ length: now - 1 }, (_, i) => i + 1).join(',');
+  if (done.join(',') !== doneWanted) problems.push(`${when}: steps ${done.join(',') || 'none'} ticked, not ${doneWanted || 'none'}`);
+  if (stashWaits && !waiting) problems.push(`${when}: the stash still waits, dimmed`);
+  if (!stashWaits && waiting) problems.push(`${when}: the stash is open with no ware chosen`);
+}
+
+/** where Odo stands in the shop's room (its frame: shop.ts stands him there), and the height his face is pictured at */
+const ODO_AT = { x: 0.1, fromBack: 0.85, face: 1.5 };
+
+/**
+ * Odo close, from his front, both sides and behind (each from 1.3 m, at his face's height), and the counter over the
+ * shoulder as the player stands at it. Read by where shop.ts stands him, not by his parts, so a commit with another
+ * Odo is pictured the same.
+ */
+function odoPictured(lab: Lab): Pictured[] {
+  const room = G.arena.rooms?.merchant;
+  if (!room) return [];
+  const [, hz] = HOUSES.merchant.half;
+  room.group.updateMatrixWorld(true);
+  const at = room.group.localToWorld(new THREE.Vector3(ODO_AT.x, ODO_AT.face, -hz + ODO_AT.fromBack));
+  // (the hero faces the counter, so his 'back' view looks at Odo's front)
+  // (behind him stands the shop's back wall: a view from there sees the wall alone)
+  const close = lab.picture('odo-close', ['back', 'left', 'right'], ['Odo from 1.3 m: his front and his sides'],
+    { at, distance: 1.3 });
+  const shoulder = lab.picture('odo-counter', ['third'], ['at the counter, over the shoulder']);
+  return [close, shoulder];
+}
+
 export async function merchant(lab: Lab, options: MerchantOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
@@ -126,6 +171,7 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   await stand(lab, counter.stand[0], counter.stand[1], Math.PI);
   moments.push(await lab.screen('merchant-shop'));
   if (objectNear() !== counter) problems.push(`at the counter the object near is ${objectNear()?.id ?? 'none'}`);
+  moments.push(...odoPictured(lab));
   await lab.step(1, () => ({ keys: ['e'] }));
   await lab.step(SETTLE);
   if (element('#merchant').classList.contains('hidden')) problems.push('E at the counter opened no trade screen');
@@ -138,6 +184,10 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   }
   if (stock.some((it) => !takes(it))) problems.push('his stock holds a piece above epic');
   if (shownWares !== stock.length) problems.push(`the screen shows ${shownWares} of his ${stock.length} wares`);
+  stepsAre(1, true, 'opened', lines, problems);
+  await lab.mouseTo({ x: 2, y: 2 });
+  await lab.step(2);
+  moments.push(await lab.screen('merchant-step1', ['opened: step 1, choose one of his wares']));
   if (tileOf('.mc-stash', legendary.id)) problems.push('the stash offers him a legendary');
   const epics = stock.filter((it) => it.rarity === 'epic');
   if (epics.length < 2) {
@@ -151,12 +201,23 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   if (offer(p, epic, [legendary.id]).worth !== 0) problems.push('a legendary counts toward a trade');
   // (one short: Trade held off, and refused when asked anyway)
   await lab.clickOn(tileOf('.mc-wares', epic.id)!);
+  await lab.step(2);
+  // (the canary's plant: the stash left waiting, dimmed, once a ware is chosen)
+  if (options.canary) document.querySelector('#merchant .mc-give')?.classList.add('waiting');
+  stepsAre(2, false, 'a ware chosen', lines, problems);
+  await lab.mouseTo({ x: 2, y: 2 });
+  await lab.step(2);
+  moments.push(await lab.screen('merchant-step2', ['a ware chosen: step 2, offer gear for it']));
+  if (options.canary) document.querySelector('#merchant .mc-give')?.classList.remove('waiting');
   const commons = p.stash.filter((it) => it.rarity === 'common').map((it) => it.id);
   for (const id of commons.slice(0, needed - 1)) await lab.clickOn(tileOf('.mc-stash', id)!);
   await lab.step(2);
   const go = element('#merchant .mc-trade') as HTMLButtonElement;
   lines.push(`one short: "${element('#merchant .mc-sum').textContent}", Trade ${go.disabled ? 'held off' : 'offered'}`);
   if (!go.disabled) problems.push('Trade was offered one common short of his price');
+  const short = document.querySelector('#merchant .mc-need')?.textContent ?? '';
+  lines.push(`one short, the deal says: "${short}"`);
+  if (!/more value needed/.test(short)) problems.push(`one short, the deal doesn't say what's missing: "${short}"`);
   const before = stashIds().join();
   if (trade(p, epic.id, commons.slice(0, needed - 1))) problems.push('a trade one common short was made');
   const changed = stashIds().join() !== before || stockOf(p).length !== stock.length;
@@ -167,6 +228,7 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   lines.push(`enough: "${element('#merchant .mc-sum').textContent}", Trade ${go.disabled ? 'held off' : 'offered'}`);
   moments.push(await lab.screen('merchant-trade'));
   if (go.disabled) problems.push('Trade was held off with enough given');
+  stepsAre(3, false, 'enough given', lines, problems);
   await lab.clickOn(go);
   await lab.step(SETTLE);
   if (options.canary) G.profile.merchant!.stock.push(epic);
@@ -182,7 +244,7 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   }
   const saved = loadProfile(G.profile.classId);
   if (!saved.stash.some((it) => it.id === epic.id)) problems.push('the trade was not saved');
-  // (his other epic: Pick fewest pays with the best of the lesser pieces, never the epic just bought)
+  // (his other epic: Auto-fill cheapest pays with the best of the lesser pieces, never the epic just bought)
   await lab.clickOn(tileOf('.mc-wares', other.id)!);
   await lab.clickOn(element('#merchant .mc-fill-best'));
   await lab.step(2);
@@ -190,14 +252,14 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
     .map((tile) => G.profile.stash.find((it) => it.id === tile.dataset.id)!);
   const fewest = fewestFor(G.profile, other);
   const pickedRarities = picked.map((it) => it.rarity).join(', ');
-  lines.push(`Pick fewest for his other epic (asks ${price(other).toFixed(2)}): `
+  lines.push(`Auto-fill cheapest for his other epic (asks ${price(other).toFixed(2)}): `
     + `${picked.length} pieces (${pickedRarities}), "${element('#merchant .mc-sum').textContent}"`);
   moments.push(await lab.screen('merchant-fewest'));
-  if (picked.length !== fewest.length) problems.push(`Pick fewest picked ${picked.length} tiles, not ${fewest.length}`);
-  if (picked.some((it) => rankOf(it) >= rankOf(other))) problems.push('Pick fewest offered an epic for an epic');
-  if (!offer(G.profile, other, fewest).enough) problems.push('Pick fewest gave less than he asks');
+  if (picked.length !== fewest.length) problems.push(`Auto-fill cheapest picked ${picked.length} tiles, not ${fewest.length}`);
+  if (picked.some((it) => rankOf(it) >= rankOf(other))) problems.push('Auto-fill cheapest offered an epic for an epic');
+  if (!offer(G.profile, other, fewest).enough) problems.push('Auto-fill cheapest gave less than he asks');
   if (picked.length > RARES + 1) {
-    problems.push(`Pick fewest gave ${picked.length} pieces with ${RARES} rares at hand`);
+    problems.push(`Auto-fill cheapest gave ${picked.length} pieces with ${RARES} rares at hand`);
   }
   // (three runs begun: he restocks, full again)
   const ids = stockOf(G.profile).map((it) => it.id).join();
@@ -209,7 +271,10 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   if (fresh.some((it) => ids.split(',').includes(it.id))) problems.push('the restock kept old wares');
   await lab.step(1, () => ({ keys: ['e'] }));
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
-  const caught = problems.some((line) => line.startsWith('his stock holds'));
-  lines.push(`canary: ${caught ? 'caught' : 'missed'} (the piece bought put back in his stock)`);
+  const caughtStock = problems.some((line) => line.startsWith('his stock holds'));
+  const caughtWaiting = problems.some((line) => line.includes('the stash still waits'));
+  const caught = caughtStock && caughtWaiting;
+  lines.push(`canary: ${caught ? 'caught' : 'missed'} (the piece bought put back in his stock: `
+    + `${caughtStock ? 'found' : 'unseen'}; the stash left waiting with a ware chosen: ${caughtWaiting ? 'found' : 'unseen'})`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }

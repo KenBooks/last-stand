@@ -233,7 +233,8 @@ async function boot() {
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
   await Promise.all([heads, engraving]);
-  // (the houses' folk seated, the library's scholar: his head and hands are the heroes', made by now)
+  // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
+  // made by now)
   if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
   G.profile = loadProfile(savedClass());
   G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
