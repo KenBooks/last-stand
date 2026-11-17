@@ -5,6 +5,9 @@ import { VILLAGE } from '../core/beta';
 export type QualityLevel = 'high' | 'medium' | 'low' | 'verylow';
 export type QualitySetting = 'auto' | QualityLevel;
 
+/** how the trees are drawn: grown (false), or a simple model with a leafy crown or a cartoon one */
+export type SimpleTrees = false | 'simple' | 'cartoon';
+
 /**
  * Each setting a block of its own, sorted, its value at every level: a PR adding a setting adds its block alone (as
  * one line a level, every setting a column, any two PRs adding settings both rewrote all four lines and conflicted).
@@ -84,8 +87,9 @@ const SETTINGS = {
    *  frame he stood still: from play, 1.28M triangles facing a wall, "our users are really struggling") */
   shadowsOnMove: { high: true, medium: true, low: true, verylow: true },
   /** whether the village's and the Thornwood's trees are drawn as simple ones, each a model of a few pieces
-   *  (`setSimpleTrees` in world/simpleTrees.ts): geometries alone */
-  simpleTrees: { high: false, medium: false, low: true, verylow: true },
+   *  (`setSimpleTrees` in world/simpleTrees.ts): geometries alone. Low's crowns leafy lumps (#643), Very low's
+   *  cartoon clumps (#688: the review kept them off Low, "for very low its fine, but for low its not") */
+  simpleTrees: { high: false, medium: false, low: 'simple', verylow: 'cartoon' } as Record<QualityLevel, SimpleTrees>,
   /** whether the sun's shadow is of what stands still alone, drawn only when that changes (`setSunShadowStill` in
    *  world/props.ts): its pass drew the whole biome again each time; the heroes and foes cast none by it then */
   stillSunShadow: { high: false, medium: false, low: false, verylow: true },

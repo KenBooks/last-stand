@@ -1,26 +1,36 @@
 // The simple tree (`simpleTrees` in data/quality.ts): a tree's model made anew of a few pieces, for the levels that
 // draw it in place of the grown one. Its trunk is the grown trunk's own, a few rings of a few sides, its first limbs
-// each a three-sided taper, its twigs gone; its crown a few big clumps where the grown tree's leaf cards stood, each a
-// ball pushed out into rounded puffs, in flat tones of the leaves' colour, a cartoon tree's. Each is drawn in the grown
-// tree's own bark and leaf materials (a clump's faces each on one flat spot of the leaves' picture), so a quality
-// switches it live by a swap of geometry, no program made, and the tree stands where it stood: its trunk, which a body
-// and an arrow meet, is the grown one's.
+// each a three-sided taper, its twigs gone. Its crown, on Low, a few leafy lumps where the grown tree's leaf cards stood,
+// each a coarse ball with a few big cards round it for a ragged edge (`simpleCrown`); on Very low a cartoon tree's, a
+// few big clumps pushed out into rounded puffs in flat tones of the leaves' colour (`cartoonCrown`). Each is drawn in
+// the grown tree's own bark and leaf materials, so a quality switches it live by a swap of geometry, no program made,
+// and the tree stands where it stood: its trunk, which a body and an arrow meet, is the grown one's.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry, TAU } from '../util';
 import type { TreeKind } from './ezTrees';
+import type { SimpleTrees } from '../data/quality';
 import { leafClusterTones } from './foliage';
+import { lumpy } from './props';
 
 /** the rings kept up a branch and the sides round it: the trunk's, a first limb's */
 const TRUNK = { rings: 4, round: 5 };
 const LIMB = { rings: 3, round: 3 };
 
-/** a crown's clumps: how many, and each one's ball (an icosahedron's detail: 1 is 80 faces, 2 is 320) */
-const CROWN = { lumps: 3, detail: 2 };
-/** a clump's size by its leaves' spread about its middle (their root mean square, across and up), and by a card's
+/** Low's crown: its lumps, how many, each ball's detail (an icosahedron's: 0 is 20 faces, 1 is 80) and how lumpy, the
+ *  cards round each and their size against the lump's */
+const CROWN = { lumps: 8, detail: 0, lumpy: 0.12, cards: 2, card: 1.3 };
+/** a lump's size by its leaves' spread about its middle (their root mean square, across and up), and by a card's
  *  reach, its least height of its width, and how far it's gathered in towards the crown's middle and lifted (of its
- *  height) */
-const LUMP = { across: 1.4, up: 1.5, card: 0.3, flattest: 0.85, gather: 0.4, lift: 0.15 };
+ *  height): Low's lumps where their leaves stood */
+const LUMP: LumpShape = { across: 1.15, up: 1.6, card: 0.3, flattest: 0.6, gather: 0, lift: 0 };
+/** how far from the middle of the leaves' picture a Low lump's face lies, and how far its own middle wanders: the
+ *  picture is leaves all through about that far out (`paintCluster` in foliage.ts: a disc 0.37 of it) */
+const FACE_UV = { reach: 0.24, wander: 0.05 };
+/** Very low's cartoon crown: its clumps, how many, and each one's ball (an icosahedron's detail: 2 is 180 faces), and
+ *  each clump's shape as `LUMP`'s, gathered into one canopy (a sapling's stood up its trunk as a stack of pancakes) */
+const CARTOON = { lumps: 3, detail: 2 };
+const CARTOON_LUMP: LumpShape = { across: 1.4, up: 1.5, card: 0.3, flattest: 0.85, gather: 0.4, lift: 0.15 };
 /** a clump's puffs: how many round it besides the one on top and how far up they lean (radians), how far in its faces
  *  rest between them and how far out a puff bulges (of the clump's size), and how sharply (the power of a face's
  *  closeness to its puff's way: higher, rounder puffs and deeper creases) */
@@ -81,10 +91,12 @@ const CARD_CORNERS = 4;
 
 /** a crown's lump: its middle, and how far it reaches across and up */
 interface Lump { at: THREE.Vector3; across: number; up: number }
+/** how a crown's lumps are sized and placed from their leaves (`LUMP`) */
+interface LumpShape { across: number; up: number; card: number; flattest: number; gather: number; lift: number }
 
-/** The lumps a kind's leaf cards stand in: the cards' middles sorted into a few heaps (k-means, begun from the cards
- *  furthest apart, so the same each time), each heap a lump as wide and as tall as its cards spread. */
-function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
+/** The `count` lumps a kind's leaf cards stand in: the cards' middles sorted into heaps (k-means, begun from the cards
+ *  furthest apart, so the same each time), each heap a lump as wide and as tall as its cards spread, by `shape`. */
+function lumpsOf(leaves: THREE.BufferGeometry, count: number, shape: LumpShape): Lump[] {
   const p = leaves.attributes.position, cards = Math.floor(p.count / CARD_CORNERS);
   const middles: THREE.Vector3[] = [], corner = new THREE.Vector3();
   let reach = 0;
@@ -98,7 +110,7 @@ function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
   if (!cards) return [];
   const heaps = [middles[0].clone()];
   const nearest = (m: THREE.Vector3): number => heaps.reduce((best, h, i) => (m.distanceToSquared(h) < m.distanceToSquared(heaps[best]) ? i : best), 0);
-  while (heaps.length < Math.min(CROWN.lumps, cards)) {
+  while (heaps.length < Math.min(count, cards)) {
     let furthest = middles[0], most = -1;
     for (const m of middles) {
       const d = m.distanceToSquared(heaps[nearest(m)]);
@@ -120,12 +132,12 @@ function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
     if (!mine.length) return;
     const across = Math.sqrt(mine.reduce((sum, m) => sum + (m.x - at.x) ** 2 + (m.z - at.z) ** 2, 0) / mine.length);
     const up = Math.sqrt(mine.reduce((sum, m) => sum + (m.y - at.y) ** 2, 0) / mine.length);
-    const wide = across * LUMP.across + reach * LUMP.card;
-    lumps.push({ at, across: wide, up: Math.max(wide * LUMP.flattest, up * LUMP.up + reach * LUMP.card) });
+    const wide = across * shape.across + reach * shape.card;
+    lumps.push({ at, across: wide, up: Math.max(wide * shape.flattest, up * shape.up + reach * shape.card) });
   });
   // (gathered in towards the crown's middle, a little up: one canopy of clumps, not a stack of them up the trunk)
   const middle = lumps.reduce((sum, l) => sum.add(l.at), new THREE.Vector3()).divideScalar(lumps.length || 1);
-  for (const l of lumps) l.at.lerp(middle, LUMP.gather).y += l.up * LUMP.lift;
+  for (const l of lumps) l.at.lerp(middle, shape.gather).y += l.up * shape.lift;
   return lumps;
 }
 
@@ -142,21 +154,80 @@ function puffWays(rng: () => number): THREE.Vector3[] {
 }
 
 /**
- * A kind's simple crown: a few big clumps where its leaves stood, each one ball pushed out into rounded puffs, with
+ * A kind's simple crown, Low's: a coarse ball for each lump of its leaves, and a few big leaf cards round each. Its normals
+ * point out from its lump, tipped up, so a lump is lit as one soft mass (as `canopyGeo`'s in foliage.ts); each face of
+ * a ball takes a patch of its own from the middle of the leaves' picture. The grown leaves where it has none.
+ */
+export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry {
+  const lumps = lumpsOf(kind.leaves, CROWN.lumps, LUMP);
+  if (!lumps.length) return kind.leaves;
+  const rng = mulberry(seed);
+  const parts: THREE.BufferGeometry[] = [];
+  const n = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const soft = (g: THREE.BufferGeometry, { at, across }: Lump): void => {
+    const p = g.attributes.position, normal = g.attributes.normal;
+    for (let k = 0; k < p.count; k++) {
+      n.set(p.getX(k) - at.x, (p.getY(k) - at.y) * 1.3 + across * 0.3, p.getZ(k) - at.z).normalize();
+      normal.setXYZ(k, n.x, n.y, n.z);
+    }
+  };
+  const turn = new THREE.Quaternion(), roll = new THREE.Quaternion(), ahead = new THREE.Vector3(0, 0, 1);
+  lumps.forEach((lump, l) => {
+    const ball = lumpy(new THREE.IcosahedronGeometry(1, CROWN.detail), CROWN.lumpy, seed * 13 + l * 7)
+      .scale(lump.across, lump.up, lump.across).translate(lump.at.x, lump.at.y, lump.at.z);
+    // each face a patch of the picture's middle, turned and moved its own way
+    const p = ball.attributes.position, uv = ball.attributes.uv;
+    for (let f = 0; f < p.count; f += 3) {
+      a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
+      const mid = n.copy(a).add(b).add(c).divideScalar(3).clone();
+      const along = b.clone().sub(a).normalize(), across = c.clone().sub(a).cross(along).cross(along).normalize();
+      const size = Math.max(a.distanceTo(mid), b.distanceTo(mid), c.distanceTo(mid));
+      const angle = rng() * TAU, cos = Math.cos(angle), sin = Math.sin(angle);
+      const u0 = 0.5 + (rng() - 0.5) * 2 * FACE_UV.wander, v0 = 0.5 + (rng() - 0.5) * 2 * FACE_UV.wander;
+      [a, b, c].forEach((corner, k) => {
+        const x = corner.clone().sub(mid).dot(along) / size, y = corner.clone().sub(mid).dot(across) / size;
+        uv.setXY(f + k, u0 + (x * cos - y * sin) * FACE_UV.reach, v0 + (x * sin + y * cos) * FACE_UV.reach);
+      });
+    }
+    soft(ball, lump);
+    parts.push(ball);
+    for (let i = 0; i < CROWN.cards; i++) {
+      // all round, a little more on top, where the light and the camera are
+      const out = new THREE.Vector3(rng() * 2 - 1, rng() * 2 - 0.7, rng() * 2 - 1).normalize();
+      const size = lump.across * CROWN.card * (0.85 + rng() * 0.3);
+      const card = new THREE.PlaneGeometry(size, size);
+      turn.setFromUnitVectors(ahead, out);
+      roll.setFromAxisAngle(out, rng() * TAU);
+      card.applyQuaternion(turn.premultiply(roll));
+      card.rotateX((rng() - 0.5) * 0.9).rotateZ((rng() - 0.5) * 0.9);
+      card.translate(lump.at.x + out.x * lump.across * 0.75, lump.at.y + out.y * lump.up * 0.75, lump.at.z + out.z * lump.across * 0.75);
+      soft(card, lump);
+      parts.push(card.toNonIndexed());
+    }
+  });
+  const crown = mergeGeometries(parts)!;
+  crown.computeBoundingSphere();
+  crown.computeBoundingBox();
+  return crown;
+}
+
+/**
+ * A kind's cartoon crown, Very low's (#688; on Low too it was, until the review: "for very low its fine, but for low
+ * its not"): a few big clumps where its leaves stood, each one ball pushed out into rounded puffs, with
  * creases where they meet, as a cartoon tree's (the owner's reference: "less leaves"). Each face is one flat tone of
  * the leaves' own picture (`leafClusterTones`), brighter on a puff's crown and up top, darker in the creases and
  * underneath; its normals point out from its puff's middle, tipped up, so each puff is lit as a soft round mass. One
  * closed surface a clump, no cards: a pixel of the crown is shaded about once. The grown leaves where it has none.
  */
-export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry {
-  const lumps = lumpsOf(kind.leaves);
+export function cartoonCrown(kind: TreeKind, seed: number): THREE.BufferGeometry {
+  const lumps = lumpsOf(kind.leaves, CARTOON.lumps, CARTOON_LUMP);
   if (!lumps.length) return kind.leaves;
   const rng = mulberry(seed);
   const tones = leafClusterTones(TONES.count, TONES.darkest, TONES.brightest);
   const d = new THREE.Vector3(), n = new THREE.Vector3(), mid = new THREE.Vector3();
   const clumps = lumps.map((lump) => {
     const ways = puffWays(rng);
-    const ball = new THREE.IcosahedronGeometry(1, CROWN.detail);
+    const ball = new THREE.IcosahedronGeometry(1, CARTOON.detail);
     const p = ball.attributes.position, normal = ball.attributes.normal, uv = ball.attributes.uv;
     const bulges: number[] = [];
     for (let k = 0; k < p.count; k++) {
@@ -193,48 +264,56 @@ export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry 
   return crown;
 }
 
-/** a set of meshes drawing one geometry (a mesh and its shadow caster: `cullInCells`), its own and its simple one */
-interface Swap { meshes: THREE.Mesh[]; full: THREE.BufferGeometry; make: () => THREE.BufferGeometry; simple?: THREE.BufferGeometry }
+/** a set of meshes drawing one geometry (a mesh and its shadow caster: `cullInCells`), its own, and each look's made
+ *  the first time a level asks for it */
+interface Swap {
+  meshes: THREE.Mesh[];
+  full: THREE.BufferGeometry;
+  make: (look: Exclude<SimpleTrees, false>) => THREE.BufferGeometry;
+  made: Partial<Record<Exclude<SimpleTrees, false>, THREE.BufferGeometry>>;
+}
 const swaps: Swap[] = [];
-let simple = false;
+let look: SimpleTrees = false;
 
 function put(swap: Swap): void {
-  const geometry = simple ? (swap.simple ??= swap.make()) : swap.full;
+  const geometry = look ? (swap.made[look] ??= swap.make(look)) : swap.full;
   for (const mesh of swap.meshes) mesh.geometry = geometry;
 }
 
-/** each kind's simple bark and crown, made the first time a level asks for them (the forest's kinds are the village's) */
+/** each kind's simple bark and each look's crown, made once (the forest's kinds are the village's) */
 const barks = new WeakMap<TreeKind, THREE.BufferGeometry>();
-const crowns = new WeakMap<TreeKind, THREE.BufferGeometry>();
+const crowns = { simple: new WeakMap<TreeKind, THREE.BufferGeometry>(), cartoon: new WeakMap<TreeKind, THREE.BufferGeometry>() };
+const CROWN_OF = { simple: simpleCrown, cartoon: cartoonCrown };
 
 /**
  * A kind's trees as drawn, `bark` and `leaves` (each a mesh and what casts its shadow, all of one geometry: a list of
  * its own for each geometry the kind's leaves are drawn in), drawn as the simple tree where the level asks for it.
  */
 export function simpleTree(kind: TreeKind, bark: THREE.Mesh[], ...leaves: THREE.Mesh[][]): void {
-  const add = (meshes: THREE.Mesh[], make: () => THREE.BufferGeometry): void => {
+  const add = (meshes: THREE.Mesh[], make: Swap['make']): void => {
     if (!meshes.length) return;
-    const swap: Swap = { meshes, full: meshes[0].geometry, make };
+    const swap: Swap = { meshes, full: meshes[0].geometry, make, made: {} };
     swaps.push(swap);
-    if (simple) put(swap);
+    if (look) put(swap);
   };
+  // (the bark the same for both looks)
   add(bark, () => {
     let made = barks.get(kind);
     if (!made) barks.set(kind, made = simpleBark(kind));
     return made;
   });
   for (const meshes of leaves) {
-    add(meshes, () => {
-      let made = crowns.get(kind);
-      if (!made) crowns.set(kind, made = simpleCrown(kind, 11));
+    add(meshes, (wanted) => {
+      let made = crowns[wanted].get(kind);
+      if (!made) crowns[wanted].set(kind, made = CROWN_OF[wanted](kind, 11));
       return made;
     });
   }
 }
 
-/** Whether the trees are drawn as simple ones (the quality level's), live: geometries swapped alone. */
-export function setSimpleTrees(on: boolean): void {
-  if (on === simple) return;
-  simple = on;
+/** How the trees are drawn (the quality level's): grown, simple or cartoon, live: geometries swapped alone. */
+export function setSimpleTrees(wanted: SimpleTrees): void {
+  if (wanted === look) return;
+  look = wanted;
   for (const swap of swaps) put(swap);
 }

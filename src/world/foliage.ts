@@ -93,7 +93,7 @@ function flatSpotsOf(leaves: [number, number, number, number, number][], warmth:
  * Spots in a leaf cluster's picture where one flat colour shows, as many as asked, evenly apart in brightness from
  * `darkest` to `brightest` (of the leaves' fill, 0.45 to 1): a face whose three corners all lie on one spot is drawn in
  * that colour alone, tinted as the leaves are, and sharp at any distance (its texture coordinates don't change across
- * it, so its texel is read from the picture itself, not a blurred smaller one). `simpleCrown` in simpleTrees.ts.
+ * it, so its texel is read from the picture itself, not a blurred smaller one). `cartoonCrown` in simpleTrees.ts.
  */
 export function leafClusterTones(count: number, darkest: number, brightest: number, seed = 7): [number, number][] {
   leafClusterTexture(seed);
