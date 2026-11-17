@@ -35,10 +35,10 @@ export const FIST = tunable('fist', {
 });
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
- *  up, ahead): the lead (left) further out, both at the cheeks and out before the face, the elbows in by the ribs */
-// (at the cheeks, a little out before them, the forearms sloping forward from the elbows: 0.3 and 0.2 ahead with the
+ *  up, ahead): the lead (left) further out, both at the chin and out before it, the elbows in by the ribs */
+// (at the chin, a little out before it, the forearms sloping forward from the elbows: 0.3 and 0.2 ahead with the
 // knuckle line upright the forearms stood upright and the knuckles faced the sky; 0.42 and 0.34 the fists were held out
-// before the face, the elbows up at the chest, two adversarial reviews)
+// before the face, the elbows up at the chest, two adversarial reviews; 5 cm higher, at the eyes from the side, a third)
 const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.01, 0.27] });
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): each fist low at its own side, the lead (left) a little higher and further in, both
