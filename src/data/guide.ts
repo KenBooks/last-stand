@@ -80,14 +80,14 @@ export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
   },
   bellwarden: {
     role: 'The Ossuary Cantor\'s guard',
-    does: 'A cracked bronze bell on a yoke, carried by four chained ghouls. It shuffles after you and tolls: a ring of sound rolls out across the floor and stuns whoever it reaches. Ghosts circle the bell and snatch up anyone who strays too close, carrying them off and dropping them hard. In the Crypt it comes as the Ossuary Cantor\'s guard: a lesser bell, half the size, its toll shorter and softer, raising no husks, its one ghost grabbing no one, and it never grows stronger as it is hurt.',
-    strengths: ['Its toll stuns you where you stand and hurts as it does.', 'Every second toll raises Hollow Husks from the ground around the arena.', 'Wounded, it tolls twice in a row, a fast ring then a slow one, and bronze shards break off it that burn the floor where they land.', 'Near death its bearers kneel and it tolls every few seconds.', 'Its ghosts grab you if you stand too close to the bell as one swoops low.'],
-    weaknesses: ['The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring unharmed.', 'The ring fades as it rolls: far enough away, it does not stun.', 'Each bearer\'s chain can be broken by hits from its side; with all four broken the bell drops and takes double damage until they rise again.', 'It cannot be shoved: it holds its ground, but it is slow.'],
-    beat: ['Keep at medium range, outside the ghosts\' circle, and step out of its ring\'s reach when the bell swings back.', 'Circle it to break its chains one side at a time, then pour everything in while the bell is down.', 'Clear the Hollow Husks quickly so they do not pin you when the next toll comes.', 'Never stand on the bronze shards.'],
+    does: 'A cracked bronze bell on a yoke, carried by four chained ghouls: in the Crypt two of them come with the Ossuary Cantor as its guards, lesser bells half the size of a Bell-Warden of old. They shuffle after you and toll, a short ring of sound that stuns whoever is close. While either stands, the Cantor is warded.',
+    strengths: ['While either guard stands, the Cantor takes only a fraction of the damage.', 'Its toll stuns you briefly if you are close to the bell when it rings.', 'Two of them at once, from two sides, as the Cantor casts.'],
+    weaknesses: ['A lesser bell: little Health, and a toll that only reaches those nearby.', 'The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring.', 'It raises no husks, its ghost grabs no one, and it never grows stronger as it is hurt.', 'Its tolls never land together with the Cantor\'s casts.'],
+    beat: ['Kill the two guards first: the Cantor\'s ward falls with the last of them.', 'Keep a few steps off the bell when it swings back, then close in after the toll.', 'Break its chains from its sides to drop the bell and finish it quickly.'],
     vs: {
       warrior: 'Raise the shield towards the bell as it swings: the toll cannot stun you through it.',
-      mage: 'Blink through the ring as it reaches you, then punish the bell while it recovers.',
-      ranger: 'Shoot from beyond its ring and its ghosts; aim at a bearer\'s chain to bring the bell down.',
+      mage: 'Blink through the ring as it reaches you, then burn the bell down before turning on the Cantor.',
+      ranger: 'Shoot it from beyond its ring; it is the Cantor\'s ward you are breaking.',
     },
   },
   cantor: {
@@ -150,6 +150,7 @@ export const AI_NOTES: Record<string, string> = {
   slam: 'Slams the ground in front of it once in reach, a ring on the floor marking where first.',
   boss: 'Slams all round itself up close, looses volleys at range, and calls help.',
   bellWarden: 'Shuffles after you and tolls, a ring of sound rolling out that stuns; its ghosts snatch whoever comes too close.',
+  cantor: 'Floats at a distance and chants: bone hands rise under you, a dirge of rings marches out, its guards ward it.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

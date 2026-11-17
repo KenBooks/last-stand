@@ -2,7 +2,7 @@
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
-import { BELL_WARDEN, BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
+import { BELL_WARDEN, BOSS_AI, CANTOR, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -18,7 +18,11 @@ const LATER = 10;
 const LAST_LOOKED = 60;
 
 /** A foe a wave brings: its id, its data, its note, and where it's met first. */
-export interface Foe { id: Exclude<EnemyId, 'dummy'>; def: EnemyDef; note: FoeNote; biome: BiomeId; from: number }
+export interface Foe {
+  id: Exclude<EnemyId, 'dummy'>; def: EnemyDef; note: FoeNote; biome: BiomeId; from: number;
+  /** the boss it comes beside as a guard, where that's the only way it comes */
+  guards?: EnemyId;
+}
 
 /** Every foe a wave brings, by the biome that brings it first and the wave it comes in, the bosses apart. */
 export function foes(): { common: Foe[]; bosses: Foe[] } {
@@ -27,17 +31,24 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
     if (id === 'dummy' || def.dummy) continue;
     const met = metAt(id);
     if (!met) continue;
-    const foe: Foe = { id, def, note: FOE_NOTES[id], ...met };
+    const foe: Foe = { id, def: met.guards ? asGuard(def) : def, note: FOE_NOTES[id], ...met };
     (def.boss ? bosses : common).push(foe);
   }
   return { common, bosses };
 }
 
-/** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there. */
-function metAt(id: EnemyId): { biome: BiomeId; from: number } | null {
+/** `def` as it comes as a guard: its `asGuard` share of its life and damage. */
+const asGuard = (def: EnemyDef): EnemyDef => ({ ...def, life: def.life * (def.asGuard?.life ?? 1), damage: def.damage * (def.asGuard?.damage ?? 1) });
+
+/** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there (and the boss it
+ *  guards, where it comes on its ladder as a guard alone). */
+function metAt(id: EnemyId): { biome: BiomeId; from: number; guards?: EnemyId } | null {
   for (const biome of BIOME_IDS) {
-    const rung = BIOMES[biome].bosses.findIndex((boss) => boss.id === id || boss.guards?.id === id);
+    const ladder = BIOMES[biome].bosses;
+    const rung = ladder.findIndex((boss) => boss.id === id);
     if (rung >= 0) return { biome, from: WAVES.bossEvery * (rung + 1) };
+    const guarded = ladder.findIndex((boss) => boss.guards?.id === id);
+    if (guarded >= 0) return { biome, from: WAVES.bossEvery * (guarded + 1), guards: ladder[guarded].id };
     for (let w = 1; w <= LAST_LOOKED; w++) if (BIOMES[biome].pool(w).some(([e]) => e === id)) return { biome, from: w };
   }
   return null;
@@ -91,7 +102,8 @@ function figures(foe: Foe): string {
 function comes(foe: Foe): [string, string] {
   const ladder = BIOMES[foe.biome].bosses;
   const every = WAVES.bossEvery * ladder.length;
-  return [`wave ${foe.from}`, `then every ${every} waves · ${BIOMES[foe.biome].title}`];
+  const beside = foe.guards ? `, guarding ${ENEMIES[foe.guards].name}` : '';
+  return [`wave ${foe.from}`, `then every ${every} waves${beside} · ${BIOMES[foe.biome].title}`];
 }
 
 /** Its attacks, each with its figures. */
@@ -112,7 +124,8 @@ function attacks(foe: Foe): string[] {
   if (th?.what === 'vine' && th.creep) {
     out.push(`<b>Vine:</b> from ${metres(th.from)} to ${metres(th.reach)} away it sends a vine creeping along the floor at ${num(th.creep[0])} m/s, through anything in its way. If its tip comes within ${metres(th.creep[1])} of you, you are held to the spot for ${secs(th.creep[2])}; a dash or a blink tears you free.`);
   }
-  if (d.ai === 'bellWarden') out.push(...bellWardenAttacks(foe));
+  if (d.ai === 'bellWarden') out.push(...(foe.guards ? guardBellAttacks(foe) : bellWardenAttacks(foe)));
+  if (d.ai === 'cantor') out.push(...cantorAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -147,6 +160,34 @@ function bellWardenAttacks(foe: Foe): string[] {
     `<b>Its chains:</b> each bearer's chain breaks under hits from its side; with all four broken the bell drops for ${secs(b.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage, then the bearers rise with the chains whole.`,
     split ? `<b>Under ${pct(split.below)}:</b> it tolls twice, a fast ring then a slow one, and your hits may break bronze shards off it that lie ${secs(b.shards.lies)} burning ${whole(hit * b.shards.hurt)} damage every ${secs(b.shards.tick)} within ${metres(b.shards.radius)}.` : '',
     kneel ? `<b>Under ${pct(kneel.below)}:</b> its bearers kneel and it tolls every ${secs(b.lastEvery)} where it stands.` : '',
+  ].filter(Boolean);
+}
+
+/** A Bell-Warden as an encounter's guard: a lesser bell, its toll short and soft, a ghost that takes no one, no phases
+ *  (data/enemies.ts `BELL_WARDEN.guard`). */
+function guardBellAttacks(foe: Foe): string[] {
+  const d = foe.def, g = BELL_WARDEN.guard, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = kit.attacks?.toll?.warn ?? d.windup;
+  return [
+    `<b>Toll:</b> the bell swings back and glows for ${secs(warn)}, then a ring rolls out to ${metres(g.reach)}. Within ${metres(g.stunsTo)} it stuns whoever it reaches for ${secs(g.stun)} and deals ${whole(hit * g.hurt)} ${typed(d)} damage. A shield raised towards it, a dash or a leap carries you through.`,
+    `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size; it raises no Hollow Husks, its one ghost takes no one, and it never grows stronger as it is hurt.`,
+    `<b>Its chains:</b> each bearer's chain breaks under hits from its side; with all four broken the bell drops for ${secs(BELL_WARDEN.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
+  ];
+}
+
+/** The Ossuary Cantor's fight, each with its figures (data/enemies.ts `CANTOR` and its boss kit). */
+function cantorAttacks(foe: Foe): string[] {
+  const d = foe.def, c = CANTOR, kit = d.bossKit!, hit = damage(d, foe.from);
+  const hands = kit.attacks?.graveHands?.warn ?? d.windup, dirge = kit.attacks?.dirge?.warn ?? d.windup;
+  const [, second, last] = kit.phases;
+  const guard = BIOMES[foe.biome].bosses.find((rung) => rung.id === foe.id)?.guards;
+  return [
+    guard && kit.ward ? `<b>Warded:</b> while any of its ${guard.count} ${ENEMIES[guard.id].name}s stands it takes only ${pct(kit.ward.taken)} of the damage, a pale shell round it.` : '',
+    `<b>Grave hands:</b> a ring of grave light ${metres(c.hands.radius * 2)} across under every hero, then ${secs(hands)} later bone hands tear up through it for ${whole(hit * c.hands.hurt)} ${typed(d)} damage. Step out of the ring.`,
+    second ? `<b>The dirge</b> (under ${pct(second.below)}, in turn with the hands): ${c.dirge.count} rings marching out along a line to you, ${metres(c.dirge.apart)} apart, the first ${secs(dirge)} after it begins and each ${secs(c.dirge.step)} after the last, ${whole(hit * c.dirge.hurt)} damage each.` : '',
+    last ? `<b>Under ${pct(last.below)}:</b> a dirge at every hero, a cast every ${secs(c.lastEvery)}.` : '',
+    `<b>Its bell-heart:</b> with its guards down, each cast leaves its ribs open and its heart bared for ${secs(c.bared)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
+    `<b>Never together:</b> its casts and its guards' tolls land at least ${secs(c.beat)} apart.`,
   ].filter(Boolean);
 }
 
