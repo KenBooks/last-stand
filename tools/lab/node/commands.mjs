@@ -1830,7 +1830,7 @@ export const COMMANDS = {
 
   guide: {
     each(side, options) {
-      return side.command('guide', { canary: Boolean(options.canary) });
+      return side.command('guide', { canary: options.canary });
     },
     textOf: asText,
     problemsOf: problemsIn,

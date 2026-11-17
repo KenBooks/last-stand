@@ -4,8 +4,17 @@
 // are all made. Each frame is timed by the browser's own clock, and the page's long tasks (50 ms and more, which
 // include its style, layout and paint) are listened for over the whole walk: the longest of either must stay under
 // `MOST_MS`. The game's own renderer must link no program for it (the guide's pictures are drawn by a renderer of its
-// own). Its pictures are made behind the lobby before it opens (ui/guide/portraits.ts); `canary` forgets them and makes
-// them all again at once as it opens, as they were made before: the stall must be caught.
+// own). Its pictures are made behind the lobby (ui/guide/portraits.ts), and first while it's open: the walk starts with
+// none made and the lobby's own building held, as on a first visit while the fight's warm-up runs (from play: "icons
+// not loading in guide": one picture after 20 s, most after a minute), and every foe's, boss's and hero's picture must
+// be drawn within `PICTURES_MS` of G. `canary=stall` makes them all again at once as it opens, as they were made before
+// they were made behind the lobby: the stall must be caught; `canary=slow` makes them behind the lobby alone, as they
+// were before they were made while the guide is open: the pictures not drawn in time must be caught. A page's own
+// picture must be drawn within `SHOWN_MS` of the page's opening, or, where the browser was still compiling it then,
+// within `SHOWN_MS` of that compile's end (Victor on #665: "model renders take 5-10sec to appear"; the compile is the
+// browser's own, which the lab's browser at below normal priority on a busy PC takes up to 12 s over, and is
+// reported apart), and every place still waiting for its picture must show its spinner (the same: "a loading
+// indicator for each placeholder that's not supposed to be empty").
 import { realWait, type Lab, type Report } from './lab';
 import { G } from '../../../src/state';
 import * as portraits from '../../../src/ui/guide/portraits';
@@ -15,8 +24,9 @@ import { perfClock } from '../../../src/ui/perfHud';
 
 /** Options of `lab guide`. */
 export interface GuideOptions {
-  /** plant the fault the measure must catch: every picture made again at once as the guide opens */
-  canary?: boolean;
+  /** plant a fault the measure must catch: every picture made at once as the guide opens (`stall`), or made behind
+   *  the lobby alone, not while the guide is open (`slow`) */
+  canary?: 'stall' | 'slow';
 }
 
 /** the longest a frame or a long task may take over the walk (ms): a frame at 60 a second is 17, and a held frame
@@ -27,6 +37,14 @@ const MOST_MS = 100;
  *  apart ran out twice on the shared PC, the pictures made in 370 to 540 frames when it was quiet) */
 const SETTLE = 60;
 const MOST_REAL_MS = 20000;
+/** the longest every picture may take to be drawn from G (ms, by the browser's clock), the browser's compiles in it:
+ *  in the lab's browser on the owner's PC, 8 to 10 s (made behind the lobby alone, as they were, never) */
+const PICTURES_MS = 20000;
+/** the longest a page's own picture may take to be drawn from the page's opening, or from the end of its compile if
+ *  that came later (ms, by the browser's clock): a frame or two, a few more on a busy PC */
+const SHOWN_MS = 150;
+/** the longest a page's own picture is waited for (ms) */
+const SHOWN_WAIT_MS = 15000;
 /** the longest moments listed */
 const LISTED = 6;
 
@@ -40,11 +58,16 @@ interface Moment { what: string; ms: number; from?: number; to?: number }
 
 /** `lab guide`'s report. */
 export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report> {
-  const canary = Boolean(options.canary);
+  const canary = options.canary;
   await toLobby(lab);
   if (G.paused) await lab.step(1, () => ({ keys: ['escape'] }));
   await lab.step(SETTLE);
   if (document.getElementById('guide')?.classList.contains('hidden') === false) throw new Error('lab: guide: it was open before G');
+  // (a first visit's: no picture made yet, and the lobby's own building held, as the fight's warm-up holds it)
+  const most = behind.BEHIND.most;
+  behind.BEHIND.most = 0;
+  portraits.portraitPlant.notWhileOpen = canary === 'slow';
+  portraits.forgetPortraits();
 
   // (the page's long tasks over the walk, each with when it began by the browser's clock)
   const tasks: Moment[] = [];
@@ -69,15 +92,31 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
   try {
     // (the opening: G's frame, and the frames after it, which make what it asked for)
     await timed('G pressed: the guide opening', () => ({ keys: ['g'] }));
-    if (canary) {
+    const opened = frames[0].from!;
+    let allDrawn = Infinity;
+    const drawn = (): void => { if (allDrawn === Infinity && !portraits.portraitsLeft().length) allDrawn = realNow() - opened; };
+    if (canary === 'stall') {
       const start = realNow();
       portraits.remakeAllNow();
       frames.push({ what: 'canary: every picture made again at once', ms: realNow() - start });
     }
     if (document.getElementById('guide')?.classList.contains('hidden') !== false) throw new Error('lab: guide: G never opened it');
     for (let i = 0; i < 5; i++) await timed(`frame ${i + 1} after the opening`);
-    // (every section and every entry, a frame each)
+    // (every section and every entry, a frame each, and each page's own picture waited for)
     let pages = 0;
+    const shown: { who: string; ms: number; frames: number; compiling: number }[] = [];
+    // (every place waiting for its picture must show its spinner: its turning ring, the place's `::after`)
+    const bare = new Set<string>();
+    let waitingSeen = 0;
+    const spinners = (): void => {
+      for (const place of document.querySelectorAll<HTMLElement>('#guide .gd-pic.waiting')) {
+        waitingSeen++;
+        // (it turns, unless the player asked for less motion: the lab's page may)
+        const ring = getComputedStyle(place, '::after');
+        const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (ring.content === 'none' || parseFloat(ring.width) < 6 || (!still && ring.animationName !== 'gd-spin')) bare.add(place.dataset.foe!);
+      }
+    };
     for (const section of ['foes', 'bosses', 'heroes', 'tips']) {
       document.querySelector<HTMLElement>(`#guide [data-gs="${section}"]`)!.click();
       await timed(`${section} opened`);
@@ -86,24 +125,46 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
         const start = realNow();
         document.querySelector<HTMLElement>(`#guide [data-ge="${entry}"]`)!.click();
         frames.push({ what: `${section}: ${entry}'s page made`, ms: realNow() - start });
+        spinners();
         await timed(`${section}: ${entry} shown`);
+        // (its own picture waited for, as a player looks at it: frames on till it's drawn)
+        const own = document.querySelector<HTMLElement>('#guide .gd-page .gd-pic');
+        if (own) {
+          let frameCount = 1;
+          while (own.classList.contains('waiting') && realNow() - start < (canary === 'slow' ? 2000 : SHOWN_WAIT_MS)) {
+            spinners();
+            await timed(`${section}: ${entry}, its picture waited for`);
+            await realWait(2);
+            frameCount++;
+          }
+          const who = own.dataset.foe! as portraits.Who;
+          const compiled = portraits.portraitTimes.get(who)?.compiled ?? -Infinity;
+          const from = Math.max(start, compiled);
+          shown.push({ who, ms: own.classList.contains('waiting') ? Infinity : realNow() - from, frames: frameCount, compiling: compiled > start ? compiled - start : 0 });
+        }
+        drawn();
         pages++;
         if (!document.querySelector('#guide .gd-page')?.textContent?.trim()) throw new Error(`lab: guide: ${entry}'s page is empty`);
       }
     }
     // (frames on till every picture laid in the guide is made: the workers and the pictures' compiles run on real time)
     let waited = 0;
-    const pending = (): number => [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe]')].filter((i) => !i.getAttribute('src') && !i.classList.contains('none')).length;
+    const pending = (): number => document.querySelectorAll('#guide .gd-pic.waiting').length;
     document.querySelector<HTMLElement>('#guide [data-gs="foes"]')!.click();
-    const giveUp = realNow() + MOST_REAL_MS;
-    while (pending() > 0 && realNow() < giveUp) {
+    // (given till every picture is made, at most `MOST_REAL_MS` more: whether in time is judged by `allDrawn`)
+    const giveUp = realNow() + (canary === 'slow' ? 2000 : MOST_REAL_MS);
+    while ((pending() > 0 || allDrawn === Infinity) && realNow() < giveUp) {
       await timed('a frame as the pictures are made');
+      drawn();
       await realWait(5);
       waited++;
     }
+    const notDrawn = portraits.portraitsLeft();
     const left = pending();
-    const waitingFor = [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe]')].filter((i) => !i.getAttribute('src') && !i.classList.contains('none')).map((i) => i.dataset.foe);
-    const made = [...document.querySelectorAll<HTMLImageElement>('#guide img[data-foe][src]')].length;
+    const waitingFor = [...document.querySelectorAll<HTMLElement>('#guide .gd-pic.waiting')].map((i) => i.dataset.foe);
+    const made = document.querySelectorAll('#guide .gd-pic:not(.waiting):not(.none)').length;
+    const slowest = [...shown].sort((a, b) => b.ms - a.ms)[0];
+    const lateShown = shown.filter((s) => s.ms > SHOWN_MS);
     // (a long task's report comes in a task after it)
     await realWait(50);
     observer.disconnect();
@@ -119,24 +180,38 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
       if (by) t.what = `a long task of the page's, ${t.from! <= by.to! ? 'in' : 'after'} "${by.what}"`;
     }
     const all = [...frames, ...tasks].sort((a, b) => b.ms - a.ms);
-    const slowestPieces = [...portraits.portraitPieces].sort((a, b) => b.ms - a.ms).slice(0, 5);
+    const slowestPieces = portraits.portraitPieces.filter((p) => !p.waited).sort((a, b) => b.ms - a.ms).slice(0, 5);
+    const compiles = portraits.portraitPieces.filter((p) => p.waited).map((p) => p.ms);
+    const slowCompiles = portraits.portraitPieces.filter((p) => p.waited).sort((a, b) => b.ms - a.ms).slice(0, 3).map((p) => `${p.what.split(':')[0]} ${(p.ms / 1000).toFixed(1)} s`).join(', ');
     const longest = all[0] ?? { what: 'nothing', ms: 0 };
     const opening = frames.slice(0, 6).reduce((most, f) => Math.max(most, f.ms), 0);
     const lines = [
       `the guide opened by G and walked through ${pages} pages; ${made} pictures made, ${left} still waiting after ${waited} frames${left ? ` (${waitingFor.join(', ')}; ${portraits.portraitState()})` : ''}`,
+      notDrawn.length
+        ? `every foe's, boss's and hero's picture drawn: no, ${notDrawn.length} not drawn ${((realNow() - opened) / 1000).toFixed(1)} s after G (${notDrawn.join(', ')}), at most ${PICTURES_MS / 1000} s`
+        : `every foe's, boss's and hero's picture drawn ${(allDrawn / 1000).toFixed(2)} s after G, none made before it and the lobby's own building held; at most ${PICTURES_MS / 1000} s`,
+      `each page's own picture drawn after its opening (or its compile's end, if later): slowest ${slowest ? `${slowest.who} ${Number.isFinite(slowest.ms) ? `${slowest.ms.toFixed(0)} ms` : 'never'}` : '(none)'}, at most ${SHOWN_MS} ms${lateShown.length ? `; late: ${lateShown.map((s) => `${s.who} ${Number.isFinite(s.ms) ? `${s.ms.toFixed(0)} ms` : 'never'}`).join(', ')}` : ''} (${shown.map((s) => `${s.who} ${Number.isFinite(s.ms) ? s.ms.toFixed(0) : 'never'}${s.compiling ? ` after ${(s.compiling / 1000).toFixed(1)} s of its compile` : ''}`).join(', ')})`,
+      `places seen waiting for their picture: ${waitingSeen}, ${bare.size ? `without a spinner: ${[...bare].join(', ')}` : 'each with its spinner'}`,
       `the opening's longest frame ${opening.toFixed(1)} ms; the walk's longest moment ${longest.ms.toFixed(1)} ms (${longest.what}), at most ${MOST_MS}`,
       `the longest: ${all.slice(0, LISTED).map((m) => `${m.what} ${m.ms.toFixed(1)} ms`).join('; ')}`,
       `long tasks of the page's: ${tasks.length}${before.length ? ` (and ${before.length} begun before G, the lobby's own: ${before.map((t) => `${t.ms.toFixed(0)} ms`).join(', ')})` : ''}; programs the game's renderer linked: ${linked}`,
+      `the browser's compiles of the pictures, waited for: ${compiles.length ? `${compiles.length}, ${Math.min(...compiles).toFixed(0)} to ${Math.max(...compiles).toFixed(0)} ms, ${compiles.reduce((a, b) => a + b, 0).toFixed(0)} ms in all (the longest: ${slowCompiles})` : 'none'}`,
       `the pictures' renderer made in ${portraits.portraitPieces.find((p) => p.what === 'the renderer made')?.ms.toFixed(1) ?? '(not this walk)'} ms; their slowest pieces: ${slowestPieces.map((p) => `${p.what} ${p.ms.toFixed(1)} ms`).join('; ') || 'none'}`,
     ];
     const slow = longest.ms > MOST_MS;
-    if (canary) {
+    const late = allDrawn > PICTURES_MS;
+    if (canary === 'stall') {
       return { text: [...lines, 'canary: every picture made at once as the guide opened'].join('\n'), problems: slow ? [] : ['the pictures made at once were missed'] };
     }
-    const problems = [slow ? lines[1] : '', linked ? lines[3] : '', left ? lines[0] : ''].filter(Boolean);
+    if (canary === 'slow') {
+      return { text: [...lines, 'canary: the pictures made behind the lobby alone, not while the guide is open'].join('\n'), problems: late && lateShown.length ? [] : ['the pictures not made while the guide is open were missed'] };
+    }
+    const problems = [late ? lines[1] : '', lateShown.length ? lines[2] : '', bare.size || !waitingSeen ? lines[3] : '', slow ? lines[4] : '', linked ? lines[6] : '', left ? lines[0] : ''].filter(Boolean);
     return { text: lines.join('\n'), problems };
   } finally {
     perfClock.now = clock;
     observer.disconnect();
+    behind.BEHIND.most = most;
+    portraits.portraitPlant.notWhileOpen = false;
   }
 }

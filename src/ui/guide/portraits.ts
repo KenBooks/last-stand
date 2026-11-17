@@ -2,8 +2,10 @@
 // picture by a small WebGL renderer of the guide's own. The game's renderer never sees these models, so it links no
 // program for them (the root's "shaders compile at load"). They're made behind the lobby a piece a frame, as the
 // heroes are (game/behind.ts, `queuePortraitsBehind` from main.ts once its warm-ups are done): the renderer, each
-// model (a hero's in his build's own pieces), its compile waited on (`compileAsync`, in parallel where the browser can)
-// and its picture encoded off the page's thread (`toBlob`). Made all at once as the guide opened, they held it up
+// model (a hero's in his build's own pieces), its compile waited on (`compileAsync`, in parallel where the browser can),
+// and its draw copied into a canvas of its own the guide's places are drawn from (`made`: shown the frame it's drawn,
+// where a PNG encoded first held each picture back a few frames more; Victor on #665: "model renders take 5-10sec to
+// appear"). While the guide is open they're made first (`stepPortraits`), the ones it shows before the others. Made all at once as the guide opened, they held it up
 // 330 ms and then 90 to 110 ms a picture (from Victor's review of #665: "lags for 1-2sec"; `npm run lab -- guide`).
 // A production build keeps them in the browser's storage for its own build (`CACHE`), so a later visit makes none.
 // Opened before they're made, the guide shows a picture as it comes, the ones it shows first (`hurryPortrait`).
@@ -13,7 +15,7 @@ import { CLASSES, CLASS_IDS } from '../../data/classes/index';
 import { buildModel, modelSteps } from '../../entities/models/index';
 import { gearOf, makeItem } from '../../loot/items';
 import { disposeGeometries } from '../../entities/models/rig';
-import { buildFirst, buildLater, finishNow, queued } from '../../game/behind';
+import { buildFirst, buildLater, buildOnly, finishNow, queued } from '../../game/behind';
 import { perfClock } from '../perfHud';
 import type { Model, Profile } from '../../types';
 
@@ -28,14 +30,21 @@ const JOB = 'guide portraits';
 /** the browser's store the pictures are kept in, a production build's alone (a dev build's models change under it) */
 const CACHE = { db: 'last-stand-guide', store: 'portraits', on: !import.meta.env.DEV && typeof indexedDB !== 'undefined' };
 
-/** set while a harness's planted fault runs (`remakeAllNow`): each picture drawn and encoded at once, as they were */
-const portraitPlant = { allAtOnce: false };
+/** how much of a frame the pictures may take while the guide is open (ms, and the most pieces): made only behind the
+ *  lobby, 2 ms a frame after the heroes and never while the fight's warm-up ran, a first visit's guide showed one
+ *  picture 20 s after it opened and most of them after a minute (from play: "icons not loading in guide") */
+export const WHILE_OPEN = { ms: 8, most: 40 };
+
+/** a harness's planted faults: each picture drawn and encoded at once, as they were (`remakeAllNow`); the pictures not
+ *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`) */
+export const portraitPlant = { allAtOnce: false, notWhileOpen: false };
 
 /** Whose picture: a foe's id, or `hero:` and a class's id. */
 export type Who = EnemyId | `hero:${string}`;
 
-const made = new Map<Who, string>();
-const waiting = new Map<Who, ((url: string | null) => void)[]>();
+/** each picture made: a canvas of its own (`SIZE` square) every place showing it is drawn from */
+const made = new Map<Who, HTMLCanvasElement>();
+const waiting = new Map<Who, ((pic: HTMLCanvasElement | null) => void)[]>();
 /** the pictures still to make, the first made next */
 let pending: Who[] = [];
 let renderer: THREE.WebGLRenderer | null = null;
@@ -46,7 +55,9 @@ let started = false;
 
 /** Each piece's name and time (ms, by `perfClock`: a harness's, `lab guide`, reads the browser's own), the latest
  *  `PIECES_KEPT`: what the slowest is made of. */
-export const portraitPieces: { what: string; ms: number }[] = [];
+export const portraitPieces: { what: string; ms: number; waited?: boolean }[] = [];
+/** when each picture's compile was done and when it was drawn (by `perfClock`), for a harness (`lab guide`) */
+export const portraitTimes = new Map<Who, { compiled: number; drawn: number }>();
 const PIECES_KEPT = 2000;
 /** `work` done as a piece named `what`, its time kept. */
 function piece<T>(what: string, work: () => T): T {
@@ -72,11 +83,31 @@ function everyone(): Who[] {
   return [...foes.filter((id) => !ENEMIES[id].boss), ...foes.filter((id) => ENEMIES[id].boss), ...CLASS_IDS.map((id) => `hero:${id}` as Who)];
 }
 
-/** A picture made already (an object URL), or null. */
-export const portraitMade = (id: Who): string | null => made.get(id) ?? null;
+/** The pictures not made yet, of every foe, boss and hero the guide shows (a harness's: `lab guide`). */
+export const portraitsLeft = (): Who[] => everyone().filter((id) => !made.has(id));
+
+/** A picture made already, or null. */
+export const portraitMade = (id: Who): HTMLCanvasElement | null => made.get(id) ?? null;
+
+/** `pic` drawn into `into` (a place in the guide showing it), filling it. */
+export function drawPortrait(into: HTMLCanvasElement, pic: HTMLCanvasElement): void {
+  if (into.width !== SIZE) into.width = into.height = SIZE;
+  const ctx = into.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  ctx.drawImage(pic, 0, 0);
+}
+
+/** A canvas of the pictures' size holding what `from` shows now. */
+function copied(from: CanvasImageSource): HTMLCanvasElement {
+  const pic = document.createElement('canvas');
+  pic.width = pic.height = SIZE;
+  pic.getContext('2d')?.drawImage(from, 0, 0, SIZE, SIZE);
+  return pic;
+}
 
 /** `id`'s picture, as it's made behind the lobby (or at once if it is); null where none can be made. */
-export function portrait(id: Who): Promise<string | null> {
+export function portrait(id: Who): Promise<HTMLCanvasElement | null> {
   const have = made.get(id);
   if (have || failed) return Promise.resolve(have ?? null);
   queuePortraitsBehind();
@@ -90,6 +121,31 @@ export function hurryPortrait(id: Who): void {
   buildFirst(JOB);
 }
 
+/** The pictures made while the guide is open, ahead of everything built behind the lobby and whatever holds it
+ *  (called each frame it's open, from main.ts): the player is looking at them. */
+export function stepPortraits(): void {
+  if (portraitPlant.notWhileOpen) return;
+  queuePortraitsBehind();
+  buildOnly(JOB, WHILE_OPEN);
+}
+
+/** `ids`' pictures made before the others (the entries the guide's list shows), in their order. */
+export function hurryPortraits(ids: Who[]): void {
+  const first = ids.filter((id) => pending.includes(id));
+  if (!first.length) return;
+  pending = [...first, ...pending.filter((id) => !first.includes(id))];
+  buildFirst(JOB);
+}
+
+/** A harness's: every picture forgotten, to be made again as on a first visit (`lab guide`). */
+export function forgetPortraits(): void {
+  made.clear();
+  portraitTimes.clear();
+  pending = everyone();
+  started = true;
+  requeue();
+}
+
 /** The pictures queued to be made behind the lobby (once; those the browser kept are read first). */
 export function queuePortraitsBehind(): void {
   if (started || failed) return;
@@ -101,14 +157,14 @@ export function queuePortraitsBehind(): void {
 }
 
 /** A picture made: kept, and given to whoever waits for it. */
-function settle(id: Who, url: string | null): void {
-  if (url) made.set(id, url);
-  for (const done of waiting.get(id) ?? []) done(url);
+function settle(id: Who, pic: HTMLCanvasElement | null): void {
+  if (pic) made.set(id, pic);
+  for (const done of waiting.get(id) ?? []) done(pic);
   waiting.delete(id);
 }
 
-/** The picture being made: its model staged, its textures still to send, and how far the browser has come with its
- *  compile and its encoding (each waited on out of the queue: the build queued again as it's done). */
+/** A picture being made: its model staged, its textures still to send, and whether the browser has compiled it
+ *  (waited on out of the queue: the build queued again as it's done). */
 interface Making {
   id: Who;
   model: Model;
@@ -116,73 +172,138 @@ interface Making {
   camera: THREE.PerspectiveCamera;
   textures: THREE.Texture[];
   compiled: boolean;
-  drawn: boolean;
-  encoded: boolean;
-  blob: Blob | null;
 }
-let making: Making | null = null;
+/** the pictures being made, their compiles running side by side: one at a time, each waited for in turn, every
+ *  picture was drawn 24 s after the guide opened (`lab guide`, the lab's browser at below normal priority, where a
+ *  compile took up to 12 s); 4 at a time, 8 to 10; 6, the page's own waited behind the others' compiles */
+let making: Making[] = [];
+/** the picture drawn, waiting for the card to have drawn it before it's copied (nothing else drawn meanwhile: the
+ *  renderer's canvas holds it) */
+let copying: { m: Making; sync: WebGLSync | null } | null = null;
+/** how many are made side by side (a page's own picture is started whatever the count) */
+const SIDE_BY_SIDE = 4;
 
 /** The build queued again behind the lobby (what the browser was doing for it is done). */
 function requeue(): void {
-  if (!queued(JOB) && (pending.length || making)) buildLater(JOB, steps(), () => undefined);
+  if (!queued(JOB) && (pending.length || making.length || copying)) buildLater(JOB, steps(), () => undefined);
+}
+
+/** `m` done with, its picture (or none) given to whoever waits for it. */
+function finished(m: Making, pic: HTMLCanvasElement | null): void {
+  making = making.filter((x) => x !== m);
+  pending = pending.filter((who) => who !== m.id);
+  try { m.scene.remove(m.model.root); disposeGeometries(m.model.root); } catch { /* let go as it is */ }
+  settle(m.id, pic);
 }
 
 /** The pictures made, a piece at a time: the renderer, each model (a hero's in his build's own pieces), its staging,
- *  its textures sent a piece each, its draw, and its picture. While the browser compiles it and encodes its picture,
- *  off the page's thread, the build leaves the queue (nothing behind the lobby waits on it) and comes back as each is
- *  done. The renderer is let go after the last. */
+ *  its compile asked for, its textures sent a piece each, and its draw, copied into its own canvas. Up to
+ *  `SIDE_BY_SIDE` are made at once, their compiles running side by side, the first wanted (`pending`'s order) started
+ *  and drawn first. While the browser compiles them and nothing else is left to do, the build leaves the queue
+ *  (nothing behind the lobby waits on it) and comes back as one is done. The renderer is let go after the last. */
 function* steps(): Generator<void, void, undefined> {
-  while (pending.length || making) {
-    const id = making?.id ?? pending[0];
-    try {
-      if (!making) {
-        if (made.has(id)) { pending = pending.filter((who) => who !== id); continue; }
-        if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
-        const model: Model = yield* timedSteps(`${id}: its model built`, modelOf(id));
+  for (;;) {
+    pending = pending.filter((id) => !made.has(id) || making.some((m) => m.id === id));
+    if (!pending.length && !making.length && !copying) break;
+    // (one compiled, the first wanted: drawn)
+    const order = (m: Making): number => { const i = pending.indexOf(m.id); return i < 0 ? 1e9 : i; };
+    // (one drawn, copied once the card has drawn it: copied at once, the page's paint waited 135 to 214 ms for the
+    // card's first draw with a program just compiled, behind the other pictures' compiles)
+    if (copying) {
+      const c = copying, r = renderer!;
+      const gl = r.getContext() as WebGL2RenderingContext;
+      if (!c.sync || gl.getSyncParameter(c.sync, gl.SYNC_STATUS) === gl.SIGNALED) {
+        copying = null;
+        try {
+          if (c.sync) gl.deleteSync(c.sync);
+          const pic = piece(`${c.m.id}: copied`, () => copied(r.domElement));
+          const times = portraitTimes.get(c.m.id);
+          if (times) times.drawn = perfClock.now();
+          // (kept for a later visit, encoded off the page's thread: nothing waits on it)
+          if (CACHE.on && !portraitPlant.allAtOnce) pic.toBlob((blob) => { if (blob) keep(c.m.id, blob); }, 'image/png');
+          piece(`${c.m.id}: let go`, () => finished(c.m, pic));
+        } catch (err) {
+          console.warn(`guide: no portrait of ${c.m.id}`, err);
+          finished(c.m, null);
+        }
         yield;
-        const { scene, camera } = piece(`${id}: staged and framed`, () => staged(model));
-        yield;
-        const m: Making = { id, model, scene, camera, textures: texturesOf(model.root), compiled: false, drawn: false, encoded: false, blob: null };
-        making = m;
-        const r = renderer;
-        const compiled = (): void => { m.compiled = true; requeue(); };
-        if (!portraitPlant.allAtOnce) piece(`${id}: its compile asked for`, () => r.compileAsync(scene, camera).then(compiled, compiled));
+        continue;
       }
-      const m = making, r = renderer!;
-      // (its textures sent to the card a piece each while it compiles: sent by its first draw, a hero's held it 33 to
-      // 81 ms)
-      while (m.textures.length && !portraitPlant.allAtOnce) {
-        const texture = m.textures.shift()!;
-        piece(`${id}: a texture sent`, () => r.initTexture(texture));
-        yield;
-      }
-      if (!m.compiled && !portraitPlant.allAtOnce) return;
-      let url: string | null = null;
-      if (portraitPlant.allAtOnce) {
-        // (the canary: drawn and encoded at once, as they were)
-        url = piece(`${id}: drawn and encoded at once`, () => { r.render(m.scene, m.camera); return r.domElement.toDataURL('image/png'); });
-      } else {
-        if (!m.drawn) {
-          m.drawn = true;
-          piece(`${id}: drawn`, () => {
-            r.render(m.scene, m.camera);
-            r.domElement.toBlob((b) => { m.blob = b; m.encoded = true; requeue(); }, 'image/png');
+    }
+    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length).sort((x, y) => order(x) - order(y))[0];
+    if (ready) {
+      const r = renderer!;
+      try {
+        if (portraitPlant.allAtOnce) {
+          // (the canary: drawn and encoded at once, as they were)
+          piece(`${ready.id}: drawn and encoded at once`, () => { r.render(ready.scene, ready.camera); r.domElement.toDataURL('image/png'); });
+          copying = { m: ready, sync: null };
+        } else {
+          piece(`${ready.id}: drawn`, () => {
+            r.render(ready.scene, ready.camera);
+            const gl = r.getContext() as WebGL2RenderingContext;
+            copying = { m: ready, sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0) };
+            gl.flush();
           });
         }
-        if (!m.encoded) return;
-        if (m.blob) { url = URL.createObjectURL(m.blob); keep(id, m.blob); }
+      } catch (err) {
+        console.warn(`guide: no portrait of ${ready.id}`, err);
+        copying = null;
+        finished(ready, null);
       }
-      piece(`${id}: let go`, () => { m.scene.remove(m.model.root); disposeGeometries(m.model.root); });
-      making = null;
-      settle(id, url);
-    } catch (err) {
-      console.warn(`guide: no portrait of ${id}`, err);
-      making = null;
-      if (!renderer) { failed = true; for (const who of pending) settle(who, null); pending = []; return; }
-      settle(id, null);
+      if (!portraitPlant.allAtOnce) yield;
+      continue;
     }
-    pending = pending.filter((who) => who !== id);
-    yield;
+    // (the next wanted not started yet: the first wanted's (a page's own) started now, and its textures sent, before
+    // another is started; another started if there's room)
+    const sending = making.filter((m) => m.textures.length).sort((x, y) => order(x) - order(y))[0];
+    const next = pending.find((id) => !made.has(id) && !making.some((m) => m.id === id));
+    const firstWaits = sending && order(sending) === 0;
+    if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits))) {
+      try {
+        if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
+        const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
+        yield;
+        const { scene, camera } = piece(`${next}: staged and framed`, () => staged(model));
+        const m: Making = { id: next, model, scene, camera, textures: texturesOf(model.root), compiled: false };
+        making.push(m);
+        if (portraitPlant.allAtOnce) {
+          // (the canary's: compiled as it's drawn, its textures sent then too)
+          m.compiled = true;
+          m.textures = [];
+        } else {
+          const r = renderer;
+          const asked = perfClock.now();
+          const compiled = (): void => {
+            m.compiled = true;
+            portraitTimes.set(next, { compiled: perfClock.now(), drawn: Infinity });
+            portraitPieces.push({ what: `${next}: its compile waited for (the browser's, not the page's)`, ms: perfClock.now() - asked, waited: true });
+            requeue();
+          };
+          // (its commands sent at once, so the browser can start on it while this context waits)
+          piece(`${next}: its compile asked for`, () => { void r.compileAsync(scene, camera).then(compiled, compiled); r.getContext().flush(); });
+        }
+      } catch (err) {
+        console.warn(`guide: no portrait of ${next}`, err);
+        if (!renderer) { failed = true; for (const who of pending) settle(who, null); pending = []; making = []; return; }
+        pending = pending.filter((who) => who !== next);
+        settle(next, null);
+      }
+      yield;
+      continue;
+    }
+    // (a texture sent to the card, the first wanted's first, while they compile: sent by its first draw, a hero's held
+    // it 33 to 81 ms)
+    if (sending) {
+      const texture = sending.textures.shift()!;
+      piece(`${sending.id}: a texture sent`, () => renderer!.initTexture(texture));
+      yield;
+      continue;
+    }
+    // (a picture drawn waits for the card: looked at again next frame)
+    if (copying) { yield; continue; }
+    // (nothing to do till the browser has compiled one: queued again then)
+    return;
   }
   // (its context let go: a second WebGL context held for nothing is memory a phone hasn't)
   piece('the renderer let go', () => { renderer?.dispose(); renderer?.forceContextLoss(); renderer = null; });
@@ -195,6 +316,8 @@ function makeRenderer(): THREE.WebGLRenderer {
   r.setPixelRatio(1);
   r.setSize(SIZE, SIZE, false);
   r.setClearColor(0x000000, 0);
+  // (no shader's log read back as it's first used: a read waits on the browser's work, other pictures' compiles)
+  r.debug.checkShaderErrors = false;
   r.outputColorSpace = THREE.SRGBColorSpace;
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.15;
@@ -274,7 +397,7 @@ function staged(model: Model): { scene: THREE.Scene; camera: THREE.PerspectiveCa
 /** Where the pictures' making stands, for a harness (`lab guide`): what's still to make, the one being made and how
  *  far the browser has come with it, and whether the build is queued behind the lobby. */
 export function portraitState(): string {
-  const m = making ? `${making.id} (compiled ${making.compiled}, drawn ${making.drawn}, encoded ${making.encoded}, textures left ${making.textures.length})` : 'none';
+  const m = making.map((x) => `${x.id} (compiled ${x.compiled}, textures left ${x.textures.length})`).join(', ') || 'none';
   return `to make: ${pending.join(', ') || 'none'}; being made: ${m}; queued: ${queued(JOB)}`;
 }
 
@@ -283,9 +406,11 @@ export function portraitState(): string {
 export function remakeAllNow(): void {
   made.clear();
   pending = everyone();
-  if (making && !pending.includes(making.id)) pending.unshift(making.id);
   started = true;
   portraitPlant.allAtOnce = true;
+  // (those already in flight drawn at once too, their compiles not waited for)
+  for (const m of making) { m.compiled = true; m.textures = []; }
+  if (copying) copying.sync = null;
   try {
     if (!queued(JOB)) buildLater(JOB, steps(), () => undefined);
     finishNow(JOB);
@@ -308,11 +433,12 @@ function openStore(): Promise<IDBDatabase | null> {
   });
 }
 
-/** The pictures this build kept on an earlier visit, made object URLs; another build's let go. */
+/** The pictures this build kept on an earlier visit, each drawn into its canvas; another build's let go. */
 async function kept(): Promise<void> {
   if (!CACHE.on) return;
   const db = await openStore();
   if (!db) return;
+  const found: [Who, Blob][] = [];
   await new Promise<void>((resolve) => {
     try {
       const tx = db.transaction(CACHE.store, 'readwrite');
@@ -323,7 +449,7 @@ async function kept(): Promise<void> {
         const cursor = req.result;
         if (!cursor) return;
         const key = String(cursor.key);
-        if (key.startsWith(prefix) && cursor.value instanceof Blob) settle(key.slice(prefix.length) as Who, URL.createObjectURL(cursor.value));
+        if (key.startsWith(prefix) && cursor.value instanceof Blob) found.push([key.slice(prefix.length) as Who, cursor.value]);
         else cursor.delete();
         cursor.continue();
       };
@@ -333,6 +459,10 @@ async function kept(): Promise<void> {
     } catch { resolve(); }
   });
   db.close();
+  // (decoded off the page's thread)
+  await Promise.all(found.map(async ([id, blob]) => {
+    try { settle(id, copied(await createImageBitmap(blob))); } catch { /* left to be made again */ }
+  }));
 }
 
 /** A picture kept for this build's later visits. */

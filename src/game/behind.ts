@@ -74,6 +74,27 @@ export async function finishInSlices(key: string, pause: () => Promise<void>): P
   job.done(await builtInSlices(job.steps, pause));
 }
 
+/** `key`'s next pieces alone, ahead of the queue and whatever holds it (the fight's warm-up, a hall open, a run):
+ *  as many as fit `budget` of this frame. For a build wanted while it's looked at (the guide's pictures, while it's
+ *  open). False if it isn't queued. */
+export function buildOnly(key: string, budget: { ms: number; most: number }): boolean {
+  const job = jobs.find((j) => j.key === key);
+  if (!job) return false;
+  const start = perfClock.now();
+  for (let pieces = 0; pieces < budget.most; pieces++) {
+    if (pieces && perfClock.now() - start >= budget.ms) break;
+    if (!headsReady(job.detail)) { void preloadHeads(job.detail); break; }
+    const next = job.steps.next();
+    job.piece++;
+    if (next.done) {
+      jobs.splice(jobs.indexOf(job), 1);
+      job.done(next.value);
+      break;
+    }
+  }
+  return true;
+}
+
 /** The queued builds' next pieces, as many as fit `BEHIND`: called each frame the lobby shows. */
 export function buildBehind(): void {
   Object.assign(behindFrame, { ms: 0, pieces: 0, longest: 0, slowest: '' });
