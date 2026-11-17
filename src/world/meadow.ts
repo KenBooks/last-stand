@@ -943,7 +943,10 @@ let grownFrom: ((mask: MeadowMask) => void) | null = null;
 export function setMeadowMask(texture: THREE.Texture, mask: MeadowMask, soft: THREE.Texture): void {
   if (texture.source.data === soft.source.data) return;
   texture.source.data = soft.source.data;
-  texture.source.needsUpdate = true;
+  // (the texture's own version, not its source's alone: three uploads a texture again only as its version changes, and
+  // with the source's marked alone the GPU kept the mask the village was built with, so a first visit, which Auto boots
+  // at Low, drew no grass beyond the palisade on High: from review, "You removed grass from here on High as well")
+  texture.needsUpdate = true;
   grownFrom?.(mask);
 }
 
@@ -954,6 +957,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   group.userData.mask = mask;
   meadowHalf = mask.half;
   group.userData.maskTexture = maskTexture;
+  group.userData.maskHalf = mask.half;
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
