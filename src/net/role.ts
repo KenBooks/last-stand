@@ -13,7 +13,7 @@ export const role = { current: 'solo' as Role };
 export const isCoop = (): boolean => role.current !== 'solo';
 export const isGuest = (): boolean => role.current === 'guest';
 export const isHost = (): boolean => role.current === 'host';
-/** The guests a host started a run with that aren't in it yet (still readying it: net/session.ts), by name. */
+/** The guests a host started a run with that aren't in it yet (still readying it: net/session.ts), by name tag. */
 export const readying = { guests: [] as string[] };
 
 /**

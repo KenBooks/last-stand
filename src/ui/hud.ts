@@ -11,7 +11,7 @@ import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
 import { partyDecision, waitingForParty } from './coop';
-import { isCoop } from '../net/role';
+import { isCoop, readying } from '../net/role';
 import { skillArt } from './skillArt';
 import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
 
@@ -268,6 +268,14 @@ function setStyle(el: HTMLElement, prop: string, v: string): void {
 const pct = (k: number): string => `${(k * 100).toFixed(1)}%`;
 let minimapT = 0, partyT = 0;
 
+/** The held countdown's line: on the host, who it waits for by name tag (two at the most, else how many: the
+ *  party frames say how far each is); on a guest, which isn't told, the players. */
+function waitingFor(guests: string[]): string {
+  if (!guests.length) return 'Waiting for players…';
+  if (guests.length > 2) return `Waiting for ${guests.length} players…`;
+  return `Waiting for ${guests.join(' and ')}…`;
+}
+
 export function updateHud(): void {
   // (in the lobby's practice, the bottom bar alone: there is no run)
   const p = G.player, r = G.mode === 'run' ? G.run : null;
@@ -304,7 +312,7 @@ export function updateHud(): void {
   // objectives
   const ol = h('.obj-line');
   const txt = r.duel ? duelObjective(r.duel)
-    : r.phase === 'countdown' && r.held ? 'Waiting for players…'
+    : r.phase === 'countdown' && r.held ? waitingFor(readying.guests)
     : r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
     : r.phase === 'cleared' ? (G.player.active ? (r.training ? 'Leave training or repeat this wave' : 'Bank your spoils or continue') : 'The others decide')

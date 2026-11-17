@@ -59,7 +59,7 @@ import { hourNow, holdHour } from './game/clock';
 import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
 import { askConflicts, renderCloudBar, showGoogleLanding } from './ui/cloudSaves';
 import { googleLanding, initCloud } from './loot/cloud';
-import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
+import { initHeroSelect, openHeroSelect, closeHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { hallOpen, prepareHeroSelection, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
 import { builtInSlices } from './entities/models/steps';
@@ -81,7 +81,7 @@ import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
-import { initReadying, layOutReadyingAhead, READYING, settleReadying } from './ui/readying';
+import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
 import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
 const COARSE_HANDS_UNDER = 0.2;
@@ -103,7 +103,7 @@ import { preloadEngraving } from './core/engraving';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
-import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun, sendDuelStart } from './net/session';
+import { initSession, invitedRoom, readyingAfresh, sendInRun, sendReadying, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun, sendDuelStart } from './net/session';
 import { isCoop, isGuest, isHost, runsOthersFight, simulates } from './net/role';
 import { updateChat } from './ui/chat';
 import { updateHouseMarks } from './ui/houseMarks';
@@ -319,7 +319,7 @@ async function boot() {
   // an item picked up off the lobby floor goes back in the stash, marked new
   initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
-  initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
+  initSession({ startRun: guestStarted, startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
   initCoop();
   initTrade();
   // (a partner's Trade button in Play together's list follows the trade: off while one is under way)
@@ -672,10 +672,49 @@ function guestDuel(setup: DuelSetup, seed: number) {
   sendInRun();
 }
 
-/** A guest: the host started a run. */
+
+/** A guest's run the host started, its fight warm, waiting for the joining bar to be drawn (`joinWhenShown`). */
+let joinAsked: { biome: BiomeId; wave: number; seed: number; training: boolean; frames: number } | null = null;
+/** the frames counted from the host's start before a warm guest's run begins in one task, so the joining bar is
+ *  drawn and painted in at least one of them (a slow device's start took seconds, and nothing said the host had
+ *  started: #561; `lab coop`'s warm start: the bar shown a frame, as its run began) */
+const JOIN_SHOWN_FRAMES = 2;
+
+/**
+ * A guest: the host started a run. Its joining bar shows at once, warm or not, over whatever it had open, which is
+ * put away (the hall of heroes, the save slots, the map, a dialog: the run began under them, unseen), and its run
+ * begins once its fight's programs are warm and the bar has been drawn. Till then the host is told how far it is.
+ */
+function guestStarted(biome: BiomeId, wave: number, seed: number, training: boolean) {
+  readyingAfresh();
+  showJoining(true);
+  closeHeroSelect();
+  openSaves(false);
+  setVillageMap(false);
+  openCoop(false);
+  hideHelp();
+  joinWhenWarm(biome, wave, seed, training);
+}
+const joinWhenWarm = whenWarm(['fight'], (biome: BiomeId, wave: number, seed: number, training: boolean) => {
+  joinAsked = { biome, wave, seed, training, frames: JOIN_SHOWN_FRAMES };
+}, READYING.join);
+
+/** Every frame: a guest joining its host's run tells the host how far it is, and begins it once its bar is drawn; a
+ *  guest no longer in the room (its host gone, the room left) joins nothing. */
+function joinWhenShown() {
+  if (!isJoining()) return;
+  if (!isGuest() || G.mode !== 'menu') { joinAsked = null; showJoining(false); return; }
+  sendReadying(joiningShare());
+  if (!joinAsked || --joinAsked.frames > 0) return;
+  const { biome, wave, seed, training } = joinAsked;
+  joinAsked = null;
+  guestStart(biome, wave, seed, training);
+}
+
 function guestStart(biome: BiomeId, wave: number, seed: number, training: boolean) {
   G.arena.setBiome(biome);
   beginRun(wave, seed, training);
+  showJoining(false);
   // (the host's countdown held till now: a slow device's readying outlasted it, and the wave came without it)
   sendInRun();
 }
@@ -1252,6 +1291,7 @@ function frame(timestamp: number): void {
   // frames timed on the other's ticks, 13.8 and 20.7 ms in turn, and the world juddered, #552; Auto reads the raw)
   const dt = Math.min(pacedStep(rawDt, revealed && !framesUncapped()), 1 / 20);
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
+  joinWhenShown();
   updateMusic(dt, musicWanted());
   const t0 = perfClock.now();
   // (the developer mode's time: frozen, slowed, a step)

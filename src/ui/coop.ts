@@ -3,7 +3,7 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import {
-  session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf, lookOf, PROTOCOL, ROOM_NAME_MAX, type Look,
+  session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf, readyingOf, lookOf, PROTOCOL, ROOM_NAME_MAX, type Look,
   type RoomKind,
   type RoomPlan,
 } from '../net/session';
@@ -1000,11 +1000,14 @@ export function updateCoopHud(): void {
     syncPortrait(t.portrait, p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
-    const state = p.away ? 'In the lobby' : p.out === 'banked' ? (G.run?.duel ? 'Watching' : G.run?.training ? 'Left training' : 'Banked') : p.out === 'dead' ? 'Fallen'
+    // (on the host, a guest still readying the run it started: how far along, from its `rdy` reports)
+    const ready = readyingOf(p);
+    const state = ready !== null ? `Readying ${Math.round(ready * 100)}%` : p.away ? 'In the lobby' : p.out === 'banked' ? (G.run?.duel ? 'Watching' : G.run?.training ? 'Left training' : 'Banked') : p.out === 'dead' ? 'Fallen'
       : p.downed ? (p.revive > 0 ? 'Being revived…' : `Down · ${Math.ceil(p.bleed)}s`) : '';
     if (t.state.textContent !== state) t.state.textContent = state;
     t.frame.classList.toggle('down', p.downed);
-    t.frame.classList.toggle('out', !!p.out || p.away);
+    t.frame.classList.toggle('out', !!p.out || p.away || ready !== null);
+    t.frame.classList.toggle('readying', ready !== null);
     if (p.life - t.life > p.stats.maxLife * HEALED.share) t.healedUntil = G.time + HEALED.shown;
     if (G.time - t.lifeAt > HEALED.over || p.life < t.life) { t.life = p.life; t.lifeAt = G.time; }
     t.frame.classList.toggle('healed', G.time < t.healedUntil && p.inRun && !p.downed);
