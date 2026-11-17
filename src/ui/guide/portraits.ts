@@ -171,6 +171,8 @@ interface Making {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   textures: THREE.Texture[];
+  /** each of its materials' maps and the small copy it's drawn with here */
+  swaps: Swap[];
   compiled: boolean;
 }
 /** the pictures being made, their compiles running side by side: one at a time, each waited for in turn, every
@@ -240,7 +242,7 @@ function* steps(): Generator<void, void, undefined> {
           copying = { m: ready, sync: null };
         } else {
           piece(`${ready.id}: drawn`, () => {
-            r.render(ready.scene, ready.camera);
+            withSmall(ready.swaps, () => r.render(ready.scene, ready.camera));
             const gl = r.getContext() as WebGL2RenderingContext;
             copying = { m: ready, sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0) };
             gl.flush();
@@ -265,7 +267,8 @@ function* steps(): Generator<void, void, undefined> {
         const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
         yield;
         const { scene, camera } = piece(`${next}: staged and framed`, () => staged(model));
-        const m: Making = { id: next, model, scene, camera, textures: texturesOf(model.root), compiled: false };
+        const swaps = piece(`${next}: its textures made small`, () => smallTextures(model.root));
+        const m: Making = { id: next, model, scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
         making.push(m);
         if (portraitPlant.allAtOnce) {
           // (the canary's: compiled as it's drawn, its textures sent then too)
@@ -296,7 +299,8 @@ function* steps(): Generator<void, void, undefined> {
     // it 33 to 81 ms)
     if (sending) {
       const texture = sending.textures.shift()!;
-      piece(`${sending.id}: a texture sent`, () => renderer!.initTexture(texture));
+      const img = texture.image as { width?: number; height?: number; data?: unknown } | null;
+      piece(`${sending.id}: a texture sent (${img?.width ?? '?'}x${img?.height ?? '?'}${img?.data ? ', data' : ''})`, () => renderer!.initTexture(texture));
       yield;
       continue;
     }
@@ -335,17 +339,65 @@ function* modelOf(id: Who): Generator<void, Model, undefined> {
   return model;
 }
 
-/** Every texture what's shown of `root` is drawn with, once each. */
-function texturesOf(root: THREE.Object3D): THREE.Texture[] {
-  const found = new Set<THREE.Texture>();
+/** A material's map, and the small copy a picture is drawn with in its place. */
+interface Swap { material: THREE.Material; key: string; small: THREE.Texture }
+
+/** the most a picture's texture is across (px): the picture is 320 px, its model a part of it */
+const SMALL = 256;
+/** each texture's small copy, made once (the game's textures are shared by every model of a kind) */
+const smallOf = new WeakMap<THREE.Texture, THREE.Texture>();
+
+/** `t` drawn small, or `t` itself where it's small already or not a picture the page can draw (a data texture). */
+function small(t: THREE.Texture): THREE.Texture {
+  const have = smallOf.get(t);
+  if (have) return have;
+  const img = t.image as { width?: number; height?: number } | null;
+  const drawable = typeof HTMLCanvasElement !== 'undefined' && (img instanceof HTMLCanvasElement
+    || (typeof OffscreenCanvas !== 'undefined' && img instanceof OffscreenCanvas)
+    || (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) || img instanceof HTMLImageElement);
+  let made = t;
+  if (drawable && img?.width && img.height && Math.max(img.width, img.height) > SMALL) {
+    const k = SMALL / Math.max(img.width, img.height);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * k));
+    c.height = Math.max(1, Math.round(img.height * k));
+    c.getContext('2d')?.drawImage(img as CanvasImageSource, 0, 0, c.width, c.height);
+    made = t.clone();
+    made.source = new THREE.Source(c);
+    made.needsUpdate = true;
+  }
+  smallOf.set(t, made);
+  return made;
+}
+
+/** Every map of what's shown of `root`, each with its small copy (made here, once for each texture). The game's
+ *  textures are canvases as large as 2048 px, shared by its own renderer: the guide's context read each back to send it
+ *  (the Voidling's first, 338 ms in one frame), where a picture shows them a few dozen pixels across. */
+function smallTextures(root: THREE.Object3D): Swap[] {
+  const swaps: Swap[] = [];
+  const seen = new Set<THREE.Material>();
   root.traverseVisible((o) => {
     const mats = (o as THREE.Mesh).material;
     if (!mats) return;
     for (const m of Array.isArray(mats) ? mats : [mats]) {
-      for (const v of Object.values(m)) if ((v as THREE.Texture | null)?.isTexture) found.add(v as THREE.Texture);
+      if (seen.has(m)) continue;
+      seen.add(m);
+      for (const [key, v] of Object.entries(m)) {
+        if ((v as THREE.Texture | null)?.isTexture) swaps.push({ material: m, key, small: small(v as THREE.Texture) });
+      }
     }
   });
-  return [...found];
+  return swaps;
+}
+
+/** `draw` done with every map swapped for its small copy, and each put back after (the materials are the game's own:
+ *  they're never left changed between its frames). */
+function withSmall(swaps: Swap[], draw: () => void): void {
+  const kept = swaps.map((w) => (w.material as unknown as Record<string, unknown>)[w.key]);
+  for (const w of swaps) (w.material as unknown as Record<string, unknown>)[w.key] = w.small;
+  try { draw(); } finally {
+    swaps.forEach((w, i) => { (w.material as unknown as Record<string, unknown>)[w.key] = kept[i]; });
+  }
 }
 
 /** The lights a portrait is drawn by: a warm key from the front right, a cool rim from behind, a dim fill. */
