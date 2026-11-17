@@ -698,7 +698,10 @@ export function buildVillage(scene: THREE.Group): Village {
   const inside = mask.within(palisadePolygon());
   grassMasks = { texture: maskTexture, whole: { mask, soft: mask.texture() }, inside: { mask: inside, soft: inside.texture() } };
   setGrassBeyondWalls(grassBeyond);
-  const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
+  // (the ground reads the whole mask at every level, its own texture never swapped: where Low and Very low grow no grass
+  // beyond the palisade, its sward stays green there, a field from inside, not bare earth; from play, "ground for after
+  // should be green (textured green)")
+  const maskUniforms: MaskUniforms = { uMeadow: { value: grassMasks.whole.soft }, uMeadowHalf: { value: mask.half } };
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
   const meadow = buildMeadow(mask, maskTexture, updaters);
