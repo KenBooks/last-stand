@@ -321,9 +321,13 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
     f.j[1].rotation.set(c * 1.1, 0, 0);
     f.j[2].rotation.set(c * 0.75, 0, 0);
   });
-  const tc = curl * 0.6 + point * 0.5;
-  // the thumb swings across the palm as the hand closes, and in from the side (held out at the open hand's 43
-  // degrees, a fist's thumb stood off the fingers, a loop in the air)
+  thumbAcross(h, curl * 0.6 + point * 0.5, spread);
+}
+
+/** The thumb swung across the palm by `tc` as the hand closes, and in from the side (held out at the open hand's 43
+ *  degrees, a fist's thumb stood off the fingers, a loop in the air). */
+function thumbAcross(h: Hand, tc: number, spread: number): void {
+  const s = h.s;
   h.thumb.j[0].rotation.set(0.25 + tc * 0.45, s * (0.3 + tc * 0.5), -s * (0.75 - spread * 0.45 - tc * 0.4));
   h.thumb.j[0].rotateY(s * THUMB_ROLL);
   h.thumb.j[1].rotation.set(tc * 0.5, 0, 0);
@@ -332,14 +336,19 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
 
 /**
  * A fist clenched after `hold` has turned the hand onto its knuckles' line: each finger folded at its knuckle, its
- * middle joint and its last (`bends`, rad), the tips in the palm, as a clenched fist is (wrapped round a handle, the
- * fingers hooked round an empty space in front of the palm, a claw; from play, "like someone with arthritis"). The
- * thumb is `hold`'s, over the fingers.
+ * middle joint and its last (`bends`, rad: about a real fist's 90, 100 and 55 degrees), each a little more than the
+ * one before it from the index, close together, the tips in the palm, and the thumb swung across the fingers by
+ * `thumb` (`poseHand`'s), the hand's turn left as `hold` set it. Wrapped round a handle the fingers hooked round an
+ * empty space before the palm, a claw (from play, "like someone with arthritis"); with the thumb left on the handle
+ * it stood off the fingers (an adversarial review); `poseHand`'s fist bends the knuckles 0.8 of its curl alone, the
+ * fingers hooked from the side.
  */
-export function clench(h: Hand, bends: readonly number[]): void {
-  for (const f of h.f) {
-    for (let n = 0; n < 3; n++) f.j[n].rotation.set(bends[n], 0, 0);
-  }
+export function clench(h: Hand, bends: readonly number[], thumb: number): void {
+  h.f.forEach((f, i) => {
+    const more = 1 + 0.04 * i;
+    for (let n = 0; n < 3; n++) f.j[n].rotation.set(bends[n] * more, 0, 0);
+  });
+  thumbAcross(h, thumb, 0);
 }
 
 /** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:

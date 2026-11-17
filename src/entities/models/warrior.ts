@@ -214,9 +214,9 @@ const HAND_K = 1.08;
  *  turns each a little proud of the one under it, its top under the sleeve's turned-back cuff (round, 4.2 to 4.9 cm
  *  out, it read as a rigid cylinder wider than the hand with a hard rim, an adversarial review) */
 const WRIST_WRAP: [number, number, number][] = [
-  [-0.328, 0.033, 0.024], [-0.322, 0.04, 0.029], [-0.316, 0.0425, 0.031], [-0.304, 0.042, 0.031],
-  [-0.297, 0.044, 0.0325], [-0.284, 0.0425, 0.032], [-0.277, 0.045, 0.034], [-0.264, 0.044, 0.034],
-  [-0.257, 0.046, 0.036], [-0.244, 0.045, 0.036], [-0.228, 0.047, 0.038],
+  [-0.328, 0.031, 0.022], [-0.322, 0.037, 0.026], [-0.316, 0.039, 0.028], [-0.304, 0.0385, 0.028],
+  [-0.297, 0.0405, 0.0295], [-0.284, 0.039, 0.029], [-0.277, 0.0415, 0.031], [-0.264, 0.0405, 0.031],
+  [-0.257, 0.0425, 0.033], [-0.244, 0.0415, 0.033], [-0.228, 0.044, 0.035],
 ];
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
  *  its hand over about 170 degrees from palm up to palm down (`rollForearm`) */
@@ -4151,7 +4151,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (fistedR > FIST.from) {
       if (fp) rollForearm(handR, j.elbowR, j.handR, fistLine.R);
       hold(handR, knuckles(grip, j.handR, fistLine.R), FIST.r);
-      if (FIST.clench[0] > 0) clench(handR, FIST.clench);
+      if (FIST.clench[0] > 0) clench(handR, FIST.clench, FIST.thumb);
     }
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
@@ -4160,7 +4160,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (fisted > FIST.from) {
       if (fp) rollForearm(handL, j.elbowL, j.handL, fistLine.L);
       hold(handL, knuckles(gripL, j.handL, fistLine.L), FIST.r);
-      if (FIST.clench[0] > 0) clench(handL, FIST.clench);
+      if (FIST.clench[0] > 0) clench(handL, FIST.clench, FIST.thumb);
     }
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 

@@ -19,8 +19,9 @@ import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'blows'>;
 
-/** where he lands: this far short of the foe's body (m, past both sizes), so his blows come down on it */
-const SHORT = 0.4;
+/** where he lands: this far short of the foe's body (m, past both sizes), at arm's length, so his blows come down on
+ *  it (0.4 short, his forearms went into a husk's body as they came down: the blows reach 0.6 m before him) */
+const SHORT = 0.75;
 /** a foe within this of the aim's point is the one meant, where the aim isn't on a body (m) */
 const NEAR_AIM = 2.5;
 /** his blows reach a foe this far from him past its size (m): one that slips further off is missed */
