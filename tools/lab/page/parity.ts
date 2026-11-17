@@ -1,6 +1,7 @@
 // `lab parity`: the same scenes pictured as the player sees them, for comparing what two renderers draw (`--renderers
 // webgl,webgpu`): each biome's arena in a run's countdown, then the lobby's village at noon and at midnight from its
-// places (the square, the hall's door and inside it, the training yard, a lamp, a cottage, the campfire), from above
+// places (the square, the hall's door and inside it, the training yard, a lamp, a cottage, the campfire, the
+// fountain close, the way out past the palisade), from above
 // and over the shoulder. The pictures are the page's own (`lab.screen`, the browser's screenshot), as WebGPU's
 // canvas can't be read back the way WebGL's is. It finds nothing itself: what differs is the A/B's verdict and the
 // pictures beside each other (tools/lab/out/parity), each difference a look one renderer misses or draws otherwise.
@@ -8,7 +9,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
-import { CAMPFIRE, HALL, TERRACE, YARD } from '../../../src/data/village';
+import { CAMPFIRE, ENTRANCES, HALL, TERRACE, YARD } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
 import { viewMode, type ViewMode } from '../../../src/core/renderer';
 import { toVillage } from './village';
@@ -26,6 +27,15 @@ const HOURS = [12, 0];
 /** A place in the village to stand at: where, facing which way (rad about y: 0 faces +z) and in which views. */
 interface Place { name: string; x: number; z: number; facing: number; views: ViewMode[] }
 
+/** how far inside the forest's gap in the palisade the hero stands to look out through it (m) */
+const INSIDE_GAP = 4;
+
+/** Where to stand inside the forest's way out, facing out through it. */
+function insideGap(): { x: number; z: number; facing: number } {
+  const { gap, out } = ENTRANCES.forest;
+  return { x: gap[0] - out[0] * INSIDE_GAP, z: gap[1] - out[1] * INSIDE_GAP, facing: Math.atan2(out[0], out[1]) };
+}
+
 /** the village's places pictured (each facing into what's there) */
 const PLACES: Place[] = [
   { name: 'square', x: 0, z: 9, facing: Math.PI, views: ['top', 'third'] },
@@ -34,6 +44,9 @@ const PLACES: Place[] = [
   { name: 'yard', x: YARD.x, z: YARD.z - 2, facing: 0, views: ['top'] },
   { name: 'campfire', x: CAMPFIRE[0] + 2, z: CAMPFIRE[1] - 2, facing: -Math.PI * 0.75, views: ['third'] },
   { name: 'cottage', x: -14.2, z: 1.5, facing: Math.PI, views: ['top'] },
+  // (what Low and Very low draw simple, #672: the fountain close, and the woods past the palisade's way out)
+  { name: 'fountain', x: 0, z: 5, facing: Math.PI, views: ['top', 'third'] },
+  { name: 'palisade', ...insideGap(), views: ['third'] },
 ];
 
 /** Whether `name` is among the scenes asked for. */
