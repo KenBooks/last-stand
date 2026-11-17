@@ -63,6 +63,8 @@ export interface ChannelSkill<S = unknown> extends SkillBase {
   stop(player: Player, def: SkillDef, state: S): void;
   /** fills in the pose's action each frame (a bow's channel: its draw, its loose and where it aims, as a shot's) */
   pose?(player: Player, def: SkillDef, state: S, action: ActionState): void;
+  /** its drain's share of its `cost` a second now (Rampage's, growing as it's held); none: all of it */
+  drainScale?(state: S): number;
 }
 
 export type SkillImpl = InstantSkill | ChannelSkill<any>;

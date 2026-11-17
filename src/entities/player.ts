@@ -1197,7 +1197,9 @@ export class Player {
     if (this.channel) {
       const ch = this.channel;
       // (from both hands it drains as its `both` has it)
-      const perSecond = this.bothHands ? ch.skill.def.both?.cost ?? ch.skill.def.cost : ch.skill.def.cost;
+      const own = this.bothHands ? ch.skill.def.both?.cost ?? ch.skill.def.cost : ch.skill.def.cost;
+      // (a channel that drains more as it's held says by how much: Rampage)
+      const perSecond = own * ((ch.skill.impl as ChannelSkill).drainScale?.(ch.state) ?? 1);
       const cost = this.sandbox ? 0 : perSecond * dt;
       if (this.energy < cost) { this.lowEnergy(); this.stopChannel(); }
       else {

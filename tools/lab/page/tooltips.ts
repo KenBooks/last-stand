@@ -17,9 +17,12 @@ import { middleOf } from './lab';
 import type { Fixture, Lab, Report } from './lab';
 import type { DerivedStats, HeldStyle, SkillDef, StyleTuning } from '../../../src/types';
 import { G } from '../../../src/state';
+import { RAMPAGE } from '../../../src/data/balance';
 import { skillTooltip } from '../../../src/ui/tooltip';
-import { holdFor } from './cast';
-import { castAt, type Cast, type Hit } from './hits';
+import { holdFor, type BoundSkill } from './cast';
+import { castAt, type Cast, type Hit, type Planting } from './hits';
+import type { Enemy } from '../../../src/entities/enemy';
+import type * as THREE from 'three';
 import { gearsOf } from './gears';
 
 export interface TooltipsOptions {
@@ -40,6 +43,9 @@ const DROPPED_STYLE: HeldStyle = 'shield';
 const MODIFIERS: Partial<DerivedStats> = {
   damagePct: 40, arcanePct: 30, elementalPct: 25, crit: 35, critDmg: 70, castSpeed: 20,
 };
+/** the channels that build as they're held, and how long one is held to reach its most (s): Rampage's blows hit
+ *  harder each second, and a hit at its full figure comes only once it's built all the way up */
+const BUILDS: Record<string, number> = { rampage: RAMPAGE.most / RAMPAGE.perSecond + 0.5 };
 /** the canary's raise of all damage once a tooltip is read (%) */
 const CANARY_PCT = 50;
 /** the raise of the weapon's all damage for the hotbar's tooltip to follow (%) */
@@ -185,6 +191,24 @@ function raiseDamage(): boolean {
   return true;
 }
 
+/** A channel held to its most as the player holds it (`BUILDS`): its foes held where they stood, as he walks after
+ *  those its blows drive back (stood still, Rampage's knock drove them out of its reach within a second), and his
+ *  Energy kept full (its drain rises as it builds) for `seconds`; the canary's raise as it begins. */
+function heldUp(canary: boolean, seconds: number): Planting {
+  const spots = new Map<Enemy, THREE.Vector3>();
+  let raised = false;
+  return (frame, cast) => {
+    if (canary && !raised) raised = raiseDamage();
+    for (const foe of cast.foes) {
+      const spot = spots.get(foe) ?? foe.pos.clone();
+      spots.set(foe, spot);
+      foe.pos.copy(spot);
+    }
+    G.player.energy = G.player.stats.maxEnergy;
+    return frame * window.__labClock.frame >= seconds * 1000;
+  };
+}
+
 /** The damage skills cast held that way: those asked for, or every one he knows, can use and that deals damage. */
 function skillsOf(options: TooltipsOptions): SkillDef[] {
   const usable = [...G.player.known.values()].map((known) => known.def).filter((def) => G.player.usable(def));
@@ -223,7 +247,10 @@ async function gearRound(
     if (read.kinds.length) figures.set(def.name, read.kinds[0].high);
     const lasting = read.kinds.some((kind) => kind.every) && !def.channel ? def.duration ?? 0 : 0;
     const plant = options.canary ? raiseDamage : null;
-    const cast = await castAt(lab, fixture, def.name, (skill) => holdFor(skill.def), plant, undefined, lasting);
+    const builds = BUILDS[def.impl];
+    const holding = (skill: BoundSkill) => builds ?? holdFor(skill.def);
+    const planting = builds ? heldUp(options.canary, builds) : plant;
+    const cast = await castAt(lab, fixture, def.name, holding, planting, undefined, lasting);
     const name = gear ? `${def.name} (${gear})` : def.name;
     const judgedCast = judged(name, read, cast);
     found.lines.push(`  ${def.name}`, ...judgedCast.lines);

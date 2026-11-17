@@ -41,7 +41,9 @@ const warrior: ClassDef = {
       key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
       desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. At 10 Frenzy every third blow is a two-fisted hammer. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.24, fireAt: 0.5,
-      damage: 30, range: 2.4, arc: 1.3, knock: 1.2, gain: 4, frenzy: 1,
+      // (range from his middle to a foe's edge: a fist lands about 0.75 m ahead of it, the arm and the step into it; at 2.4
+      // it struck a dummy from more than three arm's lengths off, from play: "this distance is too far for punch to hit")
+      damage: 30, range: 1.3, arc: 1.3, knock: 1.2, gain: 4, frenzy: 1,
       // (a shield on the other arm: the right hand alone, each punch a cross, lighter; from play, "have it punch as
       // well like if there was no sword, but not as much damage though")
       styles: { shield: { damage: 22, gain: 3, frenzy: 0 } },
@@ -60,9 +62,9 @@ const warrior: ClassDef = {
     },
     {
       key: 'mouse2', impl: 'rampage', name: 'Rampage',
-      desc: 'Hold to throw a flurry of punches as you walk, striking every foe close before you. Each blow that lands builds Frenzy, and none decays while you hold it. Quicker with Frenzy, as all your attacks are. Drains Energy while held.',
+      desc: 'Hold to throw a flurry of punches as you walk, striking every foe close before you. Each blow that lands builds Frenzy, and none decays while you hold it. Quicker with Frenzy, as all your attacks are. Each second held it hits 5% harder and drains 5% more Energy, up to 50%. Drains Energy while held.',
       tags: ['physical'], cost: 25, cooldown: 0, castTime: 0, channel: true,
-      damage: 140, range: 2.6, arc: 1.6, knock: 0.8, moveMult: 0.75, frenzy: 1, frenzyHolds: true,
+      damage: 140, range: 1.4, arc: 1.6, knock: 0.8, moveMult: 0.75, frenzy: 1, frenzyHolds: true,
       needs: 'bare',
       icon: { glyph: '≋', color: '#b070ff' },
     },
@@ -79,7 +81,7 @@ const warrior: ClassDef = {
       key: '3', impl: 'wrath', name: 'Wrath',
       desc: 'Spend all your Frenzy in one blow, harder for every stack. Under 5 stacks it is a single hook; from 5 a two-fisted slam that also strikes every foe round where it lands; at 10 or more it cracks the ground and throws them back. The damage you take goes back to normal. Needs a stack of Frenzy.',
       tags: ['physical'], cost: 15, cooldown: 4, castTime: 0.4, fireAt: 0.65,
-      damage: 60, perStack: 70, range: 2.6, arc: 1.2, radius: 3, knock: 8,
+      damage: 60, perStack: 70, range: 1.5, arc: 1.2, radius: 3, knock: 8,
       needs: 'bare',
       color: 0xff6a30,
       icon: { glyph: '✹', color: '#ffcc40' },

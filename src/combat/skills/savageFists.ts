@@ -8,7 +8,7 @@ import { shockwave } from '../../fx/effects';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { FRENZY } from '../../data/balance';
+import { CLEAN_HIT, FRENZY } from '../../data/balance';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
@@ -29,6 +29,10 @@ export function heatOf(frenzy: number): number {
 
 /** Where a fist lands on a foe: a puff of dust and sweat knocked off it (a blade's sparks are steel's), embers with
  *  the Frenzy hot. */
+/** A punch's share of its damage on a foe whose edge is `gap` m from his middle: its clean hit's (`CLEAN_HIT`) at
+ *  the end of the arm's reach, else whole. */
+export const cleanHit = (gap: number): number => (gap >= CLEAN_HIT.from && gap <= CLEAN_HIT.to ? 1 + CLEAN_HIT.bonus : 1);
+
 export function fistMark(e: Enemy, frenzy = 0, n = 5): void {
   const hot = heatOf(frenzy);
   for (let i = 0; i < n; i++) {
@@ -59,7 +63,9 @@ const skill: InstantSkill = {
   anim: 'punch',
   hits: (def) => [
     { per: 'foe', base: (def as Def).damage, type: 'physical' },
+    { per: 'clean hit', base: (def as Def).damage * (1 + CLEAN_HIT.bonus), type: 'physical', note: 'at arm\'s length' },
     { per: 'hammer', base: (def as Def).damage * FRENZY.hammerK, type: 'physical', note: `one blow in ${FRENZY.third} at ${FRENZY.hammer} Frenzy` },
+    { per: 'clean hammer', base: (def as Def).damage * FRENZY.hammerK * (1 + CLEAN_HIT.bonus), type: 'physical', note: 'at arm\'s length' },
   ],
   pose(player, _def, action) { action.form = formOf(player); },
   charging(player) {
@@ -76,7 +82,11 @@ const skill: InstantSkill = {
     const blow = hammer ? { dir, lift: -0.3, at: 0.9 } : { dir, lift: 0.2 };
     const tuned = hammer ? { ...def, damage: def.damage * FRENZY.hammerK, arc: def.arc * 1.4 } : def;
     const heat = player.frenzy;
-    const hits = sweep(player, tuned, facing, { knock: hammer ? def.knock * 3 : def.knock, blow, mark: (e) => fistMark(e, heat, hammer ? 10 : 5) });
+    // (a clean hit at arm's length lands harder, and throws twice the spray)
+    const hits = sweep(player, tuned, facing, {
+      knock: hammer ? def.knock * 3 : def.knock, blow, scale: cleanHit,
+      mark: (e, k) => fistMark(e, heat, (hammer ? 10 : 5) * (k > 1 ? 2 : 1)),
+    });
     if (hammer) {
       const at = { x: player.pos.x + dir.x * 1.3, y: 0, z: player.pos.z + dir.z * 1.3 };
       shockwave(at, { color: heatOf(heat), intensity: 1, from: 0.2, to: 1.6, life: 0.25 });

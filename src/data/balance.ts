@@ -221,6 +221,17 @@ export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
  *  % of the damage he deals and adds `frail` % to the damage he takes. `wait` s after his last hit landed it decays a
  *  stack every `every` s. At `hammer` stacks every `third` blow of Savage Fists is a two-fisted hammer, `hammerK` times
  *  a punch's damage; Wrath's slam takes from `slam` stacks, its quake from `quake`. First takes, for tuning in play. */
+/** A punch's clean hit: a fist lands hardest at the end of its reach, the arm all but straight, so a foe whose edge is
+ *  `from` to `to` m from his middle takes `bonus` more of a punch (Savage Fists', Rampage's); one crowding him, the
+ *  arm still bent, or at the reach's edge takes it plain (from play: "we need to add punch damage bonus for optimal
+ *  distance") */
+/** Rampage building as it's held: `perSecond` more of its damage, and of the Energy it drains, for each second, up to
+ *  `most` more (from play: "lets also change rampage to deal 5% more damage every second and burning 5% more energy as
+ *  well, up to 50%") */
+export const RAMPAGE = { perSecond: 0.05, most: 0.5 };
+
+export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
+
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
   hammer: 10, third: 3, hammerK: 2, slam: 5, quake: 10,

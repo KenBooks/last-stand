@@ -208,7 +208,9 @@ export async function castAt(
   await lab.step(SETTLE, () => ({ aim }));
   let freeFor = 0;
   const frenzy = frenzyFor(skill);
-  for (; frame < MOST_FRAMES; frame++) {
+  // (a key held longer than the frames looked at most is followed through and a little after)
+  const lastFrame = Math.max(MOST_FRAMES, holdFrames + AFTER * 6);
+  for (; frame < lastFrame; frame++) {
     hero.frenzy = frenzy;
     await lab.step(1, () => pressing(skill.key, aim, frame < holdFrames));
     cast.planted ||= plant?.(frame, cast) ?? false;

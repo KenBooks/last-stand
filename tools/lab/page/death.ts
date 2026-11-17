@@ -50,6 +50,9 @@ export const STANDS: Record<string, Stand> = {
   cleave: { count: 3, ahead: 1.6, across: 1 },
   twinFangs: { count: 3, ahead: 3.4, across: 0.8 },
   powerStrike: { count: 3, ahead: 2, across: 0.8 },
+  // (the fists reach 1.3 m past a foe's edge, Rampage 1.4: stood 2 m out, none was struck)
+  savageFists: { count: 3, ahead: 1.2, across: 0.6 },
+  rampage: { count: 3, ahead: 1.2, across: 0.6 },
   crescent: { count: 3, ahead: 4, across: 1.4 },
   bullRush: { count: 3, ahead: 3.5, along: 1.3 },
   tempest: { count: 4, round: 1.7 },
