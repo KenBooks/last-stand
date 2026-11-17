@@ -193,6 +193,10 @@ export interface CoopState extends Together {
   partnerLooks?: string[];
   hairShift?: string;
   partnerHairShifts?: string[];
+  /** its own save's best wave, and its partners' as the room told it (`Look.best` in net/session.ts; null where it
+   *  wasn't told, undefined in a tree without `lookOf`), which rides the same message as the look */
+  best?: number;
+  partnerBests?: (number | null)[];
   /** its own player out of the run (banked or fallen), the run over here, and its summary shown */
   out: boolean;
   /** the run's phase here ('' out of one) */
@@ -934,6 +938,9 @@ export async function coopPickColour(
 /** how long a look picked may take to be made and built (real ms) */
 const RESTYLE_MS = 180000;
 
+/** A partner's look as the room told this game (`lookOf` in net/session.ts; none in an older tree). */
+const roomLookOf = (colourSession as { lookOf?: (player: Player) => { best?: number } | null }).lookOf;
+
 /** A hero's look as built (`look/hair`; none in an older tree). */
 function lookOf(player: Player): string | undefined {
   const look = (player as unknown as { heroLook?: { preset: string; hair: string | null } }).heroLook;
@@ -955,9 +962,12 @@ function hairShiftOf(player: Player): string | undefined {
  * This page's player picks look `preset` and hair colour `hair` as a player does: the hero selection screen opened on
  * his class, its Look page's buttons clicked, the hall's hero built again in it, and the screen closed (the lobby's
  * hero takes the look as it closes, and the room is told). `quiet`: the canary's, the look kept and worn here but the
- * room never told.
+ * room never told. `best`: the save's best wave set first, which the room is told with the look (`Look.best`).
  */
-export async function coopPickLook(lab: Lab, { preset, hair, quiet = false }: { preset: string; hair: string | null; quiet?: boolean }): Promise<void> {
+export async function coopPickLook(
+  lab: Lab, { preset, hair, quiet = false, best }: { preset: string; hair: string | null; quiet?: boolean; best?: number },
+): Promise<void> {
+  if (best !== undefined) G.profile.records.bestWave = best;
   const select = await import('../../../src/ui/heroSelect');
   const hall = await import('../../../src/game/hall');
   select.openHeroSelect(G.profile.classId);
@@ -1027,6 +1037,8 @@ function stateNow(): CoopState {
     partnerLooks: partners.map((player) => lookOf(player) ?? ''),
     hairShift: hairShiftOf(G.player),
     partnerHairShifts: partners.map((player) => hairShiftOf(player) ?? ''),
+    best: G.profile.records.bestWave,
+    partnerBests: roomLookOf ? partners.map((player) => roomLookOf(player)?.best ?? null) : undefined,
     out: Boolean(G.player.out),
     phase: G.run?.phase ?? '',
     runOver: !G.run || G.run.phase === 'over',

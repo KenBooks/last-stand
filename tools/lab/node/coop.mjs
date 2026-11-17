@@ -410,6 +410,8 @@ async function openTogether(pair, link, lines, canary) {
 /** the look and hair colour the host picks in `looks` (another than his first, and a colour of the palette's) */
 const HOST_LOOK = { warrior: 'veteran', mage: 'sage', ranger: 'tracker' };
 const HOST_HAIR = 'ginger';
+/** the best wave the host's save is given as it picks its look, which the room is told with it (`Look.best`) */
+const HOST_BEST = 17;
 /** how long a guest may take to make a look it hadn't (real ms: a face painted and a head made by its workers) */
 const LOOK_MADE_MS = 90000;
 
@@ -432,14 +434,20 @@ async function changeLooks(pair, link, lines, canary, pictures) {
     states.slice(1).forEach((state, index) => {
       const seen = state.partnerLooks?.[0];
       if (seen !== states[0].look) found.push(`${label}: ${PARTY_TAGS[index + 1]} sees the host as ${seen}, not ${states[0].look}`);
+      // (a tree whose partners' looks carry no best wave says none: `partnerBests` undefined)
+      if (state.partnerBests && state.partnerBests[0] !== states[0].best) {
+        found.push(`${label}: ${PARTY_TAGS[index + 1]} has the host's best wave as ${state.partnerBests[0]}, not ${states[0].best}`);
+      }
       if (state.partnerHairShifts?.[0] !== states[0].hairShift) {
         found.push(`${label}: ${PARTY_TAGS[index + 1]} draws the host's hair with ${state.partnerHairShifts?.[0]}, not ${states[0].hairShift}`);
       }
     });
-    lines.push(`${label}: the host ${states[0].look} (hair shift ${states[0].hairShift}); seen as ${states.slice(1).map((state) => state.partnerLooks?.[0]).join(', ')}`);
+    const seen = states.slice(1).map((state) => `${state.partnerLooks?.[0]} (best wave ${state.partnerBests?.[0]})`);
+    lines.push(`${label}: the host ${states[0].look} (hair shift ${states[0].hairShift}, best wave ${states[0].best}); `
+      + `seen as ${seen.join(', ')}`);
     return found;
   };
-  await callPage(pair.host, 'coopPickLook', { preset: HOST_LOOK[heroClass], hair: HOST_HAIR, quiet: canary });
+  await callPage(pair.host, 'coopPickLook', { preset: HOST_LOOK[heroClass], hair: HOST_HAIR, quiet: canary, best: HOST_BEST });
   states = await settled();
   // (a look the guest hasn't made yet shows in one it has, and again in the host's once its workers have painted its
   // face and made its head, in real time: waited for, up to `LOOK_MADE_MS`)
