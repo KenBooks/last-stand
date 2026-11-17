@@ -47,7 +47,7 @@ const warrior: ClassDef = {
       styles: { shield: { damage: 22, gain: 3, frenzy: 0 } },
       needs: 'fist',
       color: 0xd8c8b0,
-      icon: { glyph: '✊︎', color: '#ffb85a' },
+      icon: { glyph: '✊︎', color: '#ff8a3a' },
     },
     {
       key: 'mouse2', impl: 'pounce', name: 'Pounce',
@@ -56,7 +56,7 @@ const warrior: ClassDef = {
       damage: 35, blows: 4, range: 8, frenzy: 1,
       needs: 'bare',
       color: 0xd8b890,
-      icon: { glyph: '⤵', color: '#ffcf70' },
+      icon: { glyph: '⤵', color: '#3fd8c0' },
     },
     {
       key: '1', impl: 'rampage', name: 'Rampage',
@@ -64,7 +64,7 @@ const warrior: ClassDef = {
       tags: ['physical'], cost: 25, cooldown: 0, castTime: 0, channel: true,
       damage: 140, range: 2.6, arc: 1.6, knock: 0.8, moveMult: 0.75, frenzy: 1, frenzyHolds: true,
       needs: 'bare',
-      icon: { glyph: '≋', color: '#ff8a4a' },
+      icon: { glyph: '≋', color: '#b070ff' },
     },
     {
       key: '2', impl: 'bloodrush', name: 'Bloodrush',
@@ -73,7 +73,7 @@ const warrior: ClassDef = {
       damage: 80, range: 7, speed: 26, frenzy: 1, frenzyMost: 5,
       needs: 'bare',
       color: 0xff5a2a,
-      icon: { glyph: '➶', color: '#ff5a3a' },
+      icon: { glyph: '➶', color: '#ff3048' },
     },
     {
       key: '3', impl: 'wrath', name: 'Wrath',
@@ -82,7 +82,7 @@ const warrior: ClassDef = {
       damage: 60, perStack: 70, range: 2.6, arc: 1.2, radius: 3, knock: 8,
       needs: 'bare',
       color: 0xff6a30,
-      icon: { glyph: '✹', color: '#ff3a2a' },
+      icon: { glyph: '✹', color: '#ffcc40' },
     },
     {
       key: '4', impl: 'unchained', name: 'Unchained',
@@ -90,7 +90,7 @@ const warrior: ClassDef = {
       tags: ['buff'], cost: 30, cooldown: 30, castTime: 0,
       duration: 8,
       needs: 'bare',
-      icon: { glyph: '⛓', color: '#ff7040' },
+      icon: { glyph: '⛓', color: '#5ab8ff' },
     },
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
