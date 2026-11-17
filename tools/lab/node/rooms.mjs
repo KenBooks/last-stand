@@ -106,6 +106,8 @@ async function relayList(relayUrl, origin) {
 
 /** Pictures of a game's screen, as the player sees it, kept under `dir`. */
 async function picture(game, dir, name) {
+  // (a few of the game's frames first: what it puts away by its frames, the beta's notice under a dialog, is gone)
+  await game.call('roomsStep', { frames: 3 });
   const cdp = await game.page.context().newCDPSession(game.page);
   try {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });

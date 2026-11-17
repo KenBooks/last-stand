@@ -88,11 +88,20 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
    the list scrolling inside it, so nothing moves as rooms come and go. ---------- */
 #coop .modal-box:has(.coop-main) {
   width: 1000px; height: min(700px, calc(92vh / var(--ui, 1))); display: flex; flex-direction: column; padding: 18px 22px 14px;
-  #btn-coop-close { flex: none; align-self: center; }
 }
-#coop .modal-box:has(.coop-main) .sm-title { margin-bottom: 8px; }
+// (the title is the head row's own, beside the tabs or the room: the box's stands aside)
+#coop .modal-box:has(.coop-head) > .sm-title { display: none; }
+.coop-head {
+  display: flex; align-items: flex-end; gap: 18px; flex: none; border-bottom: 1px solid rgba($frame, .5);
+  .coop-tabs { border-bottom: none; }
+  .coop-room { margin-left: auto; padding-bottom: 6px; display: flex; align-items: baseline; gap: 8px; }
+  .coop-room .coop-code { display: inline; font-size: 24px; letter-spacing: 4px; }
+}
+.coop-title {
+  margin: 0 6px 8px 0; font: 700 26px var(--font-display); letter-spacing: 2px; color: var(--accent); white-space: nowrap;
+  text-shadow: 0 0 12px rgba($accent-glow, .3);
+}
 .coop-body:has(.coop-main) { flex: 1; min-height: 0; align-items: stretch; gap: 8px; }
-.coop-body:has(.coop-main) > .coop-netlog { flex: none; text-align: center; }
 .coop-tabs { display: flex; gap: 2px; border-bottom: 1px solid rgba($frame, .5); flex: none; }
 .coop-tab {
   padding: 8px 18px; font: 600 15px var(--font-display); letter-spacing: 1.5px; color: var(--ink-dim); cursor: $cursor-hand;
@@ -175,7 +184,17 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 .coop-create #btn-coop-host { align-self: flex-start; min-width: 200px; }
 .coop-create .coop-intro { font-size: 14px; }
 // the foot: Quick join, and a room's code typed and joined
-.coop-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex: none; padding-top: 8px; border-top: 1px solid rgba($frame, .35); }
+// (one row: its own controls, the network log's line in the room between, the code and Join, Close)
+.coop-foot {
+  display: flex; gap: 10px; align-items: center; flex: none; padding-top: 8px; border-top: 1px solid rgba($frame, .35);
+  > .coop-netlog { flex: 1; min-width: 0; text-align: center; font-size: 12px; line-height: 1.3; }
+  #btn-coop-close { flex: none; }
+  // (the code and Join stand right, beside Close, whether the network log's line is shown between or not)
+  .coop-join { margin-left: auto; }
+  // (in a room, Close at the right whether the network log's line is between or not)
+  &:has(#btn-coop-leave) #btn-coop-close { margin-left: auto; }
+}
+.coop-close-slot { display: contents; }
 .coop-foot .coop-join input { width: 10.5em; letter-spacing: 2px; }
 // (a field in a column grows down, not across: the room name filled the create page's height)
 .coop-field input { flex: none; }
@@ -187,20 +206,23 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
   .coop-tab-hero { display: block; }
   .coop-tab { padding: 6px 12px; font-size: 13px; }
   .coop-main { grid-template-columns: minmax(0, 1fr); }
-  .coop-main:not([data-pane="hero"]) .coop-hero, .coop-main[data-pane="hero"] .coop-browse { display: none; }
+  .coop-main[data-pane]:not([data-pane="hero"]) .coop-hero, .coop-main[data-pane="hero"] .coop-browse { display: none; }
+  .coop-title { font-size: 18px; margin-bottom: 6px; }
+  .coop-head { gap: 10px; }
   .coop-rooms-head { display: none; }
   .coop-room-pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; }
   .coop-pips { display: none; }
 }
 @media (max-height: 520px) {
   #coop .modal-box:has(.coop-main) { height: calc(96vh / var(--ui, 1)); max-height: calc(96vh / var(--ui, 1)); padding: 8px 14px 8px; }
-  #coop .modal-box:has(.coop-main) .sm-title { display: none; }
   .coop-body:has(.coop-main) { gap: 5px; }
   .coop-room-pick { padding: 3px 8px; }
   .coop-kind { padding: 6px 4px; small { display: none; } }
   .coop-create { gap: 6px; }
   .coop-create .coop-intro { display: none; }
-  .coop-body:has(.coop-main) > .coop-netlog { display: none; }
+  // (no room for the network log's line beside the foot's controls: it's in the pause menu's Network stats too)
+  .coop-foot > .coop-netlog { display: none; }
+  .coop-title { display: none; }
 }
 // on touch a finger's controls: the tabs, chips, rows' buttons and fields at least 36 real css px, fields' text 16 px
 // (under it a phone zooms the page into the field)
@@ -329,3 +351,55 @@ body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
 .pinghint kbd { display: inline-flex; align-items: center; justify-content: center; min-width: hud(34px); height: hud(26px); padding: 0 hud(6px);
   border-radius: hud(4px); font-family: var(--font-display); font-size: hud(14px); color: #1a1208; background: linear-gradient(#fff4d0, #e8c878);
   border: 1px solid #fff8e0; }
+
+/* the hero's colour folded into a dropdown (ui/colourPicker.ts `compact`): the colour worn as one swatch and its
+   name, the palette under it as it opens */
+.colour-drop {
+  flex-direction: column; align-items: stretch; gap: 8px;
+  summary {
+    display: flex; align-items: center; gap: 10px; cursor: $cursor-hand; padding: 5px 8px; list-style: none;
+    border: 1px solid rgba($frame, .35); border-radius: 3px;
+    &::-webkit-details-marker { display: none; }
+    // (the portrait picker's arrow, drawn the same)
+    &::after {
+      content: ''; width: 6px; height: 6px; margin: 0 6px 0 auto; color: var(--accent);
+      border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg);
+    }
+  }
+  .cc-label { font-family: var(--font-display); font-size: 16px; color: var(--accent); white-space: nowrap; }
+  .cc-now {
+    flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--swatch); display: grid; place-items: center;
+    border: 2px solid #ffe7b0; box-shadow: inset 0 0 0 2px rgba(0,0,0,.45); font: 600 11px var(--font-body); color: var(--ink);
+    &.cc-any { background: #0a0909; }
+  }
+  .cc-now-name { color: var(--ink); }
+  &[open] summary::after { transform: rotate(225deg); }
+  .cc-swatches { justify-content: flex-start; }
+}
+/* the room as its players are in it (ui/coop.ts `partyCardHtml`): a card a place, each player's portrait, colour,
+   name tag and class, the host marked; the places still open */
+.coop-in-room { grid-template-columns: minmax(0, 1fr) 290px; }
+// (in a room the box is as tall as its party, up to the browser's height: no empty half under four places)
+#coop .modal-box:has(.coop-in-room) { height: auto; }
+.coop-in-room.joining { grid-template-columns: minmax(0, 1fr); text-align: center; align-content: center; }
+.coop-party .coop-list { display: flex; flex-direction: column; gap: 6px; }
+.coop-card {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 56px;
+  background: rgba(22, 20, 24, .9); border: 1px solid rgba($frame, .3);
+  &.own { box-shadow: inset 3px 0 0 $highlight; }
+  &.empty { justify-content: space-between; border-style: dashed; background: rgba(0, 0, 0, .2); color: var(--ink-dim); }
+  small { display: block; font-size: 13px; }
+}
+.coop-card-who { min-width: 0; flex: 1; b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.coop-card-host {
+  flex: none; padding: 2px 8px; border: 1px solid rgba($highlight, .6); border-radius: 10px; font-size: 12px; color: $highlight;
+}
+.coop-card-open { font-family: var(--font-display); letter-spacing: 1px; }
+.coop-party .coop-link { flex: none; }
+@media (max-height: 520px) {
+  .coop-card { min-height: 0; padding: 4px 10px; }
+  .coop-in-room { grid-template-columns: minmax(0, 1fr) minmax(0, 260px); }
+  .coop-party .coop-intro { display: none; }
+  .colour-drop .cc-label { font-size: 13px; }
+  .colour-drop summary { gap: 6px; }
+}

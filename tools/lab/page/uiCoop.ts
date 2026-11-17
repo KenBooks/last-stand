@@ -74,17 +74,27 @@ const shownNow = (element: Element | null): boolean => Boolean(element && elemen
  */
 async function onItsPage(selector: string, lab?: Lab): Promise<HTMLElement | null> {
   const element = document.querySelector<HTMLElement>(`#coop ${selector}`);
-  if (!element || shownNow(element)) return element;
+  // (a closed dropdown's content keeps its boxes, unpainted: asked for its own, a swatch reads as shown)
+  const closed = Boolean(element?.closest<HTMLDetailsElement>('details.colour-drop:not([open])'));
+  if (!element || (shownNow(element) && !closed)) return element;
   const section = element.closest('.coop-pane');
   const pane = section ? Object.entries(PANES).find(([cls]) => section.classList.contains(cls))?.[1] : undefined;
   const tab = pane ? document.querySelector<HTMLElement>(`#coop .coop-tab[data-pane="${pane}"]`) : null;
-  if (!tab) return element;
-  if (lab && document.body.classList.contains('touch')) {
-    const box = tab.getBoundingClientRect();
-    await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
-  } else if (lab) await lab.clickOn(tab);
-  else tab.click();
+  if (tab && !shownNow(section)) await press(tab, lab);
+  // (a colour's swatch is in the colour's dropdown: opened by its summary, as a player opens it)
+  const shown = document.querySelector<HTMLElement>(`#coop ${selector}`);
+  const drop = shown?.closest<HTMLDetailsElement>('details.colour-drop');
+  if (drop && !drop.open) await press(drop.querySelector<HTMLElement>('summary')!, lab);
   return document.querySelector<HTMLElement>(`#coop ${selector}`);
+}
+
+/** `control` pressed by a click (`lab`), a finger's tap on touch, or by a script where a measure reads (no `lab`). */
+async function press(control: HTMLElement, lab?: Lab): Promise<void> {
+  if (lab && document.body.classList.contains('touch')) {
+    const box = control.getBoundingClientRect();
+    await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+  } else if (lab) await lab.clickOn(control);
+  else control.click();
 }
 
 /** `text` typed in the dialog's field `id` as a player types it: the field clicked, what's in it picked, the text put
@@ -305,7 +315,10 @@ function reachable(element: HTMLElement, name: string, state: string): string[] 
     return [`${state}: ${name} lies past the window's edge`];
   }
   const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-  if (!hit || !(hit === element || element.contains(hit))) return [`${state}: something lies over ${name}`];
+  if (!hit || !(hit === element || element.contains(hit))) {
+    const over = hit ? `${hit.tagName.toLowerCase()}${hit.id ? `#${hit.id}` : ''}.${[...hit.classList].join('.')}` : 'nothing';
+    return [`${state}: something lies over ${name} (${over})`];
+  }
   return [];
 }
 

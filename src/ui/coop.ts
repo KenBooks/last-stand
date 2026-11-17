@@ -281,6 +281,37 @@ export function renderCoop(): void {
   renderLobbyOptions();
   renderBar();
   const body = $('#coop .coop-body');
+  // (the dialog's Close lives in its foot: taken out before the body is written afresh, put back in its slot after)
+  const close = $('#btn-coop-close');
+  body.parentElement!.append(close);
+  renderBody(body);
+  body.querySelector('.coop-close-slot')?.append(close);
+}
+
+/** The dialog's title and, beside it, its tabs or its room (one row: the owner's "more compact... a single line"). */
+const headHtml = (beside: string): string => `<div class="coop-head"><h2 class="coop-title">Play together</h2>${beside}</div>`;
+/** The dialog's foot in one row: its own controls first, the network log's line, then `after` and Close. */
+const footHtml = (first: string, after = '', cls = '', attrs = ''): string =>
+  `<div class="coop-foot coop-choice${cls}"${attrs}>${first}${reportLinks()}${after}<span class="coop-close-slot"></span></div>`;
+
+/** What kind of room it is, as its room view says it. */
+function roomKindLine(s: string): string {
+  const kind = session.kind === 'public' ? 'Public: listed for anyone'
+    : session.kind === 'password' ? 'Locked with a password' : 'Private: joined by its code';
+  if (s === 'hosting') return `${esc(session.roomName)} · ${kind} · up to ${session.max}`;
+  return session.kind === 'password' ? 'Locked with a password' : '';
+}
+
+/** A player's card in the room: portrait, colour, name tag, class in its accent, the host's mark; an empty place. */
+function partyCardHtml(p: Player | null): string {
+  if (!p) return '<li class="coop-card empty"><span class="coop-card-open">Open place</span><small>Waiting for a friend to join…</small></li>';
+  const accent = CLASSES[p.cls.id]?.accent;
+  const host = p.slot === 0 ? '<span class="coop-card-host" title="Host">Host</span>' : '';
+  return `<li class="coop-card${p.local ? ' own' : ''}">${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>
+    <span class="coop-card-who"><b>${esc(nameOf(p))}</b><small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>${host}${tradeButton(p)}</li>`;
+}
+
+function renderBody(body: HTMLElement): void {
   const others = partners();
   const s = session.status;
   if (s === 'off' || s === 'failed') {
@@ -288,28 +319,30 @@ export function renderCoop(): void {
     return;
   }
   if (s === 'joining') {
-    body.innerHTML = `<p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
-      <p class="coop-intro">Finding the host on the co-op server.</p>
-      <button class="btn" id="btn-coop-leave">Cancel</button>
-      ${reportLinks()}`;
+    body.innerHTML = `${headHtml('')}
+      <div class="coop-main coop-in-room joining"><section class="coop-pane coop-party">
+        <p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
+        <p class="coop-intro">Finding the host on the co-op server.</p></section></div>
+      ${footHtml('<button class="btn" id="btn-coop-leave">Cancel</button>')}`;
   } else {
-    const list = [G.player, ...others].map((p) =>
-      `<li>${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}${tradeButton(p)}</li>`).join('')
-      + (others.length ? '' : '<li class="coop-wait">Waiting for a friend to join…</li>');
-    body.innerHTML = `
-      <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
-      ${s === 'hosting' ? `<p class="coop-room-kind">${esc(session.roomName)} · ${session.kind === 'public'
-        ? 'Public: listed for anyone' : session.kind === 'password' ? 'Locked with a password' : 'Private: joined by its code'
-      } · up to ${session.max}</p>` : session.kind === 'password' ? '<p class="coop-room-kind">Locked with a password</p>' : ''}
-      ${s === 'hosting' && session.opening ? '<p class="coop-wait" role="status">Opening the room on the co-op server…</p>'
-        : s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
-      <ul class="coop-list">${list}</ul>
-      ${colourPickerHtml()}
-      ${portraitPickerHtml()}
-      <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
-        After each wave everyone decides: bank and leave, or continue together.</p>
-      <button class="btn danger" id="btn-coop-leave">Leave room</button>
-      ${reportLinks()}`;
+    const max = s === 'hosting' ? session.max : Math.max(2, Math.min(COOP.maxPlayers, others.length + 1));
+    const players: (Player | null)[] = [G.player, ...others];
+    while (players.length < max) players.push(null);
+    const link = s === 'hosting' && session.opening ? '<p class="coop-wait" role="status">Opening the room on the co-op server…</p>'
+      : s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : '';
+    const line = roomKindLine(s);
+    body.innerHTML = `${headHtml(`<div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>`)}
+      ${line ? `<p class="coop-room-kind">${line}</p>` : ''}
+      <div class="coop-main coop-in-room">
+        <section class="coop-pane coop-party">
+          ${link}
+          <ul class="coop-list">${players.map(partyCardHtml).join('')}</ul>
+          <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
+            After each wave everyone decides: bank and leave, or continue together.</p>
+        </section>
+        <aside class="coop-pane coop-hero">${colourPickerHtml(true)}${portraitPickerHtml()}</aside>
+      </div>
+      ${footHtml('<button class="btn danger" id="btn-coop-leave">Leave room</button>')}`;
     const copy = $('#btn-coop-copy', body) as HTMLElement | null;
     if (copy) copy.onclick = () => {
       sfx.click();
@@ -457,7 +490,7 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
   const tabs = PANES.map((p) => `<button class="coop-tab coop-tab-${p.pane}${pane === p.pane ? ' on' : ''}" data-pane="${p.pane}" role="tab" aria-selected="${pane === p.pane}">${p.label}</button>`).join('');
   const quick = quickRoom();
   body.innerHTML = `
-    <div class="coop-tabs" role="tablist">${tabs}</div>
+    ${headHtml(`<div class="coop-tabs" role="tablist">${tabs}</div>`)}
     ${statusHtml(s, code)}
     <div class="coop-main" data-pane="${pane}">
       <section class="coop-pane coop-browse${up ? '' : ' off'}">${browseHtml(open)}</section>
@@ -466,16 +499,14 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
         <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
           <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${open ? '' : ' disabled'}></label>
         <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
-        ${colourPickerHtml()}
+        ${colourPickerHtml(true)}
         ${portraitPickerHtml()}
         <p class="coop-intro">Up to ${COOP.maxPlayers} heroes, each with their own gear and spoils. Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first.</p>
       </aside>
     </div>
-    <div class="coop-foot coop-choice${up ? '' : ' off'}${busy ? ' busy' : ''}"${busy ? ' aria-busy="true"' : ''}>
-      <button class="btn coop-quick"${open && quick ? '' : ' disabled'} title="${quick ? 'Join the fullest open public room' : 'No open public room to join'}">Quick join</button>
-      <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="ROOM CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form>
-    </div>
-    ${reportLinks()}`;
+    ${footHtml(`<button class="btn coop-quick"${open && quick ? '' : ' disabled'} title="${quick ? 'Join the fullest open public room' : 'No open public room to join'}">Quick join</button>`,
+      `<form class="coop-join"><input id="coop-code" maxlength="8" placeholder="ROOM CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form>`,
+      `${up ? '' : ' off'}${busy ? ' busy' : ''}`, busy ? ' aria-busy="true"' : '')}`;
   bindOutOfRoom(body, { open, rename, typingIn });
 }
 
