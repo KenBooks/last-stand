@@ -797,8 +797,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
   stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a ward that wards nothing, a program compiled, an attack that deals
   nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`. `pictures` (asked
-  for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its
-  (`tools/lab/out/boss`).
+  for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its moments, `cantorLook`
+  the Cantor alone from its front, back and sides and its skull close, its triangles held to 45k (`page/bossCantor.ts`;
+  `tools/lab/out/boss`).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

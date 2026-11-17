@@ -1405,10 +1405,11 @@ export const COMMANDS = {
       parts: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk', 'pictures', 'encounterPictures'],
+        choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk', 'pictures', 'encounterPictures', 'cantorLook'],
         help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, encounter, '
           + 'compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
-          + '(the Cantor\'s encounter in each of its)',
+          + '(the Cantor\'s encounter in each of its moments), cantorLook (the Cantor alone from every side and its '
+          + 'skull close, its triangles held to 45k)',
       },
       canary: {
         kind: 'switch',

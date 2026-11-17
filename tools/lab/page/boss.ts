@@ -30,6 +30,7 @@
 // that seize no one, a ward that wards nothing, a program compiled in the fight, and an attack that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
+import { cantorLook } from './bossCantor';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -48,10 +49,10 @@ import { lineClear } from '../../../src/world/navigation';
 
 /** The parts the command runs, in order. */
 export type BossPart =
-  'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'compiles' | 'ttk' | 'pictures' | 'encounterPictures';
+  'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'compiles' | 'ttk' | 'pictures' | 'encounterPictures' | 'cantorLook';
 export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'compiles', 'ttk'];
 /** the parts that are pictures for the eye, with no verdicts */
-const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures'];
+const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures', 'cantorLook'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -924,11 +925,19 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   return moments;
 }
 
+/** `cantorLook`: the Cantor risen alone at 12 m (bossCantor.ts). */
+async function cantorAlone(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<Pictured[]> {
+  await standIn(lab, options.fixture, 'crypt');
+  const cantor = lab.spawnFoe('cantor', clearSpot(12, ENEMIES.cantor.radius), { wave: WAVES.bossEvery * 2 });
+  await lab.until(() => cantor.spawning <= 0, RISE_FRAMES, 'the Cantor never rose');
+  return cantorLook(lab, cantor, lines, problems);
+}
+
 /** `lab boss`: each part asked for, in turn. */
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures'>, typeof ladder> = {
+  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures' | 'cantorLook'>, typeof ladder> = {
     ladder, phases, toll, chains, stand, grab, encounter, compiles, ttk,
   };
   const moments: Pictured[] = [];
@@ -937,6 +946,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
     for (const part of options.parts ?? BOSS_PARTS) {
       if (part === 'pictures') moments.push(...await pictures(lab, options, lines));
       else if (part === 'encounterPictures') moments.push(...await encounterPictures(lab, options, lines));
+      else if (part === 'cantorLook') moments.push(...await cantorAlone(lab, options, lines, problems));
       else await run[part](lab, options, lines, problems);
     }
   } finally {

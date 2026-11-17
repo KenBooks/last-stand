@@ -142,6 +142,21 @@ export function dirgeFrom(id: number, ox: number, oz: number, angle: number, dam
   addShake(0.3);
 }
 
+/** a mist's puff seeping from its hem each this many seconds, and how far round its middle (m) */
+const MIST_EVERY = 0.22, MIST_R = 1.7;
+const mistDue = new WeakMap<Enemy, number>();
+
+/** On every game: a grave mist seeping from its hem as it floats, its tatters trailing into it (pooled smoke). */
+function seep(e: Enemy, dt: number): void {
+  if (!e.alive || e.spawning > 0) return;
+  const due = (mistDue.get(e) ?? 0) - dt;
+  if (due > 0) { mistDue.set(e, due); return; }
+  mistDue.set(e, due + MIST_EVERY);
+  const a = Math.random() * Math.PI * 2;
+  smokePuff({ x: e.pos.x + Math.sin(a) * MIST_R, y: 0.15, z: e.pos.z + Math.cos(a) * MIST_R },
+    { count: 1, color: 0x2c4a3c, alpha: 0.16, size: 1.1, sizeEnd: 2.6, speed: 0.35, rise: 0.25, life: 2.4 });
+}
+
 // --- its phases (entities/bossKit.ts) ------------------------------------------------------
 
 bossHooks('cantor', {
@@ -154,7 +169,8 @@ bossHooks('cantor', {
     addShake(0.45);
     shockwave(e.pos, { color: GRAVE_LIGHT, intensity: 1.8, from: 1, to: 10, life: 1.0 });
   },
-  frame(e) {
+  frame(e, dt) {
     wardWhileGuarded(e);
+    seep(e, dt);
   },
 });
