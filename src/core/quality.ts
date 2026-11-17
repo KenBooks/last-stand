@@ -7,7 +7,6 @@
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
 import { WEBGPU } from './webgpu';
-import { setFlatMaps } from './textures';
 import { setFountainSimple } from '../world/fountain';
 import { setGrassBeyondWalls } from '../world/village';
 import * as THREE from 'three';
@@ -231,9 +230,8 @@ function apply(l: QualityLevel, most = Infinity): void {
   setShadowInTurns(p.shadowInTurns);
   setSunShadowStill(p.stillSunShadow);
   setClutterShare(p.clutter);
-  setFlatMaps(p.flatMaps);
-  setFountainSimple(p.flatMaps);
-  setGrassBeyondWalls(!p.flatMaps);
+  setFountainSimple(p.simpleVillage);
+  setGrassBeyondWalls(!p.simpleVillage);
   setLeafShare(p.leaves);
   setSimpleTrees(p.simpleTrees);
   setFloorPlants(p.floorPlants);

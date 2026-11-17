@@ -69,12 +69,6 @@ function paint(maps: PBRCanvases, d: PBRData, key: string): void {
   for (const [c, data] of [[maps.albedo, d.albedo], [maps.normal, d.normal], [maps.rough, d.rough]] as const) {
     c.width = d.size; c.height = h;
     ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0);
-    // (its flat texel made again from what it now holds: asked for before it came, it was blank)
-    const image = images.get(c);
-    if (image?.flat) {
-      image.flat.data = flatten(c, image.normal);
-      image.flat.needsUpdate = true;
-    }
   }
   if (PAINTED_FROM.has(key)) albedos.set(key, new ImageData(d.albedo, d.size, h));
 }
@@ -282,100 +276,6 @@ interface MapTextures { map: THREE.Texture; normalMap: THREE.Texture; roughnessM
 // Another repeat of the same maps copies the first's textures: copies share their source, so its one upload.
 const mapTextures = new WeakMap<PBRCanvases, Map<string, MapTextures>>();
 
-// --- flat maps (Low and Very low) ------------------------------------------------------------------
-/** A map canvas textures are made from: its own source (the canvas, a repeat's copy sharing it), the source of a single
- *  texel of its average (made as it first goes flat, and again as its map arrives), and every texture drawn from it. */
-interface MapImage {
-  whole: THREE.Texture['source'];
-  flat: THREE.Texture['source'] | null;
-  textures: Set<THREE.Texture>;
-  normal: boolean;
-}
-/** each map canvas a texture was made from */
-const images = new Map<HTMLCanvasElement, MapImage>();
-/** whether the maps are flat (`setFlatMaps`) */
-let flat = false;
-/** a normal map's flat texel: straight out */
-const FLAT_NORMAL = 'rgb(128, 128, 255)';
-/** the maps kept whole at every level: the faces (a face of one colour has no eyes or mouth), and the rock and the moss,
- *  whose boulders are faceted as split stone is, each face its own normal (`boulderGeo`): one colour over them, they read
- *  as a polygon blob (from play, the forest's boulder at Low: "fix what ever this is") */
-const KEPT_WHOLE = ['face(', 'rock(', 'moss('];
-const keptWhole = (canvas: HTMLCanvasElement): boolean => KEPT_WHOLE.some((k) => (keyOfCanvas.get(canvas) ?? '').startsWith(k));
-
-/** `canvas`'s average as one texel: drawn down by the browser's own filter (no read back of the whole map), its
- *  few pixels averaged. A normal map's is straight out. */
-function flatten(canvas: HTMLCanvasElement, normal: boolean): HTMLCanvasElement {
-  const out = canvasOf(1), c = ctx2d(out);
-  if (normal) {
-    c.fillStyle = FLAT_NORMAL;
-  } else {
-    const small = canvasOf(4), s = readCtx2d(small);
-    s.imageSmoothingEnabled = true;
-    s.imageSmoothingQuality = 'high';
-    s.drawImage(canvas, 0, 0, 4, 4);
-    const px = s.getImageData(0, 0, 4, 4).data, sum = [0, 0, 0];
-    for (let i = 0; i < px.length; i += 4) for (let k = 0; k < 3; k++) sum[k] += px[i + k];
-    c.fillStyle = `rgb(${sum.map((v) => Math.round(v / 16)).join(', ')})`;
-  }
-  c.fillRect(0, 0, 1, 1);
-  return out;
-}
-
-/** `image`'s flat texel as a source of its own, made as it's first wanted. */
-function flatSource(canvas: HTMLCanvasElement, image: MapImage): THREE.Texture['source'] {
-  if (!image.flat) {
-    image.flat = new THREE.Source(flatten(canvas, image.normal));
-    image.flat.needsUpdate = true;
-  }
-  return image.flat;
-}
-
-/**
- * `canvas`'s textures shown flat or whole, as the level has it: each one let go of its upload and given the other
- * source, so the renderer makes it anew at that size. An image swapped inside a texture's own source is copied into
- * its upload as that was first made, at the first image's size: a 1x1 texel went into one pixel of a 1024 map, which
- * went on showing the map once the level was switched (from play: "it just stayed the same"), and a whole map into a
- * texel's upload once switched back.
- */
-function showFlat(canvas: HTMLCanvasElement): void {
-  const image = images.get(canvas);
-  if (!image || keptWhole(canvas)) return;
-  const want = flat ? flatSource(canvas, image) : image.whole;
-  for (const texture of image.textures) {
-    if (texture.source === want) continue;
-    texture.dispose();
-    texture.source = want;
-  }
-}
-
-/**
- * Whether every procedural surface's maps are flat (Low's and Very low's): each map's texture shows a single texel of
- * its own average instead of the map (its albedo's mean colour, its normal straight out, its roughness and height their
- * mean), so a surface keeps its colour and how rough it is but none of its pattern, bumps or relief (from play: "on low
- * and very low, remove textures"). The texture's image alone is swapped, live, every material and program kept as
- * they are, so nothing compiles; each texel is a cache's read where the map's was a fetch across its mipmaps, and the
- * maps' memory on the GPU goes with them. The faces are kept whole.
- */
-export function setFlatMaps(on: boolean): void {
-  if (on === flat) return;
-  flat = on;
-  for (const [canvas] of images) showFlat(canvas);
-}
-
-/** A map's textures made: each kept with its canvas, to show flat or whole as the level has it. */
-function keepSources(maps: PBRCanvases, tex: MapTextures): void {
-  for (const [canvas, t] of [[maps.albedo, tex.map], [maps.normal, tex.normalMap], [maps.rough, tex.roughnessMap]] as const) {
-    let image = images.get(canvas);
-    if (!image) {
-      image = { whole: t.source, flat: null, textures: new Set(), normal: canvas === maps.normal };
-      images.set(canvas, image);
-    }
-    image.textures.add(t);
-    showFlat(canvas);
-  }
-}
-
 /** `t` copied (its source and upload shared) to repeat `u` by `v` times. */
 function repeated(t: THREE.Texture, u: number, v: number): THREE.Texture {
   const copy = t.clone();
@@ -394,7 +294,6 @@ export function pbrMaterialMaps(maps: PBRCanvases, repeat: Repeat, normalScale =
       ? { map: repeated(first.map, u, v), normalMap: repeated(first.normalMap, u, v), roughnessMap: repeated(first.roughnessMap, u, v) }
       : { map: toTexture(maps.albedo, true, u, v), normalMap: toTexture(maps.normal, false, u, v), roughnessMap: toTexture(maps.rough, false, u, v) };
     byRepeat.set(`${u},${v}`, tex);
-    keepSources(maps, tex);
   }
   return { ...tex, normalScale: new THREE.Vector2(normalScale, normalScale) };
 }
