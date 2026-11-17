@@ -47,6 +47,7 @@ import type { CursorOptions } from './cursor';
 import type { SpinOptions } from './spin';
 import type { PaceOptions } from './pace';
 import type { NearAimOptions } from './nearAim';
+import type { BowPropOptions } from './bowProp';
 import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
@@ -611,6 +612,15 @@ export async function pace(lab: Lab, command: PaceOptions): Promise<Report> {
 export async function nearaim(lab: Lab, command: NearAimOptions): Promise<Report> {
   const { nearAim } = await import('./nearAim');
   return nearAim(lab, command);
+}
+
+/**
+ * `lab bowprop`: the ranger drawing at a prop he stands against, in each biome against each kind of prop: the arrow,
+ * the bow's tip and the hero must never turn back frame after frame (#317).
+ */
+export async function bowprop(lab: Lab, command: BowPropOptions): Promise<Report> {
+  const { bowProp } = await import('./bowProp');
+  return bowProp(lab, command);
 }
 
 /**

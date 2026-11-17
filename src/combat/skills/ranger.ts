@@ -23,6 +23,7 @@ import { pastWall } from '../../world/edge';
 import { FOUNTAIN, inBasin } from '../../world/fountain';
 import { wallHit } from '../../world/wall';
 import { clamp, rand } from '../../util';
+import { tunable } from '../../core/tuning';
 import { FULL_DRAW } from '../../data/balance';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
@@ -67,6 +68,48 @@ export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: numbe
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
   return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), MIN_PITCH, MAX_PITCH);
 }
+
+/**
+ * Where the pose's shot is aimed from: the nocked arrow's middle as it stands at full draw aimed level, in the hero's
+ * frame (m: `ahead` of him, to his `side` as +x is to a hero facing +z, `up` from his feet), not the arrow as posed.
+ * The pose tips the arrow by the angle it's given, its middle swinging about a metre between the least and the most, so
+ * aimed from the arrow as posed at a point on a prop within a metre of it, each frame's angle moved the arrow to where
+ * the next frame's turned it back, and the bow and the trunk flickered between two poses (#317; `lab bowprop`, which
+ * holds these to the arrow at a level draw). The preview and the arrow loosed still aim from the arrow itself: read
+ * once a frame, they move nothing. `steady` 0 aims the pose from the arrow as posed again (the lab's canary).
+ */
+const SHOT_FROM = tunable('shotFrom', { ahead: 0.55, side: -0.1, up: 1.58, steady: 1 });
+
+/** The point the pose's shot is aimed from (`SHOT_FROM`); through the eyes, the arrow in view as before. */
+export function shotFrom(player: Player): THREE.Vector3 {
+  if (!SHOT_FROM.steady || player.eyes) return player.castPoint;
+  const facing = player.facing, sin = Math.sin(facing), cos = Math.cos(facing);
+  const { ahead, side, up } = SHOT_FROM;
+  return new THREE.Vector3(player.pos.x + ahead * sin + side * cos, player.obj.position.y + up, player.pos.z + ahead * cos - side * sin);
+}
+
+/**
+ * Where a shot is loosed from: the nocked arrow (`castPoint`), or, where a prop or a foe stands between his body and the
+ * arrow (he's pressed against it, the arrow's middle at or past its near face), the point over his feet at the arrow's height,
+ * so the flight starts outside the prop and meets it. Loosed from inside it, the drawn-surface test (`propSurface`,
+ * cast from the arrow) found no face before it, and the arrow and its aim preview went on through the prop (from
+ * Victor on #640: "laser goes through, it should not"; `lab bowprop`).
+ */
+export function loosedFrom(player: Player): THREE.Vector3 {
+  const arrow = player.castPoint, bx = player.pos.x, bz = player.pos.z, dx = arrow.x - bx, dz = arrow.z - bz;
+  for (const o of G.arena.obstacles) {
+    if (o.h <= arrow.y) continue;
+    if (entry(bx, bz, dx, dz, o.x, o.z, o.r) >= 0) return _loosed.set(bx, arrow.y, bz);
+  }
+  // (a foe he stands against as well, its body as tall as the arrow is high: a training dummy close by, from Victor and
+  // play, "should not go through when standing close")
+  for (const e of G.enemies) {
+    if (!e.alive || e.height <= arrow.y - e.obj.position.y) continue;
+    if (entry(bx, bz, dx, dz, e.pos.x, e.pos.z, e.radius) >= 0) return _loosed.set(bx, arrow.y, bz);
+  }
+  return arrow;
+}
+const _loosed = new THREE.Vector3();
 
 /** An arrow coming down at `tip` going `dir` at `vel`: into the ground, or off it if it's stone. */
 export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
@@ -249,7 +292,7 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
  *  (no weaker than the least draw, as it would leave), shown through `fx/aimLaser`. */
 function previewShot(player: Player, def: BowDef, k: number, radius: number, level: boolean, pierce: boolean): void {
   if (!player.local) return;
-  const origin = player.castPoint, target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
+  const origin = loosedFrom(player).clone(), target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
   const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
   const paths = [];
   for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, level, pierce));
@@ -312,7 +355,7 @@ const SHORT_DRAW = 'less drawn short';
 
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
-  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
+  pitch: (player, def, k, target) => launchPitch(shotFrom(player), target, arrowSpeed(def as BowDef, k)),
   hits(rawDef) {
     const def = rawDef as BowDef;
     const arrows = def.missiles > 1 ? `${def.missiles} arrows, ` : '';
@@ -324,7 +367,7 @@ export const bowShot: InstantSkill = {
     drawSound(player, def as BowDef, k);
   },
   cast(player, rawDef, target, power) {
-    const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
+    const def = rawDef as BowDef, origin = loosedFrom(player).clone(), pull = pullAt(power), v = arrowSpeed(def, power);
     drawnTo.delete(player);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
@@ -370,7 +413,7 @@ export const piercingShot: InstantSkill = {
     drawSound(player, def as BowDef, k);
   },
   cast(player, rawDef, target, power) {
-    const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
+    const def = rawDef as BowDef & Needs<'falloff'>, origin = loosedFrom(player).clone(), pull = pullAt(power), v = arrowSpeed(def, power);
     const full = power >= FULL_DRAW;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;

@@ -1295,6 +1295,32 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  bowprop: {
+    help: 'the ranger drawing at a prop he stands against, his bow\'s end in it (#317): in each biome against one prop '
+      + 'of each kind, 0.25 and 0.5 m off it, the shot held on a point on the prop from above, the mouse over it; '
+      + 'the nocked arrow, the bow\'s tip and the hero each turning back on their last frame\'s move more than 3 times over the hold '
+      + 'flicker, and are problems; first, the point the pose aims from held within 5 cm of the arrow drawn level '
+      + '(--class ranger; pictures in tools/lab/out/bowprop)',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture four frames running round the arrow\'s largest move in each biome\'s first stand (played '
+          + 'again), the whole body from his right and from above behind',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'aim the pose from the arrow as posed again (as before #317), which the stands must find flickering',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   cursor: {
     help: 'the cursor drawn over mouse look while Alt is held: in each close view the pointer locked as the player\'s '
       + 'click takes it (the lab\'s browser plays the lock, every event of the mouse sent to the game\'s canvas while '
