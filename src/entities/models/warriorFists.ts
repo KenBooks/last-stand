@@ -254,30 +254,43 @@ const pounceShares = () => {
 };
 
 /**
- * Pounce at `k` of its leap and its blows: sprung forward, in the air the lead knee drawn up, the rear leg trailing,
- * the lead fist reaching and the rear cocked, landing crouched before what it lands on, then each fist driven into it,
- * a blow at each of the skill's (`POUNCE`). Returns how far the pose owns the legs (the leap's tuck).
+ * Pounce at `k` of its leap and its blows, as a body leaps at something: launched off the rear foot stretched long, the
+ * body pitched forward and both arms flung ahead; then gathered in the air, the knees drawn up under him and both fists
+ * raised behind his head; then the fists coming down ahead of him as he drops onto bent knees before what he lands on,
+ * and each fist driven into it, a blow at each of the skill's (`POUNCE`). Returns how far the pose owns the legs.
  */
 export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): number {
-  const s = pounceShares();
-  const air = ramp(k, 0, 0.15) * (1 - ramp(k, s.leap - 0.04, s.leap + 0.02));
+  const s = pounceShares(), p = k / s.leap;
+  // (the leap's phases, each eased in and out: launched, gathered, coming down; then low on the landing)
+  const launch = ramp(p, 0, 0.12) * (1 - ramp(p, 0.2, 0.45));
+  const tuck = ramp(p, 0.25, 0.5) * (1 - ramp(p, 0.75, 0.95));
+  const fall = ramp(p, 0.7, 0.9) * (1 - ramp(k, s.leap + 0.02, s.leap + 0.08));
+  const air = Math.max(launch, tuck, fall);
   const low = ramp(k, s.leap - 0.03, s.leap + 0.04) * (1 - ramp(k, 0.9, 1));
   if (!eyes) {
-    j.spine.rotation.x += 0.45 * air + 0.22 * low; j.neck.rotation.x += -0.4 * air - 0.15 * low;
+    // (pitched forward over the leap: long and low as he goes, rounded over his knees in the air)
+    j.body.rotation.x += 0.45 * launch + 0.6 * tuck + 0.3 * fall;
+    j.spine.rotation.x += 0.1 * launch + 0.35 * tuck + 0.2 * fall + 0.22 * low;
+    j.neck.rotation.x += -0.45 * launch - 0.45 * tuck - 0.3 * fall - 0.15 * low;
     j.body.position.y += -0.12 * low; j.body.position.z += 0.06 * low;
-    j.thighL.rotation.x += -1.1 * air; j.kneeL.rotation.x += 1.5 * air;
-    j.thighR.rotation.x += 0.35 * air; j.kneeR.rotation.x += 1.2 * air;
+    // (the lead leg driven up and the rear one pushing off long behind; tucked, both knees drawn up; coming down, the
+    // legs reaching for the floor, knees bent to take him)
+    j.thighL.rotation.x += -0.9 * launch - 1.4 * tuck - 0.7 * fall; j.kneeL.rotation.x += 0.9 * launch + 1.9 * tuck + 0.8 * fall;
+    j.thighR.rotation.x += 0.45 * launch - 1.1 * tuck - 0.4 * fall; j.kneeR.rotation.x += 0.2 * launch + 1.9 * tuck + 0.9 * fall;
   }
   fistGuard(j, 1, t, eyes);
-  // in the air: the lead fist reaching for what he leaps at, the rear one cocked back by his ear
   if (air > 0) {
     if (eyes) {
-      place(j, true, onScreen(j, [-0.4, -0.15, 0.4], _far), air, eyes);
-      place(j, false, onScreen(j, [0.45, -0.1, 0.38], _far), air, eyes);
+      // (through the eyes: flung ahead out of the view's foot, raised over the view, then down into its middle)
+      const y = lerp(lerp(-0.2, 0.6, tuck), -0.25, fall);
+      place(j, true, onScreen(j, [-0.25, y, 0.45], _far), air, eyes);
+      place(j, false, onScreen(j, [0.3, y, 0.45], _far), air, eyes);
     } else {
       between(j, _mid);
-      place(j, true, _far.set(_mid.x + 0.15, _mid.y + 0.02, _mid.z + 0.45), air);
-      place(j, false, _far.set(_mid.x - 0.24, _mid.y + 0.1, _mid.z - 0.06), air);
+      // (flung ahead at the shoulders' height, raised behind the head, then down ahead at the chest's)
+      const y = lerp(lerp(0.02, 0.38, tuck), -0.12, fall), z = lerp(lerp(0.5, -0.02, tuck), 0.5, fall);
+      place(j, true, _far.set(_mid.x + 0.16, _mid.y + y, _mid.z + z), air);
+      place(j, false, _far.set(_mid.x - 0.16, _mid.y + y, _mid.z + z), air);
     }
   }
   // on it: each blow a fist driven into its body, the lead hand first (a pinned foe still stands: driven down to

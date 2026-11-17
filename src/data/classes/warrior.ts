@@ -50,7 +50,7 @@ const warrior: ClassDef = {
       icon: { glyph: '✊︎', color: '#ff8a3a' },
     },
     {
-      key: 'mouse2', impl: 'pounce', name: 'Pounce',
+      key: '1', impl: 'pounce', name: 'Pounce',
       desc: 'Leap onto the foe you aim at, up to 8 metres off, and pin it under four quick blows. Elites and bosses are too strong to pin: they take the blows standing. Builds a stack of Frenzy.',
       tags: ['physical'], cost: 20, cooldown: 3, castTime: 0,
       damage: 35, blows: 4, range: 8, frenzy: 1,
@@ -59,7 +59,7 @@ const warrior: ClassDef = {
       icon: { glyph: '⤵', color: '#3fd8c0' },
     },
     {
-      key: '1', impl: 'rampage', name: 'Rampage',
+      key: 'mouse2', impl: 'rampage', name: 'Rampage',
       desc: 'Hold to throw a flurry of punches as you walk, striking every foe close before you. Each blow that lands builds Frenzy, and none decays while you hold it. Quicker with Frenzy, as all your attacks are. Drains Energy while held.',
       tags: ['physical'], cost: 25, cooldown: 0, castTime: 0, channel: true,
       damage: 140, range: 2.6, arc: 1.6, knock: 0.8, moveMult: 0.75, frenzy: 1, frenzyHolds: true,
@@ -126,7 +126,7 @@ const warrior: ClassDef = {
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', bare: 'pounce' },
+      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', bare: 'rampage' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {
@@ -134,7 +134,7 @@ const warrior: ClassDef = {
       desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held. A two-handed weapon spins slower and hits harder.',
       tags: ['physical'], cost: 30, cooldown: 0, castTime: 0, channel: true,
       damage: 150, radius: 2.9, moveMult: 0.8, spin: 15,
-      needs: 'armed', fallback: { bare: 'rampage' },
+      needs: 'armed', fallback: { bare: 'pounce' },
       // (as Rending Cleave's swings: a great weapon's weight slows it as much, the same damage a second)
       styles: { twoHanded: { spin: 10.5 } },
       icon: { glyph: '✺', color: '#e8eef8' },

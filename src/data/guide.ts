@@ -166,7 +166,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       { name: 'The bulwark', keys: { mouse0: 'cleave', mouse2: 'raiseShield', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'Sword and shield: block the big hits, spin through packs, and keep Iron Bellow for emergencies. The easiest way to survive deep waves.' },
       { name: 'The executioner', keys: { mouse0: 'cleave', mouse2: 'crescent', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'A two-handed weapon: rush in, Power Strike the gathered pack, and clean up with Thunder Crescent.' },
       { name: 'The whirlwind', keys: { mouse0: 'cleave', mouse2: 'twinFangs', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'Two weapons: quick swings keep Energy topped up for Steel Tempest, Twin Fangs to reach the casters.' },
-      { name: 'The berserker', keys: { mouse0: 'savageFists', mouse2: 'pounce', '1': 'rampage', '2': 'bloodrush', '3': 'wrath', '4': 'unchained' }, why: 'Bare hands: pounce in, build Frenzy with every blow, and spend it all with Wrath.' },
+      { name: 'The berserker', keys: { mouse0: 'savageFists', mouse2: 'rampage', '1': 'pounce', '2': 'bloodrush', '3': 'wrath', '4': 'unchained' }, why: 'Bare hands: pounce in, build Frenzy with every blow, and spend it all with Wrath.' },
       { name: 'The shieldbearer', keys: { mouse0: 'savageFists', mouse2: 'raiseShield', '1': 'tempest', '2': 'bullRush', '3': 'powerStrike', '4': 'ironBellow' }, why: 'A shield and no weapon: punch for Energy, block the big hits, and let Bull Rush and Iron Bellow do the heavy work.' },
     ],
     combos: [
