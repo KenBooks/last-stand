@@ -102,6 +102,7 @@ import {
 } from './villageHeroStands';
 import { daisOpensCompileNothing } from './villageDaisOpens';
 import { arrowsStickInGround } from './villageArrows';
+import { grassNotThroughProps } from './villageGrassThrough';
 
 export interface VillageOptions {
   canary: boolean;
@@ -263,6 +264,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     roofsFromAbove: () => roofsFromAbove(lab, options.canary),
     grassStillFromAbove: () => grassStillFromAbove(lab, options.canary),
     campfireBurns: () => campfireBurns(lab, options.canary),
+    grassNotThroughProps: () => grassNotThroughProps(lab, options.canary),
     minimapOut: () => minimapOut(lab, (spot) => stand(lab, spot), yardToWorld(0, 0), options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
   };

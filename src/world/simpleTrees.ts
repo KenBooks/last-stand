@@ -188,6 +188,13 @@ function put(swap: Swap): void {
   for (const mesh of swap.meshes) mesh.geometry = geometry;
 }
 
+/** Every shape `mesh` is drawn in at some level: its grown one and its simple one, or its own alone if it isn't a
+ *  tree's (the meadow's grass is held under both, meadowSolids.ts: a simple trunk stands a little off the grown one). */
+export function shapesOf(mesh: THREE.Mesh): THREE.BufferGeometry[] {
+  const swap = swaps.find((s) => s.meshes.includes(mesh));
+  return swap ? [swap.full, swap.simple ??= swap.make()] : [mesh.geometry];
+}
+
 /** each kind's simple bark and crown, made the first time a level asks for them (the forest's kinds are the village's) */
 const barks = new WeakMap<TreeKind, THREE.BufferGeometry>();
 const crowns = new WeakMap<TreeKind, THREE.BufferGeometry>();

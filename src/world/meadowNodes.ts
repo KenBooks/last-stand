@@ -5,6 +5,7 @@
 // and a still material's refresh sends nothing of the object's.
 import type * as THREE from 'three';
 import { stillNodes, tsl } from '../core/webgpu';
+import { SOLID_RANGE } from './meadowSolids';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -26,6 +27,7 @@ export interface BladeUniforms {
   uTime: { value: number };
   uMeadow: { value: THREE.Texture };
   uMeadowHalf: { value: number };
+  uSolid: { value: THREE.Texture };
 }
 
 /** `meadow.ts`'s numbers for a blade's width and how its strands rise. */
@@ -117,7 +119,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const {
     Fn, abs, attribute, cameraPosition, cameraViewMatrix, clamp, cos, dot, float, floor, fract, instanceIndex, length, mix,
     normalize, pow, renderGroup, select, sign, sin, smoothstep, step, texture, uniform, uniformArray, varyingProperty,
-    vec2, vec3, vec4,
+    vec2, vec3, vec4, min, max,
   } = tsl as any;
   const { hash, noise, seed, tileOf, withinOf } = bladeFns();
   const number = (of: { value: number }, type = 'float'): N =>
@@ -137,6 +139,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const tiles = uniformArray(u.uTiles.value, 'vec2').setGroup(renderGroup);
   const half = u.uMeadowHalf.value;
   const mask = u.uMeadow.value;
+  const solids = u.uSolid.value;
   const vColour = varyingProperty('vec3', 'vBladeColour');
   const vBlade = varyingProperty('vec2', 'vBlade');
   const vStrands = varyingProperty('vec2', 'vStrands');
@@ -210,7 +213,10 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
     const green = mix(vec3(0.075, 0.2, 0.03), vec3(0.17, 0.32, 0.045), fract(h.y.mul(3.7)));
     const dry = smoothstep(0.72, 1, tuft).mul(0.7).add(smoothstep(0.75, 0.95, patchy).mul(0.25));
     vColour.assign(mix(green, vec3(0.36, 0.33, 0.1), dry));
-    return vec3(root.x, 0, root.y).add(local).add(wind);
+    // (no part of it above the lowest solid over where that part is, as `VERTEX_BLADE` holds it)
+    const at = vec3(root.x, 0, root.y).add(local).add(wind).toVar();
+    const solidOver = texture(solids, at.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE);
+    return vec3(at.x, min(at.y, max(solidOver.sub(0.01), 0)), at.z);
   })();
   // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
   m.normalNode = normalize(cameraViewMatrix.mul(vec4(vNormal, 0)).xyz);

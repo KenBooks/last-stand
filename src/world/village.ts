@@ -58,6 +58,8 @@ import { buildDoor, doorSign } from './door';
 import { buildSignposts, type BuiltArm } from './signposts';
 import { SIGNPOSTS } from '../data/signposts';
 import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
+import { solidsOver } from './meadowSolids';
+import { fireRing } from './fireRing';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -296,6 +298,8 @@ export interface Mats {
   rackTimber: THREE.MeshStandardMaterial; rackPlanks: THREE.MeshStandardMaterial; steel: THREE.Material;
   /** a lamp's plinth, thinned from the ground up */
   footAshlar: THREE.Material;
+  /** the campfire's ring of field stones (`fireRing.ts`): the rock's maps, each stone's colour and soot its vertices' */
+  fireStones: THREE.Material;
   plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
   /** the palisade's logs and tips: a fence's hole, opened by it alone (`fence` in core/seeThrough.ts) */
   palisadeLogs: THREE.Material; palisadeTips: THREE.Material;
@@ -455,6 +459,10 @@ function makeMats(): Mats {
     freeAshlar: ashlarStone.clone(),
     freeCoping: copingStone.clone(),
     footAshlar: ashlarStone.clone(),
+    // (the stair's granite, at its recipe's arguments: its maps are made once for both, a tile 0.33 m across a stone;
+    // in the Thornwood's rock, whose picture has its moss and lichen, the stones read pale and green, a review; matte,
+    // as weathered field stone is: by the granite's own roughness they shone as polished pebbles)
+    fireStones: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 3, 2), roughnessMap: null, vertexColors: true, roughness: 1 }),
     gable: undefined as unknown as THREE.Material,
     chimney: undefined as unknown as THREE.Material,
     boardRoof: undefined as unknown as THREE.Material,
@@ -526,7 +534,7 @@ function makeMats(): Mats {
   seeThrough(mats.roof, 'roof');
   const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper];
   const lectern = [mats.binding, mats.pagesLeft, mats.pagesRight, mats.pagesEdge, mats.ribbon, mats.wax, mats.freeBrass];
-  for (const m of [mats.column, mats.iron, mats.steel, mats.rackTimber, mats.rackPlanks, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
+  for (const m of [mats.fireStones, mats.column, mats.iron, mats.steel, mats.rackTimber, mats.rackPlanks, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
     ...lectern]) {
     seeThrough(m, 'prop');
   }
@@ -735,8 +743,9 @@ export function buildVillage(scene: THREE.Group): Village {
   const maskTexture = mask.texture();
   const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
+  const before = scene.children.length;
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
-  const meadow = buildMeadow(mask, maskTexture, updaters);
+  const ground = scene.children.slice(before);
   // (no grass drawn behind a cottage's walls: a hair inside them, and under their plate, the roof left out)
   // (nor behind the terrace's block from below it, nor the hall on it: its door shows its room, its panes nothing)
   const hallBack = HALL.wall - (HALL.half - HALL.inHalf);
@@ -754,7 +763,6 @@ export function buildVillage(scene: THREE.Group): Village {
       halfW: HALL.half - 0.1, halfD: (HALL.door - hallBack) / 2 - 0.1, high: TERRACE.high + HALL.wallHigh - 0.3,
     },
   ]);
-  scene.add(meadow);
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
   stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
   // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
@@ -781,11 +789,13 @@ export function buildVillage(scene: THREE.Group): Village {
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
   buildYard(scene, wall, M);
-  // (in a group of its own, which the outline of its seat draws: sat round on the floor, as a bonfire is)
+  // (in a group of its own, which the outline of its seat draws: sat round on the floor, as a bonfire is; its ring of
+  // field stones in it too, `fireRing.ts`)
   const campfireGroup = new THREE.Group();
   campfireGroup.name = 'campfire';
   scene.add(campfireGroup);
-  const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
+  const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], null, M.logs, updaters, false);
+  campfireGroup.add(fireRing(CAMPFIRE[0], CAMPFIRE[1], M.fireStones));
   campfire.light.decay = 2 + CAMPFIRE_LIGHT.soft;
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   const seats = [fireSeat(obstacles[obstacles.length - 1], [{ root: campfireGroup }])];
@@ -801,6 +811,13 @@ export function buildVillage(scene: THREE.Group): Village {
   // (after the lamps, which keep off what stands: placed first, the posts moved lamps every lit check reads)
   const signArms = stillBuilt(scene, () => buildSignposts(scene,
     { post: M.freeTimber, board: M.freePlanks, foot: M.freeAshlar, face: M.propFace }, obstacles));
+  // (the grass made once all that stands in it is: each blade kept under the lowest solid over where it is, read from
+  // everything built but the ground, whatever it is; from play, blades grew up through the campfire's logs and the
+  // lamps' plinths, and clearing the grass round each prop by hand kept it off where it grows in life, "let grass be
+  // closer to props, like real life. Just not going through them")
+  const solids = solidsOver(scene, new Set(ground), mask);
+  const meadow = buildMeadow(mask, maskTexture, updaters, solids);
+  scene.add(meadow);
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
