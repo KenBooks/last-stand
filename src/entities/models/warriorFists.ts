@@ -31,7 +31,7 @@ export const FIST = tunable('fist', {
   /** each finger's bends in a clenched fist (rad: its knuckle, middle joint and last), and the thumb's swing across
    *  them (`clench` in hands.ts; 0: `hold`'s, wrapped round the thin handle, which tucks it over the index finger: swung
    *  as `poseHand`'s, it stood out sideways and tore the mesh, `lab hands --poses clenched`) */
-  clench: [1.6, 1.95, 1.25], thumb: 0,
+  clench: [2.05, 1.6, 0.8], thumb: 0,
 });
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
@@ -39,7 +39,7 @@ export const FIST = tunable('fist', {
 // (at the cheeks, a little out before them, the forearms sloping forward from the elbows: 0.3 and 0.2 ahead with the
 // knuckle line upright the forearms stood upright and the knuckles faced the sky; 0.42 and 0.34 the fists were held out
 // before the face, the elbows up at the chest, two adversarial reviews)
-const GUARD = tunable('fistGuard', { lead: [0.13, 0.08, 0.34], rear: [-0.12, 0.06, 0.27] });
+const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.01, 0.27] });
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): each fist low at its own side, the lead (left) a little higher and further in, both
  *  wholly in the frame, reached from his own shoulders as the ranger's hands are (`fistsLens`); a little lower out of
