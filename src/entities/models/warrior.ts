@@ -343,6 +343,8 @@ const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry
 /** both hands empty (models/warriorFists.ts): how long after a move the fists stay up in their guard (s), and the
  *  moves that alternate hands, a weapon's cut and a punch */
 const FISTS_UP = 4;
+/** how long a fist's move fades in from the pose before it (s) */
+const FIST_IN = 0.06;
 /** both hands empty, moving: how far the hands close (of a fist) and how far the wrists let them hang (rad) */
 const WALK_FIST = 0.45, WALK_DROOP = 0.3;
 /** and how much further the elbows bend as he moves (rad: to about 45 degrees, the owner's "bend elbows a tiny bit
@@ -2852,7 +2854,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const charged = raw?.name === 'charge' || raw?.under?.name === 'charge', legsFade = !(charged && lastCharged);
     // (a move begun from the shoulder carry, `shouldered` still last frame's, fades in slower: in 0.14 s Power Strike
     // flicked the axe off the shoulder into its raise, its tip's way turning 37 cm in a frame)
-    if (began) fade.cut(chain && alternates(raw.name) ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : 0.14, legsFade);
+    // (a fist's move fades in fast: its punch is 0.24 s, less with Frenzy, and faded in over 0.14 s from arms hanging,
+    // both arms were half raised and reaching at its blow, the guard nowhere, an adversarial review's "zombie")
+    const fadeIn = !raw ? 0.14 : chain && alternates(raw.name) ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : FISTED.has(raw.name) ? FIST_IN : 0.14;
+    if (began) fade.cut(fadeIn, legsFade);
     else if (ended && !inTail) { fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
     if (raw) backOut = false;
     // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
