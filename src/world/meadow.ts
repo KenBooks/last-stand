@@ -331,6 +331,7 @@ const VERTEX_HEAD = /* glsl */ `
   varying vec2 vBlade;
   varying vec2 vStrands;
   varying vec2 vGrowing;
+  varying vec3 vBladeAt;
   varying float vTufted;
   varying float vDrop;
   uniform float uViewHigh;
@@ -459,6 +460,7 @@ const VERTEX_BLADE = /* glsl */ `
   // log it lies under it, and leant into a post it's bent down where it meets it; from play, "grass grows through logs")
   float solidOver = texture2D(uSolid, bladePos.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)};
   bladePos.y = min(bladePos.y, max(solidOver - 0.01, 0.0));
+  vBladeAt = bladePos;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
   // (a tuft's card is lit as the ground under it, nearly: by its own face a whole tuft stood pale and the next one
@@ -480,6 +482,10 @@ const FRAGMENT_COLOUR = /* glsl */ `
   float cardSeed = mix(floor(vStrands.y * 1024.0 + 0.5) / 1024.0, vStrands.y, uDropByPixel);
   float foldB = vBlade.y, strandShade = 0.5;
 #ifdef COMBED
+  // (a card or a sheet is wide: its corners held under the solids leave its middle slanting up through a log between
+  // them, short tips standing out of the seat logs' tops seen from above, a review's "Not fixed"; where the program
+  // cuts its blades already, each point of it is held under the lowest solid over where it is)
+  if (vBladeAt.y > texture2D(uSolid, vBladeAt.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)} - 0.005) discard;
   if (vTufted > 0.5) {
     // (a card is as many cards of the first ring side by side as it is wide: a far ring's sheet is drawn as theirs)
     float tuftsAcross = max(1.0, floor(sqrt(vStrands.x) + 0.5));
@@ -773,7 +779,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     shader.uniforms.uViewHigh = viewHigh;
     shader.uniforms.uDropByPixel = dropByPixel;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nuniform float uTuft;\nuniform float uDropByPixel;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nvarying vec3 vBladeAt;\nuniform float uTuft;\nuniform float uDropByPixel;\nuniform sampler2D uSolid;\nuniform float uMeadowHalf;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,

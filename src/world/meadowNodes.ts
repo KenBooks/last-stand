@@ -225,7 +225,13 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const shaded = vColour.mul(mix(0.3, 1, smoothstep(0, 0.55, along))).mul(acrossAt.mul(acrossAt).mul(0.3).oneMinus());
   const midrib = vec3(0.02, 0.03, 0).mul(smoothstep(0.04, 0.16, acrossAt).oneMinus()).mul(smoothstep(0.1, 0.4, along));
   m.colorNode = vec4(mix(shaded.add(midrib), vec3(0.4, 0.36, 0.16), smoothstep(0.85, 1, along).mul(0.35)), 1);
-  if (cutInto.cut) (m as N).maskNode = cutInto.cut.not();
+  // (where the program cuts its blades already, each point of a wide card or sheet held under the lowest solid over it
+  // too, as `FRAGMENT_COLOUR` holds it)
+  if (cutInto.cut) {
+    const { positionWorld } = tsl as any;
+    const solidHere = texture(solids, positionWorld.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE).sub(0.005);
+    (m as N).maskNode = cutInto.cut.not().and(positionWorld.y.lessThanEqual(solidHere));
+  }
   stillNodes.add(m);
 }
 

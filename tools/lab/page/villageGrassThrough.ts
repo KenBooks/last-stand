@@ -16,6 +16,9 @@ import { CAMPFIRE, NOTICE, YARD, yardToWorld } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
 import { LAMPS } from '../../../src/world/village';
 import { rayChunks } from './rayChunks';
+import { grassDrawnAt } from './grassDrawn';
+import { groundHeight } from '../../../src/world/ground';
+import { WEBGPU } from '../../../src/core/webgpu';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../../src/core/layers';
 import type { LightsChecked } from './villageLights';
 
@@ -50,14 +53,18 @@ const MAP_SLACK = 0.03;
 const GHOST_NAMED = 'ghost: ';
 /** the half width of a post standing in the grass without an obstacle (m) */
 const POST_HALF = 0.1;
-/** the fewest points under a prop the rays must meet, or nothing was measured */
+/** the fewest points under a prop the rays must meet, and the fewest pixels of grass drawn over the footprints' ground,
+ *  or nothing was measured */
 const LEAST_UNDER = 500;
+const LEAST_DRAWN = 200;
 /** the hour pictured, and how far off each spot its pictures stand (m) */
 const NOON = 12;
 const PICTURE_FROM = [2.6, 1.6];
 /** the hero's facing the pictures are turned by (rad): the `above` close-up then looks north, from the square's side,
  *  whatever way the boot faced him */
 const PICTURE_FACING = -0.35;
+/** where round the campfire its seat logs lie (rad: village.ts `buildBenches`) */
+const SEAT_LOGS = [0.4, 2.3, 4.2];
 /** the hours the campfire's stones are pictured at, and how far off (m) */
 const STONES_AT = [12, 0];
 const STONES_FROM = 3;
@@ -292,11 +299,12 @@ function picturedSpots(): { label: string; at: THREE.Vector3 }[] {
   const fire = new THREE.Vector2(CAMPFIRE[0], CAMPFIRE[1]);
   const away = (o: { x: number; z: number }): number => fire.distanceTo(new THREE.Vector2(o.x, o.z));
   const nearest = lamps.sort((a, b) => away(a) - away(b))[0];
-  const log = 0.4;
-  const spots = [
-    { label: 'a seat log by the campfire', at: new THREE.Vector3(CAMPFIRE[0] + Math.cos(log) * 2.2, 0.2, CAMPFIRE[1] + Math.sin(log) * 2.2) },
-    { label: 'the notice board', at: new THREE.Vector3(NOTICE.x, 0.3, NOTICE.z) },
-  ];
+  // (each of the campfire's three seat logs: blades stood through one alone in a review's picture)
+  const logs = SEAT_LOGS.map((angle, k) => ({
+    label: `seat log ${k + 1} by the campfire`,
+    at: new THREE.Vector3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.2, CAMPFIRE[1] + Math.sin(angle) * 2.2),
+  }));
+  const spots = [...logs, { label: 'the notice board', at: new THREE.Vector3(NOTICE.x, 0.3, NOTICE.z) }];
   if (nearest) spots.push({ label: 'a street lamp', at: new THREE.Vector3(nearest.x, 0.3, nearest.z) });
   return spots;
 }
@@ -321,6 +329,70 @@ async function pictures(lab: Lab): Promise<Pictured[]> {
   return moments;
 }
 
+/** the grass drawn alone through the game's camera at each stand: its target's size (px) */
+const DRAWN = { across: 640, down: 360 };
+/** how far from a prop the hero stands to see it as a player does (m), and the frames he settles in */
+const STAND_OFF = 1.1;
+const SETTLE = 15;
+
+/** Where the hero stands to see each prop in the lobby's own view: beside each seat log, a street lamp, the board. */
+function stands(): { what: string; x: number; z: number }[] {
+  const out = SEAT_LOGS.map((angle, k) => ({
+    what: `seat log ${k + 1}`,
+    x: CAMPFIRE[0] + Math.cos(angle) * (2.2 + STAND_OFF),
+    z: CAMPFIRE[1] + Math.sin(angle) * (2.2 + STAND_OFF),
+  }));
+  const lamp = picturedSpots().find((spot) => spot.label === 'a street lamp');
+  if (lamp) out.push({ what: 'a street lamp', x: lamp.at.x + STAND_OFF, z: lamp.at.z });
+  out.push({ what: 'the notice board', x: NOTICE.x + Math.sin(NOTICE.facing) * 1.6, z: NOTICE.z + Math.cos(NOTICE.facing) * 1.6 });
+  return out;
+}
+
+/** The grass drawn over a prop at each stand, as the game draws it: each pixel of grass put back into the world, and
+ *  a ray from it down meeting a solid above the ground before the ground (a blade's tip on a log's top, from above). */
+async function drawnOverProps(lab: Lab, feet: Foot[], meshes: THREE.Mesh[], moments?: Pictured[]):
+  Promise<{ what: string; over: number; near: number }[]> {
+  const ray = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+  const from = new THREE.Vector3();
+  const counts: { what: string; over: number; near: number }[] = [];
+  for (const stand of stands()) {
+    G.player.walkTo = null;
+    G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
+    await lab.step(SETTLE);
+    let over = 0;
+    let near = 0;
+    for (const point of grassDrawnAt(lab, G.camera, DRAWN.across, DRAWN.down)) {
+      const foot = feet.find((f) => Math.hypot(point.x - f.x, point.z - f.z) <= f.r);
+      if (!foot || point.y < GROUND_UP) continue;
+      near++;
+      ray.set(from.set(point.x, point.y + 0.002, point.z), down);
+      ray.far = point.y;
+      const hits = ray.intersectObjects(meshesOver(meshes, foot), false).filter((hit) => hit.point.y > GROUND_UP);
+      if (hits.length) over++;
+    }
+    counts.push({ what: stand.what, over, near });
+    // (as the player sees it there: the lobby's view over his shoulder from above, a review's own angle)
+    if (moments) moments.push(await lab.screen(`beside ${stand.what}, the lobby's view`, []));
+  }
+  return counts;
+}
+
+/** The solids' map emptied while `run` runs (the drawn test's canary: every blade stands as if nothing were over it). */
+async function withSolidsEmptied<T>(run: () => Promise<T>): Promise<T> {
+  const texture = G.arena.village!.meadow.userData.solids as THREE.DataTexture;
+  const bytes = texture.image.data as Uint8Array;
+  const kept = bytes.slice();
+  bytes.fill(255);
+  texture.needsUpdate = true;
+  try {
+    return await run();
+  } finally {
+    bytes.set(kept);
+    texture.needsUpdate = true;
+  }
+}
+
 /** No blade through anything standing on the meadow, the grass up to it; pictures close to. */
 export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<LightsChecked> {
   if (G.arena.place !== 'village') throw new Error('lab: village: not in the village');
@@ -339,12 +411,27 @@ export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<L
     ...throughLines(maps, missed).map((line) => `  ${line}`),
     'what the rays met: ' + [...countBy(under)].map(([by, n]) => `${by} ${n}`).join('; '),
   ];
+  const meshes = builtMeshes();
   if (canary) {
     const foot = under[0].foot;
-    const caught = through(withoutFoot(maps, foot), under.filter((point) => point.foot === foot)).length > 0;
-    return { lines, problems: [], caught, moments: [] };
+    const mapCaught = through(withoutFoot(maps, foot), under.filter((point) => point.foot === foot)).length > 0;
+    const drawnCaught = (await withSolidsEmptied(() => drawnOverProps(lab, feet, meshes))).some((c) => c.over > 0);
+    lines.push(`canary: the map's ${mapCaught ? 'caught' : 'missed'}, the drawn grass's ${drawnCaught ? 'caught' : 'missed'}`);
+    return { lines, problems: [], caught: mapCaught && drawnCaught, moments: [] };
   }
-  const moments = await pictures(lab);
-  const problems = throughLines(maps, missed).map((line) => `grass through ${line}`);
+  holdHour(NOON);
+  const seenThere: Pictured[] = [];
+  // (its depth read back through WebGL's targets: on WebGPU the map alone is read, and the pictures)
+  const drawn = WEBGPU ? [] : await drawnOverProps(lab, feet, meshes, seenThere);
+  holdHour(null);
+  const seen = drawn.reduce((sum, c) => sum + c.near, 0);
+  if (!WEBGPU && seen < LEAST_DRAWN) throw new Error(`lab: village: only ${seen} pixels of grass drawn round the props`);
+  lines.push(WEBGPU ? 'the grass drawn: not read on WebGPU' : `the grass drawn from the lobby's view beside each (${DRAWN.across}x${DRAWN.down}): `
+    + drawn.map((c) => `${c.what} ${c.over} of ${c.near} pixels over it`).join('; '));
+  const moments = [...seenThere, ...await pictures(lab)];
+  const problems = [
+    ...throughLines(maps, missed).map((line) => `grass through ${line}`),
+    ...drawn.filter((c) => c.over > 0).map((c) => `grass drawn over ${c.what}: ${c.over} pixels`),
+  ];
   return { lines, problems, caught: null, moments };
 }
