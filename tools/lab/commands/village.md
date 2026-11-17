@@ -156,8 +156,10 @@ be caught. It found the chest's stand off the terrace's edge, below it, where th
 `minimapOut` (`page/villageMinimap.ts`, the tracker pictured over the square and the yard; from play: "we need a minimap in wardenhollow too"): read off the page, the
 minimap out on the square and in the yard, titled for the village, with no run's objectives or spoils, the hero's arrow
 on its canvas where he stands as the camera has it turned, the bottom bar in the yard alone, the tracker under it on the
-right, and both away with the inventory and back after. `--canary` reads the arrow half a turn off and sets the tracker
-over the minimap.
+right, and both away with the inventory and back after; the camera turned a radian, each house walked into drawn
+upright on the minimap's canvas, its roof to the top (from play: "lets always orient icons north, house icons I mean";
+pictured). `--canary` reads the arrow half a turn off, sets the tracker over the minimap and reads the houses turned
+with the camera.
 
 `portalAtNight` (`page/villagePortalNight.ts`, needs `--cold`, says it wasn't measured without; from play, "when using a
 portal to the main game, it hangs"): a portal's Enter pressed at midnight with the fight's programs cold, the programs

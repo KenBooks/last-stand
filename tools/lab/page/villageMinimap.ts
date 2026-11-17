@@ -2,11 +2,14 @@
 // From play: "move training checklist to the right below minimap, and yes, we need a minimap in wardenhollow too".
 // It reads what the page shows: the minimap's canvas (the hero's arrow where the hero is, as the camera has it turned,
 // at two spots) and the boxes of the minimap and the tracker; out on the square and in the yard, with the bottom bar in
-// the yard alone, and put away with the inventory. Its canary reads the arrow half a turn off and sets the tracker
-// over the minimap.
+// the yard alone, and put away with the inventory; the camera turned, each house walked into drawn upright on the
+// canvas, its roof to the top (from play: "lets always orient icons north, house icons I mean"). Its canary reads the
+// arrow half a turn off, sets the tracker over the minimap and reads the houses as turned with the camera.
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
-import { cameraYaw } from '../../../src/core/renderer';
+import { cameraYaw, turnBy } from '../../../src/core/renderer';
+import { HOUSES, ROOM_IDS } from '../../../src/data/houses';
+import { COTTAGES } from '../../../src/data/village';
 import { restartTraining, skipTraining } from '../../../src/game/training';
 import { openPanels } from '../../../src/ui/menus';
 import { villageMinimapScale } from '../../../src/ui/villageMinimap';
@@ -23,6 +26,15 @@ const LEAST_DRAWN = 0.15;
 const MOST_BELOW = 0.2;
 /** frames for a change of the minimap's or the panels' to show */
 const SHOW_FRAMES = 15;
+/** how far the camera is turned to read the houses on the minimap (rad): far from any quarter turn */
+const HOUSE_TURN = 1;
+/** half a house mark's width (px of the canvas: ui/villageMinimap.ts's `HOUSE_MARK`) */
+const HOUSE_HALF = 4.5;
+/** where a house mark's pixels are its colour (true) or not (false), in its own frame, roof up, in half widths: the
+ *  apex's column and the block's lower corners in it, the air either side of the roof's peak out of it */
+const HOUSE_SAMPLES: readonly [number, number, boolean][] = [
+  [0, -0.5, true], [-0.53, 0.55, true], [0.53, 0.55, true], [-0.6, -0.75, false], [0.6, -0.75, false],
+];
 
 /** What a measure asks of the village's walking: the hero stood at a spot and the frames run. */
 export type Stand = (spot: [number, number]) => Promise<void>;
@@ -59,13 +71,50 @@ function arrowAt(pixels: ImageData, x: number, y: number): boolean {
   return false;
 }
 
-/** Where the hero should show on the canvas, the camera's turn `extra` radians off. */
-function heroOnCanvas(extra: number): [number, number] {
+/** Where the village's (x, z) should show on the canvas, the camera's turn `extra` radians off. */
+function onCanvas(worldX: number, worldZ: number, extra: number): [number, number] {
   const scale = villageMinimapScale(WIDTH);
-  const x = G.player.pos.x * scale;
-  const z = G.player.pos.z * scale;
+  const x = worldX * scale;
+  const z = worldZ * scale;
   const yaw = cameraYaw() + extra;
   return [WIDTH / 2 + x * Math.cos(yaw) - z * Math.sin(yaw), WIDTH / 2 + x * Math.sin(yaw) + z * Math.cos(yaw)];
+}
+
+/** Where the hero should show on the canvas, the camera's turn `extra` radians off. */
+function heroOnCanvas(extra: number): [number, number] {
+  return onCanvas(G.player.pos.x, G.player.pos.z, extra);
+}
+
+/** The canvas's pixel the point (x, y) falls in (pixel i covers i to i + 1), as "r,g,b". */
+function colourAt(pixels: ImageData, x: number, y: number): string {
+  const at = (Math.floor(y) * pixels.width + Math.floor(x)) * 4;
+  return [pixels.data[at], pixels.data[at + 1], pixels.data[at + 2]].join(',');
+}
+
+/** Whether the canvas's pixel at (x, y) is a house mark's gold (#e8c878). */
+function goldAt(pixels: ImageData, x: number, y: number): boolean {
+  const [red, green, blue] = colourAt(pixels, x, y).split(',').map(Number);
+  return red > 190 && green > 150 && red - blue > 60;
+}
+
+/** Each house walked into whose mark doesn't stand on the canvas turned `tilt` radians (0: upright), by name, with
+ *  the first of its samples that's wrong, where it is and its colour. */
+function housesTilted(pixels: ImageData, tilt: number): string[] {
+  const [cos, sin] = [Math.cos(tilt), Math.sin(tilt)];
+  const tilted: string[] = [];
+  for (const id of ROOM_IDS) {
+    const cottage = COTTAGES[HOUSES[id].cottage];
+    const [x, y] = onCanvas(cottage.x, cottage.z, 0);
+    for (const [u, v, gold] of HOUSE_SAMPLES) {
+      const [dx, dy] = [u * HOUSE_HALF, v * HOUSE_HALF];
+      const [sampleX, sampleY] = [x + dx * cos - dy * sin, y + dx * sin + dy * cos];
+      if (goldAt(pixels, sampleX, sampleY) === gold) continue;
+      const where = `${sampleX.toFixed(1)}, ${sampleY.toFixed(1)}`;
+      tilted.push(`${id} (${gold ? 'no gold' : 'gold'} at ${where}: ${colourAt(pixels, sampleX, sampleY)})`);
+      break;
+    }
+  }
+  return tilted;
 }
 
 /** The share of the canvas drawn on. */
@@ -122,6 +171,14 @@ export async function minimapOut(
   tracker.style.order = '-1';
   const wrongPlace = trackerBelow().some((problem) => problem.includes('over the minimap'));
   tracker.style.order = '';
+  turnBy(HOUSE_TURN);
+  await lab.step(SHOW_FRAMES);
+  const turned = minimapPixels();
+  const tilted = housesTilted(turned, 0);
+  if (tilted.length) problems.push(`the camera turned, the minimap's houses ${tilted.join(', ')} aren't upright`);
+  const housesTurned = housesTilted(turned, cameraYaw()).length > 0;
+  const housesShot = await lab.screen(`the minimap turned ${HOUSE_TURN} rad, its houses upright`, [], '#minimap');
+  turnBy(-HOUSE_TURN);
   await stand(yard);
   await lab.step(SHOW_FRAMES);
   problems.push(...atSpot('in the yard', true));
@@ -136,7 +193,9 @@ export async function minimapOut(
   restartTraining();
   skipTraining();
   const lines = [`minimap: the hero's arrow at ${squareAt} on the square and ${yardAt} in the yard; `
-    + `the tracker under it, ${problems.length} problems`];
-  const moments = canary ? [] : [onSquare, inYard];
-  return { lines, problems: canary ? [] : problems, caught: canary ? wrongTurn && wrongPlace : null, moments };
+    + `the tracker under it; the camera turned, ${ROOM_IDS.length - tilted.length} of ${ROOM_IDS.length} houses `
+    + `upright; ${problems.length} problems`];
+  const moments = canary ? [] : [onSquare, housesShot, inYard];
+  const caught = canary ? wrongTurn && wrongPlace && housesTurned : null;
+  return { lines, problems: canary ? [] : problems, caught, moments };
 }
