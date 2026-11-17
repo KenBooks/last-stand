@@ -410,6 +410,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   each drag's last preview before a frame showed it, holds its cast against the stop before's preview, and reads the
   plain ring as shown beside a preview: each must be caught. (A dummy risen outside the arena or in a prop is pushed
   in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
+- `rooms`: Play together's rooms end to end (#676; `node/rooms.mjs`, `page/rooms.ts`), against a co-op relay the
+  command starts in its own process on a free port for the page's origin (`startRelay` from `server/relay/relay.mjs`, its
+  grace 400 ms so a host gone leaves the list soon; its packages once: `npm ci --prefix server/relay`). The command's page
+  hosts and a partner's page joins, both on the command's screen, each press their own (`lab.clickOn`, `lab.type`), the
+  relay's own list read beside the browser's as a page of the origin reads it: a public room opened from the create page,
+  listed with its host, name and size, joined from its row (the relay counting two), gone once its host left; a password
+  room listed locked and its password nowhere in the list, a wrong one turned away (said, the password asked for again),
+  the right one let in where the dialog asks; a private room never listed, joined by its code. Pictures of both pages
+  (the create page, the browser, a wrong password, joined, hosting) in `out/rooms/<WxH>`, the relay's log in
+  `out/rooms/relay.log`. `--canary` starts the relay with its `faults` (any password let in, private rooms listed), each
+  of which must be caught. About a minute after the boot.
+
 - `beta`: the village beta as a player opts into it and out again (`src/core/beta.ts`, `src/ui/beta.ts`), and a
   co-op room keeping to its host's lobby (`src/net/session.ts` `onHello`). The command's own page is the room's
   host; a second page, the visitor's, is booted in the lobby without the village (cold: what a game warms behind

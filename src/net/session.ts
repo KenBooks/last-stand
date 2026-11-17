@@ -11,7 +11,7 @@ import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
-import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
+import { openLink, RoomRefused, ServerDown, SERVER_DOWN, type Link, type RefusedWhy, type RoomCard } from './transport';
 import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { readying, role } from './role';
@@ -36,10 +36,31 @@ import { setTradeNet, tradeHeard, tradePeerLeft, endRoomTrades, endTrades, updat
 
 import type { Profile } from '../types';
 
-/** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 37;
+/** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
+ *  rooms' cards, whose `v` keeps a list to the rooms this game can join) */
+export const PROTOCOL = 38;
 /** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
 const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
+/** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
+ *  75 s, `server/relay/rooms.mjs`) */
+const CARD_EVERY = 20_000;
+
+/** What kind of room a host opens: listed for anyone, found by its code alone, or by its code and a password. */
+export type RoomKind = 'public' | 'private' | 'password';
+/** How a host opens its room (`hostRoom`). */
+export interface RoomPlan { kind: RoomKind; name: string; max: number; password: string }
+/** the most a room's name may be (characters, as the relay keeps it) */
+export const ROOM_NAME_MAX = 32;
+/** what a player is told when a room turns them away, by why */
+const REFUSED: Record<RefusedWhy, string> = {
+  'needs-password': 'This room needs a password.',
+  password: 'That password isn\'t right. Ask the host for it and try again.',
+  tries: 'Too many wrong passwords. Wait a minute, then try again.',
+  wait: 'The room is still opening. Try again in a moment.',
+  taken: 'That room code is taken. Open the room again for a new one.',
+  full: 'That room is full.',
+  'old-server': 'The co-op server needs an update before public and password rooms work. Open a private room for now.',
+};
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -48,7 +69,12 @@ const ASKED_MOST = 64;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /** A player's class and gear, which is all another game needs to show them. */
-export interface Look { cls: string; eq: Profile['equipped']; av?: string | null }
+export interface Look {
+  cls: string; eq: Profile['equipped']; av?: string | null;
+  /** the player's best wave cleared, any battleground (the save's `records.bestWave`): Play together's party cards
+   *  show it beside the gear's level (PROTOCOL 37) */
+  best?: number;
+}
 
 export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
 
@@ -94,6 +120,13 @@ export const session = {
   /** joining failed as the room is in the other lobby (the village beta on there and off here, or the other way):
    *  whether the room's is the village, for the switch offered; null otherwise */
   lobbyAsked: null as boolean | null,
+  /** joining failed as the room is locked and we gave no password, or a wrong one: the dialog asks for it */
+  passwordAsked: false,
+  /** the room as its host opened it: listed or not, locked or not, its name and how many it holds (a guest knows the
+   *  kind only as `locked`, from a password it gave) */
+  kind: 'private' as RoomKind,
+  roomName: '',
+  max: COOP.maxPlayers,
   /** the local player's name tag in the room (net/nameTag) */
   tag: '',
   /** hosting, the room's link to the co-op server not yet open (the dialog says it's opening) */
@@ -202,7 +235,16 @@ export function invitedRoom(): string | null {
   return c && /^[A-Z0-9]{4,8}$/i.test(c) ? c.toUpperCase() : null;
 }
 
-export const myLook = (): Look => ({ cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player) });
+export const myLook = (): Look => ({
+  cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player), best: G.profile.records.bestWave,
+});
+
+/** A player's look as this game knows it: the local one's own, a partner's as its hello and look said it. */
+export function lookOf(p: Player): Look | null {
+  if (p.local) return myLook();
+  for (const peer of session.peers.values()) if (peer.player === p) return peer.look;
+  return null;
+}
 
 /** Takes the local player's name tag for a room, kept for next time; false (the session failed, saying why) if it
  *  can't be used. */
@@ -222,16 +264,50 @@ function takeTag(typed: string): boolean {
 }
 
 // --- rooms -------------------------------------------------------------------------------
-/** Opens a room with the local player as its host, named `tag`. */
-export async function hostRoom(tag: string): Promise<void> {
+/** A room's name as a host types it: its spaces one, at most `ROOM_NAME_MAX` characters; the host's tag's room if
+ *  none is typed. */
+export function roomNameOf(typed: string, tag: string): string {
+  const name = [...typed.replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim()].slice(0, ROOM_NAME_MAX).join('');
+  return name || [...`${tag}'s room`].slice(0, ROOM_NAME_MAX).join('');
+}
+
+/** A public room's card for the relay's list, as the room stands now. */
+function roomCard(): RoomCard {
+  return {
+    name: session.roomName, tag: session.tag, cls: G.profile.classId, map: G.arena.biome,
+    wave: G.run && !G.run.duel ? G.run.wave : session.wave, run: Boolean(G.run && !G.run.training && !G.run.duel),
+    lobby: VILLAGE ? 'village' : 'panels', v: PROTOCOL,
+  };
+}
+let cardTimer: ReturnType<typeof setInterval> | undefined;
+let cardSent = '';
+/** A listed room's host (public or locked): its card sent to the relay if it changed, or always (`again`: it's sent every
+ *  `CARD_EVERY` so the relay keeps listing it). */
+export function sendCard(again = false): void {
+  if (!link || role.current !== 'host' || session.kind === 'private' || session.opening) return;
+  const card = roomCard();
+  const said = JSON.stringify(card);
+  if (!again && said === cardSent) return;
+  cardSent = said;
+  link.card(card);
+}
+
+/** Opens a room with the local player as its host, named `tag`; `plan` says what kind (a private room for four
+ *  without it). */
+export async function hostRoom(tag: string, plan: RoomPlan = { kind: 'private', name: '', max: COOP.maxPlayers, password: '' }): Promise<void> {
   if (link) return;
   if (!takeTag(tag)) return;
   session.code = newCode();
   session.status = 'hosting';
-  netLog(`hosting room ${session.code}`);
+  netLog(`hosting room ${session.code} (${plan.kind}, ${plan.max})`);
   session.error = '';
   session.renameAsked = false;
+  session.passwordAsked = false;
   session.lobbyAsked = null;
+  session.kind = plan.kind;
+  session.roomName = roomNameOf(plan.name, session.tag);
+  session.max = Math.max(2, Math.min(COOP.maxPlayers, Math.round(plan.max)));
+  cardSent = '';
   role.current = 'host';
   G.player.slot = 0;
   wearRoomColour(freeColour([], savedColour()));
@@ -240,13 +316,15 @@ export async function hostRoom(tag: string): Promise<void> {
   hooks.changed();
   const code = session.code;
   let opened: Link;
+  const opening = { pub: plan.kind !== 'private', max: session.max, password: plan.kind === 'password' ? plan.password : '' };
   try {
-    opened = await openLink(code);
+    opened = await openLink(code, { host: opening });
   } catch (e) {
     netLog((e as Error).message);
     // (left while it opened: nothing to say)
     if (session.status === 'hosting' && session.code === code) {
-      fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't open a room (${(e as Error).message})`);
+      fail(e instanceof ServerDown ? SERVER_DOWN : e instanceof RoomRefused ? REFUSED[e.why]
+        : `Couldn't open a room (${(e as Error).message})`);
     }
     return;
   }
@@ -256,11 +334,15 @@ export async function hostRoom(tag: string): Promise<void> {
   session.opening = false;
   wire(link);
   hostSync();
+  sendCard(true);
+  clearInterval(cardTimer);
+  if (session.kind !== 'private') cardTimer = setInterval(() => sendCard(true), CARD_EVERY);
   hooks.changed();
 }
 
-/** Joins room `code` as `tag` (the host refuses a tag the room already has: `session.renameAsked`). */
-export async function joinRoom(code: string, tag: string): Promise<void> {
+/** Joins room `code` as `tag`, with the room's `password` if it's locked (the host refuses a tag the room already
+ *  has: `session.renameAsked`; the relay a wrong password: `session.passwordAsked`). */
+export async function joinRoom(code: string, tag: string, password = ''): Promise<void> {
   if (link) leaveRoom();
   session.code = code.toUpperCase();
   if (!takeTag(tag)) return;
@@ -268,12 +350,21 @@ export async function joinRoom(code: string, tag: string): Promise<void> {
   netLog(`joining room ${session.code}`);
   session.error = '';
   session.renameAsked = false;
+  session.passwordAsked = false;
   session.lobbyAsked = null;
+  session.kind = password ? 'password' : 'private';
+  session.roomName = '';
   hooks.changed();
   try {
-    link = await openLink(session.code);
+    link = await openLink(session.code, { password: password || undefined });
   } catch (e) {
     netLog((e as Error).message);
+    if (e instanceof RoomRefused) {
+      fail(REFUSED[e.why]);
+      session.passwordAsked = e.why === 'needs-password' || e.why === 'password' || e.why === 'tries';
+      hooks.changed();
+      return;
+    }
     fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't reach the room (${(e as Error).message})`);
     return;
   }
@@ -288,6 +379,7 @@ export async function joinRoom(code: string, tag: string): Promise<void> {
 /** Leave the room (the partners' characters go with it). */
 export function leaveRoom(): void {
   clearTimeout(joinTimer);
+  clearInterval(cardTimer);
   if (link) { link.send('ctl', { t: 'bye' }); link.leave(); }
   link = null;
   // the lobby floor is the host's: a guest leaving it leaves what's there (the host keeps it)
@@ -334,6 +426,7 @@ function fail(why: string, rename = false): void {
   session.status = 'failed';
   session.error = why;
   session.renameAsked = rename;
+  session.passwordAsked = false;
   session.lobbyAsked = null;
   hooks.changed();
 }
@@ -982,6 +1075,8 @@ export function updateSession(dt: number, reviving: boolean): void {
   numbersT -= dt;
   if (numbersT <= 0) {
     numbersT = 1;
+    // (a public room's card, as its map, wave or hero changes: checked once a second, sent only when changed)
+    sendCard();
     const n = mine;
     const run = [n.dealt, n.taken, n.mitigated, n.healed].map(Math.round);
     send('st', { n: [...run, n.kills, n.downs, n.revives, Math.round(G.time - n.since)], p: Math.round(serverPings().rtt ?? -1) } satisfies NumbersMsg);

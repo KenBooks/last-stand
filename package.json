@@ -23,6 +23,7 @@
     "traces:build": "npm --prefix server/traces/web run build",
     "traces:test": "npm run traces:build && node --test \"server/traces/test/*.test.mjs\"",
     "saves:test": "node --test \"server/saves/test/*.test.mjs\"",
+    "relay:test": "node --test \"server/relay/test/*.test.mjs\"",
     "saves:drive-token": "node server/saves/driveToken.mjs",
     "saves:restore": "node server/saves/restore.mjs"
   },

@@ -1969,6 +1969,16 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  rooms: {
+    async each(side, options) {
+      // (a relay of the lab's own, server/relay: its packages installed by npm ci --prefix server/relay)
+      const { runRooms } = await import('./rooms.mjs');
+      return runRooms(side, { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   practice: {
     each(side, options) {
       return side.command('practice', { canary: Boolean(options.canary) });

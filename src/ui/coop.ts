@@ -2,12 +2,18 @@
 // frames and nameplates, the downed state and the revive prompt.
 import { G } from '../state';
 import { COOP } from '../data/balance';
-import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf } from '../net/session';
+import {
+  session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf, lookOf, PROTOCOL, ROOM_NAME_MAX, type Look,
+  type RoomKind,
+  type RoomPlan,
+} from '../net/session';
 import { askProblem, askTrade } from '../net/trade';
 import { reloadWithVillage, VILLAGE } from '../core/beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
-import { serverUp, SERVER_DOWN } from '../net/transport';
+import { listRooms, serverUp, SERVER_DOWN, type RoomListing } from '../net/transport';
+import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
+import { CLASSES } from '../data/classes/index';
 import { isCoop } from '../net/role';
 import { cleanTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
 import { anchorLabel, removeLabel, onLayout, onScreenOrEdge } from './floaters';
@@ -68,8 +74,64 @@ function asked(): void {
   typed = { for: '', tag: null, code: null };
 }
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['heroes'], (tag: string) => { asked(); void hostRoom(tag); }, READYING.coop);
-const join = whenWarm(['heroes'], (code: string, tag: string) => { asked(); void joinRoom(code, tag); }, READYING.coop);
+const host = whenWarm(['heroes'], (tag: string, plan: RoomPlan) => { asked(); void hostRoom(tag, plan); }, READYING.coop);
+const join = whenWarm(['heroes'], (code: string, tag: string, password: string) => {
+  asked();
+  void joinRoom(code, tag, password);
+}, READYING.coop);
+
+/** The dialog's page out of a room: the public rooms, a room of one's own to open, or (on a small screen, where it
+ *  has no column beside them) the player's hero: name tag, colour, portrait. */
+type Pane = 'browse' | 'create' | 'hero';
+let pane: Pane = 'browse';
+/** what the dialog's own fields hold, kept through its renders as `typed` is (the browser's filters, the room to
+ *  create, a password) */
+const form = {
+  search: '', map: '' as BiomeId | '', notFull: false,
+  kind: 'public' as RoomKind, name: '', password: '', max: COOP.maxPlayers,
+  /** the room picked in the list, and the password typed for it or for the room that asked for one */
+  picked: '', joinPassword: '',
+};
+/** the public rooms as last read (null: they couldn't be read; 'loading' before the first answer) */
+let rooms: RoomListing[] | null | 'loading' = 'loading';
+let roomsNo = 0;
+/** how often the list is read again while it's shown (ms) */
+const ROOMS_EVERY = 10_000;
+let roomsTimer: ReturnType<typeof setInterval> | undefined;
+async function readRooms(): Promise<void> {
+  const n = ++roomsNo;
+  const read = await listRooms();
+  if (n !== roomsNo) return;
+  rooms = read;
+  if (coopOpen() && pane === 'browse' && (session.status === 'off' || session.status === 'failed')) renderCoop();
+}
+/** The list read now and every `ROOMS_EVERY` while the dialog is up and the server answers; stopped otherwise. */
+function watchRooms(on: boolean): void {
+  clearInterval(roomsTimer);
+  roomsTimer = undefined;
+  if (!on) return;
+  void readRooms();
+  roomsTimer = setInterval(() => {
+    if (!coopOpen() || (session.status !== 'off' && session.status !== 'failed')) { watchRooms(false); return; }
+    if (pane === 'browse') void readRooms();
+  }, ROOMS_EVERY);
+}
+
+/** the rooms this game can join and the filters let through, as the list shows them */
+function shownRooms(): RoomListing[] {
+  if (!Array.isArray(rooms)) return [];
+  const q = form.search.trim().toLowerCase();
+  return rooms.filter((r) => r.v === PROTOCOL
+    && (!form.map || r.map === form.map)
+    && (!form.notFull || r.players < r.max)
+    && (!q || `${r.tag} ${r.name} ${biomeLabel(r.map)}`.toLowerCase().includes(q)));
+}
+/** a room Quick join may take: open, unlocked, in this lobby; the fullest first, as the relay lists them */
+const quickRoom = (): RoomListing | undefined => (Array.isArray(rooms) ? rooms : [])
+  .find((r) => r.v === PROTOCOL && !r.locked && r.players < r.max && r.lobby === (VILLAGE ? 'village' : 'panels'));
+
+const biomeLabel = (id: string): string => (BIOMES as Record<string, { title: string } | undefined>)[id]?.title ?? id;
+const classOf = (id: string): { name: string; accent: string } | null => CLASSES[id] ?? null;
 /** a room code from an invite link, waiting in the dialog for a name tag */
 let invited = '';
 /** what's wrong with the name tag as last tried, said under it */
@@ -125,6 +187,7 @@ async function checkServer(): Promise<void> {
   const up = await serverUp();
   if (n !== checkNo) return;
   server = up ? 'up' : 'down';
+  watchRooms(up);
   renderCoop();
 }
 
@@ -152,7 +215,7 @@ export function joinInvited(code: string): void {
   const tag = savedTag();
   if (!tagProblem(tag)) {
     invitedJoin = true;
-    join(code, tag);
+    join(code, tag, '');
     return;
   }
   invited = code;
@@ -208,7 +271,7 @@ export const coopOpen = (): boolean => !$('#coop').classList.contains('hidden');
 
 export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
-  if (!open) return;
+  if (!open) { watchRooms(false); return; }
   if (session.status === 'off' || session.status === 'failed') void checkServer();
   else renderCoop();
 }
@@ -219,111 +282,90 @@ export function renderCoop(): void {
   renderLobbyOptions();
   renderBar();
   const body = $('#coop .coop-body');
+  // (the dialog's Close lives in its foot: taken out before the body is written afresh, put back in its slot after)
+  const close = $('#btn-coop-close');
+  body.parentElement!.append(close);
+  renderBody(body);
+  body.querySelector('.coop-close-slot')?.append(close);
+}
+
+/** The dialog's title and, beside it, its tabs or its room (one row: the owner's "more compact... a single line"). */
+const headHtml = (beside: string): string => `<div class="coop-head"><h2 class="coop-title">Play together</h2>${beside}</div>`;
+/** The dialog's foot in one row: its own controls first, the network log's line, then `after` and Close. */
+const footHtml = (first: string, after = '', cls = '', attrs = ''): string =>
+  `<div class="coop-foot coop-choice${cls}"${attrs}>${first}${reportLinks()}${after}<span class="coop-close-slot"></span></div>`;
+
+/** What kind of room it is, as its room view says it. */
+function roomKindLine(s: string): string {
+  const kind = session.kind === 'public' ? 'Public: listed for anyone'
+    : session.kind === 'password' ? 'Locked with a password' : 'Private: joined by its code';
+  if (s === 'hosting') return `${esc(session.roomName)} · ${kind} · up to ${session.max}`;
+  return session.kind === 'password' ? 'Locked with a password' : '';
+}
+
+/** A player's card in the room: portrait, colour, name tag, class in its accent, the host's mark; an empty place. */
+/** The level of a player's gear: the mean of what it wears' item levels, 0 with nothing worn. */
+function gearLevel(look: Look | null): number {
+  const levels = Object.values(look?.eq ?? {}).map((item) => item?.ilvl).filter((l): l is number => Number.isFinite(l));
+  return levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : 0;
+}
+/** a partner's best wave as its look says it, held to a whole number a wave could be (none: unsaid) */
+const bestOf = (look: Look | null): number | null =>
+  Number.isInteger(look?.best) && look!.best! >= 0 && look!.best! < 10000 ? look!.best! : null;
+/** one figure of a card: its number over its name */
+const statHtml = (value: string, name: string): string => `<span class="coop-stat"><b>${value}</b><small>${name}</small></span>`;
+
+/** A player's card in the room: portrait, colour, name tag, class in its accent, the gear's level and best wave, the
+ *  host's mark; an empty place. Every card is one size (from Victor's review of #682: "Card need to be same size,
+ *  host or guest"): the host's mark has its column on every card, empty but for the host's. */
+function partyCardHtml(p: Player | null): string {
+  if (!p) {
+    return `<li class="coop-card empty"><span class="coop-card-face"></span><span class="coop-card-who"><b>Open place</b>
+      <small>Waiting for a friend to join…</small></span><span class="coop-card-stats"></span><span class="coop-card-mark"></span></li>`;
+  }
+  const accent = CLASSES[p.cls.id]?.accent;
+  const look = lookOf(p);
+  const best = bestOf(look);
+  const host = p.slot === 0 ? '<span class="coop-card-host" title="Host">Host</span>' : '';
+  return `<li class="coop-card${p.local ? ' own' : ''}"><span class="coop-card-face">${portraitHtml(p)}</span>
+    <span class="coop-card-who"><b><span class="coop-dot"${dotColour(p)}></span>${esc(nameOf(p))}</b>
+      <small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>
+    <span class="coop-card-stats">${statHtml(String(gearLevel(look)), 'Gear level')}${statHtml(best === null ? '–' : String(best), 'Best wave')}</span>
+    <span class="coop-card-mark">${host}${tradeButton(p)}</span></li>`;
+}
+
+function renderBody(body: HTMLElement): void {
   const others = partners();
   const s = session.status;
   if (s === 'off' || s === 'failed') {
-    const up = server === 'up';
-    const busy = pressed !== null;
-    const open = up && !busy;
-    // (asked to rename: the tag that was taken, picked for retyping, and the room's code kept to join again)
-    const rename = s === 'failed' && session.renameAsked;
-    const form = formFor(rename);
-    if (typed.for !== form) typed = { for: form, tag: null, code: null };
-    const code = typed.code ?? (invited || (rename ? session.code : ''));
-    const tagValue = typed.tag ?? (rename ? session.tag : savedTag());
-    const typingIn = fieldTypedIn(body);
-    body.innerHTML = `
-      <p class="coop-intro">Fight side by side over the internet, up to ${COOP.maxPlayers} heroes. Each brings their own hero and gear and keeps their own spoils.</p>
-      <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
-      ${server === 'down' ? `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`
-        : server === 'checking' ? '<p class="coop-checking" role="status">Checking the co-op server…</p>'
-        : busy ? `<p class="coop-checking" role="status">Getting co-op ready, then ${pressed === 'host' ? 'opening a room'
-          : `joining room <b>${esc(code.trim().toUpperCase())}</b>`}…</p>`
-        : s === 'failed' ? `<p class="coop-error" role="alert">${esc(session.error)}</p>${lobbySwitchHtml()}` : ''}
-      <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
-        <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${open ? '' : ' disabled'}></label>
-      <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
-      ${colourPickerHtml()}
-      ${portraitPickerHtml()}
-      <div class="coop-choice${up ? '' : ' off'}${busy ? ' busy' : ''}"${busy ? ' aria-busy="true"' : ''}>
-        <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
-          <button class="btn primary${pressed === 'host' ? ' pressed' : ''}" id="btn-coop-host"${open ? '' : ' disabled'}>${pressed === 'host' ? 'Opening a room…' : 'Open a room'}</button></div>
-        <div class="coop-col"><div class="coop-h">Join</div><p>Enter the code your friend sent.</p>
-          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form></div>
-      </div>
-      ${reportLinks()}`;
-    bindReportLinks(body);
-    bindColourPicker(body);
-    bindPortraitPicker(body, renderCoop);
-    $('#btn-coop-host', body).onclick = () => {
-      if (server !== 'up' || pressed) return;
-      const tag = typedTag(body);
-      if (tag === null) return;
-      sfx.click();
-      pressed = 'host';
-      host(tag);
-      // (still cold: the room is asked for once the heroes are warm, and the dialog says it's waiting meanwhile)
-      if (pressed) renderCoop();
-    };
-    const tagField = $<HTMLInputElement>('#coop-tag', body);
-    const codeField = $<HTMLInputElement>('#coop-code', body);
-    // (what's typed kept for the dialog's next render)
-    tagField.oninput = () => { typed.tag = tagField.value; };
-    codeField.oninput = () => { typed.code = codeField.value; };
-    // (Enter in the name tag: join with the code if there is one, else just done typing)
-    tagField.onkeydown = (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      if (codeField.value.trim().length >= 4) $<HTMLFormElement>('.coop-join', body).requestSubmit();
-      else tagField.blur();
-    };
-    // the field typed in still typed in, its caret where it was; else asked to rename, its taken tag picked to retype
-    const typingBack = typingIn && body.querySelector<HTMLInputElement>(`#${typingIn.id}`);
-    if (typingBack && !typingBack.disabled) {
-      typingBack.focus();
-      if (typingIn.from !== null) typingBack.setSelectionRange(typingIn.from, typingIn.to);
-    } else if (rename && open && typed.tag === null) {
-      tagField.focus();
-      tagField.select();
-    }
-    const retry = $('#btn-coop-retry', body) as HTMLElement | null;
-    if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
-    const toLobby = body.querySelector<HTMLElement>('#btn-coop-lobby');
-    if (toLobby) toLobby.onclick = () => reloadWithVillage(session.lobbyAsked === true, session.code);
-    $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
-    $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
-      e.preventDefault();
-      const room = codeField.value.trim();
-      if (room.length < 4 || server !== 'up' || pressed) return;
-      const tag = typedTag(body);
-      if (tag === null) return;
-      sfx.click();
-      pressed = 'join';
-      join(room, tag);
-      if (pressed) renderCoop();
-    };
+    renderOutOfRoom(body, s);
     return;
   }
   if (s === 'joining') {
-    body.innerHTML = `<p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
-      <p class="coop-intro">Finding the host on the co-op server.</p>
-      <button class="btn" id="btn-coop-leave">Cancel</button>
-      ${reportLinks()}`;
+    body.innerHTML = `${headHtml('')}
+      <div class="coop-main coop-in-room joining"><section class="coop-pane coop-party">
+        <p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
+        <p class="coop-intro">Finding the host on the co-op server.</p></section></div>
+      ${footHtml('<button class="btn" id="btn-coop-leave">Cancel</button>')}`;
   } else {
-    const list = [G.player, ...others].map((p) =>
-      `<li>${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>${esc(who(p))}${tradeButton(p)}</li>`).join('')
-      + (others.length ? '' : '<li class="coop-wait">Waiting for a friend to join…</li>');
-    body.innerHTML = `
-      <div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>
-      ${s === 'hosting' && session.opening ? '<p class="coop-wait" role="status">Opening the room on the co-op server…</p>'
-        : s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : ''}
-      <ul class="coop-list">${list}</ul>
-      ${colourPickerHtml()}
-      ${portraitPickerHtml()}
-      <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
-        After each wave everyone decides: bank and leave, or continue together.</p>
-      <button class="btn danger" id="btn-coop-leave">Leave room</button>
-      ${reportLinks()}`;
+    const max = s === 'hosting' ? session.max : Math.max(2, Math.min(COOP.maxPlayers, others.length + 1));
+    const players: (Player | null)[] = [G.player, ...others];
+    while (players.length < max) players.push(null);
+    const link = s === 'hosting' && session.opening ? '<p class="coop-wait" role="status">Opening the room on the co-op server…</p>'
+      : s === 'hosting' ? `<div class="coop-link"><input readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn" id="btn-coop-copy">Copy link</button></div>` : '';
+    const line = roomKindLine(s);
+    body.innerHTML = `${headHtml(`<div class="coop-room">Room <b class="coop-code">${esc(session.code)}</b></div>`)}
+      ${line ? `<p class="coop-room-kind">${line}</p>` : ''}
+      <div class="coop-main coop-in-room">
+        <section class="coop-pane coop-party">
+          ${link}
+          <ul class="coop-list">${players.map(partyCardHtml).join('')}</ul>
+          <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
+            After each wave everyone decides: bank and leave, or continue together.</p>
+        </section>
+        <aside class="coop-pane coop-hero">${colourPickerHtml(true)}${portraitPickerHtml()}</aside>
+      </div>
+      ${footHtml('<button class="btn danger" id="btn-coop-leave">Leave room</button>')}`;
     const copy = $('#btn-coop-copy', body) as HTMLElement | null;
     if (copy) copy.onclick = () => {
       sfx.click();
@@ -352,6 +394,287 @@ function tradeButton(p: Player): string {
   if (!id || G.mode !== 'menu') return '';
   const why = askProblem(id);
   return `<button class="btn coop-trade" data-peer="${esc(id)}"${why ? ` disabled title="${esc(why)}"` : ''}>Trade</button>`;
+}
+
+
+// --- out of a room: the rooms browser, a room of one's own, the hero -------------------------------------------
+/** what each kind of room is, as the create page's choices say it */
+const KINDS: { kind: RoomKind; label: string; says: string }[] = [
+  { kind: 'public', label: 'Public', says: 'Listed, anyone can join' },
+  { kind: 'private', label: 'Private', says: 'Hidden, joined by code or link' },
+  { kind: 'password', label: 'Password', says: 'Listed, needs a password to join' },
+];
+const PANES: { pane: Pane; label: string }[] = [
+  { pane: 'browse', label: 'Browse rooms' }, { pane: 'create', label: 'Create room' }, { pane: 'hero', label: 'Your hero' },
+];
+
+/** a room's players as pips, filled for each one in it */
+const pipsHtml = (r: RoomListing): string => `<span class="coop-pips" aria-hidden="true">${
+  Array.from({ length: r.max }, (_, i) => `<i${i < r.players ? ' class="on"' : ''}></i>`).join('')}</span>`;
+
+/** A room's row in the list: its host and hero, its name, map and wave, how full, locked or not, and its Join; the
+ *  room picked opens under its row, with a password field where it's locked. */
+function roomRowHtml(r: RoomListing, open: boolean): string {
+  const cls = classOf(r.cls);
+  const picked = form.picked === r.code;
+  const full = r.players >= r.max;
+  const otherLobby = r.lobby !== (VILLAGE ? 'village' : 'panels');
+  const where = r.run ? `Wave ${r.wave}` : 'In the lobby';
+  const dot = cls ? ` style="--dot:${cls.accent}"` : '';
+  const join = `<button class="btn primary coop-room-join" data-code="${esc(r.code)}"${open && !full ? '' : ' disabled'}>${
+    full ? 'Full' : 'Join'}</button>`;
+  const detail = !picked ? '' : `<div class="coop-room-more">
+      <span>${esc(cls ? `${cls.name} host` : 'Host')} · ${r.locked ? 'Password room' : 'Public room'} · ${
+        otherLobby ? (r.lobby === 'village' ? 'In the village beta' : 'In the old lobby') : 'Your lobby'}</span>
+      ${r.locked ? `<input id="coop-room-pass" type="password" maxlength="64" placeholder="Password" autocomplete="off"
+        aria-label="The room's password" value="${esc(form.joinPassword)}"${open ? '' : ' disabled'}>` : ''}
+    </div>`;
+  return `<li class="coop-room-row${picked ? ' picked' : ''}${full ? ' full' : ''}" data-code="${esc(r.code)}">
+    <button class="coop-room-pick" data-code="${esc(r.code)}" aria-expanded="${picked}">
+      <span class="coop-room-host"><span class="coop-cls"${dot}>${esc((cls?.name ?? '?').slice(0, 1))}</span>
+        <span class="coop-room-names"><b>${esc(r.tag)}</b><small>${esc(r.name)}</small></span>${
+        r.locked ? '<span class="coop-lock" title="Needs a password" aria-label="Needs a password">&#128274;</span>' : ''}</span>
+      <span class="coop-room-map">${esc(biomeLabel(r.map))}<small>${esc(where)}</small></span>
+      <span class="coop-room-size">${pipsHtml(r)}<span>${r.players}/${r.max}</span></span>
+    </button>${join}${detail}</li>`;
+}
+
+/** The browser's page: its filters and the public rooms, or why there are none. */
+function browseHtml(open: boolean): string {
+  const shown = shownRooms();
+  const maps = [['', 'All maps'], ...BIOME_IDS.map((id) => [id, BIOMES[id].label])]
+    .map(([id, label]) => `<button class="coop-chip${form.map === id ? ' on' : ''}" data-map="${id}" aria-pressed="${form.map === id}">${esc(label)}</button>`)
+    .join('');
+  const empty = rooms === 'loading' ? 'Looking for rooms…'
+    : rooms === null ? 'The list of rooms couldn\'t be read. Join a friend by their code below.'
+    : Array.isArray(rooms) && rooms.length && !shown.length ? 'No rooms match. Clear the search or the filters.'
+    : 'No public rooms right now. Create one, and it shows here for anyone.';
+  return `<div class="coop-tools">
+      <input id="coop-search" type="search" placeholder="Search host, room or map" value="${esc(form.search)}" aria-label="Search the rooms" autocomplete="off" spellcheck="false">
+      <div class="coop-chips">${maps}<button class="coop-chip${form.notFull ? ' on' : ''}" data-notfull aria-pressed="${form.notFull}">Not full</button>
+      <button class="coop-chip coop-refresh" aria-label="Refresh the list" title="Refresh">&#8635;</button></div>
+    </div>
+    <div class="coop-rooms-head" aria-hidden="true"><span>Host</span><span>Map</span><span>Players</span><span></span></div>
+    <ul class="coop-rooms">${shown.length ? shown.map((r) => roomRowHtml(r, open)).join('') : `<li class="coop-rooms-empty">${esc(empty)}</li>`}</ul>`;
+}
+
+/** The create page: what kind of room, its name, its password, how many it holds, and Open the room. */
+function createHtml(open: boolean, tag: string): string {
+  const kinds = KINDS.map((k) => `<button class="coop-kind${form.kind === k.kind ? ' on' : ''}" data-kind="${k.kind}" role="radio" aria-checked="${form.kind === k.kind}">
+      <b>${k.label}</b><small>${k.says}</small></button>`).join('');
+  const sizes = [2, 3, 4].map((n) => `<button class="coop-size${form.max === n ? ' on' : ''}" data-max="${n}" role="radio" aria-checked="${form.max === n}">${n}</button>`).join('');
+  return `<div class="coop-kinds" role="radiogroup" aria-label="Kind of room">${kinds}</div>
+    <label class="coop-field"><span>Room name</span>
+      <input id="coop-room-name" maxlength="${ROOM_NAME_MAX}" placeholder="${esc(tag ? `${tag}'s room` : 'Your room')}" value="${esc(form.name)}" autocomplete="off" spellcheck="false"${open ? '' : ' disabled'}></label>
+    ${form.kind === 'password' ? `<label class="coop-field"><span>Password</span>
+      <input id="coop-room-password" type="password" maxlength="64" placeholder="What your friends type to join" value="${esc(form.password)}" autocomplete="new-password"${open ? '' : ' disabled'}></label>
+      <p class="coop-pass-note hidden" role="alert"></p>` : ''}
+    <div class="coop-sizes-row"><span>Players</span><div class="coop-sizes" role="radiogroup" aria-label="Players">${sizes}</div></div>
+    <p class="coop-intro">${form.kind === 'public' ? 'Anyone can find it in Browse rooms and join.'
+      : form.kind === 'private' ? 'Only someone with its code or invite link can join.'
+      : 'Listed for anyone, but only those with the password can join.'}</p>
+    <button class="btn primary${pressed === 'host' ? ' pressed' : ''}" id="btn-coop-host"${open ? '' : ' disabled'}>${pressed === 'host' ? 'Opening a room…' : 'Open the room'}</button>`;
+}
+
+/** The dialog's status line over its pages: the server's state, the press waiting, or what went wrong (a password
+ *  asked for, with its field; the room's lobby, with the switch). */
+function statusHtml(s: string, code: string): string {
+  if (server === 'down') return `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`;
+  if (server === 'checking') return '<p class="coop-checking" role="status">Checking the co-op server…</p>';
+  if (pressed) {
+    return `<p class="coop-checking" role="status">Getting co-op ready, then ${pressed === 'host' ? 'opening a room'
+      : `joining room <b>${esc(code.trim().toUpperCase())}</b>`}…</p>`;
+  }
+  if (s !== 'failed') return '';
+  const pass = session.passwordAsked ? `<form class="coop-pass-ask"><input id="coop-pass" type="password" maxlength="64"
+      placeholder="Room ${esc(session.code)}'s password" aria-label="The room's password" autocomplete="off">
+      <button class="btn primary" type="submit">Join</button></form>` : '';
+  return `<p class="coop-error" role="alert">${esc(session.error)}</p>${pass}${lobbySwitchHtml()}`;
+}
+
+/** The dialog out of a room: tabs over the rooms browser and the create page, the player's hero beside them (a tab
+ *  of its own on a small screen), and Quick join and Join by code along its foot. */
+function renderOutOfRoom(body: HTMLElement, s: string): void {
+  const up = server === 'up';
+  const busy = pressed !== null;
+  const open = up && !busy;
+  // (asked to rename: the tag that was taken, picked for retyping, and the room's code kept to join again)
+  const rename = s === 'failed' && session.renameAsked;
+  const formKey = formFor(rename);
+  if (typed.for !== formKey) {
+    typed = { for: formKey, tag: null, code: null };
+    // (asked to rename: the hero's page is where the tag is retyped, shown once as the refusal comes, then left to
+    // the player's tabs)
+    if (rename && window.matchMedia(SMALL).matches) pane = 'hero';
+  }
+  const code = typed.code ?? (invited || (rename || session.passwordAsked ? session.code : ''));
+  const tagValue = typed.tag ?? (rename ? session.tag : savedTag());
+  const typingIn = fieldTypedIn(body);
+  const tabs = PANES.map((p) => `<button class="coop-tab coop-tab-${p.pane}${pane === p.pane ? ' on' : ''}" data-pane="${p.pane}" role="tab" aria-selected="${pane === p.pane}">${p.label}</button>`).join('');
+  const quick = quickRoom();
+  body.innerHTML = `
+    ${headHtml(`<div class="coop-tabs" role="tablist">${tabs}</div>`)}
+    ${statusHtml(s, code)}
+    <div class="coop-main" data-pane="${pane}">
+      <section class="coop-pane coop-browse${up ? '' : ' off'}">${browseHtml(open)}</section>
+      <section class="coop-pane coop-create${up ? '' : ' off'}">${createHtml(open, cleanTag(tagValue))}</section>
+      <aside class="coop-pane coop-hero">
+        <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
+          <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${open ? '' : ' disabled'}></label>
+        <p class="coop-tag-note${tagNote ? '' : ' hidden'}" role="alert">${esc(tagNote)}</p>
+        ${colourPickerHtml(true)}
+        ${portraitPickerHtml()}
+        <p class="coop-intro">Up to ${COOP.maxPlayers} heroes, each with their own gear and spoils. Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first.</p>
+      </aside>
+    </div>
+    ${footHtml(`<button class="btn coop-quick"${open && quick ? '' : ' disabled'} title="${quick ? 'Join the fullest open public room' : 'No open public room to join'}">Quick join</button>`,
+      `<form class="coop-join"><input id="coop-code" maxlength="8" placeholder="ROOM CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form>`,
+      `${up ? '' : ' off'}${busy ? ' busy' : ''}`, busy ? ' aria-busy="true"' : '')}`;
+  bindOutOfRoom(body, { open, rename, typingIn });
+}
+
+/** the screens where the hero has a tab of its own, not a column beside the rooms (as `_coop.scss` lays it out) */
+const SMALL = '(max-width: 760px), (max-height: 520px)';
+
+/** The room asked for by name tag (said under it and its page shown if it can't be used): hosted with `plan`, or
+ *  joined at `code` with `password`. */
+function ask(body: HTMLElement, which: 'host' | 'join', go: (tag: string) => void): void {
+  if (server !== 'up' || pressed) return;
+  const tag = typedTag(body);
+  if (tag === null) {
+    // (the tag's field is on the hero's page on a small screen: shown, so the note under it is seen)
+    if (window.matchMedia(SMALL).matches && pane !== 'hero') { pane = 'hero'; renderCoop(); typedTag($('#coop .coop-body')); }
+    return;
+  }
+  sfx.click();
+  pressed = which;
+  go(tag);
+  // (still cold: the room is asked for once the heroes are warm, and the dialog says it's waiting meanwhile)
+  if (pressed) renderCoop();
+}
+
+function bindOutOfRoom(body: HTMLElement, { open, rename, typingIn }: {
+  open: boolean; rename: boolean; typingIn: ReturnType<typeof fieldTypedIn>;
+}): void {
+  bindReportLinks(body);
+  bindColourPicker(body);
+  bindPortraitPicker(body, renderCoop);
+  const field = <T extends HTMLElement = HTMLInputElement>(id: string): T | null => body.querySelector<T>(`#${id}`);
+  for (const tab of body.querySelectorAll<HTMLElement>('.coop-tab')) {
+    tab.onclick = () => { sfx.click(); pane = tab.dataset.pane as Pane; renderCoop(); };
+  }
+  // the browser: its filters, a room picked, its Join
+  const search = field('coop-search');
+  if (search) search.oninput = () => { form.search = search.value; renderCoop(); };
+  for (const chip of body.querySelectorAll<HTMLElement>('.coop-chip[data-map]')) {
+    chip.onclick = () => { sfx.click(); form.map = chip.dataset.map as BiomeId | ''; renderCoop(); };
+  }
+  const notFull = body.querySelector<HTMLElement>('.coop-chip[data-notfull]');
+  if (notFull) notFull.onclick = () => { sfx.click(); form.notFull = !form.notFull; renderCoop(); };
+  const refresh = body.querySelector<HTMLElement>('.coop-refresh');
+  if (refresh) refresh.onclick = () => { sfx.click(); void readRooms(); };
+  for (const row of body.querySelectorAll<HTMLElement>('.coop-room-pick')) {
+    row.onclick = () => {
+      sfx.click();
+      const code = row.dataset.code!;
+      if (form.picked !== code) form.joinPassword = '';
+      form.picked = form.picked === code ? '' : code;
+      renderCoop();
+      body.querySelector<HTMLInputElement>('#coop-room-pass')?.focus();
+    };
+  }
+  const roomPass = field('coop-room-pass');
+  if (roomPass) {
+    roomPass.oninput = () => { form.joinPassword = roomPass.value; };
+    roomPass.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); joinListed(body, form.picked); } };
+  }
+  for (const button of body.querySelectorAll<HTMLElement>('.coop-room-join')) {
+    button.onclick = () => joinListed(body, button.dataset.code!);
+  }
+  const quick = body.querySelector<HTMLElement>('.coop-quick');
+  if (quick) quick.onclick = () => { const r = quickRoom(); if (r) ask(body, 'join', (tag) => join(r.code, tag, '')); };
+  // the create page
+  for (const kind of body.querySelectorAll<HTMLElement>('.coop-kind')) {
+    kind.onclick = () => { sfx.click(); form.kind = kind.dataset.kind as RoomKind; renderCoop(); };
+  }
+  for (const size of body.querySelectorAll<HTMLElement>('.coop-size')) {
+    size.onclick = () => { sfx.click(); form.max = Number(size.dataset.max); renderCoop(); };
+  }
+  const name = field('coop-room-name');
+  if (name) name.oninput = () => { form.name = name.value; };
+  const password = field('coop-room-password');
+  if (password) password.oninput = () => { form.password = password.value; };
+  const hostButton = field<HTMLElement>('btn-coop-host');
+  if (hostButton) hostButton.onclick = () => {
+    if (form.kind === 'password' && !form.password) {
+      const note = body.querySelector<HTMLElement>('.coop-pass-note');
+      if (note) { note.textContent = 'Type a password for the room.'; note.classList.remove('hidden'); }
+      password?.focus();
+      return;
+    }
+    ask(body, 'host', (tag) => host(tag, { kind: form.kind, name: form.name, max: form.max, password: form.password }));
+  };
+  // the hero: the name tag
+  const tagField = field('coop-tag');
+  const codeField = field('coop-code')!;
+  if (tagField) {
+    // (what's typed kept for the dialog's next render)
+    tagField.oninput = () => { typed.tag = tagField.value; };
+    // (Enter in the name tag: join with the code if there is one, else just done typing)
+    tagField.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (codeField.value.trim().length >= 4) $<HTMLFormElement>('.coop-join', body).requestSubmit();
+      else tagField.blur();
+    };
+  }
+  codeField.oninput = () => { typed.code = codeField.value; };
+  // the field typed in still typed in, its caret where it was; else asked to rename, its taken tag picked to retype
+  const typingBack = typingIn && body.querySelector<HTMLInputElement>(`#${typingIn.id}`);
+  if (typingBack && !typingBack.disabled) {
+    typingBack.focus();
+    if (typingIn.from !== null && typingBack.type !== 'search') typingBack.setSelectionRange(typingIn.from, typingIn.to);
+  } else if (rename && open && typed.tag === null && tagField) {
+    tagField.focus();
+    tagField.select();
+  } else if (session.passwordAsked && open) field('coop-pass')?.focus();
+  const retry = field<HTMLElement>('btn-coop-retry');
+  if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
+  const toLobby = field<HTMLElement>('btn-coop-lobby');
+  if (toLobby) toLobby.onclick = () => reloadWithVillage(session.lobbyAsked === true, session.code);
+  const saves = body.querySelector<HTMLElement>('.coop-saves');
+  if (saves) saves.onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
+  $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
+    e.preventDefault();
+    const room = codeField.value.trim();
+    if (room.length < 4) return;
+    ask(body, 'join', (tag) => join(room, tag, ''));
+  };
+  const passAsk = body.querySelector<HTMLFormElement>('.coop-pass-ask');
+  if (passAsk) passAsk.onsubmit = (e) => {
+    e.preventDefault();
+    const pw = field('coop-pass')!.value;
+    if (!pw) return;
+    ask(body, 'join', (tag) => join(session.code, tag, pw));
+  };
+}
+
+/** A listed room joined from its row, with the password typed under it where it's locked (asked for if none is). */
+function joinListed(body: HTMLElement, code: string): void {
+  const room = Array.isArray(rooms) ? rooms.find((r) => r.code === code) : undefined;
+  if (!room) return;
+  if (room.locked && form.picked === code && !form.joinPassword) {
+    body.querySelector<HTMLInputElement>('#coop-room-pass')?.focus();
+    return;
+  }
+  if (room.locked && form.picked !== code) {
+    form.picked = code;
+    form.joinPassword = '';
+    renderCoop();
+    body.querySelector<HTMLInputElement>('#coop-room-pass')?.focus();
+    return;
+  }
+  ask(body, 'join', (tag) => join(code, tag, room.locked ? form.joinPassword : ''));
 }
 
 /** The lobby's line about the room (hidden solo). */
