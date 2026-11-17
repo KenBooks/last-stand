@@ -2,7 +2,7 @@
 
 Contributions come in as pull requests from a fork: you open an issue, fix it on a branch of your fork, and open a PR into `main` of `VictorZakharov/last-stand`. Two scripts automate the routine parts: `scripts/issue.sh` and `scripts/commit.sh`.
 
-Read [AGENTS.md](AGENTS.md) before changing code: it has the product rules (procedural everything, original names, UI that fits any screen) and what applies across the game. Every directory has an AGENTS.md of its own with the gotchas of its code: read the ones on the way to what you change (the heroes' models and legs also have notes in `docs/agents/`, which `src/entities/models/AGENTS.md` says when to read).
+Read [AGENTS.md](AGENTS.md) before changing code: it has the product rules (procedural everything, original names, UI that fits any screen) and what applies across the game. Every directory has an AGENTS.md of its own with the gotchas of its code: read the ones on the way to what you change (some areas also have notes in `docs/agents/`, which the AGENTS.md they came from says when to read).
 
 ## 1. One-time setup
 

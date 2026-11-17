@@ -1,8 +1,9 @@
 # `tools/lab`'s commands
 
 Every command of the lab in full: what it measures and what it was measured against, its options, the looks a picture
-takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab's rules, each command in a line
-(Commands at a glance), how to write a measure, how the lab works and what keeps it repeatable.
+takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab's rules and each command in a line
+(Commands at a glance); [`WRITING.md`](WRITING.md) how to write a measure and what keeps it repeatable,
+[`WORKINGS.md`](WORKINGS.md) how the lab works.
 
 - `sheet`: the hero in the states the player sees (`--states stand,walk,full,cast`), pictured from the game's views
   and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`, the whole frame
@@ -124,7 +125,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   pose from the arrow as posed again (`shotFrom.steady=0`), which must flicker; `--pictures` films four frames running
   round the arrow's largest move in each biome's first stand (played again to it), the whole body from his right and
   from above behind, each with the arrow's height (`tools/lab/out/bowprop`).
-- `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
+- `probe <module>`: a measure of your own ([`WRITING.md`](WRITING.md)). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
 - `ui`: the game's UI as the player sees it, in its states: in full in [`commands/ui.md`](commands/ui.md).
 - `readme`: the README's pictures (`page/readmeShots.ts`, written to `out/readme/<shot>.png` at the screen's own

@@ -1,6 +1,6 @@
 # `src/audio/music`
 
-The music's tracks, one for each biome's lobby (and between its runs' waves) and one for its waves' fights, played by `core/music.ts` (the Music gotcha in `src/core/AGENTS.md`) where `data/music.ts` says each loops. `tools/music/README.md` says how each was cut from its piece.
+The music's tracks, one for each biome's lobby (and between its runs' waves) and one for its waves' fights, played by `core/music.ts` (the Music note in `docs/agents/audio.md`) where `data/music.ts` says each loops. `tools/music/README.md` says how each was cut from its piece.
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 

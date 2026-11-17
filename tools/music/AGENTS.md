@@ -1,6 +1,6 @@
 # `tools/music`
 
-The music's tool (`README.md`): `loops` finds where a piece can loop, `map` pictures it against itself, `make` cuts a track from it and checks its seam, `seam` checks any track's, and `levels` says how loud each is. How the game plays the tracks is the Music gotcha in `src/core/AGENTS.md`.
+The music's tool (`README.md`): `loops` finds where a piece can loop, `map` pictures it against itself, `make` cuts a track from it and checks its seam, `seam` checks any track's, and `levels` says how loud each is. How the game plays the tracks is the Music note in `docs/agents/audio.md`.
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 

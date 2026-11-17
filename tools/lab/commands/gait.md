@@ -60,3 +60,9 @@ goes +x along z -8.5 past the dais's side, the floor's clearest lane (along z 14
 or the nearest clear lane beside it should a prop come within 1.5 m (`page/straightRun.ts`), and says how straight it
 held: it fails when the facing lies over 3 degrees off +x or turns over 3 degrees across its frames, with a canary of
 made-up runs (held straight, turning 10 degrees, the other way) it must judge right.
+
+## At a glance, in full
+
+The line `tools/lab/AGENTS.md`'s Commands at a glance gave it, before it grew too long for a line:
+
+- `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
