@@ -29,8 +29,9 @@ export const FIST = tunable('fist', {
   /** share of the arm's reach at impact: about 20 degrees of elbow bend */
   reach: 0.985, eyesReach: 0.93,
   /** each finger's bends in a clenched fist (rad: its knuckle, middle joint and last), and the thumb's swing across
-   *  them (`clench` in hands.ts) */
-  clench: [1.6, 1.95, 1.25], thumb: 1.3,
+   *  them (`clench` in hands.ts; 0: `hold`'s, wrapped round the thin handle, which tucks it over the index finger: swung
+   *  as `poseHand`'s, it stood out sideways and tore the mesh, `lab hands --poses clenched`) */
+  clench: [1.6, 1.95, 1.25], thumb: 0,
 });
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,

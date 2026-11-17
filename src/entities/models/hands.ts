@@ -337,8 +337,9 @@ function thumbAcross(h: Hand, tc: number, spread: number): void {
 /**
  * A fist clenched after `hold` has turned the hand onto its knuckles' line: each finger folded at its knuckle, its
  * middle joint and its last (`bends`, rad: about a real fist's 90, 100 and 55 degrees), each a little more than the
- * one before it from the index, close together, the tips in the palm, and the thumb swung across the fingers by
- * `thumb` (`poseHand`'s), the hand's turn left as `hold` set it. Wrapped round a handle the fingers hooked round an
+ * one before it from the index, close together, the tips in the palm; the thumb left as `hold` wrapped it round its
+ * handle (over the index finger round a thin one), or swung across by `thumb` as `poseHand`'s is; the hand's turn left
+ * as `hold` set it. `lab hands --poses clenched` pictures the warrior's from six sides. Wrapped round a handle the fingers hooked round an
  * empty space before the palm, a claw (from play, "like someone with arthritis"); with the thumb left on the handle
  * it stood off the fingers (an adversarial review); `poseHand`'s fist bends the knuckles 0.8 of its curl alone, the
  * fingers hooked from the side.
@@ -348,7 +349,7 @@ export function clench(h: Hand, bends: readonly number[], thumb: number): void {
     const more = 1 + 0.04 * i;
     for (let n = 0; n < 3; n++) f.j[n].rotation.set(bends[n] * more, 0, 0);
   });
-  thumbAcross(h, thumb, 0);
+  if (thumb > 0) thumbAcross(h, thumb, 0);
 }
 
 /** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:

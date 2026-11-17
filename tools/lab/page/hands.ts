@@ -8,7 +8,8 @@ import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
 import { meshesOf, wearLook, type Look } from './looks';
 import * as handsCode from '../../../src/entities/models/hands';
-import { hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
+import { clench, hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
+import { FIST } from '../../../src/entities/models/warriorFists';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
@@ -111,6 +112,8 @@ const POSES: Record<string, Pose> = {
   // (the mage's free hand held into Void Lance's portal, half way into its kick)
   strained: (hand) => strainHand(hand, 0.75, 0.65),
   fist: (hand) => poseHand(hand, 1.45, 0),
+  // (the warrior's bare fist, #400: turned as round a thin handle, then clenched, as `models/warrior.ts` closes it)
+  clenched: clenchedFist,
   handle: closedRound,
 };
 
@@ -142,6 +145,15 @@ function closedRound(hand: Hand, wrist: THREE.Object3D): void {
   wrist.updateMatrixWorld(true);
   hold(hand, across, HANDLE_RADIUS);
   grip.add(new THREE.Mesh(new THREE.CylinderGeometry(HANDLE_RADIUS, HANDLE_RADIUS, HANDLE_LENGTH, 24), HANDLE));
+}
+
+/** The warrior's bare fist (`FIST`, tunable `fist`): the hand turned by `hold` as round its thin handle across the
+ *  palm, the handle not drawn, and clenched (`clench`): the fingertips in the palm, the thumb across them. */
+function clenchedFist(hand: Hand, wrist: THREE.Object3D): void {
+  const across = new THREE.Vector3(-hand.s, 0, 0);
+  wrist.updateMatrixWorld(true);
+  hold(hand, across, FIST.r);
+  clench(hand, FIST.clench, FIST.thumb);
 }
 
 /** A point of the hand's surface where it's drawn (the world), and the joint it moves with. */

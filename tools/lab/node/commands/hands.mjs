@@ -13,7 +13,7 @@ export default {
     poses: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['flat', 'open', 'relaxed', 'strained', 'fist', 'handle'],
+      choices: ['flat', 'open', 'relaxed', 'strained', 'fist', 'clenched', 'handle'],
       help: 'the poses pictured (all by default)',
     },
     views: {

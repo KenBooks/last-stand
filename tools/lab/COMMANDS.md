@@ -1159,7 +1159,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   change to a model with `--ab`. The studio, its camera and its pictures are `page/studio.ts`, which `hands` shares.
 - `hands`: the hero's right hand alone (`page/hands.ts`): a copy of it on a wrist of its own (`handLike` in
   `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed,
-  strained as a caster's (`strainHand`), in a fist and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
+  strained as a caster's (`strainHand`), in a fist, clenched as the warrior's bare fist (`clenched`: `hold` then `clench`, `FIST` tunable as `fist`) and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
   little finger's, the fingertips and three-quarters (`--views`), and close up when asked for: `cuffs`, the glove's
   cuffs over the fingers, `web`, the thumb's web (where a bent thumb once pressed the glove into the skin), and `joints`, the fingers'
   knuckles and the bones between them from the little finger's side. Said
