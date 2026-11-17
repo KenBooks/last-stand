@@ -1,7 +1,8 @@
 // The minimap's village (ui/hud.ts draws the rest, as in a run): the plan of the village in the run's minimap's own
 // marks, its boundary and what stands inside it pale on the dark, its two portals the colours of their biomes' gates,
 // so a player meets the minimap in the village as the fights show it. The village stands still: drawn once, and turned
-// with the camera each time the minimap is drawn.
+// with the camera each time the minimap is drawn; the marks of the houses walked into are drawn over it each time,
+// upright on the screen.
 //
 // Its paving and what's built are each drawn whole in one colour on a layer of their own, and the layer laid on at its
 // share: each road, the square and the terrace laid on at their share one over another, every place two met was darker
@@ -150,16 +151,26 @@ function drawVillage(c: CanvasRenderingContext2D, s: number): void {
     if (!object.biome) dot(c, s, object.at[0], object.at[1], USED_DOT, USED);
   }
   for (const id of BIOME_IDS) dot(c, s, portalPlace(id).x, portalPlace(id).z, PORTAL_DOT, BIOMES[id].minimap.portal);
-  // (each house walked into: a little house on its roof)
-  for (const id of ROOM_IDS) {
-    const cottage = COTTAGES[HOUSES[id].cottage];
-    house(c, s, cottage.x, cottage.z, HOUSE_MARK, USED);
-  }
 }
 
-/** A little house at (x, z), `size` px across: a gable on a block, a dark door in it. */
-function house(c: CanvasRenderingContext2D, s: number, x: number, z: number, size: number, fill: string): void {
-  const h = size / 2, cx = x * s, cy = z * s;
+/** Each house walked into, a little house on its roof, upright on the screen however the minimap is turned (they're
+ *  drawn each time, not in the plan: turned with it, each stood at the camera's angle, from play "lets always orient
+ *  icons north"). */
+function drawHouses(c: CanvasRenderingContext2D, s: number): void {
+  const turned = c.getTransform();
+  const scale = Math.hypot(turned.a, turned.b);
+  for (const id of ROOM_IDS) {
+    const cottage = COTTAGES[HOUSES[id].cottage];
+    const at = turned.transformPoint({ x: cottage.x * s, y: cottage.z * s });
+    c.setTransform(scale, 0, 0, scale, at.x, at.y);
+    house(c, HOUSE_MARK, USED);
+  }
+  c.setTransform(turned);
+}
+
+/** A little house round the origin, `size` px across: a gable on a block, a dark door in it. */
+function house(c: CanvasRenderingContext2D, size: number, fill: string): void {
+  const h = size / 2, cx = 0, cy = 0;
   c.fillStyle = fill;
   c.beginPath();
   c.moveTo(cx - h, cy);
@@ -185,4 +196,5 @@ export function drawVillageOnMinimap(c: CanvasRenderingContext2D, width: number)
     drawVillage(own, villageMinimapScale(width));
   }
   c.drawImage(drawn, -width / 2, -width / 2, width, width);
+  drawHouses(c, villageMinimapScale(width));
 }
