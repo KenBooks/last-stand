@@ -198,6 +198,10 @@ function onReach(near: THREE.Vector3, far: THREE.Vector3, shoulder: THREE.Vector
   return true;
 }
 
+/** how far a punch turns the trunk into it (the hips half of it, the chest the whole), the jab's and the cross's: the
+ *  whole body behind it (0.3 and 0.5, the arm read as alone from behind him, an adversarial review) */
+const PUNCH_TURN = tunable('punchTurn', { jab: 0.5, cross: 0.75 });
+
 /**
  * The trunk behind a punch at `k` of its cast, out `out` of the way (`lead`: the jab, else the cross): the hips first,
  * the chest after them, the shoulder sent after the fist; the head kept on the foe. Moving, the legs step and the
@@ -211,7 +215,7 @@ function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: b
   shoulder.position.x += (lead ? -1 : 1) * (eyes ? 0.03 : 0.012) * out;
   if (eyes) return;
   // (a jab turns the lead shoulder into it too, 17 degrees: at 9 it read as the arm alone)
-  const turn = lead ? -0.3 : 0.5, w = 0.45 + 0.55 * still;
+  const turn = lead ? -PUNCH_TURN.jab : PUNCH_TURN.cross, w = 0.45 + 0.55 * still;
   j.hips.rotation.y += 0.5 * turn * hips * w;
   j.spine.rotation.y += 0.2 * turn * chest;
   j.chest.rotation.y += 0.5 * turn * chest;
