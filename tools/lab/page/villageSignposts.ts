@@ -3,7 +3,7 @@
 // within a few degrees; each post stands off the paving and its curb, off the footpaths, clear of what else stands
 // (the lamps, the trees, the benches); and each arm can be read from the paving near it: a spot on a road or the
 // square within reach from which its face is turned toward the eye, its letters tall enough over the shoulder. Pictured
-// from each post's best spot at noon, and from afar in the game's own view at noon and at night. `canary` turns one arm a quarter round and stands a post on a road's middle,
+// from each post's best spot at noon, and from afar in the game's own view at noon, dusk and midnight. `canary` turns one arm a quarter round and stands a post on a road's middle,
 // both of which must be found.
 import * as THREE from 'three';
 import { screenArea, type Lab, type Pictured } from './lab';
@@ -39,9 +39,10 @@ const SETTLE = 60;
 /** how far from a post it's pictured from (m), and how far aside of it the view looks (rad) */
 const PICTURED_FROM = 3.4;
 const PICTURED_ASIDE = 0.35;
-/** how far off a post it's pictured from in the game's own view (m), and the night's hour it's pictured at too */
+/** how far off a post it's pictured from in the game's own view (m), and the hours it's pictured at besides noon */
 const AFAR = 6;
-const AFAR_NIGHT = 22;
+const AFAR_DUSK = 19;
+const AFAR_NIGHT = 0;
 /** the box round a post its close crop takes in (m either side of it, and its height) */
 const AROUND = 2.2;
 const POST_TOP = 3;
@@ -176,11 +177,11 @@ async function pictured(lab: Lab): Promise<Pictured[]> {
 }
 
 /** Each post as the player first meets it (from Viktor: "signs need better visibility at the distance"): the game's
- *  own view from above, from `AFAR` m off on the paving before its first arm, at noon and at night. */
+ *  own view from above, from `AFAR` m off on the paving before its first arm, at noon, dusk and midnight. */
 async function fromAfar(lab: Lab): Promise<Pictured[]> {
   const moments: Pictured[] = [];
   await viewBy(lab, 'top');
-  for (const [hour, when] of [[12, 'noon'], [AFAR_NIGHT, 'night']] as const) {
+  for (const [hour, when] of [[12, 'noon'], [AFAR_DUSK, 'dusk'], [AFAR_NIGHT, 'midnight']] as const) {
     holdHour(hour);
     for (const post of SIGNPOSTS) {
       const arm = G.arena.village.signArms.find((a) => a.post === post)!;
