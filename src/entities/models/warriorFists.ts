@@ -24,7 +24,11 @@ import { tunable } from '../../core/tuning';
 
 /** a hand closing: its curl and its fingers' spread on the way (models/hands.ts `poseHand`), and from how far closed
  *  it is a fist, the hand shut as round a handle this thin (m, `hold`) */
-export const FIST = { curl: 1.7, spread: 0.02, from: 0.6, r: 0.012 };
+export const FIST = tunable('fist', {
+  curl: 1.7, spread: 0.02, from: 0.6, r: 0.012,
+  /** each finger's bends in a clenched fist (rad: its knuckle, middle joint and last; `clench` in hands.ts) */
+  clench: [1.55, 1.75, 0.95],
+});
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
  *  up, ahead): the lead (left) further out, both at the cheeks and out before the face, the elbows in by the ribs */
@@ -47,8 +51,9 @@ const GUARD_EYES = tunable('fistsEyes', {
  *  the screen's line there meets the arm's reach (aimed further, the arm pointed at it from the shoulder under the
  *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
 const PUNCH_AT = [0, -0.04, 1.2];
-/** how much of its length an arm thrown out in a punch keeps short of straight (a locked elbow reads as a stick) */
-const PUNCH_REACH = 0.97;
+/** how much of its length an arm thrown out in a punch reaches: short of straight, the elbow a little bent on the blow
+ *  (at 0.97 the elbow read 2 degrees, locked: "robotic", an adversarial review) */
+const PUNCH_REACH = 0.93;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
 const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
@@ -163,6 +168,9 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
  *  short of the arm's length; through the eyes just under the crosshair. */
 function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): THREE.Vector3 {
   const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * PUNCH_REACH;
+  // (the middle line first: `between` works in `_sh` too, and read before it the punch was measured from the other
+  // shoulder's place in the world, every punch thrown out to its arm's full length, the elbow locked straight)
+  if (!eyes) from(between(j, _mid), PUNCH_AT, out);
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
   if (eyes) {
     const [across, up] = GUARD_EYES.punch;
@@ -170,7 +178,7 @@ function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): T
     if (onReach(onScreen(j, [on[0], on[1], 0.1], _near), onScreen(j, [on[0], on[1], 1.5], out), _sh, reach, out)) {
       return out;
     }
-  } else from(between(j, _mid), PUNCH_AT, out);
+  }
   return out.sub(_sh).setLength(reach).add(_sh);
 }
 
@@ -193,10 +201,11 @@ function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: b
   const hips = curve(PUNCH_OUT, k + LEAD.hips), chest = curve(PUNCH_OUT, k + LEAD.chest), out = curve(PUNCH_OUT, k);
   const shoulder = lead ? j.shoulderL : j.shoulderR;
   // (the shoulder sent in after the fist: forward and in, as the collarbone carries it)
-  shoulder.position.z += (eyes ? 0.14 : 0.04) * out;
+  shoulder.position.z += (eyes ? 0.14 : 0.07) * out;
   shoulder.position.x += (lead ? -1 : 1) * (eyes ? 0.03 : 0.012) * out;
   if (eyes) return;
-  const turn = lead ? -0.16 : 0.5, w = 0.45 + 0.55 * still;
+  // (a jab turns the lead shoulder into it too, 17 degrees: at 9 it read as the arm alone)
+  const turn = lead ? -0.3 : 0.5, w = 0.45 + 0.55 * still;
   j.hips.rotation.y += 0.5 * turn * hips * w;
   j.spine.rotation.y += 0.2 * turn * chest;
   j.chest.rotation.y += 0.5 * turn * chest;
@@ -272,43 +281,55 @@ const pounceShares = () => {
 };
 
 /**
- * Pounce at `k` of its leap and its blows, as a body leaps at something: launched off the rear foot stretched long, the
- * body pitched forward and both arms flung ahead; then gathered in the air, the knees drawn up under him and both fists
- * raised behind his head; then the fists coming down ahead of him as he drops onto bent knees before what he lands on,
- * and each fist driven into it, a blow at each of the skill's (`POUNCE`). Returns how far the pose owns the legs.
+ * Pounce at `k` of its leap and its blows, as a body leaps at something: sunk into his knees, then sprung up and
+ * forward at about 45 degrees, the lead fist reaching ahead and the rear one cocked by his ear, the knees driven up under
+ * him; then the fists coming down ahead of him as he lands, a moment's give in the knees and up to his full height an
+ * arm's length off what he lands on, and each fist driven into it, a blow at each of the skill's (`POUNCE`). Returns how
+ * far the pose owns the legs.
  */
 export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): number {
   const s = pounceShares(), p = k / s.leap;
-  // (the leap's phases, each eased in and out: launched, gathered, coming down; then low on the landing)
-  const launch = ramp(p, 0, 0.12) * (1 - ramp(p, 0.2, 0.45));
-  const tuck = ramp(p, 0.25, 0.5) * (1 - ramp(p, 0.75, 0.95));
-  const fall = ramp(p, 0.7, 0.9) * (1 - ramp(k, s.leap + 0.02, s.leap + 0.08));
-  const air = Math.max(launch, tuck, fall);
-  const low = ramp(k, s.leap - 0.03, s.leap + 0.04) * (1 - ramp(k, 0.9, 1));
+  // (the leap's phases, each eased in and out: crouched to spring, launched, gathered, coming down; then standing on
+  // the landing, at his full height an arm's length off what he lands on)
+  const crouch = ramp(p, 0, 0.08) * (1 - ramp(p, 0.12, 0.22));
+  const launch = ramp(p, 0.1, 0.2) * (1 - ramp(p, 0.28, 0.45));
+  const tuck = ramp(p, 0.3, 0.5) * (1 - ramp(p, 0.72, 0.92));
+  const fall = ramp(p, 0.7, 0.88) * (1 - ramp(k, s.leap + 0.01, s.leap + 0.06));
+  const air = Math.max(crouch, launch, tuck, fall);
+  const low = ramp(k, s.leap - 0.03, s.leap + 0.02) * (1 - ramp(k, s.leap + 0.04, s.leap + 0.12));
   if (!eyes) {
-    // (pitched forward over the leap: long and low as he goes, rounded over his knees in the air)
-    j.body.rotation.x += 0.45 * launch + 0.6 * tuck + 0.3 * fall;
-    j.spine.rotation.x += 0.1 * launch + 0.35 * tuck + 0.2 * fall + 0.22 * low;
-    j.neck.rotation.x += -0.45 * launch - 0.45 * tuck - 0.3 * fall - 0.15 * low;
-    j.body.position.y += -0.12 * low; j.body.position.z += 0.06 * low;
-    // (the lead leg driven up and the rear one pushing off long behind; tucked, both knees drawn up; coming down, the
-    // legs reaching for the floor, knees bent to take him)
-    j.thighL.rotation.x += -0.9 * launch - 1.4 * tuck - 0.7 * fall; j.kneeL.rotation.x += 0.9 * launch + 1.9 * tuck + 0.8 * fall;
-    j.thighR.rotation.x += 0.45 * launch - 1.1 * tuck - 0.4 * fall; j.kneeR.rotation.x += 0.2 * launch + 1.9 * tuck + 0.9 * fall;
+    // (sunk into his knees to spring; launched up and forward at about 45 degrees, the trunk upright over the hips and
+    // the knees driven up, not dived flat; leaning into what he comes down on; a moment's give in the knees as he lands,
+    // then tall. Pitched 26 to 34 degrees through the air and kept 12 cm down on the landing, he dived flat like a
+    // swimmer and knelt into the foe: an adversarial review)
+    j.body.position.y += -0.16 * crouch - 0.06 * low;
+    j.body.rotation.x += 0.12 * crouch + 0.18 * launch + 0.15 * tuck + 0.2 * fall;
+    j.spine.rotation.x += 0.18 * crouch + 0.05 * launch + 0.12 * tuck + 0.1 * fall + 0.06 * low;
+    j.neck.rotation.x += -0.25 * crouch - 0.25 * launch - 0.25 * tuck - 0.25 * fall;
+    // (crouched, both knees bent deep; launched, the lead knee driven up and the rear leg pushing off long behind;
+    // tucked, both knees drawn up under him; coming down, the legs reaching for the floor)
+    j.thighL.rotation.x += -0.75 * crouch - 1.2 * launch - 1.5 * tuck - 0.7 * fall;
+    j.kneeL.rotation.x += 1.3 * crouch + 1.2 * launch + 1.9 * tuck + 0.7 * fall + 0.35 * low;
+    j.thighR.rotation.x += -0.5 * crouch + 0.35 * launch - 1.2 * tuck - 0.4 * fall;
+    j.kneeR.rotation.x += 1.1 * crouch + 0.3 * launch + 1.9 * tuck + 0.8 * fall + 0.35 * low;
   }
   fistGuard(j, 1, t, eyes);
   if (air > 0) {
     if (eyes) {
-      // (through the eyes: flung ahead out of the view's foot, raised over the view, then down into its middle)
-      const y = lerp(lerp(-0.2, 0.6, tuck), -0.25, fall);
-      place(j, true, onScreen(j, [-0.25, y, 0.45], _far), air, eyes);
-      place(j, false, onScreen(j, [0.3, y, 0.45], _far), air, eyes);
+      // (through the eyes: drawn down to spring, the lead fist thrown ahead into the view's middle and the rear one
+      // cocked at its side, then both come down into it)
+      const y = lerp(lerp(-0.45, -0.1, Math.max(launch, tuck)), -0.25, fall);
+      place(j, true, onScreen(j, [-0.12, y, 0.62], _far), air, eyes);
+      place(j, false, onScreen(j, [0.5, y - 0.15, 0.42], _far), air, eyes);
     } else {
       between(j, _mid);
-      // (flung ahead at the shoulders' height, raised behind the head, then down ahead at the chest's)
-      const y = lerp(lerp(0.02, 0.38, tuck), -0.12, fall), z = lerp(lerp(0.5, -0.02, tuck), 0.5, fall);
-      place(j, true, _far.set(_mid.x + 0.16, _mid.y + y, _mid.z + z), air);
-      place(j, false, _far.set(_mid.x - 0.16, _mid.y + y, _mid.z + z), air);
+      // (drawn back low by the hips to spring; in the air the lead fist reaching ahead at the shoulders' height and the
+      // rear one cocked back by the ear, to come down on it; down ahead at the chest's height to land)
+      const fly = Math.max(launch, tuck);
+      const lead = lerp(lerp(-0.32, 0.02, fly), -0.1, fall), leadZ = lerp(lerp(0.05, 0.55, fly), 0.5, fall);
+      const rear = lerp(lerp(-0.32, 0.12, fly), -0.06, fall), rearZ = lerp(lerp(-0.05, -0.02, fly), 0.42, fall);
+      place(j, true, _far.set(_mid.x + 0.16, _mid.y + lead, _mid.z + leadZ), air);
+      place(j, false, _far.set(_mid.x - 0.2, _mid.y + rear, _mid.z + rearZ), air);
     }
   }
   // on it: each blow a fist driven into its body, the lead hand first (a pinned foe still stands: driven down to
@@ -338,6 +359,9 @@ export function fistRush(j: Joints, run: number, eyes: boolean): void {
     // (the lead shoulder turned square into the way, the trunk dropped over it and the chin tucked behind it)
     j.chest.rotation.y += -0.6 * run; j.spine.rotation.x += 0.38 * run; j.neck.rotation.y += 0.5 * run;
     j.neck.rotation.x += 0.12 * run; j.body.position.y += -0.06 * run;
+    // (the whole body pitched into the dash over the feet driving it, not upright on them: with the spine's bend alone
+    // he ran upright with a walking stride, an adversarial review)
+    j.body.rotation.x += 0.22 * run;
   }
   if (eyes) {
     place(j, true, onScreen(j, [-0.12, -0.35, 0.36], _far), run, eyes);

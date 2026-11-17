@@ -80,7 +80,8 @@ const skill: InstantSkill = {
         bloodSpray({ x: p.x, y: 1.1, z: p.z }, dir, 8);
       }
       if (player.local) kickFov(6);
-      // dust thrown up behind, and a red haze of his blood's heat streaming off him, a drop now and then falling from it
+      // dust thrown up behind, and a red haze of his blood streaming off him, a drop now and then falling from it (no
+      // glowing sparks: red light read as embers, not blood)
       if ((dust -= G.dt) <= 0) {
         dust = 0.04;
         smokePuff({ x: p.x - dir.x * 0.4, y: 0, z: p.z - dir.z * 0.4 }, { count: 1, color: DUST, alpha: 0.4, size: 0.5, sizeEnd: 1.6, life: 0.7, speed: 0.6 });
@@ -96,11 +97,6 @@ const skill: InstantSkill = {
           life: 0.9, size: rand(0.05, 0.09), sizeEnd: 0.04, color: col(GORE.drop), alpha: 0.95, gravity: 16, drag: 0.6,
         });
       }
-      for (let i = 0; i < 2; i++) particles.glow.spawn({
-        x: p.x + rand(-0.3, 0.3), y: rand(0.6, 1.6), z: p.z + rand(-0.3, 0.3),
-        vx: -dir.x * rand(5, 9), vy: rand(0, 0.8), vz: -dir.z * rand(5, 9),
-        life: rand(0.12, 0.22), size: rand(0.03, 0.05), sizeEnd: 0, color: col(0xff2a14, 1.2), colorEnd: col(0x400404, 0.1),
-      });
       hurtPropsIn(player, p.x, p.z, REACH, PROP_DAMAGE.trample, struck);
       for (const e of G.enemies) {
         if (!e.alive || hit.has(e) || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > REACH + e.radius) continue;

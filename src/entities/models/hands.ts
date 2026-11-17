@@ -330,6 +330,18 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
   h.thumb.j[2].rotation.set(tc * 0.6, 0, 0);
 }
 
+/**
+ * A fist clenched after `hold` has turned the hand onto its knuckles' line: each finger folded at its knuckle, its
+ * middle joint and its last (`bends`, rad), the tips in the palm, as a clenched fist is (wrapped round a handle, the
+ * fingers hooked round an empty space in front of the palm, a claw; from play, "like someone with arthritis"). The
+ * thumb is `hold`'s, over the fingers.
+ */
+export function clench(h: Hand, bends: readonly number[]): void {
+  for (const f of h.f) {
+    for (let n = 0; n < 3; n++) f.j[n].rotation.set(bends[n], 0, 0);
+  }
+}
+
 /** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:
  *  a claw, as reference photographs of a hand straining against a force hold it (#425), the knuckle nearly straight
  *  and the middle joint bent hard, graded from the index, nearly straight, to the little finger, most; bent gently

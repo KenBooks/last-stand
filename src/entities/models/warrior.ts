@@ -21,7 +21,7 @@ import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
-import { buildHand, poseHand, hold, loosen, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
+import { buildHand, poseHand, hold, loosen, clench, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -4128,6 +4128,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (fistedR > FIST.from) {
       if (fp) rollForearm(handR, j.elbowR, j.handR, fistLine.R);
       hold(handR, knuckles(grip, j.handR, fistLine.R), FIST.r);
+      if (FIST.clench[0] > 0) clench(handR, FIST.clench);
     }
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
@@ -4136,6 +4137,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (fisted > FIST.from) {
       if (fp) rollForearm(handL, j.elbowL, j.handL, fistLine.L);
       hold(handL, knuckles(gripL, j.handL, fistLine.L), FIST.r);
+      if (FIST.clench[0] > 0) clench(handL, FIST.clench);
     }
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 
