@@ -661,8 +661,18 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   S.add(collar, furM, j.chest);
   yield;
   // a high collar of the gambeson inside the fur, round the neck as the tunic's neckline is (centred on the chest, his
-  // neck came out through it behind), and the neck
-  S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
+  // neck came out through it behind), and the neck; drawn in at its top's sides to the neck's own section, which is narrower
+  // across than deep, with a rolled edge (round, it stood 17 mm off the sides of his neck, its edge cut flat: a hard line
+  // round the neck over the fur)
+  const COLLAR = { top: 0.075, foot: 0.09, high: 0.06, across: 0.93, rim: 0.006 };
+  const collarAt = (g: THREE.BufferGeometry, y0: number) => {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) * lerp(1, COLLAR.across, sm(-COLLAR.high / 2, COLLAR.high / 2, p.getY(i) + y0)));
+    g.computeVertexNormals();
+    return g;
+  };
+  S.add(collarAt(new THREE.CylinderGeometry(COLLAR.top, COLLAR.foot, COLLAR.high, 24, 3, true), 0), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
+  S.add(collarAt(new THREE.TorusGeometry(COLLAR.top, COLLAR.rim, 6, 24).rotateX(Math.PI / 2), COLLAR.high / 2), cloth, j.chest, [0, 0.27 + COLLAR.high / 2, -NECKLINE_BACK]);
 
   yield;
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the

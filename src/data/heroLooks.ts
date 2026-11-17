@@ -23,7 +23,7 @@ export interface HeroLookDef {
 export const HERO_LOOKS: Record<'warrior' | 'mage' | 'ranger', readonly HeroLookDef[]> = {
   warrior: [
     { id: 'sellsword', name: 'Sellsword', blurb: 'Long dark hair, a week of stubble', face: 'warrior', hair: 'loose' },
-    { id: 'veteran', name: 'Veteran', blurb: 'Cropped hair, a broken nose, an old scar', face: 'warrior-veteran', hair: 'short', crop: true },
+    { id: 'veteran', name: 'Veteran', blurb: 'Cropped hair, a hard stare, an old scar', face: 'warrior-veteran', hair: 'short', crop: true },
     { id: 'northman', name: 'Northman', blurb: 'A long mane and a full red beard', face: 'warrior-northman', hair: 'mane' },
     { id: 'old-soldier', name: 'Old Soldier', blurb: 'Greying, lined, his hair swept back', face: 'warrior-elder', hair: 'swept' },
   ],

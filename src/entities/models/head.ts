@@ -10,7 +10,7 @@ import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { faceCanvases, faceGrid } from '../../core/textures';
 import { createKit, kitCopy } from '../../core/materials';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceId, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, neckCord, type FaceId, type FaceShape, type HeadGrid } from './face';
 import { HERO_LOOKS, lookDef, looksOf, type HairStyle, type HeroLookDef } from '../../data/heroLooks';
 import type { MaterialKit } from '../../types';
 import { built } from './steps';
@@ -325,7 +325,7 @@ export function headShapes(who: FaceId, o: HeadStyle = {}): HeadShapes {
     locks = once(`${key}:locks`, () => {
       const made: THREE.BufferGeometry[] = [];
       if (loose) looseLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
-      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, L.fringe);
       else sweptLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, o.hair === 'mane');
       const merged = mergeGeometries(made)!;
       for (const x of made) x.dispose();
@@ -1045,7 +1045,7 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
  *  longer on top and close at the sides (sdf-harness's short groom, `groomHair`: lengths by where they root), standing off
  *  the scalp on top and tousled, each running back over the head turned a random way from the comb's line, its tip lifting;
  *  `crop`'s tufts cover the back and the sides below them. Lit by the hair's mass (`massNormals`). */
-function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
+function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number, fringeLen = 1): void {
   const n = lod(720, 180), V = THREE.Vector3, N = 9;
   const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
   const r = new V(), flow = new V(), end = new V(), d = new V(), pts: THREE.Vector3[] = [];
@@ -1068,7 +1068,7 @@ function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     const crown = sm(1.0, 1.35, el0);
     flow.applyAxisAngle(r, (rng() - 0.5) * (0.6 + 1.2 * topness + 2.5 * crown) * (1 - 0.6 * fringe));
     // its length (mm): 18 to 30 at the sides, 40 to 65 on top; as an angle round the skull
-    const R = surface(az0, el0, 0).distanceTo(skullC) / HEAD_MM, len = lerp(26, 56, topness) + rng() * lerp(14, 30, topness);
+    const R = surface(az0, el0, 0).distanceTo(skullC) / HEAD_MM, len = (lerp(26, 56, topness) + rng() * lerp(14, 30, topness)) * lerp(1, fringeLen, fringe);
     const ang = len / R;
     end.copy(r).multiplyScalar(Math.cos(ang)).addScaledVector(flow, Math.sin(ang)).normalize();
     const top = 7 + 20 * topness + rng() * 7;
@@ -1433,7 +1433,11 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: Face
       // the muscles' relief only below it (the head's column has none)
       const s = C ? neckSeam(Math.cos(a)) : 0, cross = C ? 1 - 2 * sm(s - 4, s + 4, yf) : 0, up = C ? sm(s - 2, s - 12, yf) : 1;
       // the muscles running from the back of the jaw (top) to the breastbone (bottom), the Adam's apple
-      const scm = 3 * up * Math.exp(-(((ang - lerp(0.45, 1.3, t)) / 0.28) ** 2));
+      // (a column neck with its own `neckCords` takes them as the head's column does, through the seam: the head's skin above
+      // it carries them too)
+      const scm = C && F.neckCords
+        ? neckCord(Math.abs(Math.sin(a)) * rx, yf, (F.neckBack ?? -8) + Math.cos(a) * rz, F)
+        : 3 * up * Math.exp(-(((ang - lerp(0.45, 1.3, t)) / 0.28) ** 2));
       // (under a column neck's seam, wholly)
       const adam = 5 * up * Math.exp(-((a / 0.3) ** 2)) * (C ? Math.exp(-(((yf + 62) / 12) ** 2)) : Math.exp(-(((t - 0.55) / 0.16) ** 2)));
       pos.push(Math.sin(a) * (rx + scm + cross) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam + cross)) * HEAD_MM);

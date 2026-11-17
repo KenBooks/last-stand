@@ -95,6 +95,10 @@ export interface FaceShape {
   /** how much wider (mm each way) a column neck grows down to its base, over the part below the head's skin: a neck
    *  widening into the shoulders, not a column of one width down to the collar */
   neckFlare?: number;
+  /** on a column neck, how far its two muscles from behind the ears to the breastbone lift its skin (mm, `neckCord`), on the
+   *  head's column and the rig's neck alike: without them, and with the rig's neck's own 3 mm below its seam alone, the
+   *  head's column showing down to the collar read as a plain tube under the jaw */
+  neckCords?: number;
   /** how much further out the cheekbones' arches stand (mm each side), the mid-face widening with them: a broad face
    *  at the cheekbones without a bump on them */
   zygo?: number;
@@ -203,7 +207,7 @@ type BaseFace = 'warrior' | 'mage' | 'ranger';
 
 const BASE_FACES: Record<BaseFace, FaceShape> = {
   // a strong jaw and chin, a brow over deep-set eyes, a straight nose
-  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.78, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 10.5, mouthW: 1.07, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
+  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.78, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 10.5, mouthW: 1.07, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -7, neckBlend: 9, neckCol: [58, 68], neckCords: 4, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
     templeNarrow: -4.4, lidFold: 5, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
@@ -285,6 +289,21 @@ function neckColumn(ax: number, y: number, z: number, F: FaceShape): number {
   return Math.max((Math.hypot(ax / (rx * kx), (z - (F.neckBack ?? -8)) / (rz * k)) - 1) * m, y - T.end, s - 32 - y);
 }
 
+/** Where a column neck's muscles run, from behind the ear (the mastoid) down and forward to the top of the breastbone
+ *  (mm, the face's frame), a little inside its skin all the way; and how wide each lifts it (mm). */
+const CORD = { from: [46, 62, -22], to: [13, -110, 48], wide: 12, fade: [72, 34] } as const;
+/** How far a column neck's two muscles (`neckCords`) lift its skin at a point (mm): the head's column and the rig's neck
+ *  (models/head.ts `buildNeck`) both take it, so they stay matched where one takes over from the other. Faded out up
+ *  under the ear, where the muscle runs into the skull. */
+export function neckCord(ax: number, y: number, z: number, F: FaceShape): number {
+  const lift = F.neckCords ?? 0;
+  if (!lift) return 0;
+  const [ax0, ay0, az0] = CORD.from, dx = CORD.to[0] - ax0, dy = CORD.to[1] - ay0, dz = CORD.to[2] - az0;
+  const t = clamp(((ax - ax0) * dx + (y - ay0) * dy + (z - az0) * dz) / (dx * dx + dy * dy + dz * dz), 0, 1);
+  const r = Math.hypot(ax - ax0 - dx * t, y - ay0 - dy * t, z - az0 - dz * t);
+  return lift * Math.exp(-((r / CORD.wide) ** 2)) * sm(CORD.fade[0], CORD.fade[1], y);
+}
+
 /** eyeball centre (the left one; the right mirrors it) and radius, mm */
 export const EYE = { x: 32, y: 114, z: 71, r: 12 };
 
@@ -363,7 +382,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   // the side of the face under the cheekbone's arch, in front of the ear (the chewing muscle)
   if (!M || F.maskMasseter) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
   // the top of the neck under the jaw and the skull (the rig's neck carries on below it)
-  d = smin(d, F.neckCol ? neckColumn(ax, y, z, F) : ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
+  d = smin(d, F.neckCol ? neckColumn(ax, y, z, F) - neckCord(ax, y, z, F) : ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
   // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
   // with grooves between them)
   if (!M) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
@@ -681,7 +700,7 @@ export function gridR(g: HeadGrid, fi: number, fj: number): number {
 /** the plain skin's shade of the face's skin colour (the ears', the neck's: models/head.ts `plainSkin`) */
 export const PLAIN_SKIN = 0.97;
 /** how far above a column neck's seam (mm) its paint has become the rig's neck's own colour */
-const NECK_PAINT = 12;
+const NECK_PAINT = 34;
 
 /** the occlusion's steps out from the skin (mm) and their weights */
 const AO_STEPS: [number, number][] = [[2, 0.5], [5, 0.35], [10, 0.25], [18, 0.15], [30, 0.1]];
@@ -751,6 +770,9 @@ export interface FaceLook {
   cheekShade?: number;
   /** an old scar down through the left brow onto the cheekbone (0 none, 1 clear) */
   scar?: number;
+  /** `short` hair's fringe, the locks along the front of the hairline falling over the forehead, as a share of their
+   *  length (1): long, the Veteran's lay down his forehead to the brows, a row of dark points */
+  fringe?: number;
 }
 
 const BASE_LOOKS: Record<BaseFace, FaceLook> = {
@@ -772,8 +794,9 @@ const VARIANTS = {
   // a scarred veteran (PR #551, the owner's "Warrior: a scarred veteran's face"): a broad jaw, a heavy jutting brow drawn
   // into a frown over narrowed deep-set eyes, a nose broken once, weathered and ruddy, lined, a little grey in the
   // stubble, and an old scar down through the left brow onto the cheekbone
-  'warrior-veteran': { base: 'warrior', F: { jaw: 60, brow: 2.4, noseW: 14, hump: 0.5, eyeOpen: 2.5, browFwd: 10, occiput: 12, browDrop: 5, earFlare: 0.15, earIn: 2, earThick: 5.5, earRound: 1, zygo: 3, browFrown: 3 },
-    L: { skin: [0.76, 0.54, 0.44], hair: [0.12, 0.09, 0.06], beardHair: [0.25, 0.18, 0.12], flush: 1.1, grey: 0.12, age: 0.8, brows: 1.25, hairDrop: 8, nape: 35, contour: 0.9, browY: -8, templeDrop: 8, folds: 0.7, scar: 1 } },
+  'warrior-veteran': { base: 'warrior', F: { jaw: 55, brow: 2.4, noseW: 14, hump: 0, eyeOpen: 2.5, browFwd: 10, occiput: 12, browDrop: 5, earFlare: 0.15, earIn: 2, earThick: 5.5, earRound: 1, zygo: 3, browFrown: 3,
+    maskCheekbones: true, mask: { ...BASE_FACES.warrior.mask!, hollow: 1.5 } },
+    L: { skin: [0.76, 0.54, 0.44], hair: [0.12, 0.09, 0.06], beardHair: [0.25, 0.18, 0.12], flush: 1.1, grey: 0.12, age: 0.8, brows: 1.25, hairDrop: 8, nape: 35, contour: 0.9, browY: -8, templeDrop: 8, folds: 0.7, scar: 1, fringe: 0.45 } },
   // a northman (the warrior's face options, D): a full red-brown beard, pale blue eyes, a long mane
   'warrior-northman': { base: 'warrior', F: { beardFull: 20, beardDepth: 6, beardLine: 12, beardUnder: -38, eyeOpen: 2.9, browFwd: 7, browDrop: 3.4, iris: [0.32, 0.45, 0.55] },
     L: { hair: [0.2, 0.1, 0.045], streak: [0.38, 0.22, 0.11], beardHair: [0.34, 0.18, 0.08], stubble: 0, age: 0.6, skin: [0.8, 0.6, 0.52], flush: 1.3, grey: 0.03, brows: 1.1, folds: 0.4 } },
@@ -1162,7 +1185,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       }
       if (aoAt) {
         // (light that reaches a crease has gone through skin and comes out redder; leave the neck to the lighting)
-        const neck = F.neckCol ? sm(0, 8, neckColumn(ax, yy, z, F)) : 1;
+        const neck = F.neckCol ? sm(0, 8, neckColumn(ax, yy, z, F) - neckCord(ax, yy, z, F)) : 1;
         const k = 1 - L.ao! * neck * (1 - aoAt(tx, ty));
         c[0] *= k ** 0.75; c[1] *= k; c[2] *= k ** 1.15; dh *= k;
       }
