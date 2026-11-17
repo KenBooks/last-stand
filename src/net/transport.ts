@@ -10,6 +10,8 @@ export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'dmg' | 'st' | 'ctl
 export interface Link {
   /** this peer's id in the room */
   readonly self: string;
+  /** a public room's card, sent to the relay by its host for the list (`server/relay/rooms.mjs`) */
+  card(c: RoomCard): void;
   send(ch: Channel, data: unknown, to?: string): void;
   onMessage(fn: (ch: Channel, data: unknown, from: string) => void): void;
   onJoin(fn: (peer: string) => void): void;
@@ -26,6 +28,58 @@ const SERVER: string = import.meta.env.VITE_COOP_SERVER ?? 'wss://ls.wellscoped.
  *  `src/perf/upload.ts`). */
 export const serverHttp = (): string =>
   (new URLSearchParams(location.search).get('server') ?? SERVER).replace(/^ws/, 'http').replace(/\/+$/, '');
+
+/** What a public room's host tells the relay of it, for the list (the relay counts its players itself). */
+export interface RoomCard {
+  /** the room's name, as its host typed it */
+  name: string;
+  /** the host's name tag and hero's class */
+  tag: string; cls: string;
+  /** the battleground, and the wave: the one fought in a run, else the one it starts at */
+  map: string; wave: number; run: boolean;
+  /** the lobby it's in (a room is in its host's), and the game's protocol */
+  lobby: 'village' | 'panels'; v: number;
+}
+
+/** A public room as the relay lists it. */
+export interface RoomListing extends RoomCard {
+  code: string; players: number; max: number; locked: boolean; since: number;
+}
+
+/** How a host opens its room: listed for anyone or not, how many it holds, its password ('' for none). */
+export interface RoomOpening { pub: boolean; max: number; password: string }
+
+/** Why the relay turned a link to a room away: the password missing or wrong, too many wrong ones, the room's
+ *  password not set yet, its code held by another host, full, or a relay too old for public and password rooms. */
+export type RefusedWhy = 'needs-password' | 'password' | 'tries' | 'wait' | 'taken' | 'full' | 'old-server';
+export class RoomRefused extends Error {
+  constructor(readonly why: RefusedWhy) { super(`the room turned us away (${why})`); }
+}
+
+/** what a relay must be (its hi's `v`) to have hosts, public rooms and passwords (`server/relay/rooms.mjs`) */
+const ROOMS_RELAY = 2;
+/** the relay's own words for why it turned a link away */
+const WHYS: readonly RefusedWhy[] = ['password', 'tries', 'wait', 'taken', 'full'];
+
+/**
+ * The public rooms of this site and game, as the relay lists them (`GET /rooms`), or null where it couldn't be read
+ * (the server down, or too old to list them). `?net=local` lists none.
+ */
+export async function listRooms(): Promise<RoomListing[] | null> {
+  if (new URLSearchParams(location.search).get('net') === 'local') return [];
+  try {
+    const url = `${serverHttp()}/rooms?app=${APP}`;
+    const r = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(CHECK_TIMEOUT * 1000) });
+    if (!r.ok) return null;
+    const body = await r.json() as { rooms?: unknown };
+    return Array.isArray(body.rooms) ? body.rooms.filter(isListing) : null;
+  } catch { return null; }
+}
+const isListing = (r: unknown): r is RoomListing => {
+  const l = r as RoomListing;
+  return typeof l?.code === 'string' && /^[A-Z0-9]{4,8}$/.test(l.code) && typeof l.name === 'string'
+    && typeof l.tag === 'string' && typeof l.map === 'string' && Number.isFinite(l.players) && Number.isFinite(l.max);
+};
 
 /** The server didn't answer: co-op isn't available (said so plainly, not as an error). */
 export class ServerDown extends Error {}
@@ -47,10 +101,13 @@ export async function serverUp(): Promise<boolean> {
 }
 const CHECK_TIMEOUT = 5;
 
-export async function openLink(code: string): Promise<Link> {
+/** What a link is opened as: a host opening its room (how), or a joiner with the room's password if it has one. */
+export interface LinkAs { host?: RoomOpening; password?: string }
+
+export async function openLink(code: string, as: LinkAs = {}): Promise<Link> {
   const q = new URLSearchParams(location.search);
   if (q.get('net') === 'local') return localLink(code);
-  return serverLink(code, q.get('server') ?? SERVER);
+  return serverLink(code, q.get('server') ?? SERVER, as);
 }
 
 /**
@@ -64,9 +121,15 @@ const GRACE = 8000;
 const RECONNECT = 30_000;
 /** a ping to the server every so often, for the round trip (the scoreboard graphs it) */
 const PING_MS = 1000;
-function serverLink(code: string, server: string): Promise<Link> {
+function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
   const self = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join('');
-  const url = `${server.replace(/\/+$/, '')}/room/${APP}/${code}?id=${self}`;
+  const opening = as.host;
+  // (a host's flags; never its password, which goes in a message over the encrypted socket, not in an address)
+  const flags = opening
+    ? `&host=1&max=${opening.max}${opening.pub ? '&pub=1' : ''}${opening.password ? '&lock=1' : ''}` : '';
+  const url = `${server.replace(/\/+$/, '')}/room/${APP}/${code}?id=${self}${flags}`;
+  /** why the relay turned this link away, as it said before closing the socket */
+  let refused: RefusedWhy | null = null;
   let onMsg: (ch: Channel, data: unknown, from: string) => void = () => {};
   let join: (peer: string) => void = () => {}, gone: (peer: string) => void = () => {};
   const peers = new Set<string>();
@@ -82,11 +145,14 @@ function serverLink(code: string, server: string): Promise<Link> {
         countMsg('out');
         if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(to ? { ch, d: data, to } : { ch, d: data }));
       },
+      card(c) { toServer({ t: 'card', c }); },
       onMessage(fn) { onMsg = fn; },
       onJoin(fn) { join = fn; },
       onLeave(fn) { gone = fn; },
       leave() { left = true; clearInterval(pinger); for (const t of missing.values()) clearTimeout(t); missing.clear(); netLog('left the room'); ws?.close(); },
     };
+    /** a message for the relay itself (a host's password and card, a joiner's password) */
+    const toServer = (m: unknown) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
     /** peers not back after a reconnect, and when they're given up */
     const missing = new Map<string, ReturnType<typeof setTimeout>>();
     const lose = (p: string) => { missing.delete(p); if (peers.delete(p)) { netLog(`peer ${p.slice(0, 6)} left`); gone(p); } };
@@ -101,10 +167,31 @@ function serverLink(code: string, server: string): Promise<Link> {
       serverState('connecting');
       sock.onopen = () => { tries = 0; serverState('open'); netLog(`server ${host} open after ${((performance.now() - t0) / 1000).toFixed(1)}s`); };
       sock.onmessage = (e) => {
-        let m: { t?: string; p?: string; peers?: string[]; ch?: Channel; d?: unknown; from?: string; n?: number };
+        let m: {
+          t?: string; p?: string; peers?: string[]; ch?: Channel; d?: unknown; from?: string; n?: number; v?: number; why?: string;
+        };
         try { m = JSON.parse(e.data as string); } catch { return; }
         if (m.t === 'pong') { if (typeof m.n === 'number') serverRtt(performance.now() - m.n); return; }
+        // a locked room asks for its password (again after a reconnect: the relay may have restarted)
+        if (m.t === 'locked') {
+          if (as.password) toServer({ t: 'pass', pw: as.password });
+          else { refused = 'needs-password'; sock.close(); }
+          return;
+        }
+        if (m.t === 'denied') {
+          refused = WHYS.find((w) => w === m.why) ?? 'password';
+          netLog(`the room turned us away (${refused})`);
+          return;
+        }
         if (m.t === 'hi') {
+          // (a public or password room needs a relay that lists and locks rooms: an older one would let anyone in)
+          if (opening && (opening.pub || opening.password) && !((m.v ?? 0) >= ROOMS_RELAY)) {
+            refused = 'old-server';
+            sock.close();
+            return;
+          }
+          // (a host's password, set on every hi: a restarted relay has forgotten it)
+          if (opening?.password) toServer({ t: 'lock', pw: opening.password });
           // (the peers already there are met once the session has its handlers on the link, after it's resolved)
           if (!opened) {
             opened = true; resolve(link); setTimeout(() => sock.onmessage?.(e), 0);
@@ -125,6 +212,14 @@ function serverLink(code: string, server: string): Promise<Link> {
         if (ws !== sock || left) return;
         serverState('closed');
         netLog(`server ${host} closed (${e.code}${e.reason ? ' ' + e.reason : ''})`);
+        // (turned away by the room: said why, and not tried again)
+        if (refused) {
+          left = true;
+          clearInterval(pinger);
+          if (!opened) reject(new RoomRefused(refused));
+          else for (const p of [...peers]) { peers.delete(p); gone(p); }
+          return;
+        }
         // (never opened: the server is down or turned us away; open, it has RECONNECT to come back: a deploy restarts it)
         if (!opened) { reject(new ServerDown(`the co-op server ${host} didn't answer`)); return; }
         if (!tries++) lostAt = performance.now();
@@ -133,7 +228,7 @@ function serverLink(code: string, server: string): Promise<Link> {
       };
     };
     connect();
-    setTimeout(() => { if (!opened) { left = true; ws?.close(); serverState('closed'); reject(new ServerDown(`the co-op server ${host} didn't answer`)); } }, OPEN_TIMEOUT * 1000);
+    setTimeout(() => { if (!opened && !refused) { left = true; ws?.close(); serverState('closed'); reject(new ServerDown(`the co-op server ${host} didn't answer`)); } }, OPEN_TIMEOUT * 1000);
   });
 }
 
@@ -164,6 +259,7 @@ function localLink(code: string): Link {
   setTimeout(() => post({ sys: 'here' }), 50);
   return {
     self,
+    card() { /* (no relay: nothing lists a room) */ },
     send(ch, data, to) { post({ ch, data, to }); },
     onMessage(fn) { onMsg = fn; },
     onJoin(fn) { join = fn; },

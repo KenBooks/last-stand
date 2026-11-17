@@ -2340,6 +2340,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  rooms: {
+    help: 'Play together\'s rooms end to end against a co-op relay of the lab\'s own (server/relay on localhost): a '
+      + 'public room opened from the create page, listed in a partner\'s browser and joined from its row, gone once '
+      + 'its host left; a password room listed locked, a wrong password turned away and the right one let in; a '
+      + 'private room never listed, joined by its code; pictures in out/rooms/<screen>',
+    options: {
+      canary: { kind: 'switch', help: 'start the relay letting any password in and listing private rooms' },
+      ...COMMON_OPTIONS,
+    },
+  },
   beta: {
     help: 'the village beta opted into and out of, on a page of its own, by the browser\'s own clicks and loads: '
       + 'the pause menu\'s Beta tab and its Reload (the page loaded with ?village=1, the choice kept in its '

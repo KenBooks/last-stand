@@ -27,8 +27,10 @@ export interface CoopFound {
 
 /** what of the dialog a player must reach, by its selector and what it's called in a report */
 const CONTROLS: [string, string][] = [
+  // (Open the room first: the canary's plant on it must be measured before another page is shown, which renders anew)
+  ['#btn-coop-host', 'Open the room'],
   ['#coop-tag', 'the name tag field'],
-  ['#btn-coop-host', 'Open a room'],
+  ['.coop-tab[data-pane="create"]', 'the Create room tab'],
   ['#coop-code', 'the room code field'],
   ['.coop-join button', 'Join'],
 ];
@@ -60,10 +62,35 @@ let seen: CoopFound = { lines: [], problems: [] };
 
 const coopField = (id: string): HTMLInputElement | null => document.querySelector<HTMLInputElement>(`#coop #${id}`);
 
+/** the dialog's pages (src/ui/coop.ts `Pane`), by the class of the section each control lies in */
+const PANES: Record<string, string> = { 'coop-browse': 'browse', 'coop-create': 'create', 'coop-hero': 'hero' };
+const shownNow = (element: Element | null): boolean => Boolean(element && element.getClientRects().length);
+
+/**
+ * The page `selector` lies on shown by its tab, where it isn't (the create page's Open the room; on a small screen the
+ * hero's page, its name tag and colours), as a player opens it: by a click (`lab`), a finger's tap on touch (a click
+ * would take the page out of touch mode before the tap after it), or as a measure reads it (no `lab`). Returns the
+ * element as it stands after (the dialog renders anew).
+ */
+async function onItsPage(selector: string, lab?: Lab): Promise<HTMLElement | null> {
+  const element = document.querySelector<HTMLElement>(`#coop ${selector}`);
+  if (!element || shownNow(element)) return element;
+  const section = element.closest('.coop-pane');
+  const pane = section ? Object.entries(PANES).find(([cls]) => section.classList.contains(cls))?.[1] : undefined;
+  const tab = pane ? document.querySelector<HTMLElement>(`#coop .coop-tab[data-pane="${pane}"]`) : null;
+  if (!tab) return element;
+  if (lab && document.body.classList.contains('touch')) {
+    const box = tab.getBoundingClientRect();
+    await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+  } else if (lab) await lab.clickOn(tab);
+  else tab.click();
+  return document.querySelector<HTMLElement>(`#coop ${selector}`);
+}
+
 /** `text` typed in the dialog's field `id` as a player types it: the field clicked, what's in it picked, the text put
  *  in its place by the browser (`lab.type`, as a paste or a phone's keyboard puts it). */
 async function typeInto(lab: Lab, id: string, text: string): Promise<void> {
-  const field = coopField(id)!;
+  const field = (await onItsPage(`#${id}`, lab)) as HTMLInputElement;
   await lab.clickOn(field);
   field.select();
   await lab.type(text);
@@ -89,21 +116,21 @@ async function renderedTyping(lab: Lab, id: string, state: string, problems: str
 
 /** The press of `button` (Open a room, Join) waiting for the heroes: said on it and over the choices, the rest
  *  waiting too, what was typed kept, and the dialog still within the window with its controls in reach. */
-function waitingFound(which: 'host' | 'join', says: string): void {
+async function waitingFound(which: 'host' | 'join', says: string): Promise<void> {
   const state = `coop (${which === 'host' ? 'Open a room' : 'Join'} pressed, the heroes cold)`;
   const pressed = document.querySelector<HTMLButtonElement>(which === 'host' ? '#btn-coop-host' : '#coop .coop-join button');
   const other = document.querySelector<HTMLButtonElement>(which === 'host' ? '#coop .coop-join button' : '#btn-coop-host');
   const status = document.querySelector('#coop .coop-checking')?.textContent ?? '';
   seen.lines.push(`  ${state}: "${pressed?.textContent}", "${status}"`);
   if (!pressed?.textContent?.includes(says)) seen.problems.push(`${state}: the button reads "${pressed?.textContent}"`);
-  if (!pressed?.disabled || !other?.disabled) seen.problems.push(`${state}: Open a room and Join don't both wait`);
+  if (!pressed?.disabled || !other?.disabled) seen.problems.push(`${state}: Open the room and Join don't both wait`);
   if (!coopField('coop-tag')?.disabled || !coopField('coop-code')?.disabled) {
     seen.problems.push(`${state}: the name tag and the code can still be changed while it waits`);
   }
   if (!status) seen.problems.push(`${state}: nothing over the choices says it's waiting`);
   fieldsKept(state);
   // (its choices disabled as meant: the rest of the dialog's checks)
-  const found = dialogFound(state);
+  const found = await dialogFound(state);
   seen.problems.push(...found.problems.filter((problem) => !problem.includes('is disabled')));
 }
 
@@ -123,8 +150,8 @@ function choicesBack(when: string): void {
     seen.problems.push(`coop: ${when}, the dialog's choices aren't back`);
     return;
   }
-  if (host.disabled || join.disabled || host.textContent !== 'Open a room' || join.textContent !== 'Join') {
-    seen.problems.push(`coop: ${when}, Open a room and Join read "${host.textContent}" and "${join.textContent}"`);
+  if (host.disabled || join.disabled || host.textContent !== 'Open the room' || join.textContent !== 'Join') {
+    seen.problems.push(`coop: ${when}, Open the room and Join read "${host.textContent}" and "${join.textContent}"`);
   }
   if (document.querySelector('#coop .coop-choice.busy')) seen.problems.push(`coop: ${when}, the choices still wait`);
   fieldsKept(when, '');
@@ -143,9 +170,9 @@ async function pressesFound(lab: Lab): Promise<void> {
   const chill = (warm as { chill?: (need: 'heroes') => void }).chill;
   if (!chill) return;
   chill('heroes');
-  await lab.clickOn(document.getElementById('btn-coop-host')!);
+  await lab.clickOn((await onItsPage('#btn-coop-host', lab))!);
   await lab.step(1);
-  waitingFound('host', 'Opening a room');
+  await waitingFound('host', 'Opening a room');
   await warmed(lab);
   roomFound('hosting', 'Room');
   leaveRoom();
@@ -155,7 +182,7 @@ async function pressesFound(lab: Lab): Promise<void> {
   await typeInto(lab, 'coop-code', TYPED.code);
   await lab.clickOn(document.querySelector('#coop .coop-join button')!);
   await lab.step(1);
-  waitingFound('join', 'Joining');
+  await waitingFound('join', 'Joining');
   await warmed(lab);
   roomFound('joining', `Joining room ${TYPED.code}`);
   await lab.clickOn(document.getElementById('btn-coop-leave')!);
@@ -164,7 +191,7 @@ async function pressesFound(lab: Lab): Promise<void> {
 }
 
 /** the problem the canary must raise */
-export const COOP_CANARY = { name: 'Open a room lies past', what: 'Open a room moved off the window\'s foot' };
+export const COOP_CANARY = { name: 'Open the room lies past', what: 'Open the room moved off the window\'s foot' };
 
 /** The dialog opened from the lobby: the panels' link clicked, or as the village's campfire opens it. */
 export function openFromLobby(): void {
@@ -188,7 +215,7 @@ export async function openCoopDialog(lab: Lab): Promise<void> {
  * has no picker: nothing is picked.
  */
 async function pickSwatch(lab: Lab, id: string, how: 'click' | 'tap'): Promise<void> {
-  const swatch = document.querySelector(`#coop .cc-swatch[data-colour="${id}"]`);
+  const swatch = await onItsPage(`.cc-swatch[data-colour="${id}"]`, lab);
   if (!swatch) return;
   swatch.scrollIntoView({ block: 'nearest' });
   const box = swatch.getBoundingClientRect();
@@ -250,7 +277,7 @@ export async function openCoopTouch(lab: Lab): Promise<void> {
   await openCoopDialog(lab);
   wornBefore = wornNow();
   await pickSwatch(lab, PICKS.coopTouch, 'tap');
-  const field = document.getElementById('coop-tag')!;
+  const field = (await onItsPage('#coop-tag'))!;
   const box = field.getBoundingClientRect();
   await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   await lab.step(1);
@@ -283,7 +310,7 @@ function reachable(element: HTMLElement, name: string, state: string): string[] 
 }
 
 /** The dialog's box and controls: lines and problems, as `state`'s. */
-function dialogFound(state: string): CoopFound {
+async function dialogFound(state: string): Promise<CoopFound> {
   const box = document.querySelector<HTMLElement>('#coop .modal-box')?.getBoundingClientRect();
   if (!box || document.getElementById('coop')!.classList.contains('hidden')) {
     return { lines: [], problems: [`${state}: the dialog isn't shown`] };
@@ -302,7 +329,7 @@ function dialogFound(state: string): CoopFound {
     problems.push(`${state}: the dialog scrolls (${hidden} px out of its box)`);
   }
   for (const [selector, name] of CONTROLS) {
-    const element = document.querySelector<HTMLElement>(`#coop ${selector}`);
+    const element = await onItsPage(selector);
     if (!element) {
       problems.push(`${state}: no ${name}`);
       continue;
@@ -313,6 +340,7 @@ function dialogFound(state: string): CoopFound {
     lines.push(`  ${name}: ${missed.length ? 'out of reach' : 'in reach'}${disabled}`);
     if (disabled) problems.push(`${state}: ${name} is disabled (the server not found up)`);
   }
+  await onItsPage('.cc-swatch');
   const swatches = [...document.querySelectorAll<HTMLElement>('#coop .cc-swatch')];
   if (!swatches.length) problems.push(`${state}: no colour picker`);
   // (each scrolled to in the dialog's box first, as a player scrolls to it: a short screen has them under Host and
@@ -370,19 +398,20 @@ function touchFound(state: string): CoopFound {
 }
 
 /** The dialog checked as `state` shows it; with the canary, again with Open a room moved off the window's foot. */
-export function coopShown(state: 'coop' | 'coopRename' | 'coopTouch', canary: boolean): CoopFound {
-  const found = dialogFound(state);
+export async function coopShown(state: 'coop' | 'coopRename' | 'coopTouch', canary: boolean): Promise<CoopFound> {
+  // (the state's own first: what has the focus, before the dialog's pages are shown in turn to find its controls)
   const own = state === 'coopRename' ? renameFound(state) : state === 'coopTouch' ? touchFound(state) : null;
+  const found = await dialogFound(state);
   const picked = state === 'coopRename' ? null : pickedFound(state, PICKS[state]);
   const typing = state === 'coop' ? seen : null;
   const lines = [...found.lines, ...(own?.lines ?? []), ...(picked?.lines ?? []), ...(typing?.lines ?? [])];
   const problems = [...found.problems, ...(own?.problems ?? []), ...(picked?.problems ?? []), ...(typing?.problems ?? [])];
   if (!canary) return { lines, problems };
-  const host = document.getElementById('btn-coop-host')!;
+  const host = (await onItsPage('#btn-coop-host'))!;
   // (its transitions off: a button's eases its transform, and the move wasn't there yet when measured)
   host.style.transition = 'none';
   host.style.transform = 'translateY(200vh)';
-  const planted = dialogFound(state);
+  const planted = await dialogFound(state);
   host.style.transform = '';
   host.style.transition = '';
   return { lines, problems: [...problems, ...planted.problems] };

@@ -51,6 +51,12 @@ jobs:
       - name: Test the saves service
         run: npm run saves:test
 
+      - name: Install the relay's packages
+        run: npm ci --prefix server/relay
+
+      - name: Test the relay's rooms
+        run: npm run relay:test
+
       - name: Type-check and build
         run: npm run build
 
