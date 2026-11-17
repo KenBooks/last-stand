@@ -10,6 +10,7 @@ import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
+import { setMarkedShown } from '../../../src/dev/marked';
 import { canaryCost, flameCost, turnCost } from './fireCost';
 import { medianOf, timedRenders, timerOf } from './gpuTurns';
 import type { Lab } from './lab';
@@ -189,6 +190,8 @@ function switches(): Switch[] {
     { name: 'three\'s order (off: the grass first)', turn: (on) => grassFirst(!on) },
     { name: 'three\'s order (off: the ground last)', turn: (on) => groundLast(!on) },
     { name: 'no depth pass (off: what stands still first)', turn: depthPassOf(stillMeshes()) },
+    // (every tree, its bark and leaves, as the developer mode's Trees checkbox takes them out: what a level's trees cost)
+    { name: 'the trees (the developer mode\'s Trees)', turn: (on) => setMarkedShown('tree', on) },
     { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
       G.renderer.shadowMap.autoUpdate = on;
     } },
