@@ -1351,7 +1351,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   portal is drawn; the warrior's (`WARRIOR`): `cleave`, `cleaveGreat` and `cleaveDual`, Rending Cleave held with each
   weapon, three swings each biting; `fangs`; `crescent`; `shield`, raised, two blows caught and the guard broken;
   `tempest` and `tempestGreat`, held 3 s and let go; `bullRush`; `powerStrike` and `powerStrikeEarly`; `bellow`;
-  `draught`; his fists' (#400), `fists`, six of Savage Fists' punches held, and `wrath`, its slam; the ranger's (`RANGER`): `nockshot`, held to full and let go three times; `nockshotQuick`, loosed at
+  `draught`; his fists' (#400), `fists`, six of Savage Fists' punches held, `fistsHot` the same at full Frenzy (two of them hammers, with a grunt), `wrath`, its slam, `unchained`, his roar, and `frenzyFull`, his heart; the ranger's (`RANGER`): `nockshot`, held to full and let go three times; `nockshotQuick`, loosed at
   its least draw into the ground, a foe, a log and off a stone; `nockshotHeld`, held at full for 4 s; `briar`;
   `lancewood` and `lancewoodShort`; `hail`, Hailfletch held for three volleys of 24; `rangerMany`, the loudest a
   ranger gets (two in co-op, a volley landing as a fan and a full Lancewood Shot are loosed); `quarry`, the mark and

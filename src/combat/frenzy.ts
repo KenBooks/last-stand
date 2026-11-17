@@ -6,6 +6,7 @@
 // keeps it, as it judges his hits; the partners' are told how many stacks he has with his state, for its look.
 import { G } from '../state';
 import { FRENZY } from '../data/balance';
+import { sfx } from '../core/audio';
 import type { Player } from '../entities/player';
 
 /** The most stacks he may have now: more under Unchained. */
@@ -17,7 +18,10 @@ export const unchained = (p: Player): boolean => p.unchainedUntil > G.time;
 /** `n` stacks built (his own game's; a partner's copy shows what its reports say). */
 export function gainFrenzy(p: Player, n: number): void {
   if (!p.local || n <= 0) return;
+  const was = p.frenzy;
   p.frenzy = Math.min(frenzyCap(p), p.frenzy + n);
+  // (his heart heard hammering as it comes to its full)
+  if (was < FRENZY.cap && p.frenzy >= FRENZY.cap) sfx.frenzyFull();
 }
 
 /** Every stack spent (Wrath): how many there were. Damage taken goes back to normal with them. */

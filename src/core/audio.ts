@@ -1225,16 +1225,64 @@ function punchAir(lead: number, way: number): void {
   v.start(); v.stopAt(v.t + at + 0.4);
 }
 
-/** A fist landing, from the `way` side: knuckles on a body, a smack with its weight under it and what's struck
- *  giving. */
-function punchLand(way: number): void {
-  const v = voice(0, 0.2);
+/** A fist landing, from the `way` side, `heat` the hero's Frenzy as a share of its usual most (0 to 1.5): knuckles
+ *  on a body. Its front a smack (skin on skin: bright noise and a driven body of it round 1.1 kHz, gone in a few
+ *  hundredths), its weight under it (a whump, a thump), the meat of what's struck giving, and as the Frenzy rises a
+ *  heavier blow, a bone's crunch and grit under it. Each a little apart in its bands and pan, as blows come four a
+ *  second. (The first take, a crack, a whump and a crunch alike at any Frenzy, from play: "we also need better sound
+ *  effects".) */
+function punchLand(way: number, heat = 0): void {
+  const v = voice(0, 0.18);
+  const k = 0.9 + Math.random() * 0.2, hot = Math.min(1.5, Math.max(0, heat));
   const lane = v.lane(1, way * 0.3 + Math.random() * 0.2 - 0.1);
-  crack(v, 0, 0.13, lane, 1700);
-  whump(v, 0, 0.42, 0.17, lane);
-  thump(v, 0, 750 * (0.9 + Math.random() * 0.2), 110, 0.32, 0.2, lane, 4);
-  crunch(v, 0, 0.1, 0.09, lane);
-  v.start(); v.stopAt(v.t + 0.6);
+  // the smack
+  crack(v, 0, 0.16 + 0.04 * hot, lane, 2200 * k);
+  const smack = v.c.createBiquadFilter(); smack.type = 'bandpass'; smack.frequency.value = 1100 * k; smack.Q.value = 1.1;
+  v.loop(smack); smack.connect(drive(5)).connect(blowAt(v, 0, 0.3, 0.07, lane, 0.0008));
+  // its weight
+  whump(v, 0, 0.5 + 0.15 * hot, 0.2 + 0.08 * hot, lane);
+  thump(v, 0, 900 * k, 110, 0.36 + 0.1 * hot, 0.24 + 0.1 * hot, lane, 4.5);
+  // the meat giving, and with the Frenzy up, bone
+  crunch(v, 0.004, 0.12 + 0.08 * hot, 0.1 + 0.05 * hot, lane);
+  if (hot > 0.4) grit(v, Math.round(3 + 5 * hot), 0.01, 0.08, 500, 2600, 0.1 * hot);
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** A berserker's breath forced out with a blow, `heat` his Frenzy's share: noise swept down through a voice's band and
+ *  driven, so it has no pitch; harsher and louder as the Frenzy rises. */
+function grunt(heat: number): void {
+  const v = voice(0, 0.2);
+  const hot = Math.min(1.5, Math.max(0, heat)), k = 0.85 + Math.random() * 0.3;
+  const breath = v.sweep('bandpass', 760 * k, 300 * k, 0.16, 1.3);
+  v.loop(breath); breath.connect(drive(2.5 + 2 * hot)).connect(v.hit(0.12 + 0.1 * hot, 0.2, v.out, 0.01));
+  const chest = v.c.createBiquadFilter(); chest.type = 'lowpass'; chest.frequency.value = 420; chest.Q.value = 0.7;
+  v.loop(chest); chest.connect(drive(4)).connect(v.hit(0.1 + 0.08 * hot, 0.16, v.out, 0.012));
+  v.start(); v.stopAt(v.t + 0.5);
+}
+
+/** Unchained: a berserker's roar torn out of him, rising, held and breaking off, his breath ragged at its end, and a
+ *  heavy whump of his weight dropping into his stance under it. Noise alone, driven through a voice's bands. */
+function berserkRoar(): void {
+  const v = voice(0.02, 0.45);
+  const roar = glide(v, 'bandpass', 1.6, [[0, 300], [0.25, 820], [0.75, 700], [1.1, 260]]);
+  v.loop(roar); roar.connect(drive(6)).connect(v.hit(0.4, 1.9, v.out, 0.14));
+  const throat = glide(v, 'bandpass', 2.2, [[0, 520], [0.3, 1350], [0.8, 1100], [1.1, 420]]);
+  v.loop(throat); throat.connect(v.flange(v.hit(0.17, 1.7, v.out, 0.16), 3, 1.5, 7, 0.45));
+  const chest = v.c.createBiquadFilter(); chest.type = 'lowpass'; chest.frequency.value = 380;
+  v.loop(chest); chest.connect(drive(5)).connect(v.hit(0.3, 1.8, v.out, 0.12));
+  whump(v, 0.05, 0.55, 0.5);
+  thump(v, 0.05, 800, 110, 0.4, 0.5, v.out, 4.5);
+  v.start(); v.stopAt(v.t + 1.8);
+}
+
+/** Frenzy come to its full: his heart heard hammering, two dull beats, the second softer. */
+function frenzyFull(): void {
+  const v = voice(0, 0.15);
+  for (const [at, peak] of [[0, 0.5], [0.18, 0.36]]) {
+    whump(v, at, peak, 0.22);
+    thump(v, at, 380, 110, peak * 0.6, 0.2, v.out, 4);
+  }
+  v.start(); v.stopAt(v.t + 0.8);
 }
 
 /** Wrath's slam: both fists raised and brought down `lead` s in. The air drawn up with the arms, then the floor
@@ -1952,7 +2000,13 @@ export const sfx = {
   wardHit: guard(() => { if (throttle('wardHit', 60)) return; wardHit(); }),
   /** the fists (both hands empty): a punch arriving `lead` s on from the `way` side (+1 the right), and landing */
   punch: guard((lead: number, way: number) => { if (throttle('punch', 60)) return; punchAir(lead, way); }),
-  punchLand: guard((way: number) => { if (throttle('punchLand', 60)) return; punchLand(way); }),
+  punchLand: guard((way: number, heat?: number) => { if (throttle('punchLand', 60)) return; punchLand(way, heat); }),
+  /** a berserker's breath forced out with a blow, harsher with his Frenzy's share `heat` */
+  grunt: guard((heat: number) => { if (throttle('grunt', 400)) return; grunt(heat); }),
+  /** Unchained's roar */
+  roar: guard(() => { berserkRoar(); }),
+  /** Frenzy come to its full: his heart hammering */
+  frenzyFull: guard(() => { if (throttle('frenzyFull', 1500)) return; frenzyFull(); }),
   /** Wrath's slam: the fists raised and brought down `lead` s on */
   pound: guard((lead: number) => { groundPound(lead); }),
   /** a prop chipped by a blow: timber (`wood`, `shroom`) or stone */

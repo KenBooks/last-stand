@@ -100,6 +100,9 @@ function tempestCues(heft: number): Cue[] {
   return [{ at: 0, sound: ['tempest'], args: [TEMPEST_TURNS[heft], heft], keep: 'spin' }, ...bites, { at: TEMPEST_HELD, stop: 'spin' }];
 }
 
+/** Savage Fists' pace at full Frenzy against none: 5% quicker a stack (`FRENZY.haste`) */
+const HOT_HASTE = 1.5;
+
 const WARRIOR: Record<string, Scene> = {
   cleave: { what: 'Rending Cleave held with a one-hander: three swings, each biting', cues: cleaveCues(1) },
   cleaveGreat: { what: 'Rending Cleave held with a great weapon: three swings, each biting', cues: cleaveCues(2) },
@@ -169,7 +172,24 @@ const WARRIOR: Record<string, Scene> = {
       { at: punch * PUNCH.pace + PUNCH.pace * PUNCH.fires, sound: ['punchLand'], args: [punch % 2 ? 1 : -1] },
     ]),
   },
-  wrath: { what: 'Wrath\'s slam: the fists brought down', cues: [{ at: 0, sound: ['pound'], args: [0] }] },
+  fistsHot: {
+    what: 'Savage Fists at full Frenzy: six punches at its quicker pace, the third and sixth a hammer with a grunt',
+    cues: [0, 1, 2, 3, 4, 5].flatMap((punch) => {
+      const pace = PUNCH.pace / HOT_HASTE, way = punch % 2 ? 1 : -1, hammer = punch % 3 === 2;
+      const lands = punch * pace + pace * PUNCH.fires;
+      return [
+        { at: punch * pace, sound: ['punch'], args: [pace * PUNCH.fires, way] },
+        { at: lands, sound: ['punchLand'], args: [way, hammer ? 1.5 : 1] },
+        ...(hammer ? [{ at: lands, sound: ['grunt'], args: [1] }] : []),
+      ];
+    }),
+  },
+  wrath: {
+    what: 'Wrath\'s slam: the fists brought down, his breath forced out',
+    cues: [{ at: 0, sound: ['pound'], args: [0] }, { at: 0, sound: ['grunt'], args: [1.2] }],
+  },
+  unchained: { what: 'Unchained: his roar', cues: [{ at: 0, sound: ['roar'] }] },
+  frenzyFull: { what: 'Frenzy come to its full: his heart', cues: [{ at: 0, sound: ['frenzyFull'] }] },
 };
 
 /** The ranger's paces (s, `data/classes/ranger.ts`): each drawn shot's time to full draw and what follows its

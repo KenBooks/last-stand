@@ -83,7 +83,10 @@ const skill: InstantSkill = {
       smokePuff(at, { count: 5, color: 0x2a241c, alpha: 0.45, size: 0.6, sizeEnd: 1.6, speed: 2 });
     }
     if (!hits) return;
-    sfx.punchLand(-(player.model.swing ?? 1));
+    // (heavier as the Frenzy rises, a grunt with the hammer and now and then with a blow at high Frenzy)
+    const hot = heat / FRENZY.cap;
+    sfx.punchLand(-(player.model.swing ?? 1), hot + (hammer ? 0.5 : 0));
+    if (hammer || (hot >= 0.5 && Math.random() < 0.3)) sfx.grunt(hot);
     addShake(hammer ? 0.18 : 0.05);
     if (player.sandbox) return;
     player.energy = Math.min(player.stats.maxEnergy, player.energy + (def.gain ?? 0) * hits);

@@ -78,7 +78,7 @@ const skill: InstantSkill = {
     const first = before(player, def);
     if (form === 0) {
       if (first) strike(first, def.knock * 0.5, 0.35);
-      sfx.punchLand(1);
+      sfx.punchLand(1, heat / FRENZY.cap + 0.5); sfx.grunt(heat / FRENZY.cap);
       addShake(0.25);
       if (first) shockwave(first.pos, { color: heatOf(heat), intensity: 1.2, from: 0.2, to: 1.4, life: 0.25 });
       return;
@@ -101,7 +101,7 @@ const skill: InstantSkill = {
       blastCorpses(at, def.radius + 0.5, 7, { lift: 1.1 });
     }
     addShake(form === 2 ? 0.7 : 0.4);
-    sfx.pound(0);
+    sfx.pound(0); sfx.grunt(1.2);
   },
 };
 

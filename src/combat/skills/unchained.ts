@@ -23,7 +23,7 @@ const skill: InstantSkill = {
     groundFlash(p, { color: HEAT, intensity: 0.8, radius: 2.2, life: 0.3 });
     flash({ color: HEAT, intensity: 8, distance: 6, life: 0.3, pos: { x: p.x, y: 1.4, z: p.z } });
     if (player.local) addShake(0.2);
-    sfx.bellow();
+    sfx.roar();
     // (heat off his shoulders and arms while it runs, none through his own eyes: it would rise through the view)
     let owed = 0;
     addEffect({

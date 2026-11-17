@@ -11,7 +11,7 @@ import { smokePuff, debris } from '../../fx/particles';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { gainFrenzy } from '../frenzy';
-import { POUNCE } from '../../data/balance';
+import { FRENZY, POUNCE } from '../../data/balance';
 import { fistMark } from './savageFists';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
@@ -60,7 +60,7 @@ const skill: InstantSkill = {
     const go = Math.max(0, d - foe.radius - player.radius - SHORT);
     const dur = POUNCE.leap, hold = pounceHold(def.blows);
     let down = false, built = false;
-    sfx.bullLaunch();
+    sfx.bullLaunch(); sfx.grunt(player.frenzy / FRENZY.cap);
     player.startDash(dir, go / dur, dur, {
       anim: 'pounce', hold, lift: Math.min(POUNCE.top, go * POUNCE.rise),
       step: () => {
@@ -86,7 +86,7 @@ const skill: InstantSkill = {
         // (a blow into its body: what it kills is thrown back off it)
         hitEnemy(foe, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: player.pos, blow: { dir: { x: way.x / len, z: way.z / len }, lift: 0.1, at: 0.9 } });
         fistMark(foe, player.frenzy, 6);
-        sfx.punchLand(i % 2 ? 1 : -1);
+        sfx.punchLand(i % 2 ? 1 : -1, player.frenzy / FRENZY.cap);
         if (player.local) addShake(0.06);
         if (!built && !player.sandbox) { built = true; gainFrenzy(player, def.frenzy ?? 0); }
       });

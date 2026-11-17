@@ -5,6 +5,7 @@
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { gainFrenzy } from '../frenzy';
+import { FRENZY } from '../../data/balance';
 import { sweep } from './cleave';
 import { fistMark } from './savageFists';
 import type { ChannelSkill, Needs } from './types';
@@ -41,7 +42,8 @@ const skill: ChannelSkill<RampageState> = {
         knock: def.knock, blow: { dir: way, lift: 0.2 }, mark: (e) => fistMark(e, heat, 4),
       });
       if (hits) {
-        sfx.punchLand(st.blows % 2 ? 1 : -1);
+        sfx.punchLand(st.blows % 2 ? 1 : -1, heat / FRENZY.cap);
+        if (heat >= FRENZY.cap / 2 && Math.random() < 0.25) sfx.grunt(heat / FRENZY.cap);
         if (player.local) addShake(0.04);
         if (!player.sandbox) gainFrenzy(player, def.frenzy ?? 0);
       }
