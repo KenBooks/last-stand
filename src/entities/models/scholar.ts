@@ -15,6 +15,7 @@ import { stripRig } from './shapes';
 import { buildHead, buildNeck, hairCard, handSkin, toGroup, HEAD_MM, HERO_HEADS, type Head } from './head';
 import { origin } from './face';
 import { buildHand, bare, poseHand, type Hand } from './hands';
+import { turnedPage, type BookShape } from './book';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 
 /** how long his reading loop is (s): the page turns, the beard, the spectacles and the lean all come round in it */
@@ -29,17 +30,17 @@ const BEATS = {
 /** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again */
 const GLANCE = { near: 3.6, hold: 2.6, rest: 13 };
 
-/** The open book he reads, in his frame (x across him, +z ahead, up from the floor): its spine's middle on the table,
- *  and its pages' width (spine to edge) and depth. */
+/** The open book he reads, in his frame (x across him, +z ahead, up from the floor): the spine's foot in the gutter at
+ *  its middle, its shape (models/book.ts), and the page he turns's material. */
 export interface ScholarBook {
-  spine: THREE.Vector3; pageW: number; pageD: number; page: THREE.Material;
+  spine: THREE.Vector3; shape: BookShape;
   /** the table's top in his frame: across (x), from his side of it to its far side (z), and its height */
   table: { x0: number; x1: number; z0: number; z1: number; top: number };
-  /** the book's two page blocks (each a box, its top face the pages lying open on it): the page he turns is laid
-   *  over them (the lab reads it against them) */
+  /** the book's two halves' blocks of pages (each in its own frame: x from the spine to its outer edge, `blockGeometry`),
+   *  his right's first, and their printed pages: the page he turns is the right's top page, laid over them (the lab
+   *  reads it against them) */
   blocks: THREE.Mesh[];
-  /** how far over its blocks' tops the open book's printed pages lie (m) */
-  printed: number;
+  prints: THREE.Mesh[];
   /** the height of its printed pages at their outer edges (m, his frame): his hands rest on them */
   printTop: number;
 }
@@ -60,22 +61,16 @@ export interface Scholar {
   readonly book: ScholarBook;
   readonly page: THREE.Mesh;
   readonly hands: Hand[];
+  /** how far his right hand has the page he turns in hand now (0 to 1) */
+  readonly holding: number;
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-/** how far each open page lies tilted down from the spine to its edge (rad), as the book's blocks are */
-export const PAGE_TILT = 0.06;
-/**
- * The angle of the turning page at `r` of the way from the spine to its edge, at `k` of its turn (rad about the spine:
- * the rest tilt on his right, through upright, to it mirrored on his left). Its edge lags its root under its own
- * weight, but never further than the page lying open under it: lagged freely, early in the turn the edge dipped below
- * the open page and lifted out from under its block (from play: "1/4 of it is under another white piece").
- */
-export function pageAngle(k: number, r: number): number {
-  const root = PAGE_TILT - (Math.PI + 2 * PAGE_TILT) * smooth(k), lag = 0.9 * Math.sin(Math.PI * k) * r * r * 0.5;
-  return clamp(root + lag, -Math.PI - PAGE_TILT, PAGE_TILT);
-}
+/** how far over the print the page he turns lies at rest (m): it's the top page, so where it lies it hides the print */
+const PAGE_LIFT = 0.0012;
+/** how far into its turn he lets go of the page (0 to 1): it falls over by itself from there */
+const LET_GO = 0.36;
 /** 0 outside [a, b], 1 inside it, eased in and out over `rise` at each end */
 const span = (t: number, a: number, b: number, rise: number): number =>
   smooth(clamp((t - a) / rise, 0, 1)) * (1 - smooth(clamp((t - (b - rise)) / rise, 0, 1)));
@@ -230,39 +225,73 @@ export function buildScholar(book: ScholarBook): Scholar {
   const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass };
   dressBody(j, add, M);
 
-  // --- the page he turns: hidden but while it's turned ---
-  const W = book.pageW, D = book.pageD, SEG = 12;
-  const pageGeo = new THREE.PlaneGeometry(W, D, SEG, 1).rotateX(-Math.PI / 2).translate(-W / 2, 0, 0);
-  const rest = Float32Array.from(pageGeo.attributes.position.array as Float32Array);
+  // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
+  // depth, shaped as the book is (models/book.ts); hidden but while it's turned, the print under it the same page ---
+  const shape = book.shape, D = shape.depth, SEG = 28;
+  const pageGeo = new THREE.PlaneGeometry(1, D, SEG, 1).rotateX(-Math.PI / 2);
+  // (its front the right half's print, laid as it is on the right half; its back the left half's, as it is laid on the
+  // left: so it lifts off the right page as that page, and lands on the left as the page there, nothing changing as it
+  // shows and hides. Its own writing, laid the other way up, changed the page as it lifted and as it landed)
+  const backUV = new Float32Array(pageGeo.attributes.uv.count * 2);
+  for (let i = 0; i < pageGeo.attributes.position.count; i++) {
+    const t = pageGeo.attributes.position.getX(i) + 0.5, v = (D / 2 + pageGeo.attributes.position.getZ(i)) / D;
+    pageGeo.attributes.uv.setXY(i, t, v);
+    backUV[i * 2] = 1 - t; backUV[i * 2 + 1] = v;
+  }
+  const backGeo = pageGeo.clone();
+  backGeo.setAttribute('uv', new THREE.BufferAttribute(backUV, 2));
+  // (the back shares the front's positions and normals, which are laid each frame)
+  backGeo.setAttribute('position', pageGeo.attributes.position);
+  backGeo.setAttribute('normal', pageGeo.attributes.normal);
+  // (each column's place across, 0 at the spine to 1 at the edge; its uv as the right print's)
+  const across = Float32Array.from({ length: pageGeo.attributes.position.count }, (_, i) => pageGeo.attributes.position.getX(i) + 0.5);
+  const depthAt = Float32Array.from({ length: pageGeo.attributes.position.count }, (_, i) => pageGeo.attributes.position.getZ(i));
   const pivot = new THREE.Group();
-  // (its spine's height is the book's, given: over its blocks at rest by a hair, `ScholarBook.spine`)
   pivot.position.copy(book.spine);
   j.root.add(pivot);
-  const page = add(pageGeo, book.page, pivot, 'page', false);
+  const front = (book.prints[0].material as THREE.MeshStandardMaterial).clone();
+  front.side = THREE.FrontSide;
+  const backMat = (book.prints[1].material as THREE.MeshStandardMaterial).clone();
+  backMat.side = THREE.BackSide;
+  const page = add(pageGeo, front, pivot, 'page', false);
+  const pageBack = add(backGeo, backMat, page, 'page back', false);
+  void pageBack;
   page.visible = false;
-  /** the page laid at `k` of its turn (0 on his right, 1 over on his left): its root turning about the spine, its edge
-   *  lagging and curled under its own weight */
+  const at2 = new THREE.Vector2();
+  /** the page laid at `k` of its turn (0 lying on his right half, 1 on his left), each point turned round the spine
+   *  from its place on the right to its place on the left (`turnedPage`: never through either half) */
   const layPage = (k: number) => {
     const p = pageGeo.attributes.position;
     for (let i = 0; i < p.count; i++) {
-      const r = -rest[i * 3] / W, a = pageAngle(k, r), d = r * W;
-      p.setXYZ(i, -Math.cos(a) * d, -Math.sin(a) * d, rest[i * 3 + 2]);
+      turnedPage(shape, k, across[i], PAGE_LIFT, at2);
+      // (across towards his right, -x)
+      p.setXYZ(i, -at2.x, at2.y, depthAt[i]);
     }
     p.needsUpdate = true;
     pageGeo.computeVertexNormals();
   };
-  /** where the page's outer corner nearest him is at `k` of its turn, in his frame */
-  const corner = (k: number, out: THREE.Vector3) => {
-    const a = pageAngle(k, 0.92);
-    return out.set(-Math.cos(a) * W * 0.92, -Math.sin(a) * W * 0.92, -D * 0.38).add(pivot.position);
+  /** the page's outer edge at `k` of its turn, `z` along it (his frame), and the way along the page from it towards the
+   *  spine and the way its face looks (up at rest), for the hand that holds it */
+  const edgeAt = (k: number, z: number, out: THREE.Vector3, inward: THREE.Vector3, face: THREE.Vector3) => {
+    turnedPage(shape, k, 1, PAGE_LIFT, at2);
+    out.set(-at2.x, at2.y, z).add(pivot.position);
+    const ex = -at2.x, ey = at2.y;
+    turnedPage(shape, k, 0.85, PAGE_LIFT, at2);
+    inward.set(-at2.x - ex, at2.y - ey, 0).normalize();
+    // (the face: the inward way turned a quarter round the spine's axis, up at rest; as the page stands up it faces
+    // his left, over the left half it comes down on)
+    face.set(-inward.y, inward.x, 0);
+    return out;
   };
 
   // --- his pose, a frame at a time ---
   const eyes = head.eyes;
-  let loop = 7, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0;
+  let loop = 7, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0, holding = 0;
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
   const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
   const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
+  /** the page's edge he holds, the way along the page from it to the spine, and the way its face looks */
+  const edge = new THREE.Vector3(), inward = new THREE.Vector3(), face = new THREE.Vector3();
   /** where each elbow rests on the table (his frame) */
   const restL = new THREE.Vector3(), restR = new THREE.Vector3();
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qp = new THREE.Quaternion(), basis = new THREE.Matrix4();
@@ -367,8 +396,8 @@ export function buildScholar(book: ScholarBook): Scholar {
     const { top, z0 } = book.table;
     // (each wrist on its page's near half, its fingers lying on the page and short of its far edge: with the wrist
     // half way up the page, the fingers hung 7 cm past the book's edge, down onto the table, and looked sunk in it)
-    tL.set(book.spine.x + 0.16, book.printTop + 0.035, book.spine.z - book.pageD * 0.4);
-    tR.set(book.spine.x - 0.18, book.printTop + 0.035, book.spine.z - book.pageD * 0.38);
+    tL.set(book.spine.x + 0.16, book.printTop + 0.035, book.spine.z - D * 0.4);
+    tR.set(book.spine.x - 0.18, book.printTop + 0.035, book.spine.z - D * 0.38);
     // (leaning in, his hands slide a little further on, so his arms keep their reach and his elbows their rest)
     tL.z += lean * 0.06; tR.z += lean * 0.06;
     restL.set(0.33, top + 0.085, z0 + 0.05);
@@ -388,13 +417,31 @@ export function buildScholar(book: ScholarBook): Scholar {
     bridge.y -= 0.12; bridge.x += 0.02; bridge.z += 0.03;
     tL.lerp(bridge, specs);
     tL.y += lift;
-    // the right: to the page's corner, over with it, and back
-    const pageK = smooth(clamp((turnK - 0.24) / 0.56, 0, 1));
-    const reach = span(turnK, 0.04, 0.72, 0.2) * turning;
-    corner(pageK, tmp);
-    // (over the corner by the fingers' thickness: at 2.5 cm, they dug into the page as he took it)
-    tmp.y += 0.04; tmp.z -= 0.03;
+    // (its fingers lifted off his left page as the turned page comes down on it, the wrist kept there, and laid on the new
+    // page once it lies there: left on the page, the turned page came down over them. Lifted whole, his bell went into
+    // the table)
+    const turnAt = turnA > 0 ? along(t, ...BEATS.turnA) : along(t, ...BEATS.turnB), clear = span(turnAt, 0.56, 1, 0.16);
+    tL.x += clear * 0.03; tL.y += clear * 0.015;
+    // the right: to the page's outer edge, near its corner nearest him, lifting it by the edge and carrying it up past
+    // upright, then letting it fall over and going back to rest (he took it from thin air, by the spine, from play:
+    // "there is nothing on the edges")
+    // (the page lifts once his hand has it: it lifted before he was there, and his fingers came down on its print)
+    const pageK = smooth(clamp((turnK - 0.3) / 0.5, 0, 1));
+    // (let go of eased out: let go of at once, his hand turned 6.8 degrees in a frame back to the table)
+    // (lifted by his hand a third of the way, then let go of to fall over by itself, as a page is turned: held up past
+    // upright, his hand turned round 180 degrees letting it go, 7.8 degrees a frame)
+    const reach = smooth(span(turnK, 0.02, 0.76, 0.26)) * turning;
+    // (in his hand till he lets it go)
+    holding = pageK <= LET_GO ? reach : 0;
+    // (his hand follows the edge only as far as he lifts it, then goes back from there: following it as it fell over, his
+    // hand turned with it 6.8 degrees a frame as it let go)
+    edgeAt(Math.min(pageK, LET_GO), -D * 0.3, edge, inward, face);
+    // (the wrist out past the edge by a hand's palm and its fingers half curled, so they close on the edge, the pads a
+    // finger's thickness off its face)
+    tmp.copy(edge).addScaledVector(inward, -0.155).addScaledVector(face, 0.04);
     tR.lerp(tmp, reach);
+    // (and over the book in an arc, there and back: brought straight back down, his fingers dug 3 cm into the page)
+    tR.y += 0.05 * Math.sin(Math.PI * reach) * (pageK > 0 ? 1 : 0.4);
     // (each elbow bent towards its rest on the table; out and down as a hand goes to the face, the right's out as it
     // reaches across)
     poleL.copy(chestLocal(restL.clone())).sub(j.shoulderL.position);
@@ -408,19 +455,25 @@ export function buildScholar(book: ScholarBook): Scholar {
     reachArm(j.shoulderR, j.elbowR, P.upperL, P.foreL, chestLocal(tR.clone()), poleR, 1, 0.08);
     j.root.updateMatrixWorld(true);
     // the hands' turns: flat on the table, fingers ahead and in; cupping the beard; a finger to the bridge; on the page
-    handTurn(V(-0.35, 0.06, 1), V(0, -1, -0.06), qa);
+    // (its fingers lifted off the page, the wrist kept on it, as the turned page comes down)
+    handTurn(V(-0.35, 0.06 + clear * 0.9, 1), V(0, -1, -0.06 - clear * 0.9), qa);
     handTurn(V(-0.5, 0.75, -0.2), V(0.1, 0, -1), qb); qa.slerp(qb, smooth(beard));
     handTurn(V(-0.2, 0.9, -0.3), V(0.1, 0.2, -1), qb); qa.slerp(qb, smooth(specs));
     setHand(j.handL, qa.clone());
     handTurn(V(0.45, 0.06, 1), V(0, -1, -0.06), qa);
-    handTurn(V(0.7, 0.2 + pageK * 0.4, 0.6), V(0.2, -1 + pageK * 0.6, 0.2), qb); qa.slerp(qb, reach);
+    // (holding the page: the fingers along it towards the spine, the palm on its face)
+    // (the palm half way between the page's face and down: he pinches it from above, and his hand turns half as fast as it
+    // lifts)
+    handTurn(tmp.copy(inward).addScaledVector(face, 0.12).add(V(0, 0, 0.2)), face.clone().negate().add(V(0, -1, 0)), qb); qa.slerp(qb, reach);
     setHand(j.handR, qa.clone());
     // (resting, his fingers lie nearly flat on the page: curled as a hand is at rest in the air, their tips dug in)
     poseHand(handL, lerp(lerp(0.14, 1.0, beard), 0.6, specs), 0.15, specs, clock, 0);
-    poseHand(handR, lerp(0.12 + 0.04 * Math.sin(clock * 0.7), 0.45, reach), 0.15, 0, clock, 0);
+    poseHand(handR, lerp(0.12 + 0.04 * Math.sin(clock * 0.7), 0.25, reach), 0.15, 0, clock, 0);
 
     // --- the page ---
-    page.visible = turning > 0.5 && pageK > 0.002 && pageK < 0.998;
+    // (shown from the moment it moves to when it lies flat on the left page again: hidden a hair short of that, its
+    // edge was still 7 mm over the left page and dropped there at once)
+    page.visible = turning > 0.5 && pageK > 0 && pageK < 1;
     if (page.visible) layPage(pageK);
   }
 
@@ -442,6 +495,7 @@ export function buildScholar(book: ScholarBook): Scholar {
     book,
     page,
     hands: [handL, handR],
+    get holding() { return holding; },
     update,
     get loopAt() { return loop; },
     set loopAt(v: number) { loop = ((v % SCHOLAR_LOOP) + SCHOLAR_LOOP) % SCHOLAR_LOOP; },
