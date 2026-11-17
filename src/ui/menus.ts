@@ -796,6 +796,13 @@ let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 /** The hero's best wave in each battleground, as the mode chosen counts them: banked, or in the training grounds reached. */
 export const startBests = (): Bests => trainingSelected() ? G.profile.records.bestReached : G.profile.records.bestBanked;
+/** the last start the developer mode offers whatever was banked (`offerStartsUpTo`; 0 in play: src/dev alone sets it) */
+let devStarts = 0;
+/** The developer mode's (PR previews and dev builds): any start up to `wave` offered, the hero's best still the default. */
+export function offerStartsUpTo(wave: number): void {
+  devStarts = wave;
+  renderWaveOptions();
+}
 
 function stepWave(d: number): void {
   if (isGuest()) return;   // the host picks
@@ -808,8 +815,8 @@ function renderWaveOptions(): void {
   const s = VILLAGE ? G.arena.biome : biomeSetting(), grounds = trainingSelected();
   const bests = startBests();
   const best = bestStart(bests, s);
-  const key = `${G.profile.classId}:${grounds}:${s}:${best}`;
-  if (key !== seen) { seen = key; startWave = maxWave = best; }
+  const key = `${G.profile.classId}:${grounds}:${s}:${best}:${devStarts}`;
+  if (key !== seen) { seen = key; startWave = best; maxWave = Math.max(best, devStarts); }
   // a co-op guest plays the host's choice
   const guest = isGuest(), wave = guest ? session.wave : startWave;
   const box = $('#opt-wave');
