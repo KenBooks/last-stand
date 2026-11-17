@@ -813,7 +813,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`. `pictures` (asked
   for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its moments, `cantorLook`
   the Cantor alone from its front, back and sides and its skull close, its triangles held to 45k (`page/bossCantor.ts`;
-  `tools/lab/out/boss`), `twinsPictures` the Twins at each of theirs.
+  `tools/lab/out/boss`), `twinsPictures` the Twins at each of theirs,
+  `twinsLook` each twin alone from its front, its back and both sides
+  and its skull close up from the front and both sides (the other twin sent 30 m off behind the hero, so the side
+  views' camera never stands in its ribs; its chain hidden, which glared across every picture; each held facing
+  the hero by finding no target, so no daze's stars over it), its triangles held to 45k (a phone's budget for one
+  boss, as the Rootmother's), the meshes that take the most listed, and each sculpted bone's triangles at Slab's
+  size: where a budget is cut (`tools/lab/out/boss`).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

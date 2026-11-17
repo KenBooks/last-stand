@@ -26,7 +26,8 @@
 //   and without its weak windows.
 //
 // - `pictures` (asked for alone, not run by default): the Bell-Warden in each of its moments, a sheet for the eye;
-//   `encounterPictures` the Cantor's encounter in each of its, `twinsPictures` the Twins in each of theirs.
+//   `encounterPictures` the Cantor's encounter in each of its, `twinsPictures` the Twins in each of theirs, `twinsLook`
+//   each twin alone from every side, its triangles held to a boss's budget.
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
 // one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts

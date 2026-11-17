@@ -6,6 +6,7 @@
 //   in its phase; Reliquary's mend raising the pair's life once Slab stands hurt and unhit, and a stun in its channel
 //   breaking it, healing nothing.
 // - `twinsPictures`: the pair in each of their moments, a sheet for the eye.
+// - `twinsLook`: each twin alone from its front, back and sides and its skull close up, its triangles held to 45k.
 //
 // Its canaries: a pair that shares nothing, a chain that never snaps, no collapse at half, a mend that mends nothing.
 // This module reads boss.ts's helpers only inside its functions: boss.ts imports it, and its constants aren't made
