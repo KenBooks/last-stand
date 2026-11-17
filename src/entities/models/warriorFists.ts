@@ -26,8 +26,8 @@ import { POUNCE } from '../../data/balance';
 export const FIST = { curl: 1.7, spread: 0.02, from: 0.6, r: 0.012 };
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
- *  up, ahead): the lead (left) further out, both before the chin */
-const GUARD = { lead: [0.14, 0.02, 0.27], rear: [-0.15, 0, 0.17] };
+ *  up, ahead): the lead (left) further out, both at the cheeks and out before the face, the elbows in by the ribs */
+const GUARD = { lead: [0.13, 0.11, 0.3], rear: [-0.12, 0.08, 0.2] };
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): each fist in its bottom corner, the lead (left) a little higher and further in, both
  *  wholly in the frame, as a first-person brawler's fists are held; a little lower out of a fight */
@@ -40,7 +40,7 @@ const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.55, up: -0.42 };
 /** how much of its length an arm thrown out in a punch keeps short of straight (a locked elbow reads as a stick) */
 const PUNCH_REACH = 0.97;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
-const POLE_L = new THREE.Vector3(0.35, -1, -0.1), POLE_R = new THREE.Vector3(-0.35, -1, -0.1);
+const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
 const POLE_EYES = 0.7;
 
@@ -100,7 +100,7 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = fa
   _sq.copy(shoulder.quaternion); _eq.copy(elbow.quaternion);
   j.chest.worldToLocal(j.body.localToWorld(_at.copy(at)));
   _pole.copy(left ? POLE_L : POLE_R);
-  if (eyes) _pole.x *= POLE_EYES / 0.35;
+  if (eyes) _pole.x *= POLE_EYES / POLE_L.x;
   reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _at, _pole);
   // (each from the pose's own towards the reach: `slerpQuaternions` into one of its own ends copies over it first)
   if (w < 1) { shoulder.quaternion.copy(_sq.slerp(shoulder.quaternion, w)); elbow.quaternion.copy(_eq.slerp(elbow.quaternion, w)); }
@@ -316,13 +316,17 @@ export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): numb
  */
 export function fistRush(j: Joints, run: number, eyes: boolean): void {
   if (run <= 0) return;
-  if (!eyes) { j.chest.rotation.y += -0.35 * run; j.spine.rotation.x += 0.2 * run; j.neck.rotation.y += 0.3 * run; }
+  if (!eyes) {
+    // (the lead shoulder turned square into the way, the trunk dropped over it and the chin tucked behind it)
+    j.chest.rotation.y += -0.6 * run; j.spine.rotation.x += 0.38 * run; j.neck.rotation.y += 0.5 * run;
+    j.neck.rotation.x += 0.12 * run; j.body.position.y += -0.06 * run;
+  }
   if (eyes) {
     place(j, true, onScreen(j, [-0.12, -0.35, 0.36], _far), run, eyes);
     place(j, false, onScreen(j, [0.5, -0.9, 0.4], _far), run, eyes);
   } else {
     between(j, _mid);
-    place(j, true, _far.set(_mid.x - 0.02, _mid.y + 0.06, _mid.z + 0.3), run);
+    place(j, true, _far.set(_mid.x + 0.04, _mid.y - 0.04, _mid.z + 0.2), run);
     place(j, false, _far.set(_mid.x - 0.24, _mid.y - 0.42, _mid.z - 0.1), run);
   }
   lineTo(fistLine.L, [0, 1, 0], run);
