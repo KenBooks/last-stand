@@ -1,10 +1,12 @@
-// Odo the merchant (world/shop.ts stands him behind his counter; his trade is ui/merchant.ts): a stout, cheerful trader
-// in a green wool coat over an oxblood waistcoat with brass buttons, a leather apron, his sleeves turned back in wide
-// cuffs over his linen shirt, a broad felt hat with a feather, half-moon spectacles and a grey beard. Built on the
-// heroes' own rig, head and hands (the ranger's bearded face, its hair greyed and tucked under the hat), so he holds up
-// as close as they do. His idle is a loop that never snaps (`ODO_LOOP` long: every motion in it a pulse still at both
-// its ends, or a whole number of turns): he breathes, rests his hands on the counter and drums his fingers, weighs a
-// coin from his scale and holds it up to his spectacles, writes a line in his ledger with a quill, and looks up from it.
+// Odo the merchant (world/shop.ts stands him behind his counter; his trade is ui/merchant.ts): a stocky, cheerful
+// travelling trader, drawn to read nothing like the library's Brother Hollis (from review: "why Odo looks like
+// librarian?": both had a grey beard, spectacles, a felt cap and an oxblood front over brown): a saffron shirt with its
+// sleeves rolled to the elbow over bare forearms, a teal waistcoat with brass buttons, a wide belt hung with pouches, a
+// coin purse and a ring of keys, a short tan apron, a broad teal hat with a yellow plume, and a dark beard. Built on the
+// heroes' own rig, head and hands (the ranger's bearded face), so he holds up as close as they do. His idle is a loop
+// that never snaps (`ODO_LOOP` long: every motion in it a pulse still at both its ends, or a whole number of turns): he
+// breathes, rests his hands on the counter and drums his fingers, weighs a coin from his scale and holds it up to his
+// eye, writes a line in his ledger with a quill, and looks up from it.
 // A hero coming near is glanced at, and a trade made earns a nod (`odoNods`).
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
@@ -119,8 +121,8 @@ function inHead(g: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 interface Mats {
-  coat: THREE.Material; coatD: THREE.Material; lining: THREE.Material; waistcoat: THREE.Material; apron: THREE.Material;
-  linen: THREE.Material; brass: THREE.Material; trousers: THREE.Material; boot: THREE.Material;
+  shirt: THREE.Material; waistcoat: THREE.Material; apron: THREE.Material; belt: THREE.Material; pouch: THREE.Material;
+  arm: THREE.Material; brass: THREE.Material; iron: THREE.Material; trousers: THREE.Material; boot: THREE.Material;
 }
 type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
 
@@ -134,44 +136,43 @@ export function buildOdo(counter: OdoCounter): Odo {
     const m = pbrMaterialMaps(maps, 1, ns);
     return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale };
   };
-  const coat = kit.rim({ color: 0x3a5a3c, roughness: 1, ...tex(woolMaps(), 1.3) }, 0x5a7a50, 0.3);
-  const coatD = kit.rim({ color: 0x3a5a3c, roughness: 1, ...tex(woolMaps(), 1.3), side: THREE.DoubleSide }, 0x5a7a50, 0.3);
-  const lining = kit.rim({ color: 0x6a5a3a, roughness: 0.9, ...tex(clothMaps(), 0.8), side: THREE.DoubleSide }, 0x6a5a3a, 0.15);
-  const waistcoat = kit.rim({ color: 0x7a2420, roughness: 0.9, ...tex(feltMaps(), 0.9) }, 0x9a3a2a, 0.3);
-  const apron = kit.std({ color: 0x6e4a2a, roughness: 0.75, ...tex(leatherMaps(), 1.2), side: THREE.DoubleSide });
-  const linen = kit.rim({ color: 0xd8ccb0, roughness: 1, ...tex(clothMaps(), 1.2) }, 0xe8dcc0, 0.25);
+  // (his palette is a market's, not the library's: saffron, teal and tan, where Hollis wears brown and oxblood)
+  const shirt = kit.rim({ color: 0xd8962a, roughness: 1, ...tex(clothMaps(), 1.2), side: THREE.DoubleSide }, 0xf0b850, 0.3);
+  const waistcoat = kit.rim({ color: 0x1f5a62, roughness: 0.85, ...tex(feltMaps(), 0.9) }, 0x3a8a90, 0.3);
+  const apron = kit.std({ color: 0xa8743e, roughness: 0.7, ...tex(leatherMaps(), 1.2), side: THREE.DoubleSide });
+  const belt = kit.std({ color: 0x3a2412, roughness: 0.55, ...tex(leatherMaps(), 1) });
+  const pouch = kit.std({ color: 0x7a4a24, roughness: 0.65, ...tex(leatherMaps(), 1.1) });
+  const arm = kit.rim({ color: 0xc08a68, roughness: 0.75 }, 0xe0a888, 0.25);
   const brass = kit.std({ color: 0xd0a850, metalness: 0.9, roughness: 0.32 });
-  const trousers = kit.std({ color: 0x3a3028, roughness: 1, ...tex(woolMaps(), 1) });
+  const iron = kit.std({ color: 0x4a4a4e, metalness: 0.85, roughness: 0.45 });
+  const trousers = kit.std({ color: 0x3e3a30, roughness: 1, ...tex(woolMaps(), 1) });
   const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
-  const hatFelt = kit.rim({ color: 0x4a3220, roughness: 1, ...tex(feltMaps(), 0.8), side: THREE.DoubleSide }, 0x6a4a30, 0.3);
-  const band = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
-  const feather = kit.rim({ color: 0xb03a20, roughness: 0.85, side: THREE.DoubleSide }, 0xe06a3a, 0.4);
-  const glass = kit.std({ color: 0xffffff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
+  const hatFelt = kit.rim({ color: 0x1f5a62, roughness: 1, ...tex(feltMaps(), 0.8), side: THREE.DoubleSide }, 0x3a8a90, 0.3);
+  const band = kit.std({ color: 0xd8962a, roughness: 0.9, ...tex(clothMaps(), 1) });
+  const feather = kit.rim({ color: 0xf0c020, roughness: 0.85, side: THREE.DoubleSide }, 0xffe060, 0.4);
   const gold = kit.std({ color: 0xf0c050, metalness: 1, roughness: 0.25 });
   const quillMat = kit.std({ color: 0xece4d4, roughness: 0.8, side: THREE.DoubleSide });
 
-  // --- the rig, standing, stout: a broad chest and a round belly ---
-  const j: Joints = buildHumanoid({ skin: coat }, { chestW: 0.23, chestD: 0.15, waistW: 0.19 });
+  // --- the rig, standing, stocky: a broad chest and a round belly ---
+  const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.25, chestD: 0.16, waistW: 0.22 });
   stripRig(j.root);
   for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `odo ${name}`;
   const P = j.P;
 
-  // --- the head: the ranger's bearded face, its hair and beard greyed, his hair under his hat ---
+  // --- the head: the ranger's bearded face, his hair and beard darkened, his hair under his hat ---
   const head: Head = buildHead(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger);
   buildNeck(j.neck, kit, 'ranger', P.neckL, j.head);
-  const grey = (m: THREE.Material | THREE.Material[] | undefined, r: number) => {
+  const darken = (m: THREE.Material | THREE.Material[] | undefined, k: number) => {
     const s = (Array.isArray(m) ? m[0] : m) as THREE.MeshStandardMaterial | undefined;
-    s?.color.setRGB(r, r * 0.97, r * 0.93);
+    s?.color.multiplyScalar(k);
   };
-  // (the locks over the crown under his hat; the shell and the crop's tufts below its band greyed)
+  // (the locks over the crown under his hat; what shows below its band a dark brown, as his beard's tufts)
   if (head.hair[1]) head.hair[1].visible = false;
-  grey(head.hair[0]?.material, 0.42);
-  grey(head.crop?.material, 1.15);
-  // (the beard's tufts salted grey; its body is the face's own paint, which no tint can grey: so salt and pepper)
-  for (const b of head.beards.slice(1)) grey(b.material, 1.05);
-  // (a ruddier, older face than the ranger's)
-  (head.face.material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(1.02, 0.95, 0.9));
-  dressHead(head, hatFelt, band, feather, brass, glass);
+  darken(head.crop?.material, 0.7);
+  for (const b of head.beards.slice(1)) darken(b.material, 0.7);
+  // (a ruddy, weathered face: a man on the roads)
+  (head.face.material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(1.04, 0.94, 0.86));
+  dressHead(head, hatFelt, band, feather);
 
   // --- the hands: the heroes' own, bare ---
   const skin = handSkin(kit, 'ranger');
@@ -188,7 +189,7 @@ export function buildOdo(counter: OdoCounter): Odo {
     parts.push(m);
     return m;
   };
-  dressBody(j, add, { coat, coatD, lining, waistcoat, apron, linen, brass, trousers, boot });
+  dressBody(j, add, { shirt, waistcoat, apron, belt, pouch, arm, brass, iron, trousers, boot });
 
   // --- what he holds: a coin from his scale, a quill as he writes (at no size while not held: a hidden mesh compiles
   // nothing in the room's warm-up, and would at his first beat) ---
@@ -255,7 +256,7 @@ export function buildOdo(counter: OdoCounter): Odo {
     // --- the beats of the loop ---
     const weigh = span(t, ...BEATS.weigh, 1.1), write = span(t, ...BEATS.write, 1.2), look = span(t, ...BEATS.look, 1.0);
     const weighK = along(t, ...BEATS.weigh), writeK = along(t, ...BEATS.write), lookK = along(t, ...BEATS.look);
-    // (the coin taken from the pan, held up to his spectacles, turned, and put back)
+    // (the coin taken from the pan, held up to his eye, turned, and put back)
     const up = span(weighK, 0.22, 0.8, 0.16);
     const breath = Math.sin((t / ODO_LOOP) * Math.PI * 2 * 9);
 
@@ -286,7 +287,7 @@ export function buildOdo(counter: OdoCounter): Odo {
     headX += nodding * 0.32;
     j.neck.rotation.x = neckX;
     j.head.rotation.set(headX, headY, -headY * 0.06);
-    // (his eyes over his half-moons at what he looks at: down to the counter, up to the hero)
+    // (his eyes on what he looks at: down to the counter, up to the hero)
     const eyeX = 0.22 * (1 - gaze) * (1 - look) + up * -0.1;
     for (const e of eyes) e.rotation.set(eyeX, 0, 0);
     j.root.updateMatrixWorld(true);
@@ -339,9 +340,10 @@ export function buildOdo(counter: OdoCounter): Odo {
   };
 }
 
-/** His clothes on the rig: a green wool coat over a stout chest and belly, open at the front over an oxblood waistcoat
- *  with brass buttons, a leather apron hung from his neck over both, a skirt to his shins, sleeves to the elbow and
- *  wide turned-back cuffs over his linen shirt's sleeves to the wrist; trousers and boots under. */
+/** His clothes on the rig: a teal waistcoat over a stocky chest and belly, buttoned in brass, his saffron shirt's
+ *  collar open at the neck; a wide belt with a brass buckle, two pouches, a coin purse and a ring of keys; a short tan
+ *  apron from the belt to above his knees; trousers and boots under; his shirt's sleeves rolled up over the elbow,
+ *  bare forearms below. Nothing hangs past his hips but the apron: no coat skirt, no bib (both read as a habit). */
 function dressBody(j: Joints, add: Add, M: Mats): void {
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds, how far the belly comes forward */
@@ -355,29 +357,25 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     }
     return row;
   };
-  // --- the coat's body: the chest, up over the shoulders to a turned collar ---
+  // --- the waistcoat's body: the chest, up over the shoulders, where the shirt takes over at the neck ---
   const chestRows: [number, number, number, number, number][] = [
     // y, across, deep, folds, belly
-    [-0.1, 0.2, 0.16, 0.01, 0.05], [0.0, 0.205, 0.158, 0.012, 0.035], [0.08, 0.215, 0.152, 0.012, 0.015],
-    [0.14, 0.228, 0.145, 0.008, 0], [0.185, 0.238, 0.132, 0.005, 0], [0.215, 0.222, 0.118, 0.002, 0],
-    [0.238, 0.17, 0.1, 0, 0], [0.252, 0.11, 0.084, 0, 0], [0.268, 0.082, 0.078, 0, 0], [0.29, 0.07, 0.07, 0, 0],
+    [-0.1, 0.22, 0.175, 0.006, 0.06], [0.0, 0.225, 0.172, 0.007, 0.045], [0.08, 0.235, 0.165, 0.007, 0.02],
+    [0.14, 0.245, 0.155, 0.005, 0], [0.185, 0.25, 0.14, 0.003, 0], [0.215, 0.232, 0.124, 0.002, 0],
+    [0.238, 0.178, 0.104, 0, 0], [0.252, 0.115, 0.088, 0, 0],
   ];
-  add(rowsSurface(chestRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 1.3)), 1.2), M.coat, j.chest, 'coat chest');
+  add(rowsSurface(chestRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 1.3)), 1.2), M.waistcoat, j.chest, 'waistcoat chest');
+  // (the shirt from the waistcoat's top up round his neck)
+  // (snug, open at the throat in the waistcoat's V: a ring of collar round it read as a monk's cowl)
+  const neckRows: [number, number, number, number, number][] = [
+    [0.248, 0.125, 0.09, 0, 0], [0.262, 0.082, 0.074, 0, 0], [0.285, 0.062, 0.064, 0, 0],
+  ];
+  add(rowsSurface(neckRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 0.4)), 1.2), M.shirt, j.chest, 'shirt neck');
   const waistRows: [number, number, number, number, number][] = [
-    [-0.12, 0.23, 0.18, 0.012, 0.03], [-0.06, 0.225, 0.185, 0.014, 0.06], [0.02, 0.215, 0.19, 0.016, 0.08],
-    [0.1, 0.205, 0.18, 0.014, 0.07], [0.2, 0.2, 0.165, 0.012, 0.05],
+    [-0.12, 0.25, 0.2, 0.008, 0.04], [-0.06, 0.245, 0.205, 0.009, 0.075], [0.02, 0.235, 0.205, 0.01, 0.095],
+    [0.1, 0.225, 0.195, 0.009, 0.08], [0.2, 0.22, 0.18, 0.007, 0.06],
   ];
-  add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.1)), 1.2), M.coat, j.spine, 'coat waist');
-  // (the coat's collar turned down round his neck)
-  {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i < 22; i++) {
-      const a = (i / 22) * Math.PI * 2, [x, z] = oval(a, 0.1, 0.092, 2.2);
-      pts.push(V(x, 0.28 - 0.03 * Math.max(0, Math.cos(a)) ** 2 + 0.02 * Math.max(0, -Math.cos(a)), z - 0.008));
-    }
-    add(cord(pts, 0.022, true, 60), M.coat, j.chest, 'collar');
-  }
-  // --- the waistcoat: a front panel over the chest and belly between the coat's open fronts, its brass buttons ---
+  add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.1)), 1.2), M.waistcoat, j.spine, 'waistcoat belly');
   const front = (rows: [number, number, number, number, number][], y: number) => {
     const at = rows.findIndex((r) => r[0] >= y), hi = rows[Math.max(0, at)], lo = rows[Math.max(0, at - 1)];
     const t = hi === lo ? 0 : (y - lo[0]) / (hi[0] - lo[0]);
@@ -388,97 +386,99 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     const { w, d, b } = front(rows, y), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
     return V(x, y, z + b * Math.cos(a) ** 2 + lift);
   };
+  // --- the waistcoat's front: its open V over the shirt at the chest, buttoned in brass down to the belt ---
   {
     const rows: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 10; k++) {
-      const y = lerp(-0.1, 0.235, k / 10), half = lerp(0.12, 0.05, (k / 10) ** 1.4), row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 8; i++) row.push(onFront(chestRows, lerp(-half, half, i / 8), y, 0.006));
+    for (let k = 0; k <= 6; k++) {
+      const y = lerp(0.12, 0.25, k / 6), half = lerp(0.005, 0.07, k / 6), row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 6; i++) row.push(onFront(chestRows, lerp(-half, half, i / 6), y, 0.004));
       rows.push(row);
     }
-    add(rowsSurface(rows, 2), M.waistcoat, j.chest, 'waistcoat');
-    const rowsW: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 8; k++) {
-      const y = lerp(-0.04, 0.2, k / 8), half = 0.13, row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 8; i++) row.push(onFront(waistRows, lerp(-half, half, i / 8), y, 0.006));
-      rowsW.push(row);
-    }
-    add(rowsSurface(rowsW, 2), M.waistcoat, j.spine, 'waistcoat belly');
-    const button = new THREE.SphereGeometry(0.009, 10, 6).scale(1, 1, 0.5);
-    for (const y of [0.18, 0.1, 0.02]) add(button.clone(), M.brass, j.chest, 'button', false).position.copy(onFront(chestRows, 0, y, 0.012));
-    for (const y of [0.17, 0.08, -0.01]) add(button.clone(), M.brass, j.spine, 'button', false).position.copy(onFront(waistRows, 0, y, 0.012));
-    // (the coat's open fronts, a hand's width either side of the waistcoat, edged)
+    add(rowsSurface(rows, 2), M.shirt, j.chest, 'shirt front');
     for (const s of [1, -1]) {
       const edge: THREE.Vector3[] = [];
-      for (let k = 0; k <= 8; k++) { const y = lerp(-0.1, 0.235, k / 8); edge.push(onFront(chestRows, s * lerp(0.12, 0.06, (k / 8) ** 1.4), y, 0.012)); }
-      add(cord(edge, 0.008, false, 24), M.coat, j.chest, 'coat edge');
+      for (let k = 0; k <= 8; k++) { const y = lerp(0.12, 0.25, k / 8); edge.push(onFront(chestRows, s * lerp(0.005, 0.07, k / 8), y, 0.008)); }
+      add(cord(edge, 0.006, false, 20), M.waistcoat, j.chest, 'lapel');
     }
+    const button = new THREE.SphereGeometry(0.009, 10, 6).scale(1, 1, 0.5);
+    for (const y of [0.1, 0.03, -0.05]) add(button.clone(), M.brass, j.chest, 'button', false).position.copy(onFront(chestRows, 0, y, 0.008));
+    for (const y of [0.16, 0.08]) add(button.clone(), M.brass, j.spine, 'button', false).position.copy(onFront(waistRows, 0, y, 0.008));
   }
-  // --- the apron: from a strap round his neck down his chest and belly over the waistcoat to his knees ---
+  // --- the belt: wide, a brass buckle; two pouches, a coin purse and a ring of keys hung from it ---
+  const BELT = -0.02;
+  add(rowsSurface([ring(BELT - 0.03, 0.258, 0.214, 0, 0.05, 0), ring(BELT + 0.03, 0.256, 0.21, 0, 0.07, 0)], 2), M.belt, j.spine, 'belt');
   {
-    const rows: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 8; k++) {
-      const y = lerp(0.04, 0.19, k / 8), half = lerp(0.1, 0.075, k / 8), row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 6; i++) row.push(onFront(chestRows, lerp(-half, half, i / 6), y, 0.016));
-      rows.push(row);
-    }
-    add(rowsSurface(rows, 2), M.apron, j.chest, 'apron bib');
-    const lower: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 10; k++) {
-      const y = lerp(-0.12, 0.2, k / 10), half = lerp(0.17, 0.12, k / 10), row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 8; i++) row.push(onFront(waistRows, lerp(-half, half, i / 8), y, 0.018));
-      lower.push(row);
-    }
-    add(rowsSurface(lower, 2), M.apron, j.spine, 'apron');
+    const buckle = new THREE.TorusGeometry(0.03, 0.006, 6, 4).rotateZ(Math.PI / 4).scale(1.2, 0.9, 1);
+    add(buckle, M.brass, j.spine, 'buckle', false).position.copy(onFront(waistRows, 0, BELT, 0.012));
+    // (a pouch on each hip, a flap over it)
     for (const s of [1, -1]) {
-      const strap = [onFront(chestRows, s * 0.085, 0.19, 0.016), V(s * 0.08, 0.26, 0.05), V(s * 0.075, 0.29, -0.02), V(s * 0.05, 0.295, -0.07)];
-      add(cord(strap, 0.006, false, 12), M.apron, j.chest, 'apron strap');
+      const at = onFront(waistRows, s * 0.2, BELT - 0.07, 0.025);
+      const bag = add(new THREE.BoxGeometry(0.09, 0.1, 0.045, 2, 2, 1), M.pouch, j.spine, 'pouch');
+      bag.position.copy(at);
+      bag.rotation.y = s * 0.7;
+      const flap = add(new THREE.BoxGeometry(0.094, 0.045, 0.05), M.belt, j.spine, 'pouch flap', false);
+      flap.position.copy(at).add(V(0, 0.035, 0.003));
+      flap.rotation.y = s * 0.7;
+    }
+    // (a round coin purse at his right front, drawn shut)
+    const purse = add(new THREE.SphereGeometry(0.04, 12, 8).scale(1, 1.15, 0.8), M.pouch, j.spine, 'purse');
+    purse.position.copy(onFront(waistRows, -0.11, BELT - 0.075, 0.03));
+    add(new THREE.TorusGeometry(0.018, 0.004, 5, 12).rotateX(Math.PI / 2), M.brass, j.spine, 'purse ring', false)
+      .position.copy(purse.position).add(V(0, 0.045, 0));
+    // (a ring of keys at his left front)
+    const ringAt = onFront(waistRows, 0.11, BELT - 0.05, 0.03);
+    add(new THREE.TorusGeometry(0.022, 0.003, 5, 16), M.iron, j.spine, 'key ring', false).position.copy(ringAt);
+    for (let k = 0; k < 3; k++) {
+      const key = add(new THREE.BoxGeometry(0.008, 0.06, 0.003).translate(0, -0.03, 0), M.iron, j.spine, 'key', false);
+      key.position.copy(ringAt).add(V((k - 1) * 0.012, -0.018, 0.004));
+      key.rotation.z = (k - 1) * 0.3;
     }
   }
-  // --- the coat's skirt from the hips to his shins, and the apron down over its front ---
+  // --- the apron: short, tan leather, from the belt to above his knees, over the hips ---
   {
-    const rows: THREE.Vector3[][] = [];
-    const K = 12;
-    for (let k = 0; k <= K; k++) {
-      const s = k / K, y = lerp(-0.62, 0.06, s), w = lerp(0.29, 0.23, s), d = lerp(0.25, 0.2, s), fold = lerp(0.04, 0.01, s);
-      rows.push(ring(y, w, d, fold, lerp(0.02, 0.05, s), 3.7));
-    }
-    add(rowsSurface(rows, 1.2), M.coatD, j.hips, 'coat skirt');
     const lap: THREE.Vector3[][] = [];
     for (let k = 0; k <= 10; k++) {
-      const s = k / 10, y = lerp(-0.45, 0.06, s), w = lerp(0.29, 0.23, s), d = lerp(0.25, 0.2, s), half = lerp(0.2, 0.17, s), row: THREE.Vector3[] = [];
+      const t = k / 10, y = lerp(-0.34, 0.07, t), w = lerp(0.27, 0.25, t), d = lerp(0.23, 0.21, t), half = lerp(0.2, 0.18, t);
+      const row: THREE.Vector3[] = [];
       for (let i = 0; i <= 8; i++) {
         const x = lerp(-half, half, i / 8), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
-        row.push(V(x, y, z + lerp(0.02, 0.05, s) * Math.cos(a) ** 2 + 0.03));
+        row.push(V(x, y, z + lerp(0.03, 0.06, t) * Math.cos(a) ** 2 + 0.02));
       }
       lap.push(row);
     }
-    add(rowsSurface(lap, 2), M.apron, j.hips, 'apron skirt');
+    add(rowsSurface(lap, 2), M.apron, j.hips, 'apron');
   }
-  // --- trousers and boots under ---
-  for (const [knee, ankle, s] of [[j.kneeL, j.ankleL, 1], [j.kneeR, j.ankleR, -1]] as const) {
-    add(sleeve([[0.058, -0.42], [0.06, -0.3], [0.064, -0.15], [0.07, 0], [0.075, 0.08]], 0.03, 3 + s), M.trousers, knee, 'trouser');
-    add(new THREE.CylinderGeometry(0.062, 0.058, 0.2, 14).translate(0, 0.06, 0), M.boot, ankle, 'boot');
-    const toe = add(new THREE.SphereGeometry(1, 14, 10).scale(0.055, 0.045, 0.12), M.boot, ankle, 'boot toe');
+  // --- trousers from the hips to the boots ---
+  {
+    const rows: THREE.Vector3[][] = [];
+    for (let k = 0; k <= 4; k++) {
+      const t = k / 4;
+      rows.push(ring(lerp(-0.1, 0.08, t), lerp(0.24, 0.245, t), lerp(0.2, 0.2, t), 0.01, lerp(0.02, 0.05, t), 5.1));
+    }
+    add(rowsSurface(rows, 1.2), M.trousers, j.hips, 'trouser seat');
+  }
+  for (const [thigh, knee, ankle, s] of [[j.thighL, j.kneeL, j.ankleL, 1], [j.thighR, j.kneeR, j.ankleR, -1]] as const) {
+    add(sleeve([[0.08, -j.P.thighL - 0.02], [0.085, -0.3], [0.09, -0.15], [0.095, 0.02]], 0.03, 1 + s), M.trousers, thigh, 'trouser thigh');
+    add(sleeve([[0.058, -0.42], [0.06, -0.3], [0.064, -0.15], [0.07, 0], [0.078, 0.06]], 0.03, 3 + s), M.trousers, knee, 'trouser');
+    add(new THREE.CylinderGeometry(0.064, 0.058, 0.22, 14).translate(0, 0.07, 0), M.boot, ankle, 'boot');
+    const toe = add(new THREE.SphereGeometry(1, 14, 10).scale(0.056, 0.046, 0.12), M.boot, ankle, 'boot toe');
     toe.position.set(0, -0.04, 0.07);
   }
-  // --- the sleeves: the coat's to the elbow and a little past, a wide cuff turned back there; his shirt's linen
-  // from under it to his wrist, its cuff gathered over the hand (no hand left at the end of an empty sleeve) ---
+  // --- the sleeves: the shirt's, full, to the elbow, rolled up in a thick band over it; his forearms bare below ---
   for (const [shoulder, elbow, s] of [[j.shoulderL, j.elbowL, 1], [j.shoulderR, j.elbowR, -1]] as const) {
-    add(sleeve([[0.072, -0.32], [0.078, -0.24], [0.082, -0.12], [0.088, -0.03], [0.086, 0.03], [0.055, 0.07], [0.022, 0.085]], 0.05, 5 + s),
-      M.coat, shoulder, 'sleeve');
-    add(sleeve([[0.07, -0.1], [0.074, -0.04], [0.078, 0.03], [0.074, 0.06]], 0.04, 7 + s), M.coatD, elbow, 'sleeve fore');
-    // (the cuff: turned back over the sleeve's end, its lining out)
-    add(sleeve([[0.094, -0.12], [0.098, -0.1], [0.092, -0.04], [0.08, -0.03]], 0.02, 9 + s), M.lining, elbow, 'cuff');
+    add(sleeve([[0.07, -0.33], [0.078, -0.25], [0.084, -0.12], [0.09, -0.03], [0.088, 0.03], [0.06, 0.075], [0.024, 0.09]], 0.06, 5 + s),
+      M.shirt, shoulder, 'sleeve');
+    // (the roll: a fat band of the shirt turned up round the elbow)
+    add(sleeve([[0.056, -0.05], [0.07, -0.04], [0.074, -0.01], [0.072, 0.03], [0.06, 0.045]], 0.05, 7 + s), M.shirt, elbow, 'sleeve roll');
     const fore = -j.P.foreL;
-    add(sleeve([[0.03, fore - 0.014], [0.034, fore - 0.006], [0.036, fore + 0.006], [0.033, fore + 0.018], [0.038, fore + 0.07],
-      [0.046, -0.12], [0.05, -0.06], [0.052, -0.02]], 0.05, 13 + s), M.linen, elbow, 'shirt sleeve');
+    add(sleeve([[0.026, fore - 0.012], [0.03, fore + 0.02], [0.038, fore * 0.55], [0.046, -0.05], [0.05, -0.02]], 0, 13 + s),
+      M.arm, elbow, 'forearm');
   }
 }
 
-/** His head dressed: a broad felt hat with a leather band and a feather, half-moon brass spectacles low on his nose.
+/** His head dressed: a broad teal felt hat, its brim wide and turned up at one side, a saffron band and a yellow plume.
  *  All in the head's group, made in the face's frame (mm). */
-function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, feather: THREE.Material, brass: THREE.Material,
-  glass: THREE.Material): void {
+function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, feather: THREE.Material): void {
   const G = head.group;
   const put = (geo: THREE.BufferGeometry, mat: THREE.Material, name: string, cast = true) => {
     const m = new THREE.Mesh(inHead(geo), mat);
@@ -501,13 +501,16 @@ function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, fe
     }
   }
   put(crown, hatFelt, 'hat crown');
-  const brim = new THREE.LatheGeometry([[90, BASE - 2], [130, BASE - 7], [168, BASE - 4], [180, BASE + 6], [182, BASE + 10]]
+  const brim = new THREE.LatheGeometry([[90, BASE - 2], [140, BASE - 8], [190, BASE - 6], [206, BASE + 6], [208, BASE + 11]]
     .map(([r, y]) => new THREE.Vector2(r, y)), 40);
   brim.scale(1, 1, 1.12).translate(0, 0, CZ);
   // (its brim tipped down a hair at the front over his eyes, up behind)
   {
     const p = brim.attributes.position;
-    for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) - 0.06 * (p.getZ(i) - CZ));
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), r = Math.hypot(x, p.getZ(i) - CZ);
+      p.setY(i, p.getY(i) - 0.06 * (p.getZ(i) - CZ) + 0.5 * Math.max(0, x) * smooth(clamp((r - 120) / 80, 0, 1)));
+    }
   }
   put(brim, hatFelt, 'hat brim');
   put(new THREE.CylinderGeometry(97, 94, 22, 32, 1, true).scale(1, 1, 1.18).translate(0, BASE + 11, CZ), band, 'hat band');
@@ -521,15 +524,4 @@ function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, fe
     }
     put(rowsSurface(rows), feather, 'hat feather');
   }
-  // --- the spectacles: half-moons low on his nose, a bridge, the arms back to his ears ---
-  const R = 15, y = 100, z = 104;
-  for (const s of [1, -1]) {
-    const rim = new THREE.TorusGeometry(R, 1, 6, 20, Math.PI).rotateZ(Math.PI).translate(s * 30, y, z);
-    put(rim, brass, 'spectacles', false);
-    put(new THREE.BoxGeometry(2 * R, 1.6, 1.4).translate(s * 30, y, z), brass, 'spectacles top', false);
-    const lens = new THREE.CircleGeometry(R, 20, Math.PI, Math.PI).translate(s * 30, y, z - 0.4);
-    put(lens, glass, 'lens', false);
-    put(cord([V(s * 45, y, z - 2), V(s * 60, y + 6, 70), V(s * 66, y + 6, 25), V(s * 64, y - 6, 4)], 0.8, false, 16), brass, 'spectacles arm', false);
-  }
-  put(cord([V(-15, y + 1, z), V(-5, y + 5, z + 5), V(5, y + 5, z + 5), V(15, y + 1, z)], 0.9, false, 12), brass, 'spectacles bridge', false);
 }
