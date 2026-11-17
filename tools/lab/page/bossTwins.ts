@@ -21,6 +21,7 @@ import { hooksOf } from '../../../src/entities/bossHooks';
 import { setFxSink } from '../../../src/entities/enemyAI';
 import { inObstacle } from '../../../src/world/collision';
 import { clearSpot, standIn } from './boss';
+import { femur, forearm, humerus, jaw, pelvis, scapula, skull, sternum, tibia, twinSkull } from '../../../src/entities/models/ossuary';
 
 /** the wave the Twins come on, the frames each may take to rise, the lab's frames a second */
 const WAVE = WAVES.bossEvery * 3;
@@ -250,5 +251,149 @@ export async function twinsPictures(lab: Lab, options: BossOptions, lines: strin
     lab.drawing = drawing;
   }
   lines.push(`twinsPictures: ${moments.length} moments`);
+  return moments;
+}
+
+// --- their look -------------------------------------------------------------------------------------------
+
+/** the most triangles each twin's model may draw (a phone's budget for one boss, as the Rootmother's) */
+const TWIN_TRIANGLES = 45_000;
+/** how far off a twin the whole pictures are taken from (m), the height they're framed on; the skull's */
+const LOOK_FROM = 12;
+/** how far behind the hero the other twin is sent for each one's pictures (m) */
+const OTHER_OFF = 30;
+const LOOK_Y = 2.8;
+const SKULL_FROM = 4;
+
+/** The triangles a model draws, by its meshes' geometries (each drawn once). */
+function trianglesOf(root: THREE.Object3D): number {
+  const seen = new Set<THREE.BufferGeometry>();
+  let count = 0;
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || seen.has(mesh.geometry)) return;
+    seen.add(mesh.geometry);
+    const geometry = mesh.geometry;
+    count += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+  });
+  return Math.round(count);
+}
+
+/** how far below the top of a twin its skull's middle is (m) */
+const SKULL_DOWN = 0.6;
+
+/** a foe's own way of finding its target, while `blind` has it find none */
+const sight = new WeakMap<Enemy, () => boolean>();
+type Seeing = { pickTarget: () => boolean };
+
+/** `foe` finding no target, so thinking nothing (without a daze's stars over it) until `sighted`. */
+function blind(foe: Enemy): void {
+  const seeing = foe as unknown as Seeing;
+  if (!sight.has(foe)) sight.set(foe, seeing.pickTarget);
+  seeing.pickTarget = () => false;
+}
+
+/** `foe` finding its target again. */
+function sighted(foe: Enemy): void {
+  const own = sight.get(foe);
+  if (own) (foe as unknown as Seeing).pickTarget = own;
+  sight.delete(foe);
+}
+
+/** The triangles of each of a model's meshes, the most first: its joint's place in the model's tree and its
+ *  material's colour, so a budget can be cut where it goes. */
+function trianglesByMesh(root: THREE.Object3D, most: number): string {
+  const rows: [string, number][] = [];
+  const seen = new Set<THREE.BufferGeometry>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || seen.has(mesh.geometry)) return;
+    seen.add(mesh.geometry);
+    const geometry = mesh.geometry;
+    const count = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+    let depth = 0;
+    for (let at: THREE.Object3D | null = mesh.parent; at && at !== root; at = at.parent) depth++;
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    const colour = material.color ? `#${material.color.getHexString()}` : material.type;
+    rows.push([`depth ${depth} ${colour}`, Math.round(count)]);
+  });
+  rows.sort((a, b) => b[1] - a[1]);
+  return rows.slice(0, most).map(([what, count]) => `${what} ${count}`).join(', ');
+}
+
+/** The triangles of each sculpted bone as Slab's measures make it (m), meshed alone: what a model's budget is spent on. */
+function bonesTriangles(): string {
+  const count = (g: THREE.BufferGeometry): number => Math.round((g.index ? g.index.count : g.attributes.position.count) / 3);
+  const span = 1.85, thick = 0.17, hip = 0.464;
+  const bones: [string, THREE.BufferGeometry][] = [
+    ['heavy skull', twinSkull(0.0092, 'heavy')], ['long skull', twinSkull(0.0092, 'long')], ['jaw', jaw(0.0082)], ['small skull', skull(0.019)], ['small jaw', jaw(0.016)],
+    ['pelvis', pelvis(hip)], ['scapula', scapula(span * 0.44)], ['sternum', sternum(span * 0.38)],
+    ['femur', femur(1.05, thick * 0.55)], ['tibia', tibia(0.82, thick * 0.52)], ['humerus', humerus(1.25, thick * 0.48)],
+    ['forearm', forearm(1.15, thick * 0.41)],
+  ];
+  const listed = bones.map(([name, g]) => `${name} ${count(g)}`).join(', ');
+  for (const [, g] of bones) g.dispose();
+  return listed;
+}
+
+/** Where `who`'s skull is drawn, in the world: just under the top of its body as posed. */
+function skullOf(who: Enemy): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(who.model.root);
+  return who.pos.clone().setY(box.max.y - SKULL_DOWN);
+}
+
+/**
+ * `boss --parts twinsLook`: each twin alone, standing, from its front, its back and both sides, and its skull close
+ * up; its triangles held to `TWIN_TRIANGLES`. Taken without its stars: thinking, its cooldown held, a frame.
+ */
+export async function twinsLook(lab: Lab, options: BossOptions, lines: string[],
+  problems: string[]): Promise<Pictured[]> {
+  await standIn(lab, options.fixture, 'crypt');
+  const moments: Pictured[] = [];
+  const { slab, reliquary } = await pairAt(lab, 12, false);
+  const faceIt = (at: THREE.Vector3): void => {
+    G.player.facing = Math.atan2(at.x - G.player.pos.x, at.z - G.player.pos.z);
+  };
+  // (the chain to his brother hidden: drawn, it glared across every picture of either)
+  const lay = slab.model.root.userData.layChain as (to: THREE.Vector3 | null, taut: number) => void;
+  slab.model.root.userData.layChain = (_to: THREE.Vector3 | null, taut: number) => lay(null, taut);
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    for (const [who, name, other] of [[slab, 'Slab', reliquary], [reliquary, 'Reliquary', slab]] as const) {
+      // (the other one sent well off behind the hero, so each stands alone in its pictures: beside it, the side
+      // views' camera stood inside the other's ribs)
+      const away = new THREE.Vector3(G.player.pos.x - who.pos.x, 0, G.player.pos.z - who.pos.z).normalize();
+      other.pos.copy(G.player.pos).addScaledVector(away, OTHER_OFF);
+      // (thinking nothing, but not dazed: its stars stay off, and it stands facing the hero as it's turned)
+      const toHero = Math.atan2(G.player.pos.x - who.pos.x, G.player.pos.z - who.pos.z);
+      await lab.step(20, () => {
+        for (const twin of [who, other]) {
+          twin.dazed = 0;
+          blind(twin);
+        }
+        who.facing = who.targetFacing = toHero;
+        return keepWhole();
+      });
+      faceIt(who.pos);
+      // (views by the hero: he faces it, so `back` is its front, `front` its back)
+      const whole = { at: who.pos.clone().setY(LOOK_Y), distance: LOOK_FROM };
+      moments.push(lab.picture(`${name} front and back`, ['back', 'front'], [`${name} from its front and its back`], whole));
+      moments.push(lab.picture(`${name} sides`, ['left', 'right'], [`${name} from both sides`], whole));
+      moments.push(lab.picture(`${name} skull`, ['back', 'left', 'right'], [`${name}'s skull, its face and both sides`],
+        { at: skullOf(who), distance: SKULL_FROM }));
+      for (const twin of [who, other]) {
+        sighted(twin);
+        twin.dazed = 1e4;
+      }
+      const count = trianglesOf(who.model.root);
+      lines.push(`twinsLook: ${name} draws ${count} triangles (at most ${TWIN_TRIANGLES}); the most: ${trianglesByMesh(who.model.root, 10)}`);
+      if (count > TWIN_TRIANGLES) problems.push(`twinsLook: ${name}'s model draws ${count} triangles, over ${TWIN_TRIANGLES}`);
+    }
+  } finally {
+    lab.drawing = drawing;
+    slab.model.root.userData.layChain = lay;
+  }
+  lines.push(`twinsLook: each bone at Slab's size: ${bonesTriangles()}`);
   return moments;
 }

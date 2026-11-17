@@ -1407,11 +1407,12 @@ export const COMMANDS = {
         kind: 'list',
         usage: 'a,b',
         choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'twins', 'compiles', 'ttk', 'pictures',
-          'encounterPictures', 'cantorLook', 'twinsPictures'],
+          'encounterPictures', 'cantorLook', 'twinsPictures', 'twinsLook'],
         help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, encounter, '
           + 'twins, compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
           + '(the encounter of the Cantor in each of its moments), cantorLook (the Cantor alone from every side and its '
-          + 'skull close, its triangles held to 45k), twinsPictures (the Ossuary Twins in each of theirs)',
+          + 'skull close, its triangles held to 45k), twinsPictures (the Ossuary Twins in each of theirs), '
+          + 'twinsLook (each twin alone from four sides and its skull close up, its triangles held to 45k)',
       },
       canary: {
         kind: 'switch',

@@ -52,15 +52,15 @@ import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
-import { twins, twinsPictures, twinsTime } from './bossTwins';
+import { twins, twinsLook, twinsPictures, twinsTime } from './bossTwins';
 
 /** The parts the command runs, in order. */
 export type BossPart =
   'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'encounter' | 'twins' | 'compiles' | 'ttk' | 'pictures'
-  | 'encounterPictures' | 'cantorLook' | 'twinsPictures';
+  | 'encounterPictures' | 'cantorLook' | 'twinsPictures' | 'twinsLook';
 export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'encounter', 'twins', 'compiles', 'ttk'];
 /** the parts that are pictures for the eye, with no verdicts */
-const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures', 'cantorLook', 'twinsPictures'];
+const PICTURE_PARTS: BossPart[] = ['pictures', 'encounterPictures', 'cantorLook', 'twinsPictures', 'twinsLook'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -1148,7 +1148,7 @@ async function cantorAlone(lab: Lab, options: BossOptions, lines: string[], prob
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures' | 'cantorLook' | 'twinsPictures'>, typeof ladder> = {
+  const run: Record<Exclude<BossPart, 'pictures' | 'encounterPictures' | 'cantorLook' | 'twinsPictures' | 'twinsLook'>, typeof ladder> = {
     ladder, phases, toll, chains, stand, grab, encounter, twins, compiles, ttk,
   };
   const moments: Pictured[] = [];
@@ -1159,6 +1159,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       else if (part === 'encounterPictures') moments.push(...await encounterPictures(lab, options, lines));
       else if (part === 'cantorLook') moments.push(...await cantorAlone(lab, options, lines, problems));
       else if (part === 'twinsPictures') moments.push(...await twinsPictures(lab, options, lines));
+      else if (part === 'twinsLook') moments.push(...await twinsLook(lab, options, lines, problems));
       else await run[part](lab, options, lines, problems);
     }
   } finally {
