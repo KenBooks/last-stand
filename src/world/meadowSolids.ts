@@ -101,12 +101,13 @@ class SolidCells {
   }
 }
 
-/** Whether `mesh` is solid to the grass: shown, and drawn opaque and whole (not a fire's flames, water, a glow or leaf
- *  cards cut out by their picture). */
+/** Whether `mesh` is solid to the grass: shown, its colour and depth drawn whole (not a fire's flames, water, a glow,
+ *  a ghost's twin or leaf cards cut out by their picture). Not by `transparent`: what thins as it hides him (`seeThrough`)
+ *  blends but stands solid, the seat logs among it, and left out by it they stood out of the map, blades up through their
+ *  tops (from review, "Not fixed"). */
 export function solid(mesh: THREE.Mesh): boolean {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  return materials.every((m) => !m.transparent && m.depthWrite && m.visible && m.alphaTest === 0
-    && !(m as THREE.ShaderMaterial).isShaderMaterial);
+  return materials.every((m) => m.depthWrite && m.colorWrite && m.visible && m.alphaTest === 0);
 }
 
 /** `mesh`'s triangles placed by `matrix`, met by `cells`. */

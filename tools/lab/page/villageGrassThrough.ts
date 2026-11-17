@@ -151,6 +151,14 @@ function footprints(): Foot[] {
   return [...obstacles, ...posts()];
 }
 
+/** Whether `mesh` is drawn as something solid, as the player sees it: its colour and depth written, nothing cut out
+ *  of it. The lab's own rule, not the game's (`solid` in meadowSolids.ts): read by the game's, the check passed by the
+ *  seat logs the game's rule left out of the map, which drew blades up through their tops ("Not fixed", #679). */
+function drawnSolid(mesh: THREE.Mesh): boolean {
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return materials.every((m) => m.visible && m.colorWrite && m.depthWrite && m.alphaTest === 0);
+}
+
 /** What's built in the village as the grass's map is made of it, low enough to meet: shown, opaque meshes standing
  *  still but the meadow's own, each instance of an instanced one a mesh of its own, the merged ones cut into chunks for rays. */
 function builtMeshes(): THREE.Mesh[] {
@@ -160,7 +168,7 @@ function builtMeshes(): THREE.Mesh[] {
   const matrix = new THREE.Matrix4();
   village.meadow.parent!.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.geometry?.attributes.position || !game.solids.solid(mesh)) return;
+    if (!mesh.isMesh || !mesh.geometry?.attributes.position || !drawnSolid(mesh)) return;
     // (what moves stands nowhere for good: the heroes, the yard's dummies and its ghost, the chest's lid)
     if ((mesh as THREE.SkinnedMesh).isSkinnedMesh || mesh.layers.isEnabled(CROWD_LAYER) || mesh.layers.isEnabled(HERO_SHADOW_LAYER)) return;
     // (nor the meadow, nor the ghost by the yard's gate, a projection the grass stands through: game/ghost.ts)
