@@ -209,11 +209,14 @@ const EYES = tunable('warriorEyes', {
 });
 /** the hands' scale (`buildHand`'s `k`) */
 const HAND_K = 1.08;
-/** a bare hand's leather wrap round the wrist, [radius, y] up the forearm from over the heel of the hand: wound in
- *  turns, each a little proud of the one under it, its top under the sleeve's turned-back cuff */
-const WRIST_WRAP: [number, number][] = [
-  [0.042, -0.322], [0.046, -0.316], [0.045, -0.304], [0.0475, -0.297], [0.0455, -0.284], [0.048, -0.277],
-  [0.046, -0.264], [0.0485, -0.257], [0.047, -0.244], [0.049, -0.228],
+/** a bare hand's leather wrap round the wrist, [y, half across, half through] up the forearm from over the heel of the
+ *  hand (`ovalTube`): flat across the wrist as the ranger's cuff is, its lowest turn rounded in onto the hand, wound in
+ *  turns each a little proud of the one under it, its top under the sleeve's turned-back cuff (round, 4.2 to 4.9 cm
+ *  out, it read as a rigid cylinder wider than the hand with a hard rim, an adversarial review) */
+const WRIST_WRAP: [number, number, number][] = [
+  [-0.328, 0.033, 0.024], [-0.322, 0.04, 0.029], [-0.316, 0.0425, 0.031], [-0.304, 0.042, 0.031],
+  [-0.297, 0.044, 0.0325], [-0.284, 0.0425, 0.032], [-0.277, 0.045, 0.034], [-0.264, 0.044, 0.034],
+  [-0.257, 0.046, 0.036], [-0.244, 0.045, 0.036], [-0.228, 0.047, 0.038],
 ];
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
  *  its hand over about 170 degrees from palm up to palm down (`rollForearm`) */
@@ -837,7 +840,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (and a fighter's leather wrap wound round the wrist onto the heel of the hand, as the ranger's cuff is: a tube of
     // bare skin there, cut off flat, had the hand's own wrist standing out of it in points, a seam at every wrist; from
     // play, "does this look proper to you ?", "lets not reinvent the wheel, we already have hands for ranger")
-    B.skin(scaleUV(lathe(WRIST_WRAP, 16), 2, 1), leather, el, hd, 0.25, 0.29);
+    B.skin(scaleUV(ovalTube(WRIST_WRAP, 18), 2, 1), leather, el, hd, 0.25, 0.29);
     yield;
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);

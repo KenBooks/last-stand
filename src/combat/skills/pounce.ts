@@ -45,6 +45,17 @@ function quarry(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
  *  `POUNCE` in data/balance.ts). */
 const pounceHold = (blows: number): number => POUNCE.first + POUNCE.apart * (blows - 1) + POUNCE.after;
 
+/** The rest of the leap aimed `SHORT` from the foe's body where it is now, along the leap's way, never back: aimed at
+ *  where it stood as he sprang, he landed inside a foe that walked at him (an adversarial review). */
+function steer(dash: { vx: number; vz: number; t: number; dur: number }, player: Player, foe: Enemy, dir: THREE.Vector3): void {
+  const left = dash.dur - dash.t;
+  if (left <= 1e-3) return;
+  const gap = Math.hypot(foe.pos.x - player.pos.x, foe.pos.z - player.pos.z) - foe.radius - player.radius - SHORT;
+  const speed = Math.max(0, gap) / left;
+  dash.vx = dir.x * speed;
+  dash.vz = dir.z * speed;
+}
+
 const skill: InstantSkill = {
   anim: 'pounce',
   dashes: true,
@@ -65,6 +76,7 @@ const skill: InstantSkill = {
       anim: 'pounce', hold, lift: Math.min(POUNCE.top, go * POUNCE.rise),
       step: () => {
         const dash = player.dash;
+        if (!down && dash && dash.t < dash.dur && foe.alive) steer(dash, player, foe, dir);
         if (down || !dash || dash.t < dash.dur) return;
         // the landing: his weight on it, the dust thrown out round them, and the foe pinned under him
         down = true;

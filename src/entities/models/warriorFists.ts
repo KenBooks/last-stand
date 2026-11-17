@@ -34,15 +34,18 @@ export const FIST = tunable('fist', {
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
  *  up, ahead): the lead (left) further out, both at the cheeks and out before the face, the elbows in by the ribs */
-const GUARD = { lead: [0.13, 0.11, 0.3], rear: [-0.12, 0.08, 0.2] };
+// (out before the chin, the forearms sloping forward from the elbows to the fists: held by the cheeks, 0.3 and 0.2
+// ahead, the forearms stood upright and the knuckles faced the sky, the wrist read as bent back, an adversarial review)
+const GUARD = tunable('fistGuard', { lead: [0.13, 0.06, 0.42], rear: [-0.12, 0.03, 0.34] });
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): each fist low at its own side, the lead (left) a little higher and further in, both
  *  wholly in the frame, reached from his own shoulders as the ranger's hands are (`fistsLens`); a little lower out of
  *  a fight. In the corners from shoulders under the eyes, the fists were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
   lead: [-0.34, -0.42, 0.52], rear: [0.46, -0.6, 0.46],
-  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored) */
-  line: [0.6, 0.75, 0.25],
+  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored): ahead and across, as
+   *  in third person, the backs of the hands to the eye (mostly upward, the thumb side was turned to it) */
+  line: [0.7, 0, 0.7],
   /** how far out the elbows' way is through the eyes */
   pole: 0.7,
   /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
@@ -76,7 +79,9 @@ export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };
 /** the knuckles' line in the guard and in a punch, each hand's (in the body's frame): the way from the little
  *  finger's knuckle to the index's, as a handle runs up out of a fist (`hold`), so the left hand's punch is the
  *  right's mirrored (the same line for both turned the left palm up, its fingers curled at the eyes as a claw) */
-const LINE = { guard: [0.6, 0.75, 0.25], punch: [1, 0, 0] };
+// (in the guard ahead and across, the palm turned in by half: the knuckles face forward along the sloping forearm, the
+// thumb across the fingers; a line mostly upward turned the fist against the forearm, the wrist bent back by `hold`)
+const LINE = tunable('fistLines', { guard: [0.7, 0, 0.7], punch: [1, 0, 0] });
 /** a knuckle line for the hand on that side: mirrored across his middle for the left */
 const sided = (line: readonly number[], left: boolean): number[] => (left ? [-line[0], line[1], line[2]] : [...line]);
 
@@ -379,6 +384,12 @@ const HOOK_OUT: Keys = [[0, 0], [0.4, -0.25], [0.58, 0.9], [WRATH_LANDS, 1], [0.
 const SLAM_UP: Keys = [[0, 0], [0.45, 1], [0.52, 1], [WRATH_LANDS, 0], [1, 0]];
 const SLAM_DOWN: Keys = [[0, 0], [0.5, 0], [WRATH_LANDS, 1], [1, 1]];
 
+/** Wrath's slam through the eyes, raised: where each fist goes on the screen (across, up, metres ahead), up past the
+ *  view's top corners as arms raised overhead go up beside the head, the middle clear (held at the eyes' height, at
+ *  arm's length, it read as reaching out, not raised; raised up the middle, the sleeves filled two thirds of the view,
+ *  an adversarial review) */
+const WRATH_EYES = tunable('wrathEyes', { raised: [0.8, 1.05, 0.3] });
+
 /**
  * Wrath at `k` of its cast, of `form` (0 a hook, 1 a slam, 2 a quake): the hook a rear-hand blow swung round from the
  * side, the hips and the trunk turning hard through it, the elbow up level with the fist; the slam both fists raised
@@ -420,9 +431,11 @@ export function fistWrath(j: Joints, k: number, form: number, t: number, eyes: b
   const w = Math.max(smooth(ramp(k, 0, 0.3)), down);
   if (eyes) {
     // (as the hammer: raised at arm's length to the eyes' height, then down through the view to the floor before him)
-    const y = lerp(lerp(-0.4, 0.1, up), -0.75, down), ahead = lerp(0.64, 0.68, down);
-    place(j, true, onScreen(j, [-0.11, y, ahead], _far), w, eyes);
-    place(j, false, onScreen(j, [0.11, y, ahead], _far), w, eyes);
+    const [across, high, near] = WRATH_EYES.raised;
+    const y = lerp(lerp(-0.4, high, up), -0.75, down), ahead = lerp(lerp(0.64, near, up), 0.68, down);
+    const x = lerp(lerp(0.11, across, up), 0.11, down);
+    place(j, true, onScreen(j, [-x, y, ahead], _far), w, eyes);
+    place(j, false, onScreen(j, [x, y, ahead], _far), w, eyes);
   } else {
     between(j, _mid);
     const y = lerp(lerp(0, 0.5, up), -0.8 * deep, down), z = lerp(lerp(0.25, 0.15, up), 0.5, down);
