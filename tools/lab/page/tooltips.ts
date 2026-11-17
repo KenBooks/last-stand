@@ -162,8 +162,8 @@ function judged(name: string, read: Read, cast: Cast): { lines: string[]; proble
     problems.push(`${name}: its crit chance is ${read.crit}%, the hero's ${G.player.stats.crit}%`);
   }
   const timed = read.kinds.find((kind) => kind.every);
-  // (the hits of the kind that states a pace: a skill's other hits come as they come, Living Flail's on the foe swung
-  // as it strikes a rock in its way, and counted in they stretched the pace on the foe struck most)
+  // (the hits of the kind that states a pace: a skill's other hits come as they come, and counted in they stretched
+  // the pace on the foe struck most)
   const pace = timed ? paceOf(cast.hits.filter((hit) => within(hit, timed, read.critDmg))) : null;
   if (timed?.every && pace !== null) {
     lines.push(`    a hit every ${pace.toFixed(3)} s on a foe, as it states every ${timed.every} s`);

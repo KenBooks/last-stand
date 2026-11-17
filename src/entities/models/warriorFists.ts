@@ -31,12 +31,12 @@ const GUARD = { lead: [0.14, 0.02, 0.27], rear: [-0.15, 0, 0.17] };
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): each fist in its bottom corner, the lead (left) a little higher and further in, both
  *  wholly in the frame, as a first-person brawler's fists are held; a little lower out of a fight */
-const GUARD_EYES = { lead: [-0.5, -0.5, 0.52], rear: [0.58, -0.66, 0.48] }, EASY_EYES = -0.22;
+const GUARD_EYES = { lead: [-0.62, -0.55, 0.52], rear: [0.72, -0.7, 0.48] }, EASY_EYES = -0.22;
 /** where a punch lands: on his middle line at the chin's height, further than the arm reaches (it goes out straight
- *  at it, a little short of locked); through the eyes just under the crosshair, a hair to the fist's own side, where
+ *  at it, a little short of locked); through the eyes under the crosshair, a little to the fist's own side, where
  *  the screen's line there meets the arm's reach (aimed further, the arm pointed at it from the shoulder under the
  *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
-const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.05, up: -0.1 };
+const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.55, up: -0.42 };
 /** how much of its length an arm thrown out in a punch keeps short of straight (a locked elbow reads as a stick) */
 const PUNCH_REACH = 0.97;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
@@ -63,7 +63,7 @@ export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };
 /** the knuckles' line in the guard and in a punch, each hand's (in the body's frame): the way from the little
  *  finger's knuckle to the index's, as a handle runs up out of a fist (`hold`), so the left hand's punch is the
  *  right's mirrored (the same line for both turned the left palm up, its fingers curled at the eyes as a claw) */
-const LINE = { guard: [0, 1, 0.35], punch: [1, 0, 0] };
+const LINE = { guard: [0.6, 0.75, 0.25], punch: [1, 0, 0] };
 /** a knuckle line for the hand on that side: mirrored across his middle for the left */
 const sided = (line: readonly number[], left: boolean): number[] => (left ? [-line[0], line[1], line[2]] : [...line]);
 
@@ -135,7 +135,7 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
   const bob = 0.008 * Math.sin(t * 1.8) + 0.006 * (1 - easy) * Math.sin(t * 5.2);
   if (!shielded) {
     place(j, true, guardAt(j, true, eyes, easy, bob, _far), w, eyes);
-    lineTo(fistLine.L, LINE.guard, 1);
+    lineTo(fistLine.L, sided(LINE.guard, true), 1);
   }
   place(j, false, guardAt(j, false, eyes, easy, bob * 0.8, _far), w, eyes);
   lineTo(fistLine.R, LINE.guard, 1);
@@ -177,7 +177,7 @@ function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: b
   const hips = curve(PUNCH_OUT, k + LEAD.hips), chest = curve(PUNCH_OUT, k + LEAD.chest), out = curve(PUNCH_OUT, k);
   const shoulder = lead ? j.shoulderL : j.shoulderR;
   // (the shoulder sent in after the fist: forward and in, as the collarbone carries it)
-  shoulder.position.z += (eyes ? 0.07 : 0.04) * out;
+  shoulder.position.z += (eyes ? 0.14 : 0.04) * out;
   shoulder.position.x += (lead ? -1 : 1) * (eyes ? 0.03 : 0.012) * out;
   if (eyes) return;
   const turn = lead ? -0.16 : 0.5, w = 0.45 + 0.55 * still;
@@ -185,9 +185,9 @@ function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: b
   j.spine.rotation.y += 0.2 * turn * chest;
   j.chest.rotation.y += 0.5 * turn * chest;
   j.neck.rotation.y -= 0.9 * turn * (0.5 * hips * w + 0.7 * chest);
-  j.spine.rotation.x += (lead ? 0.04 : 0.1) * chest;
+  j.spine.rotation.x += (lead ? 0.02 : 0.05) * chest;
   j.body.position.z += (lead ? 0.03 : 0.07) * hips * w;
-  j.body.position.y += (lead ? -0.01 : -0.035) * hips * w;
+  j.body.position.y += (lead ? -0.005 : -0.012) * hips * w;
 }
 
 /**
@@ -204,7 +204,7 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   if (shielded) return;
   if (eyes) {
     const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead;
-    place(j, !lead, onScreen(j, [on[0] * 1.08, on[1] - 0.1 * out, on[2] - 0.05 * out], _far), 1, eyes);
+    place(j, !lead, onScreen(j, [on[0] * (1 + 0.2 * out), on[1] - 0.12 * out, on[2] - 0.08 * out], _far), 1, eyes);
   } else (lead ? j.elbowR : j.elbowL).rotation.x += -0.1 * out;
 }
 
@@ -215,10 +215,12 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
 export function fistHammer(j: Joints, k: number, eyes: boolean): void {
   const up = curve(HAMMER_UP, k), down = curve(HAMMER_DOWN, k);
   if (!eyes) {
-    j.spine.rotation.x += -0.18 * up + 0.42 * down; j.chest.rotation.x += -0.08 * up + 0.12 * down;
-    j.neck.rotation.x += -0.1 * up - 0.3 * down;
+    // (standing tall through it, the trunk over the hips: bent into it, 24 degrees at the spine and 12 cm down, he
+    // ducked under his own blow, from play: "his two handed punch he ducks down as well, looks weird")
+    j.spine.rotation.x += -0.12 * up + 0.05 * down; j.chest.rotation.x += -0.06 * up + 0.03 * down;
+    j.neck.rotation.x += -0.06 * up - 0.12 * down;
     j.hips.rotation.y += 0.2 * Math.max(up, down);
-    j.body.position.y += 0.02 * up - 0.12 * down; j.body.position.z += 0.06 * down;
+    j.body.position.y += 0.02 * up; j.body.position.z += 0.03 * down;
   }
   const w = Math.max(up, down, ramp(k, 0, 0.15) * (1 - ramp(k, 0.85, 1)));
   if (eyes) {
@@ -228,7 +230,7 @@ export function fistHammer(j: Joints, k: number, eyes: boolean): void {
     place(j, false, onScreen(j, [0.05, y, ahead], _far), w, eyes);
   } else {
     between(j, _mid);
-    const y = lerp(lerp(0, 0.45, up), -0.42, down), z = lerp(lerp(0.3, 0.18, up), 0.55, down);
+    const y = lerp(lerp(0, 0.45, up), -0.28, down), z = lerp(lerp(0.3, 0.18, up), 0.55, down);
     place(j, true, _far.set(_mid.x + 0.07, _mid.y + y, _mid.z + z), w);
     place(j, false, _far.set(_mid.x - 0.07, _mid.y + y, _mid.z + z), w);
   }

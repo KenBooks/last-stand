@@ -306,7 +306,7 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
     .multiplyScalar(AIM_AHEAD));
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
   // (a skill with nothing to cast at isn't cast, `InstantSkill.canCast`: the foes are let come on until it can be.
-  // Heave takes hold of a foe within his reach, and pressed as they rose 13 m off, nothing was cast)
+  // Pounce leaps only onto a foe within its reach, and pressed as they rose 13 m off, nothing was cast)
   const impl = SKILL_IMPLS[def.impl];
   if (options.foes && !impl.channel && impl.canCast) {
     const ready = () => impl.canCast?.(hero, def, aim) ?? true;

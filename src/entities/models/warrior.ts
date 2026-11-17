@@ -3274,7 +3274,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
         // Savage Fists: the lead hand's jab, then the rear hand's cross, over the guard; at full Frenzy every third a
         // two-fisted hammer (`form` 1). A shield on the other arm: every punch is the right hand's, the shield held
         aw = 1;
-        if (a.form === 1 && !shield.visible) { fistHammer(j, k, fp); feet = WIDE_FEET; }
+        if (a.form === 1 && !shield.visible) fistHammer(j, k, fp);
         else fistPunch(j, k, side > 0 && !shield.visible, still, t, fp, shield.visible);
       } else if (a.name === 'rampage') {
         // Rampage: a flurry of punches thrown as he walks on, the lead hand's and the rear's in turn
