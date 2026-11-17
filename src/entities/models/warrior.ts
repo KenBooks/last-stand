@@ -281,6 +281,8 @@ const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
  *  quarter turn about the grip (`MOUNT`), so its flat lies along the palm */
 const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
+/** a punching arm's goal as posed (`punchArm`) */
+const _pkW = new THREE.Vector3(), _pkQ = new THREE.Quaternion(), _pkE = new THREE.Vector3(), _pkS = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
 const _letW = new THREE.Vector3(), _letQ = new THREE.Quaternion(), _letP = new THREE.Vector3(), _letS = new THREE.Vector3();
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
@@ -3734,6 +3736,19 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // grip and that wrist bent further). (Not through the eyes, where the arms are placed where they're seen: fitted,
     // a two-hander held square couldn't point its blade ahead of the arms, where the eyes see it, and stood upright)
     slantR = 0; slantL = 0;
+    /** whether a punch has sent this side's shoulder forward of its rest */
+    const shoulderForward = (left: boolean): boolean => {
+      const sh = left ? j.shoulderL : j.shoulderR;
+      return sh.position.z > (sh.userData.rest as THREE.Vector3).z + 1e-5;
+    };
+    /** the punching arm solved for its fist as posed, from its shoulder where the punch put it */
+    const punchArm = (left: boolean, solids: typeof body): void => {
+      const sh = left ? j.shoulderL : j.shoulderR, hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
+      hand.getWorldPosition(_pkW);
+      hand.getWorldQuaternion(_pkQ);
+      elbow.getWorldPosition(_pkE).sub(sh.getWorldPosition(_pkS));
+      solveArm(j, left, { wrist: _pkW, hand: _pkQ, pole: _pkE, body: solids, shoulder: _pkS.copy(sh.position) });
+    };
     if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
     // (the hold he stood with remembered as he begins to sit, and taken up again once he's up: from where the carry's
     // solves left the arm, it came back on another slant, the weapon 4 to 7 cm along his fist)
@@ -3747,6 +3762,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       recall(j.shoulderL, standL);
       standL = null;
     }
+    // A punch sends its shoulder forward: its arm is fitted from there (Codex's find), or the solver took the shoulder
+    // back to rest with the fist still out ahead, and every punch in third person was thrown with the elbow locked
+    const punching = !fp && st.dead < 0 && bare && (a?.name === 'punch' || a?.name === 'rampage');
     const gripped = !!held;
     if (twoSits) {
       // (up to the port, then let down onto what takes its weight)
@@ -3895,6 +3913,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       const stuck = inGround && turned > 0 && floorRest(held!) === SIT_HANDS.swordRest;
       held!.group.userData.stuckIn = stuck ? SIT_HANDS.stuckIn + twoSit.lower * SIT_HANDS.sinkBy : 0;
     }
+    else if (punching && shoulderForward(false)) punchArm(false, body);
     else if (!fp && st.dead < 0) {
       // (sat, kept near the slant he stood with: free, the weapon went 10 cm along his fist; held to it, the wrist went
       // 12 degrees past its range)
@@ -4063,7 +4082,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
 
     // the other arm within a body's ranges too, its hand where the pose put it
     const grippedL = offHeld && !sheathed;
-    if (!fp && st.dead < 0 && !twoHeld && !leftEased) {
+    if (punching && shoulderForward(true)) punchArm(true, body);
+    else if (!fp && st.dead < 0 && !twoHeld && !leftEased) {
       const stoodL = st.sit ? standL?.slant : undefined;
       const slantRange: number | [number, number] = stoodL === undefined ? SLANT : [stoodL - SIT_HANDS.slant, stoodL + SIT_HANDS.slant];
       slantL = fitArm(j, true, grippedL ? gripTurn(handL, gripL, _vl) : undefined, body, grippedL ? slantRange : undefined).slant;

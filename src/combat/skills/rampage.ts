@@ -35,7 +35,8 @@ const skill: ChannelSkill<RampageState> = {
     const rate = (1 + stats.castSpeed / 100) / PACE, top = 1 + RAMPAGE.most, clean = 1 + CLEAN_HIT.bonus;
     const most = `${Math.round(RAMPAGE.most * 100)}%`, each = `${Math.round(RAMPAGE.perSecond * 100)}%`;
     // (each from its first blow's to its most, held long: a blow partway between falls inside it)
-    const built = `${each} more a second held, up to ${most}`;
+    const held = Math.round(RAMPAGE.most / RAMPAGE.perSecond);
+    const built = `at its most, held ${held} s: ${each} more each second held, up to ${most}`;
     return [
       { per: 'blow', base: def.damage * PACE * top, least: 1 / top, rate, type: 'physical', note: built },
       { per: 'clean blow', base: def.damage * PACE * top * clean, least: 1 / top, rate, type: 'physical', note: "at arm's length" },

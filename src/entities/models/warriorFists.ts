@@ -26,6 +26,8 @@ import { tunable } from '../../core/tuning';
  *  it is a fist, the hand shut as round a handle this thin (m, `hold`) */
 export const FIST = tunable('fist', {
   curl: 1.7, spread: 0.02, from: 0.6, r: 0.012,
+  /** share of the arm's reach at impact: about 20 degrees of elbow bend */
+  reach: 0.985, eyesReach: 0.93,
   /** each finger's bends in a clenched fist (rad: its knuckle, middle joint and last; `clench` in hands.ts) */
   clench: [1.55, 1.75, 0.95],
 });
@@ -51,9 +53,6 @@ const GUARD_EYES = tunable('fistsEyes', {
  *  the screen's line there meets the arm's reach (aimed further, the arm pointed at it from the shoulder under the
  *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
 const PUNCH_AT = [0, -0.04, 1.2];
-/** how much of its length an arm thrown out in a punch reaches: short of straight, the elbow a little bent on the blow
- *  (at 0.97 the elbow read 2 degrees, locked: "robotic", an adversarial review) */
-const PUNCH_REACH = 0.93;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
 const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
@@ -167,7 +166,7 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
 /** Where a punch lands, into `out` (the body's frame): straight out along the middle line from the shoulder, a little
  *  short of the arm's length; through the eyes just under the crosshair. */
 function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): THREE.Vector3 {
-  const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * PUNCH_REACH;
+  const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * (eyes ? FIST.eyesReach : FIST.reach);
   // (the middle line first: `between` works in `_sh` too, and read before it the punch was measured from the other
   // shoulder's place in the world, every punch thrown out to its arm's full length, the elbow locked straight)
   if (!eyes) from(between(j, _mid), PUNCH_AT, out);
