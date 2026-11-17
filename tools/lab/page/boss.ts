@@ -836,8 +836,7 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   cantor.cd = 99;
   await lab.step(90, keepWhole);
   await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
-  close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)');
-  close('1 the Cantor (front)', 'its face, its ribs and its bell-heart', ['front']);
+  close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
   // 2-3. grave hands: the rings under the hero, then the hands
   await castUntil('graveHands', 0.35);
   await seen('2 grave hands warning', 'arms raised, chanting: a ring of grave light under the hero, about 1.3 s to step out');
