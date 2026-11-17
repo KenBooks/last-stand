@@ -199,7 +199,8 @@ export function buildBellWarden(): Model {
 
     // the ghosts: round the bell, into it for a toll, scattered while it's down or as it falls, three in the last phase
     cue.scatter = Math.max(down, dead);
-    cue.count = (look?.phase ?? 0) >= 2 ? 3 : 2;
+    // (a guard's lesser bell has one: `Enemy` tells its model, `userData.guard`)
+    cue.count = root.userData.guard ? 1 : (look?.phase ?? 0) >= 2 ? 3 : 2;
     cue.bell.set(0, frame.position.y + BEAM_Y - HEAD_DROP - BELL_H * 0.6, 0);
     ghosts.update(t, dt, cue);
 

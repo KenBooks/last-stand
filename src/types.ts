@@ -412,7 +412,7 @@ export interface EnemyDef {
   bossKit?: BossKitDef;
   /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life and damage then, as
    *  shares of its own */
-  asGuard?: { life: number; damage: number };
+  asGuard?: { life: number; damage: number; size: number };
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says

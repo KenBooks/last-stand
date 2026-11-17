@@ -1765,9 +1765,9 @@ const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | und
 /** The bell's toll: struck (a whump of bronze and wood), its body ringing for seconds in a cluster of narrow bands at
  *  a cracked bell's inharmonic ratios to a strike drawn anew each time, the crack's buzz beating in it, the hall
  *  ringing on. `heavy` (0..1) the slow ring's weight, a double toll's fast ring lighter. */
-function bellToll(heavy: number): void {
+function bellToll(heavy: number, pitch = 1): void {
   const v = voice(0, 0.55);
-  const base = 150 + Math.random() * 60, k = 0.6 + 0.4 * heavy;
+  const base = (150 + Math.random() * 60) * pitch, k = 0.6 + 0.4 * heavy;
   whump(v, 0, 0.6 * k, 0.7);
   thump(v, 0, 1600, 90, 0.35 * k, 0.9, v.out, 3);
   crack(v, 0, 0.12 * k, v.out, 1800);
@@ -1939,7 +1939,7 @@ export const sfx = {
   shatter: guard(() => { if (throttle('shatter', 50)) return; noise({ dur: 0.35, freq: 5200, sweep: 2400, q: 1.2, gain: 0.16 }); [2350, 3140, 3720].forEach((f, i) => tone({ freq: f, dur: 0.25, gain: 0.025, type: 'triangle', delay: i * 0.03 })); }),
   /** the Bell-Warden's toll (`heavy` 0..1: a double toll's fast ring lighter), the creak of its swing back over `dur`
    *  s, a bearer's chain snapping, the bell dropped, a shard broken off */
-  bellToll: guard((heavy: number = 1) => { if (throttle('bellToll', 120)) return; bellToll(heavy); }),
+  bellToll: guard((heavy: number = 1, pitch: number = 1) => { if (throttle('bellToll', 120)) return; bellToll(heavy, pitch); }),
   bellCreak: guard((dur: number = 1) => { if (throttle('bellCreak', 300)) return; bellCreak(dur); }),
   chainSnap: guard(() => { if (throttle('chainSnap', 80)) return; chainSnap(); }),
   bellDrop: guard(() => { if (throttle('bellDrop', 500)) return; bellDrop(); }),

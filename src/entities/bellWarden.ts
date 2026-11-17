@@ -14,6 +14,9 @@
 // - **Its ghosts** (models/bellGhosts.ts) seize a hero who comes too near one as it swoops low: carried up and out
 //   from the bell and dropped for damage (`BELL_WARDEN.grab`), each game its own hero as its screen shows them.
 // - **Phase 3**: the bearers kneel; it stands where it is and tolls every `lastEvery` s.
+// - **As an encounter's guard** (`Enemy.guard`, data/enemies.ts `asGuard` and `BELL_WARDEN.guard`): a lesser bell,
+//   about half its height, its ring shorter and softer, its stun short, one ghost that seizes no one, no phases (from
+//   play, two whole Bell-Wardens beside the Cantor were "too big (almost like main boss)").
 import * as THREE from 'three';
 import { G } from '../state';
 import { BELL_WARDEN, CANTOR } from '../data/enemies';
@@ -136,7 +139,10 @@ export function bellSwung(warn: number): void {
  * `damage`, unless his shield is raised towards it, he's dashing or leaping, or it has rolled past `stunsTo`.
  */
 export function tollAt(id: number, x: number, z: number, double: number, damage: number): void {
-  const t = B.toll, foe = G.enemies.find((e) => e.id === id) ?? null;
+  const foe = G.enemies.find((e) => e.id === id) ?? null, lesser = !!foe?.guard, gd = B.guard;
+  // (a guard's lesser bell: a shorter, softer ring, a short stun; its light, shake and sound `soft` of a whole one's)
+  const t = lesser ? { ...B.toll, reach: gd.reach, stunsTo: gd.stunsTo, stun: gd.stun, hurt: gd.hurt } : B.toll;
+  const soft = lesser ? gd.soft : 1, size = foe ? foe.height / foe.model.height : 1;
   const rings: { speed: number; delay: number; heavy: number }[] = double
     ? [{ speed: t.fast, delay: 0, heavy: 0.6 }, { speed: t.slow, delay: t.slowAfter, heavy: 1 }]
     : [{ speed: t.speed, delay: 0, heavy: 1 }];
@@ -144,7 +150,7 @@ export function tollAt(id: number, x: number, z: number, double: number, damage:
   for (const ring of rings) {
     let judged = false;
     soundRing(pos, {
-      color: TOLL_COLOR, speed: ring.speed, reach: t.reach, from: 1.5, delay: ring.delay, intensity: 0.9 + 0.5 * ring.heavy,
+      color: TOLL_COLOR, speed: ring.speed, reach: t.reach, from: 1.5 * size, delay: ring.delay, intensity: (0.9 + 0.5 * ring.heavy) * (lesser ? 0.6 : 1),
       onStep: (r0, r1) => {
         const p = G.player;
         if (judged || !p.active) return;
@@ -159,12 +165,13 @@ export function tollAt(id: number, x: number, z: number, double: number, damage:
       },
     });
   }
-  sfx.bellToll(double ? 0.6 : 1);
-  if (double) schedule(t.slowAfter, () => sfx.bellToll(1));
+  const pitch = lesser ? gd.pitch : 1;
+  sfx.bellToll((double ? 0.6 : 1) * soft, pitch);
+  if (double) schedule(t.slowAfter, () => sfx.bellToll(soft, pitch));
   // (one light a toll, soft and slow: nothing large flashes faster than about 1.5 times a second)
-  flash({ color: TOLL_COLOR, intensity: 18, distance: 14, life: 0.9, pos: { x, y: BELL_Y, z } });
-  addShake(0.35);
-  smokePuff({ x, y: 0, z }, { count: 8, color: 0x2a2620, alpha: 0.3, size: 1.2, sizeEnd: 3.2, speed: 3, life: 1.1 });
+  flash({ color: TOLL_COLOR, intensity: 18 * soft, distance: 14 * size, life: 0.9, pos: { x, y: BELL_Y * size, z } });
+  addShake(0.35 * soft);
+  smokePuff({ x, y: 0, z }, { count: lesser ? 4 : 8, color: 0x2a2620, alpha: 0.3, size: 1.2 * size, sizeEnd: 3.2 * size, speed: 3, life: 1.1 });
 }
 
 /**
@@ -229,7 +236,8 @@ function haunt(e: Enemy, dt: number): void {
   if (seized && !G.enemies.includes(seized.foe)) { G.player.lift = 0; seized = null; }
   if (seized?.foe === e) { carry(seized, ghosts, dt); return; }
   const p = G.player, g = B.grab;
-  if (seized || !p.active || p.seized || p.stunned || p.dash || G.time < graceUntil || e.training) return;
+  // (a guard's ghost seizes no one: its lesser bell's is only seen)
+  if (seized || e.guard || !p.active || p.seized || p.stunned || p.dash || G.time < graceUntil || e.training) return;
   for (let i = 0; i < ghosts.most; i++) {
     if (rest[i] > 0 || !ghosts.freeAt(i, _ghost)) continue;
     const over = _ghost.y - p.obj.position.y;

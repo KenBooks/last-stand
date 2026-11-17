@@ -42,7 +42,8 @@ export function phaseAt(e: Enemy, share: number): number {
 export function checkPhase(e: Enemy, amount = 0): void {
   if (!e.def.bossKit || e.net || !e.alive) return;
   if (amount > 0) hooksOf(e.type)?.hurt?.(e, amount);
-  const to = phaseAt(e, e.life / e.maxLife);
+  // (an encounter's guard keeps its first phase: no banner, no cue, nothing harder of its own)
+  const to = e.guard ? 0 : phaseAt(e, e.life / e.maxLife);
   while (e.bossPhase < to) fx('bossPhase', e.id, e.bossPhase + 1);
 }
 
@@ -136,8 +137,10 @@ export function weakLooks(e: Enemy): void {
     return;
   }
   const on = e.weak > 0, beat = on ? 0.5 + 0.5 * Math.sin(G.time * Math.PI * 2) : 0;
-  e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : 1.6);
-  e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : 1.6));
+  // (an encounter's guard: its ring at rest fainter and tighter, the encounter's boss its main one)
+  const rest = e.guard ? 0.9 : 1.6;
+  e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : rest);
+  e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : e.guard ? 1.25 : 1.6));
 }
 
 /** How many breakable parts `e` has. */

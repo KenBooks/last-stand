@@ -519,17 +519,37 @@ function closestHits(landed: Landed[]): { gap: number; pair: string } {
 async function encounter(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
   await standIn(lab, options.fixture, 'crypt');
   const ward = ENEMIES.cantor.bossKit!.ward!;
-  const taken = ward.taken;
-  if (options.canary) ward.taken = 1;
+  const asGuard = ENEMIES.bellwarden.asGuard!;
+  const lesser = { ...BELL_WARDEN.guard };
+  const planted = { taken: ward.taken, size: asGuard.size };
+  // (the canary: a ward that wards nothing, and guards as whole Bell-Wardens, their tolls a whole bell's)
+  if (options.canary) {
+    ward.taken = 1;
+    asGuard.size = 1;
+    Object.assign(BELL_WARDEN.guard, { reach: BELL_WARDEN.toll.reach, stunsTo: BELL_WARDEN.toll.stunsTo });
+  }
+  const taken = planted.taken;
   try {
     const { cantor, guards } = await encounterAt(lab);
+    lesserGuards(cantor, guards, lines, problems);
     const landed: Landed[] = [], rings: Landed[] = [];
-    let wardedFrames = 0, frames = 0, wardTaken = 1;
+    let wardedFrames = 0, frames = 0, wardTaken = 1, seizedFrames = 0, wasStunned = false;
+    const stunsFrom: number[] = [];
     await fight(lab, GUARDED_FOR, landed, rings, () => {
       frames++;
       if (cantor.warded) wardedFrames++;
       wardTaken = Math.min(wardTaken, damageTaken(cantor));
+      const hero = G.player;
+      if (hero.seized) seizedFrames++;
+      // (each stun begun, and how far the nearest guard stood: only a guard tolls in this span)
+      if (hero.stunned && !wasStunned) stunsFrom.push(Math.min(...guards.map((g) => Math.hypot(g.pos.x - hero.pos.x, g.pos.z - hero.pos.z))));
+      wasStunned = hero.stunned;
     });
+    guardTolls(stunsFrom, seizedFrames, lesser.stunsTo, lines, problems);
+    guards[0].takeDamage(guards[0].life - 0.15 * guards[0].maxLife, {});
+    await lab.step(3);
+    lines.push(`encounter: a guard at 15% of its life in phase ${guards[0].bossPhase}`);
+    if (guards[0].bossPhase !== 0) problems.push(`encounter: a guard entered phase ${guards[0].bossPhase}: a guard keeps its first`);
     lines.push(`encounter: guards up ${GUARDED_FOR} s: warded ${fixed(wardedFrames / frames, 2)} of the frames, `
       + `taking ${fixed(wardTaken, 2)} of the damage`);
     if (wardedFrames < frames - 2) problems.push(`encounter: the Cantor warded ${wardedFrames} of ${frames} frames with its guards up`);
@@ -558,8 +578,32 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
     if (tolls === 0) problems.push('encounter: the guards never tolled');
     if (closest.gap < CANTOR.beat - BEAT_SLACK) problems.push(`encounter: two bosses' warned hits ${fixed(closest.gap, 2)} s apart, under the beat ${CANTOR.beat} s`);
   } finally {
-    ward.taken = taken;
+    ward.taken = planted.taken;
+    asGuard.size = planted.size;
+    Object.assign(BELL_WARDEN.guard, lesser);
   }
+}
+
+/** The most a guard may stand against its Cantor's height: a lesser bell, the Cantor towering over it. */
+const GUARD_HEIGHT_MOST = 0.5;
+
+/** Each guard's size against the Cantor's: a lesser bell (from play, whole ones were "almost like main boss"). */
+function lesserGuards(cantor: Enemy, guards: Enemy[], lines: string[], problems: string[]): void {
+  const tallest = Math.max(...guards.map((guard) => guard.height));
+  const share = tallest / cantor.height;
+  lines.push(`encounter: the guards ${fixed(tallest, 2)} m tall against the Cantor's ${fixed(cantor.height, 2)} m (${fixed(share, 2)}), `
+    + `${fixed(guards[0].radius, 2)} m round`);
+  if (share > GUARD_HEIGHT_MOST) problems.push(`encounter: a guard stands ${fixed(share, 2)} of the Cantor's height, over ${GUARD_HEIGHT_MOST}`);
+}
+
+/** The guards' tolls as a lesser bell's: no stun from further than its `stunsTo` (and the hero's body), no seizing. */
+function guardTolls(stunsFrom: number[], seizedFrames: number, stunsTo: number, lines: string[], problems: string[]): void {
+  const most = stunsTo + G.player.radius + 0.5;
+  const far = stunsFrom.filter((d) => d > most);
+  lines.push(`encounter: ${stunsFrom.length} stuns by the guards' tolls, from ${stunsFrom.map((d) => fixed(d, 1)).join(', ') || 'none'} m; `
+    + `${seizedFrames} frames seized by a ghost`);
+  if (far.length) problems.push(`encounter: a guard's toll stunned the hero from ${fixed(Math.max(...far), 1)} m, past its ${stunsTo} m`);
+  if (seizedFrames) problems.push(`encounter: a guard's ghost seized the hero (${seizedFrames} frames)`);
 }
 
 // --- the programs ------------------------------------------------------------------------------------------
@@ -826,17 +870,24 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
     moments.push(lab.picture(label, views, [note], { at, distance: 13 }));
   };
   const seen = async (label: string, note: string): Promise<void> => { moments.push(await lab.screen(label, [note])); };
-  const castUntil = async (name: string, share: number): Promise<void> => {
-    cantor.cd = 0;
-    const reached = (): boolean => cantor.action?.name === name && cantor.action.t / cantor.action.dur >= share;
-    await lab.until(reached, TOLL_FRAMES, `the Cantor never reached ${share} of its ${name}`, keepWhole);
+  const actUntil = async (foe: Enemy, name: string, share: number): Promise<void> => {
+    foe.cd = 0;
+    const reached = (): boolean => foe.action?.name === name && foe.action.t / foe.action.dur >= share;
+    await lab.until(reached, TOLL_FRAMES, `the ${foe.def.name} never reached ${share} of its ${name}`, keepWhole);
   };
+  const castUntil = (name: string, share: number): Promise<void> => actUntil(cantor, name, share);
   // 1. it comes, its guards with it, warded
   for (const guard of guards) guard.cd = 99;
   cantor.cd = 99;
   await lab.step(90, keepWhole);
   await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
   close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
+  // 1b. a guard's toll: its ring rolling out
+  await actUntil(guards[0], 'toll', 0.98);
+  await lab.step(18, keepWhole);
+  await seen('1b a guard tolls', "a guard Bell-Warden's toll, its ring rolling out");
+  guards[0].cd = 99;
+  await lab.step(60, keepWhole);
   // 2-3. grave hands: the rings under the hero, then the hands
   await castUntil('graveHands', 0.35);
   await seen('2 grave hands warning', 'arms raised, chanting: a ring of grave light under the hero, about 1.3 s to step out');

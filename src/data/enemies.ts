@@ -51,7 +51,9 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     summon: 'husk',
     cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x5a7cff,
     // (as the Ossuary Cantor's guard: about a quarter of its life and three quarters of its damage, two of them at once)
-    asGuard: { life: 0.26, damage: 0.75 },
+    // (as a guard: a lesser bell, about half its height, so its Cantor towers over it: from play, two full-size
+    // Bell-Wardens were "too big (almost like main boss)")
+    asGuard: { life: 0.26, damage: 0.75, size: 0.55 },
     bossKit: {
       phases: [
         { below: 1 },
@@ -150,7 +152,10 @@ export const BOSS_AI = {
  * `lies` s, hurting `hurt` of its damage every `tick` s whoever stands within `radius` m. A ghost circling it seizes a
  * hero who comes within `grab.reach` m of it as it swoops under `grab.under` m: carried up `rise` m and `away` m out
  * from the bell over `carry` s, dropped from there (`fall` s) for `hurt` of its damage; that ghost seizes no one for
- * `every` s, and the hero isn't seized again for `grace` s.
+ * `every` s, and the hero isn't seized again for `grace` s. As an encounter's guard (`guard`) it's a lesser bell: its
+ * ring reaches `reach` m and stuns only within `stunsTo`, for `stun` s, hurting `hurt` of its damage; its light, shake
+ * and sound `soft` of a whole bell's, rung `pitch` higher; one ghost, which seizes no one; no phases, so no double
+ * toll, no shards and no last phase.
  */
 export const BELL_WARDEN = {
   toll: { speed: 9, reach: 24, stunsTo: 15, stun: 2, hurt: 0.45, band: 0.6, fast: 15, slow: 6.5, slowAfter: 0.25 },
@@ -159,6 +164,7 @@ export const BELL_WARDEN = {
   down: 6,
   shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
   grab: { reach: 2.2, under: 3.4, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 6, grace: 4.5 },
+  guard: { reach: 10, stunsTo: 6, stun: 0.8, hurt: 0.3, soft: 0.4, pitch: 1.6 },
 };
 
 /**
