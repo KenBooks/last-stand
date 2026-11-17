@@ -395,7 +395,9 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
   d.rotation.y = turn;
   g.add(d);
   const temp: typeof b.obstacles = [];
-  table(d, M, 0, 0.62, 1.2, 0.72, temp, 0.76);
+  /** his table (in the desk's frame: its middle ahead of the chair, its size, its top's height), and where he sits */
+  const TABLE = { z: 0.62, w: 1.2, d: 0.72, top: 0.76 }, SAT = -0.03;
+  table(d, M, 0, TABLE.z, TABLE.w, TABLE.d, temp, TABLE.top);
   // (his chair: a seat, legs, a high back of slats under a carved rail)
   box(d, 0.48, 0.05, 0.46, 0, 0.41, -0.04, M.oak);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(d, 0.05, 0.41, 0.05, sx * 0.2, 0, -0.04 + sz * 0.19, M.timber);
@@ -430,8 +432,9 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
   return () => {
-    const s = buildScholar({ spine: new THREE.Vector3(0, 0.796, 0.5), pageW: SIZE * 0.47, pageD: SIZE * 0.64, page: pageMat });
-    s.root.position.set(0, 0, -0.03);
+    const table = { x0: -TABLE.w / 2, x1: TABLE.w / 2, z0: TABLE.z - TABLE.d / 2 - SAT, z1: TABLE.z + TABLE.d / 2 - SAT, top: TABLE.top };
+    const s = buildScholar({ spine: new THREE.Vector3(0, 0.796, 0.5 - SAT), pageW: SIZE * 0.47, pageD: SIZE * 0.64, page: pageMat, table });
+    s.root.position.set(0, 0, SAT);
     d.add(s.root);
     return s;
   };

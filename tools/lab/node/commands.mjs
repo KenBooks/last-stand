@@ -1934,8 +1934,10 @@ export const COMMANDS = {
     each(side, options) {
       return side.command('scholar', { canary: Boolean(options.canary), views: options.views, at: options.at });
     },
-    // (its moments written: him at each beat of his loop close up, the talk, as the player sees him)
+    // (its moments written: him at each beat of his loop close up, the talk, as the player sees him; with --film a
+    // picture each, in order, for a clip of his loop)
     finish(results, options, session) {
+      if (options.film) return textWithSheetEach(results, session.outFor('scholar'), session.browser);
       return textWithMoments(results, session.outFor('scholar'), session.browser);
     },
     textOf: asText,

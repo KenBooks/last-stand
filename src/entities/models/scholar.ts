@@ -31,7 +31,11 @@ const GLANCE = { near: 3.6, hold: 2.6, rest: 13 };
 
 /** The open book he reads, in his frame (x across him, +z ahead, up from the floor): its spine's middle on the table,
  *  and its pages' width (spine to edge) and depth. */
-export interface ScholarBook { spine: THREE.Vector3; pageW: number; pageD: number; page: THREE.Material }
+export interface ScholarBook {
+  spine: THREE.Vector3; pageW: number; pageD: number; page: THREE.Material;
+  /** the table's top in his frame: across (x), from his side of it to its far side (z), and its height */
+  table: { x0: number; x1: number; z0: number; z1: number; top: number };
+}
 
 export interface Scholar {
   /** his root: stand it on the chair's seat, facing the table (+z) */
@@ -40,8 +44,10 @@ export interface Scholar {
   update(dt: number, hero: THREE.Vector3 | null, talking: boolean): void;
   /** how far into his loop he is (s), for the lab's pictures at set points of it */
   loopAt: number;
-  /** his meshes' count of triangles (the lab reads it) */
+  /** his meshes (the lab reads them: his sleeves against the table, his triangles) */
   readonly parts: THREE.Mesh[];
+  /** the table he reads at, in his frame (`ScholarBook.table`) */
+  readonly table: ScholarBook['table'];
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -88,19 +94,34 @@ function oval(a: number, w: number, d: number, p = 2.4): [number, number] {
 const cord = (pts: THREE.Vector3[], r: number, closed = false, segs = 48) =>
   new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), segs, r, 6, closed);
 
-/** A sleeve's piece on a joint (hanging along -y): a lathe through `profile` ([radius, y], bottom to top), drooped
- *  towards -z by `droop(y)` (a bell hanging below the forearm laid on a table, its palm side down), folds round it. */
-function sleeve(profile: [number, number][], droop: (y: number) => number, folds: number, seed: number): THREE.BufferGeometry {
+/** how a sleeve hangs: the way down from its arm as he rests (in its joint's frame, across the arm), how far it drops
+ *  that way along the arm (m), and how far below the arm its cloth may come before it lies flat (m: on the table) */
+interface Hang { down: THREE.Vector3; droop: (y: number) => number; floor: (y: number) => number }
+/** the sides of a lathe's segments, round */
+const SLEEVE_SIDES = 28;
+
+/** A sleeve's piece on a joint (hanging along -y): a lathe through `profile` ([radius, y], bottom to top), folds round
+ *  it, dropped by `hang` and laid flat where it would go further down than its floor (a wide bell on a forearm laid on
+ *  the table lies along it, spread out at its sides: hung free, it went through the table). Its opening's ring too. */
+function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: number): { geo: THREE.BufferGeometry; rim: THREE.Vector3[] } {
   const rng = mulberry(seed), ph = rng() * 6;
-  const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 28);
-  const p = g.attributes.position;
+  const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), SLEEVE_SIDES);
+  const p = g.attributes.position, side = new THREE.Vector3().crossVectors(V(0, 1, 0), hang.down);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z);
     const fold = 1 + folds * Math.sin(a * 5 + ph + y * 9) * clamp(-y / 0.25, 0.25, 1);
-    p.setXYZ(i, Math.sin(a) * r * fold, y, Math.cos(a) * r * fold - droop(y));
+    const fx = Math.sin(a) * r * fold, fz = Math.cos(a) * r * fold;
+    // (its depth below the arm and its reach to the side, the way it hangs)
+    let d = fx * hang.down.x + fz * hang.down.z + hang.droop(y), w = fx * side.x + fz * side.z;
+    const floor = hang.floor(y);
+    if (d > floor) { const past = d - floor; d = floor + past * 0.12; w *= 1 + past * 4; }
+    p.setXYZ(i, hang.down.x * d + side.x * w, y, hang.down.z * d + side.z * w);
   }
   g.computeVertexNormals();
-  return g;
+  // (the profile's first point is its opening's, a lathe's columns a segment each)
+  const rim: THREE.Vector3[] = [];
+  for (let k = 0; k < SLEEVE_SIDES; k++) rim.push(new THREE.Vector3().fromBufferAttribute(p, k * profile.length));
+  return { geo: g, rim };
 }
 
 /**
@@ -121,6 +142,10 @@ export function buildScholar(book: ScholarBook): Scholar {
   const capFelt = kit.rim({ color: 0x4a1612, roughness: 1, ...tex(feltMaps(), 0.8) }, 0x6a2a20, 0.3);
   const shoe = kit.std({ color: 0x2a1a10, roughness: 0.7, ...tex(leatherMaps(), 1) });
   const brass = kit.std({ color: 0xc8a050, metalness: 0.9, roughness: 0.35 });
+  // (his tabard: oxblood wool woven with a gold border and the library's sign; the wool's relief under it)
+  const woven = pbrMaterialMaps(woolMaps(), 1, 1);
+  const tabard = kit.rim({ map: tabardMap(), normalMap: woven.normalMap, normalScale: woven.normalScale, roughness: 1, side: THREE.DoubleSide }, 0x7a3a2a, 0.3);
+  const trim = kit.rim({ color: 0xa8803a, roughness: 0.6, metalness: 0.35, ...tex(clothMaps(), 1.4) }, 0xc89a4a, 0.3);
   const glass = kit.std({ color: 0xffffff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
 
   // --- the rig, sat: hips on the seat, thighs ahead, shins down to the floor ---
@@ -177,7 +202,8 @@ export function buildScholar(book: ScholarBook): Scholar {
     parts.push(m);
     return m;
   };
-  dressBody(j, add, { habit, habitD, lining, rope, shoe });
+  const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass };
+  dressBody(j, add, M);
 
   // --- the page he turns: hidden but while it's turned ---
   const W = book.pageW, D = book.pageD, SEG = 12;
@@ -214,6 +240,8 @@ export function buildScholar(book: ScholarBook): Scholar {
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
   const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
   const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
+  /** where each elbow rests on the table (his frame) */
+  const restL = new THREE.Vector3(), restR = new THREE.Vector3();
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qp = new THREE.Quaternion(), basis = new THREE.Matrix4();
   const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3();
   /** a hand's turn in his frame: its fingers along `fingers`, its palm facing `palm` */
@@ -310,16 +338,22 @@ export function buildScholar(book: ScholarBook): Scholar {
     j.root.updateMatrixWorld(true);
 
     // --- the arms: each hand at rest on the table, and where a beat takes it ---
-    const tableY = book.spine.y - 0.015;
-    // (the left on the book's lower corner, holding it open; the right on the table by it)
-    tL.set(book.spine.x + 0.17, tableY + 0.045, book.spine.z - book.pageD * 0.42);
-    tR.set(book.spine.x - 0.3, tableY + 0.035, book.spine.z - book.pageD * 0.55);
+    // (leant on the table as a reader leans: each elbow resting on it a hand in from its edge, the forearm laid along it
+    // to the book, the left's hand on its left page's margin holding it open, the right's on the right's. Held off it,
+    // the elbows hung below its top short of its edge, and the forearms rose through its edge to the hands)
+    const { top, z0 } = book.table;
+    tL.set(0.17, top + 0.062, z0 + 0.26);
+    tR.set(-0.21, top + 0.058, z0 + 0.27);
+    // (leaning in, his hands slide a little further on, so his arms keep their reach and his elbows their rest)
+    tL.z += lean * 0.06; tR.z += lean * 0.06;
+    restL.set(0.33, top + 0.085, z0 + 0.05);
+    restR.set(-0.33, top + 0.085, z0 + 0.05);
     // (a breath lifts them a hair, as it does the shoulders)
     tL.y += breath * 0.002; tR.y += breath * 0.002;
     // the left: to stroke his beard, or push his spectacles up
     const stroke = 0.5 - 0.5 * Math.cos(along(t, BEATS.beard[0] + 1.2, BEATS.beard[1] - 1.2) * Math.PI * 4);
-    const chin = onHead(4, lerp(-8, -70, stroke), lerp(106, 112, stroke), new THREE.Vector3());
-    chin.x += 0.03; chin.z += 0.02; chin.y -= 0.06;
+    const chin = onHead(4, lerp(-8, -52, stroke), lerp(106, 112, stroke), new THREE.Vector3());
+    chin.x += 0.03; chin.z += 0.02; chin.y -= 0.05;
     tL.lerp(chin, beard);
     const nudge = Math.sin(along(t, BEATS.specs[0] + 0.9, BEATS.specs[1] - 0.9) * Math.PI);
     const bridge = onHead(10, 96 + nudge * 8, 150, new THREE.Vector3());
@@ -331,10 +365,15 @@ export function buildScholar(book: ScholarBook): Scholar {
     corner(pageK, tmp);
     tmp.y += 0.025; tmp.z -= 0.03;
     tR.lerp(tmp, reach);
-    // (the arms' elbows out and down; the right's further out as it reaches across)
-    poleL.set(1, -1, -0.5); poleR.set(-1 - reach * 0.5, -1, -0.4 + reach * 0.4);
+    // (each elbow bent towards its rest on the table; out and down as a hand goes to the face, the right's out as it
+    // reaches across)
+    poleL.copy(chestLocal(restL.clone())).sub(j.shoulderL.position);
+    poleR.copy(chestLocal(restR.clone())).sub(j.shoulderR.position);
     const gesture = Math.max(beard, specs);
-    poleL.lerp(tmp.set(1, -1.6, 0.2), gesture);
+    // (his elbow kept on the table as his hand goes to his beard or his spectacles, as a man leaning on a table does: drawn
+    // out and down, it went through the table)
+    poleL.normalize().lerp(tmp.set(1.2, -0.6, 0.5).normalize(), gesture * 0.4);
+    poleR.normalize().lerp(tmp.set(-1.3, -0.4, 0.3).normalize(), reach * 0.5);
     reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(tL.clone()), poleL, 1, 0.08);
     reachArm(j.shoulderR, j.elbowR, P.upperL, P.foreL, chestLocal(tR.clone()), poleR, 1, 0.08);
     j.root.updateMatrixWorld(true);
@@ -354,8 +393,21 @@ export function buildScholar(book: ScholarBook): Scholar {
     if (page.visible) layPage(pageK);
   }
 
+  // (the sleeves' bells shaped as his forearms lie at rest, on the table: down from each, in its own frame)
+  loop = 5;
+  update(0, null, false);
+  const downFrom = (elbow: THREE.Object3D) => {
+    const d = V(0, -1, 0).applyQuaternion(elbow.getWorldQuaternion(new THREE.Quaternion()).invert());
+    d.y = 0;
+    return d.lengthSq() > 1e-4 ? d.normalize() : V(0, 0, -1);
+  };
+  dressBells(j, add, M, { L: downFrom(j.shoulderL), R: downFrom(j.shoulderR) }, { L: downFrom(j.elbowL), R: downFrom(j.elbowR) });
+  loop = 7;
+  update(0, null, false);
+
   return {
     root: j.root,
+    table: book.table,
     update,
     get loopAt() { return loop; },
     set loopAt(v: number) { loop = ((v % SCHOLAR_LOOP) + SCHOLAR_LOOP) % SCHOLAR_LOOP; },
@@ -365,13 +417,30 @@ export function buildScholar(book: ScholarBook): Scholar {
 
 interface BodyMats {
   habit: THREE.Material; habitD: THREE.Material; lining: THREE.Material; rope: THREE.Material;
-  shoe: THREE.Material;
+  shoe: THREE.Material; tabard: THREE.Material; trim: THREE.Material; brass: THREE.Material;
+}
+type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
+
+/** A strip's surface (`rowsSurface`'s winding) with uvs of its own: across each row 0 to 1, down the rows `v0` to `v1`
+ *  (a share of one texture several strips take their parts of). */
+function strip(rows: THREE.Vector3[][], v0: number, v1: number): THREE.BufferGeometry {
+  const g = rowsSurface(rows), uv = g.attributes.uv, n = rows[0].length;
+  for (let j = 0; j < rows.length; j++) for (let i = 0; i < n; i++) uv.setXY(j * n + i, i / (n - 1), lerp(v0, v1, j / (rows.length - 1)));
+  return g;
 }
 
-/** His habit on the rig: its body on the spine and the chest, the skirt over his lap down to the floor on the hips,
- *  the sleeves (wide bells from the elbow) on the arms, the rope belt, the cowl, shoes. */
-function dressBody(j: Joints, add: (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh,
-  M: BodyMats): void {
+/** A small key: its bow a ring, its shaft, its bit, hanging down from (0, 0, 0). */
+function keyGeometry(len: number): THREE.BufferGeometry {
+  const bow = new THREE.TorusGeometry(0.008, 0.0022, 5, 12).translate(0, -0.008, 0);
+  const shaft = new THREE.CylinderGeometry(0.0022, 0.0022, len, 6).translate(0, -0.016 - len / 2, 0);
+  const bit = new THREE.BoxGeometry(0.008, 0.01, 0.0025).translate(0.005, -0.016 - len + 0.006, 0);
+  return mergeAll([bow, shaft, bit]);
+}
+
+/** His habit on the rig: its body on the spine and the chest, the skirt over his lap down to the floor on the hips, the
+ *  sleeves over his upper arms, his tabard over it from the cowl to his knees, the rope belt with his keys and a
+ *  pouch, the cowl, shoes. (The sleeves' bells come after his first pose: `dressBells`.) */
+function dressBody(j: Joints, add: Add, M: BodyMats): void {
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds */
   const ring = (y: number, w: number, d: number, fold: number, seed: number, p = 2.4) => {
@@ -448,40 +517,161 @@ function dressBody(j: Joints, add: (g: THREE.BufferGeometry, m: THREE.Material, 
     const path = new THREE.CatmullRomCurve3([V(0, 0.02, -0.08), V(0, 0.04, 0.12), V(0, 0.03, 0.36), V(0, -0.02, 0.5),
       V(0, -0.14, 0.56), V(0, -0.34, 0.58), V(0, -0.52, 0.6)]);
     const K = 30, rows: THREE.Vector3[][] = [], T = new THREE.Vector3(), X = V(1, 0, 0), Nn = new THREE.Vector3(), C = new THREE.Vector3();
-    for (let k = 0; k <= K; k++) {
-      const s = k / K;
+    /** the skirt at `s` along its path and `th` round it, `lift` off it, its folds by `folded` */
+    const at = (s: number, th: number, lift = 0, folded = 1) => {
       path.getPointAt(s, C); path.getTangentAt(s, T);
       Nn.crossVectors(T, X).normalize();
       // (round both thighs, flaring as it falls from the knees to the hem)
       const hang = smooth(clamp((s - 0.42) / 0.58, 0, 1));
-      const a = lerp(0.225, 0.3, hang), b = lerp(0.115, 0.2, hang), foldAmp = lerp(0.006, 0.035, hang);
+      const a = lerp(0.225, 0.3, hang), b = lerp(0.115, 0.2, hang), foldAmp = lerp(0.006, 0.035, hang) * folded;
+      // (between the knees the cloth sags into the lap; over them it's drawn tight)
+      const top = Math.max(0, Math.sin(th)), sag = 0.035 * Math.exp(-((Math.cos(th) / 0.22) ** 2)) * top * (1 - hang) * smooth(clamp(s / 0.25, 0, 1));
+      const fold = foldAmp * (Math.sin(th * 9 + 1.7) * 0.7 + Math.sin(th * 4 + s * 3) * 0.3);
+      const p = C.clone().addScaledVector(X, (a + fold + lift) * Math.cos(th)).addScaledVector(Nn, (b + fold * 0.6 + lift) * Math.sin(th) - sag);
+      // (sat on: its underside along the seat kept to the seat's top, not into it)
+      if (s < 0.4) p.y = Math.max(p.y, -0.075);
+      return p;
+    };
+    for (let k = 0; k <= K; k++) {
       const row: THREE.Vector3[] = [];
-      for (let i = 0; i <= N; i++) {
-        const th = (i / N) * Math.PI * 2;
-        // (between the knees the cloth sags into the lap; over them it's drawn tight)
-        const top = Math.max(0, Math.sin(th)), sag = 0.035 * Math.exp(-((Math.cos(th) / 0.22) ** 2)) * top * (1 - hang) * smooth(clamp(s / 0.25, 0, 1));
-        const fold = foldAmp * (Math.sin(th * 9 + 1.7) * 0.7 + Math.sin(th * 4 + s * 3) * 0.3);
-        const p = C.clone().addScaledVector(X, (a + fold) * Math.cos(th)).addScaledVector(Nn, (b + fold * 0.6) * Math.sin(th) - sag);
-        // (sat on: its underside along the seat kept to the seat's top, not into it)
-        if (s < 0.4) p.y = Math.max(p.y, -0.075);
-        row.push(p);
-      }
+      for (let i = 0; i <= N; i++) row.push(at(k / K, (i / N) * Math.PI * 2));
       rows.push(row);
     }
     add(rowsSurface(rows, 1.2), M.habitD, j.hips, 'skirt');
+    // (a gold cord along its hem)
+    add(cord(rows[K].slice(0, N), 0.006, true, 120), M.trim, j.hips, 'trim hem');
+    // the tabard's lap: from under the belt over his knees and a hand down his shins, laid on the skirt's top, its
+    // folds half the skirt's (over them, not into them)
+    const lap: THREE.Vector3[][] = [];
+    for (let k = 0; k <= 16; k++) {
+      const s = lerp(0.15, 0.6, k / 16), half = lerp(0.1, 0.12, k / 16), row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 8; i++) {
+        const x = lerp(half, -half, i / 8), a = lerp(0.225, 0.3, smooth(clamp((s - 0.42) / 0.58, 0, 1)));
+        row.push(at(s, Math.acos(clamp(x / (a + 0.01), -1, 1)), 0.009, 0.5));
+      }
+      lap.push(row);
+    }
+    add(strip(lap, 0.53, 0), M.tabard, j.hips, 'tabard lap');
+  }
+  // --- the tabard's front: from under the cowl down his chest to the belt ---
+  {
+    const rows: THREE.Vector3[][] = [];
+    for (let k = 0; k <= 12; k++) {
+      const y = lerp(-0.125, 0.27, k / 12), at = chestRows.findIndex((r) => r[0] >= y);
+      const hi = chestRows[Math.max(0, at)], lo = chestRows[Math.max(0, at - 1)];
+      const t = hi === lo ? 0 : (y - lo[0]) / (hi[0] - lo[0]), w = lerp(lo[1], hi[1], t), d = lerp(lo[2], hi[2], t);
+      const half = Math.min(lerp(0.105, 0.085, k / 12), w * 0.9), row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 8; i++) {
+        const x = lerp(-half, half, i / 8), a = Math.asin(clamp(x / (w + 0.012), -1, 1)), [, z] = oval(a, w, d);
+        row.push(V(x, y, z * (1 + Math.abs(lo[3]) * 1.2) + 0.008));
+      }
+      rows.push(row);
+    }
+    add(strip(rows, 0.53, 1), M.tabard, j.chest, 'tabard front');
+  }
+  // --- his keys on a ring at his left hip, under the knot; a leather pouch on his right ---
+  {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0025, 6, 24), M.brass);
+    ring.position.set(0.15, 0.05, 0.12);
+    ring.rotation.set(0.2, -0.6, 0.1);
+    ring.name = 'scholar keys';
+    j.spine.add(ring);
+    [0.055, 0.045, 0.065].forEach((len, k) => {
+      const key = new THREE.Mesh(keyGeometry(len), M.brass);
+      const a = -1.2 - k * 0.45;
+      key.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, 0);
+      key.rotation.z = (k - 1) * 0.35;
+      key.castShadow = false;
+      ring.add(key);
+    });
+    const pouch = new THREE.LatheGeometry([[0, -0.07], [0.04, -0.065], [0.05, -0.04], [0.048, -0.005], [0.036, 0.01], [0.03, 0.012], [0, 0.012]]
+      .map(([r, y]) => new THREE.Vector2(r, y)), 14).scale(1, 1, 0.55);
+    const bag = add(pouch, M.shoe, j.spine, 'pouch');
+    bag.position.set(-0.165, 0.09, 0.1);
+    bag.rotation.set(0.15, 0.55, 0);
+    const flap = add(new THREE.BoxGeometry(0.075, 0.035, 0.008), M.shoe, bag, 'pouch flap');
+    flap.position.set(0, -0.005, 0.03);
+    flap.rotation.x = 0.15;
+    const stud = new THREE.Mesh(new THREE.SphereGeometry(0.005, 8, 6), M.brass);
+    stud.position.set(0, -0.018, 0.036);
+    bag.add(stud);
   }
   // --- the sleeves: close over the upper arm, a wide bell from the elbow, its lining dark; shoes under the hem ---
   for (const [shoulder, elbow, ankle, s] of [[j.shoulderL, j.elbowL, j.ankleL, 1], [j.shoulderR, j.elbowR, j.ankleR, -1]] as const) {
-    add(sleeve([[0.064, -0.33], [0.07, -0.26], [0.074, -0.14], [0.08, -0.04], [0.078, 0.02], [0.05, 0.06], [0.02, 0.075]], () => 0, 0.05, 5 + s),
-      M.habit, shoulder, 'sleeve');
-    const bell: [number, number][] = [[0.12, -0.25], [0.112, -0.2], [0.095, -0.13], [0.078, -0.05], [0.07, 0.01], [0.066, 0.04]];
-    const droop = (y: number) => 0.045 * smooth(clamp(-y / 0.25, 0, 1));
-    add(sleeve(bell, droop, 0.06, 9 + s), M.habitD, elbow, 'bell');
-    add(sleeve(bell.map(([r, y]) => [r - 0.008, y + 0.004] as [number, number]).filter(([, y]) => y < -0.06), droop, 0.05, 9 + s), M.lining, elbow, 'lining', false);
+    void elbow; void shoulder;
     const toe = new THREE.SphereGeometry(1, 14, 10).scale(0.05, 0.04, 0.11);
     const foot = add(toe, M.shoe, ankle, 'shoe');
     foot.position.set(0, -0.04, 0.07);
   }
+}
+
+/** His sleeves: over the upper arms, and the bells from his elbows, wide, lined dark, a gold cord round each opening: each dropped the way down is
+ *  from its forearm as he rests (`downL`, `downR`, in each elbow's frame), and laid flat 3.5 cm under it at the wrist,
+ *  more towards the elbow: on the table, where they hung free through it. */
+function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3; R: THREE.Vector3 }, fore: { L: THREE.Vector3; R: THREE.Vector3 }): void {
+  const bell: [number, number][] = [[0.12, -0.25], [0.112, -0.2], [0.095, -0.13], [0.078, -0.05], [0.07, 0.01], [0.066, 0.04]];
+  // (the upper sleeves too: laid flat 6 cm under the arm at the elbow, where it rests on the table, free above it)
+  for (const [shoulder, down, s] of [[j.shoulderL, upper.L, 1], [j.shoulderR, upper.R, -1]] as const) {
+    const hang: Hang = { down, droop: () => 0, floor: (y) => (y > -0.2 ? Infinity : lerp(0.08, 0.044, smooth(clamp((-y - 0.2) / 0.11, 0, 1)))) };
+    add(sleeve([[0.064, -0.33], [0.07, -0.26], [0.074, -0.14], [0.08, -0.04], [0.078, 0.02], [0.05, 0.06], [0.02, 0.075]], hang, 0.05, 5 + s).geo,
+      M.habit, shoulder, 'sleeve');
+  }
+  for (const [elbow, down, s] of [[j.elbowL, fore.L, 1], [j.elbowR, fore.R, -1]] as const) {
+    const hang: Hang = { down, droop: (y) => 0.03 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, 0.028, smooth(clamp(-y / 0.24, 0, 1))) };
+    const outer = sleeve(bell, hang, 0.06, 9 + s);
+    add(outer.geo, M.habitD, elbow, 'bell');
+    const inner = bell.map(([r, y]) => [r - 0.008, y + 0.004] as [number, number]).filter(([, y]) => y < -0.06);
+    add(sleeve(inner, { ...hang, floor: (y) => hang.floor(y) - 0.006 }, 0.05, 9 + s).geo, M.lining, elbow, 'lining', false);
+    add(cord(outer.rim, 0.005, true, 56), M.trim, elbow, 'trim cuff', false);
+  }
+}
+
+let tabardTex: THREE.CanvasTexture | null = null;
+/** His tabard's weave: oxblood wool, a gold border down both edges with a thin line inside it, a row of small
+ *  lozenges down its middle; on the chest an open book under a lamp, on the lap a key: the library's keeper. v runs
+ *  from the chest's top (1 at the canvas's top) down to the lap's end (0). */
+function tabardMap(): THREE.CanvasTexture {
+  if (tabardTex) return tabardTex;
+  const W = 128, H = 640, cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d')!, rng = mulberry(23);
+  c.fillStyle = '#5a1a1c';
+  c.fillRect(0, 0, W, H);
+  // (the wool's weave: fine light and dark threads)
+  for (let k = 0; k < 2600; k++) {
+    c.fillStyle = rng() < 0.5 ? `rgba(0,0,0,${0.05 + rng() * 0.08})` : `rgba(255,190,160,${0.03 + rng() * 0.04})`;
+    c.fillRect(rng() * W, rng() * H, 1 + rng() * 2, 1);
+  }
+  const gold = '#d8b060', deep = '#8a6a2a';
+  for (const x of [4, W - 12]) { c.fillStyle = deep; c.fillRect(x, 0, 8, H); c.fillStyle = gold; c.fillRect(x + 1, 0, 6, H); }
+  for (let y = 0; y < H; y += 10) for (const x of [4, W - 12]) { c.fillStyle = deep; c.fillRect(x + 1, y, 6, 2); }
+  c.strokeStyle = gold; c.lineWidth = 1.5;
+  for (const x of [17, W - 17]) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+  // the open book under a lamp's flame, on the chest (its top: the canvas's top is the chest's)
+  const cx = W / 2;
+  c.fillStyle = gold; c.strokeStyle = deep; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(cx, 150); c.quadraticCurveTo(cx - 20, 132, cx - 40, 138); c.lineTo(cx - 40, 104); c.quadraticCurveTo(cx - 20, 98, cx, 116);
+  c.quadraticCurveTo(cx + 20, 98, cx + 40, 104); c.lineTo(cx + 40, 138); c.quadraticCurveTo(cx + 20, 132, cx, 150); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(cx, 116); c.lineTo(cx, 150); c.stroke();
+  for (let r = 0; r < 3; r++) for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(cx + sx * 8, 114 + r * 8); c.lineTo(cx + sx * 32, 110 + r * 8); c.stroke(); }
+  c.fillStyle = '#ffd890';
+  c.beginPath(); c.moveTo(cx, 58); c.quadraticCurveTo(cx + 12, 76, cx, 88); c.quadraticCurveTo(cx - 12, 76, cx, 58); c.fill();
+  // a row of lozenges down the middle between them
+  for (let y = 190; y < 400; y += 26) {
+    c.fillStyle = gold;
+    c.beginPath(); c.moveTo(cx, y - 8); c.lineTo(cx + 6, y); c.lineTo(cx, y + 8); c.lineTo(cx - 6, y); c.fill();
+  }
+  // the key, on the lap
+  c.fillStyle = gold; c.strokeStyle = gold; c.lineWidth = 7;
+  c.beginPath(); c.arc(cx, 452, 16, 0, Math.PI * 2); c.stroke();
+  c.fillRect(cx - 3.5, 468, 7, 90);
+  c.fillRect(cx, 530, 22, 9); c.fillRect(cx, 546, 16, 9);
+  c.fillStyle = '#5a1a1c'; c.beginPath(); c.arc(cx, 452, 6, 0, Math.PI * 2); c.fill();
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  tabardTex = t;
+  return t;
 }
 
 /** His head dressed: the skullcap over his crown, his brows, his moustache and long beard (cards in `white`, the beard's

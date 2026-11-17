@@ -2309,7 +2309,8 @@ export const COMMANDS = {
     options: {
       views: { kind: 'list', usage: 'a,b', default: 'front,left,right,back,above', help: 'the views of the close-ups' },
       at: { kind: 'numbers', usage: 's,s', help: 'the points of his loop pictured (s), in place of its beats' },
-      canary: { kind: 'switch', help: 'jump his loop on 20 s mid-way, a snap that must be found' },
+      film: { kind: 'switch', help: 'a picture for each moment in order (film-N.png), not one sheet: the frames of a clip' },
+      canary: { kind: 'switch', help: 'jump his loop on 20 s mid-way and raise the table 8 cm, both of which must be found' },
       ...COMMON_OPTIONS,
     },
   },
