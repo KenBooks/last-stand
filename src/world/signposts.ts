@@ -14,6 +14,8 @@ import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { boxWithUV } from './props';
 import { groundHeight } from './ground';
 import { mulberry } from '../util';
+import { tsl } from '../core/webgpu';
+import type { OwnLooks } from '../core/shaderPorts';
 import type { Obstacle } from '../types';
 
 /** what a signpost is made of: its post's timber, its arms' planks, its foot's stone, and the material its arms'
@@ -31,7 +33,15 @@ const FACE = { high: 0.34, px: 300 };
  *  cut and the edge round them */
 // (a step under white: paler, the arm beside a lamp was lit past its letters at night)
 const WOOD = { top: '#b09468', foot: '#92774e', dark: '64,44,24', light: '214,194,156', knot: '#4e3420' };
-const CUT = { fill: '#1e120a', edge: 'rgba(250,236,204,.9)', shade: 'rgba(30,18,8,.55)' };
+const CUT = { fill: '#1e120a', shade: 'rgba(30,18,8,.5)' };
+/** the most light an arm's face gives back (a luminance): well under the bloom's threshold, 0.9 (`UnrealBloomPass` in
+ *  core/renderer.ts, `bloom` in core/webgpu.ts). From Kenneth's look at night: the pale arm a hand's width from a
+ *  street lamp was lit past it, bloomed into a white bar its name couldn't be read on, and the arm beside it nearly so;
+ *  the dark boards before never reached it. Capped, the board is lit as bright as it may be and its cut letters, dark,
+ *  stay dark on it; the lamp is as it was. At 0.78 it no longer bloomed, but the night's adaptation still lit it near
+ *  white and thinned its letters; at 0.35 it reads at midnight, and the sun at noon never lights a board that far (its
+ *  pictures at 0.35 and 0.5 alike), so only a lamp's near side is held. */
+const FACE_MOST = 0.35;
 
 /** An arm as built: its post, the name it bears, the way it points in the world (rad about y, 0 along +x toward
  *  -z: `atan2(-dz, dx)`), its height, and its group (its +x the way it points, its faces facing ±z). */
@@ -79,8 +89,8 @@ function paintAll(arms: { name: string; wide: number }[]): { map: THREE.CanvasTe
 }
 
 /** An arm's face `w` by `h` px painted with `name`: pale weathered wood of an open grain, with a knot or two, a dark
- *  edge, and the name cut deep in Cinzel's heaviest weight, filling the board: dark in the pale wood, a pale lip round
- *  each letter where the cut catches the light. Made to be read from afar (the houses' signs, `paintSign` in door.ts,
+ *  edge, and the name cut deep in Cinzel's heaviest weight, filling the board, dark in the pale wood, its strokes
+ *  thickened. Made to be read from afar (the houses' signs, `paintSign` in door.ts,
  *  are dark boards with thin gilt letters, read up close). */
 function paintArm(c: CanvasRenderingContext2D, w: number, h: number, name: string): void {
   const rng = mulberry(name.length * 53 + name.charCodeAt(0));
@@ -114,7 +124,8 @@ function paintArm(c: CanvasRenderingContext2D, w: number, h: number, name: strin
   c.strokeStyle = CUT.fill;
   c.lineWidth = Math.max(3, h * 0.05);
   c.strokeRect(0, 0, w, h);
-  // the name cut in: a pale lip round it, its shadow, then the cut itself, dark
+  // the name cut in, its strokes thickened by an outline of the same dark (a pale lip round each letter, lit as bright
+  // as the board, thinned the letters to hairlines by a lamp at night), its shadow under it
   let size = h * 0.64;
   const font = (px: number): string => `900 ${px}px 'Cinzel', Georgia, serif`;
   c.font = font(size);
@@ -124,13 +135,32 @@ function paintArm(c: CanvasRenderingContext2D, w: number, h: number, name: strin
   c.textBaseline = 'middle';
   const x = w / 2, y = h / 2 + size * 0.04;
   c.lineJoin = 'round';
-  c.strokeStyle = CUT.edge;
-  c.lineWidth = Math.max(2, size * 0.12);
-  c.strokeText(name, x, y);
   c.fillStyle = CUT.shade;
   c.fillText(name, x + size * 0.03, y + size * 0.04);
+  c.strokeStyle = CUT.fill;
+  c.lineWidth = Math.max(2, size * 0.07);
+  c.strokeText(name, x, y);
   c.fillStyle = CUT.fill;
   c.fillText(name, x, y);
+}
+
+/** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
+ *  hue kept), on WebGL by a line after its output (its program's key told), on WebGPU by its output node. */
+function underBloom<M extends THREE.Material>(m: M): M {
+  const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
+  const most = FACE_MOST.toFixed(3);
+  m.onBeforeCompile = (shader, renderer) => {
+    prev.call(m, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      { float faceLit = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+        if (faceLit > ${most}) gl_FragColor.rgb *= ${most} / faceLit; }`);
+  };
+  m.customProgramCacheKey = () => `${key}|underBloom`;
+  (m as unknown as OwnLooks).webgpuLooks = (converted) => {
+    const out = tsl.output, lit = tsl.dot(out.rgb, tsl.vec3(0.2126, 0.7152, 0.0722));
+    converted.outputNode = tsl.vec4(out.rgb.mul(tsl.min(1, tsl.float(FACE_MOST).div(tsl.max(lit, 1e-4)))), out.a);
+  };
+  return m;
 }
 
 /** A face of an arm, its picture's row on it, `wide` m along the board from its back, facing +z (or -z: `back`). */
@@ -148,7 +178,7 @@ export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles
   const all = SIGNPOSTS.flatMap((post) => post.arms.map((arm) => ({ post, arm, long: armLong(arm.name) })));
   const faceWide = (long: number): number => long - ARM.back - FACE_FROM - FACE_GAP - ARM.point;
   const { map, rows } = paintAll(all.map(({ arm, long }) => ({ name: arm.name, wide: faceWide(long) })));
-  const faces = M.face(map);
+  const faces = underBloom(M.face(map));
   const built: BuiltArm[] = [];
   let row = 0;
   for (const post of SIGNPOSTS) {
