@@ -79,8 +79,8 @@ export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
     },
   },
   bellwarden: {
-    role: 'Second boss of the Crypt',
-    does: 'A cracked bronze bell on a yoke, carried by four chained ghouls. It shuffles after you and tolls: a ring of sound rolls out across the floor and stuns whoever it reaches. Ghosts circle the bell and snatch up anyone who strays too close, carrying them off and dropping them hard.',
+    role: 'The Ossuary Cantor\'s guard',
+    does: 'A cracked bronze bell on a yoke, carried by four chained ghouls. It shuffles after you and tolls: a ring of sound rolls out across the floor and stuns whoever it reaches. Ghosts circle the bell and snatch up anyone who strays too close, carrying them off and dropping them hard. In the Crypt it comes as the Ossuary Cantor\'s guard: a lesser bell, half the size, its toll shorter and softer, raising no husks, its one ghost grabbing no one, and it never grows stronger as it is hurt.',
     strengths: ['Its toll stuns you where you stand and hurts as it does.', 'Every second toll raises Hollow Husks from the ground around the arena.', 'Wounded, it tolls twice in a row, a fast ring then a slow one, and bronze shards break off it that burn the floor where they land.', 'Near death its bearers kneel and it tolls every few seconds.', 'Its ghosts grab you if you stand too close to the bell as one swoops low.'],
     weaknesses: ['The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring unharmed.', 'The ring fades as it rolls: far enough away, it does not stun.', 'Each bearer\'s chain can be broken by hits from its side; with all four broken the bell drops and takes double damage until they rise again.', 'It cannot be shoved: it holds its ground, but it is slow.'],
     beat: ['Keep at medium range, outside the ghosts\' circle, and step out of its ring\'s reach when the bell swings back.', 'Circle it to break its chains one side at a time, then pour everything in while the bell is down.', 'Clear the Hollow Husks quickly so they do not pin you when the next toll comes.', 'Never stand on the bronze shards.'],
@@ -88,6 +88,18 @@ export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
       warrior: 'Raise the shield towards the bell as it swings: the toll cannot stun you through it.',
       mage: 'Blink through the ring as it reaches you, then punish the bell while it recovers.',
       ranger: 'Shoot from beyond its ring and its ghosts; aim at a bearer\'s chain to bring the bell down.',
+    },
+  },
+  cantor: {
+    role: 'Second boss of the Crypt',
+    does: 'A towering skeletal priest of the ossuary, floating in rotted vestments under a crown of candles, a bronze bell for a heart in its open ribs. It comes with two lesser Bell-Wardens as its guards, and while either of them stands it is warded: your blows barely touch it. It chants, and the dead answer: bone hands tear up through the floor beneath you.',
+    strengths: ['Warded while a guard stands: it takes only a fraction of the damage.', 'Grave hands rise under every hero at once.', 'Wounded, it sings a dirge: a line of rings marching out towards you, each bursting in turn.', 'Near death it sends a dirge at every hero and casts faster.', 'It keeps its distance, gliding back from a hero who presses in.'],
+    weaknesses: ['Every cast is warned: a ring of grave light on the floor before the hands burst.', 'Its guards are lesser bells, smaller and weaker than a Bell-Warden alone: kill them first and the ward falls.', 'With its guards down, every cast leaves its ribs open and its bell-heart bared, taking double damage for a few seconds.', 'Its casts and its guards\' tolls never land together: there is always a moment to step out.'],
+    beat: ['Turn on the guards first; ignore the Cantor until both bells are silent.', 'Step out of the ring the moment it appears under you.', 'Strafe off the dirge\'s line rather than running along it.', 'Hold your burst for the moment its ribs swing open after a cast.'],
+    vs: {
+      warrior: 'Shield up towards a guard\'s toll, then close on the Cantor as its heart is bared.',
+      mage: 'Blink out of the grave light, and lance the bared heart from range.',
+      ranger: 'Keep moving between shots: the hands rise where you stand, not where you were.',
     },
   },
   thornling: {
