@@ -53,6 +53,10 @@ import {
 import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
 import { FENCE, STANDS_FREE, Wall } from './wall';
 import { buildWeaponsRack } from './weaponsRack';
+import { buildDoor, doorSign } from './door';
+import { buildSignposts, type BuiltArm } from './signposts';
+import { SIGNPOSTS } from '../data/signposts';
+import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -176,6 +180,8 @@ export interface Village extends Biome {
   trees: readonly { x: number; z: number; height: number }[];
   /** what stops his sight from above (core/sight.ts), the walls and the hall, which may be shut to him */
   sight: { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[]; doors: SightDoor[] };
+  /** the signposts' arms as built (world/signposts.ts; tools/lab `houses` reads them) */
+  signArms: readonly BuiltArm[];
   /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
   lanterns: readonly THREE.Vector3[];
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
@@ -299,6 +305,12 @@ interface Mats {
   lockBrass: THREE.MeshStandardMaterial;
   chestWood: THREE.Material; chestIron: THREE.Material;
   lantern: THREE.MeshBasicMaterial; lanternIron: THREE.MeshBasicMaterial;
+  /** a house walked into's door (world/door.ts): its leaf's darker planks, its iron (the planks' look, dark and
+   *  metal: the same program), and its sign's face (`signFace`: its picture its own) */
+  doorLeaf: THREE.MeshStandardMaterial; doorIron: THREE.MeshStandardMaterial;
+  signFace(map: THREE.Texture): THREE.Material;
+  /** a signpost's arms' faces (world/signposts.ts): what stands free's planks with their picture */
+  propFace(map: THREE.Texture): THREE.Material;
 }
 
 /** how bright a cottage's window burns at night: its candlelit panes as a room's glow, short of a lamp's flame (at 2.4
@@ -450,6 +462,10 @@ function makeMats(): Mats {
     freeBrass: undefined as unknown as THREE.Material,
     rackTimber: undefined as unknown as THREE.MeshStandardMaterial,
     rackPlanks: undefined as unknown as THREE.MeshStandardMaterial,
+    doorLeaf: undefined as unknown as THREE.MeshStandardMaterial,
+    doorIron: undefined as unknown as THREE.MeshStandardMaterial,
+    signFace: undefined as unknown as (map: THREE.Texture) => THREE.Material,
+    propFace: undefined as unknown as (map: THREE.Texture) => THREE.Material,
     // (pale and half metal: all metal, a blade showed the sky's blue and no steel, a dark line from the square)
     steel: new THREE.MeshStandardMaterial({ color: 0xc4c9d0, metalness: 0.4, roughness: 0.38 }),
     palisadeLogs: undefined as unknown as THREE.Material,
@@ -478,8 +494,30 @@ function makeMats(): Mats {
   mats.rackTimber.color.set(0xd8b488);
   mats.rackPlanks = (mats.planks as THREE.MeshStandardMaterial).clone();
   mats.rackPlanks.color.set(0xf0d4a4);
+  // (the houses' doors, in the planks' own program: an oak darker than the cottages', iron of the same maps dark and
+  // metal, and the dark of a room unlit past it, warm a little)
+  const planksBase = (mats.planks as THREE.MeshStandardMaterial).clone();
+  mats.doorLeaf = planksBase.clone();
+  mats.doorLeaf.color.set(0x6a4528);
+  mats.doorIron = planksBase.clone();
+  mats.doorIron.color.set(0x2c2a2a);
+  mats.doorIron.metalness = 0.75;
+  mats.doorIron.roughness = 0.55;
+  mats.signFace = (map) => {
+    const face = planksBase.clone();
+    face.map = map;
+    face.color.set(0xffffff);
+    return seeThrough(face, 'built');
+  };
+  mats.propFace = (map) => {
+    const face = planksBase.clone();
+    face.map = map;
+    face.color.set(0xffffff);
+    return seeThrough(face, 'prop');
+  };
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
-  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane,
+    mats.doorLeaf, mats.doorIron]) {
     seeThrough(m, 'built');
   }
   // (the notice board's roof isn't a house's: no room under it, and a ghost over the lit grass it took the fog of what's
@@ -753,6 +791,9 @@ export function buildVillage(scene: THREE.Group): Village {
   // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim
   // and never casting, the hero by one cast "no shadows FROM LIGHT, only from moon")
   const lanterns = [...stair.map(({ lantern }) => lantern), ...stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles))];
+  // (after the lamps, which keep off what stands: placed first, the posts moved lamps every lit check reads)
+  const signArms = stillBuilt(scene, () => buildSignposts(scene,
+    { post: M.freeTimber, board: M.freePlanks, foot: M.freeAshlar, face: M.propFace }, obstacles));
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
@@ -787,6 +828,7 @@ export function buildVillage(scene: THREE.Group): Village {
     exits,
     trees,
     lanterns,
+    signArms,
     sight: sightOfThePlace(),
     hallCutaway: hall.cutaway,
     meadow,
@@ -1237,6 +1279,8 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   mask.clearRect(RACK.x - RACK.half - 0.2, RACK.z - 0.7, RACK.x + RACK.half + 0.2, RACK.z + 0.7, 0.3, RACK.facing);
   mask.clearCircle(RACK.x + Math.sin(RACK.facing) * 1.2, RACK.z + Math.cos(RACK.facing) * 1.2, 1.3, 0.45);
   for (const s of [-1, 1]) mask.clearCircle(TERRACE.x + s * LAMPS.x, LAMPS.z, 0.5);
+  // (the signposts' feet, and the grass round them trodden by who stops to read them)
+  for (const post of SIGNPOSTS) mask.clearCircle(post.at[0], post.at[1], 0.6, 0.4);
   for (const t of trees) mask.clearCircle(t.x, t.z, 0.9, 0.4);
   // the palisade's foot; the crypt's court, paved; the trodden path into the grove to its portal
   const line = palisadePolygon();
@@ -2238,8 +2282,10 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     for (const y of [0.5, h - 0.18]) block(g, 0.08, 0.16, d, endX, y, 0, M.timber);
   }
   // the door and two windows on its face (+z, as it's turned), lit within by night: each its panes set in a timber
-  // casing, a sill under it
-  block(g, 1.0, 1.9, 0.08, 0, 0.5, d / 2 + 0.04, M.planks);
+  // casing, a sill under it; a house walked into has a door of its own, its name over it
+  const house = ROOM_IDS.find((id) => HOUSES[id].cottage === COTTAGES.indexOf(c));
+  if (house) houseDoor(g, M, house, d / 2);
+  else block(g, 1.0, 1.9, 0.08, 0, 0.5, d / 2 + 0.04, M.planks);
   for (const sx of [-1, 1]) {
     const wx = sx * (w / 2 - 1.2), face = d / 2 + 0.05;
     // (its own uvs: the panes' picture once across its face)
@@ -2286,6 +2332,39 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   chimneys.push(new THREE.Vector3(w / 2 - 0.9, h + rise + 1.1, -d / 4).applyMatrix4(g.matrixWorld));
   wall.add(body, true, 'wall', true);
   for (const part of [...roofParts, chimney]) wall.add(part, true, 'beyond');
+}
+
+/** a house's door in its cottage's face: its opening's width and height (on the sill), its frame's head, how far it
+ *  swings out (rad); its sign sits on the head, under the eave (higher, a camera over the shoulder saw the eave's
+ *  underside where its name was) */
+const HOUSE_DOOR = { wide: 1.0, high: 1.72, head: 0.1, sill: 0.66, frameOut: 0.2 };
+/** the two stone steps up to a house's door from the ground to its sill's foot (the footing's top), each one's
+ *  height, how far out it reaches past the footing and its width (m): with none, the door stood on the plinth over
+ *  the grass with no way up to it (from play, "improve door outside of all houses") */
+const DOOR_STEPS = { rise: 0.25, lower: 0.5, upper: 0.26, wide: [1.5, 1.3] };
+
+/**
+ * House `id`'s door in its cottage's face at `face` (z, the cottage's frame): framed in timber on the sill, its leaf
+ * of planks strapped in iron swinging out (world/door.ts: nothing compiles, its leaf moved and kept out of the merge),
+ * the dark of the room past it, and its name on a sign over it (from play, "door should look like a door", "show the
+ * house name over the door").
+ */
+function houseDoor(g: THREE.Object3D, M: Mats, id: RoomId, face: number): void {
+  const door = buildDoor({ frame: M.timber, leaf: M.doorLeaf, iron: M.doorIron }, {
+    wide: HOUSE_DOOR.wide, high: HOUSE_DOOR.high, leafZ: 0.03, hinge: -1, faces: 1, head: HOUSE_DOOR.head,
+    frameOut: HOUSE_DOOR.frameOut,
+    frame: true,
+  }, HOUSES[id].cottage + 11);
+  door.group.position.set(0, HOUSE_DOOR.sill, face);
+  g.add(door.group);
+  // (the steps out from the footing, 0.1 m past the wall's face; the upper one narrower, on the lower, and its top a
+  // hair under the footing's: no two of their faces lie in one plane)
+  const foot = face + 0.1;
+  block(g, DOOR_STEPS.wide[0], DOOR_STEPS.rise, DOOR_STEPS.lower, 0, 0, foot + DOOR_STEPS.lower / 2, M.ashlar);
+  block(g, DOOR_STEPS.wide[1], DOOR_STEPS.rise - 0.005, DOOR_STEPS.upper, 0, DOOR_STEPS.rise, foot + DOOR_STEPS.upper / 2 - 0.001, M.ashlar);
+  const sign = doorSign(HOUSES[id].name, M.planks, M.doorIron, M.signFace, HOUSE_DOOR.sill + door.top + 0.005);
+  sign.position.z = face;
+  g.add(sign);
 }
 
 /** where each cottage's chimney smokes (`chimneySmoke`) */

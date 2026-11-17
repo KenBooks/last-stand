@@ -11,7 +11,7 @@ import { ENEMIES, type EnemyId } from '../data/enemies';
 import { RARITIES } from '../data/items';
 import { peekProfile } from '../loot/profile';
 import { saveSlot } from '../loot/saveSlots';
-import { faceCamera, settleCamera } from '../core/renderer';
+import { faceCamera, holdZoom, settleCamera } from '../core/renderer';
 import { groundHeight } from '../world/ground';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
@@ -37,6 +37,10 @@ function doorPuff(x: number, z: number): void {
   }
 }
 
+/** the top view's zoom inside a room (game's zoom: 1 the run's, the lobby 0.45): near enough that the room fills the
+ *  screen, never out to where it stood small amid the black past its cut away walls (from play) */
+export const ROOM_ZOOM = { least: 0.24, most: 0.36 };
+
 /** The hero put at `at`, facing `facing`, the camera behind him there at once. */
 function placeHero(at: { x: number; z: number; facing: number }): void {
   const p = G.player;
@@ -53,6 +57,7 @@ export const enterRoom = whenWarm(['rooms'], (id: RoomId): void => {
   G.arena.showRoom(id);
   showFoes(false);
   if (id === 'records') writeRecords();
+  holdZoom(ROOM_ZOOM);
   placeHero(insideOf(id));
   doorPuff(0, HOUSES[id].half[1] - 0.4);
   told(id);
@@ -64,6 +69,8 @@ export function leaveRoom(quiet = false): void {
   if (!id) return;
   G.arena.showRoom(null);
   showFoes(true);
+  // (his own zoom given back as it was, but as a run takes him out: it sets its own)
+  holdZoom(null, !quiet);
   if (!quiet) {
     const out = outsideOf(id);
     placeHero(out);

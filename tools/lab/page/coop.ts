@@ -42,6 +42,7 @@ export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
 } from './coopLobby';
+export { coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHouseSeen, coopLeaveHouse, coopVillageMap } from './coopHouses';
 export {
   coopBarBack, coopBarFit, coopBarScreens, coopCanvasCover, coopClick, coopDrag, coopDragEnd, coopFloor, coopHold,
   coopOutCanary, coopOutSeen, coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopTwist, coopWatching,

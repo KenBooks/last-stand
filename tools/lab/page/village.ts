@@ -225,6 +225,11 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     hallFacesSteady: () => hallFacesSteady(lab, options.canary),
     startSpots: () => startSpots(lab, options.canary),
     rackOpensDuel: () => unposed(() => rackOpensDuel(lab, options.canary)),
+    // (loaded as it runs: an A/B's other commit may have no signposts)
+    signpostsReadable: async () => {
+      const { signpostsReadable } = await import('./villageSignposts');
+      return unposed(() => signpostsReadable(lab, options.canary));
+    },
     topKeepsHim: () => topKeepsHim(lab, options.canary),
     staffAtNight: () => staffAtNight(lab, options.canary),
     dummyLabelsFade: () => dummyLabelsFade(lab, options.canary),

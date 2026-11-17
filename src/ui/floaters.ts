@@ -69,17 +69,19 @@ export function textArt(text: string, s: TextStyle): { w: number; h: number; pai
 }
 
 /** a prompt's plate (px): round its words, its key's square, and the room left round it for its drop shadow */
-const PROMPT = { side: 7, high: 3, key: 19, gap: 6, shade: 9, corner: 5 };
+const PROMPT = { side: 7, high: 3, key: 19, gap: 6, shade: 9, corner: 5, track: 4 };
 
 /**
  * Art for what using a thing takes: `key`'s square and `text` on a dark plate with a drop shadow, to read over whatever
  * lies behind it (from play, "need to make hint more stand out": bare words read as part of a notice board's papers).
  */
-export function promptArt(key: string, text: string, s: TextStyle): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
+export function promptArt(key: string, text: string, s: TextStyle, fill?: number): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
   const plain = { ...s, shadows: [] };
   const words = measure(text, plain), letter = measure(key, plain);
   const inside = Math.max(PROMPT.key, words.h);
-  const w = PROMPT.side * 2 + PROMPT.key + PROMPT.gap + words.w, h = inside + PROMPT.high * 2;
+  // (room under its words for the hold's track)
+  const under = fill === undefined ? 0 : PROMPT.track + 2;
+  const w = PROMPT.side * 2 + PROMPT.key + PROMPT.gap + words.w, h = inside + PROMPT.high * 2 + under;
   const paint = (c: CanvasRenderingContext2D, scale: number): void => {
     const x = PROMPT.shade, y = PROMPT.shade;
     roundRect(c, x, y, w, h, PROMPT.corner);
@@ -93,12 +95,19 @@ export function promptArt(key: string, text: string, s: TextStyle): { w: number;
     c.strokeStyle = 'rgba(214,170,92,.8)';
     c.lineWidth = 1;
     c.stroke();
-    const keyX = x + PROMPT.side, keyY = y + (h - PROMPT.key) / 2;
+    const keyX = x + PROMPT.side, keyY = y + (h - under - PROMPT.key) / 2;
     roundRect(c, keyX, keyY, PROMPT.key, PROMPT.key, 3);
     c.fillStyle = '#e6c06a';
     c.fill();
     drawText(c, letter, keyX + (PROMPT.key - letter.w) / 2, keyY + (PROMPT.key - letter.h) / 2, { ...plain, color: '#20140a' }, scale);
-    drawText(c, words, keyX + PROMPT.key + PROMPT.gap, y + (h - words.h) / 2, plain, scale);
+    drawText(c, words, keyX + PROMPT.key + PROMPT.gap, y + (h - under - words.h) / 2, plain, scale);
+    // (held to use, a door: a track along its foot, filling as the key is held)
+    if (fill === undefined) return;
+    const trackX = x + PROMPT.side, trackW = w - PROMPT.side * 2, trackY = y + h - PROMPT.track - 2;
+    c.fillStyle = 'rgba(214,170,92,.25)';
+    c.fillRect(trackX, trackY, trackW, PROMPT.track);
+    c.fillStyle = '#ffd36a';
+    c.fillRect(trackX, trackY, trackW * Math.max(0, Math.min(1, fill)), PROMPT.track);
   };
   return { w: w + PROMPT.shade * 2, h: h + PROMPT.shade * 2, paint };
 }

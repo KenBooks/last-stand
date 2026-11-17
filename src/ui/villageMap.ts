@@ -5,7 +5,7 @@
 // accordion, each shaded by how far it's turned from the light, and folds back the same way as it's put away. The
 // fold is stepped by the game's frames (`updateVillageMap`), a transform a panel; the sheet is drawn once, as it opens
 // at a size it hasn't been drawn at.
-import { HOUSES, HOUSE_OBJECTS } from '../data/houses';
+import { HOUSES, HOUSE_OBJECTS, type RoomId } from '../data/houses';
 import { G } from '../state';
 import {
   CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, RACK, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
@@ -52,6 +52,8 @@ export interface VillageMapHooks {
 
 let hooks: VillageMapHooks;
 let root: HTMLElement, sheet: HTMLElement, you: HTMLElement;
+/** each house's name on the sheet, its line naming the partners inside, and what that last said (ui/houseMarks.ts) */
+const houseNames = new Map<RoomId, { button: HTMLElement; inside: HTMLElement; says: string }>();
 const panels: { el: HTMLElement; canvas: HTMLCanvasElement; shade: HTMLElement }[] = [];
 /** whether it's wanted open, how far it's open (0 folded away, 1 flat), and the size it was last drawn at */
 let wanted = false, open = 0, drawnAt = '';
@@ -114,8 +116,9 @@ export function initVillageMap(h: VillageMapHooks): void {
     const b = document.createElement('button');
     b.className = 'vm-name';
     b.dataset.use = o.use;
-    b.innerHTML = `${HOUSE_ICON}<span></span>`;
+    b.innerHTML = `${HOUSE_ICON}<span></span><small class="vm-inside" hidden></small>`;
     b.querySelector('span')!.textContent = o.name;
+    houseNames.set(o.into, { button: b, inside: b.querySelector<HTMLElement>('.vm-inside')!, says: '' });
     b.setAttribute('aria-label', `${o.name}: go in`);
     const cottage = COTTAGES[HOUSES[o.into].cottage];
     const [u, v] = toSheet(cottage.x, cottage.z);
@@ -226,6 +229,23 @@ export function updateVillageMap(dt: number): void {
   const [u, v] = toSheet(p.x, p.z);
   you.style.transform = `translate(${(u * sheet.clientWidth).toFixed(1)}px, ${(v * sheet.clientHeight).toFixed(1)}px)` +
     ` rotate(${(-G.player.facing * 180 / Math.PI + 180).toFixed(1)}deg)`;
+}
+
+/** Each house's name says who of the party is inside (ui/houseMarks.ts, every frame), the page touched only as it
+ *  changes, and the names laid clear of each other again as one grows. */
+export function showWhoIsInside(inside: ReadonlyMap<RoomId, readonly string[]>): void {
+  let changed = false;
+  for (const [id, name] of houseNames) {
+    const names = inside.get(id);
+    const says = names ? `${names.join(', ')} inside` : '';
+    if (says === name.says) continue;
+    name.says = says;
+    name.inside.textContent = says;
+    name.inside.hidden = !says;
+    name.button.classList.toggle('occupied', !!says);
+    changed = true;
+  }
+  if (changed && wanted) layNames();
 }
 
 const easeInOut = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);

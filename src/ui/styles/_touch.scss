@@ -99,3 +99,9 @@ body:has(#touch-village:not(.hidden)) #touch-village {
   font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
 // (full screen an icon alone, round: its arrows out, or in while the page is full screen)
 #touch-village .tv-use { border-color: var(--accent); box-shadow: 0 0 12px rgba($highlight, .45); color: #ffe7b0; }
+// (a house's door is held: a fill runs across Use as it's held, on a layer of its own, its transform alone moved)
+#touch-village .tv-use { position: relative; overflow: hidden; isolation: isolate; touch-action: none; user-select: none; }
+#touch-village .tv-fill { position: absolute; inset: 0; z-index: -1; background: rgba($accent, .45); transform: scaleX(0);
+  transform-origin: 0 50%; will-change: transform; pointer-events: none; display: none; }
+#touch-village .tv-use.holds .tv-fill { display: block; }
+#touch-village .tv-says { pointer-events: none; }

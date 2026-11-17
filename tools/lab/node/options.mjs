@@ -330,10 +330,11 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
           + 'down, blink (a mage), rush and strike (a warrior), throws; ends alone: the ways a run ends that left a '
-          + 'player apart from the party',
+          + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
+          + '(a marker over its door, the minimap, the map)',
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },

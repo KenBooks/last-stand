@@ -997,14 +997,43 @@ export function kickFov(deg: number): void { rig.kickTo = Math.max(rig.kickTo, d
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }
 /** How near to nothing the local hero's Health is shown (0 not at all, 1 nothing left) and the heart's beat (core/lowLife.ts). */
 export function setLowLife(low: number, beat: number): void { grade.uniforms.uLow.value = low; grade.uniforms.uBeat.value = beat; }
-export function setZoom(z: number): void { rig.targetZoom = clamp(z, CAMERA.minZoom, CAMERA.maxZoom); }
+export function setZoom(z: number): void { rig.targetZoom = clamp(z, zoomLeast(), zoomMost()); }
+
+/** the top view's zoom held to a narrower range (a house's room: game/rooms.ts), and the player's own zoom as it was
+ *  when it was held, given back as it's let go */
+let zoomHeld: { least: number; most: number; own: number } | null = null;
+const zoomLeast = (): number => zoomHeld?.least ?? CAMERA.minZoom;
+const zoomMost = (): number => zoomHeld?.most ?? CAMERA.maxZoom;
+/**
+ * The top view's zoom held between `least` and `most` (the wheel and a pinch kept to it, the zoom brought into it at
+ * once), or let go (null): the zoom the player had before given back exactly, unless `giveBack` is false (a run's
+ * start sets its own). From play, in a room: "zoom when inside a room should be locked, shouldn't be able to zoom out
+ * that much": zoomed out, the room stood small in the middle of the screen, black all round its cut away walls.
+ */
+export function holdZoom(range: { least: number; most: number } | null, giveBack = true): void {
+  if (range) {
+    const own = zoomHeld?.own ?? rig.targetZoom;
+    zoomHeld = { ...range, own };
+    rig.targetZoom = clamp(rig.targetZoom, range.least, range.most);
+    rig.zoom = clamp(rig.zoom, range.least, range.most);
+    return;
+  }
+  if (!zoomHeld) return;
+  const own = zoomHeld.own;
+  zoomHeld = null;
+  if (giveBack) rig.targetZoom = rig.zoom = own;
+}
+/** The range the top view's zoom is held to now, or null (tools/lab `houses`). */
+export const zoomHeldTo = (): { least: number; most: number } | null => (zoomHeld ? { least: zoomHeld.least, most: zoomHeld.most } : null);
+/** The top view's zoom it's coming to (tools/lab `houses`). */
+export const cameraTargetZoom = (): number => rig.targetZoom;
 /** 
 otches = mouse-wheel steps (positive = zoom out). */
 export function zoomBy(notches: number): void {
   // over the shoulder the wheel pulls the camera in or out; through the eyes it does nothing
   if (rig.view === 'third') { rig.targetBoom = clamp(rig.targetBoom * CAMERA.zoomStep ** notches, CAMERA.third.minBoom, CAMERA.third.maxBoom); return; }
   if (rig.view !== 'top') return;
-  rig.targetZoom = clamp(rig.targetZoom * CAMERA.zoomStep ** notches, CAMERA.minZoom, CAMERA.maxZoom); }
+  rig.targetZoom = clamp(rig.targetZoom * CAMERA.zoomStep ** notches, zoomLeast(), zoomMost()); }
 
 /** Middle-drag orbit: dragging right turns the world right (the camera swings left). */
 export function orbitBy(px: number): void { if (rig.view === 'top') rig.targetYaw -= px * CAMERA.orbitSpeed; }
