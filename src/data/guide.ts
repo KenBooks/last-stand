@@ -78,6 +78,18 @@ export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
       ranger: 'Quarry Mark it: when it dies marked, your cooldowns come back for the next wave.',
     },
   },
+  bellwarden: {
+    role: 'Second boss of the Crypt',
+    does: 'A cracked bronze bell on a yoke, carried by four chained ghouls. It shuffles after you and tolls: a ring of sound rolls out across the floor and stuns whoever it reaches. Ghosts circle the bell and snatch up anyone who strays too close, carrying them off and dropping them hard.',
+    strengths: ['Its toll stuns you where you stand and hurts as it does.', 'Every second toll raises Hollow Husks from the ground around the arena.', 'Wounded, it tolls twice in a row, a fast ring then a slow one, and bronze shards break off it that burn the floor where they land.', 'Near death its bearers kneel and it tolls every few seconds.', 'Its ghosts grab you if you stand too close to the bell as one swoops low.'],
+    weaknesses: ['The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring unharmed.', 'The ring fades as it rolls: far enough away, it does not stun.', 'Each bearer\'s chain can be broken by hits from its side; with all four broken the bell drops and takes double damage until they rise again.', 'It cannot be shoved: it holds its ground, but it is slow.'],
+    beat: ['Keep at medium range, outside the ghosts\' circle, and step out of its ring\'s reach when the bell swings back.', 'Circle it to break its chains one side at a time, then pour everything in while the bell is down.', 'Clear the Hollow Husks quickly so they do not pin you when the next toll comes.', 'Never stand on the bronze shards.'],
+    vs: {
+      warrior: 'Raise the shield towards the bell as it swings: the toll cannot stun you through it.',
+      mage: 'Blink through the ring as it reaches you, then punish the bell while it recovers.',
+      ranger: 'Shoot from beyond its ring and its ghosts; aim at a bearer\'s chain to bring the bell down.',
+    },
+  },
   thornling: {
     role: 'Swarmer',
     does: 'Small, darting creatures of thorn and bark that rush in packs and scratch at you from every side.',

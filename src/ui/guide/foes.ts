@@ -36,7 +36,8 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
 /** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there. */
 function metAt(id: EnemyId): { biome: BiomeId; from: number } | null {
   for (const biome of BIOME_IDS) {
-    if (BIOMES[biome].boss === id) return { biome, from: WAVES.bossEvery };
+    const rung = BIOMES[biome].bosses.findIndex((boss) => boss.id === id);
+    if (rung >= 0) return { biome, from: WAVES.bossEvery * (rung + 1) };
     for (let w = 1; w <= LAST_LOOKED; w++) if (BIOMES[biome].pool(w).some(([e]) => e === id)) return { biome, from: w };
   }
   return null;
