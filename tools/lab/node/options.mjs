@@ -2125,6 +2125,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  guide: {
+    help: 'the guide\'s first opening by G and a walk through every section and entry, each frame and the page\'s long '
+      + 'tasks timed by the browser\'s clock (at most 100 ms), till its pictures are made; the game\'s renderer links no '
+      + 'program for it',
+    options: {
+      canary: { kind: 'switch', help: 'plant the fault the measure must catch: every picture made at once as it opens' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   labels: {
     help: 'a world label kept out by a full atlas: the atlas filled with name tags until a tag finds no slot, a few '
       + 'given back (too few to pack it again), and the tag drawn in one within 3 frames',
@@ -2289,6 +2299,18 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'compile a program going in and leave the room drawn going out, which must be caught',
       },
+      ...COMMON_OPTIONS,
+    },
+  },
+  scholar: {
+    help: "the library's scholar, Brother Hollis: his reading loop posed through frame by frame, its wrap included (no "
+      + 'joint snapping, his head and hands moving), glancing up at a hero come near and holding his eye while talked '
+      + 'to; pictured at points of the loop close up from each side and over his shoulder, and as the player sees him',
+    options: {
+      views: { kind: 'list', usage: 'a,b', default: 'front,left,right,back,above', help: 'the views of the close-ups' },
+      at: { kind: 'numbers', usage: 's,s', help: 'the points of his loop pictured (s), in place of its beats' },
+      film: { kind: 'switch', help: 'a picture for each moment in order (film-N.png), not one sheet: the frames of a clip' },
+      canary: { kind: 'switch', help: 'jump his loop on 20 s mid-way and raise the table 8 cm, both of which must be found' },
       ...COMMON_OPTIONS,
     },
   },

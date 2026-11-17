@@ -23,7 +23,7 @@ import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
-import { ENEMIES, type EnemyId } from '../data/enemies';
+import { BOSS_AI, ENEMIES, type EnemyId } from '../data/enemies';
 
 const _dir = new THREE.Vector3();
 const _way = { x: 0, z: 0 };
@@ -221,6 +221,12 @@ function throwAt(e: Enemy): void {
   fx('vine', kind, ox, oz, angle, Math.min(def.reach, dist + 3) - start);
 }
 
+/** A volley of `v.bolts` bolts fanned `v.apart` rad apart about the aim, turned `turn` more, led ahead of the hero or not. */
+function volley(e: Enemy, v: { bolts: number; apart: number }, turn: number, lead: boolean): void {
+  const mid = (v.bolts - 1) / 2;
+  for (let i = 0; i < v.bolts; i++) fireBolt(e, (i - mid) * v.apart + turn, lead);
+}
+
 /** A slam's telegraph, taken down with the action if the enemy dies first. */
 function slamRing(e: Enemy, x: number, z: number, radius: number, dur: number, color: number): void {
   fx('tele', e.id, x, z, radius, dur, color);
@@ -300,17 +306,17 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
     const { dist } = e.toPlayer();
     const d = e.def;
     const b = e.brain;
-    b.summonT = (b.summonT ?? 6) - dt;
+    b.summonT = (b.summonT ?? BOSS_AI.summonFirst) - dt;
     if (e.action) return;
     e.faceTo(e.target!.pos.x, e.target!.pos.z);
     if (e.cd <= 0) {
-      if (b.summonT <= 0 && G.enemies.filter((x) => x.alive).length < 14) {
-        b.summonT = 14;
+      if (b.summonT <= 0 && G.enemies.filter((x) => x.alive).length < BOSS_AI.crowd) {
+        b.summonT = BOSS_AI.summonEvery;
         e.cd = 2;
         e.startAction('roar', 1.4, [[0.5, () => bossSummon(e)]]);
         return;
       }
-      if (dist < d.range + 1.5) {
+      if (dist < d.range + BOSS_AI.slamReach) {
         e.cd = d.cooldown;
         const accent = d.accent ?? 0xb070ff;
         const x = e.pos.x, z = e.pos.z;
@@ -319,11 +325,11 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
         return;
       }
       // the volley would only hit the pillar the player hides behind: go round it instead
-      if (dist < 18 && canShoot(e)) {
-        e.cd = d.cooldown * 1.3;
+      if (dist < BOSS_AI.volleyReach && canShoot(e)) {
+        e.cd = d.cooldown * BOSS_AI.volleyCooldown;
         e.startAction('cast', 1.3, [
-          [0.45, () => { for (let i = -3; i <= 3; i++) fireBolt(e, i * 0.14, false); fx('cast'); }],
-          [0.75, () => { for (let i = -2; i <= 2; i++) fireBolt(e, i * 0.2 + 0.07, true); }],
+          [0.45, () => { volley(e, BOSS_AI.volleys[0], 0, false); fx('cast'); }],
+          [0.75, () => { volley(e, BOSS_AI.volleys[1], 0.07, true); }],
         ]);
         return;
       }
@@ -360,9 +366,9 @@ export function lured(e: Enemy, l: Lure): void {
 }
 
 function bossSummon(e: Enemy): void {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < BOSS_AI.summonCount; i++) {
     const a = Math.random() * Math.PI * 2;
-    const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * 3.5, 0, e.pos.z + Math.sin(a) * 3.5);
+    const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * BOSS_AI.summonRing, 0, e.pos.z + Math.sin(a) * BOSS_AI.summonRing);
     spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
   fx('summon', e.pos.x, e.pos.z, e.def.accent ?? 0xb070ff);

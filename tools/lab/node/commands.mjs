@@ -1811,6 +1811,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  guide: {
+    each(side, options) {
+      return side.command('guide', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   seams: {
     each(side, options) {
       return side.command('seams', { each: Boolean(options.each), canary: Boolean(options.canary) });
@@ -1916,6 +1924,21 @@ export const COMMANDS = {
     // (its moments written: each room as it shows in each view)
     finish(results, options, session) {
       return textWithMoments(results, session.outFor('houses'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  scholar: {
+    each(side, options) {
+      return side.command('scholar', { canary: Boolean(options.canary), views: options.views, at: options.at });
+    },
+    // (its moments written: him at each beat of his loop close up, the talk, as the player sees him; with --film a
+    // picture each, in order, for a clip of his loop)
+    finish(results, options, session) {
+      if (options.film) return textWithSheetEach(results, session.outFor('scholar'), session.browser);
+      return textWithMoments(results, session.outFor('scholar'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

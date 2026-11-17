@@ -1,11 +1,13 @@
 // `lab houses`: the village's houses walked into and out of as a player does (`src/game/rooms.ts`, the rooms in
-// `src/world/rooms.ts`): stood at each cottage's door, its name the object near and E taking him in; inside, the
-// village hidden and the room shown, the yard's dummies gone from it, no program compiled, the walls the camera stands
-// outside of cut away from above and none through the close views (the camera kept inside them), a walk at the back
-// wall held in; the house of records' trophies shown for the bosses beaten alone, its great ledger's card opened by E with its
-// pages fitting the window; the tavern's party table opening Play together; and the door inside by E putting him back
-// before the cottage's door, the village shown again and the room hidden, the yard's dummies still on their spots. Each
-// in another of the views.
+// `src/world/rooms.ts`, the library's in `src/world/library.ts`): stood at each cottage's door, its name the object
+// near and E taking him in; inside, the village hidden and the room shown, the yard's dummies gone from it, no program
+// compiled, the walls the camera stands outside of cut away from above and none through the close views (the camera
+// kept inside them), a walk at the back wall held in; the house of records' trophies shown for the bosses beaten
+// alone, its great ledger's card opened by E with its pages fitting the window; the tavern's party table opening Play
+// together; the library's Codex opening the in-game guide, put away by Esc; its scholar talked to by E, the talk card
+// within the window, a reply's key leading on to his rumour, Esc ending it; and the door inside by E putting him back
+// before the cottage's door, the village shown again and the room hidden, the
+// yard's dummies still on their spots. Each in another of the views.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
@@ -27,14 +29,16 @@ export interface HousesOptions {
 
 /** the frames a stand settles for, the most frames a door may take to open (a warm-up's bar), and a walk's frames */
 const SETTLE = 15;
-const DOOR_FRAMES = 600;
+export const DOOR_FRAMES = 600;
 const WALK = 150;
 /** how far a hero may come out from where he's put, coming in or going out (m) */
 const PLACED_WITHIN = 0.3;
 /** how far inside its walls' inner faces the hero walked into the back wall must still stand (m) */
 const KEPT_IN = 0.1;
 /** where across each room (x, m) a walk from the door to the back wall meets nothing standing in it */
-const LANES: Record<RoomId, number> = { records: -1.6, tavern: 2.2 };
+const LANES: Record<RoomId, number> = { records: -1.6, tavern: 2.2, library: -1.45 };
+/** how far from its back wall's face a walk down its lane may stop (m): the library's cases stand out from the wall */
+const BACK_STOP: Record<RoomId, number> = { records: 0.85, tavern: 0.85, library: 1.45 };
 /** how far a yard dummy may stand from its spot after a visit (m): the lobby's foes stand in the village's frame, and
  *  kept in the room's walls as he stood inside, they were shoved into its corner by the fountain and left there */
 const DUMMY_KEPT = 0.05;
@@ -44,6 +48,8 @@ const VISITS: readonly { id: RoomId; view: ViewMode }[] = [
   { id: 'tavern', view: 'third' },
   { id: 'records', view: 'first' },
   { id: 'tavern', view: 'top' },
+  { id: 'library', view: 'third' },
+  { id: 'library', view: 'top' },
 ];
 
 /** What a visit found: its lines, its problems, and whether a canary planted in it was caught. */
@@ -101,14 +107,14 @@ const villageShown = (): boolean => G.arena.groupOf('village').visible;
 const roomShown = (id: RoomId): boolean => G.arena.rooms![id].group.visible;
 
 /** The hero put at (x, z), facing `facing`, and let settle. */
-async function stand(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
+export async function stand(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
   await lab.step(SETTLE);
 }
 
 /** The view switched by V, as the player switches it, until it's `view`. */
-async function viewAs(lab: Lab, view: ViewMode): Promise<void> {
+export async function viewAs(lab: Lab, view: ViewMode): Promise<void> {
   for (let presses = 0; viewMode() !== view && presses < 3; presses++) {
     await lab.step(1, () => ({ keys: ['v'] }));
     await lab.step(2);
@@ -118,7 +124,7 @@ async function viewAs(lab: Lab, view: ViewMode): Promise<void> {
 }
 
 /** `o` used by E where the hero stands: a problem if it isn't the object near him. */
-async function useByE(lab: Lab, o: VillageObject, problems: string[]): Promise<void> {
+export async function useByE(lab: Lab, o: VillageObject, problems: string[]): Promise<void> {
   const near = objectNear();
   if (near !== o) problems.push(`at ${o.id}'s stand the object near is ${near?.id ?? 'none'}`);
   await lab.step(1, () => ({ keys: ['e'] }));
@@ -216,8 +222,71 @@ async function partyTableProblems(lab: Lab): Promise<string[]> {
   return problems;
 }
 
+/** The library's Codex used by E: the in-game guide opened over the pause menu, within the window; Esc puts both
+ *  away. */
+async function codexProblems(lab: Lab, moments: Pictured[]): Promise<string[]> {
+  const book = villageObject('codex')!;
+  await stand(lab, book.stand, Math.PI);
+  const problems: string[] = [];
+  await useByE(lab, book, problems);
+  await lab.step(5);
+  const guide = document.getElementById('guide')!;
+  if (guide.classList.contains('hidden')) problems.push('the Codex opened no guide');
+  const box = (guide.querySelector('.gd-box') ?? guide).getBoundingClientRect();
+  if (box.left < -1 || box.top < -1 || box.right > innerWidth + 1 || box.bottom > innerHeight + 1) {
+    problems.push(`the guide leaves the window: ${box.left},${box.top} to ${box.right},${box.bottom}`);
+  }
+  moments.push(await lab.screen('houses-codex-guide'));
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  await lab.step(5);
+  if (!guide.classList.contains('hidden')) problems.push('Esc left the guide open');
+  if (G.menuOpen) problems.push('the pause menu under the guide stayed open after it was put away');
+  return problems;
+}
+
+/** Brother Hollis talked to by E at his table: seated, the talk card up within the window, a reply picked by its key
+ *  leading on (the rumour of the door behind the hall), the replies all within the card, and Esc ending it. `plant`:
+ *  the card made wider than the window, which must be found (returned as `caught`). */
+async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): Promise<{ problems: string[]; caught: boolean }> {
+  const problems: string[] = [];
+  const room = G.arena.rooms!.library;
+  if (!room.folk?.()) problems.push('the library has no scholar seated');
+  const him = villageObject('scholar')!;
+  await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
+  await useByE(lab, him, problems);
+  await lab.step(30);
+  const card = document.getElementById('talk')!;
+  const box = card.querySelector('.tk-box') as HTMLElement;
+  // (its max width lifted too, and kept from shrinking: the modal box's own and its flex row both held a width set
+  // past the window in it)
+  if (plant) Object.assign(box.style, { width: `${innerWidth * 2}px`, maxWidth: 'none', flexShrink: '0' });
+  if (card.classList.contains('hidden')) problems.push('E at the scholar opened no talk');
+  const within = (r: DOMRect) => r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
+  const outside = (what: string, r: DOMRect) => `${what} leaves the window: ${r.left.toFixed(0)},${r.top.toFixed(0)} to ${r.right.toFixed(0)},${r.bottom.toFixed(0)}`;
+  const boxAt = box.getBoundingClientRect();
+  const caught = plant && !within(boxAt);
+  if (!within(boxAt) && !plant) problems.push(outside('the talk card', boxAt));
+  for (const reply of card.querySelectorAll('.tk-reply')) {
+    const r = reply.getBoundingClientRect();
+    if (!within(r) && !plant) problems.push(outside(`the reply "${reply.textContent}"`, r));
+  }
+  moments.push(await lab.screen('houses-scholar-talk'));
+  // (the third reply: what's strange lately, the door behind the great hall)
+  await lab.step(1, () => ({ keys: ['3'] }));
+  await lab.step(5);
+  const says = card.querySelector('.tk-says')?.textContent ?? '';
+  if (!/behind the great hall/.test(says)) problems.push(`the scholar's third reply said no door behind the hall: "${says.slice(0, 80)}"`);
+  moments.push(await lab.screen('houses-scholar-rumour'));
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  await lab.step(5);
+  if (!card.classList.contains('hidden')) problems.push('Esc left the talk open');
+  if (G.menuOpen) problems.push('the Esc that ended the talk opened the pause menu');
+  if (plant) Object.assign(box.style, { width: '', maxWidth: '', flexShrink: '' });
+  return { problems, caught };
+}
+
 /** One visit: in at the door, what the room shows, a walk at its back wall, out by its door. */
-async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, moments: Pictured[]): Promise<Visit> {
+async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, moments: Pictured[], plantTalk = false): Promise<Visit> {
   const lines: string[] = [];
   const problems: string[] = [];
   await viewAs(lab, view);
@@ -254,7 +323,7 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   await lab.step(WALK, () => ({ keys: ['w'] }));
   const [, hz] = HOUSES[id].half;
   const walked = from - G.player.pos.z;
-  const reached = G.player.pos.z < -hz + G.player.radius + 0.5;
+  const reached = G.player.pos.z < -hz + BACK_STOP[id];
   if (!reached) problems.push(`${id}: walking at the back wall he stopped ${walked.toFixed(2)} m on, short of it`);
   if (G.player.pos.z < -hz + KEPT_IN) {
     problems.push(`${id}: walked through the back wall to z ${G.player.pos.z.toFixed(2)}`);
@@ -267,6 +336,13 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
     if (view === 'top') problems.push(...await ledgerProblems(lab, moments));
   }
   if (id === 'tavern' && view === 'third') problems.push(...await partyTableProblems(lab));
+  let talkCaught: boolean | undefined;
+  if (id === 'library' && view === 'third') {
+    problems.push(...await codexProblems(lab, moments));
+    const talk = await scholarProblems(lab, moments, plantTalk);
+    problems.push(...talk.problems);
+    talkCaught = talk.caught;
+  }
   // (out by its door inside)
   const way = villageObject(`${id}Out`)!;
   await stand(lab, way.stand, 0);
@@ -286,7 +362,11 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   lines.push(dummies.line);
   const dummiesMoved = dummies.problems.length > 0;
   if (!canary) problems.push(...dummies.problems);
-  return { lines, problems, caught: canary ? caught === true && leftShown && dummiesMoved : undefined };
+  return {
+    lines,
+    problems,
+    caught: plantTalk ? talkCaught === true : canary ? caught === true && leftShown && dummiesMoved : undefined,
+  };
 }
 
 /** The canary's program: a mesh in a material no other program has, added to room `id` for its next draw. */
@@ -314,13 +394,18 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   const moments: Pictured[] = [];
   const visits: Visit[] = [];
   for (const [i, { id, view }] of VISITS.entries()) {
-    visits.push(await visit(lab, id, view, options.canary && i === 0, moments));
+    // (the canary's other fault: the scholar's talk card made wider than the window, in the library's first visit)
+    const plantTalk = options.canary && id === 'library' && view === 'third';
+    visits.push(await visit(lab, id, view, options.canary && i === 0, moments, plantTalk));
   }
   moments.push(await yardPicture(lab));
   const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...visits.flatMap((v) => v.lines)];
   const problems = visits.flatMap((v) => v.problems);
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
-  const caught = visits[0].caught === true;
-  lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's walls, the room left drawn going out)`);
+  const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');
+  const caught = visits[0].caught === true && talked?.caught === true;
+  lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's `
+    + `walls, the room left drawn going out: ${visits[0].caught ? 'found' : 'unseen'}; `
+    + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'})`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }

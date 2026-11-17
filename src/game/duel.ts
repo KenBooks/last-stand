@@ -28,7 +28,7 @@ export type DuelPart = 0 | 1 | 'watch';
 export type Side = 0 | 1;
 /** the rounds a match may be won by, and the one it is unless chosen (#406: "first to 3") */
 export const DUEL_WINS = [1, 3, 5] as const;
-const WINS_USUAL = 3;
+export const WINS_USUAL = 3;
 
 /** A duel as agreed: its battleground, how many a side, the rounds that win it, whether gear counts, and each
  *  player's part by its slot. */

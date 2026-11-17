@@ -1,5 +1,5 @@
 // `lab winding`: which way the game's faces point (tools/lab). Every model (the heroes, the foes, the dummy) built
-// afresh and every biome's props, each mesh split into its parts and each part judged by its signed volume
+// afresh, the library's scholar as he sits, and every biome's props, each mesh split into its parts and each part judged by its signed volume
 // (page/windingParts.ts): out, in, or open. A part wound inside out shows its inside wherever its material draws one
 // side only: the forest's roots, `taperTube`s wound inwards, drew as black lines on the floor (#289). On a
 // double-sided material three turns a back face's normal to the camera, which hides it, so those are listed apart
@@ -22,6 +22,8 @@ export interface WindingOptions {
 }
 
 const CANARY_NAME = 'winding canary';
+/** the library's scholar, read as a model by this name (`--models scholar`) */
+const SCHOLAR = 'scholar';
 /** the parts named a subject at most */
 const NAMED = 12;
 
@@ -136,7 +138,13 @@ export async function winding(lab: Lab, options: WindingOptions): Promise<Report
     lines.push(...found.lines);
     problems.push(...found.problems);
   };
-  for (const id of options.models ?? Object.keys(MODELS)) add(id, readOf(MODELS[id]().root));
+  for (const id of options.models ?? Object.keys(MODELS)) if (id !== SCHOLAR) add(id, readOf(MODELS[id]().root));
+  // (the library's scholar: no model of MODELS, he's seated in his room once the heroes' heads are made)
+  if (!options.models || options.models.includes(SCHOLAR)) {
+    const folk = G.arena.rooms?.library.folk?.();
+    if (folk) add(SCHOLAR, readOf(folk.root));
+    else problems.push('the library has no scholar seated to read');
+  }
   const biomes = options.biomes ?? [...BIOME_IDS];
   let caught: boolean | null = null;
   for (const biome of biomes) {

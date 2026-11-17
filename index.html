@@ -721,6 +721,7 @@
       <button class="tab" data-pause-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab" data-pause-tab="performance" role="tab" aria-selected="false">Performance</button>
       <button class="tab" data-pause-tab="beta" role="tab" aria-selected="false">Beta</button>
+      <button class="tab" data-pause-tab="guide" role="tab" aria-selected="false">Guide</button>
     </div>
     <div class="pb-pages">
       <section class="pb-page" data-pause-page="controls" role="tabpanel">
@@ -813,6 +814,16 @@
         </div>
       </section>
       <!-- features to try before they're the game's (ui/beta.ts, core/beta.ts): switched here, taken up by a reload -->
+      <!-- the guide's doors (ui/guide/): a section each, opened over the menu -->
+      <section class="pb-page off pb-guide" data-pause-page="guide" role="tabpanel">
+        <p class="pbg-intro">Every foe and boss, how each hero plays, and what helps you survive, with the game's own figures. <span class="pbg-key">Press <kbd>G</kbd> to open it anywhere.</span></p>
+        <div class="pbg-doors">
+          <button class="pbg-door" data-guide-open="foes"><b>Foes</b><span>What each one does and how to beat it</span></button>
+          <button class="pbg-door" data-guide-open="bosses"><b>Bosses</b><span>Their attacks and how to fight them</span></button>
+          <button class="pbg-door" data-guide-open="heroes"><b>Heroes</b><span>Skills, weapons, loadouts and combos</span></button>
+          <button class="pbg-door" data-guide-open="tips"><b>Tips</b><span>Banking, loot, blocking, co-op and more</span></button>
+        </div>
+      </section>
       <section class="pb-page pb-opts off" data-pause-page="beta" role="tabpanel">
         <div class="pb-opt-col beta-col">
           <div class="beta-lead">Features still being worked on. Try one, and switch it off again here at any time.</div>
@@ -925,7 +936,36 @@
     </div>
     <div class="help-actions">
       <button class="btn hidden" id="btn-help-restart">Restart training</button>
+      <button class="btn" id="btn-help-guide">Open the guide</button>
       <button class="btn primary" id="btn-help-close">Got it</button>
+    </div>
+  </div></div>
+
+  <!-- the guide (ui/guide/): its sections, a section's entries and the page, each made from the game's data as it opens -->
+  <!-- talking to the village's folk (ui/talk.ts, what each says in data/talk.ts): a card at the foot of the screen -->
+  <div id="talk" class="modal hidden"><div class="modal-box tk-box" role="dialog" aria-label="Talk">
+    <div class="tk-emblem" aria-hidden="true"><svg viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="29" fill="#1a120c" stroke="#c99a48" stroke-width="2.5"/>
+      <path d="M32 40 C24 35 15 35 10 37 L10 22 C15 20 24 20 32 25 C40 20 49 20 54 22 L54 37 C49 35 40 35 32 40Z" fill="#e8d8b0" stroke="#5a3a1a" stroke-width="1.5"/>
+      <path d="M32 25 L32 40" stroke="#5a3a1a" stroke-width="1.5"/>
+      <path d="M15 26h12M15 30h12M37 26h12M37 30h12M15 34h10M37 34h10" stroke="#7a5a3a" stroke-width="1.2"/>
+      <path d="M44 10 C47 14 47 17 44 19 C41 17 41 14 44 10Z" fill="#ffc870"/><rect x="42.5" y="19" width="3" height="5" fill="#f2e6c8"/>
+    </svg></div>
+    <div class="tk-body">
+      <div class="tk-head"><span class="tk-name"></span><span class="tk-title"></span><button class="tk-close" aria-label="Close">&times;</button></div>
+      <div class="tk-says"></div>
+      <div class="tk-replies"></div>
+    </div>
+  </div></div>
+  <div id="guide" class="modal hidden"><div class="modal-box gd-box" role="dialog" aria-label="Guide">
+    <div class="gd-head">
+      <div class="sm-title">Guide</div>
+      <div class="tabs gd-sections" role="tablist"></div>
+      <button class="btn" id="btn-guide-close">Close</button>
+    </div>
+    <div class="gd-body">
+      <nav class="gd-entries" aria-label="Entries"></nav>
+      <article class="gd-page"></article>
     </div>
   </div></div>
 
