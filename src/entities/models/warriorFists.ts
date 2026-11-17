@@ -20,6 +20,7 @@ import { curve, type Keys } from './motion';
 import { fromEyes, fromScreen } from '../viewModel';
 import { lerp, smooth } from '../../util';
 import { POUNCE } from '../../data/balance';
+import { tunable } from '../../core/tuning';
 
 /** a hand closing: its curl and its fingers' spread on the way (models/hands.ts `poseHand`), and from how far closed
  *  it is a fist, the hand shut as round a handle this thin (m, `hold`) */
@@ -29,20 +30,28 @@ export const FIST = { curl: 1.7, spread: 0.02, from: 0.6, r: 0.012 };
  *  up, ahead): the lead (left) further out, both at the cheeks and out before the face, the elbows in by the ribs */
 const GUARD = { lead: [0.13, 0.11, 0.3], rear: [-0.12, 0.08, 0.2] };
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
- *  edges, and metres ahead): each fist in its bottom corner, the lead (left) a little higher and further in, both
- *  wholly in the frame, as a first-person brawler's fists are held; a little lower out of a fight */
-const GUARD_EYES = { lead: [-0.62, -0.55, 0.52], rear: [0.72, -0.7, 0.48] }, EASY_EYES = -0.22;
+ *  edges, and metres ahead): each fist low at its own side, the lead (left) a little higher and further in, both
+ *  wholly in the frame, reached from his own shoulders as the ranger's hands are (`fistsLens`); a little lower out of
+ *  a fight. In the corners from shoulders under the eyes, the fists were huge blobs at the view's foot */
+const GUARD_EYES = tunable('fistsEyes', {
+  lead: [-0.34, -0.42, 0.52], rear: [0.46, -0.6, 0.46],
+  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored) */
+  line: [0.6, 0.75, 0.25],
+  /** how far out the elbows' way is through the eyes */
+  pole: 0.7,
+  /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
+  punch: [0.12, -0.28],
+}), EASY_EYES = -0.22;
 /** where a punch lands: on his middle line at the chin's height, further than the arm reaches (it goes out straight
  *  at it, a little short of locked); through the eyes under the crosshair, a little to the fist's own side, where
  *  the screen's line there meets the arm's reach (aimed further, the arm pointed at it from the shoulder under the
  *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
-const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.55, up: -0.42 };
+const PUNCH_AT = [0, -0.04, 1.2];
 /** how much of its length an arm thrown out in a punch keeps short of straight (a locked elbow reads as a stick) */
 const PUNCH_REACH = 0.97;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
 const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
-const POLE_EYES = 0.7;
 
 /** a punch over its cast: how far the fist is out (a hair drawn back first, out fast, held on the blow as the skill
  *  lands at 0.5, back to the guard), and the hips' and the chest's turn led a little ahead of it */
@@ -85,8 +94,14 @@ function seen(j: Joints, cam: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 
 }
 
 /** The arms through the eyes are drawn by a camera of their own, narrower than the world's (models/warrior.ts
- *  `EYES.fov`, 45 degrees against 66): a place on the world's screen shows this much further out on theirs. */
-const ARMS_LENS = Math.tan((45 * Math.PI) / 360) / Math.tan((66 * Math.PI) / 360);
+ *  `EYES.fov`, 45 degrees against 66): a place on the world's screen shows this much further out on theirs. Bare
+ *  fists are drawn at the world's lens (`fistsLens`), as the ranger's hands are, and a place shows where it is. */
+const NARROW_LENS = Math.tan((45 * Math.PI) / 360) / Math.tan((66 * Math.PI) / 360);
+let ARMS_LENS = NARROW_LENS;
+/** Whether the fists through the eyes are drawn at the world's own lens this frame (both hands bare), or the arms'. */
+export function fistsLens(world: boolean): void {
+  ARMS_LENS = world ? 1 : NARROW_LENS;
+}
 /** A place on the arms' screen (as `fromScreen`'s, across and up to their frame's edges, and metres ahead) in the
  *  body's frame. */
 const onScreen = (j: Joints, on: readonly number[], out: THREE.Vector3): THREE.Vector3 =>
@@ -100,7 +115,7 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = fa
   _sq.copy(shoulder.quaternion); _eq.copy(elbow.quaternion);
   j.chest.worldToLocal(j.body.localToWorld(_at.copy(at)));
   _pole.copy(left ? POLE_L : POLE_R);
-  if (eyes) _pole.x *= POLE_EYES / POLE_L.x;
+  if (eyes) _pole.x *= GUARD_EYES.pole / POLE_L.x;
   reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _at, _pole);
   // (each from the pose's own towards the reach: `slerpQuaternions` into one of its own ends copies over it first)
   if (w < 1) { shoulder.quaternion.copy(_sq.slerp(shoulder.quaternion, w)); elbow.quaternion.copy(_eq.slerp(elbow.quaternion, w)); }
@@ -135,10 +150,10 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
   const bob = 0.008 * Math.sin(t * 1.8) + 0.006 * (1 - easy) * Math.sin(t * 5.2);
   if (!shielded) {
     place(j, true, guardAt(j, true, eyes, easy, bob, _far), w, eyes);
-    lineTo(fistLine.L, sided(LINE.guard, true), 1);
+    lineTo(fistLine.L, sided(eyes ? GUARD_EYES.line : LINE.guard, true), 1);
   }
   place(j, false, guardAt(j, false, eyes, easy, bob * 0.8, _far), w, eyes);
-  lineTo(fistLine.R, LINE.guard, 1);
+  lineTo(fistLine.R, eyes ? GUARD_EYES.line : LINE.guard, 1);
   // (the wrists straight behind the knuckles)
   j.handL.rotation.set(lerp(j.handL.rotation.x, 0, w), 0, 0);
   j.handR.rotation.set(lerp(j.handR.rotation.x, 0, w), 0, 0);
@@ -150,7 +165,8 @@ function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): T
   const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * PUNCH_REACH;
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
   if (eyes) {
-    const on = [left ? -PUNCH_EYES.across : PUNCH_EYES.across, PUNCH_EYES.up];
+    const [across, up] = GUARD_EYES.punch;
+    const on = [left ? -across : across, up];
     if (onReach(onScreen(j, [on[0], on[1], 0.1], _near), onScreen(j, [on[0], on[1], 1.5], out), _sh, reach, out)) {
       return out;
     }

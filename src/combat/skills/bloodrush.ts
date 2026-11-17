@@ -25,6 +25,25 @@ const BRACE = 0.1, HOLD = 0.27;
 /** it meets what comes within this of its middle, past the foe's size (m) */
 const REACH = 1.1;
 const DUST = 0x2a241c, BLOOD = 0xff3a1a;
+/** blood as it shows (linear: drops dark, the mist a little brighter), drawn blended, not as light: from play, "blood
+ *  rush need a visual efffect to indicate some hint on blood" (its trail was orange sparks and dust) */
+const GORE = { drop: 0x9a0808, mist: 0xa81414 };
+
+/**
+ * Blood thrown from `at` along `dir` (flat): `count` drops flung on and up that fall and lie a moment where they land,
+ * and a puff of red mist hanging where they left. Blended, so it reads as blood whatever the light, and adds no light.
+ */
+function bloodSpray(at: { x: number; y: number; z: number }, dir: THREE.Vector3, count: number): void {
+  for (let i = 0; i < count; i++) {
+    const s = rand(2, 6), side = rand(-1.6, 1.6);
+    particles.smoke.spawn({
+      x: at.x + rand(-0.12, 0.12), y: at.y + rand(-0.15, 0.15), z: at.z + rand(-0.12, 0.12),
+      vx: dir.x * s - dir.z * side, vy: rand(0.5, 3.5), vz: dir.z * s + dir.x * side,
+      life: rand(0.8, 1.2), size: rand(0.06, 0.13), sizeEnd: 0.05, color: col(GORE.drop), alpha: 0.95, gravity: 16, drag: 0.6,
+    });
+  }
+  smokePuff(at, { count: 5, color: GORE.mist, alpha: 0.55, size: 0.45, sizeEnd: 1.3, life: 0.6, speed: 1.2, rise: 0.2 });
+}
 
 /** The way covered by `u` of the dash: nothing while it braces, then flat out, slowing over its last fifth. */
 function pace(brace: number): (u: number) => number {
@@ -58,18 +77,29 @@ const skill: InstantSkill = {
         debris(back, { count: 8, speed: 4 });
         smokePuff(back, { count: 6, color: DUST, alpha: 0.5, size: 0.7, sizeEnd: 2, speed: 2.5 });
         sfx.bullLaunch();
+        bloodSpray({ x: p.x, y: 1.1, z: p.z }, dir, 8);
       }
       if (player.local) kickFov(6);
-      // dust thrown up behind and red streaks of his heat streaming off him
+      // dust thrown up behind, and a red haze of his blood's heat streaming off him, a drop now and then falling from it
       if ((dust -= G.dt) <= 0) {
         dust = 0.04;
         smokePuff({ x: p.x - dir.x * 0.4, y: 0, z: p.z - dir.z * 0.4 }, { count: 1, color: DUST, alpha: 0.4, size: 0.5, sizeEnd: 1.6, life: 0.7, speed: 0.6 });
         decal(p, { type: 'scorch', size: 0.6, life: 2, opacity: 0.35 });
+        particles.smoke.spawn({
+          x: p.x - dir.x * 0.3 + rand(-0.2, 0.2), y: rand(0.8, 1.5), z: p.z - dir.z * 0.3 + rand(-0.2, 0.2),
+          vx: -dir.x * rand(2, 4), vy: rand(0, 0.4), vz: -dir.z * rand(2, 4),
+          life: rand(0.35, 0.55), size: rand(0.35, 0.55), sizeEnd: 1.1, color: col(GORE.mist), alpha: 0.42, drag: 3,
+        });
+        particles.smoke.spawn({
+          x: p.x + rand(-0.25, 0.25), y: rand(0.9, 1.4), z: p.z + rand(-0.25, 0.25),
+          vx: -dir.x * rand(1, 3), vy: rand(0, 1), vz: -dir.z * rand(1, 3),
+          life: 0.9, size: rand(0.05, 0.09), sizeEnd: 0.04, color: col(GORE.drop), alpha: 0.95, gravity: 16, drag: 0.6,
+        });
       }
-      for (let i = 0; i < 3; i++) particles.glow.spawn({
+      for (let i = 0; i < 2; i++) particles.glow.spawn({
         x: p.x + rand(-0.3, 0.3), y: rand(0.6, 1.6), z: p.z + rand(-0.3, 0.3),
         vx: -dir.x * rand(5, 9), vy: rand(0, 0.8), vz: -dir.z * rand(5, 9),
-        life: rand(0.12, 0.22), size: rand(0.03, 0.06), sizeEnd: 0, color: col(0xff8050, 1.6), colorEnd: col(0x601008, 0.2),
+        life: rand(0.12, 0.22), size: rand(0.03, 0.05), sizeEnd: 0, color: col(0xff2a14, 1.2), colorEnd: col(0x400404, 0.1),
       });
       hurtPropsIn(player, p.x, p.z, REACH, PROP_DAMAGE.trample, struck);
       for (const e of G.enemies) {
@@ -79,6 +109,8 @@ const skill: InstantSkill = {
         // (struck along the dash as he passes: what it kills is thrown on that way)
         const dealt = hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock: 3, from: p, blow: { dir, lift: 0.3 } });
         fistMark(e, player.frenzy, 8);
+        // (blood thrown on from what he hit, along his way)
+        bloodSpray({ x: e.pos.x, y: e.height * 0.6, z: e.pos.z }, dir, 22);
         sfx.bullHit();
         if (player.local) addShake(0.12);
         if (dealt > 0 && !player.sandbox && built < (def.frenzyMost ?? Infinity)) { built++; gainFrenzy(player, def.frenzy ?? 0); }

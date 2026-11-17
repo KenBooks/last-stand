@@ -238,7 +238,8 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera, gliding = on)
     if (on) shown.add(m); else shown.delete(m);
     m.firstPerson?.(on);
   }
-  drawArms(ownCamera ? m.armsFov!() : null);
+  const armsLens = ownCamera ? m.armsFov!() ?? (cam as THREE.PerspectiveCamera).fov : null;
+  drawArms(armsLens);
   const root = m.root, parent = root.parent;
   let p = placed.get(m);
   if (p && p.ourPos.equals(root.position) && p.ourQuat.equals(root.quaternion)) { root.position.copy(p.pos); root.quaternion.copy(p.quat); }
@@ -251,7 +252,7 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera, gliding = on)
   if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) {
     const lens = cam as THREE.PerspectiveCamera;
     // (the view the arms are drawn with: their own camera's, or the world's)
-    const fov = ownCamera ? m.armsFov!() : lens.fov;
+    const fov = armsLens ?? lens.fov;
     halfUp = Math.tan((fov * Math.PI) / 360) / lens.zoom;
     halfAcross = halfUp * lens.aspect;
   }

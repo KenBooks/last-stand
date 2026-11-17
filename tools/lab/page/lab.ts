@@ -1264,7 +1264,9 @@ export class Lab {
    * alone was read three ways).
    */
   private renderArmsFromOutside(): void {
-    const fov = this.model.armsFov?.() ?? null;
+    // (a model's arms at the world's lens are still drawn by their own camera: null from it is that lens)
+    const ownLens = this.model.armsFov?.();
+    const fov = ownLens === undefined ? null : ownLens ?? (G.camera as THREE.PerspectiveCamera).fov;
     const layers = G.camera.layers.mask;
     // (the arms' layer, as their own camera draws it)
     const arms = renderer.armsCamera().layers.mask;

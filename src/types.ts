@@ -582,8 +582,9 @@ export interface Model {
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;
   /** through its own eyes, the field of view (vertical, degrees) its arms and what they hold are drawn with, by a camera
-   *  of their own over the world's (core/renderer.ts `drawArms`); none: by the world's */
-  armsFov?(): number;
+   *  of their own over the world's (core/renderer.ts `drawArms`); none: by the world's. Null: by their own camera at the
+   *  world's lens this frame (drawn over the world, as large as the world would draw them) */
+  armsFov?(): number | null;
   /** cloth simulated on the model's own joints (a sleeve; models/sleeve.ts): stepped in `animate` */
   readonly cloths?: { update(dt: number): void; reset(): void }[];
   /** re-settle simulated parts after a teleport */
