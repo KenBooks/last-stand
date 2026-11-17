@@ -24,6 +24,10 @@ export const HOUSES: Record<RoomId, House> = {
   library: { id: 'library', cottage: 4, name: 'The Library', half: [5.6, 4.2], high: 3.8 },
 };
 
+/** Brother Hollis's reading table in the library (world/library.ts): where his chair stands (x, z in the room's frame)
+ *  and how it's turned (rad about y: 0 faces +z, the door), towards the room's middle, so he's seen from the door. */
+export const SCHOLAR_DESK = { x: -2.9, z: 0.6, turn: 0.5 };
+
 /** How far in from the room's front wall a hero comes in (m), and how far out from the cottage's door he comes out. */
 export const ENTER_IN = 1.9;
 export const EXIT_OUT = 1.3;
@@ -83,6 +87,12 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
     // (the library's great book on its lectern before the back wall's shelves: the in-game guide)
     { id: 'codex', use: 'guide', room: 'library', at: [0, -lz + 1.6], reach: 1.9, stand: [0, -lz + 2.9], label: 1.55, tall: 1.7,
       name: 'Codex of Wardenhollow', verb: 'Read the guide' },
+    // (Brother Hollis at his reading table: talked to across it)
+    (() => {
+      const { x, z, turn } = SCHOLAR_DESK, c = Math.cos(turn), s = Math.sin(turn);
+      return { id: 'scholar', use: 'talk', room: 'library', at: [x + s * 0.1, z + c * 0.1], reach: 2.4,
+        stand: [x + s * 1.45, z + c * 1.45], label: 1.62, tall: 1.5, name: 'Brother Hollis', verb: 'Talk' } satisfies VillageObject;
+    })(),
   ];
 })();
 

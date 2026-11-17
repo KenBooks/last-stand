@@ -60,6 +60,7 @@ import type { ProgramsOptions } from './programs';
 import type { MapsOptions } from './maps';
 import type { TilesOptions } from './tiles';
 import type { WindingOptions } from './winding';
+import type { ScholarOptions } from './scholar';
 import type { WallOptions } from './wallGap';
 import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
@@ -816,6 +817,12 @@ export async function training(lab: Lab, command: { canary: boolean }): Promise<
 /** The village's houses walked into and out of: each room shown in the village's stead, compiling nothing. */
 export async function houses(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { houses: measure } = await import('./houses');
+  return measure(lab, command);
+}
+
+/** The library's scholar: his loop posed through with no snap, his glance and his eye while talked to, pictured. */
+export async function scholar(lab: Lab, command: ScholarOptions): Promise<Report> {
+  const { scholar: measure } = await import('./scholar');
   return measure(lab, command);
 }
 

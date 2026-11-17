@@ -1294,7 +1294,7 @@ function strandMap(dense = false): THREE.DataTexture {
  * A hair card: a ribbon `width(t)` wide along a curve through `pts`, lying flat on the head (its face
  * turned out from `centre`, unless `facing` turns it), the strands running along it.
  */
-function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: THREE.Vector3, segs: number, twist = 0, shade: (t: number) => number = () => 1,
+export function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: THREE.Vector3, segs: number, twist = 0, shade: (t: number) => number = () => 1,
   facing?: (t: number, O: THREE.Vector3, p: THREE.Vector3) => void, vAt: (t: number) => number = (t) => t): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts), pos: number[] = [], uv: number[] = [], idx: number[] = [], col: number[] = [];
   const p = new THREE.Vector3(), T = new THREE.Vector3(), O = new THREE.Vector3(), X = new THREE.Vector3();

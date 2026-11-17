@@ -10,6 +10,9 @@ import type { Obstacle } from '../types';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { mulberry, rand } from '../util';
 import { particles, col } from '../fx/particles';
+import { G } from '../state';
+import { buildScholar, type Scholar } from '../entities/models/scholar';
+import { SCHOLAR_DESK } from '../data/houses';
 import {
   BODY, CANDLE, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
   parchment, rug, stool, table, writing, type Build, type Mats, type Room,
@@ -377,6 +380,63 @@ function codex(g: THREE.Group, M: Mats, b: Build, x: number, z: number): void {
   for (const sx of [-1, 1]) b.obstacles.push({ x: x + sx * 0.85, z: z + 0.2, r: 0.16, h: 1.6 });
 }
 
+/** Whether Brother Hollis is talked to now (main.ts sets it as his dialogue opens and closes, ui/talk.ts): he looks up
+ *  and holds the hero's eye. */
+export const scholarTalk = { talking: false };
+
+/** Brother Hollis's reading table (data/houses.ts `SCHOLAR_DESK`, turned to face the room): a chair with a high back
+ *  where he sits, the table before it, his book open on it facing him, a candle (its light one of the room's ten, the
+ *  reading desk's he took the place of), a stack of books, his inkwell and quill, a scroll. He himself is seated later
+ *  (`seat`): his head and hands are the heroes', made in workers as the game loads, after the rooms are built. */
+function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
+  const { x, z, turn } = SCHOLAR_DESK;
+  const d = new THREE.Group();
+  d.position.set(x, 0, z);
+  d.rotation.y = turn;
+  g.add(d);
+  const temp: typeof b.obstacles = [];
+  table(d, M, 0, 0.62, 1.2, 0.72, temp, 0.76);
+  // (his chair: a seat, legs, a high back of slats under a carved rail)
+  box(d, 0.48, 0.05, 0.46, 0, 0.41, -0.04, M.oak);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(d, 0.05, 0.41, 0.05, sx * 0.2, 0, -0.04 + sz * 0.19, M.timber);
+  for (const sx of [-1, 1]) box(d, 0.055, 0.72, 0.05, sx * 0.21, 0.46, -0.25, M.timber);
+  for (let k = -2; k <= 2; k++) box(d, 0.04, 0.5, 0.02, k * 0.07, 0.52, -0.255, M.panel);
+  box(d, 0.5, 0.08, 0.06, 0, 1.12, -0.25, M.oak);
+  // (his book, open towards him: turned half round, its first page on his left)
+  const SIZE = 0.44;
+  openBook(d, M, 0, 0.76, 0.5, Math.PI, SIZE, 5);
+  // (the page he turns: its writing on both its faces)
+  const page = writing(M, 192, 256, SIZE * 0.47, SIZE * 0.64);
+  page.write((cx, w, h) => inkedPage(cx, w, h, false, 37));
+  const pageMat = page.mesh.material as THREE.MeshStandardMaterial;
+  pageMat.side = THREE.DoubleSide;
+  // (beside it, his things: a stack of books, the candle on its dish, the inkwell and quill, a scroll)
+  for (let k = 0; k < 4; k++) box(d, 0.26 - k * 0.015, 0.05, 0.19, 0.42, 0.76 + k * 0.05, 0.72, M.leather).rotation.y = (k % 2 ? 0.25 : -0.1);
+  drum(d, 0.05, 0.06, 0.02, -0.4, 0.76, 0.78, M.brass, 10);
+  candle(d, M, -0.4, 0.78, 0.78, 0.18, CANDLE);
+  drum(d, 0.028, 0.032, 0.045, 0.3, 0.76, 0.42, M.dark, 10);
+  const quill = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.8 }));
+  quill.position.set(0.32, 0.9, 0.45);
+  quill.rotation.set(-0.35, 0, -0.3);
+  d.add(quill);
+  const scroll = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.36, 10).rotateZ(Math.PI / 2), M.paper);
+  scroll.position.set(-0.12, 0.79, 0.86);
+  scroll.rotation.y = 0.2;
+  d.add(scroll);
+  // (its circles where they stand in the room, and his chair's)
+  d.updateMatrix();
+  for (const o of [...temp, { x: 0, z: -0.05, r: 0.42, h: 1.2 }]) {
+    const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
+    b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
+  }
+  return () => {
+    const s = buildScholar({ spine: new THREE.Vector3(0, 0.796, 0.5), pageW: SIZE * 0.47, pageD: SIZE * 0.64, page: pageMat });
+    s.root.position.set(0, 0, -0.03);
+    d.add(s.root);
+    return s;
+  };
+}
+
 /** The library: built into `group`. */
 export function buildLibrary(group: THREE.Group): Room {
   const id: RoomId = 'library', b = begin(id, group, 2718), { g, M, rng } = b;
@@ -450,7 +510,7 @@ export function buildLibrary(group: THREE.Group): Room {
   rug(g, M, 0, -2.4, 3.2, 2.0, ['#4a1414', '#c09a50', '#1e2a40'], 41);
   rug(g, M, 0, 1.2, 3.6, 2.4, ['#1e2a3a', '#b08a40', '#5a1a14'], 43);
   codex(g, M, b, 0, -hz + 1.6);
-  readingDesk(g, M, b, -2.7, 1.3, 0.12, 1);
+  const seat = scholarDesk(g, M, b);
   readingDesk(g, M, b, 1.9, 2.2, -0.2, 2);
   globe(g, M, 3.1, -2.2);
   b.obstacles.push({ x: 3.1, z: -2.2, r: 0.35, h: 1.3 });
@@ -478,5 +538,23 @@ export function buildLibrary(group: THREE.Group): Room {
       });
     }
   });
-  return finish(id, b, { look: libraryLook() });
+  // (Brother Hollis, seated once the heroes' heads and hands are made: he reads, glances up at a hero come near, and
+  // looks up from his book while he's talked to)
+  let scholar: Scholar | undefined;
+  const hero = new THREE.Vector3();
+  b.updaters.push((dt) => {
+    if (!scholar) return;
+    const me = G.player;
+    scholar.update(dt, me ? hero.copy(me.pos) : null, scholarTalk.talking);
+  });
+  return finish(id, b, {
+    look: libraryLook(),
+    seatFolk() {
+      if (scholar) return;
+      scholar = seat();
+      // (posed once now: its first frame drawn, a warm-up's, is as he reads)
+      scholar.update(0, null, false);
+    },
+    folk: () => scholar,
+  });
 }

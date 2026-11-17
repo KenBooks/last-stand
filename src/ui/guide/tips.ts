@@ -10,6 +10,7 @@ import { formatStat } from '../../loot/items';
 import type { SkillDef, StatKey } from '../../types';
 import { head, num, para, pct, points, secs, whole } from './parts';
 import { runLoop } from './diagrams';
+import { HOLLIS } from '../../data/talk';
 
 export interface Tip { id: string; title: string; html: () => string }
 
@@ -163,6 +164,13 @@ export const TIPS_PAGES: Tip[] = [
         "A charge shoves a hero aside instead of carrying them. A chill slows a hero as it slows a foe.",
         'Blocks, wards and dodges work as they do against foes: a raised shield still turns a blow from the front.',
       ], 'plain'),
+  },
+  {
+    id: 'folk', title: 'Folk of the village',
+    html: () => para(`Some of the village's houses have someone in them to talk to. Walk up and press <b>E</b> (or tap Use, or click them); pick what to say with a click, a tap or its number's key, and Esc ends the talk.`)
+      + points('', [
+        `<b class="gold">${HOLLIS.name}</b>, ${HOLLIS.title.toLowerCase()}, reads at his table in the library, south of the square. He knows the village's old books, and maybe a secret or two: ask him if he has heard anything strange.`,
+      ]),
   },
   {
     id: 'controls', title: 'Controls',

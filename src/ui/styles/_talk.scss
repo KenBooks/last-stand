@@ -1,0 +1,43 @@
+// Talking to the village's folk (ui/talk.ts): a card at the foot of the screen, the room still seen above it (no blur,
+// a shade only towards the foot); his emblem, his name and what he is, his lines fading in one after another, the
+// replies as rows to pick. Narrow or short screens: the emblem shrinks, the lines scroll.
+@use 'theme' as *;
+
+#talk { align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2vh);
+  background: linear-gradient(transparent 45%, rgba(0, 0, 0, .55)); backdrop-filter: none; }
+.tk-box { width: 720px; flex-direction: row; align-items: flex-start; gap: 16px; padding: 16px 18px; text-align: left; }
+.tk-emblem { flex: 0 0 76px; width: 76px; height: 76px; }
+.tk-emblem svg { width: 100%; height: 100%; display: block; }
+.tk-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.tk-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-right: 26px; position: relative; }
+.tk-name { font: 900 22px var(--font-display); color: var(--accent); }
+.tk-title { font-size: 14px; font-style: italic; color: var(--ink-dim); }
+.tk-close { position: absolute; top: -6px; right: -4px; width: 30px; height: 30px; padding: 0; font-size: 24px; line-height: 1;
+  background: none; border: none; color: var(--ink-dim); cursor: $cursor-hand; }
+.tk-close:hover { color: var(--ink); }
+.tk-says { max-height: 28vh; overflow-y: auto; }
+.tk-says p { margin: 0 0 6px; font-size: 17px; line-height: 1.35; color: var(--ink); animation: tk-in .45s ease backwards;
+  animation-delay: calc(var(--i) * .35s); }
+.tk-replies { display: flex; flex-direction: column; gap: 4px; }
+.tk-reply { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px; text-align: left;
+  font: 500 16px var(--font-body, inherit); color: #ffe7b0; background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba($frame, .45); border-radius: 3px; cursor: $cursor-hand; animation: tk-in .35s ease backwards;
+  animation-delay: calc(var(--i) * .35s); }
+.tk-reply:hover, .tk-reply:focus-visible { background: rgba(255, 231, 176, .1); border-color: var(--accent); }
+.tk-reply .k { flex: 0 0 auto; min-width: 20px; padding: 0 4px; font: 700 12px var(--font-display); text-align: center;
+  border: 1px solid var(--frame); border-radius: 2px; color: var(--accent); }
+@keyframes tk-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tk-says p, .tk-reply { animation: none; } }
+// (a short screen, a phone held sideways: the emblem small, two replies to a row, the lines a little smaller)
+@media (max-height: 520px) {
+  .tk-box { gap: 10px; padding: 10px 12px; }
+  .tk-emblem { flex-basis: 44px; width: 44px; height: 44px; }
+  .tk-says { max-height: 22vh; }
+  .tk-says p { font-size: 15px; margin-bottom: 3px; }
+  .tk-replies { display: grid; grid-template-columns: 1fr 1fr; }
+  .tk-reply { min-height: 32px; font-size: 14px; }
+}
+// (a narrow screen, a phone held upright: the emblem beside the name only)
+@media (max-width: 560px) {
+  .tk-emblem { flex-basis: 40px; width: 40px; height: 40px; }
+}

@@ -1930,6 +1930,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  scholar: {
+    each(side, options) {
+      return side.command('scholar', { canary: Boolean(options.canary), views: options.views, at: options.at });
+    },
+    // (its moments written: him at each beat of his loop close up, the talk, as the player sees him)
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('scholar'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   training: {
     each(side, options) {
       if (options.coop) return runTrainingCoop(side, options);

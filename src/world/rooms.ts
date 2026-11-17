@@ -7,6 +7,7 @@
 // The walls and the ceiling the camera stands outside of aren't drawn (`cutAway`): from above the room is seen as a
 // dollhouse, and over the shoulder the camera's boom stops at the walls (`Room.wall`).
 import * as THREE from 'three';
+import type { Scholar } from '../entities/models/scholar';
 import { HOUSES, ROOM_IDS, TROPHIES, type RoomId, type TrophyDef } from '../data/houses';
 import type { EnemyId } from '../data/enemies';
 import { ashlar, bannerCloth, boards, ctx2d, canvasOf, flagstone, granite, grunge, pbrMaterialMaps, textureFromCanvas, wood } from '../core/textures';
@@ -53,6 +54,11 @@ export interface Room {
   showRecords?(shown: RecordsShown): void;
   /** which bosses' trophies hang shown now (the house of records'; tools/lab `houses` reads it) */
   trophiesShown?(): Partial<Record<EnemyId, boolean>>;
+  /** the folk who live in it seated (the library's scholar): built on the heroes' heads and hands, so once their
+   *  workers have made them (main.ts, before the rooms are warmed) */
+  seatFolk?(): void;
+  /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */
+  folk?(): Scholar | undefined;
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */

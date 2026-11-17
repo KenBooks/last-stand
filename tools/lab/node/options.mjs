@@ -2302,6 +2302,17 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  scholar: {
+    help: "the library's scholar, Brother Hollis: his reading loop posed through frame by frame, its wrap included (no "
+      + 'joint snapping, his head and hands moving), glancing up at a hero come near and holding his eye while talked '
+      + 'to; pictured at points of the loop close up from each side and over his shoulder, and as the player sees him',
+    options: {
+      views: { kind: 'list', usage: 'a,b', default: 'front,left,right,back,above', help: 'the views of the close-ups' },
+      at: { kind: 'numbers', usage: 's,s', help: 'the points of his loop pictured (s), in place of its beats' },
+      canary: { kind: 'switch', help: 'jump his loop on 20 s mid-way, a snap that must be found' },
+      ...COMMON_OPTIONS,
+    },
+  },
   training: {
     help: 'training grounds: reached-wave saves and migration, host choices, harmless holograms, no rewards, '
       + 'repeat and leave; includes a normal-run damage control',

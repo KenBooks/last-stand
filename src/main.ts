@@ -42,6 +42,8 @@ import { queuePortraitsBehind } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
+import { initTalk, openTalk, closeTalk, talkOpen, talkKeys } from './ui/talk';
+import { scholarTalk } from './world/library';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
@@ -227,6 +229,8 @@ async function boot() {
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
   await Promise.all([heads, engraving]);
+  // (the houses' folk seated, the library's scholar: his head and hands are the heroes', made by now)
+  if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
   G.profile = loadProfile(savedClass());
   G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
     () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
@@ -280,7 +284,9 @@ async function boot() {
     renderMenu();
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
     // (in or out of a house: what was open put away, the partners told and shown only where they stand)
-    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); syncAway(); });
+    // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
+    initTalk((on) => { scholarTalk.talking = on; if (!on) closedFrom(villageObject('scholar')); });
+    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
     initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
@@ -568,6 +574,7 @@ function useObject(o: VillageObject): void {
     case 'leave': showVillageCard(null); openPanels(null); leaveRoom(); return;
     case 'records': openPanels(null); writeRecords(); showVillageCard(o); return;
     case 'guide': showVillageCard(null); openPanels(null); showGuide(); return;
+    case 'talk': showVillageCard(null); openPanels(null); openTalk(o.id); return;
   }
 }
 
@@ -577,6 +584,7 @@ function leaveObject(o: VillageObject): void {
   if (o.use === 'stash' && panelsOpen() === 'chest') openPanels(null);
   if (o.use === 'coop') openCoop(false);
   if (o.use === 'help') hideHelp();
+  if (o.use === 'talk') closeTalk();
 }
 
 /** Whether what `o` opened is still up. */
@@ -585,6 +593,7 @@ function objectShows(o: VillageObject): boolean {
     case 'portal': case 'chronicle': case 'training': case 'pvp': case 'records': return villageCardOf() === o;
     case 'enter': case 'leave': return false;
     case 'guide': return guideOpen();
+    case 'talk': return talkOpen();
     case 'stash': return panelsOpen() === 'chest';
     case 'coop': return coopOpen();
     case 'help': return helpOpen();
@@ -945,7 +954,7 @@ function syncView(): void {
 }
 
 /** Whether Play together or how to play is up (the campfire's, the notice board's, the pause menu's links). */
-const dialogOpen = (): boolean => coopOpen() || helpOpen();
+const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen();
 
 /** The guide (ui/guide/), on `section` if given, opened over the pause menu: the menu opened under it if it wasn't (the
  *  game held as the pause menu holds it, and the pointer free), and put away with it then. */
@@ -981,9 +990,11 @@ function handleGlobalKeys() {
   if (VILLAGE && villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
   // (and Play together or how to play, wherever they were opened from: from play, "esc on play together should close
   // play together, not open keys menu")
+  if (VILLAGE && talkOpen()) talkKeys();
   if (VILLAGE && dialogOpen() && wasPressed('escape')) {
     openCoop(false);
     hideHelp();
+    closeTalk();
     closedFrom();
     return;
   }
