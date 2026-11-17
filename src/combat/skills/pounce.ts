@@ -1,6 +1,6 @@
 // Pounce: the warrior with both hands empty (#400). An instant leap onto the foe aimed at, up to `range` m off, landing
-// on it with his weight and pinning it under a flurry of `blows` short downward punches, the lead hand and the rear in
-// turn. The foe is pinned (dazed) from the landing until the last blow; an elite or a boss is too strong to pin, and
+// on it with his weight and pinning it under a flurry of `blows` short punches to its body, the lead hand and the rear
+// in turn. The foe is pinned (dazed) from the landing until the last blow; an elite or a boss is too strong to pin, and
 // takes the blows standing. The first blow that lands builds a stack of Frenzy (combat/frenzy.ts).
 import * as THREE from 'three';
 import { G } from '../../state';
@@ -83,8 +83,8 @@ const skill: InstantSkill = {
         if (!player.alive || player.stunned || !foe.alive) return;
         if (Math.hypot(foe.pos.x - player.pos.x, foe.pos.z - player.pos.z) > REACH + foe.radius) return;
         const way = { x: foe.pos.x - player.pos.x, z: foe.pos.z - player.pos.z }, len = Math.hypot(way.x, way.z) || 1;
-        // (a blow down onto it: what it kills is driven into the floor)
-        hitEnemy(foe, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: player.pos, blow: { dir: { x: way.x / len, z: way.z / len }, lift: -0.4, at: 0.8 } });
+        // (a blow into its body: what it kills is thrown back off it)
+        hitEnemy(foe, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: player.pos, blow: { dir: { x: way.x / len, z: way.z / len }, lift: 0.1, at: 0.9 } });
         fistMark(foe, player.frenzy, 6);
         sfx.punchLand(i % 2 ? 1 : -1);
         if (player.local) addShake(0.06);

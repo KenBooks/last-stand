@@ -33,8 +33,10 @@ const GUARD = { lead: [0.14, 0.02, 0.27], rear: [-0.15, 0, 0.17] };
  *  wholly in the frame, as a first-person brawler's fists are held; a little lower out of a fight */
 const GUARD_EYES = { lead: [-0.5, -0.5, 0.52], rear: [0.58, -0.66, 0.48] }, EASY_EYES = -0.22;
 /** where a punch lands: on his middle line at the chin's height, further than the arm reaches (it goes out straight
- *  at it, a little short of locked); through the eyes just under the crosshair, a hair to the fist's own side */
-const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.07, up: -0.2, ahead: 0.82 };
+ *  at it, a little short of locked); through the eyes just under the crosshair, a hair to the fist's own side, where
+ *  the screen's line there meets the arm's reach (aimed further, the arm pointed at it from the shoulder under the
+ *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
+const PUNCH_AT = [0, -0.04, 1.2], PUNCH_EYES = { across: 0.05, up: -0.1 };
 /** how much of its length an arm thrown out in a punch keeps short of straight (a locked elbow reads as a stick) */
 const PUNCH_REACH = 0.97;
 /** the elbows' way in the chest's frame: down and a little out in the guard */
@@ -66,7 +68,7 @@ const LINE = { guard: [0, 1, 0.35], punch: [1, 0, 0] };
 const sided = (line: readonly number[], left: boolean): number[] => (left ? [-line[0], line[1], line[2]] : [...line]);
 
 const _mid = new THREE.Vector3(), _at = new THREE.Vector3(), _sh = new THREE.Vector3(), _far = new THREE.Vector3();
-const _cam = new THREE.Vector3(), _pole = new THREE.Vector3();
+const _cam = new THREE.Vector3(), _pole = new THREE.Vector3(), _near = new THREE.Vector3();
 const _sq = new THREE.Quaternion(), _eq = new THREE.Quaternion();
 
 /** The point between the shoulders in the body's frame, the trunk posed as it is. */
@@ -145,13 +147,25 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
 /** Where a punch lands, into `out` (the body's frame): straight out along the middle line from the shoulder, a little
  *  short of the arm's length; through the eyes just under the crosshair. */
 function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): THREE.Vector3 {
-  const shoulder = left ? j.shoulderL : j.shoulderR;
-  if (eyes) {
-    const across = left ? -PUNCH_EYES.across : PUNCH_EYES.across;
-    onScreen(j, [across, PUNCH_EYES.up, PUNCH_EYES.ahead], out);
-  } else from(between(j, _mid), PUNCH_AT, out);
+  const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * PUNCH_REACH;
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
-  return out.sub(_sh).setLength((j.P.upperL + j.P.foreL) * PUNCH_REACH).add(_sh);
+  if (eyes) {
+    const on = [left ? -PUNCH_EYES.across : PUNCH_EYES.across, PUNCH_EYES.up];
+    if (onReach(onScreen(j, [on[0], on[1], 0.1], _near), onScreen(j, [on[0], on[1], 1.5], out), _sh, reach, out)) {
+      return out;
+    }
+  } else from(between(j, _mid), PUNCH_AT, out);
+  return out.sub(_sh).setLength(reach).add(_sh);
+}
+
+/** The point of the line from `near` to `far` that lies `reach` from `shoulder`, the further one, into `out`; false
+ *  where the line passes beyond the reach. */
+function onReach(near: THREE.Vector3, far: THREE.Vector3, shoulder: THREE.Vector3, reach: number, out: THREE.Vector3): boolean {
+  const way = _cam.subVectors(far, near).normalize(), back = _at.subVectors(near, shoulder);
+  const b = back.dot(way), c = back.lengthSq() - reach * reach, d = b * b - c;
+  if (d < 0) return false;
+  out.copy(near).addScaledVector(way, -b + Math.sqrt(d));
+  return true;
 }
 
 /**
@@ -238,42 +252,43 @@ const pounceShares = () => {
 };
 
 /**
- * Pounce at `k` of its leap and its blows: crouched and sprung forward, in the air the knees drawn up and both fists
- * cocked back high, landing low on what it lands on, then each fist driven down in turn onto it, a blow at each
- * of the skill's (`POUNCE`). Returns how far the pose owns the legs (the leap's tuck).
+ * Pounce at `k` of its leap and its blows: sprung forward, in the air the lead knee drawn up, the rear leg trailing,
+ * the lead fist reaching and the rear cocked, landing crouched before what it lands on, then each fist driven into it,
+ * a blow at each of the skill's (`POUNCE`). Returns how far the pose owns the legs (the leap's tuck).
  */
 export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): number {
   const s = pounceShares();
   const air = ramp(k, 0, 0.15) * (1 - ramp(k, s.leap - 0.04, s.leap + 0.02));
   const low = ramp(k, s.leap - 0.03, s.leap + 0.04) * (1 - ramp(k, 0.9, 1));
   if (!eyes) {
-    j.spine.rotation.x += 0.3 * air + 0.45 * low; j.neck.rotation.x += -0.25 * air - 0.35 * low;
-    j.body.position.y += -0.32 * low; j.body.position.z += 0.08 * low;
+    j.spine.rotation.x += 0.45 * air + 0.22 * low; j.neck.rotation.x += -0.4 * air - 0.15 * low;
+    j.body.position.y += -0.12 * low; j.body.position.z += 0.06 * low;
     j.thighL.rotation.x += -1.1 * air; j.kneeL.rotation.x += 1.5 * air;
-    j.thighR.rotation.x += -0.5 * air; j.kneeR.rotation.x += 1.6 * air;
+    j.thighR.rotation.x += 0.35 * air; j.kneeR.rotation.x += 1.2 * air;
   }
   fistGuard(j, 1, t, eyes);
-  // in the air: both fists drawn back high, ready
+  // in the air: the lead fist reaching for what he leaps at, the rear one cocked back by his ear
   if (air > 0) {
     if (eyes) {
       place(j, true, onScreen(j, [-0.4, -0.15, 0.4], _far), air, eyes);
       place(j, false, onScreen(j, [0.45, -0.1, 0.38], _far), air, eyes);
     } else {
       between(j, _mid);
-      place(j, true, _far.set(_mid.x + 0.2, _mid.y + 0.16, _mid.z + 0.05), air);
-      place(j, false, _far.set(_mid.x - 0.2, _mid.y + 0.18, _mid.z + 0.02), air);
+      place(j, true, _far.set(_mid.x + 0.15, _mid.y + 0.02, _mid.z + 0.45), air);
+      place(j, false, _far.set(_mid.x - 0.24, _mid.y + 0.1, _mid.z - 0.06), air);
     }
   }
-  // on it: each blow a fist driven down onto what's under him, the lead hand first
+  // on it: each blow a fist driven into its body, the lead hand first (a pinned foe still stands: driven down to
+  // the floor, the blows went into its knees)
   for (let i = 0; i < POUNCE.blows; i++) {
     const at = s.blow(i), u = (k - at) / s.apart + 0.5;
     if (u <= 0 || u >= 1) continue;
     const out = curve(PUNCH_OUT, u), left = i % 2 === 0;
     if (!eyes) j.chest.rotation.y += (left ? -0.18 : 0.22) * out;
-    if (eyes) place(j, left, onScreen(j, [left ? -0.08 : 0.08, -0.62, 0.62], _far), out, eyes);
+    if (eyes) place(j, left, onScreen(j, [left ? -0.08 : 0.08, -0.3, 0.55], _far), out, eyes);
     else {
       between(j, _mid);
-      place(j, left, _far.set(_mid.x + (left ? 0.05 : -0.05), _mid.y - 0.55, _mid.z + 0.5), out);
+      place(j, left, _far.set(_mid.x + (left ? 0.05 : -0.05), _mid.y - 0.18, _mid.z + 0.55), out);
     }
     lineTo(left ? fistLine.L : fistLine.R, sided(LINE.punch, left), out);
   }
@@ -335,12 +350,12 @@ export function fistWrath(j: Joints, k: number, form: number, t: number, eyes: b
     lineTo(fistLine.R, [0, 1, 0], go);
     return 0;
   }
-  const up = curve(SLAM_UP, k), down = curve(SLAM_DOWN, k), deep = form === 2 ? 1.35 : 1;
+  const up = curve(SLAM_UP, k), down = curve(SLAM_DOWN, k), deep = form === 2 ? 1.2 : 1;
   if (!eyes) {
-    j.spine.rotation.x += -0.25 * up + 0.6 * down * deep; j.chest.rotation.x += -0.1 * up + 0.15 * down;
+    j.spine.rotation.x += -0.25 * up + 0.42 * down * deep; j.chest.rotation.x += -0.1 * up + 0.15 * down;
     j.neck.rotation.x += -0.15 * up - 0.4 * down;
     j.hips.rotation.y += 0.3 * Math.max(up, down); j.chest.rotation.y += -0.1 * Math.max(up, down);
-    j.body.position.y += 0.03 * up - 0.38 * down * deep; j.body.position.z += 0.1 * down;
+    j.body.position.y += 0.03 * up - 0.28 * down * deep; j.body.position.z += 0.1 * down;
   }
   const w = Math.max(smooth(ramp(k, 0, 0.3)), down);
   if (eyes) {
