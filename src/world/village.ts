@@ -1210,6 +1210,23 @@ function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed
   return mesh;
 }
 
+/** whether the village smokes: its chimneys and its fires (`setVillageSmoke`) */
+let villageSmoke = true;
+
+/**
+ * Whether the village smokes (Very low's none: from play, "For very low, remove all smoke for village"): the chimneys
+ * puff nothing, and every fire shown with the village (the campfire, the hall's braziers, the houses' hearths) none
+ * either (`holdSmoke` in fire.ts, held by the arena while the village is the place shown). Puffs already in the air
+ * thin out as they would; the smoke's pool is the dust's and the debris' too, so it's what spawns that's held, live,
+ * no program changed. The battlegrounds' fires smoke as ever.
+ */
+export function setVillageSmoke(on: boolean): void {
+  villageSmoke = on;
+}
+
+/** Whether the village smokes now (`setVillageSmoke`). */
+export const villageSmokes = (): boolean => villageSmoke;
+
 /** the meadow's two masks, the whole one and the one within the palisade, and the texture they're shown by */
 let grassMasks: {
   texture: THREE.Texture;
@@ -2358,7 +2375,7 @@ function portalMotes(): Updater {
 function chimneySmoke(): Updater {
   let due = 0;
   return (dt) => {
-    due += dt * chimneys.length * 1.6;
+    due = villageSmoke ? due + dt * chimneys.length * 1.6 : 0;
     for (; due >= 1; due--) {
       const at = chimneys[Math.floor(Math.random() * chimneys.length)];
       particles.smoke.spawn({

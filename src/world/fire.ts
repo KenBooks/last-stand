@@ -77,6 +77,15 @@ const LIGHT_SWELL = 1.2;
 const LIGHT_SWAY = 0.05;
 /** how hot a fire's bed glows, against a log's char */
 const BED_HEAT = 1.5;
+/** whether a fire's smoke is held where it burns now (Very low's village, `holdSmoke`) */
+let smokeHeld = (): boolean => false;
+
+/** What holds every fire's smoke while it says so (the arena: Very low's village, `setVillageSmoke`): no puff spawned,
+ *  the fire's flames, light and embers as ever, so nothing changes but a count. */
+export function holdSmoke(held: () => boolean): void {
+  smokeHeld = held;
+}
+
 /** a puff of smoke's opacity as it leaves the flames */
 const SMOKE_ALPHA = 0.16;
 
@@ -605,7 +614,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
       due.embers -= 1;
       spawnEmber(inWorld, radius, height);
     }
-    due.smoke += dt * spec.smoke;
+    due.smoke = smokeHeld() ? 0 : due.smoke + dt * spec.smoke;
     while (due.smoke >= 1) {
       due.smoke -= 1;
       spawnSmoke(inWorld, radius, height * puff, spec.smokeColour);

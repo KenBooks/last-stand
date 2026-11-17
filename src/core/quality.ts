@@ -8,7 +8,7 @@
 // to cut, we need to cut something else, not resolution").
 import { WEBGPU } from './webgpu';
 import { setFountainSimple } from '../world/fountain';
-import { setGrassBeyondWalls } from '../world/village';
+import { setGrassBeyondWalls, setVillageSmoke } from '../world/village';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -232,6 +232,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setClutterShare(p.clutter);
   setFountainSimple(p.simpleVillage);
   setGrassBeyondWalls(!p.simpleVillage);
+  setVillageSmoke(p.villageSmoke);
   setLeafShare(p.leaves);
   setSimpleTrees(p.simpleTrees);
   setFloorPlants(p.floorPlants);

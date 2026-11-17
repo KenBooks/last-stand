@@ -21,7 +21,8 @@ import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
 import { cullOutsideHall } from './hallPortal';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
-import { buildVillage, VILLAGE_ENV, type Village } from './village';
+import { buildVillage, VILLAGE_ENV, villageSmokes, type Village } from './village';
+import { holdSmoke } from './fire';
 import { buildHeroHall } from './heroHall';
 import { buildRooms, type Room } from './rooms';
 import type { RoomId } from '../data/houses';
@@ -172,6 +173,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   /** the run's biome (the one a portal or a co-op host chose), and the place shown */
   let biome: BiomeId = BIOME_IDS[0];
   let shown: PlaceId = VILLAGE ? 'village' : biome;
+  // (the village's fires smoke only as its level has it: the hall's and the houses' rooms are shown in its place)
+  holdSmoke(() => shown === 'village' && !villageSmokes());
   let active = places[shown].b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
   const stillDrawn = { place: null as PlaceId | 'hall' | RoomId | null, rev: -1, lamps: 0, sun: '' };

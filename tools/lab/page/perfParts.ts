@@ -12,6 +12,7 @@ import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
 import { setFountainSimple } from '../../../src/world/fountain';
 import { setGrassBeyondWalls } from '../../../src/world/village';
+import { particles } from '../../../src/fx/particles';
 import { canaryCost, flameCost, turnCost } from './fireCost';
 import { medianOf, timedRenders, timerOf } from './gpuTurns';
 import type { Lab } from './lab';
@@ -196,6 +197,8 @@ function switches(): Switch[] {
     // on High and on Low what the level saves; left at the level's way after)
     { name: 'the fountain\'s detail (Low\'s: none)', turn: (on) => setFountainSimple(!on && simple) },
     { name: 'the grass beyond the palisade (Low\'s: none)', turn: (on) => setGrassBeyondWalls(on || !simple) },
+    // (the smoke's pool drawn or not: in the village it holds the chimneys' and the fires' smoke alone, none on Very low)
+    { name: 'the smoke drawn (Very low\'s village: none)', turn: (on) => { particles.smoke.points.visible = on; } },
     { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
       G.renderer.shadowMap.autoUpdate = on;
     } },
