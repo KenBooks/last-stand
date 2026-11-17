@@ -63,7 +63,7 @@ export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
 /** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
  *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | 'punch' | 'pounce' | 'rampage' | 'bloodrush' | 'wrath' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -141,15 +141,26 @@ export interface SkillDef {
   knock?: number;
   /** energy restored per enemy hit */
   gain?: number;
+  /** the warrior's fists (#400, combat/frenzy.ts): the Frenzy a blow that lands builds (a punch, a pounce, a foe a
+   *  dash meets), the most one cast builds, and whether holding it keeps the Frenzy from decaying (Rampage) */
+  frenzy?: number;
+  frenzyMost?: number;
+  frenzyHolds?: boolean;
+  /** blows a skill lands one after another on what it strikes (Pounce's on the foe pinned) */
+  blows?: number;
+  /** Wrath: the damage each stack of Frenzy spent adds to its `damage` */
+  perStack?: number;
   /** a channel opens over this many seconds before it acts (its look and pose show the opening) */
   opening?: number;
   /** when the cast lands, as a fraction of the cast time (default 0.55) */
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
-  /** only works with a shield, a two-handed weapon or a weapon in each hand; otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'twoHanded' | 'dual';
-  fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string };
+  /** only works with a shield, a two-handed weapon, a weapon in each hand, something in a hand (`armed`: a weapon or
+   *  a shield), nothing in either (`bare`), a weapon in the main hand (`weapon`) or none there (`fist`: whatever the
+   *  other holds); otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded' | 'dual' | 'armed' | 'bare' | 'weapon' | 'fist';
+  fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string; bare?: string };
   /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
    *  lighter ones): `loot/loadout.ts` `forStyle` */
   styles?: Partial<Record<HeldStyle, StyleTuning>>;
@@ -181,8 +192,8 @@ export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 /** The school of magic a weapon is attuned to (the mage's staffs): it sets the spell the weapon itself casts. */
 export type School = 'arcane' | 'fire' | 'lightning' | 'healing';
 
-/** What a loadout is kept under: how the weapons are held, the school of the one held, or `bare`, none held by a
- *  class whose weapons have schools. */
+/** What a loadout is kept under: how the weapons are held, the school of the one held, or `bare`: none held by a
+ *  class whose weapons have schools, or both hands empty (no weapon, no shield) for one whose skills go by the gear. */
 export type HeldStyle = WeaponStyle | School | 'bare';
 
 /** The hands a hero with none full casts a channel from (`SkillDef.both`): one of its keys held is a hand, the
@@ -201,7 +212,7 @@ export interface HallDef {
 }
 
 /** What a weapon style may change of a skill. */
-export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain' | 'spin' | 'styleNote' | 'ram'>>;
+export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain' | 'spin' | 'styleNote' | 'ram' | 'frenzy'>>;
 
 export interface ClassDef {
   id: string;
@@ -472,6 +483,10 @@ export interface ActionState {
   yaw?: number; arrows?: number; fan?: number;
   /** a bow's shot with no arrow on the string: how far the hand is through taking one from the quiver first (0..1) */
   fetch?: number;
+  /** the warrior's fists (#400): which form of the move it is (Savage Fists' 1 a two-fisted hammer; Wrath's 0 a hook,
+   *  1 a slam, 2 a quake), and a flurry's blows so far with the share of the next thrown (Rampage's: 2.4 the third
+   *  blow two fifths out) */
+  form?: number; beat?: number;
   /** a dash run under it (a skill cast as Bull Rush's charge runs): its own name and share, for its legs and the
    *  lean of its body posed under the action's arms */
   under?: { name: string; t: number };

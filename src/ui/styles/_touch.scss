@@ -56,6 +56,8 @@ body.unarmed #touch-skills { visibility: hidden; }
 body.touch #btn-full.cant { display: none !important; }
 /* touch HUD: the hotbar gives way to the buttons, the bars move up out of the thumbs' way */
 body.touch #hotbar { display: none; }
+/* (the bar's column under the bars: the Frenzy pips in it, under the energy) */
+body.touch #frenzy { position: static; transform: none; order: 3; align-self: flex-start; }
 body.touch #bottombar { left: $touch-beside; top: 12px; bottom: auto; transform: none; flex-direction: column; align-items: stretch; gap: 4px; scale: var(--touch, 1); transform-origin: left top; }
 body.touch .bar { width: var(--touch-bar, 220px); height: 24px; border-radius: 12px !important; border: 1px solid var(--frame-dark) !important; }
 body.touch .bar .txt { font-size: 13px; }

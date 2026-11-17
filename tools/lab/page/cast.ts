@@ -6,6 +6,7 @@
 // counts them (page/flashes.ts), and the shaders compiled after loading are counted: none may be. A cell that
 // flashes is then shared out among what's in the scene (page/flashSources.ts): the cast is played again, and at
 // each counted change the frame is drawn with each thing taken out in turn.
+import { SKILL_IMPLS } from '../../../src/combat/skills/index';
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
@@ -304,6 +305,13 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
     .multiplyScalar(AIM_AHEAD));
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
+  // (a skill with nothing to cast at isn't cast, `InstantSkill.canCast`: the foes are let come on until it can be.
+  // Heave takes hold of a foe within his reach, and pressed as they rose 13 m off, nothing was cast)
+  const impl = SKILL_IMPLS[def.impl];
+  if (options.foes && !impl.channel && impl.canCast) {
+    const ready = () => impl.canCast?.(hero, def, aim) ?? true;
+    if (!ready()) await lab.until(ready, 900, `${def.name} never had a foe to cast at`, () => ({ aim }));
+  }
   return { key, def, aim };
 }
 

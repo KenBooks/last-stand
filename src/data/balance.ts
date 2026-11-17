@@ -215,3 +215,19 @@ export const CARRY = {
  *  wielder's basic attack cuts every 0.3 s; the fangs 0.36 s apart, at 0.27 and 0.63 s of 0.9, were the owner's "too
  *  slow": "both hits in a rapid succession", "faster than regular LMB" (`lab hits twinFangs --than cleave`). */
 export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
+
+/** Frenzy, the warrior's with both hands empty (#400, combat/frenzy.ts): his fists' hits build it, up to `cap` stacks
+ *  (`unchained` under Unchained). Each stack quickens his attacks by `haste` % (his casting speed), heals back `leech`
+ *  % of the damage he deals and adds `frail` % to the damage he takes. `wait` s after his last hit landed it decays a
+ *  stack every `every` s. At `hammer` stacks every `third` blow of Savage Fists is a two-fisted hammer, `hammerK` times
+ *  a punch's damage; Wrath's slam takes from `slam` stacks, its quake from `quake`. First takes, for tuning in play. */
+export const FRENZY = {
+  cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
+  hammer: 10, third: 3, hammerK: 2, slam: 5, quake: 10,
+};
+
+/** Pounce's timing (s), the skill's (combat/skills/pounce) and the warrior's pose keyed to it
+ *  (entities/models/warriorFists): the leap, whatever its length; its first blow after the landing and each after
+ *  that; how long he holds on after the last; and how many blows. How high a leap goes for each metre (m), at most
+ *  `top`. */
+export const POUNCE = { leap: 0.3, first: 0.06, apart: 0.12, after: 0.16, blows: 4, rise: 0.11, top: 1 };

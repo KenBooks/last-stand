@@ -11,6 +11,7 @@ import type { InstantSkill, Needs } from './types';
 import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import { hurtsProps } from '../../net/role';
 import type { Player } from '../../entities/player';
+import type { Enemy } from '../../entities/enemy';
 import { swingOn, swingWay, type Blow } from '../fling';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
@@ -34,7 +35,7 @@ export function sparks(x: number, y: number, z: number, color: THREE.ColorRepres
 
 /** How a sweep hits: its knock and type; the way it sweeps (+1 from the right to the left: what it kills goes along
  *  it, and out) and how much of that goes up; or a blow of its own for a blow that isn't a sweep (a chop). */
-interface SweepOpts { knock?: number; type?: 'physical' | 'fire' | 'lightning'; swing?: number; lift?: number; blow?: Blow }
+interface SweepOpts { knock?: number; type?: 'physical' | 'fire' | 'lightning'; swing?: number; lift?: number; blow?: Blow; /** what shows where it lands on a foe, in place of a blade's sparks (a fist's) */ mark?: (e: Enemy) => void }
 
 /** Hit every enemy within `range` and half of `arc` of `facing` around the player. */
 export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, facing: number, opts: SweepOpts = {}): number {
@@ -48,7 +49,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     const swing = opts.swing ?? 1;
     const blow = opts.blow ?? { dir: swingWay(p, e.pos, swing), lift: opts.lift ?? 0.3, on: swingOn(p, e.pos, swing, e.radius) };
     hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
-    sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
+    if (opts.mark) opts.mark(e); else sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }
   // and the props in reach take the blow too (a log is several circles, but one prop takes one blow)

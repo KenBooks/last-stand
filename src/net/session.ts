@@ -824,6 +824,8 @@ function onLook(from: string, look: Look): void {
 interface StateMsg {
   t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1;
   e: number; l: number; av?: string | null; rm?: number; sw: number; sh: number; sf: number; sb: number; sa: number;
+  /** the warrior's Frenzy stacks (combat/frenzy.ts), for its look on the partners' screens; none: 0 */
+  fz?: number;
 }
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
@@ -930,6 +932,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
   r.sit.w = m.sw; r.sit.hip = m.sh; r.sit.foot = m.sf; r.sit.before = m.sb; r.sit.after = m.sa;
   p.reviving = m.rv === 1;
   p.energy = m.e * p.stats.maxEnergy;
+  p.frenzy = m.fz ?? 0;
   if (p.alive) p.life = m.l;
 }
 
@@ -1148,6 +1151,7 @@ export function updateSession(dt: number, reviving: boolean): void {
       t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
       run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p), rm: roomIndex(),
       sw: r2(sat?.w ?? 0), sh: r2(sat?.hip ?? 0), sf: r2(sat?.foot ?? 0), sb: r2(sat?.before ?? 0), sa: r2(sat?.after ?? 0),
+      ...(p.frenzy ? { fz: p.frenzy } : {}),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

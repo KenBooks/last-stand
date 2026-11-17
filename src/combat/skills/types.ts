@@ -50,6 +50,9 @@ export interface InstantSkill extends SkillBase {
   /** `SkillDef.aimed`: where it's cast for `target` as its key is let go, the point every game is given (Quarry
    *  Mark's: the middle of the foe its preview outlined, so each game marks that one); the aim itself if not given */
   settle?(player: Player, def: SkillDef, target: THREE.Vector3): THREE.Vector3;
+  /** fills in the pose's action each frame of its cast (which form of the move it is: Savage Fists' hammer, Wrath's
+   *  hook, slam or quake, `ActionState.form`) */
+  pose?(player: Player, def: SkillDef, action: ActionState): void;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */

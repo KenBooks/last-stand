@@ -1208,6 +1208,50 @@ function bullDazed(): void {
   v.start(); v.stopAt(v.t + 1.1);
 }
 
+/** The warrior's fists (both hands empty, #400): flesh, cloth, bodies and earth, so no steel rings in any of them
+ *  (`iron` is a weapon's) and nothing has a pitch. */
+
+/** A punch thrown, its fist arriving `lead` s in, from the `way` side (+1 the right hand's): a short push of air and
+ *  the sleeve's snap, each a little apart, as a held button punches again and again. */
+function punchAir(lead: number, way: number): void {
+  const v = voice(0, 0.1);
+  const k = 0.9 + Math.random() * 0.2;
+  const at = Math.max(0.04, lead), from = Math.max(0, at - 0.09), tail = 0.08;
+  const lane = v.lane(1, way * 0.3);
+  const air = glide(v, 'bandpass', 1.1, [[0, 380 * k], [from, 380 * k], [at, 1500 * k], [at + tail, 420 * k]]);
+  v.loop(air); air.connect(swellAt(v, from, at, 0.34, tail * 1.5, lane));
+  const cloth = v.c.createBiquadFilter(); cloth.type = 'bandpass'; cloth.frequency.value = 2600 * k; cloth.Q.value = 0.8;
+  v.loop(cloth); cloth.connect(swellAt(v, Math.max(from, at - 0.03), at, 0.07, 0.05, lane));
+  v.start(); v.stopAt(v.t + at + 0.4);
+}
+
+/** A fist landing, from the `way` side: knuckles on a body, a smack with its weight under it and what's struck
+ *  giving. */
+function punchLand(way: number): void {
+  const v = voice(0, 0.2);
+  const lane = v.lane(1, way * 0.3 + Math.random() * 0.2 - 0.1);
+  crack(v, 0, 0.13, lane, 1700);
+  whump(v, 0, 0.42, 0.17, lane);
+  thump(v, 0, 750 * (0.9 + Math.random() * 0.2), 110, 0.32, 0.2, lane, 4);
+  crunch(v, 0, 0.1, 0.09, lane);
+  v.start(); v.stopAt(v.t + 0.6);
+}
+
+/** Wrath's slam: both fists raised and brought down `lead` s in. The air drawn up with the arms, then the floor
+ *  breaking under them: its smash, the earth's weight, the ground's answer and the stones it threw coming down. */
+function groundPound(lead: number): void {
+  const v = voice(0, 0.5);
+  const at = Math.max(0.1, lead);
+  const rise = glide(v, 'lowpass', 0.8, [[0, 240], [at * 0.7, 900], [at, 300]]);
+  v.loop(rise); rise.connect(drive(3)).connect(swellAt(v, 0, at * 0.8, 0.16, at * 0.3));
+  smash(v, at, 0.36, 0.3);
+  whump(v, at, 0.6, 0.8);
+  thump(v, at, 950, 110, 0.5, 1, v.out, 5);
+  rumble(v, at + 0.02, 0.32, 1.4);
+  grit(v, 12, at + 0.15, 0.6, 250, 1400, 0.22);
+  v.start(); v.stopAt(v.t + at + 1.9);
+}
+
 /** Power Strike gathered over `dur` s: strength drawn into the weapon. Air drawn in from both sides towards the
  *  middle, opening and swelling, a strain of dark noise under it, the grip creaking; in its last instants the weapon
  *  comes down, its air falling. No pitch climbs (the old `charge` was a saw gliding from 70 to 260 Hz). Returns a
@@ -1906,6 +1950,11 @@ export const sfx = {
   /** Iron Bellow's cry, and a blow taken on its shields */
   bellow: guard(() => { bellow(); }),
   wardHit: guard(() => { if (throttle('wardHit', 60)) return; wardHit(); }),
+  /** the fists (both hands empty): a punch arriving `lead` s on from the `way` side (+1 the right), and landing */
+  punch: guard((lead: number, way: number) => { if (throttle('punch', 60)) return; punchAir(lead, way); }),
+  punchLand: guard((way: number) => { if (throttle('punchLand', 60)) return; punchLand(way); }),
+  /** Wrath's slam: the fists raised and brought down `lead` s on */
+  pound: guard((lead: number) => { groundPound(lead); }),
   /** a prop chipped by a blow: timber (`wood`, `shroom`) or stone */
   chip: guard((kind?: string) => { if (throttle('chip', 60)) return; chip(kind); }),
   /** Healing Draught drunk */

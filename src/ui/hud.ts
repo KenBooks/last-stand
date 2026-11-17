@@ -18,6 +18,8 @@ import { skillArt } from './skillArt';
 import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
 
 import { SKILL_KEYS } from '../loot/loadout';
+import { FRENZY } from '../data/balance';
+import { frenzyCap } from '../combat/frenzy';
 import type { Player } from '../entities/player';
 import type { Item, SkillDef, SkillKey } from '../types';
 
@@ -271,6 +273,48 @@ export function renderSpoils(gained?: Item): void {
 
 let lastBuffs = '';
 
+/** The Frenzy pips' colours, a pip a stack: from a hot orange through red to a deep blood red at the last. */
+function pipColour(i: number): string {
+  const k = i / (FRENZY.unchained - 1);
+  const r = Math.round(255 - 115 * k), g = Math.round(176 * (1 - k) ** 1.4 + 14 * k), b = Math.round(64 * (1 - k) + 14 * k);
+  return `rgb(${r},${g},${b})`;
+}
+
+/** what the Frenzy pips last showed (stacks, cap, shown), written to the page only as it changes */
+let frenzyShown = '';
+
+/**
+ * The warrior's Frenzy (combat/frenzy.ts) as a row of pips over the skill bar, while a skill on it builds or spends
+ * it: lit a pip a stack, the five past the usual cap shown only under Unchained. Written only as it changes: nothing of
+ * it moves every frame.
+ */
+function updateFrenzy(p: Player): void {
+  const el = h('#frenzy');
+  const uses = SKILL_KEYS.some((key) => { const def = p.skillAt(key)?.def; return !!(def?.frenzy || def?.perStack); });
+  const cap = frenzyCap(p), state = uses ? `${p.frenzy}/${cap}` : '';
+  if (state === frenzyShown) return;
+  frenzyShown = state;
+  el.classList.toggle('hidden', !uses);
+  if (!uses) return;
+  const pips = h('#frenzy .fz-pips');
+  if (!pips.children.length) {
+    for (let i = 0; i < FRENZY.unchained; i++) {
+      const pip = document.createElement('i');
+      pip.style.setProperty('--c', pipColour(i));
+      pips.append(pip);
+    }
+  }
+  [...pips.children].forEach((pip, i) => {
+    pip.classList.toggle('on', i < p.frenzy);
+    pip.classList.toggle('extra', i >= FRENZY.cap);
+    pip.classList.toggle('shown', i < cap);
+  });
+  el.classList.toggle('unchained', cap > FRENZY.cap);
+  el.classList.toggle('full', p.frenzy >= FRENZY.cap);
+  el.setAttribute('aria-valuemax', String(cap));
+  el.setAttribute('aria-valuenow', String(p.frenzy));
+}
+
 // The HUD updates every frame. Look static elements up once, and only write values that
 // changed: every DOM write invalidates style, which the browser then recalculates.
 const hudEls = new Map<string, HTMLElement>();
@@ -304,6 +348,7 @@ export function updateHud(): void {
   setText(h('.bar.life .txt'), `${Math.ceil(p.life)} / ${Math.round(s.maxLife)}`);
   setStyle(h('.bar.energy .fill'), 'width', pct(p.energy / s.maxEnergy));
   setText(h('.bar.energy .txt'), `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`);
+  updateFrenzy(p);
   if (r && !r.duel) setText(h('.gem-num'), String(r.wave));
 
   for (const slot of slots) {

@@ -5,6 +5,7 @@ import { NUMBER_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
 import { dealsDamage } from '../net/role';
 import { countDealt } from '../game/stats';
+import { landed } from './frenzy';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { HitResult, Player } from '../entities/player';
@@ -127,6 +128,8 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   // everyone sees their own numbers (a rival's is the struck hero's own, as his game worked the hit out)
   if (!opts.unnumbered && (!opts.silent || crit) && !enemy.standIn) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
+  // (the warrior's Frenzy: its decay waits again, and its stacks heal back their share)
+  landed(by, dealt);
   return dealt;
 }
 

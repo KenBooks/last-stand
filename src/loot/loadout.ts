@@ -21,8 +21,11 @@ const STYLES: HeldStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded', 'arcane
 export function weaponStyle(cls: ClassDef, gear: Gear): HeldStyle | null {
   if (cls.schools) return gear.school ?? 'bare';
   if (!cls.skills.some((s) => s.needs)) return null;   // one loadout, whatever is held
-  return gear.shield ? 'shield' : gear.twoHanded ? 'twoHanded' : gear.offWeapon ? 'dual' : 'oneHanded';
+  return gear.shield ? 'shield' : gear.twoHanded ? 'twoHanded' : gear.offWeapon ? 'dual' : gear.weapon ? 'oneHanded' : 'bare';
 }
+
+/** Whether both hands are empty: no weapon in either, no shield. */
+export const emptyHanded = (gear: Gear): boolean => !gear.weapon && !gear.offWeapon && !gear.shield;
 
 /** The school of the weapon a hero of `cls` holds (none: no weapon, or no schools). */
 export const schoolHeld = (cls: ClassDef, weapon: { school?: School } | undefined): School | null =>
@@ -37,6 +40,10 @@ export function forStyle(def: SkillDef, style: HeldStyle | null): SkillDef {
 /** Whether the gear held allows a skill (some need a shield, a two-handed weapon or two weapons). */
 export function usableWith(def: SkillDef, gear: Gear): boolean {
   if (def.school) return gear.school === def.school;
+  if (def.needs === 'bare') return emptyHanded(gear);
+  if (def.needs === 'armed') return !emptyHanded(gear);
+  if (def.needs === 'weapon') return !!gear.weapon;
+  if (def.needs === 'fist') return !gear.weapon;
   return def.needs === 'shield' ? gear.shield : def.needs === 'twoHanded' ? gear.twoHanded : def.needs === 'dual' ? !!gear.offWeapon : true;
 }
 
@@ -52,7 +59,10 @@ export function resolveFor(def: SkillDef, gear: Gear, cls?: ClassDef): string | 
   if (usableWith(def, gear)) return def.impl;
   if (def.school) return (gear.school ? cls?.skills.find((s) => s.school === gear.school)?.impl : cls?.schools?.bare) ?? null;
   const fb = def.fallback;
-  return (gear.shield ? fb?.shield : gear.twoHanded ? fb?.twoHanded : gear.offWeapon ? fb?.dual : fb?.oneHanded) ?? null;
+  // (the main hand empty, the fists' skill where the gear allows it: a shield on the other arm too)
+  const fists = !gear.weapon && fb?.bare ? cls?.skills.find((s) => s.impl === fb.bare) : undefined;
+  if (fists && usableWith(fists, gear)) return fists.impl;
+  return (gear.shield ? fb?.shield : gear.twoHanded ? fb?.twoHanded : gear.offWeapon ? fb?.dual : gear.weapon ? fb?.oneHanded : fb?.bare) ?? null;
 }
 
 const COOKIE = (classId: string, style: HeldStyle | null, slot?: number) =>
