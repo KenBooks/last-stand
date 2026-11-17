@@ -34,6 +34,11 @@ import { endInput, watchOut } from './coopEnd';
 import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
 import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coopChat';
 import { duelInput, duelNow, pickLost, type DuelNow } from './coopDuel';
+import { tradeLost, tradeNow, type TradeNow } from './coopTrade';
+export {
+  coopTradeAccept, coopTradeAnswer, coopTradeAsk, coopTradeBack, coopTradeDrop, coopTradeFit, coopTradeList, coopTradeLoseChanges,
+  coopTradeOffer, coopTradeScreens, coopTradeStock,
+} from './coopTrade';
 export {
   coopDuelAnswer, coopDuelFit, coopDuelGo, coopDuelLosePicks, coopDuelMenu, coopDuelMouseBack, coopDuelParts,
   coopDuelPart, coopDuelPlace, coopDuelRound, coopDuelSetUp,
@@ -192,6 +197,8 @@ export interface CoopState extends Together {
   /** its own hero's most life, and the duel it's in (page/coopDuel.ts; none out of one) */
   maxLife: number;
   duel: DuelNow | null;
+  /** the trade as it shows it (page/coopTrade.ts) */
+  trade: TradeNow;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -765,7 +772,7 @@ function deliver(): void {
   while (wire.inbox.length && wire.inbox[0].due <= by) {
     const message = wire.inbox.shift()!;
     loseSpawns(message);
-    if (pickLost(message.data)) continue;
+    if (pickLost(message.data) || tradeLost(message.data)) continue;
     for (const channel of wire.channels) {
       if (channel.name === message.name) channel.onmessage?.({ data: message.data });
     }
@@ -956,6 +963,7 @@ function stateNow(): CoopState {
     maxLife: G.player.stats.maxLife,
     duel: duelNow(),
     ...togetherNow(),
+    trade: tradeNow(),
   };
 }
 

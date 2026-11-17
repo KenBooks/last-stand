@@ -32,11 +32,14 @@ import {
 } from '../game/duel';
 
 import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
+import { setTradeNet, tradeHeard, tradePeerLeft, endRoomTrades, endTrades, updateTrade } from './trade';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 36;
+const PROTOCOL = 37;
+/** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
+const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** the most foes a guest may ask about at once (the arena never holds more than this many) */
@@ -291,6 +294,7 @@ export function leaveRoom(): void {
   if (session.status === 'joined') clearGround();
   setGroundNet(null);
   setChatNet(null);
+  setTradeNet(null);
   setDuelNet(null);
   duelSetup.ready.clear();
   duelSetup.asks = [];
@@ -366,6 +370,14 @@ function wire(l: Link): void {
   setPingNet((m) => send('ctl', { t: 'ping', ...m }));
   // chat has no gameplay effect: every game sends its own to every other (net/chat.ts)
   setChatNet((text) => send('ctl', { t: 'chat', text }));
+  // a trade between two players in the lobby: straight between them, the host ruling it done or off (net/trade.ts)
+  setTradeNet({
+    self: () => l.self,
+    host: () => (role.current === 'host' ? l.self : session.hostId),
+    send: (to, m) => send('ctl', m, to),
+    partner: (id) => session.peers.get(id)?.player ?? null,
+    inRun: (id) => { const peer = session.peers.get(id); return !peer || peer.inRun || peer.readying; },
+  });
   // a duel (game/duel.ts): the host's word of its turns to everyone, each game's hits to the hero they struck
   setDuelNet({
     round: (n, score) => send('ctl', { t: 'dround', n, score }),
@@ -482,6 +494,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
     return;
   }
   if (onGround(from, m)) return;
+  if (typeof m.t === 'string' && TRADE_MESSAGES.has(m.t)) { tradeHeard(from, m); return; }
   // a rival's hits on our hero in a duel, straight from its game (game/duel.ts works them out)
   if (m.t === 'pvp') {
     const by = session.peers.get(from)?.player;
@@ -536,6 +549,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       takeSetup(m.setup, m.ready, m.asks);
       hooks.changed();
     } else if (m.t === 'dstart' && from === session.hostId && G.mode === 'menu') {
+      endTrades('a duel started');
       const setup = readSetup(m.setup);
       if (!setup) return;
       const host = session.peers.get(from);
@@ -550,6 +564,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
     } else if (m.t === 'foes' && from === session.hostId) {
       foesTold(m.list as SpawnEvent[]);
     } else if (m.t === 'start' && G.mode === 'menu') {
+      endTrades('a run started');
       const host = session.peers.get(from);
       if (host) host.inRun = true;
       hooks.startRun(m.biome as BiomeId, m.wave as number, m.seed as number, m.training === true);
@@ -658,6 +673,7 @@ export function sendDuelReady(on: boolean): void {
 /** The host starts the duel: every guest in the lobby comes along, its props shaped by the same `seed`. */
 export function sendDuelStart(setup: DuelSetup, seed: number): void {
   if (role.current !== 'host') return;
+  endRoomTrades();
   for (const peer of session.peers.values()) {
     if (peer.inRun) continue;
     send('ctl', { t: 'dstart', setup, seed }, peer.id);
@@ -852,6 +868,8 @@ function peerLeft(id: string): void {
   if (!peer) return;
   const wasHost = id === session.hostId;
   if (peer.tag) chatNote(`${peer.tag} left`);
+  // (a trade with it off, nothing moved: the host rules every trade of its off)
+  tradePeerLeft(id);
   dropPlayer(peer);
   session.peers.delete(id);
   if (role.current === 'host') publishColours();
@@ -917,6 +935,8 @@ export function sendLobby(biome: BiomeId, wave: number, training = false): void 
 /** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */
 export function sendStart(biome: BiomeId, wave: number, seed: number, training = false): void {
   if (role.current !== 'host') return;
+  // (every trade in the room off first, so each guest hears that before the start: net/trade.ts)
+  endRoomTrades();
   for (const peer of session.peers.values()) {
     if (peer.inRun) continue;
     send('ctl', { t: 'start', biome, wave, seed, training }, peer.id);
@@ -944,6 +964,9 @@ export function sendControl(m: Record<string, unknown>): void { if (session.host
 /** The partners in the room, whether or not they're in the arena with us. */
 export const partners = (): Player[] => [...session.peers.values()].flatMap((p) => (p.player ? [p.player] : []));
 
+/** A partner's peer id on the link (null: not one of the room's). */
+export const peerIdOf = (p: Player): string | null => [...session.peers.values()].find((peer) => peer.player === p)?.id ?? null;
+
 /** A partner still in a run (finishing one, or one we're not in). */
 export const partnerInRun = (): boolean => [...session.peers.values()].some((p) => p.inRun);
 
@@ -951,6 +974,7 @@ export const partnerInRun = (): boolean => [...session.peers.values()].some((p) 
 /** Every frame: report the local player (and the fight, on the host) at the send rate. */
 export function updateSession(dt: number, reviving: boolean): void {
   if (!link) return;
+  updateTrade();
   const t = Math.round(performance.now() * 10) / 10;
   if (actions.length) { send('ev', { t, a: actions } satisfies ActionsMsg); actions = []; }
   const hits = takeHits();
