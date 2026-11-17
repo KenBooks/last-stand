@@ -77,3 +77,9 @@ turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`
 frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
 each frame's joints past their ranges after it. `--tune` sets the game's tunable values first (a pose's numbers
 compared without editing them, `--sweep` for many).
+
+## At a glance, in full
+
+The line `tools/lab/AGENTS.md`'s Commands at a glance gave it, before it grew too long for a line:
+
+- `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each frame's pose timed by the browser's clock (two frames over 20 ms fail, or one over 30), each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, an arm held at two or more of its joints' stops at once (said, #307), the weapon through his own legs or trunk (said), the forearms and hands in the trunk, head or legs (said), a cast's weapon nearest the floor and its blade's tilt, the weapon's tip traced through a cast and drawn (its fast frames off a straight line from above), `--foe` a foe ahead and the weapon's lowest over it, `--at`/`--facing` stood elsewhere (the dais's edge), `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)

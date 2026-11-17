@@ -1,6 +1,6 @@
 # `tools/lab`
 
-The lab as an agent works with it: what every command measures, in a line here and in full in [`COMMANDS.md`](COMMANDS.md), how to write a measure, how the lab works and what keeps it repeatable. `README.md` is the short guide for people. The rules across the game are the [root AGENTS.md](../../AGENTS.md); `node/`, `page/`, `test/` and `examples/` have an AGENTS.md of their own.
+The lab as an agent works with it: what every command measures, in a line here and in full in [`COMMANDS.md`](COMMANDS.md); how to write a measure and what keeps it repeatable are [`WRITING.md`](WRITING.md), how the lab works [`WORKINGS.md`](WORKINGS.md). `README.md` is the short guide for people. The rules across the game are the [root AGENTS.md](../../AGENTS.md); `node/`, `page/`, `test/` and `examples/` have an AGENTS.md of their own.
 
 ## Rules
 
@@ -25,24 +25,23 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `npm run lab -- sheet`: pictures the hero in the player's views with each arm's load beside them
 - `carry`: measures the carried bow
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
-- `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each frame's pose timed by the browser's clock (two frames over 20 ms fail, or one over 30), each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, an arm held at two or more of its joints' stops at once (said, #307), the weapon through his own legs or trunk (said), the forearms and hands in the trunk, head or legs (said), a cast's weapon nearest the floor and its blade's tilt, the weapon's tip traced through a cast and drawn (its fast frames off a straight line from above), `--foe` a foe ahead and the weapon's lowest over it, `--at`/`--facing` stood elsewhere (the dais's edge), `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
+- `range`: every joint against a body's ranges frame by frame, standing, walking, attacking and turning: each angle past its range and where, the frame's time, the weapon through his body, the arms at their stops (in full in `commands/range.md`)
 - `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of by the other hand, seen or not, or seen in one hand; a fist open on its handle; the arm drawn against its swing's keys, the weapon's way and flat too; the arms' joints past their ranges where they're seen; the arms in the body the view hides, said; the weapon and the elbows jumping between frames; a film of the frames)
 - `swing <name>`: a swing through the eyes keyed from a pose (the key that holds a grip and a weapon's way, and what of it the swing's plane can't hold; each key placed as the game places it at its share: the grip, the weapon and its share in the frame, the elbow, the wrist, a two-hander's lower grip against the other arm's reach, where it starts against the swing before's end; turned as the trunk turns the cut or its way back; the whole swing in 1% steps, an elbow turned over and a lower grip past reach between the keys; `all`: every swing of every weapon each way held, as `check` runs it)
 - `match <picture>`: the hero standing through the eyes beside a reference's screenshot, on a screen of its shape (the screenshot, his frame, the two blended, the points marked on it and his drawn on each, and how far his are off)
-- `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, each foe's duck or blink out of the guest's shots on both screens, whether a blow it dodged hurt it, the lava thrown at it landing alike and hurting it, a vine holding it and its copy shown held on the host's, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens, `--class mage`; a guest's charge carrying foes on both screens, and a Power Strike landed in it, `--class warrior`; `--party 3` or `4`: the others join after the guest, the third first as the guest's name tag, which must be refused and asked to rename, and every game must have every other in a slot of its own by its tag; every room's heroes in colours no two share, a free pick kept, each game showing each partner's as its own game draws it, `--canary` the guest in the host's; `wave`: wave 4 let come, the guest hearing of no spawn for 6 s, every host foe on its screen; `trade`, alone: banked gear traded between the two in the lobby through the window's own controls, both stashes right on both games after it, an offer changed after an accept taking both back, a full stash refused with its reason, the guest's link lost mid-trade moving nothing, the window fitted on six screens by mouse and touch, `--canary` the guest's changes lost on the host's link; `chat`: lines said on each screen as typed (markup as text, a long one cut), a burst held back, Esc shutting the box without pausing; `ping`: a foe, a spot, a preview moved from the floor onto a foe and a minimap long press pinged, each on both screens' world and minimap, one size, a foe's centred on it; then the run's end: the guest banks and holds his keys, casting and aiming nothing, the rest leave, and every game is back in the lobby by itself, the summaries shown before the end gone; a middle drag turning each lobby's camera, from a floor item's name too; its skill bar there, the host's hall of heroes opened as the others cast, showing neither them nor the floor, and every hero shown with its name tag every frame; then a second run watched by the guest: the first partner followed, LMB, RMB and the bar's buttons, F's free camera, Q/E, a middle drag and two fingers twisted (the world turning their way), the bar fitted on phones', tablets' and a desktop's screens; `commands/coop.md`)
+- `coop`: two games playing together, a host's and a guest's, over a link of a high ping and jitter: what each shows of the other's heroes and foes and whether the hits counted, parties of 3 and 4, colours, trade, chat, pings, the run's end and spectating (`--scenarios`; in full in `commands/coop.md`)
 - `guide`: the guide's first opening by G and a walk through every page, till its pictures are made (each frame and the page's long tasks by the browser's clock, at most 100 ms; the game's renderer links nothing; `--canary` makes every picture again at once)
 - `behind`: the heroes built behind the lobby a piece a frame (the hall's heroes and the spares let go and built again: each frame's building by the browser's clock, at most 30 ms, the slowest pieces named; then the hall opened and another hero chosen, building none)
 - `labels`: a world label a full atlas kept out (the atlas filled with name tags until one finds no slot, a few given back, too few to pack it again: the tag drawn within 3 frames)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
-- `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
+- `gait`: the walk judged as a person's, on level ground and the steps, drawn and not, tapping, turning and circling: each foot's time on the ground, the steps' rate, length and width, hops and gallops, the hips, the hands' swing, the jerks (in full in `commands/gait.md`)
 - `form`: the run judged against a runner's (published runners' cadence, time on the ground, joint curves over the stride, lean, bounce and arm swing, at a man's size, with each way the hero holds his weapons: stick figures of his stride over a runner's, and the hero pictured from both sides, in the game's views and his arms close up, at eight points of it; the set-up's `--gear` holds them any way his class can)
 - `probe <module>`: runs a measure of your own on the lab's clock and set-ups
 - `live <step>`: a page kept between steps for trying by hand (start, picture in any look with a reference over
   it, inspect, eval, frames): under a second a picture
 - `pwa`: a deploy as a returning player meets it (main's production build loaded until its offline worker has the page and the fonts, this tree's served in its place and reloaded under the old worker, the new one and offline: the game's fonts on every load, this tree's build on every one after the swap), and the installed app after a PR's previews were visited (opened offline, at a pruned preview build and at a closed PR's: the game every time)
 - `check`: runs every hero's checks of a change to how they move side by side (`--ab`: against main, its side kept once it has run; each gait scenario from three starts, its turns at other points of a stride, as a frame's change anywhere sends a scenario's later strides elsewhere: judge a change on the counts over all of them, each side's in the log; a page kept from job to job where that was shown to change nothing, `--reuse=false` and `--like` to show it again; `--plan` the jobs' order and end, `--only` some of them)
-- `ui`: pictures the UI in its states (the lobby, a tooltip, the stash's items lit for a hovered item's slot, at set moments of the glow, its loops animating only what the compositor moves and running on the hovered item and the slots alone, How to play, the save slots, the Play together dialog asking for a name tag (as it opens, asked to rename, tapped on touch), the hero selection screen over the hall of heroes (the hero framed in the room its panel leaves, a neighbour clicked into focus, Esc back), a battleground button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the dummies' labels hidden behind a prop planted before them, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave with each button's label on one line, the pause menu on its Controls tab and its Settings tab, each fitting the window without scrolling, and its Abandon run held 2 s to act, a click saying to hold (`page/uiPause.ts`), the summary, every skill's tooltip within the window, opened by the mouse over the hotbar and by a tap in the lobby, the battle log, and on touch, clear of the touch HUD and letting touches through; a stash item's sheet by a tap, its long cards scrolling and its buttons in view; a worn item's long press lighting its slot's items until a tap elsewhere; the touch HUD's corners at the
-screen's edges, and the choice after a wave within a short screen's top 30%; every touch button found by a finger and doing what it's for when tapped, in the lobby, its practice and a run) with each named element's and label's box as a share of the window, the game's own cursor over every element the mouse can be over, and every digit shown on its line, on the page and over the world
+- `ui`: pictures the UI in its states (the lobby, the stash, tooltips, the dialogs, the hero selection screen, the run's HUD, the pause menu's tabs, the summary, the touch HUD...) at each screen size, each fitting the window (`--states`, `--screens`; in full in `commands/ui.md`)
 - `readme`: the README's pictures, each a moment posed and pictured as the player sees it (the village, the party round its campfire, the hall of heroes, the stash, a fight in each battleground, the choice after a wave, a party of four in a fight and one of them down, a partner raising him; `--shots`, `--class`, `--after`: `docs/screenshots/AGENTS.md`)
 - `wind`: the loading screen's exit as it hands over to the lobby's logo (run on the lab's clock, the window resized as the particles fly with `--resize`: the particles' picture as each column of it rests, read from the exit's canvas, against the logo once the exit is done, at the screen's own pixels: the pixels apart and which way the logo stands from them)
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
@@ -51,7 +50,7 @@ screen's edges, and the choice after a wave within a short screen's top 30%; eve
 - `beta`: the village beta opted into and out of on a page of its own, by the browser's own clicks and loads (the pause menu's Beta tab saying what the page runs and offering Reload once switched, Reload loading the page with `?village=1`, the choice kept in its cookie, the notice shown as the game opens there, kept through the village's own frames and put away by a screen opened over it, the next visit without a parameter in the village too, its notice left alone gone by itself, the notice's Back to the old lobby and the visit after it; then a co-op room hosted by the command's page asked from the other lobby: refused, told which lobby the room is in, the switch offered in the dialog, clicked, the page loaded in the room's lobby as an invite to it and the room joined; `--panels` hosts the room in the lobby without the village; `--canary` keeps the notice by the pointer past its time, puts it away before it's read, loses the cookie before the next visit and forgets the lobby the room refused the game for)
 - `rooms`: Play together's rooms end to end against a co-op relay of the lab's own (server/relay on localhost; once: `npm ci --prefix server/relay`), the command's page hosting and a partner's joining, every step their own clicks and typing (a public room opened from the create page, listed in the partner's browser with its host, name, map and size, joined from its row, the relay counting two, gone once its host left; a password room listed locked, its password nowhere in the list, a wrong password turned away with the dialog asking for it, the right one let in; a private room never listed, joined by its code; both pages pictured at `--screen` in `out/rooms/<screen>`; `--canary` starts the relay letting any password in and listing private rooms)
 - `practice`: casting in the lobby and the runs it starts (each skill with a cooldown cast twice at once in the village's training yard, the inventory open, put away by I and opened again, on the square, and in runs started at the crypt's portal and begun in practice, a co-op guest's: free where the inventory shows, a run's costs and cooldowns elsewhere, none out of the yard)
-- `village`: the lobby's village as a player walks it (every object usable from its stand, and again by E after its own button put it away, the hall's walls holding him off, casting in the yard alone, the grass's grain alike as its rings follow him and its light steady in the wind as he stands, Low's grass shading at most a third of High's vertices and its lamps lighting a point by at most 60% of High's, their shadows unread, no walk out of the palisade or a way out, walks to a spot round the cottages and from each portal to each object, every kind of light at midnight not blinding, the staff's crystal steady by night, what he can't see in a fog from above, steady as he walks, its leaves grey and its fires still, the places a game opens at, a dummy's readout fading across the yard's edge and counting afresh, the fountain stopping arrows and a rain standing in its water, the lamps' lights steady and a lamp lit alike near and far and through the hall's door, the hero's shadow from a lamp, the terrace's stair climbed, the pointer let go over the hall's screen, the first visit's training ticked step by step and skipped, the minimap out with the hero's arrow where he stands and the tracker under it, no program compiled at any hour)
+- `village`: the lobby's village as a player walks it: every object usable from its stand, walks and ways, the grass and the lamps by quality, the light at midnight, the fog from above, the hall and the houses (`--only`; in full in `commands/village.md`)
 - `village --only signpostsReadable`: the signposts, each arm pointing where its name leads, each post off the paving, the paths and what stands, each arm read face on from the paving near it (`--canary` turns an arm and stands a post in a road)
 - `tap`: the touch buttons of every skill aimed by holding, the other thumb on the move stick (tapped standing, at once and walking: a movement skill the way he moves, any other at the nearest foe; dragged while the stick moves: the skill's own preview following the drag, cast where it last showed, the stick still walking him)
 - `parity`: the same scenes pictured as the player sees them, to compare what two renderers draw (`--renderers webgl,webgpu`: each biome's arena, the village at noon and midnight from its places, from above and over the shoulder; the pictures are the page's own, as WebGPU's canvas can't be read back; what differs is the A/B's verdict and the pictures side by side)
@@ -136,6 +135,12 @@ Options every command takes:
 - `--cold`: the page booted as a player's first visit (or a new build's) leaves it: the lab's own boot asks for everything the game warms after the lobby shows (`src/game/warm.ts`: the fight's programs, the other heroes') and waits for it; a cold one asks for nothing, so those stay cold until something needs them, as in the owner's lobby (`programs --cold`: its performance report counted every program as compiled late)
 - `--rarity rare|...` (any command that sets the run up): every item he wears of that rarity, as its look shows it (Rare and up glow)
 - `--wear helm,chest,hands|none` (any command that sets the run up): the armour the hero wears, every piece not named left off (the set-up's report says what he `wears`): with `--screen` at the owner's window, a picture of what they see (the lab's hero is otherwise as the boot rolled him, bare-handed, and his first-person hands looked nothing like the owner's gloved ones)
+- `houses`: the village's houses walked into and out of by E held at their doors in each view (a tap taking him nowhere, the prompt naming the house and filling; no two faces round a door inside in one plane; the room shown, the village and the yard's dummies not, every frame drawn and no program compiled, its cut away walls, a walk held in by its back wall, the trophies for the bosses beaten alone, the ledger's card within the window, the party table opening Play together, the library's Codex opening the guide, its scholar talked to and his card within the window, out before the cottage's door, the yard's dummies still on their spots, and the square and yard pictured after); `--canary` compiles a program going in, keeps the dummies in the room's walls, leaves the room drawn going out, makes the hold a press, lays a sheet in the door frame, makes the talk card wider than the window and lets the room's zoom go (from above in a room, the wheel out and in kept to its range, his own zoom given back out of it). `coop --scenarios houses`: the guest goes into the tavern, the host's game shows his name over its door, a dot at it on the minimap and his name under it on the map, all gone as he comes out (`node/coopHouses.mjs`, `page/coopHouses.ts`; `--canary` takes the marker away).
+- `scholar`: the library's Brother Hollis (his reading loop posed through frame by frame, its wrap included: no joint snapping, his head and hands moving, his sleeves never through his table, the book's prints reaching the spine, the page he turns never under the book and landing flat, his fingers on its edge while he holds it, the page never through either hand, his forearms clothed to the wrist, his fingertips never sunk into what they rest on; a hero come near glanced up at and walked off from, the hero held in his eye while talked to; pictured at the loop's beats close up from each side and over his shoulder, his face, and as the player sees him); `--film` a picture a moment; `--canary` jumps his loop on mid-way, raises his table, lowers the page's spine, draws the prints back from the spine, drops the page on his resting hand and strips his undersleeves.
+- `merchant`: Odo's prices against the drop rates (no rarity sold from a wave where trading beats playing for it, none above epic) and his trade at his counter (the screen within the window, its three steps lit in turn and the stash dimmed till a ware is chosen, the legendary not offered, Auto-fill cheapest paying with rares, his full stock, a trade one common short held off and refused, one with enough made and saved, the stock one fewer, his restock after three runs; Odo pictured close and over the shoulder); `--canary` puts the piece bought back in his stock and leaves the stash dimmed with a ware chosen.
+- `training`: Training grounds (#405): attempted-wave persistence/migration, the village's ghost talked to and its card's battleground and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage and a solid ghost.
+- `guard`: #399, attacks while blocking in third person and through the eyes, a damage control during the exposed swing, immediate return/release/failure cases, independent shield and attack touch fingers. `--canary` leaves a shield raised during a swing and must detect it.
+- `portraits`: optional portrait requests and the real co-op picker; no downloads before use, current class only, selection, peer picture rendering and clearing, a class's default picture shown with none chosen, no two classes' alike (run it with `--panels`: the village's lobby hides the party cards it pictures). `--canary` requests another class and must detect it.
 
 A command exits with 1 when it failed or found a problem (an error in the page, a canary missed; not the dev server's own client's, whose socket the lab never uses: on a machine short of sockets it failed to connect, and failed jobs the game had passed, `fromDevClient` in `node/side.mjs`). An A/B's pictures that differ are pictured where they differ (`tools/lab/out/ab/<command>/`), a probe can return moments pictured (`lab.picture`, or `lab.screen` for the screen as the player sees it, the page's UI over the game, whole or round one element; written as a sheet and compared in an A/B), and `page/timing.ts` times a method's calls by the browser's own clock (the page's `performance.now` is the lab's). Write a new measure in the lab (`tools/lab/examples/handSpeed.ts` shows its parts: the state it measures checked to have happened, a canary it must catch), never as a script with a boot and a clock of its own, and keep it: from its first use it is a lab command, or part of one that measures the same thing, never a probe left in `.tmp` (every harness is permanent). The probes and films the AGENTS.md files and their notes name (the bow probe, the range probe, `legdet`, the zigzag and aim probes...) were such scripts and aren't in the repo: each is a measure to port into the lab the first time it's needed again, as the carry's was (`carry`). The lab's own code has unit tests: `npm run lab:test`.
 
@@ -152,277 +157,8 @@ moves there too.
 
 ## Writing a measure
 
-A measure starts as a probe module: a TypeScript file whose default export takes the lab and the command's options,
-and returns text, anything JSON can hold, or a `Report` (`{ text, problems }`: its problems fail the command).
-[`examples/handSpeed.ts`](examples/handSpeed.ts) is a short one with every part a measure needs:
-
-```ts
-import type { Lab, Report } from '../page/lab';
-
-export default async function handSpeed(lab: Lab, options: { canary?: boolean }): Promise<Report> {
-  const start = lab.player.pos.clone();
-  const rows = await lab.step(150, (frame) => ({ keys: frame < 60 ? [] : ['w'] }), (frame) => {
-    // measure the frame as it would be drawn (the world matrices are up to date)
-  });
-  const problems = lab.player.pos.distanceTo(start) < 1 ? ['the hero never walked'] : [];
-  return { text: '...', problems };
-}
-```
-
-It runs on a page booted for it, after the set-up the command's options ask for (the run held in its countdown, the
-hero placed, stopped and settled), and may import the game's modules by relative path. While you work on it, keep it
-in `.tmp`: it is compiled afresh on every run, with the modules beside it it imports. With `--ab` those files are
-copied into the other commit, so the same measure runs on both sides.
-
-What the lab gives a probe (`page/lab.ts`):
-
-- `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
-- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `gear`, `fresh`, `yaw`), checked, and its
-  report. The keys go by the camera, and the top-down camera is as the boot left it unless `yaw` turns it (0: `d` runs
-  +x), which differs by class: the village opens at a spot of its own, at random (the warrior's boot faces it a half turn
-  round from the ranger's), so a measure whose keys must go one way in the world sets `yaw`.
-  A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same
-  one, and the game's clock, which his idle runs on, only goes forward (to the next whole minute at each set-up, so
-  the idle is at the same moment whatever ran before; the hero's own state still carries over). A scan is the same
-  every time it runs, but one of its cases run alone may come out otherwise, so trace a case by running the cases
-  before it first (an option of the probe's own: `--trace=<case>`, say), or run each on a page of its own as a check
-  runs the gait's;
-- `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
-  `look` for mouse look, `aim` for the point the mouse is over, `sight` for a point the close views' crosshair is
-  turned onto: a mouse-look move a frame, over it in one or two) and measured after each, a row a frame;
-- `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
-- `lab.spawnFoe(type, at, options)`: a foe for a measure that needs one (a mark, a lure; `options` as the game's
-  `EnemyOpts`: a hero foe with its name, say), which the set-up keeps while it clears every other until the next
-  set-up; it rises first as a spawned foe does (`Enemy.spawning`), and a training dummy (`dummy`) stands still;
-- `lab.letWavesCome()`: the run's waves let come until the next set-up, the hero still kept whole; a measure sets one
-  off itself (`G.run.wave`, its `timer` to 0) and reads its foes as they rise;
-- `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
-  `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
-  (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
-  run the measure's input to them and picture each);
-- `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
-  page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
-  selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
-  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone), the
-  page's running animations settled first (they run on the browser's clock: an A/B's two sides caught the wave's
-  banner at other moments of its fade; one a command holds paused is left as it is, and so is one a scroll drives,
-  at rest while its scroll is: ended, the stash's fade was held hidden over the row it fades, `onTheClock`); taken
-  through the DevTools protocol at the screen's own pixels (Playwright's screenshot put the page back on the screen
-  Playwright had given it, and on a `--screen` every picture after the first showed 1920x1080);
-- `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
-  `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
-  percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the
-  machine's load drifts between commands). Its `lap()` says what the calls took since the last lap: a frame's, read
-  after each frame (`crowd`);
-- `await lab.showOn(screen)`: the page put on another screen as the command runs (`{ width, height, ratio }`, css
-  px, as `--screen` names one), as the player's window is taken to full screen or onto another monitor: the page lays
-  itself out again and hears a resize, and the browser draws a frame (`wind --resize`);
-- `await lab.throttle(rate)`: the page's CPU slowed `rate` times as the browser emulates a slower device's (DevTools'
-  presets: 4 a mid-range phone, 6 a low-end one), sent through the DevTools protocol: times read by the browser's
-  own clock take that much longer, while the lab's frames stay as long as ever. Set it up at full speed and slow
-  only what's measured (`crowd`);
-- `lab.aim` and `lab.pointAt(point)`: where the mouse is;
-- `await lab.touchDown(at, finger)`, `touchMove(at, finger)`, `touchUp(finger)`: a finger on the page (css px) as a
-  touch screen gives it, sent through the DevTools protocol, so the page's own pointer events follow with their
-  pointer ids and its touch controls take it as a player's (no frame runs; each returns once the page has handled
-  it). `finger` (0 by default) tells fingers down at once apart: a thumb on the move stick and the other on a skill
-  (`tap`). Each touch names only the finger it changes, by its id, as Puppeteer sends them: sent as the protocol's
-  docs have it (every finger down in each touch, the one lifted left out), a finger left out was never lifted. The
-  game's first touch puts it in touch mode, as a player's does, and its controls show from the next frame.
-  `await lab.tap(at)` puts a finger down and lifts it, and returns once the page has handled the click the browser
-  makes of it, which comes in a task after the lift (`touchUp` returns before it: a button tapped hadn't heard it);
-- `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
-  (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
-  them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);
-  `lab.type(text)` puts text in the focused field as a paste or a phone's keyboard does (`Input.insertText`: a key
-  pressed types nothing, as the protocol's key has no text), its input events with it;
-  `lab.mouseDown(at)` / `mouseUp(at)` press the left button and hold it (a button held to act), `lab.clickOn(element)` clicks an element at its middle, scrolled to and once the page's CSS transitions are over
-  (the lab's frames outrun the browser's clock, and a panel sliding back in took a click 31 px off its tab; a move
-  to where the mouse already is makes no pointer move, so a click there skips it), `lab.mouseTo(at)` moves the
-  mouse alone, `lab.wheel(at, deltaY)` turns its wheel, and `lab.keyDown(code)` /
-  `keyUp(code)` hold a key and let it go (`AltLeft`, `ControlLeft` too). A frame the lab runs holds a key in the game
-  only if its input does (`Frame.keys`): hold it there too, by the game's name (`altleft`);
-- `lab.pointerLock(on)`: the pointer lock played by the page (`noCapture` in `node/browser.mjs`; the real one is never
-  taken): asked for after a click or a key, it's taken, and while it's held the mouse's every event goes to the
-  locked element, at the point where it was taken, its moves told as movement alone, a cancelled pointer's down
-  holding back the mouse's own as the browser does. Off, it's let go, which the game hears as a lock lost (a run's
-  pauses): put the view top-down first, so the game lets go of it itself (`cursor`). `lab.browserLetsGoOfLock()`
-  lets it go as the browser does on the player's Esc, and `lab.lockAnswersLate(on)` holds the browser's answers
-  (`pointerlockchange`) till it's set back, as a real one's come a frame or more late; `lab.keyRepeat(code)` is a
-  held key's repeat (`cursor`'s Esc);
-- `await lab.reduceMotion(reduced)`: the page's `prefers-reduced-motion` as the browser emulates it. Every page opens
-  with it reduced (the page's decorative animation left out); a measure of such an animation (the crosshair's beat,
-  `draw`) lets it run and puts it back as it ends. CSS's animations run on the page's clock, not the lab's: read them
-  with `getAnimations()`, and hold one at a moment to picture it;
-- in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
-  them (`crossingsAlong`), and the distance between segments (`segmentDistance`);
-- `distinctCorners(positions)` (`page/corners.ts`): a mesh's corners, each place once (a mesh repeats one for each
-  face whose normals part there: the mage's staff has 12,234 points at 2,515 places).
-
-A measure read every frame costs every frame, in every job a check runs: read each frame only what the frame's
-verdicts use, and what can't change (a weapon's head, a geometry's box) once. Through the eyes, each frame read the
-weapon's head off its meshes for a share no frame kept, a third of each job; the range's floor and body read every
-corner of the weapon five times over, 60% of its jobs. `--profile` shows a measure's share beside the game's frames.
-
-A measure is only as good as what it can catch:
-
-- **Check the state happened.** A measure of a state that never came reads as clean: a probe that scripted the game
-  before its run began reported no clips at full draw, because it never drew. Throw `lab: ...` or report a problem
-  when the walk didn't walk or the draw didn't draw.
-- **Carry a canary.** Plant the fault the measure is for (the bow moved into the hips for a frame, a hand moved
-  10 cm) and report a problem when it isn't caught. Run it when the measure changes.
-- **Measure, don't choose.** A pose is decided as a person would hold it and looked at in the game's views first
-  (`sheet`); a measure checks it (`src/entities/models/AGENTS.md`).
-
-Every measure is kept: from its first use it is a command of its own in `page/` (a module, an entry in
-`page/commands.ts`, one in `node/commands.mjs` and its options in `node/options.mjs`), as the carry's and the touch
-stick's are, or a part of one that already measures the same thing, never a probe left in `.tmp`.
+How to write one (a probe module and its parts, the `Lab` it's handed, what a frame's read costs) is [`WRITING.md`](WRITING.md), with what keeps a command repeatable: read it before writing or changing a measure.
 
 ## How it works
 
-With `lab:serve` up, the next command's page is booted as soon as a command finishes, and again once the source has
-been left alone for a moment after a change, so a command finds it ready: the sheet takes about 2 s, the carry 5.
-Without it, a command boots a session of its own (about 15 s) and closes it. The server runs under a supervisor of
-the lab's own, which starts it again when what the lab's Node code says changes (not on every change Windows
-reports: a file read now and then counts as one, and a server started again under a command closed its browser),
-launches its browser again if it has closed (it crashed: every command after it failed until the server restarted),
-and every command carries a hash of the code it was sent from: a server that loaded other code starts again before it
-runs it (`node --watch` once stopped noticing changes, and the server ran old code that dropped an option the command
-line had just learnt). Its Vite server starts again when `vite.config.ts` or the packages change. Stopping the
-terminal's task stops it all.
-
-A boot that fails fails at once, with why (`side.mjs` `openPageIn`): a boot that threw says so on the game's loading
-screen, and a module Vite couldn't compile answers its request with an error, which the lab asks for again to say
-Vite's message (where it went wrong in which file), and a module that won't link (importing a name another doesn't
-export: a page booted between two edits) throws a `SyntaxError` on the page. Waited for the loading screen to go
-alone, each was waited out to the timeout, three minutes: a module that wouldn't compile or link never runs, so its
-loading screen never says it failed, and the command after it waited behind it.
-
-- `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
-  127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.
-- `node/`, the Node side:
-  - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
-    only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in
-    your browser could otherwise send it an `eval`). `supervisor.mjs` runs it (`serverProcess.mjs`) in a child
-    process and starts it again when the lab's code says something else (`codeStamp.mjs`, the hash every command is
-    checked against), and stops it when whatever started the supervisor is gone.
-  - `session.mjs`: a command run on each side it asks for, its report, problems and A/B verdict; `commands.mjs`:
-    what each command does on a side and how its results are compared.
-  - `side.mjs`: a tree of the game served by a Vite dev server of the lab's own (HMR off, so a measure never meets a
-    stale copy of a module) and booted in a page; `commits.mjs`: another commit exported for an A/B.
-  - `browser.mjs`: Playwright's Chromium in its native headless mode, and the scripts every page runs first (the
-    clock, seeded random numbers, no pointer lock but the page's own when asked, fresh storage).
-  - `trace.mjs`: `lab trace`, a trace fetched from the traces service and reported (`src/perf/traceReport.ts`), kept
-    in `out/traces`; `tracesService.mjs`: `lab recorder`'s traces service of its own (`server/traces`).
-  - `pwa.mjs`: `lab pwa`, two production builds served in turn by `staticHost.mjs` (as Pages serves the game) to a
-    browser of its own, the offline worker and all.
-  - `compare.mjs` (the reports' verdict), `pictures.mjs` (the pictures'), `profile.mjs` and `sourceMaps.mjs`
-    (`--profile`, its functions traced back through Vite's source maps to their lines in the source),
-    `sheetImage.mjs` (the sheet as one image), `probeFiles.mjs`, `errors.mjs`, `paths.mjs`.
-- `page/`: the lab inside the game's page, TypeScript typechecked with the game (`tsconfig.json` includes it, and
-  `examples/`), imported as the game imports its modules, so there is one copy of each. `lab.ts` (the clock, input,
-  set-ups, pictures), `commands.ts` (what the session calls: each command's module loaded as it runs, as an A/B copies
-  these modules into the other commit's tree, and one measuring game code that commit hasn't got stopped every command
-  loading there), `sheet.ts`, `carry.ts`, `comfort.ts`, `geometry.ts`,
-  `ranger.ts` (the bow's handle, `bow.group.userData.bow`).
-- `test/`: the Node side's tests, `npm run lab:test`.
-- `out/`: everything the lab writes (sheets, exported commits, Vite's cache, the browser's profile), never the user's
-  temp folder.
-
-Some of what that takes:
-
-- **Every command on a fresh page.** A page a command ran on is left as that command left it (the game's clock on,
-  the hero wherever it took him), and a set-up on it starts from another moment, so it is never used again. Within
-  one command its steps run in order on its page (the sheet's states one after another), the same order every time.
-  A check alone keeps pages from job to job, for the commands shown to come out the same that way, each set-up
-  afresh in a run of its own (`commands/check.md`). A page is booted once every map the loading workers make has
-  come (`mapsCome`: one landing mid-command drew the crypt's foes otherwise on a loaded machine).
-- **The clock.** From the moment the loading screen reveals the game, its frames run on the lab's clock: each a hair
-  over a 60th of a second, as fast as the page can, nothing drawn unless asked (the scene's matrices are still
-  updated). Every time the page reads is on a grid of 1/1024 ms, so the game's frame time is exact and the same on
-  every boot. Frames run back to back, with nothing landing between them (an A/B's side on a commit from before the
-  heroes' capes were taken off steps its capes in the frame, on the main thread, `stepCapesHere`: in the game they
-  stepped in a worker, whose results landed a frame or two late, and a commit's pictures against itself differed).
-- **No page of the lab's reaches production** (`node/production.mjs`, #595): every context a side opens routes production's host (`ls.wellscoped.dev`, the saves service, the co-op relay and the traces service) through a guard. The save slots screen and Play together ask the saves service for its health as they open, which production refuses a page on localhost (CORS: two errors of the page's that failed every command opening either, `ui --states saves,heroes,coop`); the lab answers that call itself (no Google sign-in). A slow-game report (`POST /traces`, which the game sends itself as a co-op run or a `ui` state meets a slow stretch) is answered with nothing too (204): no fault of the command's, and no lab page's report belongs in production (#675). Any other request or WebSocket there is refused and kept as an ask, which fails the command (`session.mjs`; `ui` states each judge their own, and its `--canary` lifts the lab's answer so the save slots ask production's host and must be caught). A command with services of its own (`cloud`, `recorder`, `profile`) points the page at them on localhost, which the guard never touches.
-- **Set-ups check themselves** (`Lab.setup`, the `Fixture`): the run held in its countdown (no foes and none coming),
-  the hero placed, stopped and settled, an arrow nocked if asked, the view made as the player makes it (V pressed: the
-  game sets the camera's view from its own every frame, and set on the camera alone it was top-down again a frame
-  later, so `--view first` never took); each step throws if it didn't take, and so does a boot that didn't boot the
-  hero asked for.
-- **A/B** (`--ab[=ref]`): the commit is exported with `git archive` into `out/commits/<sha>` (no worktree, no links),
-  served with its own dependency cache, the lab's page modules copied into it, and each side runs alone in the
-  browser, this tree's first. The pictures are compared pixel by pixel in the lab's browser.
-- **Rays against the body** (`geometry.ts`, `BakedBody`): the meshes skinned into the world as drawn, each bone's
-  matrix made once a frame (three's own way made it again for every vertex, 30 ms a frame), and only the meshes that
-  may reach the lines measured, by a bound that holds for any pose (each bone's sphere round its own vertices); every
-  baked vertex is checked against it.
-
-## Repeatability
-
-Every command gives the same result on every boot, its pictures too: a commit compared with itself agrees line for
-line, and no pixel of its pictures is more than 2 levels apart (the same view drawn twice with nothing changed comes
-out a level apart in a few pixels, the GPU's own rounding). What it takes:
-
-- the clock taken over at the reveal, every time on a grid of 1/1024 ms and a frame a whole number of its steps, so
-  the game's frame time is exact; and one frame run with the game held still as the lab installs, so the game's timer
-  counts from a lab frame;
-- `Math.random` seeded, started again as each command starts (after its modules are imported, in the same task:
-  each three.js object made draws a random number for its id, and textures land from the workers while a module
-  loads) and at each set-up, and as a hero's profile is found missing, just before a new one rolls its gear; and at
-  each lab frame, from the last seed and the frames since (`__labFrame`), so a draw one side made and the other didn't
-  moves only what's random after it in its own frame (it moved every particle from then on: a crowd's pictures differed
-  by 17% of their pixels where its bodies were drawn the same); timers' callbacks draw from a stream of their own,
-  since they fire by the browser's clock;
-- the game's clock moved forward to the next whole minute at a set-up, storage and cookies cleared at each boot, one
-  page alive at a time, and every command on a page booted for it.
-
-Each of these was found as a cause of runs that differed:
-
-- frames run in real time between the reveal and the lab taking over;
-- a yield after every frame (async work landed between different frames);
-- the loading screen's tips drawing random numbers on a timer, so a slower boot rolled other weapons;
-- a saved profile and cookies kept between boots;
-- two pages alive at once (one lost focus; the game lets go of the input on a blur);
-- the exported commit's ez-tree alias lowercased by the lab (a second copy of three.js, other random draws);
-- `Player.place` keeping the velocity (fixed in the game);
-- frame times a few bits apart from boot to boot, taken from the browser's clock (a cast of a whole number of 60ths
-  ended a frame early or late, one self-A/B in five);
-- commands run on a page an earlier one had used;
-- the random numbers started again before a command's imports rather than after (one boot in four, the haze and
-  pollen spawned before its set-up lay elsewhere in its pictures);
-- the first lab frame measured from the game's last real frame, a browser frame earlier on some boots (every
-  emitter's bursts a frame early or late, one boot in three);
-- the default profile rolled from wherever the boot had left the sequence: a commit that made one more three.js
-  object as its modules loaded rolled the ranger another bow and 2 less Health than main, so every A/B of him
-  compared two heroes (`ui --ab` differed in 11 of 12 pictures);
-- the wave's banner taken off the page by a timer on the browser's clock: one boot in two it was still there at a
-  picture, the HUD's layers laid out another way and the hotbar's thin frame lines rastered 20% brighter or dimmer
-  (`light --ab` differed in one picture of 18, one run in two). It goes now as its fade ends (`ui/hud.ts`), which
-  follows the lab ending it (`settleRunning`), and `screen` lets the browser draw a frame after each round it ends,
-  for their ends to reach the page and its layers to fall without them.
-
-To find where two runs part, record each frame's state and each random draw's caller in a probe and compare boots
-(two fresh boots, `--setup=false`, the probe setting up itself): the first frame or draw that differs names the cause.
-A page picture whose UI differs in how bright its thin lines are, nothing moved, was rastered two ways: `--layers`
-lists Chrome's layers at each picture, and where the sides' differ.
-
-## Testing the lab
-
-- `npm run lab:test`: the Node side's unit tests (the command line, the verdicts, the server's checks, the source
-  maps), in a second; the PR build runs them.
-- Each measure's canary (`carry --canary`, the example's `--canary`): run it when the measure changes.
-- `npm run lab -- carry --ab=HEAD` and `sheet --ab=HEAD`: a commit against itself must agree, line for line and pixel
-  for pixel; anything else is a cause of runs that differ, to be found and removed as above.
-
-- `houses`: the village's houses walked into and out of by E held at their doors in each view (a tap taking him nowhere, the prompt naming the house and filling; no two faces round a door inside in one plane; the room shown, the village and the yard's dummies not, every frame drawn and no program compiled, its cut away walls, a walk held in by its back wall, the trophies for the bosses beaten alone, the ledger's card within the window, the party table opening Play together, the library's Codex opening the guide, its scholar talked to and his card within the window, out before the cottage's door, the yard's dummies still on their spots, and the square and yard pictured after); `--canary` compiles a program going in, keeps the dummies in the room's walls, leaves the room drawn going out, makes the hold a press, lays a sheet in the door frame, makes the talk card wider than the window and lets the room's zoom go (from above in a room, the wheel out and in kept to its range, his own zoom given back out of it). `coop --scenarios houses`: the guest goes into the tavern, the host's game shows his name over its door, a dot at it on the minimap and his name under it on the map, all gone as he comes out (`node/coopHouses.mjs`, `page/coopHouses.ts`; `--canary` takes the marker away).
-- `scholar`: the library's Brother Hollis (his reading loop posed through frame by frame, its wrap included: no joint snapping, his head and hands moving, his sleeves never through his table, the book's prints reaching the spine, the page he turns never under the book and landing flat, his fingers on its edge while he holds it, the page never through either hand, his forearms clothed to the wrist, his fingertips never sunk into what they rest on; a hero come near glanced up at and walked off from, the hero held in his eye while talked to; pictured at the loop's beats close up from each side and over his shoulder, his face, and as the player sees him); `--film` a picture a moment; `--canary` jumps his loop on mid-way, raises his table, lowers the page's spine, draws the prints back from the spine, drops the page on his resting hand and strips his undersleeves.
-
-- `merchant`: Odo's prices against the drop rates (no rarity sold from a wave where trading beats playing for it, none above epic) and his trade at his counter (the screen within the window, its three steps lit in turn and the stash dimmed till a ware is chosen, the legendary not offered, Auto-fill cheapest paying with rares, his full stock, a trade one common short held off and refused, one with enough made and saved, the stock one fewer, his restock after three runs; Odo pictured close and over the shoulder); `--canary` puts the piece bought back in his stock and leaves the stash dimmed with a ware chosen.
-
-- `training`: Training grounds (#405): attempted-wave persistence/migration, the village's ghost talked to and its card's battleground and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage and a solid ghost.
-
-- A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.
-
-- `guard`: #399, attacks while blocking in third person and through the eyes, a damage control during the exposed swing, immediate return/release/failure cases, independent shield and attack touch fingers. `--canary` leaves a shield raised during a swing and must detect it.
-
-- `portraits`: optional portrait requests and the real co-op picker; no downloads before use, current class only, selection, peer picture rendering and clearing, a class's default picture shown with none chosen, no two classes' alike (run it with `--panels`: the village's lobby hides the party cards it pictures). `--canary` requests another class and must detect it.
+How the lab boots, serves and keeps its pages, its Node and page sides, its clock and what tests it are [`WORKINGS.md`](WORKINGS.md): read it before changing the lab itself.
