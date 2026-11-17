@@ -241,9 +241,11 @@ export function fistHammer(j: Joints, k: number, eyes: boolean): void {
   const w = Math.max(up, down, ramp(k, 0, 0.15) * (1 - ramp(k, 0.85, 1)));
   if (eyes) {
     // (in the view: up into its top, then down through the middle to under the crosshair)
-    const y = lerp(lerp(-0.3, 0.55, up), -0.35, down), ahead = lerp(0.5, 0.65, down);
-    place(j, true, onScreen(j, [-0.05, y, ahead], _far), w, eyes);
-    place(j, false, onScreen(j, [0.05, y, ahead], _far), w, eyes);
+    // (raised at arm's length to the eyes' height, not over the head: on his own shoulders, raised into the view's
+    // top, the arms filled it)
+    const y = lerp(lerp(-0.3, 0.06, up), -0.35, down), ahead = lerp(0.64, 0.66, down);
+    place(j, true, onScreen(j, [-0.1, y, ahead], _far), w, eyes);
+    place(j, false, onScreen(j, [0.1, y, ahead], _far), w, eyes);
   } else {
     between(j, _mid);
     const y = lerp(lerp(0, 0.45, up), -0.28, down), z = lerp(lerp(0.3, 0.18, up), 0.55, down);
@@ -394,9 +396,10 @@ export function fistWrath(j: Joints, k: number, form: number, t: number, eyes: b
   }
   const w = Math.max(smooth(ramp(k, 0, 0.3)), down);
   if (eyes) {
-    const y = lerp(lerp(-0.4, 0.75, up), -0.85, down), ahead = lerp(0.45, 0.7, down);
-    place(j, true, onScreen(j, [-0.06, y, ahead], _far), w, eyes);
-    place(j, false, onScreen(j, [0.06, y, ahead], _far), w, eyes);
+    // (as the hammer: raised at arm's length to the eyes' height, then down through the view to the floor before him)
+    const y = lerp(lerp(-0.4, 0.1, up), -0.75, down), ahead = lerp(0.64, 0.68, down);
+    place(j, true, onScreen(j, [-0.11, y, ahead], _far), w, eyes);
+    place(j, false, onScreen(j, [0.11, y, ahead], _far), w, eyes);
   } else {
     between(j, _mid);
     const y = lerp(lerp(0, 0.5, up), -0.8 * deep, down), z = lerp(lerp(0.25, 0.15, up), 0.5, down);
