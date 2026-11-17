@@ -31,7 +31,7 @@ import { focusOf } from '../../../src/world/meadow';
 import { goTo, goUse, objectNear, villageObject } from '../../../src/game/village';
 import { routing } from '../../../src/world/walkPath';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
-import { helpOpen, hideHelp, showHelp } from '../../../src/ui/menus';
+import { helpOpen, hideHelp, hideSummary, showHelp, showSummary } from '../../../src/ui/menus';
 import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
 import { portalAtNight } from './villagePortalNight';
@@ -159,6 +159,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     stairClimbed: () => stairClimbed(lab, options.canary),
     hallWallsHold: () => unposed(() => hallWallsHold(lab, options.canary)),
     hallFreesPointer: () => hallFreesPointer(lab, options.canary),
+    summaryFreesPointer: () => summaryFreesPointer(lab, options.canary),
     grassSteady: () => grassSteady(lab, options.canary),
     grassRingsUnseen: () => grassRingsUnseen(lab, options.canary),
     grassRingsGentle: () => grassRingsGentle(lab, options.canary),
@@ -559,6 +560,28 @@ async function hallFreesPointer(lab: Lab, canary: boolean): Promise<Checked> {
   const problems = !lookHeld ? ['pointer: the close view never asked for mouse look on the square'] : [];
   if (!canary && held) problems.push('pointer: the hall of heroes\' screen kept the pointer locked (hidden)');
   if (heroSelectOpen()) closeHeroSelect();
+  await pressV(lab);
+  await pressV(lab);
+  await lab.step(SETTLE);
+  return { lines: [line], problems: canary ? [] : problems, caught: canary ? held : null };
+}
+
+/** In the close view, the pointer let go while the run's summary is up over the village (asked with none shown, with
+ *  `canary`, where mouse look holds it). From play: "After run, the mouse is still locked". */
+async function summaryFreesPointer(lab: Lab, canary: boolean): Promise<Checked> {
+  await stand(lab, [0, 4.5]);
+  await pressV(lab);
+  await lab.step(SETTLE);
+  if (renderer.viewMode() === 'top') throw new Error('lab: V never took the village into a close view');
+  const lookHeld = pointerWanted();
+  if (!canary) showSummary({ outcome: 'banked', wave: 18, score: 19950, kills: 448, bag: [] });
+  await lab.step(SETTLE);
+  const held = pointerWanted();
+  const line = `pointer: mouse look ${lookHeld ? 'holds' : 'lets go of'} it on the square, `
+    + `${held ? 'holds' : 'lets go of'} it ${canary ? 'there (asked there)' : 'over the run\'s summary'}`;
+  const problems = !lookHeld ? ['pointer: the close view never asked for mouse look on the square'] : [];
+  if (!canary && held) problems.push('pointer: the run\'s summary kept the pointer locked (hidden)');
+  hideSummary();
   await pressV(lab);
   await pressV(lab);
   await lab.step(SETTLE);

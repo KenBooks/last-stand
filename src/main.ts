@@ -998,7 +998,11 @@ function syncView(): void {
   const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen()
     && (!VILLAGE || (!villageCardOf() && !villageMapOpen() && !heroSelectOpen() && !dialogOpen()));
-  const look = v !== 'top' && !G.menuOpen && (inRun || inLobby) && !dev?.wantsCursor();
+  // (the run's summary is a screen of its own over either: its items' names are pointed at and scrolled, and with the
+  // lock held after a run ended in a close view the pointer stayed hidden over it, from play: "After run, the mouse is
+  // still locked")
+  const summaryUp = !$('#summary').classList.contains('hidden');
+  const look = v !== 'top' && !G.menuOpen && !summaryUp && (inRun || inLobby) && !dev?.wantsCursor();
   // (a finger looks by dragging over the world: no pointer to lock, ui/touch.ts)
   wantPointerLock(look && !input.touchMode);
   crosshair.classList.toggle('hidden', v === 'top');
