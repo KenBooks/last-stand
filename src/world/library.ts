@@ -11,7 +11,7 @@ import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { mulberry, rand } from '../util';
 import { particles, col } from '../fx/particles';
 import { G } from '../state';
-import { buildScholar, type Scholar } from '../entities/models/scholar';
+import { buildScholar, PAGE_TILT, type Scholar } from '../entities/models/scholar';
 import { SCHOLAR_DESK } from '../data/houses';
 import {
   BODY, CANDLE, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
@@ -222,24 +222,33 @@ function globe(g: THREE.Object3D, M: Mats, x: number, z: number): void {
   g.add(stand);
 }
 
-/** A book lying open at (x, y, z) turned `turn`: its cover and two inked pages bowed to the spine. */
-function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, turn: number, size: number, seed: number): void {
+/** how far over its block's top an open book's printed page lies (m) */
+const PRINTED = 0.0008;
+/** an open book's page block: its height, how far over the cover its foot stands (m) */
+const BLOCK = { high: 0.022, foot: 0.008 };
+
+/** A book lying open at (x, y, z) turned `turn`: its cover and two blocks of pages bowed to the spine, each page's
+ *  print lying on its block's top. Its blocks. (The print was turned by its own angles beside the block, the other
+ *  way from it: by the spine each block's top stood over its page, a plain white strip, from play.) */
+function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, turn: number, size: number, seed: number): THREE.Mesh[] {
   const b = new THREE.Group();
   b.position.set(x, y, z);
   b.rotation.y = turn;
   g.add(b);
   const cover = new THREE.MeshStandardMaterial({ color: [0x5a1814, 0x1e3a24, 0x23304e][seed % 3], roughness: 0.6 });
   box(b, size * 1.02, 0.012, size * 0.7, 0, 0, 0, cover);
+  const blocks: THREE.Mesh[] = [];
   for (const sx of [-1, 1]) {
-    const stack = box(b, size * 0.48, 0.022, size * 0.66, sx * size * 0.25, 0.008, 0, M.paper);
-    stack.rotation.z = -sx * 0.06;
+    const stack = box(b, size * 0.48, BLOCK.high, size * 0.66, sx * size * 0.25, BLOCK.foot, 0, M.paper);
+    stack.rotation.z = -sx * PAGE_TILT;
     const page = writing(M, 192, 256, size * 0.47, size * 0.64);
     page.mesh.rotation.set(-Math.PI / 2, 0, 0);
-    page.mesh.rotation.y = -sx * 0.06;
-    page.mesh.position.set(sx * size * 0.25, 0.036, 0);
+    page.mesh.position.set(0, BLOCK.high / 2 + PRINTED, 0);
     page.write((cx, w, h) => inkedPage(cx, w, h, sx < 0, seed * 7 + sx));
-    b.add(page.mesh);
+    stack.add(page.mesh);
+    blocks.push(stack);
   }
+  return blocks;
 }
 
 /** A reading desk at (x, z), turned `turn`: its top, legs and a drawer front; an open book, a stack, a quill in its
@@ -404,9 +413,10 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
   for (const sx of [-1, 1]) box(d, 0.055, 0.72, 0.05, sx * 0.21, 0.46, -0.25, M.timber);
   for (let k = -2; k <= 2; k++) box(d, 0.04, 0.5, 0.02, k * 0.07, 0.52, -0.255, M.panel);
   box(d, 0.5, 0.08, 0.06, 0, 1.12, -0.25, M.oak);
-  // (his book, open towards him: turned half round, its first page on his left)
-  const SIZE = 0.44;
-  openBook(d, M, 0, 0.76, 0.5, Math.PI, SIZE, 5);
+  // (his book, open towards him: turned half round, its first page on his left; out on the table a forearm's length
+  // from its edge, where his elbows rest)
+  const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };
+  const blocks = openBook(d, M, 0, BOOK.y, BOOK.z, Math.PI, SIZE, 5);
   // (the page he turns: its writing on both its faces)
   const page = writing(M, 192, 256, SIZE * 0.47, SIZE * 0.64);
   page.write((cx, w, h) => inkedPage(cx, w, h, false, 37));
@@ -433,7 +443,12 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
   }
   return () => {
     const table = { x0: -TABLE.w / 2, x1: TABLE.w / 2, z0: TABLE.z - TABLE.d / 2 - SAT, z1: TABLE.z + TABLE.d / 2 - SAT, top: TABLE.top };
-    const s = buildScholar({ spine: new THREE.Vector3(0, 0.796, 0.5 - SAT), pageW: SIZE * 0.47, pageD: SIZE * 0.64, page: pageMat, table });
+    // (the turning page's spine: where a page tilted as the blocks are, from there, lies over each block's print at its
+    // edge by 1.5 mm, and further over it towards the spine)
+    const edgeTop = BOOK.y + BLOCK.foot + BLOCK.high + PRINTED;
+    const spineY = edgeTop + Math.sin(PAGE_TILT) * SIZE * 0.49 + 0.0015;
+    const s = buildScholar({ spine: new THREE.Vector3(0, spineY, BOOK.z - SAT), pageW: SIZE * 0.47, pageD: SIZE * 0.64, page: pageMat, table,
+      blocks, printed: PRINTED, printTop: edgeTop });
     s.root.position.set(0, 0, SAT);
     d.add(s.root);
     return s;
