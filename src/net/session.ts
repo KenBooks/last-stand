@@ -69,7 +69,12 @@ const ASKED_MOST = 64;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /** A player's class and gear, which is all another game needs to show them. */
-export interface Look { cls: string; eq: Profile['equipped']; av?: string | null }
+export interface Look {
+  cls: string; eq: Profile['equipped']; av?: string | null;
+  /** the player's best wave cleared, any battleground (the save's `records.bestWave`): Play together's party cards
+   *  show it beside the gear's level (PROTOCOL 37) */
+  best?: number;
+}
 
 export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
 
@@ -230,7 +235,16 @@ export function invitedRoom(): string | null {
   return c && /^[A-Z0-9]{4,8}$/i.test(c) ? c.toUpperCase() : null;
 }
 
-export const myLook = (): Look => ({ cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player) });
+export const myLook = (): Look => ({
+  cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player), best: G.profile.records.bestWave,
+});
+
+/** A player's look as this game knows it: the local one's own, a partner's as its hello and look said it. */
+export function lookOf(p: Player): Look | null {
+  if (p.local) return myLook();
+  for (const peer of session.peers.values()) if (peer.player === p) return peer.look;
+  return null;
+}
 
 /** Takes the local player's name tag for a room, kept for next time; false (the session failed, saying why) if it
  *  can't be used. */

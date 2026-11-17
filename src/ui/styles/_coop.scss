@@ -93,7 +93,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 #coop .modal-box:has(.coop-head) > .sm-title { display: none; }
 .coop-head {
   display: flex; align-items: flex-end; gap: 18px; flex: none; border-bottom: 1px solid rgba($frame, .5);
-  .coop-tabs { border-bottom: none; }
+  // (the tabs to the right, the title on the left: from Victor's review of #682, "Lets move tabs to right")
+  .coop-tabs { border-bottom: none; margin-left: auto; }
   .coop-room { margin-left: auto; padding-bottom: 6px; display: flex; align-items: baseline; gap: 8px; }
   .coop-room .coop-code { display: inline; font-size: 24px; letter-spacing: 4px; }
 }
@@ -383,21 +384,54 @@ body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
 #coop .modal-box:has(.coop-in-room) { height: auto; }
 .coop-in-room.joining { grid-template-columns: minmax(0, 1fr); text-align: center; align-content: center; }
 .coop-party .coop-list { display: flex; flex-direction: column; gap: 6px; }
-.coop-card {
-  display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 56px;
-  background: rgba(22, 20, 24, .9); border: 1px solid rgba($frame, .3);
+// one size for every card, host or guest, filled or open (from Victor's review of #682): a fixed height, and every
+// part in a column of its own on every card, the portrait's box and the host's mark's held whether shown or not
+.coop-list > .coop-card {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) auto minmax(64px, auto); align-items: center; gap: 14px;
+  height: 72px; padding: 0 16px 0 12px; box-sizing: border-box;
+  background: linear-gradient(90deg, rgba(34, 28, 22, .95), rgba(18, 16, 18, .92)); border: 1px solid rgba($frame, .35);
+  border-radius: 3px;
   &.own { box-shadow: inset 3px 0 0 $highlight; }
-  &.empty { justify-content: space-between; border-style: dashed; background: rgba(0, 0, 0, .2); color: var(--ink-dim); }
-  small { display: block; font-size: 13px; }
+  &.empty { border-style: dashed; background: rgba(0, 0, 0, .22); color: var(--ink-dim); }
 }
-.coop-card-who { min-width: 0; flex: 1; b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.coop-card-face {
+  width: 52px; height: 52px; display: grid; place-items: center; overflow: hidden;
+  border: 1px solid rgba($frame, .5); border-radius: 3px; background: rgba(0, 0, 0, .35);
+  > * { width: 100%; height: 100%; object-fit: cover; border: none; border-radius: 0; }
+}
+.coop-card.empty .coop-card-face { border-style: dashed; border-color: rgba($frame, .25); background: none; }
+.coop-card-who {
+  min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  b {
+    display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap;
+    font: 700 18px var(--font-body); letter-spacing: .3px; color: #f3e7cf;
+  }
+  .coop-dot { margin: 0; }
+  small { font: 600 12px var(--font-display); letter-spacing: 1.5px; text-transform: uppercase; }
+}
+.coop-card.empty .coop-card-who b { font: 600 15px var(--font-display); letter-spacing: 1.5px; color: var(--ink-dim); }
+.coop-card.empty .coop-card-who small { font: 13px var(--font-body); letter-spacing: 0; text-transform: none; }
+.coop-card-stats { display: flex; gap: 18px; }
+.coop-stat {
+  display: flex; flex-direction: column; align-items: center; min-width: 58px;
+  b { font: 700 20px var(--font-display); color: var(--accent); font-variant-numeric: lining-nums tabular-nums; line-height: 1.1; }
+  small { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-dim); white-space: nowrap; }
+}
+.coop-card-mark { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 .coop-card-host {
-  flex: none; padding: 2px 8px; border: 1px solid rgba($highlight, .6); border-radius: 10px; font-size: 12px; color: $highlight;
+  padding: 3px 10px; border: 1px solid rgba($highlight, .6); border-radius: 10px; font: 600 12px var(--font-display);
+  letter-spacing: 1px; color: $highlight; background: rgba($highlight, .08);
 }
-.coop-card-open { font-family: var(--font-display); letter-spacing: 1px; }
 .coop-party .coop-link { flex: none; }
 @media (max-height: 520px) {
-  .coop-card { min-height: 0; padding: 4px 10px; }
+  // (a phone held sideways: smaller cards, still one size)
+  .coop-list > .coop-card { height: 46px; grid-template-columns: 36px minmax(0, 1fr) auto 48px; gap: 8px; padding: 0 8px; }
+  .coop-card-face { width: 36px; height: 36px; }
+  .coop-card-who b { font-size: 14px; }
+  .coop-card-who small { font-size: 10px; }
+  .coop-card-stats { gap: 8px; }
+  .coop-stat { min-width: 44px; b { font-size: 15px; } small { font-size: 9px; } }
+  .coop-card-host { padding: 1px 6px; font-size: 10px; }
   .coop-in-room { grid-template-columns: minmax(0, 1fr) minmax(0, 260px); }
   .coop-party .coop-intro { display: none; }
   .colour-drop .cc-label { font-size: 13px; }

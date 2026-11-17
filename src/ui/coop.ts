@@ -3,7 +3,8 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import {
-  session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf, PROTOCOL, ROOM_NAME_MAX, type RoomKind,
+  session, hostRoom, joinRoom, leaveRoom, inviteLink, partners, peerIdOf, lookOf, PROTOCOL, ROOM_NAME_MAX, type Look,
+  type RoomKind,
   type RoomPlan,
 } from '../net/session';
 import { askProblem, askTrade } from '../net/trade';
@@ -303,12 +304,34 @@ function roomKindLine(s: string): string {
 }
 
 /** A player's card in the room: portrait, colour, name tag, class in its accent, the host's mark; an empty place. */
+/** The level of a player's gear: the mean of what it wears' item levels, 0 with nothing worn. */
+function gearLevel(look: Look | null): number {
+  const levels = Object.values(look?.eq ?? {}).map((item) => item?.ilvl).filter((l): l is number => Number.isFinite(l));
+  return levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : 0;
+}
+/** a partner's best wave as its look says it, held to a whole number a wave could be (none: unsaid) */
+const bestOf = (look: Look | null): number | null =>
+  Number.isInteger(look?.best) && look!.best! >= 0 && look!.best! < 10000 ? look!.best! : null;
+/** one figure of a card: its number over its name */
+const statHtml = (value: string, name: string): string => `<span class="coop-stat"><b>${value}</b><small>${name}</small></span>`;
+
+/** A player's card in the room: portrait, colour, name tag, class in its accent, the gear's level and best wave, the
+ *  host's mark; an empty place. Every card is one size (from Victor's review of #682: "Card need to be same size,
+ *  host or guest"): the host's mark has its column on every card, empty but for the host's. */
 function partyCardHtml(p: Player | null): string {
-  if (!p) return '<li class="coop-card empty"><span class="coop-card-open">Open place</span><small>Waiting for a friend to join…</small></li>';
+  if (!p) {
+    return `<li class="coop-card empty"><span class="coop-card-face"></span><span class="coop-card-who"><b>Open place</b>
+      <small>Waiting for a friend to join…</small></span><span class="coop-card-stats"></span><span class="coop-card-mark"></span></li>`;
+  }
   const accent = CLASSES[p.cls.id]?.accent;
+  const look = lookOf(p);
+  const best = bestOf(look);
   const host = p.slot === 0 ? '<span class="coop-card-host" title="Host">Host</span>' : '';
-  return `<li class="coop-card${p.local ? ' own' : ''}">${portraitHtml(p)}<span class="coop-dot"${dotColour(p)}></span>
-    <span class="coop-card-who"><b>${esc(nameOf(p))}</b><small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>${host}${tradeButton(p)}</li>`;
+  return `<li class="coop-card${p.local ? ' own' : ''}"><span class="coop-card-face">${portraitHtml(p)}</span>
+    <span class="coop-card-who"><b><span class="coop-dot"${dotColour(p)}></span>${esc(nameOf(p))}</b>
+      <small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>
+    <span class="coop-card-stats">${statHtml(String(gearLevel(look)), 'Gear level')}${statHtml(best === null ? '–' : String(best), 'Best wave')}</span>
+    <span class="coop-card-mark">${host}${tradeButton(p)}</span></li>`;
 }
 
 function renderBody(body: HTMLElement): void {
