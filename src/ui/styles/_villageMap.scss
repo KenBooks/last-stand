@@ -39,6 +39,11 @@
 /* a house walked into: a house before its name, in a hearth's brown */
 .vm-name[data-use="enter"] { display: inline-flex; align-items: center; gap: ui(5px); color: #7a3412; }
 .vm-house { width: ui(14px); height: ui(14px); flex: none; }
+/* a partner inside it (ui/houseMarks.ts): his name under the house's, in the partners' blue on a dark band */
+.vm-name.occupied { flex-wrap: wrap; justify-content: center; row-gap: ui(2px); }
+.vm-inside { flex-basis: 100%; font: 700 ui(11px) var(--font-display); letter-spacing: .03em; color: #cfe6ff;
+  background: rgba(20, 42, 70, .88); border-radius: ui(2px); padding: ui(1px) ui(5px); white-space: nowrap; }
+.vm-inside[hidden] { display: none; }
 /* the hero: an arrow the way he faces */
 .vm-you { position: absolute; left: 0; top: 0; width: ui(22px); height: ui(22px); margin: ui(-11px) 0 0 ui(-11px);
   will-change: transform; }

@@ -15,7 +15,7 @@ export interface House { id: RoomId; cottage: number; name: string; half: [numbe
 
 export const HOUSES: Record<RoomId, House> = {
   // (the cottage nearest the notice board, beside the Thornwood's road: from play, its pick)
-  records: { id: 'records', cottage: 0, name: 'House of Records', half: [4.6, 3.6], high: 3.3 },
+  records: { id: 'records', cottage: 0, name: 'The House of Records', half: [4.6, 3.6], high: 3.3 },
   // (the cottage east of the square, its door on the road to the Crypt's portal, where a party passes on its way to a
   // run: from play, the owner's pick on the village's map)
   tavern: { id: 'tavern', cottage: 5, name: 'The Ember & Oak', half: [5.4, 4.0], high: 3.2 },
@@ -59,7 +59,8 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
     // (its name over the door's lintel, a hair out from it)
     return {
       id: `${id}Door`, use: 'enter', room: undefined, into: id, at: [d.x + Math.sin(d.facing) * 0.35, d.z + Math.cos(d.facing) * 0.35],
-      reach: 2.0, stand: [s.x, s.z], label: 2.25, tall: 2.3, name: HOUSES[id].name, verb: 'Go in',
+      // (its prompt on the door's leaf, under the sign over it: at the head, the two stood one on the other, from play)
+      reach: 2.0, stand: [s.x, s.z], label: 1.75, tall: 2.3, name: HOUSES[id].name, verb: 'Go in',
     };
   });
   const way = (id: RoomId): VillageObject => {

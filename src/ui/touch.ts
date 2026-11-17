@@ -95,6 +95,10 @@ export interface TouchVillage {
   /** the object the hero is near, if any: Use's */
   near(): VillageObject | null;
   use(o: VillageObject): void;
+  /** whether `o` is used by holding Use (a house's door), and Use held (`on`) or let go; how far a hold has come */
+  holds(o: VillageObject): boolean;
+  hold(on: boolean): void;
+  held(): number;
   inventory(): void;
   map(): void;
 }
@@ -107,10 +111,19 @@ export function initTouch(v: TouchVillage): void {
   village = v;
   // (the village's row and the view's button are the village's: the panels' lobby's touch play stays top-down)
   if (VILLAGE) {
-    $('#touch-village .tv-use').addEventListener('click', () => {
+    const use = $('#touch-village .tv-use');
+    use.addEventListener('click', () => {
       const o = village.near();
-      if (o) village.use(o);
+      // (a house's door is held, not tapped: game/village.ts `holdAt`)
+      if (o && !village.holds(o)) village.use(o);
     });
+    // (held on its own pointer, as the hold buttons are: a finger drifting off it doesn't let go)
+    use.addEventListener('pointerdown', (e) => {
+      use.setPointerCapture(e.pointerId);
+      village.hold(true);
+    });
+    for (const end of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) use.addEventListener(end, () => village.hold(false));
+    use.addEventListener('contextmenu', (e) => e.preventDefault());
     $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
     $('#touch-village .tv-map').addEventListener('click', () => village.map());
   }
@@ -367,11 +380,16 @@ function updateVillageRow(on: boolean): void {
     villageShown = on;
     $('#touch-village').classList.toggle('hidden', !on);
   }
-  const says = on ? village.near()?.verb ?? '' : '';
+  const near = on ? village.near() : null;
+  const holds = !!near && village.holds(near);
+  // (its fill, a layer of its own moved by its transform alone: the hold's share)
+  if (holds) $('#touch-village .tv-fill').style.transform = `scaleX(${village.held().toFixed(3)})`;
+  const says = near ? (holds ? `Hold · ${near.verb}` : near.verb) : '';
   if (says === useSays) return;
   useSays = says;
   const use = $('#touch-village .tv-use');
-  use.textContent = says;
+  use.querySelector('.tv-says')!.textContent = says;
+  use.classList.toggle('holds', holds);
   use.classList.toggle('hidden', !says);
 }
 

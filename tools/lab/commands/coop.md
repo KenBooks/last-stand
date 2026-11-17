@@ -6,6 +6,12 @@ delayed link. `--party 3|4` includes the remaining party members; `--canary` del
 host's colour and must detect the duplicate. It finishes by changing colour from Settings during a run. The normal
 combat scenarios keep their existing room checks.
 
+`coop --scenarios houses` runs alone, in the village with no run (`node/coopHouses.mjs`, `page/coopHouses.ts`): the
+host stands before the tavern's door and the guest goes into the tavern. The host's game must draw the marker over
+its door with the guest's name (`ui/houseMarks.ts`), a dot for him at the door on its minimap, and his name under the
+tavern's on the village's map; none of them before he goes in or once he's out. `--pictures` takes the marker and the
+map (`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn, which must be found.
+
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 

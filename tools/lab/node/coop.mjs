@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
+import { partnerInHouse } from './coopHouses.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
 import { runsEnds } from './coopEnds.mjs';
@@ -623,6 +624,7 @@ export async function runCoop(side, options) {
     throw labError('coop: colours runs alone, without combat');
   }
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
+  if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
@@ -646,6 +648,12 @@ export async function runCoop(side, options) {
       // (a party's: three games, one of them watching a 1 v 1; four, a 2 v 2)
       if (party > 2) problems.push(...await fightPartyDuel(pair, callPage, lines, { pictures }));
       else problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures }));
+      return { text: lines.join('\n'), problems };
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'houses') {
+      // (in the village, no run: a partner gone into a house, node/coopHouses.mjs)
+      const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
+      problems.push(...await partnerInHouse(pair, callPage, lines, { tags: PARTY_TAGS, canary, pictures }));
       return { text: lines.join('\n'), problems };
     }
     const start = await startTogether(pair, { ping, jitter }, lines, canary);

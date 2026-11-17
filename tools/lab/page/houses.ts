@@ -14,15 +14,20 @@ import { G } from '../../../src/state';
 import { HOUSES, ROOM_IDS, insideOf, outsideOf, type RoomId } from '../../../src/data/houses';
 import { objectNear, villageObject } from '../../../src/game/village';
 import { chronicleOf } from '../../../src/game/chronicle';
+import { writeRecords } from '../../../src/game/rooms';
 import { faceCamera, settleCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { toVillage } from './village';
+import { holdThroughDoor } from './housesDoor';
+import { doorFacesSteady } from './housesFaces';
+import { ownZoom, zoomGivenBack, zoomInRoom } from './housesZoom';
 import { YARD_DUMMIES, type VillageObject } from '../../../src/data/village';
 import { resolveWorld } from '../../../src/world/collision';
 import type { Enemy } from '../../../src/entities/enemy';
 
 /** `--canary`: a program compiled as the first room comes in, the yard's dummies kept in its walls as if they stood
- *  there, and the room left shown as he comes out. */
+ *  there, the room left shown as he comes out, the door's hold made a press, and a sheet laid in the door frame's face
+ *  inside. */
 export interface HousesOptions {
   canary: boolean;
 }
@@ -293,8 +298,14 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   const door = villageObject(`${id}Door`)!;
   const out = outsideOf(id);
   await stand(lab, door.stand, out.facing + Math.PI);
+  // (from above, a zoom of his own outside, out past a room's: given back as he comes out)
+  if (view === 'top') ownZoom();
   const before = programs();
-  await useByE(lab, door, problems);
+  // (held, as a player holds it: a tap first, which must take him nowhere; pictured mid-hold at each house's first)
+  const first = VISITS.findIndex((v) => v.id === id) === VISITS.findIndex((v) => v.id === id && v.view === view);
+  const held = await holdThroughDoor(lab, door, moments, first ? `houses-${id}-hold-${view}` : null, canary);
+  const tapCaught = held.some((p) => p.includes('a tap of E'));
+  if (!canary) problems.push(...held);
   await lab.until(() => G.arena.room === id, DOOR_FRAMES, `${id}'s door never took him in`);
   // (the canary's program: a material of its own, compiled as the room is first drawn)
   const planted = canary ? plantProgram(id) : null;
@@ -312,11 +323,26 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   if (seenFoes) problems.push(`${id}: ${seenFoes} of the lobby's foes drawn in the room`);
   problems.push(...cutAwayProblems(id, view));
   const compiled = programs() - before;
-  const caught = canary ? compiled > 0 : undefined;
+  // (no two faces round its door in one plane, from inside and from above)
+  const faces = first ? doorFacesSteady(id, canary) : null;
+  if (faces) {
+    lines.push(faces.line);
+    if (!canary && faces.places) problems.push(faces.line);
+  }
+  G.arena.rooms![id].cutAway(G.camera.getWorldPosition(new THREE.Vector3()));
+  // (its trophies hung again for the bosses beaten: the check showed every part)
+  if (id === 'records') writeRecords();
+  const caught = canary ? compiled > 0 && tapCaught && (faces?.places ?? 0) > 0 : undefined;
   if (compiled && !canary) problems.push(`${id} in ${view}: ${compiled} programs compiled going in`);
   lines.push(`${id} in ${view}: in at ${G.player.pos.x.toFixed(2)},${G.player.pos.z.toFixed(2)}; cut away: `
     + `${cutAway(id).join(', ') || 'none'}; programs compiled ${compiled}`);
   moments.push(await lab.screen(`houses-${id}-${view}`));
+  // (from above, the wheel turned out and in as far as it goes, before any card opens over the room: the zoom kept to the room's)
+  const zoomed = view === 'top' ? await zoomInRoom(lab, id, moments, canary) : null;
+  if (zoomed) {
+    lines.push(zoomed.line);
+    problems.push(...zoomed.problems);
+  }
   // (walked at the back wall down a lane clear of what stands in the room: held in by it)
   await stand(lab, [LANES[id], G.player.pos.z], Math.PI);
   const from = G.player.pos.z;
@@ -343,11 +369,12 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
     problems.push(...talk.problems);
     talkCaught = talk.caught;
   }
-  // (out by its door inside)
+  // (out by its door inside, held as going in was: pictured mid-hold, its frame and leaf as he sees them)
   const way = villageObject(`${id}Out`)!;
   await stand(lab, way.stand, 0);
+  if (view !== 'top') moments.push(await lab.screen(`houses-${id}-door-inside-${view}`));
   const leaving = programs();
-  await useByE(lab, way, problems);
+  problems.push(...await holdThroughDoor(lab, way, moments, first ? `houses-${id}-hold-out-${view}` : null));
   await lab.until(() => G.arena.room === null, DOOR_FRAMES, `${id}'s door inside never let him out`);
   if (canary) G.arena.rooms![id].group.visible = true;
   await lab.step(SETTLE);
@@ -357,15 +384,17 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   const leftShown = roomShown(id);
   if (leftShown && !canary) problems.push(`${id}: out of it, the room is still drawn`);
   if (programs() !== leaving) problems.push(`${id}: ${programs() - leaving} programs compiled going out`);
+  if (view === 'top' && !canary) problems.push(...zoomGivenBack(id));
   if (canary) G.arena.rooms![id].group.visible = false;
   const dummies = dummyProblems(id);
   lines.push(dummies.line);
   const dummiesMoved = dummies.problems.length > 0;
   if (!canary) problems.push(...dummies.problems);
+  const zoomCaught = zoomed?.caught === true;
   return {
     lines,
     problems,
-    caught: plantTalk ? talkCaught === true : canary ? caught === true && leftShown && dummiesMoved : undefined,
+    caught: plantTalk ? talkCaught === true : canary ? caught === true && leftShown && dummiesMoved && zoomCaught : undefined,
   };
 }
 
@@ -405,7 +434,8 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');
   const caught = visits[0].caught === true && talked?.caught === true;
   lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's `
-    + `walls, the room left drawn going out: ${visits[0].caught ? 'found' : 'unseen'}; `
+    + 'walls, the room left drawn going out, a tap through a door made a press, a sheet in the door frame, the zoom '
+    + `let go in a room: ${visits[0].caught ? 'found' : 'unseen'}; `
     + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'})`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }

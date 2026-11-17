@@ -19,6 +19,7 @@ import { buildFire, emberMat, type FireLog } from './fire';
 import { boxWithUV, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
 import { buildLibrary } from './library';
+import { buildDoor, type Door } from './door';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -208,7 +209,7 @@ export function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, 
 /** The room's shell: the floor, the walls (plaster over a panelled wainscot between timber posts, a door in the front,
  *  windows either side of it), the ceiling's planks on beams. Each wall and the ceiling in a group of its own (the
  *  cut away's), each added to the room's wall. */
-function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[] } {
+function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door } {
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(hx * 2 + 0.2, hz * 2 + 0.2).rotateX(-Math.PI / 2), M.floor);
   const uv = floor.geometry.attributes.uv;
@@ -217,18 +218,23 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
   g.add(floor);
   const sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[] = [];
   // each wall in its own frame: x along it, its inner face at z = 0, facing +z (into the room)
+  let door: Door | null = null;
   const walls: { length: number; at: THREE.Vector3; turn: number; door: boolean; windows: number[]; outside: (e: THREE.Vector3) => boolean }[] = [
     { length: hx * 2, at: new THREE.Vector3(0, 0, -hz), turn: 0, door: false, windows: [], outside: (e) => e.z < -hz - OUTSIDE },
     { length: hx * 2, at: new THREE.Vector3(0, 0, hz), turn: Math.PI, door: true, windows: [-hx * 0.55, hx * 0.55], outside: (e) => e.z > hz + OUTSIDE },
     { length: hz * 2, at: new THREE.Vector3(-hx, 0, 0), turn: Math.PI / 2, door: false, windows: [], outside: (e) => e.x < -hx - OUTSIDE },
     { length: hz * 2, at: new THREE.Vector3(hx, 0, 0), turn: -Math.PI / 2, door: false, windows: [], outside: (e) => e.x > hx + OUTSIDE },
   ];
-  for (const w of walls) {
+  for (const [i, w] of walls.entries()) {
     const side = new THREE.Group();
     side.position.copy(w.at);
     side.rotation.y = w.turn;
     g.add(side);
-    const L = w.length + WALL_THICK * 2, t = WALL_THICK;
+    // (the back and front walls run past the corners; the side walls stop at their faces, and what runs along a side
+    // wall stops short of the front's and the back's by its own depth: run into the corner, the two walls' tops, rails,
+    // skirtings and plates lay in one plane there and flickered from above)
+    const across = i >= 2, t = WALL_THICK, L = across ? w.length : w.length + t * 2;
+    const short = (depth: number): number => (across ? depth : 0);
     // the plaster's body behind, in pieces round the door and windows
     const holes = [...(w.door ? [{ x: 0, half: DOOR.half, low: 0, high: DOOR.high }] : []),
       ...w.windows.map((x) => ({ x, half: WINDOW.half, low: WINDOW.low, high: WINDOW.high }))].sort((a, b) => a.x - b.x);
@@ -241,41 +247,49 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
     }
     box(side, L / 2 - from, high, t, (from + L / 2) / 2, 0, -t / 2, M.plaster, false);
     // the wainscot's panels and its rail, broken by the door
+    // (stopped under the door's frame, which stands out past them all: ended in it a hand in, the skirting's face lay
+    // in one plane with the frame's and flickered)
     const runs = w.door ? [[-w.length / 2, -DOOR.half - 0.1], [DOOR.half + 0.1, w.length / 2]] : [[-w.length / 2, w.length / 2]];
+    const run = (a: number, b: number, depth: number, h: number, y: number, z: number, m: THREE.Material): void => {
+      const from = a + (a <= -w.length / 2 ? short(depth) : 0), to = b - (b >= w.length / 2 ? short(depth) : 0);
+      box(side, to - from, h, depth, (from + to) / 2, y, z, m);
+    };
     for (const [a, b] of runs) {
-      box(side, b - a, WAINSCOT, 0.04, (a + b) / 2, 0, 0.02, M.panel);
-      box(side, b - a, 0.07, 0.07, (a + b) / 2, WAINSCOT, 0.035, M.timber);
-      box(side, b - a, 0.12, 0.05, (a + b) / 2, 0, 0.065, M.timber);
+      run(a, b, 0.04, WAINSCOT, 0, 0.02, M.panel);
+      run(a, b, 0.07, 0.07, WAINSCOT, 0.035, M.timber);
+      run(a, b, 0.09, 0.12, 0, 0.065 - 0.02, M.timber);
       // (its panels' stiles every 0.7 m)
       for (let x = a + 0.35; x < b - 0.2; x += 0.7) box(side, 0.06, WAINSCOT - 0.12, 0.03, x, 0.12, 0.055, M.timber);
     }
     // posts and a plate under the ceiling
     for (const x of [-w.length / 2 + 0.1, w.length / 2 - 0.1, ...(w.length > 8 ? [-w.length / 4, w.length / 4] : [])]) {
       if (holes.some((h) => Math.abs(h.x - x) < h.half + 0.2)) continue;
-      box(side, 0.2, high, 0.12, x, 0, 0.06, M.timber);
+      // (up to the plate, not through it: their tops lay in one plane with the plate's, seen from above)
+      box(side, 0.2, high - 0.2, 0.12, x, 0, 0.06, M.timber);
     }
-    box(side, w.length, 0.2, 0.14, 0, high - 0.2, 0.07, M.timber);
-    // the door's frame and its leaves, shut (the night beyond), and each window's casing, panes and sill
+    box(side, w.length - short(0.14) * 2, 0.2, 0.14, 0, high - 0.2, 0.07, M.timber);
+    // the door in its frame, its reveal lined, shut (the night beyond: world/door.ts), and each window's casing, panes
+    // and sill. (Its jambs stood half into the wall's thickness, their faces in one plane with the plaster's beside the
+    // hole and under its head, which flickered against them seen from inside, from play)
     if (w.door) {
-      for (const sx of [-1, 1]) box(side, 0.12, DOOR.high, 0.16, sx * (DOOR.half + 0.06), 0, 0.02, M.timber);
-      box(side, DOOR.half * 2 + 0.36, 0.16, 0.18, 0, DOOR.high, 0.02, M.timber);
-      box(side, DOOR.half * 2, DOOR.high, 0.06, 0, 0, -0.08, M.oak);
-      for (const y of [0.35, 1.1, 1.85]) box(side, DOOR.half * 2 - 0.1, 0.07, 0.03, 0, y, -0.035, M.iron);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.01, 6, 14), M.iron);
-      ring.position.set(DOOR.half - 0.2, 1.05, -0.02);
-      side.add(ring);
+      door = buildDoor({ frame: M.timber, leaf: M.oak, iron: M.iron }, {
+        wide: DOOR.half * 2, high: DOOR.high, leafZ: -0.12, hinge: 1, faces: 1, frame: true, lining: 0.03, deep: t,
+      }, 3 + ROOM_IDS.indexOf(id));
+      side.add(door.group);
     }
     for (const x of w.windows) {
       box(side, WINDOW.half * 2, WINDOW.high - WINDOW.low, 0.03, x, WINDOW.low, -t / 2, M.glass, false).castShadow = false;
       box(side, 0.05, WINDOW.high - WINDOW.low, 0.05, x, WINDOW.low, -t / 2 + 0.02, M.timber);
       box(side, WINDOW.half * 2, 0.05, 0.05, x, (WINDOW.low + WINDOW.high) / 2, -t / 2 + 0.02, M.timber);
-      for (const sx of [-1, 1]) box(side, 0.1, WINDOW.high - WINDOW.low + 0.1, 0.1, x + sx * (WINDOW.half + 0.05), WINDOW.low - 0.05, 0.03, M.timber);
-      box(side, WINDOW.half * 2 + 0.3, 0.1, 0.12, x, WINDOW.high, 0.04, M.timber);
+      // (its casing on the wall's face, a hair off it: half into the wall, its faces lay in the hole's, as the door's did)
+      for (const sx of [-1, 1]) box(side, 0.1, WINDOW.high - WINDOW.low + 0.1, 0.08, x + sx * (WINDOW.half + 0.05), WINDOW.low - 0.05, 0.042, M.timber);
+      box(side, WINDOW.half * 2 + 0.3, 0.1, 0.1, x, WINDOW.high, 0.052, M.timber);
       box(side, WINDOW.half * 2 + 0.36, 0.06, 0.2, x, WINDOW.low - 0.07, 0.08, M.timber);
     }
     wall.add(side, false);
     sides.push({ group: side, outside: w.outside });
   }
+  if (!door) throw new Error(`room ${id} has no door`);
   // the ceiling: planks over beams across the room, a ridge beam along it
   const ceiling = new THREE.Group();
   g.add(ceiling);
@@ -284,7 +298,7 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
   box(ceiling, hx * 2, 0.24, 0.26, 0, high - 0.5, 0, M.timber);
   wall.add(ceiling, false);
   sides.push({ group: ceiling, outside: (e) => e.y > high - 0.05 });
-  return { sides };
+  return { sides, door };
 }
 
 /** A hearth in the middle of a wall (the wall's frame: `side`, 0 its middle, facing +z): a stone chimney breast, its
@@ -967,12 +981,12 @@ const SIDE_NAMES = ['back', 'front', 'west', 'east', 'ceiling'] as const;
 
 /** What both rooms share as they're built. */
 export interface Build { g: THREE.Group; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
-  sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[] }
+  sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door }
 
 export function begin(id: RoomId, group: THREE.Group, seed: number): Build {
   const M = makeMats(), wall = new Wall('village');
-  const { sides } = shell(group, M, id, wall);
-  return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides };
+  const { sides, door } = shell(group, M, id, wall);
+  return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides, door };
 }
 
 /** A room as built, its walls sealed. */
@@ -1116,11 +1130,27 @@ function buildRecords(group: THREE.Group): Room {
   return room;
 }
 
+/** the height of the tavern's table tops, where its cups and candles stand (m), and how thick their worn top is */
+const TOP = 0.76, WORN = 0.012;
+
 /** The tavern: the hearth in the back wall, the bar down the east wall with its shelves of bottles and kegs, the party's
  *  round table by the hearth with its map, a long table and benches, barrels by the door, the party board beside it. */
 function buildTavern(group: THREE.Group): Room {
   const id: RoomId = 'tavern', b = begin(id, group, 4711), { g, M, obstacles, rng } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
+  // (its tables and seats in a wood of their own: in the floor's dark oak they read as one with it, from play, "tables
+  // should stand out from the floor"; a ruddy rim and legs nearly black, a pale top worn by the tankards, its grain
+  // finer: the oak's and the floor's maps and programs, other colours and repeats)
+  const legs = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x1c100a });
+  const rim = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0xa8461a });
+  const worn = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), [1, 2], 0.5), color: 0xfff0d8, roughness: 0.6 });
+  const T: Mats = { ...M, oak: rim, timber: legs };
+  /** a table in the tavern's wood: its top a hair over the rim, at the height the cups stand */
+  const inn = (x: number, z: number, w: number, d: number, round = false): void => {
+    table(g, T, x, z, w, d, obstacles, TOP - WORN, round);
+    if (round) drum(g, w / 2 - 0.05, w / 2 - 0.05, WORN, x, TOP - WORN, z, worn, 24).castShadow = false;
+    else box(g, w - 0.08, WORN, d - 0.08, x, TOP - WORN, z, worn).castShadow = false;
+  };
   hearth(g, M, new THREE.Vector3(0.6, 0, -hz), 0, high, b.updaters, obstacles);
   // (tankards and a pot on the mantel)
   for (const x of [-0.3, 0.1, 0.55, 1.2, 1.5]) tankard(g, M, x, 1.46, -hz + 0.78, x > 1);
@@ -1133,7 +1163,7 @@ function buildTavern(group: THREE.Group): Room {
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
   for (const [z, metal] of [[-1.9, false], [-1.2, true], [-0.1, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
-  for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, M, barX - 0.75, z, 0.72);
+  for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, T, barX - 0.75, z, 0.72);
   const east = onWall(g, id, 'east');
   const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
   const glassTints = [0x2a5a2a, 0x6a2a14, 0x1a3a5a, 0x8a6a2a, 0x3a1a3a];
@@ -1162,7 +1192,7 @@ function buildTavern(group: THREE.Group): Room {
   lantern(east, M, 0.6, 2.6, 0, 0, 1);
   // --- the party's round table by the hearth, a map spread on it, stools round ---
   const [px, pz] = [-hx + 2.2, -hz + 2.4];
-  table(g, M, px, pz, 1.5, 1.5, obstacles, 0.76, true);
+  inn(px, pz, 1.5, 1.5, true);
   const map = writing(M, 512, 384, 0.9, 0.66);
   map.mesh.rotation.set(-Math.PI / 2, 0, 0.2);
   map.mesh.position.set(px, 0.765, pz);
@@ -1170,21 +1200,21 @@ function buildTavern(group: THREE.Group): Room {
   map.write((cx, w, h) => drawMap(cx, w, h));
   for (let k = 0; k < 5; k++) {
     const a = (k / 5) * Math.PI * 2 + 0.4;
-    stool(g, M, px + Math.cos(a) * 1.05, pz + Math.sin(a) * 1.05);
+    stool(g, T, px + Math.cos(a) * 1.05, pz + Math.sin(a) * 1.05);
   }
   candle(g, M, px + 0.45, 0.76, pz - 0.3, 0.18, CANDLE);
   tankard(g, M, px - 0.5, 0.76, pz + 0.2);
   tankard(g, M, px - 0.2, 0.76, pz - 0.5, true);
   // --- a long table with benches, west by the front ---
   const [lx, lz] = [-hx + 1.6, 1.4];
-  table(g, M, lx, lz, 0.9, 2.2, obstacles, 0.76);
-  for (const sx of [-1, 1]) bench(g, M, lx + sx * 0.75, lz, 2.0, Math.PI / 2);
+  inn(lx, lz, 0.9, 2.2);
+  for (const sx of [-1, 1]) bench(g, T, lx + sx * 0.75, lz, 2.0, Math.PI / 2);
   for (const sx of [-1, 1]) obstacles.push({ x: lx + sx * 0.75, z: lz, r: 0.2, h: 0.45 });
   candle(g, M, lx, 0.76, lz - 0.2, 0.2, CANDLE);
   for (const [dx, dz] of [[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]]) tankard(g, M, lx + dx, 0.76, lz + dz, dz < 0);
   // --- a small table in the middle ---
-  table(g, M, 0.3, -0.2, 0.9, 0.9, obstacles, 0.76, true);
-  for (const a of [0.6, 2.2, 3.9]) stool(g, M, 0.3 + Math.cos(a) * 0.75, -0.2 + Math.sin(a) * 0.75);
+  inn(0.3, -0.2, 0.9, 0.9, true);
+  for (const a of [0.6, 2.2, 3.9]) stool(g, T, 0.3 + Math.cos(a) * 0.75, -0.2 + Math.sin(a) * 0.75);
   candle(g, M, 0.3, 0.76, -0.2, 0.16, CANDLE);
   // --- barrels by the door, the party board beside it ---
   barrel(g, M, -hx + 0.5, 0, hz - 0.5);

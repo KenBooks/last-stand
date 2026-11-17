@@ -5,7 +5,7 @@
 // little behind the freshest, so its character moves smoothly and casts in step with its body
 // whatever the link's jitter. The host hands out the party slots (0 is the host) and starts the
 // runs. Built for up to COOP.maxPlayers.
-import { ROOM_IDS } from '../data/houses';
+import { ROOM_IDS, type RoomId } from '../data/houses';
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
@@ -878,6 +878,20 @@ function placeSpawns(): void {
 
 /** The village's house this game's hero stands in, as the state says it: its room's index in `ROOM_IDS` + 1, or 0. */
 const roomIndex = (): number => (G.mode === 'run' || !G.arena?.room ? 0 : ROOM_IDS.indexOf(G.arena.room) + 1);
+
+/** The partners standing in one of the village's houses, and which (none in a run: theirs or ours). Read from the
+ *  room each one's state says (`StateMsg.rm`), so nothing new is sent: the others outside show a marker over its door
+ *  and on the maps (ui/houseMarks.ts). */
+export function partnersInHouses(): { player: Player; room: RoomId }[] {
+  if (G.mode === 'run') return [];
+  const inside: { player: Player; room: RoomId }[] = [];
+  for (const peer of session.peers.values()) {
+    if (!peer.player || peer.inRun || !peer.room) continue;
+    const room = ROOM_IDS[peer.room - 1];
+    if (room) inside.push({ player: peer.player, room });
+  }
+  return inside;
+}
 
 /** A partner in the other place (the lobby while we're in a run, or the other way round) isn't shown. */
 export function syncAway(): void {

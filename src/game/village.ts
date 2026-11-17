@@ -13,7 +13,7 @@ import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
 import { HOUSE_OBJECTS } from '../data/houses';
-import { input, wasPressed, cylinder } from '../core/input';
+import { input, isDown, wasPressed, cylinder } from '../core/input';
 import { viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
@@ -91,6 +91,29 @@ let near: VillageObject | null = null, pointed: VillageObject | null = null, goi
 let opened: VillageObject | null = null;
 /** each object's name over it, and what it last said */
 const labels = new Map<string, { label: Label; says: string }>();
+
+/** how long E, or the touch Use button, is held at a house's door to go through it (s): a press alone, meant for
+ *  the notice board beside the house of records, took him in (from play, "hold E to enter, so we dont enter by
+ *  accident") */
+export const HOLD_TO_USE = 0.9;
+/** the hold's time now (s): `HOLD_TO_USE`, or another a lab's canary sets (`setHoldToUse`) */
+let holdToUse = HOLD_TO_USE;
+/** The hold's time set (s): the lab's canary makes it a press. */
+export function setHoldToUse(seconds: number): void {
+  holdToUse = seconds;
+}
+/** the steps the prompt's fill is painted in (painted again only as it passes one: ui/overlay) */
+const HOLD_STEPS = 24;
+/** Whether `o` is used by holding (a house's door, in or out), not a press. */
+export const usedByHolding = (o: VillageObject): boolean => o.use === 'enter' || o.use === 'leave';
+/** the door being held (E or the touch Use button) and for how long (s); whether the touch Use button is held */
+let heldOn: VillageObject | null = null, held = 0, touchHeld = false;
+/** The touch Use button pressed (`on`) or let go: held at a door, it's held as E is. */
+export function holdUse(on: boolean): void {
+  touchHeld = on;
+}
+/** How far the hold at the door near him has come (of 1), and the door; none held: 0. */
+export const holdShare = (): number => (heldOn ? Math.min(1, held / Math.max(holdToUse, 1e-6)) : 0);
 
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const _to = new THREE.Vector3();
@@ -326,6 +349,8 @@ export function updateVillage(dt = 0): void {
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
   if (!on) {
     near = null;
+    heldOn = null;
+    held = 0;
     if (going) { going = null; p.walkTo = null; }
     if (G.mode !== 'menu') opened = null;
     syncLabels();
@@ -337,6 +362,7 @@ export function updateVillage(dt = 0): void {
   // press got it, I cannot press E again until I move away")
   if (opened && !hooks.shows(opened)) opened = null;
   if (going && distanceTo(going) < going.reach) useNow(going);
+  else if (near && usedByHolding(near)) holdAt(near, dt);
   else if (near && wasPressed('e')) {
     // (E again puts it away, from play, "lets add option to dismiss with E as well"; the hall's screen has a place of its own)
     if (opened !== near) useNow(near);
@@ -350,11 +376,37 @@ export function updateVillage(dt = 0): void {
     opened = null;
     hooks.leave(left);
   }
+  if (!near || !usedByHolding(near)) {
+    heldOn = null;
+    held = 0;
+  }
   // (in the close views the pointer is the crosshair's, and picks nothing: the object near is named)
   if (viewMode() !== 'top') pointed = null;
   // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet)
   if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) want('heroes');
   syncLabels();
+}
+
+/** The door `o` held at, a frame: a hold begun by a press of E or the touch Use button there, let go before it's
+ *  full, nothing; held `HOLD_TO_USE` through. */
+function holdAt(o: VillageObject, dt: number): void {
+  const down = isDown('e') || touchHeld;
+  if (!down) {
+    heldOn = null;
+    held = 0;
+    return;
+  }
+  // (begun at this door: a key held down from before he came to it, walking up to the house, takes him in at no press)
+  if (heldOn !== o) {
+    held = 0;
+    heldOn = wasPressed('e') || touchHeld ? o : null;
+    if (!heldOn) return;
+  }
+  held += dt;
+  if (held < holdToUse) return;
+  heldOn = null;
+  held = 0;
+  useNow(o);
 }
 
 /** The hall of heroes as the hero walks into it: its roof, ceiling and front wall cut away over him (but through his eyes, which
@@ -1082,12 +1134,23 @@ function castFromLamps(on: boolean): void {
 function syncLabels(): void {
   for (const o of OBJECTS) {
     const l = labels.get(o.id)!;
-    const says = o === near ? o.verb : o.name;
+    // (a house's door says which house: from play, "the prompt should say the house's name")
+    const verb = o.use === 'enter' ? `${o.verb}: ${o.name}` : o.verb;
+    const holds = o === near && usedByHolding(o);
+    const fill = holds ? Math.round((heldOn === o ? holdShare() : 0) * HOLD_STEPS) / HOLD_STEPS : -1;
+    const says = o === near ? `${verb}|${fill}` : o.name;
     if (says === l.says) continue;
     l.says = says;
     const look = { face: 'display', size: 14, weight: 700, spacing: 0.5 } as const;
-    l.label.show(o === near ? promptArt('E', says, { ...look, color: '#ffe7b0' }) : textArt(says, { ...look, color: '#e8dcc8', shadows: OUTLINE }));
+    l.label.show(o === near ? promptArt('E', verb, { ...look, color: '#ffe7b0' }, holds ? fill : undefined)
+      : textArt(says, { ...look, color: '#e8dcc8', shadows: OUTLINE }));
   }
+}
+
+/** What `o`'s name over it says now, and whether it shows (the lab: a house's door names its house). */
+export function labelSays(o: VillageObject): { says: string; shown: boolean } {
+  const l = labels.get(o.id)!;
+  return { says: l.says.split('|')[0], shown: l.label.shown };
 }
 
 /** The object `o`'s screen point of its name (the lab). */

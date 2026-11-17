@@ -48,7 +48,7 @@ import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
-import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport } from './game/village';
+import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
 import { initTraining, completeStep, restartTraining } from './game/training';
@@ -105,6 +105,7 @@ import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun, sendDuelStart } from './net/session';
 import { isCoop, isGuest, isHost, runsOthersFight, simulates } from './net/role';
 import { updateChat } from './ui/chat';
+import { updateHouseMarks } from './ui/houseMarks';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
 import { updateScoreboard } from './ui/scoreboard';
@@ -250,7 +251,7 @@ async function boot() {
 
   initHud();
   initTouch({
-    active: villageActive, near: objectNear, use: goUse, map: () => { if (!G.arena.room) setVillageMap(!villageMapOpen()); },
+    active: villageActive, near: objectNear, use: goUse, holds: usedByHolding, hold: holdUse, held: holdShare, map: () => { if (!G.arena.room) setVillageMap(!villageMapOpen()); },
     inventory: () => openPanels(panelsOpen() ? null : 'inventory'),
   });
   initPerfHud(renderer);
@@ -1133,6 +1134,7 @@ function update(dt: number): void {
   updateSession(dt, G.player.reviving);
   syncPractice();
   updateNameTags();
+  if (VILLAGE) updateHouseMarks();
   if (G.mode === 'run') {
     updateHud();
     updateDuelHud();
