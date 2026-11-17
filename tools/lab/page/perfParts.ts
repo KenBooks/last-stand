@@ -10,6 +10,8 @@ import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
+import { setFountainSimple } from '../../../src/world/fountain';
+import { setGrassBeyondWalls } from '../../../src/world/village';
 import { canaryCost, flameCost, turnCost } from './fireCost';
 import { medianOf, timedRenders, timerOf } from './gpuTurns';
 import type { Lab } from './lab';
@@ -180,6 +182,7 @@ function depthPassOf(meshes: THREE.Mesh[]): (on: boolean) => void {
 function switches(): Switch[] {
   const preset = QUALITY[qualityLevel()];
   const shadows = lampShadowsOn();
+  const simple = preset.simpleVillage;
   return [
     { name: 'MSAA (off: none)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 0 }) },
     { name: 'MSAA (off: 4)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 4 }) },
@@ -189,6 +192,10 @@ function switches(): Switch[] {
     { name: 'three\'s order (off: the grass first)', turn: (on) => grassFirst(!on) },
     { name: 'three\'s order (off: the ground last)', turn: (on) => groundLast(!on) },
     { name: 'no depth pass (off: what stands still first)', turn: depthPassOf(stillMeshes()) },
+    // (what Low and Very low leave out of the village, `simpleVillage`: each put back in its turn, so it reads nothing
+    // on High and on Low what the level saves; left at the level's way after)
+    { name: 'the fountain\'s detail (Low\'s: none)', turn: (on) => setFountainSimple(!on && simple) },
+    { name: 'the grass beyond the palisade (Low\'s: none)', turn: (on) => setGrassBeyondWalls(on || !simple) },
     { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
       G.renderer.shadowMap.autoUpdate = on;
     } },
