@@ -188,12 +188,15 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       if (centre > SKIN_CAST) return ACROSS.map(() => 1);
       const ys = ACROSS.map((across) => centre + (across - 0.5) * wide);
       const found = ys.map((y, k) => posed(angle, y, ACROSS[k] === 0 || ACROSS[k] === 1 ? EDGE_GAP : WRAP_GAP));
-      const known = found.filter((s) => s !== null);
+      const middles = ys.map((y) => posed(angle, y, WRAP_GAP));
+      const known = middles.filter((s) => s !== null);
       if (!known.length) return ACROSS.map(() => 1);
       // (an edge with no skin under it takes the most the row's others need)
       const most = Math.max(...known);
+      // (the middle at the most the row needs, the edges each on the skin under it: with the middle on its own skin the
+      // skin rose between it and the edges through the strip)
       return found.map((s, k) => {
-        const on = s ?? most;
+        const on = ACROSS[k] === 0 || ACROSS[k] === 1 ? s ?? most : most;
         return Math.max(on, THREE.MathUtils.lerp(on, 1, smooth(ys[k], SKIN_FROM, SKIN_TO)));
       });
     });
