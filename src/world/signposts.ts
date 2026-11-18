@@ -6,8 +6,8 @@
 //
 // Its arms are made to be read from afar, as the player first meets them from the game's view above (from Viktor, of
 // the first ones, painted as the houses' dark signs with thin gilt letters: "signs need better visibility at the
-// distance... maybe bolder text, different wood grain"): pale weathered boards of an open grain, and each name cut in
-// deep, in Cinzel's heaviest weight, dark into the pale wood, filling the board, on taller and longer arms.
+// distance... maybe bolder text, different wood grain"): painted boards, ivory, each name lettered plain and heavy in
+// dark paint, filling the board, on taller and longer arms, their faces flat (`paintArm`, `flatFace`).
 import * as THREE from 'three';
 import { SIGNPOSTS, type Signpost } from '../data/signposts';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
@@ -29,11 +29,9 @@ const POST = { wide: 0.14, high: 2.75, cap: 0.22, foot: 0.34, footHigh: 0.16 };
 const ARM = { high: 0.4, thick: 0.04, top: 2.45, drop: 0.46, point: 0.22, back: 0.1, perLetter: 0.13, least: 1.2 };
 /** the painted face on each side: its height on the board, and the picture's pixels a metre */
 const FACE = { high: 0.34, px: 300 };
-/** the arms' wood: its pale ground at its top and foot, its grain's dark and light streaks, its knots; the letters'
- *  cut and the edge round them */
-// (a step under white: paler, the arm beside a lamp was lit past its letters at night)
-const WOOD = { top: '#b09468', foot: '#92774e', dark: '64,44,24', light: '214,194,156', knot: '#4e3420' };
-const CUT = { fill: '#1e120a', shade: 'rgba(30,18,8,.5)' };
+/** the arms' paint: the board's ivory at its top and foot, its brush streaks, and the dark its border and letters are
+ *  painted in */
+const PAINT = { top: '#d8cbac', foot: '#c4b592', streak: '90,70,40', ink: '#1c140c' };
 /** the most light an arm's face gives back (a luminance): well under the bloom's threshold, 0.9 (`UnrealBloomPass` in
  *  core/renderer.ts, `bloom` in core/webgpu.ts). From Kenneth's look at night: the pale arm a hand's width from a
  *  street lamp was lit past it, bloomed into a white bar its name couldn't be read on, and the arm beside it nearly so;
@@ -42,6 +40,8 @@ const CUT = { fill: '#1e120a', shade: 'rgba(30,18,8,.5)' };
  *  white and thinned its letters; at 0.35 it reads at midnight, and the sun at noon never lights a board that far (its
  *  pictures at 0.35 and 0.5 alike), so only a lamp's near side is held. */
 const FACE_MOST = 0.35;
+/** the painted face's roughness: a dull, weathered paint, no sheen to catch a lamp */
+const FACE_ROUGH = 0.92;
 
 /** An arm as built: its post, the name it bears, the way it points in the world (rad about y, 0 along +x toward
  *  -z: `atan2(-dz, dx)`), its height, and its group (its +x the way it points, its faces facing ±z). */
@@ -88,60 +88,63 @@ function paintAll(arms: { name: string; wide: number }[]): { map: THREE.CanvasTe
   return { map, rows };
 }
 
-/** An arm's face `w` by `h` px painted with `name`: pale weathered wood of an open grain, with a knot or two, a dark
- *  edge, and the name cut deep in Cinzel's heaviest weight, filling the board, dark in the pale wood, its strokes
- *  thickened. Made to be read from afar (the houses' signs, `paintSign` in door.ts,
- *  are dark boards with thin gilt letters, read up close). */
+/** An arm's face `w` by `h` px painted with `name`, as a street sign is: a flat painted board, ivory, with faint brush
+ *  streaks along it and a dark painted border, and the name lettered plain and heavy in the game's own sans (Alegreya
+ *  Sans, bold capitals, a little apart), in dark paint. From Kenneth, of the boards before (pale wood of an open grain
+ *  with knots, the names cut in Cinzel's heaviest): "try a different texture or something, the text is not easy to
+ *  read": the grain and the knots ran through the letters, and the serifs blurred at a distance. */
 function paintArm(c: CanvasRenderingContext2D, w: number, h: number, name: string): void {
   const rng = mulberry(name.length * 53 + name.charCodeAt(0));
   const ground = c.createLinearGradient(0, 0, 0, h);
-  ground.addColorStop(0, WOOD.top);
-  ground.addColorStop(1, WOOD.foot);
+  ground.addColorStop(0, PAINT.top);
+  ground.addColorStop(1, PAINT.foot);
   c.fillStyle = ground;
   c.fillRect(0, 0, w, h);
-  // (its grain: long streaks along it, wavering round its knots)
-  const knots = Array.from({ length: 1 + Math.floor(rng() * 2) }, () => ({ x: w * (0.1 + rng() * 0.8), y: h * (0.25 + rng() * 0.5) }));
-  for (let k = 0; k < 60; k++) {
-    c.strokeStyle = `rgba(${rng() < 0.6 ? WOOD.dark : WOOD.light},${0.18 + rng() * 0.3})`;
-    c.lineWidth = 1 + rng() * 2.5;
-    const y = rng() * h, bow = (rng() - 0.5) * h * 0.12;
+  // (its brush streaks: faint, along it, none strong enough to cross a letter)
+  for (let k = 0; k < 24; k++) {
+    c.strokeStyle = `rgba(${PAINT.streak},${0.04 + rng() * 0.05})`;
+    c.lineWidth = 2 + rng() * 4;
+    const y = rng() * h;
     c.beginPath();
     c.moveTo(0, y);
-    for (const knot of knots) {
-      const off = Math.sign(y - knot.y || 1) * Math.max(0, h * 0.18 - Math.abs(y - knot.y)) * 0.6;
-      c.quadraticCurveTo(knot.x - h * 0.3, y + bow, knot.x, y + off);
-    }
-    c.quadraticCurveTo(w * 0.8, y - bow, w, y + (rng() - 0.5) * 4);
+    c.lineTo(w, y + (rng() - 0.5) * 3);
     c.stroke();
   }
-  for (const knot of knots) {
-    c.fillStyle = WOOD.knot;
-    c.beginPath();
-    c.ellipse(knot.x, knot.y, h * 0.07, h * 0.04, 0, 0, Math.PI * 2);
-    c.fill();
-  }
-  // its edge, worn dark
-  c.strokeStyle = CUT.fill;
-  c.lineWidth = Math.max(3, h * 0.05);
-  c.strokeRect(0, 0, w, h);
-  // the name cut in, its strokes thickened by an outline of the same dark (a pale lip round each letter, lit as bright
-  // as the board, thinned the letters to hairlines by a lamp at night), its shadow under it
-  let size = h * 0.64;
-  const font = (px: number): string => `900 ${px}px 'Cinzel', Georgia, serif`;
-  c.font = font(size);
-  const room = w - h * 0.5;
-  while (c.measureText(name).width > room && size > 8) c.font = font(size -= 2);
+  // its border, painted dark, and a thin line inside it
+  const band = Math.max(3, h * 0.07);
+  c.strokeStyle = PAINT.ink;
+  c.lineWidth = band;
+  c.strokeRect(band / 2, band / 2, w - band, h - band);
+  c.lineWidth = Math.max(1, h * 0.015);
+  c.strokeRect(band * 1.9, band * 1.9, w - band * 3.8, h - band * 3.8);
+  // the name, plain and heavy, as large as the board takes
+  const text = name.toUpperCase();
+  let size = h * 0.6;
+  const font = (px: number): string => `700 ${px}px 'Alegreya Sans', 'Trebuchet MS', sans-serif`;
+  const spaced = (px: number): void => {
+    c.font = font(px);
+    (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${(px * 0.06).toFixed(1)}px`;
+  };
+  spaced(size);
+  const room = w - band * 6;
+  while (c.measureText(text).width > room && size > 8) spaced(size -= 2);
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  const x = w / 2, y = h / 2 + size * 0.04;
-  c.lineJoin = 'round';
-  c.fillStyle = CUT.shade;
-  c.fillText(name, x + size * 0.03, y + size * 0.04);
-  c.strokeStyle = CUT.fill;
-  c.lineWidth = Math.max(2, size * 0.07);
-  c.strokeText(name, x, y);
-  c.fillStyle = CUT.fill;
-  c.fillText(name, x, y);
+  c.fillStyle = PAINT.ink;
+  c.fillText(text, w / 2, h / 2 + size * 0.05);
+}
+
+/** `m` painted flat: none of the planks' relief or roughness maps it was copied with, so the light lies even over the
+ *  paint (the planks' grooves, at its picture's scale, rippled the light across the letters). */
+function flatFace<M extends THREE.Material>(m: M): M {
+  const standard = m as unknown as THREE.MeshStandardMaterial;
+  if (standard.isMeshStandardMaterial) {
+    standard.normalMap = null;
+    standard.bumpMap = null;
+    standard.roughnessMap = null;
+    standard.roughness = FACE_ROUGH;
+  }
+  return m;
 }
 
 /** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
@@ -178,7 +181,7 @@ export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles
   const all = SIGNPOSTS.flatMap((post) => post.arms.map((arm) => ({ post, arm, long: armLong(arm.name) })));
   const faceWide = (long: number): number => long - ARM.back - FACE_FROM - FACE_GAP - ARM.point;
   const { map, rows } = paintAll(all.map(({ arm, long }) => ({ name: arm.name, wide: faceWide(long) })));
-  const faces = underBloom(M.face(map));
+  const faces = underBloom(flatFace(M.face(map)));
   const built: BuiltArm[] = [];
   let row = 0;
   for (const post of SIGNPOSTS) {
