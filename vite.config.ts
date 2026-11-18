@@ -1,7 +1,7 @@
 import { defineConfig, transformWithOxc, type Plugin } from 'vite';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { pwa } from './scripts/pwa.ts';
 
 // Inline the tiny gesture handler so loading-screen clicks need no network-loaded module to be ready.
@@ -21,17 +21,50 @@ const bootFullScreen = () => ({
 // 300 PRs touched index.html for their own panel; a panel's markup in its own file touches no one else's.
 const HTML_PARTS = fileURLToPath(new URL('./src/ui/html/', import.meta.url));
 const PART = /^ {2}<!-- part: ([\w-]+) -->$/gm;
+
+// The screens of their own, a folder each (src/ui/screens/<id>/, ui/screens.ts): every one's markup goes where
+// index.html's `<!-- screens -->` line stands and every one's styles (`_<name>.scss`) where the stylesheets' index has
+// its `// screens` line, each in its folder's name's order, so a new screen is a folder and touches no list.
+const SCREENS = fileURLToPath(new URL('./src/ui/screens/', import.meta.url));
+const SCREENS_HTML = /^ {2}<!-- screens -->$/m;
+const SCREENS_SCSS = /^\/\/ screens$/m;
+/** Each screen folder's files whose names `pick` takes, as paths from src/ui/screens/, in their folders' order. */
+const screenFiles = (pick: (name: string) => boolean): string[] => readdirSync(SCREENS, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort()
+  .flatMap((dir) => readdirSync(`${SCREENS}${dir}`).filter(pick).sort().map((name) => `${dir}/${name}`));
+/** Every screen's panels' markup, as index.html takes it. */
+const screensHtml = (): string => screenFiles((name) => name.endsWith('.html'))
+  .map((file) => readFileSync(`${SCREENS}${file}`, 'utf8').replace(/\r?\n$/, ''))
+  .join('\n');
+/** Every screen's stylesheet, `@use`d where the stylesheets' index asks (each found from its folder). */
+const screensScss = (): string => screenFiles((name) => name.startsWith('_') && name.endsWith('.scss'))
+  .map((file) => `@use '../screens/${file.replace(/\/_/, '/').replace(/\.scss$/, '')}';`)
+  .join('\n');
+
+/** The stylesheets' index with every screen's styles where its `// screens` line stands. */
+const screenStyles = (): Plugin => ({
+  name: 'screen-styles',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!slash(id).endsWith('/src/ui/styles/index.scss')) return;
+    return code.replace(SCREENS_SCSS, screensScss());
+  },
+});
 const htmlParts = (): Plugin => ({
   name: 'html-parts',
   transformIndexHtml: {
     order: 'pre',
-    handler: (html: string) => html.replace(PART, (_line, id: string) => {
-      return readFileSync(`${HTML_PARTS}${id}.html`, 'utf8').replace(/\r?\n$/, '');
-    }),
+    handler: (html: string) => html
+      .replace(PART, (_line, id: string) => readFileSync(`${HTML_PARTS}${id}.html`, 'utf8').replace(/\r?\n$/, ''))
+      .replace(SCREENS_HTML, () => screensHtml()),
   },
   // (a part changed reloads the page, as index.html itself does)
   handleHotUpdate({ file, server }) {
-    if (!slash(file).startsWith(slash(HTML_PARTS))) return;
+    const part = slash(file).startsWith(slash(HTML_PARTS));
+    const screenPart = slash(file).startsWith(slash(SCREENS)) && file.endsWith('.html');
+    if (!part && !screenPart) return;
     server.ws.send({ type: 'full-reload' });
     return [];
   },
@@ -98,8 +131,10 @@ const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
-  plugins: [htmlParts(), bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
+  plugins: [htmlParts(), screenStyles(), bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
+  // (a screen's styles, in its own folder, take the theme and the mixins by name as every other stylesheet does)
+  css: { preprocessorOptions: { scss: { loadPaths: [fileURLToPath(new URL('./src/ui/styles/', import.meta.url))] } } },
   // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
   // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)
   optimizeDeps: { exclude: ['ez-tree'] },

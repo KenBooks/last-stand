@@ -2,20 +2,21 @@
 // to fill ours from, every item with its tooltip (a tap pins it on touch, a second tap acts), both accepts, Accept and
 // Cancel. Over it, at the top of the screen, the ask (asked to trade: Trade or Decline; asking: Cancel) and the last
 // word of a trade (done, or off and why). Asked for from the room's list in Play together (ui/coop.ts).
-import { dialog } from './dialogs';
-import { G } from '../state';
-import { RUN, TRADE } from '../data/balance';
-import { byValue, rarityOf } from '../loot/items';
-import { offerProblem, tradeLocked, usableBy } from '../loot/trade';
+import { screen } from '../../screenKit';
+import { dialog } from '../../dialogs';
+import { G } from '../../../state';
+import { RUN, TRADE } from '../../../data/balance';
+import { byValue, rarityOf } from '../../../loot/items';
+import { offerProblem, tradeLocked, usableBy } from '../../../loot/trade';
 import {
   answerTrade, cancelTrade, onTradeChange, setAccept, toggleOffer, tradeNote, tradeView, type TradeView,
-} from '../net/trade';
-import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML, type TooltipContent } from './tooltip';
-import { itemIconSVG } from './itemIcons';
-import { isTouch } from './touch';
-import { nameOf } from './coop';
-import { sfx } from '../core/audio';
-import type { Item } from '../types';
+} from '../../../net/trade';
+import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML, type TooltipContent } from '../../tooltip';
+import { itemIconSVG } from '../../itemIcons';
+import { isTouch } from '../../touch';
+import { nameOf } from '../../coop';
+import { sfx } from '../../../core/audio';
+import type { Item } from '../../../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -28,7 +29,7 @@ export const tradeOpen = (): boolean => !$('#trade').classList.contains('hidden'
 // (it takes its own Escape first, main.ts: a trade is cancelled, never put away with the rest)
 dialog({ open: () => tradeOpen() });
 
-export function initTrade(): void {
+function initTrade(): void {
   onTradeChange(renderTrade);
   $('#trade-accept').onclick = () => {
     const v = tradeView();
@@ -47,7 +48,7 @@ export function initTrade(): void {
 }
 
 /** Every frame: the last word of a trade goes after a while. */
-export function updateTradeUi(): void {
+function updateTradeUi(): void {
   const n = tradeNote();
   const shown = !!n && performance.now() / 1000 - n.at < NOTE_SHOWN && !tradeView();
   const el = $('#trade-note');
@@ -181,3 +182,6 @@ function fill(el: HTMLElement, cells: HTMLElement[], slots: number): void {
     el.appendChild(d);
   }
 }
+
+// (a screen of its own, in both lobbies, started and stepped each frame by ui/screens.ts)
+screen({ init: initTrade, frame: updateTradeUi });
