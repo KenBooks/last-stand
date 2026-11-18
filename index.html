@@ -222,7 +222,8 @@
     </div>
 
     <!-- bank or continue (ui/hud.ts showDecision): unfolds from the wave badge, folds down to its
-         buttons after a while, and back into the badge once chosen -->
+         buttons after a while (not for a new player: ui/choiceLesson.ts), and back into the badge once chosen.
+         What each choice stakes is a small line inside its button (.stake), in main's height; never what an unbanked item is -->
     <div id="decision" class="hidden">
       <div class="dc-details"><div>
         <div class="dc-title">The wave is broken</div>
@@ -231,8 +232,8 @@
         <div class="dc-risk"></div>
       </div></div>
       <div class="dc-buttons">
-        <button class="btn bank"><span class="k">B</span> <span class="bank-label">Bank spoils &amp; leave</span></button>
-        <button class="btn primary cont"><span class="k">C</span> <span class="cont-label">Continue</span></button>
+        <button class="btn bank"><span class="k">B</span> <span class="dc-label"><span class="bank-label">Bank spoils &amp; leave</span><span class="stake bank-stake"></span></span></button>
+        <button class="btn primary cont"><span class="k">C</span> <span class="dc-label"><span class="cont-label">Continue</span><span class="stake cont-stake"></span></span></button>
       </div>
     </div>
     <!-- co-op (ui/coop.ts): partners' frames, being down, watching the rest of a run, reviving on touch -->

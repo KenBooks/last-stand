@@ -36,6 +36,7 @@ import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { buildableLook, chooseLooks, profileLook, readyLook } from './game/looks';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
+import { noteBank } from './ui/choiceLesson';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
 import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
@@ -802,6 +803,7 @@ function chooseBank() {
   const r = G.run;
   if (!r || r.phase !== 'cleared' || !G.player.active) return;
   if (isGuest()) sendControl({ t: 'bank' });
+  if (!r.training) noteBank();   // the choice taught until a few banks (ui/choiceLesson.ts)
   bankRun();
 }
 

@@ -11,6 +11,7 @@ import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
 import { partyDecision, waitingForParty } from './coop';
+import { choiceTaught } from './choiceLesson';
 import { isCoop, readying } from '../net/role';
 import { skillArt } from './skillArt';
 import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
@@ -164,8 +165,10 @@ export function rarityChips(bag: Item[], cls = 'chip'): string {
 
 let refreshDecision: (() => void) | null = null;
 let decisionTimer: ReturnType<typeof setTimeout> | undefined;
-/** The choice folds down to its two buttons after this long. */
+/** The choice folds down to its two buttons after this long (once the player has been taught it: `choiceTaught`). */
 const DECISION_DETAILS_MS = 10000;
+/** A boss this many waves ahead or nearer is named on the choice. */
+const BOSS_NEAR = 2;
 /** How long the choice takes to fold back into the wave badge (`dc-close` in _hud.scss). */
 const DECISION_CLOSE_MS = 650;
 
@@ -185,7 +188,10 @@ export function showDecision(): void {
     box.classList.add('opening');
     $('#wavebadge').classList.remove('back');
     $('#wavebadge').classList.add('morphed');
-    decisionTimer = setTimeout(() => box.classList.add('compact'), DECISION_DETAILS_MS);
+    // a new player's choice stays unfolded (it doesn't fold to its buttons by itself) until they have banked a few times
+    const taught = choiceTaught();
+    box.classList.toggle('taught', taught);
+    if (!taught) decisionTimer = setTimeout(() => box.classList.add('compact'), DECISION_DETAILS_MS);
   }
   const refresh = () => {
     if (box.classList.contains('hidden') || box.classList.contains('closing')) return;
@@ -209,6 +215,15 @@ export function showDecision(): void {
     const party = partyDecision();
     $('.dc-party', box).textContent = party;
     $('.dc-party', box).classList.toggle('hidden', !party);
+    // what each choice stakes, a small line inside its button (training stakes nothing, and its buttons are main's);
+    // co-op: each keeps their own spoils, and a bank takes only yours out of the run. The next boss named once near
+    // (on its own wave the label names it already)
+    box.classList.toggle('staked', !r.training);
+    $('.bank-stake', box).textContent = r.training ? '' : isCoop() ? 'Keep yours · the rest fight on' : 'Keep all you carry · the run ends';
+    const boss = Math.ceil(next / WAVES.bossEvery) * WAVES.bossEvery;
+    const bossShort = BIOMES[G.arena.biome].bossShort;
+    $('.cont-stake', box).textContent = r.training || waiting ? ''
+      : boss !== next && boss - r.wave <= BOSS_NEAR ? `${bossShort} at wave ${boss} · better loot` : 'A harder wave · better loot';
   };
   refresh();
   refreshDecision = refresh;

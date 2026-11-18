@@ -27,6 +27,8 @@ Nearly everything is made by code as the game runs: the models, their animation,
 - After every wave, choose:
   - **Bank** — leave the arena and move everything you found into your stash, or
   - **Continue** — face a harder wave with better loot (you recover 25% health).
+
+  Each button says what it stakes in a small line under its name, and Continue names the boss when one is a wave or two away. Until you have banked three times the choice stays open; after that it folds down to its buttons on its own.
 - Loot goes straight into your bag, **unseen**: you only know how many items of each rarity you carry (1 Legendary, 2 Epic...). Banking reveals what they are, the best first.
 - Below half health the screen drains of colour and blood seeps in from its edges, more the closer you are to none.
 - If you die, **all unbanked spoils are lost**, never seen.

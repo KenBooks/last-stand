@@ -4,7 +4,10 @@
 // must offer it as the starting wave, before and after the hero is read back from the save (a reload's). Random then
 // rolls only where that wave is unlocked, the other battleground shown out of the roll, and picked by itself the
 // other still starts at its own first wave (a wave is unlocked where it was banked).
-// A canary: the bank's record taken out of the save, which the same checks must find.
+// Each choice met is also read for its lesson (#347, `page/bankLesson.ts`): taught to a new player for the first few
+// banks, compact after, the count kept in local storage.
+// A canary: the bank's record taken out of the save, and the lesson's count out of storage, which the same checks
+// must find.
 import type { Lab, Report, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { VILLAGE } from '../../../src/core/beta';
@@ -15,6 +18,8 @@ import { clearEnemies } from '../../../src/entities/enemy';
 import { loadProfile, peekProfile, saveProfile } from '../../../src/loot/profile';
 import { saveSlot } from '../../../src/loot/saveSlots';
 import { renderMenu, selectedWave } from '../../../src/ui/menus';
+import { BANKS_TAUGHT, LESSON_KEY } from '../../../src/ui/choiceLesson';
+import { type ChoiceMet, choiceNow, keptProblems, lessonCanaryCaught, lessonLine, lessonProblems } from './bankLesson';
 
 /** `--canary`: the record of the bank taken out of the save, which must be found. */
 export interface BankOptions {
@@ -104,6 +109,17 @@ export async function bank(lab: Lab, options: BankOptions): Promise<Report> {
   if (G.mode !== 'menu') throw new Error('lab: bank: the fresh page must begin in the lobby');
   if (VILLAGE) throw new Error('lab: bank: Random is the panels\' lobby\'s (the command boots it: --panels)');
 
+  // a new player: no bank made in this browser, so the choice is taught
+  localStorage.removeItem(LESSON_KEY);
+  const choices: ChoiceMet[] = [];
+  let banks = 0;
+  /** The choice met now, read for its lesson before it's chosen. */
+  const meet = (when: string): void => {
+    const met = choiceNow(banks);
+    choices.push(met);
+    problems.push(...lessonProblems(met, when));
+  };
+
   // a hero with nothing banked anywhere, on Random
   G.profile.records.bestBanked = {};
   G.profile.records.bestReached = {};
@@ -117,11 +133,14 @@ export async function bank(lab: Lab, options: BankOptions): Promise<Report> {
   const biome = await enter(lab);
   const other = BIOME_IDS.find((id) => id !== biome)!;
   await clearWave(lab);
+  meet('wave 1 cleared');
   await lab.clickOn(element('#decision .cont'));
   await lab.until(() => G.run!.wave === BANKED_AT && G.run!.phase === 'countdown', 300, 'Continue never led to the next wave');
   await clearWave(lab);
-  moments.push(await lab.screen('bank-choice', [`wave ${BANKED_AT} cleared in the ${biome}: the choice`]));
+  meet(`wave ${BANKED_AT} cleared`);
+  moments.push(await lab.screen('bank-choice', [`wave ${BANKED_AT} cleared in the ${biome}: the choice, taught`]));
   await bankAndLeave(lab, async () => { moments.push(await lab.screen('bank-summary', ['banked: the summary'])); });
+  banks++;
   lines.push(`banked at wave ${BANKED_AT} in the ${biome} (Random's roll), nothing banked in the ${other}`);
 
   problems.push(...bankProblems(biome, BANKED_AT, 'back in the lobby'));
@@ -146,7 +165,20 @@ export async function bank(lab: Lab, options: BankOptions): Promise<Report> {
     rolled.push(await enter(lab));
     if (G.run!.wave !== BANKED_AT) problems.push(`a run offered wave ${BANKED_AT} started at wave ${G.run!.wave}`);
     await clearWave(lab);
+    meet(`roll ${i + 1}`);
+    if (banks === BANKS_TAUGHT) {
+      moments.push(await lab.screen('bank-choice-compact', [`after ${banks} banks: the choice, compact`]));
+    }
     await bankAndLeave(lab);
+    banks++;
+  }
+  // the count as storage keeps it: what a reload reads
+  problems.push(...keptProblems(banks));
+  lines.push(lessonLine(choices));
+  if (options.canary) {
+    const caught = lessonCanaryCaught(banks);
+    if (!caught) problems.push('canary: the lesson\'s count lost from storage was not found');
+    lines.push(`canary (the lesson's count out of storage): ${caught ? 'caught' : 'missed'}`);
   }
   if (rolled.some((id) => id !== biome)) {
     problems.push(`starting at wave ${BANKED_AT}, Random rolled ${rolled.join(', ')}: the wave is unlocked in the ${biome} alone`);
