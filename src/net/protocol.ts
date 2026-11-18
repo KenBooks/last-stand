@@ -7,6 +7,7 @@
 // sorted
 const PARTS = [
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
+  'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
 ];
 
 /** FNV-1a of the parts, as a number the relay keeps on a room's card (it reads `v` as a count under a million) */

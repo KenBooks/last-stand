@@ -52,7 +52,7 @@ import {
 } from './villagePlan';
 import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
 import { FENCE, STANDS_FREE, Wall } from './wall';
-import { buildWeaponsRack } from './weaponsRack';
+import { buildPlaces } from './places';
 import { buildDoor, doorSign } from './door';
 import { buildSignposts, type BuiltArm } from './signposts';
 import { SIGNPOSTS } from '../data/signposts';
@@ -283,7 +283,7 @@ class Levels {
 const stepAt = (along: number, top: number): number => Math.min(top, Math.max(0, Math.ceil(along / STEP_RUN - 1e-6)) * STEP_RISE);
 
 /** The village's materials, made once: its stones, its woods, its plaster, its iron. */
-interface Mats {
+export interface Mats {
   yardFloor: THREE.Material; cobbles: THREE.Material; flags: THREE.Material;
   ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
   /** the ledges' and the fountain's stones: what stands free in the ashlar's and the coping's looks */
@@ -785,7 +785,8 @@ export function buildVillage(scene: THREE.Group): Village {
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
-  stillBuilt(scene, () => buildWeaponsRack(scene, { timber: M.rackTimber, planks: M.rackPlanks, iron: M.iron, steel: M.steel, hilt: M.freeBrass, grip: M.binding }, obstacles));
+  // (the places of their own, world/places/: the weapons rack; before the lamps, which keep off what stands)
+  stillBuilt(scene, () => buildPlaces({ scene, wall, M, obstacles, updaters }));
   const stair = [-1, 1].map((s) => buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
   for (const { light } of stair) lights.push(light);
   // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim

@@ -1,24 +1,26 @@
-// Odo's trade (`#merchant`, opened at his counter in his shop: game/rooms.ts, world/shop.ts), in three steps (from
+// Odo's trade (`#merchant`, opened at his counter in his shop: game/rooms.ts, world/houses/merchant.ts), in three steps (from
 // play: "make it more intuitive to follow"): 1, choose one of his wares (its price shown on it); 2, offer gear from the
 // stash for it (each piece's value in the same unit, the stash dimmed with a hint until a ware is chosen); 3, the deal:
 // what you get beside what you give, its value against his price as a filled bar ("Value 18 of 20"), what's missing
 // said in words, and Trade, which says why it's held off. What's given goes to him for good (said under Trade); gear
 // thrown on the lobby's floor is another thing. Every piece has its tooltip, by the mouse and by a tap on touch, which
 // also picks it.
-import { G } from '../state';
-import { fewestFor, offer, price, runsToRestock, stockOf, takes, trade, worth } from '../loot/merchant';
-import { rarityOf } from '../loot/items';
-import { RUN } from '../data/balance';
-import { sfx } from '../core/audio';
-import { dialog } from './dialogs';
-import { villageUse } from '../game/villageUses';
-import { showVillageCard } from './villageCard';
-import { openPanels } from './menus';
-import { itemIconSVG } from './itemIcons';
-import { odoNods } from '../entities/models/merchant';
-import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from './tooltip';
-import { renderMenu } from './menus';
-import type { Item } from '../types';
+import { closedFrom, villageObject } from '../../../game/village';
+import { screen } from '../../screenKit';
+import { G } from '../../../state';
+import { fewestFor, offer, price, runsToRestock, stockOf, takes, trade, worth } from '../../../loot/merchant';
+import { rarityOf } from '../../../loot/items';
+import { RUN } from '../../../data/balance';
+import { sfx } from '../../../core/audio';
+import { dialog } from '../../dialogs';
+import { villageUse } from '../../../game/villageUses';
+import { showVillageCard } from '../../villageCard';
+import { openPanels } from '../../menus';
+import { itemIconSVG } from '../../itemIcons';
+import { odoNods } from '../../../entities/models/merchant';
+import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../../tooltip';
+import { renderMenu } from '../../menus';
+import type { Item } from '../../../types';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -33,7 +35,7 @@ let closed: () => void = () => undefined;
 const shown = (v: number): string => (v >= 100 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toString());
 
 /** The screen's buttons bound; `onClose` told when Leave puts it away. */
-export function initMerchant(onClose: () => void): void {
+function initMerchant(onClose: () => void): void {
   closed = onClose;
   $('#merchant .mc-close').onclick = () => { sfx.click(); showMerchant(false); closed(); };
   $('#merchant .mc-fill-best').onclick = () => {
@@ -163,3 +165,6 @@ function render(): void {
   go.disabled = !o.enough;
   go.title = o.enough ? '' : 'Offer more gear: its value must reach his price';
 }
+
+// (a screen of its own, started in the village by ui/screens.ts: Leave puts his counter's use away)
+screen({ village: true, init: () => initMerchant(() => closedFrom(villageObject('shopCounter'))) });

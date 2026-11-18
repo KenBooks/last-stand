@@ -10,6 +10,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 | `facelab/` | A hero's face against a reference picture (`npm run facelab`) |
 | `icons/` | The skill icons: side by side, their fit in the round buttons, an original made into one (`npm run icons`) |
 | `music/` | The music's tracks cut from their pieces, their seams checked (`npm run music`) |
+| `new/` | A new foe, boss, house, place, screen or lab command started as a copy of a sibling's files (`npm run new`) |
 | `photos/` | The photos the maps take: a Poly Haven ground made into a recipe's two, their edges checked (`npm run photos`) |
 | `stalls/` | The browser's own stalls, in the installed Chrome (`npm run stalls`) |
 
@@ -17,7 +18,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 - **A harness runs below normal priority** unless what it measures is the machine's own timing: the lab and facelab lower themselves as they start (`lab/node/priority.mjs`, `lowerPriority`), and what they start inherits it; `stalls` stays at the priority it's started at, since it times the browser's own stalls, and says which as it starts.
 - What a tool writes stays in its own `out/` (ignored by git), never the user's temp folder. Scratch files go in `.tmp` in the repo.
 - The Python tools run through a Node launcher: the icons', the music's and the photos' with the system's Python (`python` on Windows, `python3` elsewhere), their packages in their `requirements.txt`; the face harness's in a venv of its own (`npm run facelab -- --setup`).
-- The lab's and the stalls' Node code have unit tests (`npm run lab:test`, `npm run stalls:test`).
+- The lab's, the stalls' and the scaffold's Node code have unit tests (`npm run lab:test`, `npm run stalls:test`, `npm run new:test`).
 
 ## Cleaning up
 

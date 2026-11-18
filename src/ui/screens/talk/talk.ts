@@ -1,13 +1,16 @@
 // Talking to the village's folk (`#talk`, opened by using one: data/talk.ts has what each says): a card at the foot of
 // the screen with his emblem, his name and what he is, what he says, and the replies to pick, each a button (a click, a
 // tap, or its number's key). A reply leads on to what he says next, or ends the talk; Escape ends it too (main.ts).
-import { SPEAKERS, type Speaker } from '../data/talk';
-import { sfx } from '../core/audio';
-import { wasPressed } from '../core/input';
-import { dialog } from './dialogs';
-import { villageUse } from '../game/villageUses';
-import { showVillageCard } from './villageCard';
-import { openPanels } from './menus';
+import { scholarTalk } from '../../../world/houses/library';
+import { closedFrom, villageObject } from '../../../game/village';
+import { screen } from '../../screenKit';
+import { SPEAKERS, type Speaker } from '../../../data/talk';
+import { sfx } from '../../../core/audio';
+import { wasPressed } from '../../../core/input';
+import { dialog } from '../../dialogs';
+import { villageUse } from '../../../game/villageUses';
+import { showVillageCard } from '../../villageCard';
+import { openPanels } from '../../menus';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -17,7 +20,7 @@ let node = 'start';
 let changed: (on: boolean) => void = () => undefined;
 
 /** The card's handlers bound: `onChange` told as a talk opens and ends. */
-export function initTalk(onChange: (on: boolean) => void): void {
+function initTalk(onChange: (on: boolean) => void): void {
   changed = onChange;
   $('#talk .tk-replies').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-reply]');
@@ -85,3 +88,12 @@ function render(): void {
   $('#talk .tk-replies').innerHTML = n.replies.map((r, i) =>
     `<button class="tk-reply" data-reply="${i}" style="--i:${n.says.length + i}"><span class="k">${i + 1}</span>${escape(r.text)}</button>`).join('');
 }
+
+/** A talk opened or ended: the scholar looks up from his book while it's on, and his use is put away as it ends. */
+function talkChanged(on: boolean): void {
+  scholarTalk.talking = on;
+  if (!on) closedFrom(villageObject('scholar'));
+}
+
+// (a screen of its own, started in the village by ui/screens.ts)
+screen({ village: true, init: () => initTalk(talkChanged) });

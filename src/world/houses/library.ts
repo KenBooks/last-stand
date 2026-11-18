@@ -1,23 +1,23 @@
-// The village's library (data/houses.ts `library`, built with the other houses' rooms by world/rooms.ts): tall cases of
+// The village's library (data/houses/library.ts, its room found by world/houses.ts with every other house's in this folder): tall cases of
 // books down every wall, their spines painted on canvases (each book an instance of one of a few spines, its colour its
 // own), some leaning, some stacked flat, a few lying open; a rolling ladder; the Codex of Wardenhollow open on its
 // lectern before the back wall between two candle stands (used, it opens the in-game guide); reading desks with candles,
 // open books, scrolls and a quill; a globe; a hearth with an armchair before it; rugs; the front windows lit warm from
 // outside and dust drifting by them. As every room: 10 point lights, two casting (the hearth and the chandelier).
 import * as THREE from 'three';
-import { HOUSES, type RoomId } from '../data/houses';
-import type { Obstacle } from '../types';
-import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
-import { mulberry, rand } from '../util';
-import { particles, col } from '../fx/particles';
-import { G } from '../state';
-import { buildScholar, type Scholar } from '../entities/models/scholar';
-import { blockGeometry, bookShape, printGeometry, type BookShape } from '../entities/models/book';
-import { SCHOLAR_DESK } from '../data/houses';
+import { HOUSES, type RoomId } from '../../data/houses';
+import type { Obstacle } from '../../types';
+import { canvasOf, ctx2d, textureFromCanvas } from '../../core/textures';
+import { mulberry, rand } from '../../util';
+import { particles, col } from '../../fx/particles';
+import { G } from '../../state';
+import { buildScholar, type Scholar } from '../../entities/models/scholar';
+import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../entities/models/book';
+import { SCHOLAR_DESK } from '../../data/houses/library';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
   parchment, rug, stool, table, writing, type Build, type Mats, type Room,
-} from './rooms';
+} from '../rooms';
 
 /** the library's light: as every room's, its sky's share warmer and fuller, for the books down every wall to read
  *  (at the rooms' own, the cases stood as dark walls) */
@@ -470,7 +470,7 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
 }
 
 /** The library: built into `group`. */
-export function buildLibrary(group: THREE.Group): Room {
+export function build(group: THREE.Group): Room {
   const id: RoomId = 'library', b = begin(id, group, 2718), { g, M, rng } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   // (its windows lit warm from outside, as an evening's sun)

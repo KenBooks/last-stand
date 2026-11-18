@@ -45,14 +45,13 @@ import { queuePortraitsBehind, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
-import { initTalk, closeTalk } from './ui/talk';
+import { closeTalk } from './ui/screens/talk/talk';
 import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
-import { scholarTalk } from './world/library';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
-import { initMerchant, showMerchant } from './ui/merchant';
+import { showMerchant } from './ui/screens/merchant/merchant';
 import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
@@ -113,7 +112,8 @@ import { initSession, invitedRoom, readyingAfresh, sendInRun, sendReadying, send
 import { isCoop, isGuest, isHost, runsOthersFight, simulates } from './net/role';
 import { updateChat } from './ui/chat';
 import { updateHouseMarks } from './ui/houseMarks';
-import { initTrade, tradeOpen, updateTradeUi } from './ui/trade';
+import { tradeOpen } from './ui/screens/trade/trade';
+import { frameScreens, initScreens } from './ui/screens';
 import { cancelTrade, endTrades, onTradeChange, tradeBusy } from './net/trade';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
@@ -297,10 +297,8 @@ async function boot() {
   if (VILLAGE) {
     renderMenu();
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
-    initMerchant(() => closedFrom(villageObject('shopCounter')));
     // (in or out of a house: what was open put away, the partners told and shown only where they stand)
     // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-    initTalk((on) => { scholarTalk.talking = on; if (!on) closedFrom(villageObject('scholar')); });
     onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
@@ -330,7 +328,8 @@ async function boot() {
   initSync();
   initSession({ startRun: guestStarted, startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
   initCoop();
-  initTrade();
+  // (the screens of their own, src/ui/screens/: the trade, Odo's counter, a talk)
+  initScreens(VILLAGE);
   // (a partner's Trade button in Play together's list follows the trade: off while one is under way)
   onTradeChange(() => { if (coopOpen()) renderCoop(); });
   initBugReport(reportClosed);
@@ -1239,7 +1238,7 @@ function update(dt: number): void {
   updatePingInput(dt, G.mode === 'run' ? !G.menuOpen : menuStowed() && !savesOpen() && !hallOpen() && !G.menuOpen);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
-  updateTradeUi();
+  frameScreens();
   syncPractice();
   updateNameTags();
   if (VILLAGE) updateHouseMarks();

@@ -26,6 +26,7 @@ The lab inside the game's page: TypeScript, typechecked with the game (`tsconfig
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md) (what the lab gives a measure, and what keeps it repeatable).
 
+- **A state of `lab ui` is a module of `uiStates/`** (`uiStates/<state>.ts`, the file's name the state's), default-exporting its `Steps` (`uiKit.ts`): its `order` (steps of 10, the lobby's states before the run's, `inRun`), how it opens, checks and closes, its pictures and its canary's plants (`caught(...)`). `ui.ts` keeps what every state gets (the boxes, the cursors, the digits, the run set up) and loads each state's module as it runs (`import.meta.glob`); `node/commands/ui.mjs` reads the folder for `--states` and the run's order, and `labCode.mjs` keys `ui`'s A/B side on every module there. A new state adds its module and touches no shared list; what several states share is a module beside `ui.ts` (`uiKit.ts`, `uiLog.ts`, `uiSkillTips.ts`, `uiReadying.ts`, `uiPause.ts`...).
 - **A command's module is loaded as it runs** (`commands/`): an A/B copies these modules into the other commit's tree, and one importing game code that commit hasn't got would stop every command loading there.
 - **The mouse has its three buttons** (`lab.mouseDown(at, button)`, `mouseUp`, `clickWith`, `mouseTo` moving it
   held: a middle drag), sent through the DevTools protocol with the mask of those held, as a mouse sends them.
@@ -35,3 +36,11 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 - Pure helpers a measure uses get a unit test in `test/` (`flashes.ts`, `patches.ts`, `sweptArea.ts`, `jumps.ts` have theirs).
 - `portraits` checks the real party card at the five required desktop/phone/tablet sizes: class accent, name/class alignment, host portrait star, own border, ordering and overflow. Show the HUD before measuring it (the solo lobby hides it), and yield to the browser after opening native `details`: its deferred `toggle` populates the picker after the click.
 - `heropick` checks Escape/pause before any hero is chosen, with navigation blocked behind pause. It then navigates to an unfinished alternate hero, repeats its tab and presses Enter: none may save or choose him, nor show his cold model. After choosing, real W and Escape events must reach play immediately. `behind` ensures cached spares exist, disposes them before drawing (the live hero's shared lights must stay), rebuilds them, chooses a cached hero and really draws the first lobby frame: no new shader programs.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->

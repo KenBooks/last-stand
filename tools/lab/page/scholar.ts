@@ -1,4 +1,4 @@
-// `lab scholar`: the library's Brother Hollis (`src/entities/models/scholar.ts`, seated by `src/world/library.ts`) as
+// `lab scholar`: the library's Brother Hollis (`src/entities/models/scholar.ts`, seated by `src/world/houses/library.ts`) as
 // a player meets him. Walked into the library by its door; then his reading loop posed a frame at a time through the
 // whole of it, the wrap included, as the game poses it: every joint's turn a frame (a snap is one turned further in a
 // frame than his moves ever turn one) and how far his head and his page-turning hand move over it (a loop that never
@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
-import { SCHOLAR_DESK } from '../../../src/data/houses';
+import { SCHOLAR_DESK } from '../../../src/data/houses/library';
 import { SCHOLAR_LOOP, type Scholar } from '../../../src/entities/models/scholar';
 import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';

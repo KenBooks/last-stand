@@ -55,3 +55,11 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **Leg IK and head look-at** (`models/ik.ts`; `?ik=0` turns both off and restores the walk cycle's own legs and gait for A/B): `LegIK` runs at the end of a model's `animate` (heroes and every walking enemy, not the floating witch) and takes the legs over, and `LookAt` turns the chest, neck and head onto the nearest foe (heroes) or the target (enemies). How a foot is planted, swung, landed and set off, a walk against a run, going round, stops, steps by the dais's edges, the body and arms swinging with the legs and the stance a pose asks for are in `docs/agents/legs.md`, with what each was measured against and how it went wrong before: read it before changing any of them (`models/ik.ts`, `walkCycle` in `rig.ts`, the gait in `player.ts` or `enemy.ts`), and measure with `npm run lab -- gait`, `stops`, `feet` and `form` against `main`.
 - **The kit's dissolve noise is made only while a body dissolves or chars** (`core/materials.ts`, #607). The phone's scene pass at Very low read 139 ms on main and 125 with it (`lab perf maelstrom --class mage --device phone --quality verylow --foes 10 --ab`, the GPU shared with another session's run: a share, not a frame rate), but that run also left the hair's cards off at Very low, which the owner dropped ("608, drop"): the hair is drawn whole at every level, and the noise's own share of that gain isn't measured alone.
 - **Very low poses less of what isn't watched** (the quality's `poseEvery`; #607): a co-op partner, and a foe out of view or past the leg IK's range, is posed one frame in two, the time between given to that one (`Player.pose`, `Enemy.animate`); where it stands and faces still moves every frame, and the local hero and the hall's are posed every frame. The fallen are left alone: a limit of six ragdolls at once, the longest fallen dissolving past it, was taken out again in review, as bodies vanishing early cost the fight its look.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->
