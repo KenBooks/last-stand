@@ -444,7 +444,7 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
 const FIST_CREASE = [[-0.086, -0.011], [-0.088, -0.011], [-0.086, -0.011], [-0.08, -0.011]];
 // Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
-const FIST_FAN = [5, 2, -2, -8.7];
+const FIST_FAN = [6, 1.5, -2, -10];
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
 // fill the side of the fist; its middle bone from there onto the front of the index's middle phalanx, at whatever
@@ -454,7 +454,7 @@ const FIST_FAN = [5, 2, -2, -8.7];
 // fingers with a hole under it (from play: "he still has sperm in his fist"); with its last joint placed first and its
 // knuckle wherever its bones met, the joint stood near the end of its reach, the thumb a straight stick standing off
 // the fist from the wrist with the web open under it (from play: "this is not a natural fist shape").
-const THUMB_ON = { corner: 1, front: 0.5, round: Math.PI / 4, press: 0.9 };
+const THUMB_ON = { corner: 1, front: 0.5, round: Math.PI / 3, press: 0.75 };
 /** the shares along the index's middle phalanx and the turns round its front its middle bone's end is tried at */
 const THUMB_TRIES = { shares: 20, turns: 9 };
 // A fingertip's pad's half-depth over its finger's half-width at its root: a thicker finger's tip sits further off

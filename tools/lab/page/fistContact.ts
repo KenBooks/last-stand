@@ -5,7 +5,8 @@ import type { Digit, Hand } from '../../../src/entities/models/hands';
 // Contact limits in metres and degrees. Distances include the hand's scale on the hero.
 // `sunk`: how far a finger may sink into the one beside it (pressed together, the skins meet; past this they
 // fuse into one lump, as an adversarial review read the fist from the thumb's side)
-const LIMIT = { tip: 0.006, gap: 0.003, thumb: 0.012, wrist: 10, sunk: 0.0015 };
+// (`sunkBones`: a shut fist's fingers by their bones, pressed flesh within a fifth of a finger's width)
+const LIMIT = { tip: 0.006, gap: 0.003, thumb: 0.012, wrist: 10, sunk: 0.0015, sunkBones: 0.005 };
 // A fingertip is read near the axis of its cap, and shaft contact is read away from the joint blends.
 const CAP_HALF_WIDTH = 0.004;
 const SHAFT_END = 0.15;
@@ -172,8 +173,64 @@ export function wristBend(hand: Hand, elbow: THREE.Object3D): number {
   return THREE.MathUtils.radToDeg(towardElbow.angleTo(backOfHand));
 }
 
+/** how many points along a bone `bonesApart` reads it at */
+const APART_STEPS = 12;
+
+/** A digit's segment `n` (0 its first) as it's posed, in the world: its joint to the next, or to its tip. */
+function segmentOf(digit: Digit, n: number): THREE.Line3 {
+  const from = digit.j[n].getWorldPosition(new THREE.Vector3());
+  const to = n < digit.j.length - 1
+    ? digit.j[n + 1].getWorldPosition(new THREE.Vector3())
+    : digit.j[n].localToWorld(new THREE.Vector3(0, -digit.len[n], 0));
+  return new THREE.Line3(from, to);
+}
+
+/** The least distance between two bones (segments), read at points along the first. */
+function bonesApart(bone: THREE.Line3, other: THREE.Line3): number {
+  const point = new THREE.Vector3(), near = new THREE.Vector3();
+  let least = Infinity;
+  for (let k = 0; k <= APART_STEPS; k++) {
+    bone.at(k / APART_STEPS, point);
+    least = Math.min(least, other.closestPointToPoint(point, true, near).distanceTo(point));
+  }
+  return least;
+}
+
+/**
+ * A fist sculpted shut (`HandBuild.fist`) judged by its bones: its skin is one surface, the fingers' flesh joined where
+ * they press together and the tips buried in the flesh filling their curls, so its skin has no tip, shaft or finger
+ * apart from the others to read, and read as the open hand's was its numbers jumped from run to run (the thumb 7 mm,
+ * then 14 with no change to it). Neighbouring middle phalanges are apart by their bones' distance less their radii,
+ * sunk into each other by as much under it, and the thumb's last bone off the middle finger's middle phalanx so.
+ */
+function shutContact(hand: Hand, wrist: number): { line: string; contacts: string[]; problems: string[] } {
+  const scale = hand.vis.getWorldScale(new THREE.Vector3()).x;
+  const middles = hand.f.map((digit) => segmentOf(digit, 1));
+  const between = middles.slice(1).map((bone, i) =>
+    bonesApart(middles[i], bone) - (hand.f[i].r + hand.f[i + 1].r) * scale);
+  const gaps = between.map((apart) => Math.max(0, apart));
+  const sunk = between.map((apart) => Math.max(0, -apart));
+  const thumbBone = segmentOf(hand.thumb, 2);
+  const opposed = Math.max(0, bonesApart(thumbBone, middles[1]) - (hand.thumb.r + hand.f[1].r) * scale);
+  const pad = thumbBone.getCenter(new THREE.Vector3());
+  const near = middles[1].closestPointToPoint(pad, true, new THREE.Vector3());
+  const over = hand.vis.worldToLocal(pad.clone()).z < hand.vis.worldToLocal(near).z;
+  const mm = (n: number) => (n * 1000).toFixed(1);
+  const line = `shut: tips buried, shaft gaps ${gaps.map(mm).join('/')} mm, sunk ${sunk.map(mm).join('/')} mm, `
+    + `thumb ${mm(opposed)} mm (${over ? 'over middle' : 'off middle'}), wrist ${wrist.toFixed(1)}°`;
+  const contacts: string[] = [];
+  if (Math.max(...gaps) > LIMIT.gap) contacts.push('adjacent shafts separated');
+  if (opposed > LIMIT.thumb || !over) contacts.push('thumb missed the middle shaft');
+  if (Math.max(...sunk) > LIMIT.sunkBones) contacts.push('fingers sunk into each other');
+  const problems = [...contacts];
+  if (wrist >= LIMIT.wrist) problems.push('wrist bent 10° or more');
+  if (!hand.f.every(inRange)) problems.push('finger joints out of range');
+  return { line, contacts, problems };
+}
+
 /** The same clearance and opposition checks judge the game pose and the old grip-based canary. */
 export function fistContact(hand: Hand, wrist: number): { line: string; contacts: string[]; problems: string[] } {
+  if (hand.shut?.on) return shutContact(hand, wrist);
   const samples = skinSamples(hand);
   const palm = surface(hand, samples, 'palm');
   const tips = hand.f.map((_, i) => tipDistance(samples, i, palm));
