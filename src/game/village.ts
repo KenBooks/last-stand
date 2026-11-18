@@ -325,6 +325,9 @@ function bindPointer(): void {
   }, true);
 }
 
+/** The street lamps lit for the hour as it stands, with the game frozen (photo mode's time of day, ui/photo.ts). */
+export function lightLampsNow(dt: number): void { lightLamps(dt); }
+
 /** The village's frame: what the hero is near and may use, his walk to an object, his casting (the yard alone), the
  *  names over the objects; nothing while the lobby isn't up. */
 export function updateVillage(dt = 0): void {

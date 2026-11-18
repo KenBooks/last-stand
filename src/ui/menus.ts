@@ -15,6 +15,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
+import { photoAllowed } from './photo';
 import { skillArt, skillIconHTML } from './skillArt';
 import { renderLoadoutEditor, openBook } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
@@ -79,6 +80,8 @@ export interface MenuHooks {
   panels(open: Panels): void;
   /** the guide opened (ui/guide/), on a section if given, over the pause menu */
   guide(section?: GuideSection): void;
+  /** the pause menu's Photo mode (ui/photo.ts) */
+  photo(): void;
 }
 
 /** What the lobby's panels show: the inventory (equipment, attributes and skills), the stash's chest (the inventory
@@ -150,6 +153,7 @@ function keyboardDiagram(): string {
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
     g: { icon: CONTROL_ICONS.guide, cap: 'Guide', tip: 'The guide: every foe, boss and hero, and tips' },
+    p: { icon: '◉', cap: 'Photo', tip: 'Photo mode: the UI hidden, a free camera and the look set, the shot saved' },
   };
   // (in the village E uses what the hero is near, I and M open the inventory and the map; a run's keys shown still,
   // as the game's: left out there, B and C were missed beside the rules' Bank and Continue)
@@ -363,6 +367,7 @@ export function initMenus(h: MenuHooks): void {
   };
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
+  $('#btn-photo').onclick = () => { sfx.click(); hooks.photo(); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   // (the guide's doors: How to play's and the pause menu's Guide tab; G anywhere, main.ts)
   $('#btn-help-guide').onclick = () => { sfx.click(); hideHelp(); hooks.guide(); };
@@ -1360,6 +1365,10 @@ function renderHourOption(): void {
 export function showPause(v: boolean): void {
   resetHold($('#btn-abandon'));
   if (v) {
+    // (photo mode is the village's and the time between waves': its button says so during a fight)
+    const photo = $<HTMLButtonElement>('#btn-photo'), allowed = photoAllowed();
+    photo.disabled = !allowed;
+    photo.title = allowed ? 'Hide the UI, set up a shot and save it (P)' : 'Not during a fight: in the village or between waves';
     showBuildStatus($('#pause .build-status'));
     refreshColourPickers();
     pauseTab(keptPauseTab());

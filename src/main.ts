@@ -61,6 +61,7 @@ import { hourNow, holdHour } from './game/clock';
 import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
 import { askConflicts, renderCloudBar, showGoogleLanding } from './ui/cloudSaves';
 import { googleLanding, initCloud } from './loot/cloud';
+import { enterPhoto, initPhoto, photoAllowed, photoFrame, photoKeys, photoOn } from './ui/photo';
 import { initHeroSelect, openHeroSelect, closeHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched, placeChoice } from './ui/heroSelect';
 import { hallOpen, prepareHeroSelection, queueHallBehind, takeSpareHero, updateHall } from './game/hall';
 import { buildBehind } from './game/behind';
@@ -285,7 +286,8 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide });
+  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide, photo: openPhoto });
+  initPhoto({ back: (toPause) => openPause(toPause) });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
   // of a first visit's GPU process)
@@ -858,6 +860,18 @@ function reportClosed() {
   reportAlone = false;
 }
 
+/** Photo mode (P, the pause menu's button: ui/photo.ts), from the pause menu (which it goes back to) or the game; never
+ *  over the hero selection screen or the save slots, which stage the camera themselves, nor over the bug report's
+ *  form, a talk, Odo's trade, a co-op trade or Play together and How to play (a talk frames the camera itself, and a
+ *  trade's or a dialog's state would wait unseen under it). */
+function openPhoto(): void {
+  if (photoOn() || !photoAllowed() || heroSelectOpen() || savesOpen() || profiling() || bugReportOpen()) return;
+  if (dialogOpen() || guideOpen()) return;
+  const fromPause = G.menuOpen;
+  if (fromPause) showPause(false);
+  enterPhoto(fromPause);
+}
+
 /** Abandon from the pause menu: solo back to the lobby; in co-op out of the run (spoils lost), watching the rest. */
 function abandon() {
   openPause(false);
@@ -1054,6 +1068,8 @@ function handleGlobalKeys() {
   if (tradeOpen()) { if (wasPressed('escape')) cancelTrade(); return; }
   // the bug report's form takes the keys: Esc closes it, back to what it was opened over
   if (bugReportOpen()) { if (wasPressed('escape')) closeBugReport(); return; }
+  // (photo mode takes every key while it's open: Esc leaves it)
+  if (photoOn()) { photoKeys(); return; }
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
   // screen too, which opens it
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
@@ -1099,6 +1115,7 @@ function handleGlobalKeys() {
     if (G.mode === 'run' && G.run && !G.player.inRun) return;
     openPause(!G.menuOpen);
   }
+  if (wasPressed('p')) { openPhoto(); return; }
   if (!G.menuOpen && wasPressed('v')) {
     nextView();
     completeStep('view');
@@ -1243,7 +1260,8 @@ function update(dt: number): void {
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
   const eyes = focus.player === G.player && viewMode() === 'first' && viewSettled();
-  viewArms(G.player.model, eyes, G.camera, focus.player === G.player && eyesInGlide());
+  // (photo mode shows him whole wherever its camera flies: near his head this would hide his body)
+  if (!photoOn()) viewArms(G.player.model, eyes, G.camera, focus.player === G.player && eyesInGlide());
   // (the weapons' trails in each hero's own space, the arms placed in the view first)
   updateSwingTrails();
 
@@ -1341,6 +1359,8 @@ function frame(timestamp: number): void {
   if (guideOpen()) stepPortraits();
   // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
   if (dev && revealed) dev.frame(Math.min(rawDt, 0.1));
+  // (photo mode's camera, flown by the browser's clock too: solo the game stands frozen meanwhile)
+  if (revealed) photoFrame(Math.min(rawDt, 0.1));
   // (worn items' glow: its wisps' drift and breath, wherever a hero is drawn)
   tickItemGlow(G.time);
   drawBattleLog();

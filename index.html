@@ -707,6 +707,26 @@
     <div class="prof-bar"><div class="prof-fill"></div></div>
     <div class="prof-foot"><span class="prof-left"></span><button class="btn" id="btn-profile-cancel">Cancel</button></div>
   </div>
+  <!-- photo mode (ui/photo.ts): every other panel hidden, a pad over the world for the camera, its panel at the side,
+       the letterbox's bars; the photo is the canvas's alone, so nothing here is ever in it -->
+  <div id="photo" class="hidden">
+    <div class="ph-pad" aria-hidden="true"></div>
+    <div class="ph-bar ph-top hidden"></div><div class="ph-bar ph-foot-bar hidden"></div>
+    <div class="ph-panel" role="dialog" aria-label="Photo mode">
+      <div class="ph-head"><span class="ph-title">Photo mode</span>
+        <button class="btn" id="ph-hide" title="Hide this panel for the shot (H)">Hide</button>
+        <button class="btn" id="ph-leave" title="Back to the game (Esc)">Leave</button></div>
+      <div class="ph-coop hidden">Playing together, the world keeps moving.</div>
+      <div class="ph-body"></div>
+      <div class="ph-foot"><button class="btn" id="ph-reset">Reset</button>
+        <button class="btn primary" id="ph-take" title="Saves a PNG (Space)">Take photo</button></div>
+      <div class="ph-keys">Drag to turn, right drag to move, wheel to zoom (Shift: lens). WASD, Q/E fly, Z/C tilt,
+        R recentre, Space takes the photo, H hides this, Esc leaves.</div>
+      <div class="ph-keys-touch">Drag to turn, two fingers to move and zoom.</div>
+    </div>
+    <button class="btn ph-show hidden" id="ph-show" title="Show the panel (H)">Show panel</button>
+    <div class="ph-saved hidden" role="status" aria-live="polite"></div>
+  </div>
   <div id="item-sheet" class="modal hidden"><div class="modal-box">
     <div class="is-card"></div>
     <div class="dc-buttons"><button class="btn is-a"></button><button class="btn danger is-salvage">Drop</button><button class="btn is-close">Close</button></div>
@@ -766,7 +786,9 @@
           </div>
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-blog"> Show battle log</label>
-        <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>
+        <div class="opt-row opt-buttons"><button class="btn" id="btn-fullscreen">Fullscreen</button>
+          <!-- photo mode (ui/photo.ts): the UI hidden, a camera of its own, the look set, the frame saved (P) -->
+          <button class="btn" id="btn-photo" title="Hide the UI, set up a shot and save it (P)">Photo mode</button></div>
         </div>
       </section>
       <section class="pb-page pb-opts off" data-pause-page="performance" role="tabpanel">

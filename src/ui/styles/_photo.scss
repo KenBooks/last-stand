@@ -1,0 +1,80 @@
+// Photo mode (ui/photo.ts): every other panel of the page hidden (`body.photo`), the pad over the world taking the
+// camera's drags, the panel at the right (along the foot of an upright screen), zoomed with the UI as the other
+// panels are, its sections scrolling inside it on a short screen. Nothing here moves every frame: the bars and the
+// panel stand still, and the note that a photo was saved fades by its opacity alone.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+// (its descendants too: one that sets `visibility: visible` itself shows through its parent's hidden, as the
+// class card's name and tagline do, from play: "text did not dissapear from here (charecter name and desc)")
+body.photo > :not(#game, #photo, #rotate, #alt-cursor, script, svg),
+body.photo > :not(#game, #photo, #rotate, #alt-cursor, script, svg) * { visibility: hidden !important; }
+#photo.hidden, #photo .hidden { display: none !important; }
+#photo { position: fixed; inset: 0; z-index: 48; }
+#photo .ph-pad { position: absolute; inset: 0; touch-action: none; cursor: $cursor-hand; }
+#photo .ph-bar { position: absolute; left: 0; right: 0; background: #000; pointer-events: none; }
+#photo .ph-top { top: 0; }
+#photo .ph-foot-bar { bottom: 0; }
+
+#photo .ph-panel { position: absolute; top: 12px; right: 12px; zoom: var(--ui, 1); box-sizing: border-box;
+  width: min(300px, calc((100vw - 24px) / var(--ui, 1))); max-height: calc((100vh - 24px) / var(--ui, 1));
+  display: flex; flex-direction: column; padding: 10px 12px 10px 14px; font-size: 13px; line-height: 1.35;
+  color: var(--ink); background: linear-gradient(rgba(20,17,16,.94), rgba(8,7,8,.94));
+  @include frame(var(--frame), 0 6px 18px rgba(0,0,0,.7)); }
+#photo .ph-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+#photo .ph-title { font-family: $font-display; font-weight: 700; font-size: 15px; color: var(--accent); margin-right: auto; }
+#photo .btn { padding: 4px 10px; font-size: 13px; }
+#photo .ph-coop { font-size: 12px; color: var(--highlight, #{$highlight}); margin-bottom: 4px; }
+#photo .ph-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px;
+  scrollbar-width: thin; }
+#photo .ph-section { padding: 6px 0 4px; border-top: 1px solid rgba($frame, .25); }
+#photo .ph-section:first-child { border-top: none; padding-top: 0; }
+#photo .ph-heading { font-family: $font-display; font-size: 12px; letter-spacing: 1px; color: var(--ink-dim);
+  text-transform: uppercase; margin-bottom: 3px; }
+#photo .ph-level { margin: 3px 0; }
+#photo .ph-level > span { width: 82px; flex: none; }
+#photo .ph-level input { flex: 1; width: auto; min-width: 0; height: 16px; accent-color: var(--accent); }
+#photo .ph-level output { width: 44px; flex: none; }
+#photo .ph-level.off { opacity: .45; cursor: $cursor; }
+#photo .ph-level.off input { cursor: $cursor; }
+#photo .ph-toggles { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 4px; }
+#photo .ph-check { display: flex; align-items: center; gap: 5px; cursor: $cursor-hand; }
+#photo .ph-check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; cursor: $cursor-hand; }
+#photo .ph-toggles .btn { margin-left: auto; }
+#photo .ph-filters { display: flex; flex-wrap: wrap; margin: 2px 0 4px; }
+#photo .ph-filters button { flex: 1 1 auto; padding: 4px 6px; font-size: 12px; }
+#photo .ph-filters button:disabled { opacity: .45; }
+#photo .ph-foot { display: flex; gap: 8px; margin-top: 8px; }
+#photo .ph-foot .primary { flex: 1; }
+#photo .ph-keys, #photo .ph-keys-touch { margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
+#photo .ph-keys-touch, body.touch #photo .ph-keys { display: none; }
+body.touch #photo .ph-keys-touch { display: block; }
+
+#photo .ph-show { position: absolute; top: 12px; right: 12px; zoom: var(--ui, 1); opacity: .6; }
+#photo .ph-show:hover { opacity: 1; }
+#photo .ph-saved { position: absolute; left: 50%; bottom: 24px; translate: -50% 0; zoom: var(--ui, 1);
+  padding: 6px 14px; font-size: 13px; color: #ffe7b0; white-space: nowrap; pointer-events: none;
+  background: rgba(10,9,10,.9); @include frame(var(--accent)); }
+
+// a finger's buttons and sliders: tall enough to tap, as the other touch panels' (the box is zoomed by the UI's scale)
+body.touch #photo .btn, body.touch #photo .ph-filters button {
+  min-height: calc(max(32px * var(--touch, 1), 34px) / var(--ui, 1)); }
+body.touch #photo .ph-level input { height: calc(28px / var(--ui, 1)); }
+
+// an upright screen: the panel along its foot, under half its height, the shot above it
+@media (max-aspect-ratio: 1/1) {
+  #photo .ph-panel { top: auto; bottom: 12px; right: 12px; width: calc((100vw - 24px) / var(--ui, 1));
+    max-height: calc(46vh / var(--ui, 1)); }
+}
+// a short screen (a phone held sideways): the panel narrower and tighter, the keys' line left out
+@media (max-height: 520px) {
+  #photo .ph-panel { top: 8px; right: 8px; max-height: calc((100vh - 16px) / var(--ui, 1)); padding: 6px 8px 6px 10px; }
+  #photo .ph-keys, #photo .ph-keys-touch { display: none !important; }
+  #photo .ph-section { padding: 3px 0 2px; }
+  #photo .ph-level { margin: 1px 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #photo .ph-saved { animation: ph-saved 1.8s ease-out both; }
+}
+@keyframes ph-saved { 0% { opacity: 0; } 10% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }

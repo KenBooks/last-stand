@@ -2175,6 +2175,18 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  photo: {
+    help: 'photo mode used as a player uses it, in the village (and from its pause menu), the Thornwood and the '
+      + 'crypt: opened by P, the page\'s UI hidden but its panel, the world\'s overlays left out of the frame, the '
+      + 'solo game held still, the camera flown by W and turned by a drag, the look set by a slider and a filter '
+      + 'with no program compiled, the time of day settable in the village alone, Hide hero, a photo saved by Space '
+      + 'under a dated name at the canvas\'s pixels (letterboxed: its bar black), Esc putting everything back; '
+      + 'pictured with its panel and with a shot set up',
+    options: {
+      canary: { kind: 'switch', help: 'plant faults the checks must catch: the page\'s UI shown, the overlays drawn' },
+      ...COMMON_OPTIONS,
+    },
+  },
   labels: {
     help: 'a world label kept out by a full atlas: the atlas filled with name tags until a tag finds no slot, a few '
       + 'given back (too few to pack it again), and the tag drawn in one within 3 frames',
