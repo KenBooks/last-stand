@@ -377,13 +377,20 @@ export function clench(h: Hand, bends: readonly number[], thumb: number): void {
 // Keep the index and middle striking face square to the forearm. The old 117 degree fold left a ring under it.
 const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
-const FIST_CREASE = [[-0.058, -0.0315], [-0.062, -0.020], [-0.061, -0.015], [-0.058, -0.016]];
+const FIST_CREASE = [[-0.076, -0.011], [-0.078, -0.011], [-0.076, -0.011], [-0.07, -0.011]];
 // Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
 const FIST_FAN = [5, 2, -2, -8.7];
-// Point down the thenar mound. Pointed further out, the thumb left a window beside the index in the guard.
+// Which way the thumb's bone in the palm leans, of the ways that reach the fingers: down the thenar mound. Pointed
+// further out, the thumb left a window beside the index in the guard.
 const THUMB_BASE = [0.012, -0.042, -0.021] as const;
-// Seat the thumb just above the middle shaft's centre and one pad radius off its axis.
-const THUMB_CONTACT = { across: 0.005, down: 0.011, pad: 0.010 };
+// The thumb's last joint against the index's middle phalanx (`THUMB_ON.joint` of the way along it), as far round
+// from the index's outer side onto its back as the thumb reaches, and its last bone folded on round the index's back
+// towards the middle finger (`round` at most from the outer side): off the index's bone by their radii summed
+// (`press`, a little under: skin pressed on skin). Aimed at one point on the middle finger with its bone in the palm
+// held down the mound, the thumb took up its spare length in an arch, a loop standing off the fingers with a hole
+// under it (from play: "he still has sperm in his fist"); laid over the index's back, its joint was out of reach by
+// 8 mm on the heavy hand and sank into the finger.
+const THUMB_ON = { joint: 0.15, round: Math.PI * 0.75, press: 0.9 };
 // A fingertip's pad's half-depth over its finger's half-width at its root: a thicker finger's tip sits further off
 // the palm by the difference (`HandBuild.digits`).
 const PAD_DEPTH = 0.58;
@@ -398,7 +405,6 @@ function linkBend(a: number, b: number, distance: number): number {
 
 /** The warrior's bare fist, solved from the rest joints with the fingertips seated at the palm's crease. */
 function closedFistPose(h: Hand): THREE.Quaternion[][] {
-  const middle = new THREE.Vector3();
   const rotations = h.f.map((digit, i) => {
     const root = digit.j[0].position;
     const [a, b, c] = digit.len;
@@ -414,31 +420,94 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     const angle = Math.atan2(-dz, -dy) + 2 * Math.PI - Math.atan2(c * Math.sin(last), b + c * Math.cos(last));
     const pip = clamp(angle - STRIKE_BEND, 0, THREE.MathUtils.degToRad(110));
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(STRIKE_BEND, yaw, 0, 'YXZ'));
-    if (i === 1) {
-      middle.set(0, -b / 2, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), pip);
-      middle.y -= a;
-      middle.applyQuaternion(q).add(root);
-    }
     const bend = (r: number) => new THREE.Quaternion().setFromEuler(new THREE.Euler(r, 0, 0));
     return [q, bend(pip), bend(last)];
   });
 
-  const [a, b, c] = h.thumb.len;
-  const base = new THREE.Vector3(-h.s * THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2]).normalize();
-  const pad = THUMB_CONTACT.pad * h.build.digits;
-  const target = middle.add(new THREE.Vector3(h.s * THUMB_CONTACT.across, -THUMB_CONTACT.down, -pad));
-  const to = target.sub(h.thumb.j[0].position).addScaledVector(base, -a);
-  const last = linkBend(b, c, to.length());
-  to.normalize();
-  // Fold in one plane, continuing the metacarpal toward the outside of the fist before returning to the pad.
-  const axis = new THREE.Vector3().crossVectors(base, to).normalize();
-  const near = to.clone().applyAxisAngle(axis, -Math.atan2(c * Math.sin(last), b + c * Math.cos(last)));
-  const up = base.clone().negate();
-  const frame = new THREE.Matrix4().makeBasis(axis, up, new THREE.Vector3().crossVectors(axis, up));
-  const bend = (r: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), r);
-  const atKnuckle = Math.atan2(axis.dot(new THREE.Vector3().crossVectors(base, near)), base.dot(near));
-  rotations.push([new THREE.Quaternion().setFromRotationMatrix(frame), bend(atKnuckle), bend(last)]);
+  rotations.push(thumbOver(h, rotations));
   return rotations;
+}
+
+/** A digit's joints placed by its joints' turns (in the hand's frame, from `root`), with its tip, and each segment's
+ *  turn in the hand's frame. */
+function chainOf(root: THREE.Vector3, lengths: number[], turns: THREE.Quaternion[]):
+  { points: THREE.Vector3[]; frames: THREE.Quaternion[] } {
+  const points = [root.clone()];
+  const frames: THREE.Quaternion[] = [];
+  let frame = new THREE.Quaternion();
+  turns.forEach((turn, n) => {
+    frame = frame.clone().multiply(turn);
+    frames.push(frame);
+    points.push(new THREE.Vector3(0, -lengths[n], 0).applyQuaternion(frame).add(points[n]));
+  });
+  return { points, frames };
+}
+
+/** The turn (in the hand's frame) of a segment running along `along`, its back (its nail's side, +z) as near `back`
+ *  as it can be. */
+function segmentTurn(along: THREE.Vector3, back: THREE.Vector3): THREE.Quaternion {
+  const y = along.clone().normalize().negate();
+  const z = back.clone().addScaledVector(y, -back.dot(y)).normalize();
+  const x = new THREE.Vector3().crossVectors(y, z);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+
+/**
+ * The thumb laid over the closed fingers (`fingers`, their joints' turns): its last joint against the index's middle
+ * phalanx (`THUMB_ON`), its last bone round the index's back, its bone in the palm whatever reaches the
+ * last joint from its root, leaning down the thenar mound (`THUMB_BASE`). Its joints' turns, each in its parent's
+ * frame.
+ */
+function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
+  const [a, b, c] = h.thumb.len;
+  const lift = (i: number) => (h.f[i].r + h.thumb.r) * THUMB_ON.press;
+  const index = chainOf(h.f[0].j[0].position, h.f[0].len, fingers[0]);
+  const middle = chainOf(h.f[1].j[0].position, h.f[1].len, fingers[1]);
+  // the middle phalanges' points and their backs (+z), and the index's outer side: away from the middle finger
+  const along = (chain: ReturnType<typeof chainOf>, share: number) => chain.points[1].clone().lerp(chain.points[2], share);
+  const backOf = (chain: ReturnType<typeof chainOf>) => new THREE.Vector3(0, 0, 1).applyQuaternion(chain.frames[1]);
+  const indexAt = along(index, THUMB_ON.joint);
+  const indexBack = backOf(index);
+  const outer = indexAt.clone().sub(along(middle, THUMB_ON.joint));
+  outer.addScaledVector(indexBack, -outer.dot(indexBack)).normalize();
+  const middleBack = backOf(middle);
+  const back = indexBack.clone().add(middleBack).normalize();
+  const root = h.thumb.j[0].position;
+  // its last joint round the index from its outer side towards its back, as far as its two bones reach
+  const reachable = a + b - 1e-4;
+  const roundIndex = (angle: number) => {
+    const round = outer.clone().multiplyScalar(Math.cos(angle)).addScaledVector(indexBack, Math.sin(angle));
+    return indexAt.clone().addScaledVector(round, lift(0));
+  };
+  let jointAngle = Math.PI / 2;
+  while (jointAngle > 0 && roundIndex(jointAngle).distanceTo(root) > reachable) jointAngle -= Math.PI / 36;
+  let joint = roundIndex(Math.max(0, jointAngle));
+  // (short even on the outer side: as near it as it reaches, along the line from the root)
+  const toJoint = joint.clone().sub(root);
+  const reach = clamp(toJoint.length(), Math.abs(a - b) + 1e-4, reachable);
+  const way = toJoint.normalize();
+  joint = root.clone().addScaledVector(way, reach);
+  // its knuckle where its two bones from the root and from the last joint meet (two spheres' circle), leaning in over
+  // the middle of the index's curl, so the thumb closes it (leaning down the mound, the curl's inside showed under the
+  // thumb as a hole from its side)
+  const fromRoot = (reach * reach + a * a - b * b) / (2 * reach);
+  const off = Math.sqrt(Math.max(0, a * a - fromRoot * fromRoot));
+  const centre = root.clone().addScaledVector(way, fromRoot);
+  const lean = outer.clone();
+  lean.addScaledVector(way, -lean.dot(way)).normalize();
+  const knuckle = centre.addScaledVector(lean, off);
+  // its last bone a chord of the circle round the index from its last joint on (a straight line to the middle finger
+  // went through the index: its pad sank 10 mm into it on the heavy hand), on to the middle finger's back as far as
+  // it reaches
+  const sweep = 2 * Math.asin(Math.min(1, c / (2 * lift(0))));
+  const tip = roundIndex(Math.min(Math.max(0, jointAngle) + sweep, THUMB_ON.round));
+  tip.sub(joint).setLength(c).add(joint);
+  const turns = [
+    segmentTurn(knuckle.clone().sub(root), back),
+    segmentTurn(joint.clone().sub(knuckle), back),
+    segmentTurn(tip.clone().sub(joint), back),
+  ];
+  return [turns[0], turns[0].clone().invert().multiply(turns[1]), turns[1].clone().invert().multiply(turns[2])];
 }
 
 /** The ways a bare hand is held that a wrap round it is laid over (`fighterWrap`'s `poses`), each putting it so with
