@@ -34,7 +34,7 @@ folder beside it.
   up (its side, its hero and the kind of page its command may run on), so a page booted for one job runs the next,
   and boots only for another side, hero or kind; the other side's tasks are handed out first. A boot is 8 s alone,
   25 to 30 s with eight at once, and a boot a job was most of a check. A page is kept only for the commands shown to
-  come out the same on it as on a page booted for each job (`keepsPage` and `pageKind` in `node/commands.mjs`): most
+  come out the same on it as on a page booted for each job (`keepsPage` in each command's module, `pageKind` in `node/commands.mjs`): most
   share pages whatever ran on them before (`'shared'`), `hits` and `cast` only their own jobs' (`'own'`), and
   `log` and the two-hander's eyes jobs boot each (`log` lists the game's clock, which runs on through its cases).
   The set-up takes the view from the top down before it builds the hero again: the frames that take it ran the new

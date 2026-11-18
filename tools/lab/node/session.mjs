@@ -79,7 +79,8 @@ export class LabSession {
     this.serving = serving;
     /**
      * a page runs one command after another until another hero or boot is asked for, for the commands that keep one
-     * (`keepsPage` in commands.mjs; a check's sessions: a boot a job, 15 to 20 s each, was most of a check)
+     * (`keepsPage` in its module, node/commands/; a check's sessions: a boot a job, 15 to 20 s each, was most of a
+     * check)
      */
     this.keepPages = false;
     const servedBy = serving?.repo ?? null;

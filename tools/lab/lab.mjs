@@ -3,7 +3,7 @@
 // session of its own, runs, and closes it. Exits with 1 when the command failed or found a problem.
 import { request, sendToServer, waitForChange } from './node/client.mjs';
 import { describeError, labError } from './node/errors.mjs';
-import { parseCommandLine, usage } from './node/options.mjs';
+import { COMMANDS, parseCommandLine, usage } from './node/options.mjs';
 import { lowerPriority } from './node/priority.mjs';
 import { stopRunning, stopWhenAsked } from './node/running.mjs';
 
@@ -61,6 +61,9 @@ async function main() {
     console.log(usage());
     return 0;
   }
+  // (a command whose module runs it here, with no page or server: `docs`)
+  const { run } = COMMANDS[call.command];
+  if (run) return run(call.options);
   if (call.command === 'check') {
     stoppable('check');
     const { runCheck } = await import('./node/check.mjs');

@@ -1,0 +1,15 @@
+# `tools/lab/node/commands`
+
+The lab's commands, a module each: `<name>.mjs` is `npm run lab -- <name>`, its default export the whole command. `options.mjs` reads the folder (`commandsIn`, the commands in their names' order) for the command line and the help, and `commands.mjs` takes those with work on a side for the session and `check`. Adding a command touches no other file: its page side is `page/commands/` (`page/commands/AGENTS.md`), its entry in full `tools/lab/commands/<name>.md`, and its line in `COMMANDS.md` is made from its `summary` (`npm run lab -- docs`; `lab:test` fails while it's stale).
+
+The rules across the game are the [root AGENTS.md](../../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../../AGENTS.md) and its Node side's [`node/AGENTS.md`](../AGENTS.md).
+
+What a command's export holds:
+- as the command line reads it (`options.mjs`): `summary` (its line in COMMANDS.md, its `help` when it has none), `variants` (a line more for a way of running it, `{ '--google': '...' }`), `help`, `argument` (what it takes after its name) and `mayOmit`, `open` (options it doesn't know passed on), `options` (each checked as it's read, so a misspelt one stops the command before anything boots);
+- `run(options)`, for a command the command line runs itself, with no page or server (`docs`);
+- as a side runs it (`commands.mjs` says each in full): `each` (its work on one side, calling its page functions by name: `side.command('<fn>', ...)`), `check`, `finish`, `textOf`, `problemsOf`, `countsOf`, `pictures`, `countsCompiles`, `keepsPage`.
+
+- **What several commands share goes in a kit, what one command uses stays in its module.** The options several take are `../optionKit.mjs` (the set-up's, those of every command on a page, `--look`), the work several share `../commandKit.mjs` (the set-up from the options, a result as text and its problems, the sheets and pictures written); a list one command owns (`ui`'s `UI_STATES`, `readme`'s shots) is in its module.
+- **A module that loads much more is imported as the command runs** (`beta.mjs`, `coop.mjs`, `trainingCoop.mjs`: the browser's side, the game's own modules): the command line reads every command's module on each run, about 70 ms, where `coop.mjs`'s and `beta.mjs`'s imports alone took 400.
+- An A/B's other side is kept by the code its command runs (`../labCode.mjs`): its module whole, the parts of the command kit it reaches, the modules it imports and the page functions it calls by name. A page function called from another module (`coop.mjs`) is found there too.
+- These modules were split out of the two tables that held every command (`options.mjs`, `commands.mjs`) by a codemod, their text moved as it was: a command's entry was in five places, and those files and the lab's AGENTS.md were the lab's most frequent conflicts.

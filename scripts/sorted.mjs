@@ -3,7 +3,7 @@
 // its end, the same lines, and two such PRs conflict; added in their alphabetical place, two entries rarely touch.
 // `npm run check:sorted` checks every tracked file.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const CODE_MARK = /^\s*\/\/ sorted\s*$/;
@@ -70,7 +70,7 @@ export function unsortedIn(text) {
 }
 
 function trackedFiles() {
-  return execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n').filter((path) => TEXT.test(path));
+  return execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n').filter((path) => TEXT.test(path) && existsSync(path));
 }
 
 function main() {

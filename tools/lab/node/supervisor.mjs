@@ -65,7 +65,8 @@ export function supervise() {
       tell(child, { restart: 'the lab\'s code changed' });
     }, CODE_SETTLE_MS);
   };
-  watch(join(LAB, 'node'), (_event, file) => {
+  // (with the commands' folder: node/commands/)
+  watch(join(LAB, 'node'), { recursive: true }, (_event, file) => {
     if (String(file).endsWith('.mjs')) codeChanged();
   });
   watch(join(LAB, 'lab.mjs'), codeChanged);

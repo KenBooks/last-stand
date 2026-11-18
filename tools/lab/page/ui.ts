@@ -84,7 +84,7 @@ const joinFound = (a: { lines: string[]; problems: string[] }, b: { lines: strin
   problems: [...a.problems, ...b.problems],
 });
 
-/** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
+/** The states pictured, in the order they run (tools/lab/node/commands/ui.mjs `UI_STATES`). */
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps' | 'cloudIdentity'

@@ -23,10 +23,9 @@ export const HUBS = {
   'src/net/session.ts': 'a feature\'s messages register in net/messages.ts; its protocol part is a line of net/protocol.ts',
   'src/types.ts': 'a foe\'s ai kind is declared from its own file (`declare module`)',
   'src/ui/menus.ts': 'a panel of its own is a module of its own',
-  'tools/lab/COMMANDS.md': 'generated from each command\'s own module',
-  'tools/lab/node/commands.mjs': 'a lab command is a module of its own',
-  'tools/lab/node/options.mjs': 'a lab command\'s options are in its own module',
-  'tools/lab/page/commands.ts': 'a lab command\'s page side is a module of its own',
+  'tools/lab/COMMANDS.md': 'its list is made by npm run lab -- docs (a conflict there: make it again)',
+  'tools/lab/node/commandKit.mjs': 'a lab command is node/commands/<name>.mjs and page/commands/<fn>.ts',
+  'tools/lab/node/optionKit.mjs': 'a lab command\'s own options are in its own module',
 };
 
 /** The files changed since `base` (the merge base), each with its lines added and removed. */

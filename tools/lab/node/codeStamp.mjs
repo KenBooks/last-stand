@@ -9,10 +9,17 @@ import { fileURLToPath } from 'node:url';
 /** the lab's own folder */
 export const LAB = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The files of the lab's Node code, relative to its folder: the command line and every module of the Node side. */
+/** The modules in `folder` (under the lab's), relative to the lab's folder. */
+function modulesIn(folder) {
+  return readdirSync(join(LAB, folder)).filter((name) => name.endsWith('.mjs')).map((name) => `${folder}/${name}`);
+}
+
+/**
+ * The files of the lab's Node code, relative to its folder: the command line, every module of the Node side and
+ * every command's.
+ */
 export function codeFiles() {
-  const modules = readdirSync(join(LAB, 'node')).filter((name) => name.endsWith('.mjs'));
-  return ['lab.mjs', ...modules.map((name) => `node/${name}`)].sort();
+  return ['lab.mjs', ...modulesIn('node'), ...modulesIn('node/commands')].sort();
 }
 
 /** A short hash of the lab's Node code as it is on disk now. */
