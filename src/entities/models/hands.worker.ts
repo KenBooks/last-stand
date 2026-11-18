@@ -5,7 +5,7 @@ import { packHand, setHandsCoarse } from './handShape';
 
 // (a coarse hand waits for its simplifier to load: Very low's)
 void setHandsCoarse(self.name.endsWith(COARSE_NAMED)).finally(() => {
-  const { s, build } = sideNamed(self.name);
-  const { packed, buffers } = packHand(sculptSide(s, build));
+  const { s, build, closed } = sideNamed(self.name);
+  const { packed, buffers } = packHand(sculptSide(s, build, closed));
   self.postMessage(packed, { transfer: buffers });
 });

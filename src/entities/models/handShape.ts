@@ -298,7 +298,8 @@ function gloveSeams(digits: DigitShape[], frames: Float64Array[][]): Lift {
 const THUMB_ROOT = 13;
 
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
-function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild): Part[] {
+function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild,
+  closed: boolean): Part[] {
   const { wide, deep, wrist, knuckles } = build;
   const at = (u: number, y: number, z: number) => [u * toward, y, z] as const;
   const parts: Part[] = [];
@@ -342,7 +343,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
   // the palm's hollow (none in a hand sculpted closed: the fist presses it full, and it showed over the fingers)
   // (off the thumb's mound towards the little finger's: over against it, the mound read as a crater)
-  if (build.sculptedIn === 'open') parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
+  if (!closed) parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
     blend: 0.006, cut: true, bones: [] });
   return parts;
 }
@@ -864,17 +865,17 @@ function pointOn(digit: DigitShape, n: number, along: number, space: THREE.Objec
  * `toward` is the way across the hand to its thumb (+1 or -1 along x).
  */
 export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: DigitShape, toward: number,
-  build: HandBuild = PLAIN): HandGeometries {
+  build: HandBuild = PLAIN, closed = false): HandGeometries {
   const digits = [...fingers, thumb];
   const parts = [
-    ...palmParts(fingers, thumb, toward, build),
+    ...palmParts(fingers, thumb, toward, build, closed),
     ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length)),
-    ...(build.sculptedIn === 'fist' ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space)) : []),
-    ...(build.sculptedIn === 'fist' ? thenarFill(thumb, fingers[0], space) : []),
+    ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space)) : []),
+    ...(closed ? thenarFill(thumb, fingers[0], space) : []),
   ];
   const hand = lifted(fieldOf(parts), tendons(fingers));
   // (a closed hand's thumb's mound stands further off its bones: within 16 mm, its side was cut open)
-  const box = boxOf(digits, space, build.sculptedIn === 'fist' ? 0.026 : 0.016);
+  const box = boxOf(digits, space, closed ? 0.026 : 0.016);
   const frames = digits.map((digit) => digit.j.map((joint) => frameIn(joint, space)));
   const nails = new NailMesh();
   digits.forEach((digit, i) => {

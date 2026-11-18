@@ -18,7 +18,8 @@ interface Sample { at: THREE.Vector3; region?: Region; along: number }
 /** Vertices blended as in dualQuaternion.ts, including the scale of the hand and of the model. */
 function skinSamples(hand: Hand): Sample[] {
   hand.vis.updateWorldMatrix(true, true);
-  const mesh = hand.bareSkin ?? hand.skin;
+  // (the skin drawn: a fighter's sculpted shut while his fist is, `shut` in hands.ts)
+  const mesh = hand.shut?.on ? hand.shut.skin : hand.bareSkin ?? hand.skin;
   const { position, skinWeight, skinIndex } = mesh.geometry.attributes;
   const { bones, boneInverses } = mesh.skeleton;
   const restFrames = boneInverses.map((inverse) => inverse.clone().multiply(mesh.bindMatrix));
@@ -153,7 +154,7 @@ function tipOf(samples: Sample[], i: number): THREE.Vector3 | null {
 }
 
 /** A fingertip's distance from the palm: none where its tip has no skin of its own, buried in the flesh of a hand
- *  sculpted closed (`HandBuild.sculptedIn`), where a fist's tips are. */
+ *  sculpted closed (`HandBuild.fist`), where a fist's tips are. */
 function tipDistance(samples: Sample[], i: number, palm: THREE.Triangle[]): number {
   const tip = tipOf(samples, i);
   return tip ? palmDistance(tip, palm) : 0;

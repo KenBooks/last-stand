@@ -35,6 +35,9 @@ export interface Hand {
   bareSkin: THREE.SkinnedMesh | null;
   glove: THREE.SkinnedMesh;
   nails: THREE.SkinnedMesh;
+  /** a fighter's hand's bare skin and nails sculpted shut in its fist (`HandBuild.fist`), shown in place of the open
+   *  ones while its fist is (`on`: `closeFist` shuts it, any other pose opens it) */
+  shut?: { skin: THREE.SkinnedMesh; nails: THREE.SkinnedMesh; on: boolean };
 }
 
 /** A digit's place and size: its root joint's place in the hand (u across towards the thumb, y down the hand, z out of
@@ -72,7 +75,9 @@ const SCULPT_SPREAD = 0.6;
  *  `handKey` */
 const SCULPTED = new Map<string, HandGeometries>();
 /** what a side's (`s`) hand of `build` is kept under, and the name its worker is given (`hands.worker.ts` reads it) */
-const handKey = (s: number, build: HandBuild) => `${s} ${build.name}`;
+const handKey = (s: number, build: HandBuild, closed = false) => `${s} ${build.name}${closed ? SHUT_NAMED : ''}`;
+/** what a sculpt's key (and its worker's name) has in it where its hand is sculpted shut */
+const SHUT_NAMED = ' shut';
 /** the nails: the fingertip's own skin (its colour times `NAIL_SKIN`, the warmth the sculpt shades a fingertip
  *  with), a little towards the pink of the bed under a nail (`NAIL_PINK` of the way to `NAIL_TINT`), and a little
  *  smoother, and as dark as the skin's map draws it (a nail has none). Nearly half way to a light pink and glossy,
@@ -176,10 +181,9 @@ function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material
   return mesh;
 }
 
-/** The hand's joints turned as it's sculpted and bound: open, its fingers a little spread, or closed in its fist
- *  (its build's `sculptedIn`). */
-function poseToSculpt(h: Hand): void {
-  if (h.build.sculptedIn === 'open') {
+/** The hand's joints turned as it's sculpted and bound: open, its fingers a little spread, or `closed` in its fist. */
+function poseToSculpt(h: Hand, closed: boolean): void {
+  if (!closed) {
     poseHand(h, 0, SCULPT_SPREAD);
     return;
   }
@@ -188,26 +192,26 @@ function poseToSculpt(h: Hand): void {
 }
 
 /** The hand's shape sculpted afresh on its joints, posed as it's sculpted (the lab's `hands` times it). */
-export function sculptAfresh(h: Hand): HandGeometries {
-  poseToSculpt(h);
+export function sculptAfresh(h: Hand, closed = false): HandGeometries {
+  poseToSculpt(h, closed);
   const { digits } = h.build;
   const fingers = h.f.map((d, i) => ({ j: d.j, len: d.len, width: FINGERS[i].width * digits }));
   const thumb = { j: h.thumb.j, len: h.thumb.len, width: THUMB.width * digits };
-  return sculptHand(h.vis, fingers, thumb, -h.s, h.build);
+  return sculptHand(h.vis, fingers, thumb, -h.s, h.build, closed);
 }
 
 /** A side's hand (`s`) of `build` sculpted on joints of its own, as `buildHand` places them: what a worker sculpts. */
-export function sculptSide(s: number, build: HandBuild = PLAIN): HandGeometries {
+export function sculptSide(s: number, build: HandBuild = PLAIN, closed = false): HandGeometries {
   const vis = new THREE.Group();
   const f = FINGERS.map((spec) => digitOn(vis, s, spec, build));
   const thumb = digitOn(vis, s, THUMB, build);
-  return sculptAfresh({ vis, f, thumb, s, build } as Hand);
+  return sculptAfresh({ vis, f, thumb, s, build } as Hand, closed);
 }
 
 /** The side and build a worker named by `handKey` sculpts. */
-export function sideNamed(name: string): { s: number; build: HandBuild } {
+export function sideNamed(name: string): { s: number; build: HandBuild; closed: boolean } {
   const [side, build] = name.split(' ');
-  return { s: parseInt(side, 10), build: HAND_BUILDS[build] ?? PLAIN };
+  return { s: parseInt(side, 10), build: HAND_BUILDS[build] ?? PLAIN, closed: name.includes(SHUT_NAMED) };
 }
 
 /** Where each side's hand of each build was sculpted (by `handKey`): by a worker as the game loaded, or on the page
@@ -225,9 +229,9 @@ function keep(key: string, made: HandGeometries, by: 'worker' | 'page'): HandGeo
 
 /** The hand's shape, sculpted once for its side and build (by a worker while the game loads, `preloadHands`; here, if
  *  it wasn't) and shared by every hand of it after. */
-function sculpted(h: Hand): HandGeometries {
-  const key = handKey(h.s, h.build);
-  return SCULPTED.get(key) ?? keep(key, sculptAfresh(h), 'page');
+function sculpted(h: Hand, closed = false): HandGeometries {
+  const key = handKey(h.s, h.build, closed);
+  return SCULPTED.get(key) ?? keep(key, sculptAfresh(h, closed), 'page');
 }
 
 /** what a worker's name ends in where its hand is sculpted coarse (`hands.worker.ts` reads it) */
@@ -241,8 +245,8 @@ export async function preloadHands(coarse = false): Promise<void> {
   // its simplifier has loaded, which this waits for too)
   const simplifier = setHandsCoarse(coarse).catch(() => undefined);
   if (typeof Worker === 'undefined') return simplifier;
-  const side = (s: number, build: HandBuild) => new Promise<void>((resolve) => {
-    const key = handKey(s, build);
+  const side = (s: number, build: HandBuild, closed = false) => new Promise<void>((resolve) => {
+    const key = handKey(s, build, closed);
     let worker: Worker;
     try {
       const name = `${key}${coarse ? COARSE_NAMED : ''}`;
@@ -263,7 +267,11 @@ export async function preloadHands(coarse = false): Promise<void> {
   });
   // (every build's: each hero is built at boot, `game/warmup.ts`)
   const builds = Object.values(HAND_BUILDS);
-  await Promise.all([...builds.flatMap((build) => [side(1, build), side(-1, build)]), simplifier]);
+  const sides = builds.flatMap((build) => [1, -1].flatMap((s) => [
+    side(s, build),
+    ...(build.fist ? [side(s, build, true)] : []),
+  ]));
+  await Promise.all([...sides, simplifier]);
 }
 
 /**
@@ -283,7 +291,7 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   const thumb = digitOn(vis, s, THUMB, build);
   const h = { vis, f, thumb, s, build, made: { glove, skin, bareSkin, k } } as Hand;
   // bound to its joints as it was sculpted
-  poseToSculpt(h);
+  poseToSculpt(h, false);
   const shape = sculpted(h);
   let top: THREE.Object3D = vis;
   while (top.parent) top = top.parent;
@@ -301,10 +309,45 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   const nail = h.nails.material as THREE.MeshStandardMaterial;
   nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
   nail.roughness = NAIL_ROUGH;
+  if (build.fist && bareSkin) shutOf(h, bones, bareSkin, skin);
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)
   for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
   return h;
+}
+
+/** `h`'s bare skin and nails sculpted shut, bound to its joints closed in its fist (a skeleton of their own: the
+ *  open meshes' is bound open), hidden until it's shut. */
+function shutOf(h: Hand, bones: THREE.Bone[], bareSkin: THREE.Material, skin: THREE.Material): void {
+  poseToSculpt(h, true);
+  const shape = sculpted(h, true);
+  h.vis.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(bones);
+  const fist = skinnedOn(h.vis, shape.skin, bareSkin, skeleton, true);
+  const material = fist.material as THREE.MeshStandardMaterial;
+  material.vertexColors = true;
+  wrinkled(material);
+  const nails = skinnedOn(h.vis, shape.nails, skin, skeleton, false);
+  const nail = nails.material as THREE.MeshStandardMaterial;
+  nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
+  nail.roughness = NAIL_ROUGH;
+  fist.visible = false;
+  nails.visible = false;
+  h.shut = { skin: fist, nails, on: false };
+}
+
+/** A fighter's bare hand shown shut in its fist (`on`), or open: its sculpt shut in place of its open one. A gloved
+ *  hand, or one with no sculpt shut, keeps its own. */
+export function shut(h: Hand, on: boolean): void {
+  const closed = h.shut;
+  if (!closed || !h.bareSkin) return;
+  const want = on && !h.glove.visible;
+  if (closed.on === want) return;
+  closed.on = want;
+  closed.skin.visible = want;
+  closed.nails.visible = want;
+  h.bareSkin.visible = !want && !h.glove.visible;
+  h.nails.visible = !want;
 }
 
 /** A hand built as `h` was (its side, its materials and its scale) on `joint`, bare as `h` is: the lab's `hands`
@@ -319,6 +362,7 @@ export function handLike(h: Hand, on: THREE.Object3D): Hand {
 /** the hand bare (no hands item worn: no glove, in its bare skin when it was built with one, else its skin whole), or
  *  in its glove */
 export function bare(h: Hand, on: boolean): void {
+  shut(h, false);
   h.glove.visible = !on;
   if (!h.bareSkin) {
     const shape = SCULPTED.get(handKey(h.s, h.build))!;
@@ -349,6 +393,7 @@ export function handCapsules(h: Hand): [JointPoint, JointPoint, number][] {
  *  be positioned differently", #425) */
 const THUMB_ROLL = -1.3;
 export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0, twitch = 0): void {
+  shut(h, false);
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
   h.f.forEach((f, i) => {
@@ -381,6 +426,7 @@ function thumbAcross(h: Hand, tc: number, spread: number): void {
  * fingers hooked from the side.
  */
 export function clench(h: Hand, bends: readonly number[], thumb: number): void {
+  shut(h, false);
   h.f.forEach((f, i) => {
     const more = 1 + 0.04 * i;
     for (let n = 0; n < 3; n++) f.j[n].rotation.set(bends[n] * more, 0, 0);
@@ -537,6 +583,7 @@ export function wrapPoses(h: Hand): (() => void)[] {
 
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
 export function closeFist(h: Hand, line: THREE.Vector3): void {
+  shut(h, true);
   const key = handKey(h.s, h.build);
   let pose = CLOSED_FISTS.get(key);
   if (!pose) {
@@ -746,6 +793,7 @@ export function fistReach(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, r: num
  * model's world matrices are up to date.
  */
 export function hold(h: Hand, dir: THREE.Vector3, r: number, up?: THREE.Vector3, slant = 0): void {
+  shut(h, false);
   const hand = h.vis.parent!;
   hand.updateWorldMatrix(true, false);
   _q2.setFromRotationMatrix(_m.extractRotation(hand.matrixWorld));
