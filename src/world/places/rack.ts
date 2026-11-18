@@ -1,11 +1,13 @@
-// The village's weapons rack (data/village.ts `RACK`; built by world/village.ts): a sturdy timber rack, two posts on
+// The village's weapons rack (data/village.ts `RACK`, its object data/places/rack.ts; built with the village's other
+// places by world/places.ts): a sturdy timber rack, two posts on
 // skids and a heavy beam across them, four long swords stood in it point down, their tips in a trough at its foot and
 // their blades leant on the beam: a flame-bladed two-hander, a sabre, a longsword with a ring on its guard, an arming
 // sword. Where a party sets up a duel (from play: "Item you come up to to interact (open menu), is a weapons rack").
 import * as THREE from 'three';
-import { RACK } from '../data/village';
-import { boxWithUV } from './props';
-import type { Obstacle } from '../types';
+import { RACK } from '../../data/village';
+import { boxWithUV } from '../props';
+import type { Obstacle } from '../../types';
+import type { PlaceKit } from '../placeKit';
 
 /** The rack's materials, the village's own (world/village.ts `Mats`): all of what stands free, thinned as one. */
 export interface RackMats {
@@ -133,7 +135,7 @@ function buildSword(s: Sword, M: RackMats): THREE.Group {
 }
 
 /** The rack built under `scene` where the plan has it, and what a body is kept off there. */
-export function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: Obstacle[]): void {
+function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: Obstacle[]): void {
   // (laid out with its swords to +z, turned to its facing)
   const rack = new THREE.Group();
   rack.name = 'weapons rack';
@@ -179,4 +181,11 @@ export function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: 
   scene.add(rack);
   const cos = Math.cos(RACK.facing), sin = Math.sin(RACK.facing);
   for (const x of [-0.85, 0, 0.85]) obstacles.push({ x: RACK.x + x * cos, z: RACK.z - x * sin, r: 0.48, h: high });
+}
+
+/** The rack built into the village, in the village's own materials. */
+export function build(kit: PlaceKit): void {
+  const { M } = kit;
+  const mats = { timber: M.rackTimber, planks: M.rackPlanks, iron: M.iron, steel: M.steel, hilt: M.freeBrass, grip: M.binding };
+  buildWeaponsRack(kit.scene, mats, kit.obstacles);
 }

@@ -215,47 +215,16 @@ function portalObject(id: BiomeId, name: string, verb: string): VillageObject {
   };
 }
 
-/** Every object the hero uses, in the order the touch Use button and the keys look for one. */
+/** each place's object, a file each in data/places/ (`place`, made once the plan above is): a new place is a file
+ *  there and touches no list */
+const PLACES = import.meta.glob<() => VillageObject>('./places/*.ts', { eager: true, import: 'place' });
+
+/** Every object the hero uses, the portals first, then the places in their files' order (the one used is the nearest
+ *  in reach, game/village.ts `nearest`, so the order says nothing). */
 export const VILLAGE_OBJECTS: readonly VillageObject[] = [
   portalObject('crypt', 'Portal to the Crypt', 'Enter the Crypt'),
   portalObject('forest', 'Portal to the Thornwood', 'Enter the Thornwood'),
-  {
-    // (stood before it, on the porch)
-    id: 'chest', use: 'stash', at: [CHEST.x, CHEST.z], reach: 2.2, stand: [CHEST.x, CHEST.z + 1.3], label: 0.03, tall: 1.4,
-    name: 'Stash', verb: 'Open the stash',
-  },
-  {
-    // (inside, before the plinths: walked in through its door)
-    id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.daisZ - 0.6], reach: 3.4, stand: [TERRACE.x, HALL.daisZ + 1.4],
-    label: 1.4, tall: 3.0,
-    name: 'Hall of Heroes', verb: 'Choose your hero',
-  },
-  {
-    id: 'campfire', use: 'coop', at: CAMPFIRE, reach: 2.8, stand: [CAMPFIRE[0] + 1.9, CAMPFIRE[1] - 0.4], label: 0.6, tall: 1.8,
-    name: 'Campfire', verb: 'Play together',
-  },
-  {
-    // (stood before it on the porch, as the chest's on the other side)
-    id: 'chronicle', use: 'chronicle', at: [CHRONICLE.x, CHRONICLE.z], reach: 2.2, stand: [CHRONICLE.x, CHRONICLE.z + 1.2],
-    label: 0.85, tall: 1.9, name: 'Chronicle', verb: 'Save slots',
-  },
-  {
-    // (stood before it, on the road's side)
-    id: 'ghost', use: 'training', at: [GHOST.x, GHOST.z], reach: 2.4,
-    stand: [GHOST.x + Math.sin(GHOST.facing) * 1.5, GHOST.z + Math.cos(GHOST.facing) * 1.5], label: 2.0, tall: 2.0,
-    name: 'Sparring Shade', verb: 'Enter the training grounds',
-  },
-  {
-    // (stood before its swords, on the square's side)
-    id: 'rack', use: 'pvp', at: [RACK.x, RACK.z], reach: 2.2,
-    stand: [RACK.x + Math.sin(RACK.facing) * 1.4, RACK.z + Math.cos(RACK.facing) * 1.4], label: 1.72, tall: 1.8,
-    name: 'Weapons Rack', verb: 'Set up a duel',
-  },
-  {
-    id: 'notice', use: 'help', at: [NOTICE.x, NOTICE.z], reach: 2.4,
-    stand: [NOTICE.x + Math.sin(NOTICE.facing) * 1.4, NOTICE.z + Math.cos(NOTICE.facing) * 1.4], label: 0.95, tall: 2.6,
-    name: 'Notice board', verb: 'How to play',
-  },
+  ...Object.values(PLACES).map((place) => place()),
 ];
 
 /** The hours of the village's day: its light from the hour of the player's clock (a co-op guest's, the host's).

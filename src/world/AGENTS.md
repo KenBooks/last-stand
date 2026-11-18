@@ -35,4 +35,4 @@ Adding a biome is in the root's Architecture.
 
 ## The village
 
-The lobby's village, with the beta on (`village.ts`, `villagePlan.ts`, `villageWays.ts`, `rooms.ts`, `shop.ts`, `fountain.ts`, `meadow.ts`, `signposts.ts`, `weaponsRack.ts`, `heroHall.ts`, `lampShadows.ts`, `moonShadow.ts`, `walkPath.ts`, `hoardPieces.ts`, `villageNodes.ts`): read [`docs/agents/village.md`](../../docs/agents/village.md) before changing any of it, and [`docs/agents/village-grass.md`](../../docs/agents/village-grass.md) before changing its grass.
+The lobby's village, with the beta on (`village.ts`, `villagePlan.ts`, `villageWays.ts`, `rooms.ts` and `houses/`, `places/`, `fountain.ts`, `meadow.ts`, `signposts.ts`, `heroHall.ts`, `lampShadows.ts`, `moonShadow.ts`, `walkPath.ts`, `hoardPieces.ts`, `villageNodes.ts`): read [`docs/agents/village.md`](../../docs/agents/village.md) before changing any of it, and [`docs/agents/village-grass.md`](../../docs/agents/village-grass.md) before changing its grass.
