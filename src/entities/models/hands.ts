@@ -545,18 +545,18 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
   const corner = along(index, THUMB_ON.corner).addScaledVector(outer, lift(0))
     .addScaledVector(indexFront, THUMB_ON.front * lift(0));
   // In opposition the first metacarpal comes forward out of the palm. Its two free bones can then cross the pads.
-  if (h.build.fist) corner.copy(root).add(new THREE.Vector3(-h.s * 0.30, -0.56, -0.77));
+  if (h.build.fist) corner.copy(root).add(new THREE.Vector3(-h.s * 0.18, -0.64, -0.74));
   const knuckle = corner.sub(root).setLength(a).add(root);
   // its last joint on the index's front where its middle bone reaches it, as near the front's middle as it can
   let joint = along(index, 1).addScaledVector(indexFront, lift(0));
   let share = 1;
   let best = Infinity;
+  const roundTo = h.build.fist ? 0 : THUMB_ON.round;
   for (let s = 0; s <= THUMB_TRIES.shares; s++) {
     for (let r = 0; r < THUMB_TRIES.turns; r++) {
       const turn = (Math.PI / 2) * (r / (THUMB_TRIES.turns - 1));
       const round = indexFront.clone().multiplyScalar(Math.cos(turn)).addScaledVector(outer, Math.sin(turn));
       const at = along(index, s / THUMB_TRIES.shares).addScaledVector(round, lift(0));
-      const roundTo = h.build.fist ? 0 : THUMB_ON.round;
       const miss = Math.abs(at.distanceTo(knuckle) - b) + Math.abs(turn - roundTo) * 0.004;
       if (miss < best) {
         best = miss;
@@ -566,8 +566,8 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
     }
   }
   joint.sub(knuckle).setLength(b).add(knuckle);
-  // its last bone across to the middle finger's front at the same share
-  const pad = along(middle, share).addScaledVector(middleFront, lift(1));
+  // The thumbnail points diagonally towards the striking knuckles as the pad comes to rest on the middle finger.
+  const pad = along(middle, h.build.fist ? 0 : share).addScaledVector(middleFront, lift(1));
   const tip = pad.sub(joint).setLength(c).add(joint);
   const back = indexFront.clone().add(middleFront).normalize();
   const turns = [

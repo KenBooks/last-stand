@@ -370,8 +370,8 @@ function waisted(r0: number, r1: number, from: number, to: number, depth: number
       const radius = (r0 + (r1 - r0) * t) * (1 - WAIST * (pressed ? 0.25 : 1) * pinch * pinch);
       // Side by side, the pads flatten where they touch, leaving a shallow seam across the striking face.
       if (pressed) {
-        const corner = Math.hypot(zs, along);
-        return (Math.sqrt(Math.hypot(x * x, corner * corner)) - radius) * depth;
+        const side = x * x, corner = zs * zs + along * along;
+        return (Math.sqrt(Math.sqrt(side * side + corner * corner)) - radius) * depth;
       }
       return (Math.sqrt(x * x + zs * zs + along * along) - radius) * depth;
     },
@@ -492,7 +492,7 @@ function curlFill(finger: DigitShape, first: number, space: THREE.Object3D): Par
 
 /** how thick the thumb's mound is round its bone in the palm in a hand sculpted closed, and the web from its
  *  knuckle to the index's, shares of the thumb's width */
-const THENAR_FILL = { mound: 1.45, web: 0.85 };
+const THENAR_FILL = { mound: 1.25, web: 0.85 };
 
 /**
  * The thumb's mound and its web in a hand sculpted closed: thick round the thumb's bone in the palm, and a sheet from
@@ -505,6 +505,9 @@ function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D)
     .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(joint, space)).invert());
   const [root, knuckle] = [thumb.j[0], thumb.j[1]].map(toSculpt);
   const indexKnuckle = toSculpt(index.j[0]);
+  const heel = root.clone();
+  heel.x *= 0.36;
+  heel.z -= 0.006;
   const w = thumb.width * slimOf(true);
   const bones: [number, number][] = [[0, 0.3], [THUMB_ROOT, 0.7]];
   const fill = (a: THREE.Vector3, b: THREE.Vector3, r: number): Part => (
@@ -512,8 +515,10 @@ function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D)
   );
   return [
     fill(root, knuckle, w * THENAR_FILL.mound),
+    fill(heel, knuckle, w * THENAR_FILL.mound),
     fill(knuckle, indexKnuckle, w * THENAR_FILL.web),
     fill(root, indexKnuckle, w * THENAR_FILL.web),
+    fill(root.clone().lerp(knuckle, 0.5), indexKnuckle, w * THENAR_FILL.web),
   ];
 }
 
