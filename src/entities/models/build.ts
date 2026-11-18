@@ -11,9 +11,12 @@ export interface HandBuild {
   name: string;
   /** the digits' widths (the fingers' and the thumb's) */
   digits: number;
-  /** the palm's breadth across, the digits' roots spread across it, and the wrist's with it (at least `digits`, or the
-   *  fingers press into each other) */
+  /** the palm's breadth across and the digits' roots spread across it (at least `digits`, or the fingers press into
+   *  each other) */
   wide: number;
+  /** the wrist's breadth and depth: a broad palm's wrist is not broader by as much (with the palm's 1.12, the wrapped
+   *  forearm stood 8.6 cm across at the wrist, a stiff tube the fist looked small under) */
+  wrist: number;
   /** the palm's depth from its back to its front, and the wrist's with it */
   deep: number;
   /** the knuckles' heads across the back of the hand, their size over the fingers' widths */
@@ -21,11 +24,11 @@ export interface HandBuild {
 }
 
 /** a hand as it was sculpted before builds: the mage's, the ranger's, the villagers' */
-export const PLAIN: HandBuild = { name: 'plain', digits: 1, wide: 1, deep: 1, knuckles: 1 };
+export const PLAIN: HandBuild = { name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1 };
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
  *  some 12% wider at their joints than an office worker's, the palm deeper; from play, "need bigger fists tho") */
-export const HEAVY: HandBuild = { name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, knuckles: 1.15 };
+export const HEAVY: HandBuild = { name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, wrist: 1, knuckles: 1.15 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
 export const HAND_BUILDS: Record<string, HandBuild> = { plain: PLAIN, heavy: HEAVY };
@@ -39,8 +42,8 @@ export type Section = [number, number];
 
 /** The wrist's section where a hand of `build` drawn `k` times its size meets its forearm. */
 export function wristOf(build: HandBuild, k: number): Section {
-  const half = WRIST.half * build.wide * k;
-  return [half, WRIST.half * WRIST.depth * build.deep * k];
+  const half = WRIST.half * build.wrist * k;
+  return [half, half * WRIST.depth];
 }
 
 /** A forearm's build: its section at its widest (the muscles' belly a third of the way down from the elbow) and where
@@ -51,8 +54,9 @@ export interface ForearmBuild {
   bellyAt: number;
 }
 
-/** a fighter's forearm: 29 cm round at its belly over a 21 cm wrist (a man's 27 over 17, a strongman's 32 to 35) */
-export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.053, 0.04], bellyAt: 0.68 };
+/** a fighter's forearm, the wrap over it 9.2 cm across under the sleeve's cuff, as it looked right in play before
+ *  builds (at 11.5, its belly 10.6 cm across the skin, the wrap was a cardboard tube and the fists small under it) */
+export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.0415, 0.0295], bellyAt: 0.5 };
 
 /** The forearm's section `y` up from the wrist (m) on a forearm `length` long, its wrist `wrist`: eased from the wrist
  *  out to the belly and held there to the elbow. */

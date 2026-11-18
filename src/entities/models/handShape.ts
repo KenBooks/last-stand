@@ -299,7 +299,7 @@ const THUMB_ROOT = 13;
 
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
 function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild): Part[] {
-  const { wide, deep, knuckles } = build;
+  const { wide, deep, wrist, knuckles } = build;
   const at = (u: number, y: number, z: number) => [u * toward, y, z] as const;
   const parts: Part[] = [];
   const palm = (shape: Shape, blend: number, bones: [number, number][] = [[0, 1]]) => {
@@ -310,10 +310,10 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   // wrist whose back runs on into the fingers' backs: 7 mm narrower than the outer knuckles and 6 mm deeper than a
   // finger at its end, the hand swelled into a lump at the knuckle row, a shelf the fingers hung under; from play,
   // "this hand shape is not natural", "there should be no swelling")
-  // (a build's breadth and depth scale it, and the wrist with it: `build.ts`' `wristOf` reads the wrist's)
+  // (a build's breadth and depth scale it, and its wrist the wrist: `build.ts`' `wristOf` reads the wrist's)
   palm(slab(-0.004, -0.097, 0.0285 * wide, 0.044 * wide, 0.0135 * deep, 0.0102 * deep, 0.42, 0.008), 0.006);
   // the wrist, into the cuff
-  palm(tube(0.0275 * wide, 0.029 * wide, -0.006, 0.014, 0.66 * deep / wide), 0.012);
+  palm(tube(0.0275 * wrist, 0.029 * wrist, -0.006, 0.014, 0.66), 0.012);
   for (const finger of fingers) {
     const k = finger.j[0].position;
     const w = finger.width;

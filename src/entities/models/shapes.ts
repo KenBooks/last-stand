@@ -152,7 +152,8 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     const hand = smooth(-y, 0, 0.075);
     const thumb = Math.max(0, Math.sin(angle));
     const [ax, az] = forearmAt(arm.forearm, wristSection, length, Math.max(0, y));
-    const across = wristSection[0];
+    // (over the hand by the hand's own breadth, `k`: the wrist's breadth set it once, and a broad wrist flared it)
+    const across = 0.035 * arm.k / 1.28;
     const rx = ax + WRAP_GAP + (0.4 + 0.14 * thumb) * across * hand;
     // The thenar mound is deeper than the centre of the palm. A symmetric oval cut through it in teeth.
     const rz = az + WRAP_GAP + (z > 0 ? -0.14 : 0.11 + 0.49 * thumb) * across * hand;
