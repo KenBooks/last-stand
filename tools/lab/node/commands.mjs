@@ -1899,10 +1899,13 @@ export const COMMANDS = {
       options.class ??= 'mage';
     },
     each(side, options) {
-      return side.command('heropick', { canary: Boolean(options.canary) });
+      return side.command('heropick', { canary: Boolean(options.canary), quick: Boolean(options.quick) });
     },
+    // (--quick's moment written: the screen as the other heroes first stand on the village's hall's dais)
+    finish: (results, options, session) => textWithMoments(results, session.outFor('heropick'), session.browser),
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   tap: {

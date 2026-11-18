@@ -393,7 +393,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   still cold, the Start waited under the fight's loading bar and began the run once it was warm (on WebGPU, whose
   fight warms under the loading screen, at once). `--canary` lets that click through (`heroSelectEatsClicks(false)`),
   which must be found. Run it at `--screen 640x360@3` (Start under the hero), a phone's `832x384@2.8125`, a
-  desktop's, and each with `--renderer webgpu`.
+  desktop's, and each with `--renderer webgpu`. `--quick` instead picks the mage at once, the other heroes still
+  warming (hidden on their plinths), the CPU 12 times slower (at 4 they were warm before the hall closed), the view
+  changed every 40 frames (V, the training's first step: from above, the hall's dais is seen from the square), and
+  follows every frame until their warm-up and builds are done: every shown hero in the scene must be drawn where he
+  stands (his object's world matrix within 1 cm of his position) and be someone's (a player's, the hall of heroes'
+  open, or on the dais), and the others must have come to stand on the dais, or nothing was measured. It pictures the
+  fountain from beside it as they first do. From play on a slow first visit (a PR preview): the warrior and the
+  ranger stood on the fountain, the hall of heroes' plinths in the village, their dais's matrices held where its
+  room had them (hidden there, still warming, the frame's render had left them out of the world's matrices). Its
+  `--canary` holds the first hero on the dais drawn on the fountain, which must be found.
 - `touchpad`: where a finger put down starts the touch controls' move stick (`page/touchPad.ts`). In a run, a 16x8 grid of points
   over the screen, each touched by a finger (`lab.touchDown`) and slid 30 px right, the stick read a frame after:
   pushed, or not. A point whose topmost element is a control (a button, a skill's slot, a link) is left alone, as
