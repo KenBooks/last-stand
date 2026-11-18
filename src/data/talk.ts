@@ -28,6 +28,8 @@ export interface TalkNode { says: Said[]; again?: Said[]; replies: TalkReply[] }
 /** Someone talked to: his name, what he is, the node his talk starts at, and his nodes. */
 export interface Speaker {
   id: string; name: string; title: string;
+  /** his portrait's picture, made of his own model (ui/guide/portraits.ts) */
+  portrait?: 'scholar';
   start: (c: TalkContext) => string;
   nodes: Record<string, TalkNode>;
 }
@@ -78,6 +80,7 @@ export const HOLLIS: Speaker = {
   id: 'scholar',
   name: 'Brother Hollis',
   title: 'Keeper of the Library',
+  portrait: 'scholar',
   start: (c) => (c.first ? 'meet' : 'back'),
   nodes: {
     meet: {

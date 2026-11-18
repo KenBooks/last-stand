@@ -10,7 +10,7 @@
 // middle. And the frame's cost with the card up, against without it (the browser's own clock). `--canary` shows every
 // line at once and pushes Leave off the window's foot, each of which must be found.
 import * as THREE from 'three';
-import type { Lab, PagePoint, Pictured, Report } from './lab';
+import { realWait, type Lab, type PagePoint, type Pictured, type Report } from './lab';
 import { SCHOLAR_DESK } from '../../../src/data/houses/library';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
@@ -23,6 +23,7 @@ import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
 import { LOOKED, offHero, SEEN_FROM } from './scholar';
+import { portraitWaited } from './uiTalk';
 
 export interface TalkOptions { canary: boolean }
 
@@ -163,6 +164,9 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     const him = villageObject('scholar')!;
     await stand(lab, SEEN_FROM, Math.PI);
     await lab.step(240);
+    // (his portrait made behind the lobby, as it is long before a player reaches him)
+    const waited = await portraitWaited(lab);
+    const programs = G.renderer.info.programs!.length;
     const closed = await frameCost(lab);
 
     // --- a first meeting ---
@@ -175,6 +179,11 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     if (!options.canary && Math.round(readTime(sample) * 60) !== dueFrames(sample)) problems.push('talk: the reading time of the game and of the measure disagree');
     lines.push(`first meeting: ${revealLine(meet)}`, `  offered: ${offered()}`);
     problems.push(...revealProblems(meet), ...layoutProblems('first meeting'));
+    const photo = document.querySelector<HTMLCanvasElement>('#talk .tk-photo')!;
+    const pictured = document.querySelector('#talk .tk-portrait')!.classList.contains('pictured');
+    lines.push(`his portrait: made ${waited} frames after he was stood by, ${pictured ? 'shown' : 'not shown'} in the oval, `
+      + `${photo.width}x${photo.height} px`);
+    if (!pictured || !photo.width) problems.push('talk: his portrait isn\'t shown in the oval at a first meeting');
     if (options.canary) document.head.append(plant);
     if (replyButtons().some((b) => b.querySelector('.tx')?.textContent === 'What do you make of me?')) {
       problems.push('talk: "What do you make of me?" offered to a hero who has never fought');
@@ -276,6 +285,9 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     if (talkOpen()) problems.push('talk: Esc left the talk open');
     if (G.menuOpen) problems.push('talk: the Esc that ended the talk opened the pause menu');
 
+    const compiled = G.renderer.info.programs!.length - programs;
+    lines.push(`the game's renderer compiled ${compiled} programs over the talk`);
+    if (compiled) problems.push(`talk: the game's renderer compiled ${compiled} programs over the talk (none may be)`);
     const cost = `the frame with the card up: ${open.mean.toFixed(1)} ms mean, ${open.worst.toFixed(1)} slowest; without it `
       + `${closed.mean.toFixed(1)} ms, ${closed.worst.toFixed(1)} (a game frame and a browser frame each, ${COST_FRAMES} of them)`;
     lines.push(cost);

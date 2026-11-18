@@ -155,6 +155,11 @@ function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: nu
  * Brother Hollis, built on `book`'s table. His head and hands are the heroes': build him once their workers have made
  * them (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
+/** the book he was first built at (null till he is): his talk's portrait builds another of him on it
+ *  (ui/guide/portraits.ts), his look the same as the library's */
+let firstBook: ScholarBook | null = null;
+export const scholarBook = (): ScholarBook | null => firstBook;
+
 export function buildScholar(book: ScholarBook): Scholar {
   return built(scholarSteps(book));
 }
@@ -162,6 +167,7 @@ export function buildScholar(book: ScholarBook): Scholar {
 /** `buildScholar` a piece at a time (models/steps.ts), so the boot paints between them: built whole he was one task,
  *  0.9 s with the CPU 4 times slower and 2.7 s on a player's laptop, its loading screen still (#838). */
 export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undefined> {
+  firstBook ??= book;
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);

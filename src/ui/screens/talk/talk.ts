@@ -18,6 +18,7 @@ import { dialog } from '../../dialogs';
 import { villageUse } from '../../../game/villageUses';
 import { showVillageCard } from '../../villageCard';
 import { openPanels } from '../../menus';
+import { drawPortrait, hurryPortrait, portrait, portraitMade } from '../../guide/portraits';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -84,9 +85,29 @@ export function openTalk(id: string): void {
   const card = $('#talk');
   $('.tk-name', card).textContent = speaker.name;
   $('.tk-title', card).textContent = speaker.title;
+  showPortrait(speaker);
   card.classList.remove('hidden');
   go(speaker.start(context));
   changed(true);
+}
+
+/** His portrait in the oval: the picture of his model, made behind the lobby long before (shown as it comes if it
+ *  isn't yet: never made in the opening's frame), or the drawing where none can be made. */
+function showPortrait(who: Speaker): void {
+  const frame = $('#talk .tk-portrait'), photo = $<HTMLCanvasElement>('.tk-photo', frame);
+  const show = (pic: HTMLCanvasElement | null): void => {
+    if (speaker !== who) return;
+    if (!pic) { frame.classList.add('drawn'); return; }
+    // (a canvas already drawn: copied in, nothing to decode)
+    drawPortrait(photo, pic);
+    frame.classList.add('pictured');
+  };
+  frame.classList.remove('drawn', 'pictured');
+  if (!who.portrait) { show(null); return; }
+  const made = portraitMade(who.portrait);
+  if (made) { show(made); return; }
+  hurryPortrait(who.portrait);
+  void portrait(who.portrait).then(show);
 }
 
 /** The talk ended. */
