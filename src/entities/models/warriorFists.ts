@@ -37,14 +37,18 @@ export const FIST = tunable('fist', {
 // before the face, the elbows up at the chest, two adversarial reviews; 5 cm higher, at the eyes from the side, a third)
 const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.01, 0.27] });
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
- *  edges, and metres ahead): each fist low at its own side, the lead (left) a little higher and further in, both
- *  wholly in the frame, reached from his own shoulders as the ranger's hands are (`fistsLens`); a little lower out of
- *  a fight. In the corners from shoulders under the eyes, the fists were huge blobs at the view's foot */
+ *  edges, and metres ahead): as a boxer sees his own guard, each fist close and big, low either side of the middle
+ *  with the view clear between them, the lead (left) a little higher and further in, the forearms rising into the
+ *  frame from its foot, reached from his own shoulders as the ranger's hands are (`fistsLens`); a little lower out of
+ *  a fight. Held 0.46 to 0.52 m ahead out towards the corners, they were small fists far off on steep forearms, "hands
+ *  up" more than a guard (from play: "1st person looked terrible"); in the corners from shoulders under the eyes, they
+ *  were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
-  lead: [-0.34, -0.42, 0.52], rear: [0.46, -0.6, 0.46],
-  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored): ahead and across, as
-   *  in third person, the backs of the hands to the eye (mostly upward, the thumb side was turned to it) */
-  line: [0.7, 0, 0.7],
+  lead: [-0.38, -0.66, 0.32], rear: [0.48, -0.8, 0.3],
+  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored): across the view, so the
+   *  backs of the hands face the eye with the knuckles on top (turned ahead and across as in third person, 0.7, 0,
+   *  0.7, the eye looked down into the curled fingers, a fist punching at it) */
+  line: [1, 0, 0],
   /** how far out the elbows' way is through the eyes */
   pole: 0.7,
   /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
@@ -232,11 +236,12 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   const out = curve(PUNCH_OUT, k);
   place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes);
   lineTo(lead ? fistLine.L : fistLine.R, sided(LINE.punch, lead), smooth(Math.min(1, Math.max(0, out) * 1.4)));
-  // (the other fist drawn in tight to the jaw as this one goes: through the eyes down and back in the frame)
+  // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
+  // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
   if (shielded) return;
   if (eyes) {
     const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead;
-    place(j, !lead, onScreen(j, [on[0] * (1 + 0.2 * out), on[1] - 0.12 * out, on[2] - 0.08 * out], _far), 1, eyes);
+    place(j, !lead, onScreen(j, [on[0], on[1], on[2]], _far), 1, eyes);
   } else (lead ? j.elbowR : j.elbowL).rotation.x += -0.1 * out;
 }
 
