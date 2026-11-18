@@ -9,7 +9,7 @@
 // segment and round the thumb's, and the nails are plates laid on the backs of the fingertips.
 import * as THREE from 'three';
 import { surfaceNets, type Field, type Net } from './surfaceNets';
-import { above, beyond, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
+import { above, beyond, capsule, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
 import type { Part, Shape } from './sdf';
 import { PLAIN, type HandBuild } from './build';
 import { clamp } from '../../util';
@@ -340,9 +340,9 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   palm(ellipsoid(...at(0.043 * wide, -0.078, -0.003), 0.008, 0.02, 0.006 * deep), 0.01, [[0, 0.6], [THUMB_ROOT, 0.4]]);
   // (cut off flat inside the cuff: the wrist's rounded end rose 3 cm up the forearm)
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
-  // the palm's hollow
+  // the palm's hollow (none in a hand sculpted closed: the fist presses it full, and it showed over the fingers)
   // (off the thumb's mound towards the little finger's: over against it, the mound read as a crater)
-  parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
+  if (build.sculptedIn === 'open') parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
     blend: 0.006, cut: true, bones: [] });
   return parts;
 }
@@ -453,6 +453,54 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   parts[parts.length - 1].shapeOnly = true;
   parts[parts.length - 2].shapeOnly = true;
   return parts;
+}
+
+/** how wide the flesh filling a closed finger's curl is, a share of the finger's width */
+const CURL_FILL = 0.85;
+
+/**
+ * The flesh inside a closed finger's curl, between its bones and the palm: capsules across the curl from its knuckle
+ * to its last joint and its tip, and from its middle joint to its tip, shaping alone. A finger's bones bent shut left a
+ * pocket inside its curl, seen from the side as a triangle open between them (from play: "this is not a natural fist
+ * shape").
+ */
+function curlFill(finger: DigitShape, first: number, space: THREE.Object3D): Part[] {
+  const toSculpt = (n: number, y = 0) => new THREE.Vector3(0, y, 0)
+    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert());
+  const [knuckle, middle, last] = [0, 1, 2].map((n) => toSculpt(n));
+  const tip = toSculpt(2, -finger.len[2]);
+  const r = finger.width * CURL_FILL;
+  const bones: [number, number][] = [[first, 0.5], [first + 1, 0.5]];
+  return [[knuckle, last], [knuckle, tip], [middle, tip]].map(([a, b]) => (
+    { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.004, bones, shapeOnly: true }
+  ));
+}
+
+/** how thick the thumb's mound is round its bone in the palm in a hand sculpted closed, and the web from its
+ *  knuckle to the index's, shares of the thumb's width */
+const THENAR_FILL = { mound: 1.45, web: 0.85 };
+
+/**
+ * The thumb's mound and its web in a hand sculpted closed: thick round the thumb's bone in the palm, and a sheet from
+ * its knuckle and its root to the index's knuckle, moving with the thumb's root. Bent across the fingers from the open
+ * hand's, the thumb stood off the palm as a stick with a notch under it, where a fist's thumb rises out of a full
+ * mound (beside the reference photographs of a boxer's fist).
+ */
+function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D): Part[] {
+  const toSculpt = (joint: THREE.Object3D) => new THREE.Vector3()
+    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(joint, space)).invert());
+  const [root, knuckle] = [thumb.j[0], thumb.j[1]].map(toSculpt);
+  const indexKnuckle = toSculpt(index.j[0]);
+  const w = thumb.width * slimOf(true);
+  const bones: [number, number][] = [[0, 0.3], [THUMB_ROOT, 0.7]];
+  const fill = (a: THREE.Vector3, b: THREE.Vector3, r: number): Part => (
+    { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.008, bones, shapeOnly: true }
+  );
+  return [
+    fill(root, knuckle, w * THENAR_FILL.mound),
+    fill(knuckle, indexKnuckle, w * THENAR_FILL.web),
+    fill(root, indexKnuckle, w * THENAR_FILL.web),
+  ];
 }
 
 /** how far out from the skin its closing in is read (m), and how much darker it is where it closes in wholly */
@@ -780,13 +828,13 @@ class NailMesh {
 }
 
 /** The box the hand's field is meshed within: every joint's place, with room round it. */
-function boxOf(digits: DigitShape[], space: THREE.Object3D): THREE.Box3 {
+function boxOf(digits: DigitShape[], space: THREE.Object3D, margin: number): THREE.Box3 {
   const box = palmBox();
   for (const digit of digits) {
     box.expandByPoint(pointOn(digit, 2, -digit.len[2], space));
     for (let n = 0; n < digit.j.length; n++) box.expandByPoint(pointOn(digit, n, 0, space));
   }
-  return box.expandByScalar(0.016);
+  return box.expandByScalar(margin);
 }
 
 /** The box the glove is meshed within: the palm and each digit up to its cuff (half the hand's box: meshed in the
@@ -821,9 +869,12 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const parts = [
     ...palmParts(fingers, thumb, toward, build),
     ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length)),
+    ...(build.sculptedIn === 'fist' ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space)) : []),
+    ...(build.sculptedIn === 'fist' ? thenarFill(thumb, fingers[0], space) : []),
   ];
   const hand = lifted(fieldOf(parts), tendons(fingers));
-  const box = boxOf(digits, space);
+  // (a closed hand's thumb's mound stands further off its bones: within 16 mm, its side was cut open)
+  const box = boxOf(digits, space, build.sculptedIn === 'fist' ? 0.026 : 0.016);
   const frames = digits.map((digit) => digit.j.map((joint) => frameIn(joint, space)));
   const nails = new NailMesh();
   digits.forEach((digit, i) => {

@@ -56,6 +56,23 @@ export function tube(r0: number, r1: number, from: number, to: number, depth: nu
   };
 }
 
+/** A capsule from `a` to `b` (in its frame), of radius `r`. */
+export function capsule(a: THREE.Vector3, b: THREE.Vector3, r: number): Shape {
+  const ab = b.clone().sub(a);
+  const length2 = Math.max(ab.lengthSq(), 1e-12);
+  return {
+    distance: (x, y, z) => {
+      const t = clamp(((x - a.x) * ab.x + (y - a.y) * ab.y + (z - a.z) * ab.z) / length2, 0, 1);
+      const dx = x - (a.x + ab.x * t);
+      const dy = y - (a.y + ab.y * t);
+      const dz = z - (a.z + ab.z * t);
+      return Math.sqrt(dx * dx + dy * dy + dz * dz) - r;
+    },
+    centre: a.clone().add(b).multiplyScalar(0.5).toArray(),
+    radius: Math.sqrt(length2) / 2 + r,
+  };
+}
+
 /** An ellipsoid round (cx, cy, cz) of radii (rx, ry, rz). */
 export function ellipsoid(cx: number, cy: number, cz: number, rx: number, ry: number, rz: number): Shape {
   return {

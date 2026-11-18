@@ -391,7 +391,7 @@ export function clench(h: Hand, bends: readonly number[], thumb: number): void {
 // Keep the index and middle striking face square to the forearm. The old 117 degree fold left a ring under it.
 const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
-const FIST_CREASE = [[-0.076, -0.011], [-0.078, -0.011], [-0.076, -0.011], [-0.07, -0.011]];
+const FIST_CREASE = [[-0.086, -0.011], [-0.088, -0.011], [-0.086, -0.011], [-0.08, -0.011]];
 // Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
 const FIST_FAN = [5, 2, -2, -8.7];
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside

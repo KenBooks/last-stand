@@ -147,10 +147,16 @@ function fingersSunk(hand: Hand, samples: Sample[]): number[] {
     sunkInto(next, surfaces[i], bones[i])));
 }
 
-function tipOf(samples: Sample[], i: number): THREE.Vector3 {
+function tipOf(samples: Sample[], i: number): THREE.Vector3 | null {
   const tips = samples.filter(({ region }) => region === `tip${i}`).sort((a, b) => b.along - a.along);
-  if (!tips.length) throw new Error(`hands: the fist measure found no tip for digit ${i}`);
-  return tips[0].at;
+  return tips.length ? tips[0].at : null;
+}
+
+/** A fingertip's distance from the palm: none where its tip has no skin of its own, buried in the flesh of a hand
+ *  sculpted closed (`HandBuild.sculptedIn`), where a fist's tips are. */
+function tipDistance(samples: Sample[], i: number, palm: THREE.Triangle[]): number {
+  const tip = tipOf(samples, i);
+  return tip ? palmDistance(tip, palm) : 0;
 }
 
 /** Total wrist bend, measured independently of the forearm's pronation. */
@@ -164,12 +170,13 @@ export function wristBend(hand: Hand, elbow: THREE.Object3D): number {
 export function fistContact(hand: Hand, wrist: number): { line: string; contacts: string[]; problems: string[] } {
   const samples = skinSamples(hand);
   const palm = surface(hand, samples, 'palm');
-  const tips = hand.f.map((_, i) => palmDistance(tipOf(samples, i), palm));
+  const tips = hand.f.map((_, i) => tipDistance(samples, i, palm));
   const shafts = hand.f.map((_, i) => surface(hand, samples, `shaft${i}`));
   const points = hand.f.map((_, i) => samples.filter(({ region }) => region === `shaft${i}`).map(({ at }) => at));
   const gaps = points.slice(1).map((p, i) => Math.min(clearance(p, shafts[i]), clearance(points[i], shafts[i + 1])));
   const sunk = fingersSunk(hand, samples);
   const thumb = tipOf(samples, hand.f.length);
+  if (!thumb) throw new Error('hands: the fist measure found no tip for the thumb');
   const opposed = clearance([thumb], shafts[1]);
   const middle = hand.f[1];
   const shaft = new THREE.Line3(middle.j[1].getWorldPosition(new THREE.Vector3()),
