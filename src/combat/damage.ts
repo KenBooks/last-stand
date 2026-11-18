@@ -82,7 +82,9 @@ export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 export function tellHost(enemy: Enemy, hit: DealtHit): void { dealtSink?.(enemy, hit); }
 
 /** How a foe's attack came at a player, as the battle log names it. */
-export type EnemyAttack = 'strike' | 'slam' | 'bolt' | 'lava' | 'burn' | 'charge' | 'skull' | 'chain';
+/** every attack the battle log names: these, and a foe's own added by its file in entities/foes/ (`declare module`) */
+export interface EnemyAttacks { strike: true; slam: true; bolt: true; lava: true; burn: true }
+export type EnemyAttack = keyof EnemyAttacks;
 
 /** Who dealt a hit on a player: the foe (none: one gone before its blow landed) and its attack. */
 export interface Attacker { foe: Enemy | null; attack: EnemyAttack }

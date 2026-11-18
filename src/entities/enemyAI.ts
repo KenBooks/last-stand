@@ -21,7 +21,8 @@ import { lures, lureAt, type Lure } from '../combat/lures';
 import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
 import { phaseBegun } from './bossKit';
-import { chainSnapped, chargeRan, mendBegun, mendDone, skullsLoosed, twinFell, twinsAI } from './twins';
+import { AI_TABLE, FX_TABLE, type FoeFx } from './foeKit';
+import './allFoes';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
@@ -66,7 +67,7 @@ export function setFxSink(fn: typeof fxSink): void { fxSink = fn; }
  * replay each one as the host plays it. Each game judges the hits in them on its own player, as
  * its own screen shows the blow (combat/damage `hurtPlayer`).
  */
-export const FX = {
+const CORE_FX = {
   strike(x: number, z: number) {
     burst(new THREE.Vector3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
   },
@@ -177,22 +178,13 @@ export const FX = {
     const e = G.enemies.find((x) => x.id === id);
     if (e) phaseBegun(e, phase);
   },
-  /** the Ossuary Twins' Slab `id` charging from (ox, oz) to (tx, tz), each game's hero judged as it passes (entities/twins.ts) */
-  twinCharge(id: number, ox: number, oz: number, tx: number, tz: number, damage: number) { chargeRan(id, ox, oz, tx, tz, damage); },
-  /** `n` skulls from the twin `id` at (ox, oz) curving in on (tx, tz) */
-  skullVolley(id: number, ox: number, oz: number, tx: number, tz: number, n: number, damage: number) { skullsLoosed(id, ox, oz, tx, tz, n, damage); },
-  /** the Twins' chain snapping tight between (ax, az) and (bx, bz), each game's hero judged against its line */
-  chainSnap(id: number, ax: number, az: number, bx: number, bz: number, damage: number) { chainSnapped(id, ax, az, bx, bz, damage); },
-  /** Reliquary `id` mending the pair over `warn` s, and done */
-  twinMend(_id: number, _slab: number, warn: number) { mendBegun(warn); },
-  twinMended(id: number, slab: number) { mendDone(id, slab); },
-  /** twin `id` collapsing at half, paying nothing */
-  twinFall(id: number) { twinFell(id); },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
   },
 };
+/** every effect by name: these and each foe's own (registered by its file in entities/foes/, `foeKit.ts`) */
+export const FX = Object.assign(FX_TABLE, CORE_FX) as unknown as typeof CORE_FX & FoeFx;
 export type FxName = keyof typeof FX;
 /** the foes' kinds by number, as the `lava` and `vine` fx name them */
 const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
@@ -251,9 +243,8 @@ function slamRing(e: Enemy, x: number, z: number, radius: number, dur: number, c
   fx('tele', e.id, x, z, radius, dur, color);
 }
 
-export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
+const CORE_AI: Record<string, (e: Enemy, dt: number) => void> = {
   idle() {},
-  twins: (e) => twinsAI(e),
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     const p = e.target!.pos;
@@ -357,6 +348,8 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
     chase(e);
   },
 };
+/** every way of fighting by its `ai` kind: these and each foe's own (its file in entities/foes/, `foeKit.ts`) */
+export const AI = Object.assign(AI_TABLE, CORE_AI) as Record<EnemyAIKind, (e: Enemy, dt: number) => void>;
 
 /**
  * A lured enemy (combat/lures.ts): it goes for the lure and strikes at it with its own attack, a brute's slam with its

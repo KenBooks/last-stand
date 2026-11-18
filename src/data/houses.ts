@@ -3,7 +3,7 @@
 // bosses beaten. A room is a small place of its own, shown in the village's stead as the hall of heroes' room is: the
 // village is the heaviest place to draw, and a house seen open from it would add its inside to every frame there.
 // A room's frame: x across it, z from its back wall (-) to its door (+), its middle at the origin, its floor at 0.
-import type { EnemyId } from './enemies';
+import { FOE_ENTRIES, type EnemyId } from './enemies';
 import { COTTAGES, type VillageObject } from './village';
 
 export type RoomId = 'records' | 'tavern' | 'library' | 'merchant';
@@ -107,17 +107,12 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
 /**
  * A trophy the house of records hangs for a boss beaten, keyed by the boss's enemy id: its name, its look (`TrophyLook`
  * in world/rooms.ts: a new boss may have one of its own, or take `crest`, a shield in its colours that needs nothing
- * else), its colour (hex) and a second one. A boss with no entry hangs nothing; a boss being built (the Bell-Warden,
- * the Rootmother) needs only its entry here.
+ * else), its colour (hex) and a second one. A boss with no `trophy` in its file in data/foes/ hangs nothing; a boss
+ * being built needs only its `trophy` there. They hang in the folder's order.
  */
 export interface TrophyDef { name: string; look: TrophyLook; colour: number; trim: number }
 export type TrophyLook = 'mask' | 'antlers' | 'crest';
 
-export const TROPHIES: Partial<Record<EnemyId, TrophyDef>> = {
-  // (the Hollow Colossus's cracked face, its violet glow gone dim in the eyes)
-  colossus: { name: "The Hollow Colossus's Mask", look: 'mask', colour: 0xd8d0c4, trim: 0xb070ff },
-  // (the Elder Thornheart's crown of thorned antlers, a green heartwood knot at its root)
-  thornheart: { name: "The Elder Thornheart's Crown", look: 'antlers', colour: 0xb89068, trim: 0x7aff50 },
-  // (the Ossuary Twins' link of their chain of bone, its gold light still in it: one trophy for the pair, Slab's)
-  twinslab: { name: "The Ossuary Twins' Bone Link", look: 'crest', colour: 0xd2c6a4, trim: 0xffd890 },
-};
+export const TROPHIES = Object.fromEntries(
+  Object.entries(FOE_ENTRIES).filter(([, entry]) => entry.trophy).map(([id, entry]) => [id, entry.trophy]),
+) as Partial<Record<EnemyId, TrophyDef>>;

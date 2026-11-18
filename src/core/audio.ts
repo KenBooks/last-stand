@@ -161,7 +161,7 @@ export function playInto(c: BaseAudioContext): () => void {
 }
 
 /** whether a sound of this name played within `ms` (by the context's own clock, which an offline render keeps too) */
-function throttle(name: string, ms: number): boolean {
+export function throttle(name: string, ms: number): boolean {
   const now = ctx!.currentTime * 1000;
   if (last[name] !== undefined && now - last[name] < ms) return true;
   last[name] = now;
@@ -238,7 +238,7 @@ function drive(k: number): WaveShaperNode {
 
 /** A small graph for a layered sound: an output (faded in over `fadeIn` s, at once for 0), sent dry and to the
  *  hall, and its oscillators and loops, all started and stopped together. */
-function voice(fadeIn: number, wet: number) {
+export function voice(fadeIn: number, wet: number) {
   const c = ctx!;
   const t = c.currentTime;
   const out = c.createGain();
@@ -823,7 +823,7 @@ export type Heft = 0 | 1 | 2;
 
 /** A gain silent until `from` s in, swelling to `peak` at `peakAt` s and dying over `fall` s, into `to`: a swing's
  *  air, loudest as the blade passes. */
-function swellAt(v: ReturnType<typeof voice>, from: number, peakAt: number, peak: number, fall: number, to: AudioNode = v.out): GainNode {
+export function swellAt(v: ReturnType<typeof voice>, from: number, peakAt: number, peak: number, fall: number, to: AudioNode = v.out): GainNode {
   const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t); g.gain.setValueAtTime(0.0001, v.t + from);
   g.gain.exponentialRampToValueAtTime(peak, v.t + Math.max(peakAt, from + 0.01));
   g.gain.exponentialRampToValueAtTime(0.0001, v.t + Math.max(peakAt, from + 0.01) + fall);
@@ -831,7 +831,7 @@ function swellAt(v: ReturnType<typeof voice>, from: number, peakAt: number, peak
 }
 
 /** A filter whose frequency passes through `points` ([s in, Hz], the first its start). */
-function glide(v: ReturnType<typeof voice>, type: BiquadFilterType, q: number, points: [number, number][]): BiquadFilterNode {
+export function glide(v: ReturnType<typeof voice>, type: BiquadFilterType, q: number, points: [number, number][]): BiquadFilterNode {
   const f = v.c.createBiquadFilter(); f.type = type; f.Q.value = q;
   f.frequency.setValueAtTime(points[0][1], v.t);
   for (const [at, hz] of points) {
@@ -854,7 +854,7 @@ function iron(v: ReturnType<typeof voice>, at: number, n: number, lo: number, hi
 
 /** Grit: `n` grains of noise between `lo` and `hi` Hz scattered over `span` s from `from`, thinning, each in its own
  *  place: stone splitting, earth thrown, splinters. */
-function grit(v: ReturnType<typeof voice>, n: number, from: number, span: number, lo: number, hi: number, peak: number): void {
+export function grit(v: ReturnType<typeof voice>, n: number, from: number, span: number, lo: number, hi: number, peak: number): void {
   for (let i = 0; i < n; i++) {
     const k = Math.pow(Math.random(), 1.6);
     const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4; f.frequency.value = lo * (hi / lo) ** Math.random();
@@ -889,7 +889,7 @@ function crunch(v: ReturnType<typeof voice>, at: number, peak: number, decay: nu
 /** A blow of earth or of a body, `at` s in: the noise under 450 Hz, broad (no band in it to ring, as the narrow
  *  320 to 360 Hz punch did: from play, "still sounds like its hitting a tincan"), driven hard so its weight is heard
  *  in the low mids, what's under 90 Hz cut. A whump, not a clang. */
-function whump(v: ReturnType<typeof voice>, at: number, peak: number, decay: number, out: AudioNode = v.out): void {
+export function whump(v: ReturnType<typeof voice>, at: number, peak: number, decay: number, out: AudioNode = v.out): void {
   const low = v.c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 450; low.Q.value = 0.5;
   const push = v.c.createGain(); push.gain.value = 3;
   const cut = v.c.createBiquadFilter(); cut.type = 'highpass'; cut.frequency.value = 90; cut.Q.value = 0.5;
@@ -909,14 +909,14 @@ function smash(v: ReturnType<typeof voice>, at: number, peak: number, spread: nu
 }
 
 /** The ground answering a great blow, `at` s in: dark noise driven, long, its top closing. */
-function rumble(v: ReturnType<typeof voice>, at: number, peak: number, decay: number): void {
+export function rumble(v: ReturnType<typeof voice>, at: number, peak: number, decay: number): void {
   const f = glide(v, 'lowpass', 1, [[0, 600], [at, 600], [at + decay, 180]]);
   const floor = v.c.createBiquadFilter(); floor.type = 'highpass'; floor.frequency.value = 90; floor.Q.value = 0.6;
   v.loop(f); f.connect(drive(4)).connect(floor).connect(blowAt(v, at, peak, decay, v.out, 0.01));
 }
 
 /** A crack, `at` s in: a few milliseconds of bright noise. */
-function crack(v: ReturnType<typeof voice>, at: number, peak: number, out: AudioNode = v.out, hz = 2400): void {
+export function crack(v: ReturnType<typeof voice>, at: number, peak: number, out: AudioNode = v.out, hz = 2400): void {
   const f = v.c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hz;
   v.loop(f); f.connect(blowAt(v, at, peak, 0.06, out, 0.001));
 }
@@ -1791,68 +1791,10 @@ function whenRunning(play: () => void, late: number): void {
 }
 
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
-const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
-/** One of the Ossuary Twins taking up his brother's power at half: a long breath drawn in and let out as a wail through
- *  the ossuary. */
-function twinsRise(): void {
-  const v = voice(0.05, 0.7);
-  const wail = glide(v, 'bandpass', 5, [[0, 300], [0.8, 1100], [2.2, 380]]);
-  v.loop(wail); wail.connect(v.flange(swellAt(v, 0, 0.9, 0.24, 1.4), 3, 3, 0.7, 0.5));
-  rumble(v, 0.1, 0.4, 1.8);
-  v.start(); v.stopAt(v.t + 3);
-}
-
-/** The Ossuary Twins' chain of bone snapping tight: a rattle of bones knocking down its length, a crack as it goes taut,
- *  a heavy drag under it. */
-function twinChain(): void {
-  const v = voice(0, 0.35);
-  grit(v, 22, 0, 0.3, 1200, 4200, 0.09);
-  crack(v, 0.05, 0.24, v.out, 2200);
-  crack(v, 0.11, 0.14, v.out, 3400);
-  whump(v, 0.04, 0.4, 0.4);
-  rumble(v, 0.05, 0.25, 0.7);
-  v.start(); v.stopAt(v.t + 1.2);
-}
-
-/** Reliquary's skulls let fly: a hiss of breath through each, swept up as they leave. */
-function skullVolley(): void {
-  const v = voice(0.01, 0.5);
-  const hiss = glide(v, 'bandpass', 3, [[0, 700], [0.25, 2400], [0.6, 1200]]);
-  v.loop(hiss); hiss.connect(swellAt(v, 0, 0.12, 0.14, 0.5));
-  grit(v, 8, 0, 0.2, 1500, 3800, 0.05);
-  v.start(); v.stopAt(v.t + 0.9);
-}
-
-/** Reliquary mending his brother over `dur` s: a low murmur of breath swelling under the channel, falling off with it. */
-function twinMend(dur: number): void {
-  const v = voice(0.1, 0.6);
-  for (const [lo, hi, peak] of [[180, 300, 0.12], [420, 600, 0.07]] as const) {
-    const mouth = glide(v, 'bandpass', 6, [[0, lo], [dur * 0.6, hi], [dur, lo]]);
-    v.loop(mouth); mouth.connect(v.flange(swellAt(v, 0, dur * 0.8, peak, 0.4), 4, 2, 0.5, 0.4));
-  }
-  v.start(); v.stopAt(v.t + dur + 0.8);
-}
-
-/** One of the Twins collapsing at half: its bones coming down in a heap, stone and bone knocking, a long settling. */
-function twinFall(): void {
-  const v = voice(0, 0.5);
-  whump(v, 0, 0.6, 0.6);
-  grit(v, 30, 0, 0.9, 800, 3600, 0.1);
-  crack(v, 0.1, 0.2, v.out, 1600);
-  crack(v, 0.3, 0.14, v.out, 2400);
-  rumble(v, 0.05, 0.4, 1.6);
-  v.start(); v.stopAt(v.t + 2.5);
-}
+export const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
   /** a bow drawn over `dur` s and held (`heavy`: 1 a sheaf or a lancewood shaft): returns its stop() */
   bowDraw: guard((dur: number, heavy: number) => bowDraw(dur, heavy)),
-  /** the Ossuary Twins (entities/twins.ts): the survivor taking up his brother's power, the chain snapping tight, the
-   *  skulls let fly, the mend over `dur` s, one of them collapsing */
-  twinsRise: guard(() => { if (throttle('twinsRise', 800)) return; twinsRise(); }),
-  twinChain: guard(() => { if (throttle('twinChain', 300)) return; twinChain(); }),
-  skullVolley: guard(() => { if (throttle('skullVolley', 200)) return; skullVolley(); }),
-  twinMend: guard((dur: number = 2) => { if (throttle('twinMend', 500)) return; twinMend(dur); }),
-  twinFall: guard(() => { if (throttle('twinFall', 800)) return; twinFall(); }),
   /** a bow come to full draw: the glint on the arrowhead */
   bowReady: guard(() => { drawFull(); }),
   /** `n` arrows taken from the quiver, on the string `delay` s from now */

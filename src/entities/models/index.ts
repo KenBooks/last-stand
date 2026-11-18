@@ -1,40 +1,21 @@
-// Model registry: id -> builder. Class and enemy data refer to these ids.
+// Model registry: id -> builder. Class and enemy data refer to these ids (a foe's registered by its file in
+// entities/foes/).
 import { buildMage, mageSteps } from './mage';
 import { buildWarrior, warriorSteps } from './warrior';
 import { buildRanger, rangerSteps } from './ranger';
 import { built, inOneStep, type ModelSteps } from './steps';
 import type { HeadSpec } from './head';
-import { buildHusk } from './husk';
-import { buildImp } from './imp';
-import { buildWitch } from './witch';
-import { buildBrute } from './brute';
-import { buildDummy } from './dummy';
-import { buildThornling } from './thornling';
-import { buildMossback } from './mossback';
-import { buildSporecaller } from './sporecaller';
-import { buildTreant } from './treant';
-
-import { buildTwinReliquary, buildTwinSlab } from './twins';
 import type { Model } from '../../types';
 
-export const MODELS: Record<string, () => Model> = {
+import { MODEL_BUILDERS } from '../foeKit';
+import '../allFoes';
+
+/** every model's builder by id: the heroes' here, each foe's added by its own file in entities/foes/ */
+export const MODELS: Record<string, () => Model> = Object.assign(MODEL_BUILDERS, {
   mage: buildMage,
   warrior: buildWarrior,
   ranger: buildRanger,
-  husk: buildHusk,
-  imp: buildImp,
-  witch: buildWitch,
-  brute: () => buildBrute('brute'),
-  colossus: () => buildBrute('colossus'),
-  twinslab: buildTwinSlab,
-  twinreliquary: buildTwinReliquary,
-  thornling: buildThornling,
-  mossback: buildMossback,
-  sporecaller: buildSporecaller,
-  barkhulk: () => buildTreant('barkhulk'),
-  thornheart: () => buildTreant('thornheart'),
-  dummy: buildDummy,
-};
+});
 
 /** the heroes' builds in pieces (models/steps.ts): built behind the lobby a piece a frame (game/hall.ts); each given
  *  his head (his look), or the one picked in the slot in play */
