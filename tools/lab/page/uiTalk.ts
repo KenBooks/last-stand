@@ -4,6 +4,8 @@
 // middle, his portrait and name plate shown; on touch each reply a finger's height. Its canary makes the card twice the
 // window's height, which must be found.
 import { closeTalk, openTalk, talkAnswerable } from '../../../src/ui/screens/talk/talk';
+import { portraitMade } from '../../../src/ui/guide/portraits';
+import { realWait } from './lab';
 import { G } from '../../../src/state';
 import { goTo } from '../../../src/game/village';
 import type { Lab } from './lab';
@@ -15,6 +17,22 @@ export const TALK_CANARY = { name: 'the talk card leaves the window', what: 'the
 const FINGER_PX = 32;
 /** the most frames for his lines to show once Enter is pressed (the card's fade, and some) */
 const SHOWN_FRAMES = 30;
+/** the most real time his portrait may take to be made behind the lobby (ms): its compile and encoding run on the
+ *  browser's own time, between the lab's frames */
+const PORTRAIT_MS = 20000;
+
+/** Frames on, each with a little of the browser's own time, till his portrait is made behind the lobby; how many. */
+export async function portraitWaited(lab: Lab): Promise<number> {
+  const giveUp = window.__labClock.realNow() + PORTRAIT_MS;
+  let frames = 0;
+  while (!portraitMade('scholar')) {
+    if (window.__labClock.realNow() > giveUp) throw new Error(`lab: his portrait was never made (${PORTRAIT_MS / 1000} s)`);
+    await lab.step(1);
+    await realWait(5);
+    frames++;
+  }
+  return frames;
+}
 
 /** The talk opened as a hero who's fought opens it, his lines all shown by Enter; on touch, in touch mode first. */
 export async function openTalkState(lab: Lab, touch: boolean): Promise<void> {
@@ -24,6 +42,7 @@ export async function openTalkState(lab: Lab, touch: boolean): Promise<void> {
     // co-op dialog then opened over the talk and asked the relay's health. He stays where he stands.)
     goTo(G.player.pos.x, G.player.pos.z);
   }
+  await portraitWaited(lab);
   delete G.profile.talk;
   Object.assign(G.profile.records, { runs: Math.max(1, G.profile.records.runs) });
   openTalk('scholar');
@@ -56,6 +75,10 @@ function laidOut(state: string, touch: boolean): TouchFound {
   const within = (r: DOMRect) => r.width > 0 && r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
   const box = document.querySelector('#talk .tk-box')!.getBoundingClientRect();
   if (!within(box)) problems.push(`${state}: ${TALK_CANARY.name} (${box.left.toFixed(0)},${box.top.toFixed(0)} to ${box.right.toFixed(0)},${box.bottom.toFixed(0)})`);
+  const photo = document.querySelector<HTMLCanvasElement>('#talk .tk-photo')!;
+  if (!document.querySelector('#talk .tk-portrait')!.classList.contains('pictured') || !photo.width) {
+    problems.push(`${state}: his portrait's picture isn't shown`);
+  }
   for (const what of ['.tk-portrait', '.tk-name']) {
     const r = document.querySelector(`#talk ${what}`)!.getBoundingClientRect();
     if (!within(r)) problems.push(`${state}: his ${what === '.tk-name' ? 'name' : 'portrait'} isn't shown within the window`);

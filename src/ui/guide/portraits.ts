@@ -9,6 +9,9 @@
 // 330 ms and then 90 to 110 ms a picture (from Victor's review of #665: "lags for 1-2sec"; `npm run lab -- guide`).
 // A production build keeps them in the browser's storage for its own build (`CACHE`), so a later visit makes none.
 // Opened before they're made, the guide shows a picture as it comes, the ones it shows first (`hurryPortrait`).
+// The library's Brother Hollis is pictured here too, first, for his talk's card (ui/talk.ts): another of him built on
+// the library's book, looking up at the one he talks to, head and shoulders by a candle in the dim library
+// (`scholarStaged`; from play, "lets have an actual picture of him, of his actual face").
 import * as THREE from 'three';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
@@ -21,6 +24,7 @@ import { perfClock } from '../perfHud';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model, Profile } from '../../types';
+import { buildScholar, scholarBook } from '../../entities/models/scholar';
 
 declare const __BUILD__: { ref: string; time: string };
 
@@ -42,8 +46,8 @@ export const WHILE_OPEN = { ms: 8, most: 40 };
  *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`) */
 export const portraitPlant = { allAtOnce: false, notWhileOpen: false };
 
-/** Whose picture: a foe's id, or `hero:` and a class's id. */
-export type Who = EnemyId | `hero:${string}`;
+/** Whose picture: a foe's id, `hero:` and a class's id, or the library's scholar. */
+export type Who = EnemyId | `hero:${string}` | 'scholar';
 
 /** each picture made: a canvas of its own (`SIZE` square) every place showing it is drawn from */
 const made = new Map<Who, HTMLCanvasElement>();
@@ -82,13 +86,15 @@ function* timedSteps<T>(what: string, steps: Generator<void, T, undefined>): Gen
 }
 
 /** Every picture the guide shows: the foes', the bosses' and the heroes'. */
-function everyone(): Who[] {
+function guides(): Who[] {
   const foes = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
   return [...foes.filter((id) => !ENEMIES[id].boss), ...foes.filter((id) => ENEMIES[id].boss), ...CLASS_IDS.map((id) => `hero:${id}` as Who)];
 }
+/** Every picture made: the scholar's first (his talk's card shows it), then the guide's. */
+const everyone = (): Who[] => ['scholar', ...guides()];
 
 /** The pictures not made yet, of every foe, boss and hero the guide shows (a harness's: `lab guide`). */
-export const portraitsLeft = (): Who[] => everyone().filter((id) => !made.has(id));
+export const portraitsLeft = (): Who[] => guides().filter((id) => !made.has(id));
 
 /** A picture made already, or null. */
 export const portraitMade = (id: Who): HTMLCanvasElement | null => made.get(id) ?? null;
@@ -183,7 +189,9 @@ function settle(id: Who, pic: HTMLCanvasElement | null): void {
  *  (waited on out of the queue: the build queued again as it's done). */
 interface Making {
   id: Who;
-  model: Model;
+  root: THREE.Object3D;
+  /** its meshes shown, their buffers still to send (a batch a piece: `BUFFERS_A_PIECE`) */
+  meshes: THREE.Mesh[];
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   textures: THREE.Texture[];
@@ -211,7 +219,7 @@ function finished(m: Making, pic: HTMLCanvasElement | null): void {
   making = making.filter((x) => x !== m);
   if (own === m.id) own = null;
   pending = pending.filter((who) => who !== m.id);
-  try { m.scene.remove(m.model.root); disposeGeometries(m.model.root); } catch { /* let go as it is */ }
+  try { m.scene.remove(m.root); disposeGeometries(m.root); } catch { /* let go as it is */ }
   settle(m.id, pic);
 }
 
@@ -249,7 +257,16 @@ function* steps(): Generator<void, void, undefined> {
         continue;
       }
     }
-    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length).sort((x, y) => order(x) - order(y))[0];
+    // (its meshes' buffers sent a batch a piece once it's compiled, each batch drawn alone: sent by its draw, the
+    // scholar's held it 72 ms)
+    const buffering = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && m.meshes.length).sort((x, y) => order(x) - order(y))[0];
+    if (buffering) {
+      const batch = takeBatch(buffering.meshes);
+      piece(`${buffering.id}: buffers sent`, () => drawnAlone(renderer!, buffering, batch));
+      yield;
+      continue;
+    }
+    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && !m.meshes.length).sort((x, y) => order(x) - order(y))[0];
     if (ready) {
       const r = renderer!;
       try {
@@ -284,20 +301,27 @@ function* steps(): Generator<void, void, undefined> {
     if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits && !ownMaking))) {
       try {
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
-        const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
+        let root: THREE.Object3D, scene: THREE.Scene, camera: THREE.PerspectiveCamera;
+        if (next === 'scholar') {
+          ({ root, scene, camera } = piece(`${next}: built and staged`, scholarStaged));
+        } else {
+          const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
+          yield;
+          root = model.root;
+          // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
+          // a frame behind the lobby, past `lab behind`'s 30)
+          ({ scene, camera } = piece(`${next}: staged and framed`, () => staged(model)));
+        }
         yield;
-        // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
-        // a frame behind the lobby, past `lab behind`'s 30)
-        const { scene, camera } = piece(`${next}: staged and framed`, () => staged(model));
+        const swaps = piece(`${next}: its textures made small`, () => smallTextures(root));
         yield;
-        const swaps = piece(`${next}: its textures made small`, () => smallTextures(model.root));
-        yield;
-        const m: Making = { id: next, model, scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
+        const m: Making = { id: next, root, meshes: meshesOf(root), scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
         making.push(m);
         if (portraitPlant.allAtOnce) {
-          // (the canary's: compiled as it's drawn, its textures sent then too)
+          // (the canary's: compiled as it's drawn, its textures and buffers sent then too)
           m.compiled = true;
           m.textures = [];
+          m.meshes = [];
         } else {
           const r = renderer;
           const asked = perfClock.now();
@@ -430,6 +454,38 @@ function withSmall(swaps: Swap[], draw: () => void): void {
   }
 }
 
+/** how many vertices' buffers a piece sends (each batch drawn alone, `drawnAlone`) */
+const BUFFERS_A_PIECE = 12000;
+
+/** Every mesh shown of `root`. */
+function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
+  const found: THREE.Mesh[] = [];
+  root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
+  return found;
+}
+
+/** The next meshes from `left`, up to `BUFFERS_A_PIECE` vertices (one at least). */
+function takeBatch(left: THREE.Mesh[]): THREE.Mesh[] {
+  const batch: THREE.Mesh[] = [];
+  let vertices = 0;
+  while (left.length && (!batch.length || vertices + left[0].geometry.attributes.position.count <= BUFFERS_A_PIECE)) {
+    const mesh = left.shift()!;
+    vertices += mesh.geometry.attributes.position.count;
+    batch.push(mesh);
+  }
+  return batch;
+}
+
+/** `m`'s scene drawn with only `batch` of its meshes shown, under its small textures, so their buffers are sent; the
+ *  rest shown again after. */
+function drawnAlone(r: THREE.WebGLRenderer, m: Making, batch: THREE.Mesh[]): void {
+  const hidden: THREE.Mesh[] = [];
+  const keep = new Set(batch);
+  m.root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && !keep.has(o as THREE.Mesh)) hidden.push(o as THREE.Mesh); });
+  for (const mesh of hidden) mesh.visible = false;
+  try { withSmall(m.swaps, () => r.render(m.scene, m.camera)); } finally { for (const mesh of hidden) mesh.visible = true; }
+}
+
 /** The lights a portrait is drawn by: a warm key from the front right, a cool rim from behind, a dim fill. */
 function lights(scene: THREE.Scene): void {
   scene.add(new THREE.HemisphereLight(0xcfd8ff, 0x2a1e14, 1.1));
@@ -474,6 +530,69 @@ function staged(model: Model): { scene: THREE.Scene; camera: THREE.PerspectiveCa
   );
   camera.lookAt(mid);
   return { scene, camera };
+}
+
+/** The scholar's portrait: where the one he talks to stands (his frame: ahead of him), how far the camera is from
+ *  his face (m) and how far round from that man (rad), its field of view, how far below the top of his cap it aims
+ *  (m: his face, beard and shoulders in the frame's 0.5 m), how much higher than that the camera stands (m), and how
+ *  long he's posed for his look up to settle (s, in steps). Aimed at his head's joint, at his neck, the oval held his
+ *  chest and cut his head off. */
+const SCHOLAR_SHOT = { talker: new THREE.Vector3(0.15, 0, 1.5), distance: 0.95, round: 0.28, fov: 30, below: 0.2, above: 0.06, settle: 3, step: 0.05 };
+
+/** The dim library behind him: a warm glow up to his left (his candle's side), the shelves' rows dark across it. */
+function libraryBackdrop(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const glow = g.createRadialGradient(40, 36, 4, 56, 56, 110);
+  glow.addColorStop(0, '#6a4220');
+  glow.addColorStop(0.45, '#2a180c');
+  glow.addColorStop(1, '#0c0806');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, 128, 128);
+  // (the shelves: their boards, and the books' spines between them, faint)
+  for (const y of [30, 62, 94]) {
+    g.fillStyle = 'rgba(0, 0, 0, .45)';
+    g.fillRect(0, y, 128, 3);
+    for (let x = 0; x < 128; x += 5 + ((x * 7) % 4)) {
+      g.fillStyle = `rgba(${90 + ((x * 13) % 60)}, ${40 + ((x * 7) % 30)}, 20, .16)`;
+      g.fillRect(x, y - 22 + ((x * 3) % 5), 3 + ((x * 5) % 3), 22 - ((x * 3) % 5));
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Another of Brother Hollis, built on the library's book, posed looking up at the one he talks to, in a scene of
+ *  his own: lit by a warm key from his candle's side, a cool rim from behind, a dim warm fill; a camera on his face
+ *  from just round that man, his shoulders in. */
+function scholarStaged(): { root: THREE.Object3D; scene: THREE.Scene; camera: THREE.PerspectiveCamera } {
+  const book = scholarBook();
+  if (!book) throw new Error('the scholar was never seated: no book to build him on');
+  const s = buildScholar(book);
+  const scene = new THREE.Scene();
+  scene.background = libraryBackdrop();
+  scene.add(s.root);
+  s.root.updateMatrixWorld(true);
+  for (let t = 0; t < SCHOLAR_SHOT.settle; t += SCHOLAR_SHOT.step) s.update(SCHOLAR_SHOT.step, SCHOLAR_SHOT.talker, true, 0);
+  s.root.updateMatrixWorld(true);
+  scene.add(new THREE.HemisphereLight(0xffd8b0, 0x1a1008, 0.55));
+  const key = new THREE.DirectionalLight(0xffc890, 2.8);
+  key.position.set(1.4, 2.4, 1.6);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9fb8ff, 1.4);
+  rim.position.set(-1.6, 2.2, -1.8);
+  scene.add(rim);
+  const cap = s.root.getObjectByName('scholar cap')!;
+  const box = new THREE.Box3().setFromObject(cap);
+  const top = box.getCenter(new THREE.Vector3()).setY(box.max.y);
+  const toward = SCHOLAR_SHOT.talker.clone().sub(top).setY(0).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), SCHOLAR_SHOT.round);
+  const aim = top.clone().setY(top.y - SCHOLAR_SHOT.below);
+  const camera = new THREE.PerspectiveCamera(SCHOLAR_SHOT.fov, 1, 0.05, 20);
+  camera.position.copy(aim).addScaledVector(toward, SCHOLAR_SHOT.distance).setY(aim.y + SCHOLAR_SHOT.above);
+  camera.lookAt(aim);
+  return { root: s.root, scene, camera };
 }
 
 /** Where the pictures' making stands, for a harness (`lab guide`): what's still to make, the one being made and how
