@@ -14,6 +14,8 @@ import { G } from '../../state';
 import { scholarSteps, type Scholar } from '../../entities/models/scholar';
 import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../entities/models/book';
 import { SCHOLAR_DESK } from '../../data/houses/library';
+import { HOUSE_OBJECTS } from '../../data/houses';
+import { scholarRounds, type Rounds } from '../scholarRounds';
 import { chairSeat } from '../seats';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
@@ -83,9 +85,10 @@ function bookGeometry(): THREE.BufferGeometry {
 }
 
 /** A wall's books drawn, into `g`: an instanced mesh for each spine, every book its own matrix and colour, each
- *  spine's material shared by every wall's (`spineMaterial`). */
-function shelve(g: THREE.Object3D, shelving: Shelving, spineMaterial: (design: number) => THREE.Material): void {
+ *  spine's material shared by every wall's (`spineMaterial`). Returns each mesh with its books. */
+function shelve(g: THREE.Object3D, shelving: Shelving, spineMaterial: (design: number) => THREE.Material): ShelfMesh[] {
   const geometry = bookGeometry();
+  const meshes: ShelfMesh[] = [];
   shelving.forEach(({ matrices, colours }, design) => {
     if (!matrices.length) return;
     const material = spineMaterial(design);
@@ -94,8 +97,13 @@ function shelve(g: THREE.Object3D, shelving: Shelving, spineMaterial: (design: n
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.name = `library books ${design}`;
     g.add(mesh);
+    meshes.push({ mesh, matrices, colours });
   });
+  return meshes;
 }
+
+/** a spine's books on a wall's shelves: their instanced mesh, and each one's matrix (the room's) and colour */
+interface ShelfMesh { mesh: THREE.InstancedMesh; matrices: THREE.Matrix4[]; colours: THREE.Color[] }
 
 /** A book put on the room's shelving: in `frame`'s space at `at`, sized `size` (thick, tall, deep), turned by `turn`. */
 function addBook(shelving: Shelving, frame: THREE.Object3D, at: THREE.Vector3, size: THREE.Vector3, turn: THREE.Euler,
@@ -421,7 +429,9 @@ export const scholarTalk = { talking: false, lines: 0 };
  *  where he sits, the table before it, his book open on it facing him, a candle (its light one of the room's ten, the
  *  reading desk's he took the place of), a stack of books, his inkwell and quill, a scroll. He himself is seated later
  *  (`seat`): his head and hands are the heroes', made in workers as the game loads, after the rooms are built. */
-function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Generator<void, Scholar, undefined> {
+function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
+  seat: () => Generator<void, Scholar, undefined>; desk: THREE.Group; sat: THREE.Vector3; stack: THREE.Mesh[];
+} {
   const { x, z, turn } = SCHOLAR_DESK;
   const d = new THREE.Group();
   d.position.set(x, 0, z);
@@ -444,10 +454,14 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Generator<void, S
   const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };
   const book = openBook(d, M, 0, BOOK.y, BOOK.z, Math.PI, SIZE, 5);
   // (beside it, his things: a stack of books, the candle on its dish, the inkwell and quill, a scroll)
+  // (the stack he keeps books on and shelves them from: each book's size kept)
+  const stack: THREE.Mesh[] = [];
   for (let k = 0; k < 4; k++) {
-    const stacked = box(d, 0.26 - k * 0.015, 0.05, 0.19, 0.42, 0.76 + k * 0.05, 0.72, M.leather);
+    const w = 0.26 - k * 0.015, stacked = box(d, w, 0.05, 0.19, 0.42, 0.76 + k * 0.05, 0.72, M.leather);
     stacked.rotation.y = (k % 2 ? 0.25 : -0.1);
     stacked.name = 'scholar desk books';
+    stacked.userData.size = new THREE.Vector3(w, 0.05, 0.19);
+    stack.push(stacked);
   }
   drum(d, 0.05, 0.06, 0.02, -0.4, 0.76, 0.78, M.brass, 10).name = 'scholar desk candle dish';
   candle(d, M, -0.4, 0.78, 0.78, 0.18, CANDLE);
@@ -471,7 +485,7 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Generator<void, S
     const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
-  return function* seat(): Generator<void, Scholar, undefined> {
+  const seat = function* (): Generator<void, Scholar, undefined> {
     const table = { x0: -TABLE.w / 2, x1: TABLE.w / 2, z0: TABLE.z - TABLE.d / 2 - SAT, z1: TABLE.z + TABLE.d / 2 - SAT, top: TABLE.top };
     // (the page he turns turns about the spine's foot in the gutter, the top page of the half on his right: its blocks
     // in their frames, the book's shape)
@@ -482,6 +496,7 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Generator<void, S
     d.add(s.root);
     return s;
   };
+  return { seat, desk: d, sat: new THREE.Vector3(0, 0, SAT), stack };
 }
 
 /** The library: built into `group`. */
@@ -585,12 +600,12 @@ export function build(group: THREE.Group): Room {
     }
     return material;
   };
-  for (const side of ['back', 'west', 'east'] as const) {
+  const shelfMeshes = (['back', 'west', 'east'] as const).flatMap((side) => {
     const books = new THREE.Group();
     againstWall(books, side);
     g.add(books);
-    shelve(books, shelves[side], spineMaterial);
-  }
+    return shelve(books, shelves[side], spineMaterial);
+  });
   let due = 0;
   b.updaters.push((dt) => {
     due += dt * 6;
@@ -606,22 +621,44 @@ export function build(group: THREE.Group): Room {
   });
   // (Brother Hollis, seated once the heroes' heads and hands are made: he reads, glances up at a hero come near, and
   // looks up from his book while he's talked to)
-  let scholar: Scholar | undefined;
+  let scholar: Scholar | undefined, rounds: Rounds | undefined;
   const hero = new THREE.Vector3();
   b.updaters.push((dt) => {
-    if (!scholar) return;
+    if (!scholar || !rounds) return;
     const me = G.player;
-    scholar.update(dt, me ? hero.copy(me.pos) : null, scholarTalk.talking, scholarTalk.lines);
+    rounds.update(dt, me ? hero.copy(me.pos) : null, scholarTalk.talking, scholarTalk.lines);
   });
+  // (a book for his hands, its look a shelf's (its map and colour set to the book he takes), and an open one to read
+  // standing: both shown in the room's warm-up, so their programs are made with the room's)
+  const heldMat = (shelfMeshes[0].mesh.material as THREE.MeshStandardMaterial).clone();
+  const held = new THREE.Mesh(bookGeometry(), heldMat);
+  held.name = 'library held book';
+  held.castShadow = held.receiveShadow = true;
+  held.position.set(seat.desk.position.x, 0.9, seat.desk.position.z);
+  held.scale.set(0.05, 0.24, 0.17);
+  held.visible = false;
+  g.add(held);
+  const openHeld = new THREE.Group();
+  openHeld.name = 'library open held book';
+  openHeld.position.copy(held.position);
+  openBook(openHeld, M, 0, -0.02, 0, 0, 0.26, 4);
+  openHeld.visible = false;
+  g.add(openHeld);
+  // (both moved by his rounds, and shown and hidden: out of the room's merge)
+  keepApart(held);
+  keepApart(openHeld);
   const room = finish(id, b, {
     look: libraryLook(),
     *seatFolk() {
       if (scholar) return;
-      scholar = yield* seat();
+      scholar = yield* seat.seat();
+      const talk = HOUSE_OBJECTS.find((o) => o.id === 'scholar')!;
+      rounds = scholarRounds(scholar, { g, desk: seat.desk, sat: seat.sat, half: [hx, hz], obstacles: b.obstacles, shelves: shelfMeshes, stack: seat.stack, held, openHeld, talk });
       // (posed once now: its first frame drawn, a warm-up's, is as he reads)
       scholar.update(0, null, false);
     },
     folk: () => scholar,
+    rounds: () => rounds,
   });
   // (the warm-up's draw shows the page he turns too, hidden but while he turns it: a hidden mesh compiles nothing, and
   // its back's program would have been compiled at his first turn; his next pose hides it again)
@@ -629,6 +666,9 @@ export function build(group: THREE.Group): Room {
   room.showAll = () => {
     shell();
     if (scholar) scholar.page.visible = true;
+    // (and what he holds and wears only while he's up: shown for the warm-up's draw, hidden again by his rounds)
+    held.visible = openHeld.visible = true;
+    for (const m of scholar?.parts ?? []) if (/ standing$|^scholar robe/.test(m.name)) m.visible = true;
   };
   return room;
 }

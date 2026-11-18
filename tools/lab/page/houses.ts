@@ -260,6 +260,9 @@ async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): P
   const problems: string[] = [];
   const room = G.arena.rooms!.library;
   if (!room.folk?.()) problems.push('the library has no scholar seated');
+  // (held at his table, where he's talked to across it)
+  const rounds = room.rounds?.();
+  if (rounds) rounds.hold = true;
   const him = villageObject('scholar')!;
   await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
   await useByE(lab, him, problems);

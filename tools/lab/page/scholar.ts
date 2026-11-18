@@ -31,6 +31,7 @@ import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
+import { roundsChecked } from './scholarRounds';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -110,7 +111,8 @@ function throughTable(s: Scholar, raise = 0): { depth: number; mesh: string } {
   const rootInverse = s.root.matrixWorld.clone().invert();
   let depth = 0, mesh = '';
   for (const m of s.parts) {
-    if (!/sleeve|bell|lining|cuff/.test(m.name)) continue;
+    // (the sleeves he wears sat: the standing set is hidden while he sits at it)
+    if (!/sleeve|bell|lining|cuff/.test(m.name) || / standing$/.test(m.name)) continue;
     toRoot.multiplyMatrices(rootInverse, m.matrixWorld);
     const at = m.geometry.attributes.position;
     for (let i = 0; i < at.count; i++) {
@@ -563,6 +565,9 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   await lab.until(() => G.arena.room === 'library', DOOR_FRAMES, "the library's door never took him in");
   await lab.step(15);
   const s = room.folk?.();
+  // (held at his table for the checks of him sat reading; his rounds are let go after them)
+  const rounds = room.rounds?.();
+  if (rounds) rounds.hold = true;
   if (!s) return { text: 'the library has no scholar seated', problems: ['no scholar seated'] };
   let triangles = 0;
   s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
@@ -581,6 +586,12 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   if (options.canary) {
     lines.push(`canary: ${loop.caught ? 'every planted fault found' : 'a planted fault went unseen'}`);
     if (!loop.caught) problems.push('canary: a planted fault went unseen');
+    // (and his rounds' own: a book he carries off his hands)
+    if (rounds) {
+      const planted = await roundsChecked(lab, s, rounds, true);
+      lines.push(...planted.lines);
+      problems.push(...planted.problems);
+    }
     return { text: lines.join('\n'), problems, moments };
   }
 
@@ -637,6 +648,14 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
     G.player.place(placed, turn + Math.PI);
     moments.push(lab.picture(`scholar-${what.replace(/\s+/g, '-')}-table`, ['above'], [`${what}: his book from above, ahead of him`], { at: book, distance: 0.8 }));
     G.player.place(placed, turn);
+  }
+
+  // --- his rounds: let go from his table, followed through a browse, a keep and a restock ---
+  if (rounds) {
+    const done = await roundsChecked(lab, s, rounds, false);
+    lines.push(...done.lines);
+    problems.push(...done.problems);
+    moments.push(...done.moments);
   }
   return { text: lines.join('\n'), problems, moments };
 }

@@ -10,6 +10,7 @@
 // (`Room.wall`).
 import * as THREE from 'three';
 import type { Scholar } from '../entities/models/scholar';
+import type { Rounds } from './scholarRounds';
 import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import type { Odo } from '../entities/models/merchant';
 import type { EnemyId } from '../data/enemies';
@@ -70,6 +71,8 @@ export interface Room {
   seats: Seat[];
   /** the merchant's Odo, once seated (tools/lab `odo`) */
   odo?(): Odo | undefined;
+  /** his rounds through the room, once he's seated (world/scholarRounds.ts; tools/lab `scholar`) */
+  rounds?(): Rounds | undefined;
 }
 
 /**
