@@ -1,0 +1,269 @@
+// tools/lab `scholar`'s rounds: Brother Hollis let go from his table (src/world/scholarRounds.ts) and followed a frame at
+// a time through a browse (to a case, a book taken off its shelf, looked over, read standing, put back, and back to
+// his table), then a restock (a book kept on a stack first, then the top of a stack shelved in a gap). Each frame: his
+// body clear of what stands in the room while he's up; a book in his hands always at one of them (never in the air);
+// its shelf's book hidden while it's off the shelf, and the room's gaps none once he's back at his table, sat. A hero
+// stood close as he browses must not stop him (his task goes on), and he glances up at him; talked to, he stops where
+// he is and turns to the hero, and goes on once the talk ends. From play: "have him walking around... an actual book
+// from a shelf that actually leaves the shelf... If player comes in does not mean he stops, only if he interacts".
+// Its canary holds the book he carries half a metre off his hands, which must be found.
+import * as THREE from 'three';
+import type { Lab, Pictured } from './lab';
+import { G } from '../../../src/state';
+import { faceCamera, saveCamera, settleCamera } from '../../../src/core/renderer';
+import { objectNear } from '../../../src/game/village';
+import { closeTalk, talkOpen } from '../../../src/ui/screens/talk/talk';
+import type { Scholar } from '../../../src/entities/models/scholar';
+import type { Rounds } from '../../../src/world/scholarRounds';
+import { offHero } from './scholar';
+
+/** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
+ *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
+ *  come while the hero stands close (deg), and how still he must keep while talked to (m) */
+const ROUND_FRAMES = 6000;
+const HAND_MOST = 0.1;
+const CLEAR_LEAST = 0.08;
+const GLANCED = 40;
+const STILL_MOST = 0.02;
+
+/** Where the middle of each of his palms is (world): 7 cm down the hand from its joint at the wrist, the way his fingers
+ *  point (the hand's -y). Measured from the wrist, a hand holding a book's edge was 8 to 10 cm off it. */
+function hands(s: Scholar): THREE.Vector3[] {
+  return ['scholar handL', 'scholar handR'].map((n) => s.root.getObjectByName(n)!.localToWorld(new THREE.Vector3(0, -0.07, 0)));
+}
+
+/** How far `hand` is from the book `book` (m): from its box's surface, 0 inside it. Its box is its geometry's at its
+ *  scale (a shelf's book is a unit box scaled to its size; a stack's its own size). Measured from its middle, a hand
+ *  holding a book by its edge was its half's length off. */
+function fromBook(book: THREE.Mesh, hand: THREE.Vector3): number {
+  if (!book.geometry.boundingBox) book.geometry.computeBoundingBox();
+  const local = book.worldToLocal(hand.clone()), box = book.geometry.boundingBox!;
+  const inside = local.clone().clamp(box.min, box.max);
+  return book.localToWorld(inside).distanceTo(hand);
+}
+
+/** how many frames the frame's cost is timed over, sat and walking */
+const COST_FRAMES = 90;
+
+/** The frame's mean time (ms, the browser's clock: a game frame drawn and a browser frame each) over `COST_FRAMES`. */
+async function frameCost(lab: Lab): Promise<number> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  let total = 0;
+  for (let i = 0; i < COST_FRAMES; i++) {
+    const from = window.__labClock.realNow();
+    await lab.step(1);
+    await window.__labClock.realFrame();
+    total += window.__labClock.realNow() - from;
+  }
+  lab.drawing = drawing;
+  return total / COST_FRAMES;
+}
+
+/** What a round did, frame by frame. */
+interface Followed { frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number }
+
+/** A round followed until he's back reading at his table: what he did, how far a book he held strayed from his hands,
+ *  how near he came to what stands in the room. `each` runs every frame (a hero stood close, a talk). */
+async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, each?: (f: number) => Promise<void> | void): Promise<Followed> {
+  const beats: string[] = [];
+  let farthest = 0, farAt = '', tightest = Infinity, tightAt = '', frames = 0;
+  const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
+  for (; frames < ROUND_FRAMES; frames++) {
+    await each?.(frames);
+    await lab.step(1);
+    if (beats[beats.length - 1] !== rounds.doing) beats.push(rounds.doing);
+    if (frames > 30 && rounds.doing === 'reading at his table' && s.act.sit >= 1) break;
+    // (the book he carries, but while he reads it open: the closed one waits hidden meanwhile)
+    const carried = rounds.carried;
+    if (carried?.visible) {
+      if (canary) carried.position.y += 0.5;
+      carried.updateMatrixWorld(true);
+      const near = Math.min(...hands(s).map((h) => fromBook(carried as THREE.Mesh, h)));
+      if (s.act.grip >= 1 && near > farthest) { farthest = near; farAt = rounds.doing; }
+      if (canary) carried.position.y -= 0.5;
+    }
+    // (his middle against what stands in the room, while he's up and clear of his own table)
+    if (s.act.sit <= 0) {
+      const me = rounds.body;
+      for (const o of obstacles) {
+        const room = Math.hypot(me.x - o.x, me.z - o.z) - o.r;
+        if (room < tightest) { tightest = room; tightAt = rounds.doing; }
+      }
+    }
+  }
+  return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit };
+}
+
+/** What's wrong with a round. */
+function problemsOf(name: string, r: Followed): string[] {
+  const problems: string[] = [];
+  if (r.frames >= ROUND_FRAMES) problems.push(`rounds (${name}): not back at his table in ${ROUND_FRAMES} frames (last: ${r.beats[r.beats.length - 1]})`);
+  if (r.farthest > HAND_MOST) problems.push(`rounds (${name}): a book he held ${r.farthest.toFixed(2)} m from his nearer hand, ${r.farAt} (at most ${HAND_MOST})`);
+  if (r.tightest < CLEAR_LEAST) problems.push(`rounds (${name}): his middle ${r.tightest.toFixed(2)} m past what stands in the room's circle, ${r.tightAt} (at least ${CLEAR_LEAST} clear)`);
+  if (r.gapsAtEnd && name === 'browse') problems.push(`rounds (${name}): ${r.gapsAtEnd} books still off their shelves once he's back at his table`);
+  if (r.satAtEnd < 1) problems.push(`rounds (${name}): not sat at his table at its end`);
+  return problems;
+}
+
+const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.join(' > ')}; ${r.frames} frames; a held book at most `
+  + `${r.farthest.toFixed(2)} m from his nearer hand; his middle at least ${r.tightest.toFixed(2)} m clear of what stands in the room`;
+
+/**
+ * His rounds checked: a browse, with a hero stood close as he looks for a book (he glances up and goes on), then talked
+ * to as he reads standing (he stops, turned to the hero, and goes on after); then a keep and a restock. Pictured from
+ * the open room as he walks, takes a book and reads it.
+ */
+export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean): Promise<{ lines: string[]; problems: string[]; moments: Pictured[] }> {
+  const lines: string[] = [], problems: string[] = [], moments: Pictured[] = [];
+  const hero = G.player;
+  // (in the room's front half, off the door and clear of his ways)
+  const away = new THREE.Vector3(1.6, 0, 2.5);
+  hero.place(away, Math.PI);
+  const programs = G.renderer.info.programs!.length;
+  const sat = await frameCost(lab);
+  rounds.hold = false;
+  rounds.begin('browse');
+  // (the canary: one browse, a book he carries held off his hands, which must be found)
+  if (canary) {
+    const drawingC = lab.drawing;
+    lab.drawing = false;
+    const planted = await follow(lab, s, rounds, true);
+    lab.drawing = drawingC;
+    rounds.hold = true;
+    const caught = planted.farthest > HAND_MOST;
+    lines.push(`canary: a book he carries held half a metre off his hands ${caught ? 'caught' : 'went unseen'} (${planted.farthest.toFixed(2)} m)`);
+    if (!caught) problems.push('rounds: the canary\'s book off his hands went unseen');
+    return { lines, problems, moments };
+  }
+  // (followed undrawn, a frame at a time: drawn, its 7000 frames took over three minutes; each picture draws its own)
+  const drawing = lab.drawing;
+  lab.drawing = false;
+  /** him as a player sees him: the hero stood `off` m from him towards the room's middle, facing him, the game's own
+   *  camera over his shoulder, a few frames drawn for it to settle; the hero put back after */
+  const picture = async (label: string, note: string, off = 3) => {
+    const at = s.root.getWorldPosition(new THREE.Vector3()), was = hero.pos.clone(), wasFacing = hero.facing, restore = saveCamera();
+    const toMiddle = new THREE.Vector3(-at.x, 0, -at.z).normalize();
+    const stood = at.clone().addScaledVector(toMiddle, off).setY(0);
+    // (the camera turned to him, a little aside: it turns as the player turns it, not with the hero, and straight at him
+    // the hero's own back stood in front of him)
+    const facing = Math.atan2(at.x - stood.x, at.z - stood.z);
+    hero.place(stood, facing);
+    faceCamera(facing - 0.62);
+    settleCamera(hero.pos);
+    const drawing = lab.drawing;
+    lab.drawing = true;
+    await lab.step(20);
+    moments.push(await lab.screen(label, [note]));
+    lab.drawing = drawing;
+    hero.place(was, wasFacing);
+    restore();
+  };
+  let pictured = new Set<string>(), glance = 180, continued = false, stillFrom: THREE.Vector3 | null = null, moved = 0, faced = 180;
+  let nearAtE = '', opened = false;
+  let scanFrames = 0, talkFrames = 0, talked = false, walkFrames = 0, blockedAt: THREE.Vector3 | null = null, wentRound = false;
+  let walking = 0;
+  const browse = await follow(lab, s, rounds, canary, async (f) => {
+    const doing = rounds.doing;
+    // (the frame's cost as he walks, drawn)
+    if (doing === 'walking to a case' && !walking && f > 100) walking = await frameCost(lab);
+    for (const [beat, label, off] of [['walking to a case', 'rounds-walking', 3.4], ['taking a book', 'rounds-taking', 2.6],
+      ['reading a book standing', 'rounds-reading', 2.6]] as const) {
+      if (doing.startsWith(beat) && !pictured.has(label) && f % 45 === 44) { pictured.add(label); await picture(label, `as the player sees him ${doing}`, off); }
+    }
+    // (a hero stood a metre from him as he looks for a book: he goes on looking, and glances up)
+    if (doing === 'looking for a book') {
+      scanFrames++;
+      const me = s.root.getWorldPosition(new THREE.Vector3());
+      // (before him and off to his side, where he can turn his head to: behind him, his neck can't)
+      if (scanFrames === 1) {
+        const q = s.root.getWorldQuaternion(new THREE.Quaternion());
+        hero.place(me.clone().add(new THREE.Vector3(0, 0, 1.1).applyAxisAngle(new THREE.Vector3(0, 1, 0), 1.1).applyQuaternion(q)), 0);
+      }
+      glance = Math.min(glance, offHero(s));
+      if (scanFrames === 75) {
+        const drawing = lab.drawing, restore = saveCamera();
+        faceCamera(Math.atan2(me.x - hero.pos.x, me.z - hero.pos.z) - 0.62);
+        settleCamera(hero.pos);
+        lab.drawing = true;
+        await lab.step(1);
+        moments.push(await lab.screen('rounds-looks-up', ['a hero come close as he looks for a book: he looks up at him, and goes on']));
+        lab.drawing = drawing;
+        restore();
+      }
+    } else if (scanFrames && !continued) { continued = true; hero.place(away, Math.PI); }
+    // (talked to as he reads standing: still, turned to the hero; let go after two seconds)
+    if (doing === 'reading a book standing' && !talked) {
+      talkFrames++;
+      // (the hero walked up to him where he stands and pressed E, as a player talks to him: the spot he's talked at
+      // follows him; Esc ends it)
+      if (talkFrames === 30) {
+        const me = s.root.getWorldPosition(new THREE.Vector3()), f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion()));
+        const at = me.clone().addScaledVector(f, 1.2);
+        hero.place(at, Math.atan2(me.x - at.x, me.z - at.z));
+        nearAtE = objectNear()?.id ?? 'nothing';
+        await lab.step(1, () => ({ keys: ['e'] }));
+        opened = talkOpen();
+        stillFrom = me;
+      }
+      if (stillFrom && talkFrames < 150) moved = Math.max(moved, s.root.getWorldPosition(new THREE.Vector3()).distanceTo(stillFrom));
+      if (talkFrames === 149) faced = offHero(s);
+      if (talkFrames === 150) {
+        await lab.step(1, () => ({ keys: ['escape'] }));
+        talked = !talkOpen();
+        hero.place(away, Math.PI);
+      }
+    }
+  });
+  if (talkOpen()) closeTalk();
+  lines.push(lineOf('browse', browse));
+  problems.push(...problemsOf('browse', browse));
+  lines.push(`a hero stood a metre off as he looked for a book: ${continued ? 'he went on to take one' : 'he never went on'}, his face at least `
+    + `${glance.toFixed(0)}° off the hero meanwhile`);
+  if (!continued) problems.push('rounds: a hero stood close as he looked for a book, and he never went on');
+  if (glance > GLANCED) problems.push(`rounds: a hero stood close and he never looked up at him (${glance.toFixed(0)}° off)`);
+  lines.push(`walked up to as he read standing (the object near: ${nearAtE}) and E pressed: the talk ${opened ? 'opened' : 'never opened'}; `
+    + `he moved ${moved.toFixed(3)} m, his face ${faced.toFixed(0)}° off the hero; Esc, ${talked ? 'the talk closed and he went on' : 'the talk stayed open'}`);
+  if (!opened) problems.push(`rounds: E by him as he read standing opened no talk (the object near: ${nearAtE})`);
+  if (!talked) problems.push('rounds: Esc left the talk with him open');
+  if (moved > STILL_MOST) problems.push(`rounds: talked to, he moved ${moved.toFixed(2)} m (at most ${STILL_MOST})`);
+  if (faced > GLANCED) problems.push(`rounds: talked to, his face ${faced.toFixed(0)}° off the hero`);
+  pictured = new Set();
+  // (a book kept on a stack, then one shelved from a stack in its gap. As he walks to a case for the keep, the hero steps
+  // into his way and stands there: he waits a moment, then goes round, or waits on where there's no way round. Tried in
+  // the browse, it used up his glance just before the hero stood close)
+  rounds.begin('keep');
+  const keep = await follow(lab, s, rounds, canary, () => {
+    if (rounds.doing !== 'walking to a case') return;
+    walkFrames++;
+    const me = s.root.getWorldPosition(new THREE.Vector3());
+    if (walkFrames === 40) {
+      const ahead = new THREE.Vector3(0, 0, 0.85).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion()));
+      blockedAt = me.clone().add(ahead);
+      hero.place(blockedAt, 0);
+    }
+    if (blockedAt && walkFrames === 400) hero.place(away, Math.PI);
+    if (blockedAt && walkFrames < 400 && me.distanceTo(blockedAt) > 1.3) wentRound = true;
+  });
+  lines.push(lineOf('keep', keep));
+  problems.push(...problemsOf('keep', keep));
+  // (round him where there's a way; where there's none, he waits, and goes on as the hero steps aside: either way, never
+  // through what stands in the room, and never stood there for good)
+  lines.push(`the hero stood in his way as he walked to a case for 6 s: ${!blockedAt ? 'never stood there' : wentRound ? 'he went round him' : 'no way round: he waited, and went on as the hero stepped aside'}`);
+  if (!blockedAt) problems.push('rounds: the hero never stood in his way (nothing measured)');
+  const gaps = rounds.gaps;
+  rounds.begin('restock');
+  const restock = await follow(lab, s, rounds, canary);
+  lines.push(lineOf('restock', restock));
+  problems.push(...problemsOf('restock', restock));
+  lines.push(`books off their shelves: ${gaps} after he kept one, ${rounds.gaps} after he restocked`);
+  const compiled = G.renderer.info.programs!.length - programs;
+  lines.push(`programs the game's renderer compiled over his rounds (pictured as he walks, takes and reads a book): ${compiled}`);
+  if (compiled) problems.push(`rounds: the game's renderer compiled ${compiled} programs over his rounds (none may be)`);
+  lines.push(`the frame (drawn, and the browser's): ${sat.toFixed(1)} ms as he sits reading, ${walking ? walking.toFixed(1) : '?'} ms as he walks`);
+  if (gaps < 1) problems.push('rounds: he kept a book, and no shelf had a gap for it');
+  if (rounds.gaps >= gaps) problems.push('rounds: he restocked, and no gap was filled');
+  rounds.hold = true;
+  lab.drawing = drawing;
+  return { lines, problems, moments };
+}

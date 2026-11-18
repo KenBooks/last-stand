@@ -10,6 +10,7 @@
 // (`Room.wall`).
 import * as THREE from 'three';
 import type { Scholar } from '../entities/models/scholar';
+import type { Rounds } from './scholarRounds';
 import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import type { EnemyId } from '../data/enemies';
 import { ashlar, bannerCloth, boards, ctx2d, canvasOf, flagstone, grunge, pbrMaterialMaps, textureFromCanvas, wood } from '../core/textures';
@@ -65,6 +66,8 @@ export interface Room {
   /** what a hero sits on in it (from the owner: "dont forget to add sitting in houses, where possible, some houses have
    *  armchair etc"): its benches, stools and chairs, none the folk sit on */
   seats: Seat[];
+  /** his rounds through the room, once he's seated (world/scholarRounds.ts; tools/lab `scholar`) */
+  rounds?(): Rounds | undefined;
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */

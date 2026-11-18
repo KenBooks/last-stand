@@ -157,6 +157,9 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     await lab.until(() => G.arena.room === 'library', DOOR_FRAMES, "the library's door never took him in");
     await lab.step(15);
     const s = room.folk?.();
+    // (held at his table: his rounds would take him off it mid-talk-check)
+    const rounds = room.rounds?.();
+    if (rounds) rounds.hold = true;
     if (!s) return { text: 'the library has no scholar seated', problems: ['no scholar seated'] };
     // (a hero who's never talked to him, and never fought)
     delete G.profile.talk;
