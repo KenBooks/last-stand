@@ -354,7 +354,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
  * it: level at the joints, narrowest at its middle). From play, the fingers as even tapering tubes: "fingers need
  * bones to look more natural" (#425). Rounded at both ends, as `tube` is.
  */
-function waisted(r0: number, r1: number, from: number, to: number, depth: number): Shape[] {
+function waisted(r0: number, r1: number, from: number, to: number, depth: number, pressed = false): Shape[] {
   const length = to - from;
   const shaft: Shape = {
     distance: (x, y, z) => {
@@ -362,11 +362,16 @@ function waisted(r0: number, r1: number, from: number, to: number, depth: number
       const along = -y - (from + t * length);
       const zs = z / depth;
       const pinch = Math.sin(Math.PI * t);
-      const radius = (r0 + (r1 - r0) * t) * (1 - WAIST * pinch * pinch);
+      const radius = (r0 + (r1 - r0) * t) * (1 - WAIST * (pressed ? 0.25 : 1) * pinch * pinch);
+      // Side by side, the pads flatten where they touch, leaving a shallow seam across the striking face.
+      if (pressed) {
+        const corner = Math.hypot(zs, along);
+        return (Math.sqrt(Math.hypot(x * x, corner * corner)) - radius) * depth;
+      }
       return (Math.sqrt(x * x + zs * zs + along * along) - radius) * depth;
     },
     centre: [0, -(from + to) / 2, 0],
-    radius: length / 2 + Math.max(r0, r1),
+    radius: length / 2 + Math.max(r0, r1) * (pressed ? 1.19 : 1),
   };
   return [shaft];
 }
@@ -426,7 +431,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   const says = (n: number, shape: Shape, bone: number) => {
     parts.push({ shape, frame: frames[n], blend: 0, sayOnly: true, bones: [[bone, 1]] });
   };
-  for (const half of waisted(w * radii[0], w * radii[1], rootFrom, l0, depths[0])) {
+  for (const half of waisted(w * radii[0], w * radii[1], rootFrom, l0, depths[0], pressed && !thumb)) {
     shaped(0, half, thumb ? 0.009 : 0.004, first);
   }
   // (its say in the skin from a little past the knuckle: from the joint itself, the back of the hand behind the
@@ -439,7 +444,9 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
     parts.push({ shape, frame: frames[n], blend: 0, sayOnly: true, bones });
   };
   joint(1, ellipsoid(0, 0, 0, w * radii[1], w * HINGE, w * 0.76), [[first, 0.5], [first + 1, 0.5]]);
-  for (const half of waisted(w * radii[2], w * radii[3], 0, l1, depths[1])) shaped(1, half, SEGMENT_BLEND, first + 1);
+  for (const half of waisted(w * radii[2], w * radii[3], 0, l1, depths[1])) {
+    shaped(1, half, SEGMENT_BLEND, first + 1);
+  }
   says(1, boneSay(w * radii[2], w * radii[3], 0, l1, depths[1], true, true), first + 1);
   joint(2, ellipsoid(0, 0, 0, w * radii[3], w * HINGE * 0.92, w * 0.68), [[first + 1, 0.5], [first + 2, 0.5]]);
   // (the last segment's rounded end at the digit's tip)
@@ -540,8 +547,8 @@ function knuckleSkinAt(digits: DigitShape[], frames: Float64Array[][], x: number
 /** The skin's colour at each vertex (`color`, multiplying its material's): darker where the skin round it closes in,
  *  read from `field` a few millimetres out along its normal (a point outside the hand nearer to another part of it than
  *  it is out), darker and redder over the finger joints' backs (`knuckleSkinAt`), and warmer over the fingertips. */
-function shadeSkin(geometry: THREE.BufferGeometry, field: Field, digits: DigitShape[], frames: Float64Array[][]):
-  void {
+function shadeSkin(geometry: THREE.BufferGeometry, field: Field, digits: DigitShape[], frames: Float64Array[][],
+  closed: boolean): void {
   const position = geometry.attributes.position;
   const normal = geometry.attributes.normal;
   const bones = geometry.attributes.skinIndex;
@@ -555,7 +562,7 @@ function shadeSkin(geometry: THREE.BufferGeometry, field: Field, digits: DigitSh
       const z = position.getZ(i) + normal.getZ(i) * step;
       shut += clamp((step - field(x, y, z)) / step, 0, 1);
     }
-    const light = 1 - SHUT_DARK * shut / SHUT_STEPS.length;
+    const light = 1 - (closed ? 0.22 : SHUT_DARK) * shut / SHUT_STEPS.length;
     let tip = 0;
     for (let k = 0; k < 4; k++) if (TIP_BONES.has(bones.getComponent(i, k))) tip += shares.getComponent(i, k);
     const knuckle = knuckleSkinAt(digits, frames, position.getX(i), position.getY(i), position.getZ(i));
@@ -891,7 +898,7 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
     nail(hand, own, digit, tipBone, space, nails, thumb, closed && thumb);
   });
   const skin = skinnedNet(hand, box, parts, COARSE_SHARE.skin);
-  shadeSkin(skin, hand, digits, frames);
+  shadeSkin(skin, hand, digits, frames, closed);
   return {
     skin,
     tips: bareOf(skin, digits, frames),
