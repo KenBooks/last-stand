@@ -16,6 +16,27 @@ const bootFullScreen = () => ({
   },
 });
 
+// The page's panels, each a file of its own (src/ui/html/<id>.html), put back where index.html names it
+// (`<!-- part: id -->`) as the page is served or built: the page the browser gets is the page as one file was. 53 of
+// 300 PRs touched index.html for their own panel; a panel's markup in its own file touches no one else's.
+const HTML_PARTS = fileURLToPath(new URL('./src/ui/html/', import.meta.url));
+const PART = /^ {2}<!-- part: ([\w-]+) -->$/gm;
+const htmlParts = (): Plugin => ({
+  name: 'html-parts',
+  transformIndexHtml: {
+    order: 'pre',
+    handler: (html: string) => html.replace(PART, (_line, id: string) => {
+      return readFileSync(`${HTML_PARTS}${id}.html`, 'utf8').replace(/\r?\n$/, '');
+    }),
+  },
+  // (a part changed reloads the page, as index.html itself does)
+  handleHotUpdate({ file, server }) {
+    if (!slash(file).startsWith(slash(HTML_PARTS))) return;
+    server.ws.send({ type: 'full-reload' });
+    return [];
+  },
+});
+
 // ez-tree (procedural trees) from its source, not its build, which carries its bark and leaf pictures inlined: its
 // texture module is swapped for a stub (src/world/ezTreeTextures.ts), so none of them ship
 const slash = (p: string): string => p.split('\\').join('/').toLowerCase();
@@ -77,7 +98,7 @@ const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
-  plugins: [bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
+  plugins: [htmlParts(), bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
   // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
   // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)

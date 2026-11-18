@@ -1,0 +1,80 @@
+  <div id="hud" class="hidden">
+    <div id="target" class="hidden">
+      <div class="t-name"></div>
+      <div class="t-sub"></div>
+      <div class="t-bar"><div class="t-fill"></div><div class="t-ghost"></div></div>
+    </div>
+    <div id="minimap-wrap">
+      <div class="mm-title">The Last Stand</div>
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div class="objectives">
+        <div class="obj-title">Objectives</div>
+        <div class="obj-line"><span class="box"></span><span class="obj-text">Prepare yourself</span></div>
+      </div>
+      <div id="spoils">
+        <div class="sp-title">Unbanked spoils <b class="sp-count">0</b></div>
+        <div class="sp-list"></div>
+      </div>
+      <!-- the first visit's training (ui/training.ts): its steps, ticked as they're done, under the village's minimap -->
+      <div id="training" data-lobby="village" class="hidden" role="status">
+        <div class="tr-title">Training</div>
+        <ol class="tr-steps"></ol>
+        <div class="tr-finished">Training complete: the portals are open.</div>
+        <button class="link tr-skip">Skip training</button>
+      </div>
+    </div>
+
+    <div id="crosshair" class="hidden"></div>
+    <div id="charge-ring" class="hidden" aria-hidden="true"><b class="cr-right"><i></i></b><b class="cr-left"><i></i></b></div>
+    <div id="look-hint" class="hidden">Click to look around</div>
+
+    <div id="banner" class="hidden"><div class="b-title"></div><div class="b-sub"></div></div>
+    <!-- a duel (ui/duelHud.ts): the score either side of the round's badge, and the match's result -->
+    <div id="duel-score" class="hidden" role="status">
+      <span class="ds-a"></span><span class="ds-mid"><b class="ds-points"></b><i class="ds-note"></i></span><span class="ds-b"></span>
+    </div>
+    <div id="duel-result" class="hidden" role="status">
+      <div class="dr-title"></div><div class="dr-who"></div><div class="dr-score"></div><div class="dr-note"></div>
+    </div>
+
+    <div id="buffs"></div>
+    <div id="wavebadge" class="gem"><span class="gem-label">Wave</span><span class="gem-num">1</span></div>
+    <div id="bottombar">
+      <div class="bar life"><div class="fill"></div><div class="lag"></div><span class="txt"></span><span class="bar-label">Health</span></div>
+      <div id="hotbar"></div>
+      <div class="bar energy"><div class="fill"></div><span class="txt"></span><span class="bar-label">Energy</span></div>
+    </div>
+
+    <!-- bank or continue (ui/hud.ts showDecision): unfolds from the wave badge, folds down to its
+         buttons after a while (not for a new player: ui/choiceLesson.ts), and back into the badge once chosen.
+         What each choice stakes is a small line inside its button (.stake), in main's height; never what an unbanked item is -->
+    <div id="decision" class="hidden">
+      <div class="dc-details"><div>
+        <div class="dc-title">The wave is broken</div>
+        <div class="dc-bag"></div>
+        <div class="dc-party hidden"></div>
+        <div class="dc-risk"></div>
+      </div></div>
+      <div class="dc-buttons">
+        <button class="btn bank"><span class="k">B</span> <span class="dc-label"><span class="bank-label">Bank spoils &amp; leave</span><span class="stake bank-stake"></span></span></button>
+        <button class="btn primary cont"><span class="k">C</span> <span class="dc-label"><span class="cont-label">Continue</span><span class="stake cont-stake"></span></span></button>
+      </div>
+    </div>
+    <!-- co-op (ui/coop.ts): partners' frames, being down, watching the rest of a run, reviving on touch -->
+    <div id="party"></div>
+    <div id="down-note" class="hidden"></div>
+    <div id="spectate" class="hidden">
+      <div class="sp-row">
+        <button class="sp-btn sp-prev" aria-label="Previous player"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span class="sp-name"></span>
+        <button class="sp-btn sp-next" aria-label="Next player"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button class="sp-btn sp-free"></button>
+      </div>
+      <div class="sp-keys"></div>
+    </div>
+    <button id="btn-revive" class="hidden">Revive</button>
+    <div id="hurt-vignette"></div>
+    <button id="btn-view" data-lobby="village" class="touch-only" aria-label="Change view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <button id="btn-pause" class="touch-only" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+    <button id="btn-full" class="touch-only" aria-label="Full screen"><svg class="full-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="full-leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
+  </div>

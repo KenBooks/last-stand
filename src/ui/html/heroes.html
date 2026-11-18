@@ -1,0 +1,34 @@
+  <div id="heroes" class="hidden" role="dialog" aria-modal="true" aria-label="Choose your hero">
+    <div class="hs-shade" aria-hidden="true"></div>
+    <header class="hs-top">
+      <div class="hs-logo logo-art" data-lobby="panels" role="img" aria-label="Last Stand">
+        <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+        <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+      </div>
+      <div class="hs-heading"><div class="hs-title" role="heading" aria-level="1">Choose your hero</div><button class="hs-slot" title="Save slots"></button></div>
+    </header>
+    <button class="hs-arrow hs-prev" aria-label="Previous hero"><svg viewBox="0 0 20 40" aria-hidden="true"><path d="M15 4 4 20l11 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="hs-arrow hs-next" aria-label="Next hero"><svg viewBox="0 0 20 40" aria-hidden="true"><path d="M5 4l11 16L5 36" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <aside class="hs-panel panel">
+      <!-- the hero in focus's card, his look (ui/heroLook.ts), his gear (to look at: he's not the lobby's hero until chosen) and his attributes -->
+      <div class="tabs hs-pagetabs" role="tablist">
+        <button class="tab active" data-page="hero" role="tab">Hero</button>
+        <button class="tab" data-page="look" role="tab">Look</button>
+        <button class="tab" data-page="gear" role="tab">Equipment</button>
+        <button class="tab" data-page="attrs" role="tab">Attributes</button>
+      </div>
+      <div class="hs-pages">
+        <div class="hs-page hs-cards" data-page="hero" role="tabpanel"></div>
+        <div class="hs-page hs-look off" data-page="look" role="tabpanel"></div>
+        <div class="hs-page hs-gear off" data-page="gear" role="tabpanel">
+          <div class="hs-equip"></div>
+          <div class="panel-title">Stash <span class="hs-stash-count"></span></div>
+          <div class="hs-stash"></div>
+        </div>
+        <div class="hs-page hs-stats off" data-page="attrs" role="tabpanel"></div>
+      </div>
+    </aside>
+    <div class="hs-choose" aria-hidden="true"></div>
+    <nav class="hs-tabs" aria-label="Heroes"></nav>
+    <button class="btn hs-back">&lsaquo; Back<span class="hs-long"> to the lobby</span></button>
+  </div>

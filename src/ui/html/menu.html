@@ -1,0 +1,290 @@
+  <div id="menu" class="hidden" data-tab="hero">
+    <!-- short screens (phones held sideways) show one panel at a time, picked here -->
+    <nav id="lobby-rail" class="panel" aria-label="Lobby" data-lobby="panels">
+      <button data-lt="hero" class="active"><span class="ri">⚔</span>Hero</button>
+      <button data-lt="gear"><span class="ri">⛨</span>Gear</button>
+      <button data-lt="skills"><span class="ri">✦</span>Skills</button>
+      <button id="rail-practice"><span class="ri">◎</span><span class="sh-hide">Practice</span><span class="sh-show">Back</span></button>
+      <button id="rail-play" class="play"><span class="ri">▶</span>Play</button>
+    </nav>
+    <!-- short screens (phones held sideways) show one panel of the inventory at a time, picked here -->
+    <nav id="lobby-rail" class="panel" aria-label="Inventory" data-lobby="village">
+      <button data-lt="gear" class="active"><span class="ri">⛨</span>Gear</button>
+      <button data-lt="skills"><span class="ri">✦</span>Skills</button>
+      <button id="rail-close"><span class="ri">✕</span>Close</button>
+    </nav>
+    <!-- the village's crest: its name (the loading screen's logo gathers into it), and a co-op room's bar under it -->
+    <div class="menu-left panel" data-lobby="panels">
+      <!-- folds the panel away to the left, and back (the tab stays at the screen's edge) -->
+      <button id="hero-fold" class="fold-tab" aria-expanded="true" title="Hide the hero panel" aria-label="Hide the hero panel"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M8.5 3l-6 7 6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Hero</span></button>
+      <!-- the contents scroll inside the frame (a screen too short for them), so the tab can stand outside it -->
+      <div class="ml-body">
+        <div class="logo">
+          <div class="logo-art" role="img" aria-label="Last Stand">
+            <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+            <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+          </div>
+          <div class="logo-tag">Hold the line. Bank the spoils. Or risk it all.</div>
+        </div>
+        <div class="class-card">
+          <div class="cc-head"><div class="cc-name"></div><button class="btn" id="btn-hero">Change hero</button></div>
+          <div class="cc-tag"></div>
+          <div class="cc-strip"><button class="cc-arrow cc-prev" aria-label="Previous skills">&lsaquo;</button><div class="cc-skills"></div><button class="cc-arrow cc-next" aria-label="More skills">&rsaquo;</button></div>
+        </div>
+        <div class="records"></div>
+        <div class="biome-row"><span class="br-label">Mode</span>
+          <div class="seg" id="opt-training" aria-label="Game mode">
+            <button data-training="false" class="active">Arena</button><button data-training="true">Training grounds</button>
+          </div>
+        </div>
+        <div class="biome-row"><span class="br-label">Battleground</span>
+          <div class="seg" id="opt-biome">
+            <button data-b="random" class="dice" title="Random: a new battleground every run" aria-label="Random battleground">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><g fill="currentColor"><circle cx="8" cy="8" r="1.6"/><circle cx="16" cy="8" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="8" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/></g></svg>
+            </button>
+          </div>
+        </div>
+        <div class="biome-row"><span class="br-label">Starting wave</span>
+          <div class="seg" id="opt-wave">
+            <button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button>
+          </div>
+        </div>
+        <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
+        <button class="btn primary big" id="btn-start">Enter the Arena</button>
+        <div class="menu-links">
+          <button class="link" id="btn-help">How to play</button>
+          <button class="link" id="btn-coop">Play together</button>
+          <button class="link hidden" id="btn-install">Install</button>
+          <button class="link" id="btn-saves">Save slot 1</button>
+          <button class="link report-link" id="btn-report-panel">Report a bug</button>
+          <button class="link" id="btn-reset">Reset profile</button>
+        </div>
+      </div>
+    </div>
+    <div class="menu-crest" data-lobby="village">
+      <div class="logo">
+        <div class="logo-art" role="img" aria-label="Wardenhollow">
+          <svg class="logo-glow" viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+          <svg viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+        </div>
+      </div>
+      <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
+    </div>
+    <div class="menu-center">
+      <div class="stow-hint" data-lobby="panels"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
+      <!-- the key bar; the skill book slides up over it only to remap (ui/loadoutEditor.ts) -->
+      <div id="loadout" class="panel">
+        <!-- folds the panel away to the bottom, and back (the tab stays at the screen's edge) -->
+        <button id="skills-fold" class="fold-tab" data-lobby="panels" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
+        <div class="lo-book" id="lo-book">
+          <div class="lo-head"><div class="lo-top"><span class="lo-title">Spellbook</span>
+            <span class="lo-style"><span class="lo-style-name"></span><button class="link" id="btn-lo-reset">Reset to defaults</button></span></div>
+            <span class="lo-hint mouse-only">Click a key, then a skill, or drag a skill onto a key · drag keys to swap · right-click a key to clear</span><span class="lo-hint touch-inline">Tap a key, then the skill to put on it · tap a picked key again to clear it</span></div>
+          <div id="spellbook"></div>
+        </div>
+        <div class="lo-free">Cooldowns and costs are off while the lobby is open · hide it to practice with them</div>
+        <div class="lo-keys">
+          <div id="loadout-bar"></div>
+          <button id="lo-toggle" aria-expanded="false" aria-controls="lo-book" title="Remap keys" aria-label="Remap keys"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 9.5l7-6.5 7 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="menu-right panel">
+      <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
+      <div class="fold-tabs fold-right" data-lobby="panels">
+        <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
+        <button id="attrs-fold" class="fold-tab fold-extra" title="Show attributes" aria-label="Show attributes"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Attributes</span></button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="gear">Equipment</button>
+        <button class="tab" data-tab="attrs">Attributes</button>
+      </div>
+      <div class="tab-page" data-page="gear">
+        <div id="equip">
+          <svg class="doll" data-class="mage" viewBox="0 0 240 340" aria-hidden="true">
+            <defs>
+              <linearGradient id="dollRobe" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#3a3350"/><stop offset="1" stop-color="#14121c"/>
+              </linearGradient>
+              <linearGradient id="dollGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#e2c07e"/><stop offset="1" stop-color="#7a5a2a"/>
+              </linearGradient>
+              <radialGradient id="dollGlow"><stop offset="0" stop-color="#9fffd0"/><stop offset=".4" stop-color="#5dffa8" stop-opacity=".6"/><stop offset="1" stop-color="#5dffa8" stop-opacity="0"/></radialGradient>
+              <radialGradient id="dollHalo" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#5dffa8" stop-opacity=".10"/><stop offset="1" stop-color="#5dffa8" stop-opacity="0"/></radialGradient>
+            </defs>
+            <ellipse cx="120" cy="150" rx="120" ry="170" fill="url(#dollHalo)"/>
+            <!-- staff (behind the right hand) -->
+            <line x1="196" y1="52" x2="186" y2="330" stroke="#5a3d24" stroke-width="5" stroke-linecap="round"/>
+            <path d="M184 60c-6-14 2-28 12-32 10 4 18 18 12 32" fill="none" stroke="url(#dollGold)" stroke-width="3"/>
+            <path d="M196 30l7 14-7 16-7-16z" fill="#5dffa8" opacity=".9"/>
+            <circle cx="196" cy="44" r="18" fill="url(#dollGlow)"/>
+            <!-- robe skirt with folds -->
+            <path d="M84 176c-10 50-20 100-26 142h124c-6-42-16-92-26-142z" fill="url(#dollRobe)" stroke="rgba(226,192,126,.35)" stroke-width="1.5"/>
+            <path d="M100 184l-12 132M120 186v132M140 184l12 132" stroke="rgba(0,0,0,.45)" stroke-width="2"/>
+            <path d="M58 316h124" stroke="url(#dollGold)" stroke-width="3"/>
+            <!-- boots -->
+            <path d="M92 318h22l2 14H86zM126 318h22l6 14h-30z" fill="#241a14"/>
+            <!-- torso -->
+            <path d="M82 92c10-8 24-12 38-12s28 4 38 12l6 84H76z" fill="url(#dollRobe)" stroke="rgba(226,192,126,.35)" stroke-width="1.5"/>
+            <path d="M108 96h24l-4 78h-16z" fill="#14121c"/>
+            <path d="M108 96l4 78M132 96l-4 78" stroke="url(#dollGold)" stroke-width="1.5"/>
+            <!-- belt -->
+            <rect x="78" y="168" width="84" height="10" rx="3" fill="url(#dollGold)"/>
+            <path d="M120 166l6 7-6 7-6-7z" fill="#5dffa8"/>
+            <!-- sleeves & hands -->
+            <path d="M80 96c-14 6-22 22-26 44l-10 46 16 4 14-40z" fill="url(#dollRobe)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <path d="M42 184c-2 8 2 16 10 16 6 0 10-6 8-14z" fill="#2c1f18"/>
+            <circle cx="48" cy="206" r="10" fill="url(#dollGlow)"/>
+            <path d="M160 96c14 6 22 22 26 44l6 40-16 4-10-36z" fill="url(#dollRobe)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <path d="M178 178c-2 8 2 16 10 16 6 0 10-6 8-14z" fill="#2c1f18"/>
+            <!-- mantle & pauldrons -->
+            <path d="M76 92c14-12 30-16 44-16s30 4 44 16l-8 16c-12-6-24-8-36-8s-24 2-36 8z" fill="#14121c" stroke="url(#dollGold)" stroke-width="1.5"/>
+            <ellipse cx="74" cy="100" rx="20" ry="13" fill="#3b3f4c" stroke="url(#dollGold)" stroke-width="2"/>
+            <ellipse cx="166" cy="100" rx="20" ry="13" fill="#3b3f4c" stroke="url(#dollGold)" stroke-width="2"/>
+            <path d="M60 94l-8-12M180 94l8-12" stroke="url(#dollGold)" stroke-width="3" stroke-linecap="round"/>
+            <!-- hood with shadowed face and glowing eyes -->
+            <path d="M120 12c-24 0-38 20-38 44 0 14 6 26 14 32h48c8-6 14-18 14-32 0-24-14-44-38-44z" fill="url(#dollRobe)" stroke="rgba(226,192,126,.4)" stroke-width="1.5"/>
+            <path d="M120 12c6-6 16-8 24-4-8 2-14 6-18 12" fill="#3a3350"/>
+            <path d="M120 30c-14 0-22 12-22 26 0 12 8 24 22 24s22-12 22-24c0-14-8-26-22-26z" fill="#050508"/>
+            <path d="M104 58h10M126 58h10" stroke="#5dffa8" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="109" cy="58" r="7" fill="url(#dollGlow)" opacity=".7"/><circle cx="131" cy="58" r="7" fill="url(#dollGlow)" opacity=".7"/>
+            <path d="M84 60c4 16 16 26 36 26s32-10 36-26" fill="none" stroke="url(#dollGold)" stroke-width="2"/>
+          </svg>
+          <svg class="doll hidden" data-class="ranger" viewBox="0 0 240 340" aria-hidden="true">
+            <ellipse cx="120" cy="168" rx="106" ry="156" fill="#a9cf7c" opacity=".06"/>
+            <path d="M91 224h25v94H91zM125 224h25v94h-25z" fill="#292d24" stroke="#826b42"/>
+            <path d="M87 277h30v52H83zM123 277h30l5 52h-35z" fill="#65452b" stroke="#201710"/>
+            <path d="M87 82l33 14 33-14 14 144H73z" fill="#35472c" stroke="#a58a50" stroke-width="2"/>
+            <path d="M84 92l68 89M79 179h82" stroke="#65452b" stroke-width="10"/>
+            <rect x="112" y="173" width="16" height="14" rx="2" fill="#a58a50"/>
+            <path d="M87 91l-24 28-14 74 17 4 18-64M153 91l24 28 14 74-17 4-18-64" fill="#35472c" stroke="#826b42" stroke-width="2"/>
+            <path d="M50 159l19 4-5 39-19-4M171 163l19-4 5 39-19 4" fill="#65452b"/>
+            <path d="M190 77c-4 18 29 14 31 93-2 79-35 75-31 93" fill="none" stroke="#956f3d" stroke-width="6"/>
+            <path d="M190 77v186M174 170h56l-9-6m9 6-9 6" fill="none" stroke="#c6bb9a" stroke-width="1.5"/>
+            <ellipse cx="120" cy="55" rx="24" ry="29" fill="#c9957c"/>
+            <path d="M94 51c-4-37 52-40 52 0l-16-19-17 3z" fill="#473223"/>
+            <path d="M107 54h6M128 54h6M116 70h9" stroke="#3a2418" stroke-width="2"/>
+          </svg>
+          <svg class="doll hidden" data-class="warrior" viewBox="0 0 240 340" aria-hidden="true">
+            <defs>
+              <linearGradient id="dollSteel" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#9aa2b2"/><stop offset=".5" stop-color="#4c5260"/><stop offset="1" stop-color="#1c1f26"/>
+              </linearGradient>
+              <linearGradient id="dollCrimson" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#8a1a22"/><stop offset="1" stop-color="#2e060a"/>
+              </linearGradient>
+              <radialGradient id="dollEmber"><stop offset="0" stop-color="#ffd9a0"/><stop offset=".4" stop-color="#ff8a3a" stop-opacity=".6"/><stop offset="1" stop-color="#ff8a3a" stop-opacity="0"/></radialGradient>
+              <radialGradient id="dollHaloW" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#ffa050" stop-opacity=".10"/><stop offset="1" stop-color="#ffa050" stop-opacity="0"/></radialGradient>
+            </defs>
+            <ellipse cx="120" cy="150" rx="120" ry="170" fill="url(#dollHaloW)"/>
+            <!-- sword, point up behind the right hand -->
+            <path d="M184 186V46l5-16 5 16v140z" fill="url(#dollSteel)" stroke="#111" stroke-width="1"/>
+            <path d="M189 40v144" stroke="#fff" stroke-width="1" opacity=".35"/>
+            <rect x="170" y="186" width="38" height="7" rx="2" fill="url(#dollGold)"/>
+            <rect x="186" y="193" width="6" height="30" fill="#2e2018"/>
+            <circle cx="189" cy="227" r="5" fill="url(#dollGold)"/>
+            <!-- legs: greaves and knee cops -->
+            <path d="M90 236h26v82H90zM124 236h26v82h-26z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <circle cx="103" cy="262" r="9" fill="url(#dollSteel)" stroke="url(#dollGold)" stroke-width="1.5"/>
+            <circle cx="137" cy="262" r="9" fill="url(#dollSteel)" stroke="url(#dollGold)" stroke-width="1.5"/>
+            <path d="M86 318h30l2 14H82zM124 318h30l4 14h-34z" fill="#1c1f26"/>
+            <!-- faulds and tabard -->
+            <path d="M78 172h84l8 46H70z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <path d="M76 190h88M74 204h92" stroke="rgba(0,0,0,.4)" stroke-width="2"/>
+            <path d="M104 172h32l4 120h-40z" fill="url(#dollCrimson)" stroke="rgba(226,192,126,.35)" stroke-width="1.5"/>
+            <path d="M100 290h40" stroke="url(#dollGold)" stroke-width="3"/>
+            <!-- breastplate -->
+            <path d="M82 92c10-8 24-12 38-12s28 4 38 12l6 82H76z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.4)" stroke-width="1.5"/>
+            <path d="M120 88v84" stroke="url(#dollGold)" stroke-width="2.5"/>
+            <path d="M92 110c10 6 46 6 56 0" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+            <rect x="78" y="166" width="84" height="10" rx="3" fill="#2e2018"/>
+            <rect x="112" y="164" width="16" height="14" rx="2" fill="url(#dollGold)"/>
+            <!-- arms -->
+            <path d="M80 96c-14 6-22 22-26 44l-8 38 16 4 12-36z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <path d="M160 96c14 6 22 22 26 44l6 40-16 4-10-36z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.3)" stroke-width="1.5"/>
+            <path d="M176 176c-2 10 2 18 12 18 8 0 12-8 10-16z" fill="#33363e"/>
+            <!-- round shield on the left arm -->
+            <circle cx="52" cy="192" r="40" fill="#1c1f26"/>
+            <circle cx="52" cy="192" r="35" fill="url(#dollCrimson)"/>
+            <circle cx="52" cy="192" r="37.5" fill="none" stroke="url(#dollGold)" stroke-width="3"/>
+            <path d="M28 168l48 48M76 168l-48 48" stroke="url(#dollGold)" stroke-width="3" opacity=".8"/>
+            <circle cx="52" cy="192" r="10" fill="url(#dollSteel)" stroke="url(#dollGold)" stroke-width="1.5"/>
+            <!-- pauldrons -->
+            <ellipse cx="72" cy="100" rx="25" ry="17" fill="url(#dollSteel)" stroke="url(#dollGold)" stroke-width="2"/>
+            <ellipse cx="168" cy="100" rx="25" ry="17" fill="url(#dollSteel)" stroke="url(#dollGold)" stroke-width="2"/>
+            <path d="M50 104c10 6 34 6 44 0M146 104c10 6 34 6 44 0" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="2"/>
+            <!-- great helm with a crimson crest and a glowing visor slit -->
+            <path d="M104 22c4-14 28-14 32 0l-4 8h-24z" fill="url(#dollCrimson)"/>
+            <path d="M120 20c-22 0-34 16-34 38v24c0 6 14 12 34 12s34-6 34-12V58c0-22-12-38-34-38z" fill="url(#dollSteel)" stroke="rgba(226,192,126,.45)" stroke-width="1.5"/>
+            <path d="M120 20v74" stroke="url(#dollGold)" stroke-width="2.5"/>
+            <rect x="94" y="54" width="52" height="6" rx="2" fill="#07060a"/>
+            <path d="M98 57h44" stroke="#ff8a3a" stroke-width="2.4" stroke-linecap="round"/>
+            <ellipse cx="120" cy="57" rx="26" ry="8" fill="url(#dollEmber)" opacity=".7"/>
+            <path d="M104 70v14M112 72v14M128 72v14M136 70v14" stroke="#1c1f26" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="panel-title stash-head">
+          <span>Stash <span id="stash-count"></span></span>
+          <span id="stash-chips"></span>
+          <button id="stash-filter-btn" title="Filter by stat" aria-label="Filter the stash by stat" aria-expanded="false" aria-controls="stash-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="3.6" stroke-dasharray="3.22 3.22"/><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>
+          </button>
+          <div id="stash-filter" class="hidden"></div>
+        </div>
+        <div id="stash"></div>
+      </div>
+      <div class="tab-page off" data-page="attrs">
+        <div id="stats"></div>
+      </div>
+    </div>
+    <!-- the card a village object opens (ui/villageCard.ts): a portal's starting wave and its way in, the chronicle's
+         save slots -->
+    <div id="vcard" data-lobby="village" class="panel hidden" role="dialog" aria-labelledby="vc-title">
+      <div class="vc-title" id="vc-title"></div>
+      <div class="vc-sub"></div>
+      <div class="vc-page" data-page="portal">
+        <div class="biome-row vc-grounds hidden"><span class="br-label">Battleground</span>
+          <div class="seg" id="opt-biome"></div>
+        </div>
+        <div class="biome-row"><span class="br-label">Starting wave</span>
+          <div class="seg" id="opt-wave">
+            <button data-d="-1000" aria-label="First wave">&laquo;</button><button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button><button data-d="1000" aria-label="Best wave">&raquo;</button>
+          </div>
+        </div>
+        <button class="btn primary big" id="btn-start">Enter</button>
+        <div class="vc-training hidden">
+          <p>Your training isn't finished. Walk the village first: its tracker says what's left.</p>
+          <button class="btn vc-skip">Skip training</button>
+        </div>
+      </div>
+      <div class="vc-page" data-page="chronicle">
+        <div class="records"></div>
+        <div class="vc-row"><button class="btn" id="btn-saves">Save slot 1</button><button class="btn danger" id="btn-reset">Reset profile</button></div>
+      </div>
+      <div class="vc-page" data-page="pvp">
+        <div class="pvp-choices">
+        <div class="biome-row"><span class="br-label">Battleground</span><div class="seg" id="pvp-ground"></div></div>
+        <div class="biome-row"><span class="br-label">Fight</span>
+          <div class="seg" id="pvp-size"><button data-v="1">1 v 1</button><button data-v="2">2 v 2</button></div>
+        </div>
+        <div class="biome-row"><span class="br-label">First to</span><div class="seg" id="pvp-wins"></div></div>
+        <div class="biome-row"><span class="br-label">Gear</span>
+          <div class="seg" id="pvp-gear"><button data-v="own">Own gear</button><button data-v="none">No gear</button></div>
+        </div>
+        </div>
+        <div id="pvp-sides">
+          <div class="pvp-side" data-part="0"><span class="br-label">Side one</span><div class="pvp-list"></div></div>
+          <div class="pvp-versus" aria-hidden="true">vs</div>
+          <div class="pvp-side" data-part="1"><span class="br-label">Side two</span><div class="pvp-list"></div></div>
+          <div class="pvp-side pvp-watch" data-part="watch"><span class="br-label">Watching</span><div class="pvp-list"></div></div>
+        </div>
+        <p id="pvp-note" role="status"></p>
+        <button class="btn primary big" id="pvp-go">Begin the duel</button>
+        <button class="btn primary" id="pvp-party">To the campfire</button>
+      </div>
+      <div class="vc-page" data-page="records">
+        <div class="rec-book"></div>
+      </div>
+      <button class="link vc-close">Leave</button>
+    </div>
+  </div>
