@@ -541,7 +541,10 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
   outer.addScaledVector(indexFront, -outer.dot(indexFront)).normalize();
   const root = h.thumb.j[0].position;
   // its knuckle: its bone in the palm aimed at the corner
-  const corner = along(index, THUMB_ON.corner).addScaledVector(outer, lift(0)).addScaledVector(indexFront, THUMB_ON.front * lift(0));
+  const corner = along(index, THUMB_ON.corner).addScaledVector(outer, lift(0))
+    .addScaledVector(indexFront, THUMB_ON.front * lift(0));
+  // In opposition the first metacarpal comes forward out of the palm. Its two free bones can then cross the pads.
+  if (h.build.fist) corner.copy(root).add(new THREE.Vector3(-h.s * 0.30, -0.56, -0.77));
   const knuckle = corner.sub(root).setLength(a).add(root);
   // its last joint on the index's front where its middle bone reaches it, as near the front's middle as it can
   let joint = along(index, 1).addScaledVector(indexFront, lift(0));
@@ -552,7 +555,8 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
       const turn = (Math.PI / 2) * (r / (THUMB_TRIES.turns - 1));
       const round = indexFront.clone().multiplyScalar(Math.cos(turn)).addScaledVector(outer, Math.sin(turn));
       const at = along(index, s / THUMB_TRIES.shares).addScaledVector(round, lift(0));
-      const miss = Math.abs(at.distanceTo(knuckle) - b) + Math.abs(turn - THUMB_ON.round) * 0.004;
+      const roundTo = h.build.fist ? 0 : THUMB_ON.round;
+      const miss = Math.abs(at.distanceTo(knuckle) - b) + Math.abs(turn - roundTo) * 0.004;
       if (miss < best) {
         best = miss;
         joint = at;
