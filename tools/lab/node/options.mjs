@@ -2231,6 +2231,11 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant a fault the measure must catch: the click after a choosing tap let through to the lobby',
       },
+      quick: {
+        kind: 'switch',
+        help: 'the mage picked at once, the other heroes still warming behind the screen, the CPU slowed, then '
+          + 'followed till their warm-up is done: no hero may stand in the scene that no one plays or shows',
+      },
       ...COMMON_OPTIONS,
     },
   },

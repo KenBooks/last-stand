@@ -159,6 +159,11 @@ function holdStill(p: Player, held: boolean): void {
     heldOf.delete(p);
     return;
   }
+  // (his world matrices made too, whatever the last frame drawn with him in the scene left: its render leaves a hidden
+  // part out of them, `matricesOfShownOnly` in core/renderer.ts, and a hero who left the hall of heroes hidden, still
+  // warming, was held where its room had him, on the village's fountain: from play on a slow first visit, the
+  // warrior and the ranger stood on it, `lab heropick --quick`)
+  p.obj.matrixWorldAutoUpdate = true;
   p.obj.updateMatrixWorld(true);
   const objects: THREE.Object3D[] = [];
   p.obj.traverse((o) => { if (o.matrixAutoUpdate) { objects.push(o); o.matrixAutoUpdate = false; } });
