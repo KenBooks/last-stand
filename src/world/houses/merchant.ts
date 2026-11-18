@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { HOUSES, type RoomId } from '../../data/houses';
 import {
-  BODY, CANDLE, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
+  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
   writing, type Build, type Mats, type Room,
 } from '../rooms';
 import { G } from '../../state';
@@ -282,8 +282,10 @@ export function build(group: THREE.Group): Room {
   barrel(g, M, hx - 0.5, 0, hz - 0.5);
   barrel(g, M, hx - 1.15, 0, hz - 0.45);
   b.obstacles.push({ x: hx - 0.8, z: hz - 0.5, r: 0.6, h: 0.8 });
-  // (over the rug, short of the counter: over it, from above it hid Odo)
-  chandelier(g, M, 0, high + 0.2, 1.5);
+  // (over the rug, short of the counter: over it, from above it hid Odo; centred under the cross beam there and hung
+  // from it, as the library's is: between two beams, 0.2 over the ceiling's height, its wheel and candles ran into
+  // the one at -0.5, `lab houses`)
+  chandelier(g, M, -0.5, high, 1.5, high - CROSS_UNDER);
   return finish(id, b, {
     seatFolk() {
       if (odo) return;
