@@ -544,6 +544,17 @@ export class Lab {
   }
 
   /**
+   * The foes the fight raises itself kept from here on, until the next set-up (a boss's summons, a guard's dead: the
+   * set-up's hold of the wave cleared them as they rose), the run's waves still held back.
+   */
+  keepRisen(): void {
+    const keepAll = (): void => {
+      for (const foe of G.enemies) this.foes.add(foe);
+    };
+    this.keepUp = [keepAll, () => holdTheWave(this.foes), this.keepHeroUp];
+  }
+
+  /**
    * The run's waves let come from here on, until the next set-up: its countdown, its spawns and its foes as the game
    * plays them, the hero still kept whole. A measure of a wave sets one off itself (the run's wave and its timer).
    */

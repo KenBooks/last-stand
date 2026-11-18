@@ -180,7 +180,8 @@ function guardBellAttacks(foe: Foe): string[] {
   const warn = kit.attacks?.toll?.warn ?? d.windup;
   return [
     `<b>Toll:</b> the bell swings back and glows for ${secs(warn)}, then a ring rolls out to ${metres(g.reach)}. Within ${metres(g.stunsTo)} it stuns whoever it reaches for ${secs(g.stun)} and deals ${whole(hit * g.hurt)} ${typed(d)} damage. A shield raised towards it, a dash or a leap carries you through.`,
-    `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size${d.asGuard?.stands ? ', standing where it rises' : ''}; it raises no Hollow Husks, its one ghost takes no one, and it never grows stronger as it is hurt.`,
+    `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size${d.asGuard?.stands ? ', standing where it rises' : ''}; its one ghost takes no one, and it never grows stronger as it is hurt.`,
+    `<b>It raises the dead:</b> ${g.raise.first ? `${secs(g.raise.first)} after it rises, then ` : ''}every ${secs(g.raise.every[0])} to ${secs(g.raise.every[1])} while it stands, ${g.raise.count[0]} to ${g.raise.count[1]} ${ENEMIES[(d.summon ?? 'husk') as EnemyId].name}s climb out of the floor round its frame, at most ${g.raise.ownMost} of its own up at once. They stop when it falls.`,
     `<b>Its chains:</b> each of its four chains breaks under hits from its side; with all four broken the bell drops for ${secs(BELL_WARDEN.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
   ];
 }

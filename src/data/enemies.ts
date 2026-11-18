@@ -165,7 +165,13 @@ export const BELL_WARDEN = {
   down: 6,
   shards: { every: 0.9, chance: 0.35, throw: [2.5, 6] as [number, number], lies: 4, radius: 0.9, hurt: 0.22, tick: 0.5 },
   grab: { reach: 2.2, under: 3.4, carry: 1.1, rise: 2.4, away: 3, fall: 0.35, hurt: 0.45, every: 6, grace: 4.5 },
-  guard: { reach: 10, stunsTo: 6, stun: 0.8, hurt: 0.3, soft: 0.4, pitch: 1.6 },
+  guard: {
+    reach: 10, stunsTo: 6, stun: 0.8, hurt: 0.3, soft: 0.4, pitch: 1.6,
+    // a standing guard raises `count` of the dead round its frame, `near` m out, every `every` s while it stands: at
+    // most `ownMost` of its own up, none past the wave's alive limit (from play: "make sure they spawn mobs once in
+    // a while")
+    raise: { first: 6, every: [15, 20] as [number, number], count: [2, 3] as [number, number], near: [3.5, 6] as [number, number], ownMost: 5 },
+  },
 };
 
 /**

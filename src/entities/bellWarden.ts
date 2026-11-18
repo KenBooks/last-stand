@@ -17,10 +17,12 @@
 // - **As an encounter's guard** (`Enemy.guard`, data/enemies.ts `asGuard` and `BELL_WARDEN.guard`): a lesser bell,
 //   about half its height, its ring shorter and softer, its stun short, one ghost that seizes no one, no phases (from
 //   play, two whole Bell-Wardens beside the Cantor were "too big (almost like main boss)"), and it stands where it
-//   rose, tolling from there (from play: "They stay stationary").
+//   rose, tolling from there (from play: "They stay stationary"), raising a few of the dead round its frame now
+//   and then while it stands (`raiseInTurn`; "make sure they spawn mobs once in a while").
 import * as THREE from 'three';
 import { G } from '../state';
 import { BELL_WARDEN, CANTOR } from '../data/enemies';
+import { WAVES } from '../data/waves';
 import { ARENA, BLOCK, partyScale } from '../data/balance';
 import { hurtPlayer } from '../combat/damage';
 import { addEffect, soundRing, lavaPool, shockwave } from '../fx/effects';
@@ -51,6 +53,7 @@ const BELL_Y = 3.4;
  *  between them (in its last phase it stands); with its chains broken it lies still until its window is over. */
 export function bellWardenAI(e: Enemy): void {
   const b = e.brain;
+  if (e.guard) raiseInTurn(e);
   if (b.down) {
     e.desired.set(0, 0, 0);
     if (e.weak <= 0) rise(e);
@@ -97,6 +100,42 @@ function raiseHusks(e: Enemy): void {
     if (!at) continue;
     spawnEnemy((e.def.summon ?? 'husk') as never, at, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
+}
+
+/** the dead each standing guard has raised */
+const raisedBy = new WeakMap<Enemy, Enemy[]>();
+
+/** A standing guard's dead: a few raised round its frame every `BELL_WARDEN.guard.raise.every` s while it stands (its
+ *  AI runs only while it does, and only where the fight is simulated: each is a foe the host reports), at most
+ *  `ownMost` of its own up and none past the wave's alive limit (`WAVES.maxAlive`). */
+function raiseInTurn(e: Enemy): void {
+  const r = B.guard.raise, b = e.brain;
+  b.raiseAt ??= G.time + r.first;
+  if (G.time < b.raiseAt) return;
+  b.raiseAt = G.time + rand(r.every[0], r.every[1]);
+  const standing = (raisedBy.get(e) ?? []).filter((x) => x.alive);
+  const alive = G.enemies.filter((x) => x.alive).length;
+  const most = WAVES.maxAlive(G.run?.wave ?? 1, G.run?.party ?? 0);
+  const n = Math.min(randInt(r.count[0], r.count[1]), r.ownMost - standing.length, most - alive);
+  for (let i = 0; i < n; i++) {
+    const at = spotNear(e, r.near);
+    if (!at) continue;
+    standing.push(spawnEnemy((e.def.summon ?? 'husk') as never, at, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training }));
+  }
+  raisedBy.set(e, standing);
+}
+
+/** A spot `near` m out from a foe's body, in the arena, clear of props and 3 m from every hero, or null after a few
+ *  tries. */
+function spotNear(e: Enemy, near: [number, number]): THREE.Vector3 | null {
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2, r = e.radius + rand(near[0], near[1]);
+    const at = new THREE.Vector3(e.pos.x + Math.cos(a) * r, 0, e.pos.z + Math.sin(a) * r);
+    if (Math.hypot(at.x, at.z) > ARENA.radius - 2 || inObstacle(at, 0.7)) continue;
+    if (G.players.some((p) => p.active && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 3)) continue;
+    return at;
+  }
+  return null;
 }
 
 /** A spot in the arena clear of props and 5 m from every hero, or null after a few tries. */

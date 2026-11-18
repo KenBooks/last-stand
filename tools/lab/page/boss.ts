@@ -526,12 +526,13 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
   const ward = ENEMIES.cantor.bossKit!.ward!;
   const asGuard = ENEMIES.bellwarden.asGuard!;
   const lesser = { ...BELL_WARDEN.guard };
-  const planted = { taken: ward.taken, size: asGuard.size, stands: asGuard.stands };
+  const planted = { taken: ward.taken, size: asGuard.size, stands: asGuard.stands, every: BELL_WARDEN.guard.raise.every };
   // (the canary: a ward that wards nothing, and guards as whole Bell-Wardens that walk, their tolls a whole bell's)
   if (options.canary) {
     ward.taken = 1;
     asGuard.size = 1;
     asGuard.stands = false;
+    BELL_WARDEN.guard.raise.every = CANARY_RAISE_EVERY;
     Object.assign(BELL_WARDEN.guard, { reach: BELL_WARDEN.toll.reach, stunsTo: BELL_WARDEN.toll.stunsTo });
   }
   const taken = planted.taken;
@@ -541,6 +542,8 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
     const rose = guards.map((guard) => guard.pos.clone());
     let moved = 0;
     const ghostsMost = guards.map(() => 0);
+    const dead = new DeadRaised(guards);
+    lab.keepRisen();
     const landed: Landed[] = [], rings: Landed[] = [];
     let wardedFrames = 0, frames = 0, wardTaken = 1, seizedFrames = 0, wasStunned = false;
     const stunsFrom: number[] = [];
@@ -555,7 +558,9 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
       wasStunned = hero.stunned;
       moved = Math.max(moved, ...guards.map((guard, i) => guard.pos.distanceTo(rose[i])));
       guards.forEach((guard, i) => { ghostsMost[i] = Math.max(ghostsMost[i], ghostsFree(guard.model.root)); });
+      dead.look();
     });
+    dead.judgeStanding(GUARDED_FOR, lines, problems);
     bearersGone(guards, ghostsMost, lines, problems);
     guardTolls(stunsFrom, seizedFrames, lesser.stunsTo, lines, problems);
     guardsStood(moved, lines, problems);
@@ -570,10 +575,13 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
     for (const guard of guards) guard.takeDamage(guard.life + 1, {});
     let unwarded = 0, bared = 0;
     const afterAt = landed.length;
+    dead.fallen();
     await fight(lab, UNGUARDED_FOR, landed, rings, () => {
+      dead.look();
       if (!cantor.warded) unwarded++;
       if (cantor.weak > 0) bared++;
     });
+    dead.judgeFallen(lines, problems);
     const casts = landed.slice(afterAt).filter((hit) => hit.id === cantor.id).length;
     lines.push(`encounter: guards down ${UNGUARDED_FOR} s: unwarded ${unwarded} frames, ${casts} casts landed, `
       + `its heart bared ${fixed(bared / FPS, 1)} s`);
@@ -594,6 +602,7 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
     ward.taken = planted.taken;
     asGuard.size = planted.size;
     asGuard.stands = planted.stands;
+    BELL_WARDEN.guard.raise.every = planted.every;
     Object.assign(BELL_WARDEN.guard, lesser);
   }
 }
@@ -608,6 +617,75 @@ function lesserGuards(cantor: Enemy, guards: Enemy[], lines: string[], problems:
   lines.push(`encounter: the guards ${fixed(tallest, 2)} m tall against the Cantor's ${fixed(cantor.height, 2)} m (${fixed(share, 2)}), `
     + `${fixed(guards[0].radius, 2)} m round`);
   if (share > GUARD_HEIGHT_MOST) problems.push(`encounter: a guard stands ${fixed(share, 2)} of the Cantor's height, over ${GUARD_HEIGHT_MOST}`);
+}
+
+/** The canary's guards raise the dead this often (s): far more often than their interval. */
+const CANARY_RAISE_EVERY: [number, number] = [3, 3];
+/** How near a guard a risen foe counts as its (m), and how far apart in time two risings are one group (s). */
+const RAISED_NEAR = 9, GROUP_GAP = 1;
+/** The slack on a guard's interval between groups (s): the frames a group takes to be seen. */
+const RAISE_SLACK = 0.5;
+
+/** The dead each standing guard raises (from play: "make sure they spawn mobs once in a while"), seen as they rise:
+ *  the foes new to the fight near a guard, grouped by when they came; and the most foes up at once. */
+class DeadRaised {
+  private readonly seen = new Set<Enemy>();
+  /** each guard's groups: when each rose */
+  private readonly groups: number[][];
+  private mostAlive = 0;
+  private afterFall = 0;
+  private fell = false;
+  private readonly start = G.time;
+
+  constructor(private readonly guards: Enemy[]) {
+    for (const foe of G.enemies) this.seen.add(foe);
+    this.groups = guards.map(() => []);
+  }
+
+  /** This frame: every foe new to the fight near a guard, and how many are up. */
+  look(): void {
+    this.mostAlive = Math.max(this.mostAlive, G.enemies.filter((foe) => foe.alive).length);
+    for (const foe of G.enemies) {
+      if (this.seen.has(foe)) continue;
+      this.seen.add(foe);
+      const near = this.guards.findIndex((guard) => guard.pos.distanceTo(foe.pos) < RAISED_NEAR + guard.radius);
+      if (near < 0) continue;
+      if (this.fell) {
+        this.afterFall++;
+        continue;
+      }
+      const times = this.groups[near];
+      if (!times.length || G.time - times[times.length - 1] > GROUP_GAP) times.push(G.time);
+    }
+  }
+
+  /** The guards have fallen: what rises near them from now on is a fault. */
+  fallen(): void { this.fell = true; }
+
+  /** With the guards standing `seconds`: each raised its first group by `first` and the next ones `every` apart. */
+  judgeStanding(seconds: number, lines: string[], problems: string[]): void {
+    const raise = BELL_WARDEN.guard.raise;
+    const most = WAVES.maxAlive(G.run?.wave ?? 1, G.run?.party ?? 0);
+    this.groups.forEach((times, i) => {
+      const at = times.map((t) => (t - this.start).toFixed(1)).join(', ') || 'never';
+      lines.push(`encounter: guard ${i + 1} raised the dead at ${at} s of ${seconds}`);
+      if (!times.length) problems.push(`encounter: guard ${i + 1} raised no dead in ${seconds} s standing`);
+      times.slice(1).forEach((t, k) => {
+        const gap = t - times[k];
+        if (gap < raise.every[0] - RAISE_SLACK || gap > raise.every[1] + RAISE_SLACK) {
+          problems.push(`encounter: guard ${i + 1} raised the dead ${gap.toFixed(1)} s after the last, not ${raise.every[0]} to ${raise.every[1]}`);
+        }
+      });
+    });
+    lines.push(`encounter: at most ${this.mostAlive} foes up at once, the wave's limit ${most}`);
+    if (this.mostAlive > most) problems.push(`encounter: ${this.mostAlive} foes up at once, past the wave's limit of ${most}`);
+  }
+
+  /** After the guards fell: nothing more rose near them. */
+  judgeFallen(lines: string[], problems: string[]): void {
+    lines.push(`encounter: ${this.afterFall} risen near the guards after they fell`);
+    if (this.afterFall) problems.push(`encounter: ${this.afterFall} foes rose near the guards after they fell`);
+  }
 }
 
 /** A Bell-Warden's bearers: each a body off its root, from its hips (models/bellWarden.ts `userData.bearers`). */
@@ -915,6 +993,7 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   const spot = clearSpot(12, ENEMIES.cantor.radius);
   await lab.setup({ ...options.fixture, at: SPOT, facing: Math.atan2(spot.x - SPOT[0], spot.z - SPOT[1]) });
   const { cantor, guards } = await encounterAt(lab);
+  lab.keepRisen();
   const hero = G.player;
   const moments: Pictured[] = [];
   const keepWhole = (): Record<string, never> => {
@@ -947,6 +1026,10 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   const planted = guards[1].pos.clone().setY(1.2);
   moments.push(lab.picture('1c a guard from above', ['plan'], ['a guard close from straight above: its bell in its frame on the ground, no bearers, its ghost about it'], { at: planted, distance: GUARD_SEEN_FROM }));
   moments.push(lab.picture('1d a guard from its side', ['left', 'front'], ['a guard close from its side: its frame standing on its poles, its chains hanging to the floor'], { at: planted, distance: GUARD_SEEN_FROM }));
+  // (its dead rising round it: its next raising called now, pictured as they climb out of the floor)
+  guards[1].brain.raiseAt = G.time;
+  await lab.step(DEAD_SEEN_AFTER, keepWhole);
+  moments.push(lab.picture('1e the dead rise round a guard', ['plan'], ['a guard raising the dead round its frame, as it does every 15 to 20 s while it stands'], { at: planted, distance: DEAD_SEEN_FROM }));
   // 1b. a guard's toll: its ring rolling out
   await actUntil(guards[0], 'toll', 0.98);
   // (its ring out past the guard's own glow on the floor, short of where it fades; pictured at the guard, which
@@ -1015,6 +1098,9 @@ async function pictureBeside(lab: Lab, moments: Pictured[], guard: Enemy, hero: 
   hero.pos.copy(stood);
   await lab.step(FOLLOW_FRAMES);
 }
+
+/** Frames after a guard raises its dead that they're pictured, and from how far (m): risen out of the floor. */
+const DEAD_SEEN_AFTER = 70, DEAD_SEEN_FROM = 30;
 
 /** How far a guard is pictured close from (m). */
 const GUARD_SEEN_FROM = 12;
