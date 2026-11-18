@@ -141,7 +141,7 @@ export function recordsShown(): RecordsShown {
       ['Most foes in one run', c.mostKills ? num(c.mostKills) : '—'],
       ['Most damage in one run', c.mostDealt ? num(c.mostDealt) : '—'],
       ['Favourite skill', fav ? skillName(p.classId, fav.impl) : '—'],
-      ['Its casts', fav ? num(fav.casts) : '—'],
+      ['Times cast', fav ? num(fav.casts) : '—'],
       ['Falls', String(c.deaths)],
       ['Partners raised', String(c.revives)],
       ['Runs with a party', String(c.coopRuns)],
