@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, TROPHIES, type RoomId } from '../data/houses';
-import { BIOMES, BIOME_IDS } from '../data/biomes';
+import { BIOMES, BIOME_IDS, rungBoss } from '../data/biomes';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { RARITIES } from '../data/items';
@@ -160,11 +160,13 @@ export function recordsShown(): RecordsShown {
       ...RARITIES.map((x) => [`· ${x.name}`, num(c.bankedBy[x.id] ?? 0)] as const),
     ],
   };
-  const bosses = [...new Set([...BIOME_IDS.map((b) => BIOMES[b].boss), ...(Object.keys(TROPHIES) as EnemyId[])])];
+  // (each boss wave's boss, a pair under its first by its pair's name)
+  const waves = BIOME_IDS.flatMap((b) => [BIOMES[b].boss, ...(BIOMES[b].bossWaves ?? []).map((s) => s.id)]);
+  const bosses = [...new Set([...waves, ...(Object.keys(TROPHIES) as EnemyId[])])].filter((b) => rungBoss(b) === b);
   const right: Board = {
     title: 'Bosses Slain',
     rows: [
-      ...bosses.map((b) => [ENEMIES[b]?.name ?? b, String(slain[b] ?? 0)] as const),
+      ...bosses.map((b) => [ENEMIES[b]?.pair ?? ENEMIES[b]?.name ?? b, String(slain[b] ?? 0)] as const),
       ['By this hero', String(Object.values(c.bosses).reduce((a, n) => a + n, 0))],
       ['Damage over all runs', num(c.dealt)],
       ['Heroes of this slot', String(heroes.length)],

@@ -1,0 +1,123 @@
+// What a boss's fight is made of beyond its own look and its own attacks (the Ossuary Twins', entities/twins.ts), so a
+// boss is mostly data (`EnemyDef.bossKit`) and its model. Class-agnostic.
+//
+// - **Phases** by the share of its life left (`BossKitDef.phases`): entered in order where the fight is simulated (the
+//   host's game in co-op) as its life falls past each, every one passed through entered, and told to every game through
+//   enemyAI's `fx('bossPhase')`: its banner, its cue (`BossHooks.cue`), `Enemy.bossPhase` set. Its own gameplay of the
+//   phase (`BossHooks.enter`, `exit`) runs where it's simulated alone.
+// - **Telegraphed attacks** (`telegraphed`, `BossKitDef.attacks`): an action of its own name whose hit lands as its
+//   warning ends, the model told the share (`ActionState.hit`, from the data, so a guest's copy has it too) to show it
+//   coming, and a ring on the floor where it will land where the attack has one. A fight's warned hits are kept apart
+//   (`claimBeat`), so two never land together.
+// - **A shared life** (data/biomes.ts `BossWave.twin`, `EnemyDef.shares`): two bosses rising together, each given the
+//   pair's whole life, a hit on either taking it from both (`shareHit`), each counting what it took (`Enemy.taken`); a
+//   killing blow fells both, the second paying no spoils (`Enemy.noSpoils`), so the pair pays once.
+import { G } from '../state';
+import { fx } from './enemyAI';
+import type { Enemy } from './enemy';
+import type { BossLook } from '../types';
+import { emit } from '../events';
+import { hooksOf } from './bossHooks';
+
+export { bossHooks, type BossHooks } from './bossHooks';
+
+/** The phase `share` of its life puts a boss of `e`'s kind in: the last whose `below` it's under (the first's is 1). */
+export function phaseAt(e: Enemy, share: number): number {
+  const phases = e.def.bossKit?.phases ?? [];
+  let n = 0;
+  for (let i = 1; i < phases.length; i++) if (share < phases[i].below) n = i;
+  return n;
+}
+
+/** Where the fight is simulated, after a hit of `amount` it lived through: its own `hurt`, and every phase it has
+ *  passed into, entered in turn. */
+export function checkPhase(e: Enemy, amount = 0): void {
+  if (!e.def.bossKit || e.net || !e.alive) return;
+  if (amount > 0) hooksOf(e.type)?.hurt?.(e, amount);
+  // (its hurt may have felled it: the Twins' collapse at half)
+  if (!e.alive) return;
+  const to = phaseAt(e, e.life / e.maxLife);
+  while (e.bossPhase < to) fx('bossPhase', e.id, e.bossPhase + 1);
+}
+
+/** Phase `phase` begun on this game (enemyAI's `bossPhase` fx): set, its hooks run, its banner shown. */
+export function phaseBegun(e: Enemy, phase: number): void {
+  if (phase <= e.bossPhase) return;
+  const was = e.bossPhase, hooks = hooksOf(e.type);
+  e.bossPhase = phase;
+  if (!e.net) {
+    hooks?.exit?.(e, was);
+    hooks?.enter?.(e, phase);
+  }
+  hooks?.cue?.(e, phase);
+  emit('bossPhase', e, phase);
+}
+
+/** The share of a telegraphed attack `name` its hit lands at (its warning over its whole), or null for none. */
+export function telegraphShare(e: Enemy, name: string): number | null {
+  const a = e.def.bossKit?.attacks?.[name];
+  return a ? a.warn / Math.max(0.01, a.warn + a.recover) : null;
+}
+
+/** The whole time of telegraphed attack `name` (its warning and recovery, s). */
+export function telegraphTime(e: Enemy, name: string): number {
+  const a = e.def.bossKit!.attacks![name];
+  return a.warn + a.recover;
+}
+
+/** A ring on the floor where a telegraphed attack lands, for its warning's time (gone with it if the boss dies or is
+ *  dazed first). */
+export interface TelegraphRing { x: number; z: number; radius: number; color: number }
+
+/**
+ * Telegraphed attack `name` begun (its `TelegraphDef`): `hit` run as its warning ends, `more` at their own shares of
+ * the action, its ring on the floor meanwhile where it has one. Its model shows the warning by the action's name and
+ * share (`ActionState.hit`).
+ */
+export function telegraphed(e: Enemy, name: string, hit: () => void, ring?: TelegraphRing, more: [number, () => void][] = []): void {
+  const share = telegraphShare(e, name);
+  if (share === null) throw new Error(`${e.type} has no telegraphed attack "${name}"`);
+  const dur = telegraphTime(e, name);
+  if (ring) fx('tele', e.id, ring.x, ring.z, ring.radius, dur * share, ring.color);
+  e.startAction(name, dur, [[share, hit], ...more]);
+}
+
+/** When the fight's last warned hits land (G.time, from and to), across every boss in it (`claimBeat`). */
+const beat = { from: -Infinity, to: -Infinity };
+
+/**
+ * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
+ * landing within `gap` s of them? Taken if so (the next must keep clear of it): the Twins' slam and skulls never land
+ * together.
+ */
+export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
+  const from = G.time + hitIn, to = from + span;
+  if (from < beat.to + gap && to > beat.from - gap) return false;
+  beat.from = from; beat.to = to;
+  return true;
+}
+
+/** Each frame a boss lives, on every game: its own `frame` (`BossHooks.frame`). */
+export function bossFrame(e: Enemy, dt: number): void {
+  hooksOf(e.type)?.frame?.(e, dt);
+}
+
+/** The boss sharing `e`'s life (`EnemyDef.shares`), while it stands. */
+export const partnerOf = (e: Enemy): Enemy | null =>
+  (e.def.shares ? G.enemies.find((x) => x.alive && x.type === e.def.shares) ?? null : null);
+
+/** On every game, as a hit of `amount` takes `e`'s life (before its death is decided): its partner's life made its own,
+ *  the hit counted against it, its last unhit time kept; a killing blow fells the partner too, which pays nothing. */
+export function shareHit(e: Enemy, amount: number): void {
+  const p = partnerOf(e);
+  if (!p) return;
+  e.taken += amount;
+  e.brain.hitAt = G.time;
+  p.life = Math.max(0, e.life);
+  if (e.life <= 0) { p.noSpoils = true; p.die(); }
+}
+
+/** What a boss's model is told of its fight this frame (`AnimState.boss`). */
+export function bossLook(e: Enemy): BossLook | undefined {
+  return e.def.bossKit ? { phase: e.bossPhase } : undefined;
+}

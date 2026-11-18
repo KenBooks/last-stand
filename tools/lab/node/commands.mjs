@@ -1282,6 +1282,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  twins: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        canary: Boolean(options.canary),
+        ...(options.parts ? { parts: options.parts } : {}),
+      };
+      return side.command('twins', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('twins'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   evade: {
     check(options) {
       if (options.tries !== undefined && !(options.tries >= 3)) throw labError('evade --tries: at least 3');

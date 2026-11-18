@@ -23,8 +23,8 @@ function below(y: number): Shape {
   return { distance: (_x, py) => py - y, centre: [0, 0, 0], radius: Infinity };
 }
 
-/** the sculpt's parts (m, a man's skull): what's joined, then what's cut away */
-function skullParts(): Part[] {
+/** the sculpt's parts (m, a man's skull, its teeth's foot at y 0): what's joined, then what's cut away */
+export function skullParts(): Part[] {
   const parts: Part[] = [];
   const join = (shape: Shape, blend: number) => parts.push({ shape, frame: IDENTITY, blend, bones: [] });
   const cut = (shape: Shape, blend: number) => parts.push({ shape, frame: IDENTITY, blend, cut: true, bones: [] });
@@ -55,14 +55,26 @@ function skullParts(): Part[] {
   return parts;
 }
 
+/** the box the skull's sculpt is meshed in (m) */
+export const SKULL_BOX = new THREE.Box3(new THREE.Vector3(-0.09, -0.01, -0.12), new THREE.Vector3(0.09, 0.18, 0.13));
+
 /** The skull's geometry (positions, normals, vertex colours), made once. */
 export function skullGeometry(cell = CELL): THREE.BufferGeometry {
-  const field = fieldOf(skullParts());
-  const box = new THREE.Box3(new THREE.Vector3(-0.09, -0.01, -0.12), new THREE.Vector3(0.09, 0.18, 0.13));
+  const g = netGeometry(fieldOf(skullParts()), SKULL_BOX, cell);
+  g.computeBoundingBox();
+  g.translate(0, -g.boundingBox!.min.y, 0).scale(SIZE, SIZE, SIZE);
+  g.computeBoundingSphere();
+  return g;
+}
+
+/** The surface of `field` within `box` meshed on a grid of `cell` (m), its hollows darkened in its vertex colours
+ *  (asked along each normal at steps of `step`), in the field's own space. */
+export function netGeometry(field: (x: number, y: number, z: number) => number, box: THREE.Box3, cell: number,
+  step = OCCLUSION_STEP): THREE.BufferGeometry {
   const net = surfaceNets(field, box, cell);
   const colours = new Float32Array(net.positions.length);
   for (let v = 0; v < net.positions.length; v += 3) {
-    const shade = 1 - DARKEST * occlusion(field, net.positions, net.normals, v);
+    const shade = 1 - DARKEST * occlusion(field, net.positions, net.normals, v, step);
     colours.set([shade, shade, shade], v);
   }
   const g = new THREE.BufferGeometry();
@@ -71,8 +83,6 @@ export function skullGeometry(cell = CELL): THREE.BufferGeometry {
   g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
   g.setIndex(new THREE.BufferAttribute(net.index, 1));
   g.normalizeNormals();
-  g.computeBoundingBox();
-  g.translate(0, -g.boundingBox!.min.y, 0).scale(SIZE, SIZE, SIZE);
   g.computeBoundingSphere();
   return g;
 }
@@ -89,14 +99,14 @@ export function restingLift(g: THREE.BufferGeometry, q: THREE.Quaternion, scale:
 
 /** How closed in the surface is at vertex `v` (0 open to 1 in a hollow): the field asked out along its normal, each
  *  step nearer to the surface than its length a share of the dark. */
-function occlusion(field: (x: number, y: number, z: number) => number, p: Float32Array, n: Float32Array, v: number):
-  number {
+function occlusion(field: (x: number, y: number, z: number) => number, p: Float32Array, n: Float32Array, v: number,
+  step = OCCLUSION_STEP): number {
   const length = Math.hypot(n[v], n[v + 1], n[v + 2]) || 1;
   let closed = 0;
   let weight = 1;
   let total = 0;
   for (let i = 1; i <= OCCLUSION_STEPS; i++) {
-    const h = i * OCCLUSION_STEP;
+    const h = i * step;
     const d = field(p[v] + n[v] * h / length, p[v + 1] + n[v + 1] * h / length, p[v + 2] + n[v + 2] * h / length);
     closed += weight * Math.max(0, h - d) / h;
     total += weight;

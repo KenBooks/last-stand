@@ -763,6 +763,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
+- `twins`: the Ossuary Twins (`page/twins.ts`; `src/entities/twins.ts`, `src/entities/bossKit.ts`), the Crypt's
+  special boss wave (`bossWaves` in `src/data/biomes.ts`). `waves`: each battleground's boss waves (5 to 35) set off
+  as the game sets them off, the run's wave and its timer, and stopped before anyone comes: the bosses the run holds
+  (`RunState.boss`), the banner's line and the Continue button's name, against what each should send (the Twins on
+  the Crypt's 15th and 35th, the Colossus on its others, the Thornheart on every one of the Thornwood's); then the
+  Crypt's 15th let come, its foes taken out, until both twins have risen: within their chain's reach of each other.
+  `fight`, each on a fresh set-up with the pair risen abreast 5 m apart: two hits of a tenth, one on each, leaving
+  0.8 of the pair's life on both; Reliquary set past the chain's reach across the hero, the chain snapping, hurting
+  him and dragging them 2 m nearer at least; Slab struck harder past half, he alone falling, paying nothing, and
+  Reliquary in its phase; Reliquary hurt with the hero far off, its mend raising the pair's life by its `heal` (10%
+  under at most), the next stunned a second in raising it by under half that. `compiles`: every effect of their
+  fight sent through `fx` with the pair drawn (the chain's snap, a volley, a charge, a slam's ring and blow, a mend
+  begun and done, the phase), no program compiled. `pictures` (asked for alone): nine moments, the pair from behind
+  the hero and above. `look` (asked for alone): each twin alone from four sides and its skull close up, its triangles
+  at most 45k (Slab 42k, Reliquary 44k), with each bone's. `--canary`: the Crypt's special wave taken out, the pair's
+  `shares`, a chain whose reach is a kilometre, Slab's `hurt` hook, a mend that heals nothing, a program compiled.
+  About a minute for the default parts.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

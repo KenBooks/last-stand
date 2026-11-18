@@ -40,8 +40,9 @@ import { buildableLook, readyLook } from '../game/looks';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
  *  rooms' cards, whose `v` keeps a list to the rooms this game can join; 39: a guest's `rdy` says how far
- *  along its readying is; 40: a hero's look and hair colour, `Look.hl`) */
-export const PROTOCOL = 40;
+ *  along its readying is; 40: a hero's look and hair colour, `Look.hl`; 41: the Ossuary Twins' fx, a boss's phase,
+ *  their chain, charge, skulls and mend) */
+export const PROTOCOL = 41;
 /** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
 const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within

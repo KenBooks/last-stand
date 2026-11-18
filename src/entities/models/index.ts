@@ -14,6 +14,7 @@ import { buildMossback } from './mossback';
 import { buildSporecaller } from './sporecaller';
 import { buildTreant } from './treant';
 
+import { buildTwinReliquary, buildTwinSlab } from './twins';
 import type { Model } from '../../types';
 
 export const MODELS: Record<string, () => Model> = {
@@ -25,6 +26,8 @@ export const MODELS: Record<string, () => Model> = {
   witch: buildWitch,
   brute: () => buildBrute('brute'),
   colossus: () => buildBrute('colossus'),
+  twinslab: buildTwinSlab,
+  twinreliquary: buildTwinReliquary,
   thornling: buildThornling,
   mossback: buildMossback,
   sporecaller: buildSporecaller,

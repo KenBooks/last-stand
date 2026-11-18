@@ -1398,6 +1398,30 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  twins: {
+    help: 'the Ossuary Twins: each battleground\'s boss waves set off, the bosses the run sends, its banner and the '
+      + 'Continue button\'s name (the Twins on the Crypt\'s 15th and every 20th after, the Colossus on its other boss '
+      + 'waves), and the 15th let come, both risen within their chain\'s reach (waves); one life between them, the '
+      + 'chain snapping past its reach, the collapse at half, a mend that a stun breaks (fight); their fight\'s '
+      + 'effects drawn, no program compiled (compiles)',
+    options: {
+      parts: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['waves', 'fight', 'compiles', 'pictures', 'look'],
+        help: 'the parts (all but the pictures by default): waves, fight, compiles, pictures (the pair in each of '
+          + 'their moments, a sheet for the eye), look (each twin alone from four sides and its skull close up, its '
+          + 'triangles held to 45k)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault each part must catch: no special boss wave, Twins that share nothing, a chain that never '
+          + 'snaps, no collapse at half, a mend that mends nothing, a program compiled in the fight',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   throws: {
     help: 'what the slamming foes throw at a hero too far off to slam, the thrower held to its spot and throwing as '
       + 'its AI has it, a throw a case: the Cinder Brute\'s lava at him stood still (it must land where he stood as '

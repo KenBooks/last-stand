@@ -5,6 +5,7 @@ import { G } from '../state';
 import { on } from '../events';
 import { isCoop } from '../net/role';
 import { mine } from './stats';
+import { rungBoss } from '../data/biomes';
 import type { ChronicleRecords, Item, Profile } from '../types';
 
 /** A hero's chronicle as stored, made empty where it never had one (a profile from before the house was built). */
@@ -43,9 +44,10 @@ export function recordRunEnd(kind: 'banked' | 'dead', waves: number, seconds: nu
 
 // (a boss slain counts for every hero still in the run, on each game: a boss is the party's, as its drops are)
 on('enemyKilled', (e) => {
-  if (!e.boss || e.training || !counting()) return;
-  const bosses = chronicleOf(G.profile).bosses;
-  bosses[e.type] = (bosses[e.type] ?? 0) + 1;
+  // (a pair counts once, under the boss its twin rises with: the twin felled with it pays nothing)
+  if (!e.boss || e.training || e.noSpoils || !counting()) return;
+  const bosses = chronicleOf(G.profile).bosses, id = rungBoss(e.type);
+  bosses[id] = (bosses[id] ?? 0) + 1;
 });
 
 /** The skill a hero cast most in runs (its `impl`), or null. */

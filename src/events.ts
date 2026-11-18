@@ -6,6 +6,8 @@ import type { BiomeId } from './data/biomes';
 
 export interface GameEvents {
   enemyKilled: [enemy: Enemy];
+  /** a boss entered phase `phase` of its fight (entities/bossKit.ts), on every game */
+  bossPhase: [enemy: Enemy, phase: number];
   playerDied: [player: Player];
   playerHurt: [amount: number];
   lootGained: [item: Item];

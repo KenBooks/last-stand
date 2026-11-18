@@ -2,7 +2,7 @@
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
-import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
+import { BOSS_AI, ENEMIES, HERO, SCALING, TWINS, type EnemyId } from '../../data/enemies';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -37,6 +37,8 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
 function metAt(id: EnemyId): { biome: BiomeId; from: number } | null {
   for (const biome of BIOME_IDS) {
     if (BIOMES[biome].boss === id) return { biome, from: WAVES.bossEvery };
+    const special = BIOMES[biome].bossWaves?.find((s) => s.id === id || s.twin === id);
+    if (special) return { biome, from: special.wave };
     for (let w = 1; w <= LAST_LOOKED; w++) if (BIOMES[biome].pool(w).some(([e]) => e === id)) return { biome, from: w };
   }
   return null;
@@ -80,9 +82,16 @@ function figures(foe: Foe): string {
   ];
   if (d.knockbackResist) items.push(tile('Knockback', `${pct(d.knockbackResist)} resisted`, d.knockbackResist >= 1 ? 'never moved' : ''));
   if (d.freezeResist) items.push(tile('Freezes, dazes', `${pct(d.freezeResist)} shorter`));
-  if (d.boss) items.push(tile('Comes', `every ${WAVES.bossEvery}th wave`, BIOMES[foe.biome].title));
+  if (d.boss) items.push(tile('Comes', ...comes(foe)));
   else items.push(tile('First seen', `wave ${foe.from}`, BIOMES[foe.biome].title));
   return tiles(items);
+}
+
+/** When a boss comes: its biome's boss waves, or a special boss wave's (data/biomes.ts `bossWaves`). */
+function comes(foe: Foe): [string, string] {
+  const special = BIOMES[foe.biome].bossWaves?.find((s) => s.id === foe.id || s.twin === foe.id);
+  if (special) return [`wave ${special.wave}`, `then every ${special.every}th · ${BIOMES[foe.biome].title}`];
+  return [`every ${WAVES.bossEvery}th wave`, BIOMES[foe.biome].title];
 }
 
 /** Its attacks, each with its figures. */
@@ -103,7 +112,8 @@ function attacks(foe: Foe): string[] {
   if (th?.what === 'vine' && th.creep) {
     out.push(`<b>Vine:</b> from ${metres(th.from)} to ${metres(th.reach)} away it sends a vine creeping along the floor at ${num(th.creep[0])} m/s, through anything in its way. If its tip comes within ${metres(th.creep[1])} of you, you are held to the spot for ${secs(th.creep[2])}; a dash or a blink tears you free.`);
   }
-  if (d.boss) {
+  if (d.ai === 'twins') out.push(...twinsAttacks(foe));
+  if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
     if (d.projectile) {
@@ -122,6 +132,27 @@ function attacks(foe: Foe): string[] {
     out.push(`<b>Evasion:</b> it ${what} from ${pct(ev.chance)} of the ${from.join(', ')} it sees coming at it from the front.`);
   }
   return out;
+}
+
+/** One of the Ossuary Twins' fight, each with its figures (data/enemies.ts `TWINS` and its boss kit): its own attacks,
+ *  and what the pair shares (one life, the chain). */
+function twinsAttacks(foe: Foe): string[] {
+  const d = foe.def, t = TWINS, kit = d.bossKit!, hit = damage(d, foe.from);
+  const brother = d.shares ? ENEMIES[d.shares].name : 'its brother';
+  const slab = foe.id === 'twinslab';
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const own = slab ? [
+    `<b>Grave slam:</b> he lifts the tombstone for ${secs(warn('slam'))} over a ring ${metres(t.slam.radius * 2)} across, ${metres(t.slam.ahead)} before him, then brings it down for ${whole(hit)} ${typed(d)} damage.`,
+    `<b>Shoulder charge:</b> at a hero up to ${metres(t.charge.reach)} away: its line is ringed for ${secs(warn('charge'))}, then he runs it at ${num(t.charge.speed)} m/s for ${whole(hit * t.charge.hurt)} damage to whoever he meets.`,
+  ] : [
+    `<b>Skull volley:</b> ${t.volley.least} to ${t.volley.most} skulls after ${secs(warn('volley'))}, each curving in on its own arc to where you stood, at ${num(t.volley.speed)} m/s, ${whole(hit)} damage each. It keeps 9 to 13 m off you.`,
+    `<b>Mend:</b> once ${brother} has stood hurt and unhit for ${secs(t.mend.untouched)}, it raises its casket for ${secs(warn('mend'))} and mends the pair by ${pct(t.mend.heal)} of their life. A stun or a freeze breaks it.`,
+  ];
+  return [
+    `<b>One life:</b> it shares its life with ${brother}: every hit on either takes it from both. At ${pct(0.5)} the one that has taken more falls, and the other moves ${pct(t.alone.faster - 1)} faster, attacks sooner and takes up its brother's attack too.`,
+    ...own,
+    `<b>The chain:</b> if the two drift more than ${metres(t.chain.max)} apart it snaps tight, dragging them together and dealing ${whole(damage(ENEMIES.twinslab, foe.from) * t.chain.hurt)} damage to a hero within ${metres(t.chain.reach)} of its line.`,
+  ];
 }
 
 /** Elites: any common foe may come as one, from the wave they start to show. */
