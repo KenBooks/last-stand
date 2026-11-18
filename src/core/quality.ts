@@ -12,6 +12,7 @@ import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
 import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
 import { setParticleShare } from '../fx/particles';
+import { setFlameSteps } from '../world/fire';
 
 import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
@@ -235,6 +236,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);
   setGearGlowByLevel(p.gearGlow);
+  setFlameSteps(p.flameSteps, p.flameLite);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
