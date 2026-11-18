@@ -690,7 +690,7 @@ function normalAt(field: Field, point: THREE.Vector3): THREE.Vector3 {
 
 /** A nail on the back of `digit`'s tip: a plate laid on the skin, rounded at its root, its edge a rim into the skin,
  *  moving with the tip's joint (`bone`). Its vertices, normals and triangles are added to `into`. */
-function nail(field: Field, digit: DigitShape, bone: number, space: THREE.Object3D, into: NailMesh,
+function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: THREE.Object3D, into: NailMesh,
   thumb: boolean): void {
   const tip = digit.j[2];
   const toHand = new THREE.Matrix4().fromArray(frameIn(tip, space)).invert();
@@ -707,9 +707,12 @@ function nail(field: Field, digit: DigitShape, bone: number, space: THREE.Object
     for (let c = 0; c <= NAIL_ACROSS; c++) {
       const local = new THREE.Vector3(across * (2 * c / NAIL_ACROSS - 1), -t * l2, digit.width * 2);
       const from = local.applyMatrix4(toHand);
-      const on = surfaceAlong(field, from, down, digit.width * 3);
-      if (!on) throw new Error('handShape: a nail found no fingertip under it');
-      const normal = normalAt(field, on);
+      // (a hand sculpted closed has its fingers' nails pressed into the curl, under other flesh: each is laid on its
+      // own finger's surface there, hidden until the hand opens)
+      const hand = surfaceAlong(field, from, down, digit.width * 3);
+      const on = hand ?? surfaceAlong(own, from, down, digit.width * 3);
+      if (!on) throw new Error(`handShape: a nail found no fingertip under it (bone ${bone}, hand ${!!hand}, own at start ${own(from.x, from.y, from.z).toFixed(4)})`);
+      const normal = normalAt(hand ? field : own, on);
       row.push(into.add(on.addScaledVector(normal, NAIL_OUT), normal, bone));
     }
     rows.push(row);
@@ -823,7 +826,14 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const box = boxOf(digits, space);
   const frames = digits.map((digit) => digit.j.map((joint) => frameIn(joint, space)));
   const nails = new NailMesh();
-  digits.forEach((digit, i) => nail(hand, digit, 3 + i * 3, space, nails, i === fingers.length));
+  digits.forEach((digit, i) => {
+    const thumb = i === fingers.length;
+    // (its tip's segment alone: in a fist the finger's own first segment lies over its nail)
+    const tipBone = 3 + i * 3;
+    const own = fieldOf(digitParts(digit, 1 + i * 3, space, thumb)
+      .filter((part) => !part.sayOnly && part.bones.every(([bone]) => bone === tipBone)));
+    nail(hand, own, digit, 3 + i * 3, space, nails, thumb);
+  });
   const skin = skinnedNet(hand, box, parts, COARSE_SHARE.skin);
   shadeSkin(skin, hand, digits, frames);
   return {

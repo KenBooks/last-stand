@@ -176,9 +176,20 @@ function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material
   return mesh;
 }
 
-/** The hand's shape sculpted afresh on its joints, posed open as it's sculpted (the lab's `hands` times it). */
+/** The hand's joints turned as it's sculpted and bound: open, its fingers a little spread, or closed in its fist
+ *  (its build's `sculptedIn`). */
+function poseToSculpt(h: Hand): void {
+  if (h.build.sculptedIn === 'open') {
+    poseHand(h, 0, SCULPT_SPREAD);
+    return;
+  }
+  const turns = closedFistPose(h);
+  [...h.f, h.thumb].forEach((digit, i) => digit.j.forEach((j, n) => j.quaternion.copy(turns[i][n])));
+}
+
+/** The hand's shape sculpted afresh on its joints, posed as it's sculpted (the lab's `hands` times it). */
 export function sculptAfresh(h: Hand): HandGeometries {
-  poseHand(h, 0, SCULPT_SPREAD);
+  poseToSculpt(h);
   const { digits } = h.build;
   const fingers = h.f.map((d, i) => ({ j: d.j, len: d.len, width: FINGERS[i].width * digits }));
   const thumb = { j: h.thumb.j, len: h.thumb.len, width: THUMB.width * digits };
@@ -271,8 +282,8 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   const f = FINGERS.map((spec) => digitOn(vis, s, spec, build));
   const thumb = digitOn(vis, s, THUMB, build);
   const h = { vis, f, thumb, s, build, made: { glove, skin, bareSkin, k } } as Hand;
-  // bound to its joints as it was sculpted, open
-  poseHand(h, 0, SCULPT_SPREAD);
+  // bound to its joints as it was sculpted
+  poseToSculpt(h);
   const shape = sculpted(h);
   let top: THREE.Object3D = vis;
   while (top.parent) top = top.parent;

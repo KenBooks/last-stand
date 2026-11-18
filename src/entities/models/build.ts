@@ -21,14 +21,23 @@ export interface HandBuild {
   deep: number;
   /** the knuckles' heads across the back of the hand, their size over the fingers' widths */
   knuckles: number;
+  /** the pose it's sculpted and bound in: open, or closed in its fist (`closeFist`), for a hand held closed nearly
+   *  always. Sculpted open and bent shut, a fist's fingers were tubes apart, grooves between them, and its thumb a stick
+   *  off the palm with the web open under it (from play: "this is not a natural fist shape"); sculpted shut, the
+   *  flesh pressed together is one surface, as a fist's is. */
+  sculptedIn: 'open' | 'fist';
 }
 
 /** a hand as it was sculpted before builds: the mage's, the ranger's, the villagers' */
-export const PLAIN: HandBuild = { name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1 };
+export const PLAIN: HandBuild = {
+  name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1, sculptedIn: 'open',
+};
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
  *  some 12% wider at their joints than an office worker's, the palm deeper; from play, "need bigger fists tho") */
-export const HEAVY: HandBuild = { name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, wrist: 1, knuckles: 1.15 };
+export const HEAVY: HandBuild = {
+  name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, wrist: 1, knuckles: 1.15, sculptedIn: 'fist',
+};
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
 export const HAND_BUILDS: Record<string, HandBuild> = { plain: PLAIN, heavy: HEAVY };
