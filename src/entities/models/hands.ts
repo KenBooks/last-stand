@@ -379,7 +379,7 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
 const FIST_CREASE = [[-0.058, -0.0315], [-0.062, -0.020], [-0.061, -0.015], [-0.058, -0.016]];
 // Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
-const FIST_FAN = [5.6, 2, -2.6, -9.4];
+const FIST_FAN = [5, 2, -2, -8.7];
 // Point down the thenar mound. Pointed further out, the thumb left a window beside the index in the guard.
 const THUMB_BASE = [0.012, -0.042, -0.021] as const;
 // Seat the thumb just above the middle shaft's centre and one pad radius off its axis.
