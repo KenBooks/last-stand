@@ -21,7 +21,7 @@ import { Wall } from './wall';
 import { buildLibrary } from './library';
 import { buildDoor, type Door } from './door';
 import { buildShop } from './shop';
-import { tavernKeeper, keeperTalk } from './tavern';
+import { tavernKeeper, keeperTalk, type TavernKeeper } from './tavern';
 import type { Keeper } from '../entities/models/keeper';
 import type { Player } from '../entities/player';
 import type { Relief } from './ground';
@@ -68,8 +68,10 @@ export interface Room {
   keeper?(): Keeper | undefined;
   /** ale asked of the tavern's keeper by `hero` (world/tavern.ts): false if he's busy or not seated */
   serveAle?(hero: Player): boolean;
-  /** where the keeper's slid mug stands on the bar (world), or null (tools/lab `tavern`) */
-  mugOnBar?(): THREE.Vector3 | null;
+  /** the tavern's keeper and his mugs, whole (tools/lab `tavern`) */
+  tavern?(): TavernKeeper;
+  /** what goes on in it whether it's shown or not (the tavern's keeper at work), every frame */
+  always?(dt: number): void;
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */
@@ -1280,7 +1282,7 @@ function buildTavern(group: THREE.Group): Room {
   rug(g, M, 0.2, 2.2, 2.0, 1.4, ['#3a2414', '#a07030', '#5a1a14'], 77);
   // (its keeper behind the bar, his cask and his ale: world/tavern.ts)
   const keep = tavernKeeper(b, () => keeperTalk.talking);
-  return finish(id, b, { seatFolk: keep.seat, keeper: keep.keeper, serveAle: keep.serve, mugOnBar: keep.mugOnBar });
+  return finish(id, b, { seatFolk: keep.seat, keeper: keep.keeper, serveAle: keep.serve, always: keep.always, tavern: () => keep });
 }
 
 /** The house of records' tapestry: the village's crest woven on deep red, a tree over two crossed blades in a shield,

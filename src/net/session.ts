@@ -40,8 +40,8 @@ import { buildableLook, readyLook } from '../game/looks';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
  *  rooms' cards, whose `v` keeps a list to the rooms this game can join; 39: a guest's `rdy` says how far
- *  along its readying is; 40: a hero's look and hair colour, `Look.hl`) */
-export const PROTOCOL = 40;
+ *  along its readying is; 40: a hero's look and hair colour, `Look.hl`; 45: the tavern's keeper and mugs, `tv` and `tv?`) */
+export const PROTOCOL = 45;
 /** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
 const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
@@ -592,6 +592,8 @@ function onControl(from: string, m: Record<string, unknown>): void {
     return;
   }
   if (onGround(from, m)) return;
+  // (the tavern's keeper and his mugs, the host's word ('tv') and a guest's asks ('tv?'): world/tavern.ts)
+  if (m.t === 'tv' || m.t === 'tv?') { tavernHeard?.(from, m); return; }
   if (typeof m.t === 'string' && TRADE_MESSAGES.has(m.t)) { tradeHeard(from, m); return; }
   // a rival's hits on our hero in a duel, straight from its game (game/duel.ts works them out)
   if (m.t === 'pvp') {
@@ -1112,6 +1114,24 @@ export function readyingOf(p: Player): number | null {
 }
 
 /** A guest's choice in the run, for the host. */
+/** what hears the tavern's messages (world/tavern.ts sets it) */
+let tavernHeard: ((from: string, m: Record<string, unknown>) => void) | null = null;
+/** The tavern's messages heard by `heard`: the host's keeper and mugs (`tv`), a guest's asks (`tv?`). */
+export function onTavern(heard: (from: string, m: Record<string, unknown>) => void): void { tavernHeard = heard; }
+/** A tavern message sent to `to`, or to every game. */
+export function sendTavern(m: Record<string, unknown>, to?: string): void { send('ctl', m, to); }
+/** This game's own id in the room ('' alone), and the host's. */
+export const selfId = (): string => link?.self ?? '';
+export const hostOf = (): string => session.hostId;
+/** The partners' players standing in the tavern now, by id. */
+export function partnersInTavern(): { id: string; player: Player }[] {
+  const tavern = ROOM_IDS.indexOf('tavern') + 1, out: { id: string; player: Player }[] = [];
+  for (const peer of session.peers.values()) if (peer.player && !peer.inRun && peer.room === tavern) out.push({ id: peer.id, player: peer.player });
+  return out;
+}
+/** A partner's player by id. */
+export const partnerPlayer = (id: string): Player | null => session.peers.get(id)?.player ?? null;
+
 export function sendControl(m: Record<string, unknown>): void { if (session.hostId) send('ctl', m, session.hostId); }
 
 /** The partners in the room, whether or not they're in the arena with us. */

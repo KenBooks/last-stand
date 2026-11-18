@@ -166,11 +166,38 @@ export function buildMug(kit: MaterialKit): THREE.Group {
   for (const y of [-MUG.foot + 0.018, MUG.up - 0.014]) {
     put(new THREE.TorusGeometry(MUG.gripR + 0.002 + (y > 0 ? 0.0025 : 0), 0.003, 5, 20).rotateX(Math.PI / 2), iron, y);
   }
-  // (the ale's foam: a disc just under the rim and a soft dome standing over it)
-  put(new THREE.CircleGeometry(MUG.rimR - 0.002, 16).rotateX(-Math.PI / 2), foam, MUG.up - 0.006);
-  put(new THREE.SphereGeometry(MUG.rimR * 0.95, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.28, 1), foam, MUG.up - 0.004);
+  // (the ale in it: its surface, which `setMugFill` raises and lowers, and its foam, a disc and a soft dome standing
+  // over the rim when it's full; an empty mug shows its dark inside)
+  const ale = kit.std({ color: 0xb06a14, roughness: 0.25 });
+  const surface = put(new THREE.CircleGeometry(1, 16).rotateX(-Math.PI / 2), ale, 0);
+  surface.name = 'ale';
+  const head = new THREE.Group();
+  head.name = 'foam';
+  head.position.y = MUG.up - 0.006;
+  g.add(head);
+  head.add(new THREE.Mesh(new THREE.CircleGeometry(MUG.rimR - 0.002, 16).rotateX(-Math.PI / 2), foam));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(MUG.rimR * 0.95, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.28, 1), foam);
+  dome.position.y = 0.002;
+  head.add(dome);
+  setMugFill(g, 1);
   return g;
 }
+
+/** how much ale `mug` (`buildMug`'s) holds, 0 empty to 1 full: its surface up its staves, its foam over the rim only
+ *  near full, both at no size when there's none (drawn so, never hidden: a warm-up draws them) */
+export function setMugFill(mug: THREE.Object3D, full: number): void {
+  const surface = mug.getObjectByName('ale'), head = mug.getObjectByName('foam');
+  if (!surface || !head) return;
+  const k = Math.max(0, Math.min(1, full)), floor = -MUG.foot + 0.008, top = MUG.up - 0.008;
+  surface.position.y = floor + (top - floor) * k;
+  // (the staves widen from the foot to the rim: the surface as wide as they are where it stands)
+  const r = (MUG.gripR - 0.003) + (MUG.rimR - MUG.gripR) * ((surface.position.y + MUG.foot) / (MUG.up + MUG.foot));
+  surface.scale.setScalar(k > 0.02 ? r : 0.0001);
+  head.scale.setScalar(Math.max(0.0001, Math.min(1, (k - 0.85) / 0.15)));
+}
+
+/** how full the hero's mug is at `k` of the drink: full till the first swallow, emptied over the three, dregs after */
+export const aleLeft = (k: number): number => (k < 0.26 ? 1 : k > 0.68 ? 0.03 : 1 - 0.97 * (k - 0.26) / 0.42);
 
 /** the drink's beats over the cast (k): the off-hand weapon goes onto the hip, the flask comes out, up to the lips, drunk (the heal lands at 0.5), lowered and stowed, the weapon drawn again */
 export const DRINK_SHEATHED: readonly [number, number] = [0.12, 0.88];
@@ -219,10 +246,10 @@ function aleTilt(k: number, tip: number): number {
  *  mouth with the mug's hand pushed the mug into the face, and was left out.) */
 const ALE_KEYS: DrinkKeys = {
   hip: NONE,
-  reach: [[0, 0], [0.06, 1], [0.1, 1], [0.2, 0]],
-  lift: [[0, 0], [0.1, 0], [0.24, 1], [0.7, 1], [0.8, 0.45], [0.92, 0.45], [0.98, 0]],
+  reach: [[0, 0], [0.06, 1], [0.1, 1], [0.2, 0], [0.86, 0], [0.93, 1], [0.97, 1], [1, 0]],
+  lift: [[0, 0], [0.1, 0], [0.24, 1], [0.7, 1], [0.78, 0.45], [0.84, 0.42], [0.91, 0]],
   tip: [[0, 0], [0.24, 0], [0.27, 1], [0.34, 1], [0.38, 0.3], [0.42, 1], [0.5, 1], [0.54, 0.3], [0.58, 1], [0.66, 1], [0.7, 0]],
-  out: [[0, 0], [0.075, 0], [0.09, 1], [0.95, 1], [0.99, 0]],
+  out: [[0, 0], [0.075, 0], [0.09, 1], [0.95, 1], [0.955, 0]],
   fist: [[0, 0], [0.06, 1], [0.95, 1], [1, 0]],
 };
 
@@ -243,6 +270,7 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, h: Hand, flas
   const left = h.s > 0, sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
   const K = ale ? ALE_KEYS : DRAUGHT_KEYS, gripR = ale ? MUG.gripR : NECK_R, mouthUp = ale ? MUG.up : MOUTH_UP;
   flask.userData.ale = ale;
+  flask.userData.mugFill = aleLeft(k);
   const hip = curve(K.hip, k), reach = curve(K.reach, k), e = curve(K.lift, k), tip = curve(K.tip, k);
   // to the belt on the hip, or out before him to the bar
   sh.rotation.x += 0.35 * hip - 0.75 * reach; sh.rotation.z += 0.12 * hip; el.rotation.x += -0.6 * hip - 0.35 * reach;
@@ -334,6 +362,7 @@ const smooth = (x: number): number => { const t = Math.max(0, Math.min(1, x)); r
 export function holdFlask(h: Hand, flask: THREE.Object3D, out: number): void {
   const joint = h.vis.parent!, slant = flask.userData.slant as number, ale = !!flask.userData.ale;
   (flask.userData.mug as THREE.Object3D).visible = ale;
+  if (ale) setMugFill(flask.userData.mug as THREE.Object3D, (flask.userData.mugFill as number | undefined) ?? 1);
   for (const o of flask.userData.flaskParts as THREE.Object3D[]) o.visible = !ale;
   joint.updateWorldMatrix(true, false);
   joint.getWorldQuaternion(_q);

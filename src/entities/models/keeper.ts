@@ -18,55 +18,68 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, reachArm, type Joints } from './rig';
+import { buildHumanoid, reachArm, resetPose, walkCycle, type Joints } from './rig';
+import { LegIK, gaitRate, legLength } from './ik';
 import { stripRig } from './shapes';
 import { buildHead, buildNeck, handSkin, HERO_HEADS, type Head } from './head';
 import { buildHand, bare, hold, poseHand, seatHeld, type Hand } from './hands';
 import { cord, oval, rowsSurface, sleeve } from './merchant';
-import { buildMug, MUG } from './flask';
-import { SERVE } from '../../data/tavern';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 
-/** how long his idle loop is (s) */
-export const KEEP_LOOP = 32;
-/** what happens when in the loop (s): a mug wiped with his rag, the bar polished, a look round the room */
-const BEATS = { wipe: [1, 13], polish: [15, 26], look: [27.5, 30.5] } as const satisfies Record<string, readonly [number, number]>;
-/** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again */
-const GLANCE = { near: 4.5, hold: 3, rest: 9 };
 /** the rag's radius where his fist closes round it bunched (m) */
 const RAG_R = 0.022;
+/** how fast a hand eases towards where it's sent (1/s: from 66 cm away, 10 cm the first frame) */
+const GOAL_EASE = 9;
+/** where his rag hangs tucked in his apron's pocket while his right hand holds something else (the hips' frame) */
+const TUCKED = new THREE.Vector3(0.09, -0.24, 0.24);
 
-/** Where his bar and what's on it stand, in his frame (x across him, his left +x; +z ahead; up from the floor). */
-export interface KeeperBar {
-  /** the bar's top (m), its near edge (z) and its far edge, the hero's side */
-  top: number; near: number; far: number;
-  /** the cask's tap on the bar, where the ale runs from */
-  tap: THREE.Vector3;
+/** Where one of his hands goes for the frame. */
+export interface HandGoal {
+  /** where it goes (world): the grip's place for a hand that holds or grips, the palm's for an open one */
+  at: THREE.Vector3;
+  /** what it holds, a child of that hand (`Keeper.carry`): the fist closed round it, its axis along `dir` (world, up by
+   *  default), `r` its radius there, the thing stood with its +y along `dir` */
+  held?: THREE.Object3D; r?: number; dir?: THREE.Vector3;
+  /** a fist closed round a handle it doesn't carry (the broom's foot hand, the tap's handle): along `dir`, `r` round */
+  grip?: boolean;
+  /** a fist closed round a thing the other hand holds, `along` m up its +y from that hand's grip (the broom's foot
+   *  hand): `at` and `dir` read off it as the other hand left it */
+  on?: { thing: THREE.Object3D; along: number };
+}
+
+/** His body for the frame, the brain's (world/tavern.ts): his root's place and turn are set by it beforehand. */
+export interface KeeperPose {
+  /** how fast he walks (m/s, along his facing): the legs' stride and the arms' swing where a hand has no goal */
+  speed: number;
+  /** how far he leans over (0 upright, 1 bent over a table), and how far he crouches (0 standing, 1 down on his heels) */
+  bend: number; crouch: number;
+  /** what he looks at (world), or ahead */
+  look: THREE.Vector3 | null;
+  left: HandGoal | null; right: HandGoal | null;
 }
 
 export interface Keeper {
-  /** his root: stand it on the floor behind the bar, facing across it (+z) */
+  /** his root: the brain stands it on the floor and turns it */
   root: THREE.Group;
-  /** his pose for the frame: `hero` where the local hero is (world space) or null; `talking` while the hero talks to him */
-  update(dt: number, hero: THREE.Vector3 | null, talking: boolean): void;
-  /** a mug of ale asked for: he fills one and slides it across (false if he's already pouring one) */
-  serve(): boolean;
-  /** how far into a serving he is (s; -1 none) */
-  readonly serving: number;
-  /** the mug he slides, as it leaves his hand on the bar (his frame), once a serving reaches it; `null` otherwise */
-  served(): THREE.Vector3 | null;
-  /** how far into his loop he is (s), for the lab's pictures at set points of it */
-  loopAt: number;
+  /** his body posed for the frame */
+  pose(dt: number, p: KeeperPose): void;
+  /** a thing put in his hand (`side`), carried by it from now, or taken out of it and left in `to`'s frame where it is */
+  carry(side: 'left' | 'right', thing: THREE.Object3D): void;
+  drop(thing: THREE.Object3D, to: THREE.Object3D): void;
+  /** his rag: in his right hand, or tucked in his apron's pocket (`tuckRag`) while that hand holds something else */
+  readonly rag: THREE.Object3D;
+  tuckRag(tucked: boolean): void;
+  /** he was put somewhere at once (stood behind the bar as he's seated): his feet set under him again there */
+  placed(): void;
+  /** his ankles in the world (the lab reads them sliding), and whether the leg IK has each foot planted */
+  feet(out: [THREE.Vector3, THREE.Vector3]): [boolean, boolean];
+  /** where each hand's grip is in the world, the left's and the right's (the lab reads them against their goals) */
+  hands(out: [THREE.Vector3, THREE.Vector3]): void;
   /** his meshes (the lab reads them) */
   readonly parts: THREE.Mesh[];
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-/** 0 outside [a, b], 1 inside it, eased in and out over `rise` at each end */
-const span = (t: number, a: number, b: number, rise: number): number =>
-  smooth(clamp((t - a) / rise, 0, 1)) * (1 - smooth(clamp((t - (b - rise)) / rise, 0, 1)));
-/** where `t` is between a and b (0 to 1) */
-const along = (t: number, a: number, b: number): number => clamp((t - a) / (b - a), 0, 1);
 
 /** Stripes run down a cloth (u across it) on a ground, `repeat` times across a unit of its uv. */
 function stripes(ground: string, stripe: string, bands: [number, number][], repeat: number): THREE.CanvasTexture {
@@ -92,10 +105,10 @@ interface Mats {
 }
 
 /**
- * The keeper, behind `bar`. His head and hands are made as the heroes' are: build him once their workers have made
- * them (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
+ * The keeper. His head and hands are made as the heroes' are: build him once their workers have made them
+ * (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
-export function buildKeeper(bar: KeeperBar): Keeper {
+export function buildKeeper(): Keeper {
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);
@@ -116,11 +129,12 @@ export function buildKeeper(bar: KeeperBar): Keeper {
   const trousers = kit.std({ color: 0x343c4a, roughness: 1, ...tex(woolMaps(), 1) });
   const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
 
-  // --- the rig: a man of an ordinary build, a little thick at the waist ---
+  // --- the rig: a man of an ordinary build, a little thick at the waist; his legs planted by the leg IK as he walks ---
   const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.21, chestD: 0.14, waistW: 0.17 });
   stripRig(j.root);
   for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `keeper ${name}`;
   const P = j.P;
+  const legs = new LegIK(j), leg = legLength({ joints: j, root: j.root }), hipY = j.hips.position.y;
 
   // --- the head: his own face, short crop and full beard, all the head's own (face.ts, head.ts) ---
   const head: Head = buildHead(j.head, kit, HERO_HEADS.keeper.who, HERO_HEADS.keeper);
@@ -143,160 +157,140 @@ export function buildKeeper(bar: KeeperBar): Keeper {
     return m;
   };
   dressBody(j, add, { shirt, apron, strap, thread, scarf, towel, arm, brass, bone, trousers, boot });
-
-  // --- what he holds: his mug in his left fist, a rag in his right ---
-  const mug = buildMug(kit);
-  j.handL.add(mug);
   const rag = add(ragGeometry(), towel, j.handR, 'rag', false);
+  let ragTucked = false;
 
   // --- his pose, a frame at a time ---
-  const eyes = head.eyes;
-  let loop = 3, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0, serveT = -1;
+  let phase = 0, gaze = 0, bend = 0, crouch = 0;
+  /** each hand's goal eased towards where it's sent (a step's goal changes at once: the hand doesn't), and how far
+   *  the arm is its goal's rather than his walk's swing */
+  const eased = [new THREE.Vector3(), new THREE.Vector3()], easedSet = [false, false], weight = [0, 0];
+  const swing = { qs: new THREE.Quaternion(), qe: new THREE.Quaternion() };
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
-  const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
-  const fistL = new THREE.Vector3(), fistR = new THREE.Vector3(), wristL = new THREE.Vector3(), wristR = new THREE.Vector3();
-  const poleL = V(1, -0.6, -0.5).normalize(), poleR = V(-1, -0.6, -0.5).normalize();
-  const up = V(0, 1, 0), turn = new THREE.Quaternion(), rootTurn = new THREE.Quaternion(), at = new THREE.Vector3();
-  const slideFrom = V(0.04, bar.top, bar.near + 0.3), slid = new THREE.Vector3();
-  const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
-  /** a hand's fist closed round what it holds, `dir` its axis (world), the held thing seated in it and stood the
-   *  world's way up */
-  const grip = (h: Hand, held: THREE.Object3D, r: number, dir: THREE.Vector3) => {
-    j.root.updateMatrixWorld(true);
-    hold(h, dir, r);
-    seatHeld(h, held, r);
-    held.parent!.getWorldQuaternion(turn);
-    j.root.getWorldQuaternion(rootTurn);
-    held.quaternion.copy(turn.invert().multiply(rootTurn));
-  };
-  /** an arm sent so its fist's grip (where `held` is seated) lands at `fist` (his frame): solved once to the wrist
-   *  guessed from the hand's length, and again by how far the grip landed off */
-  const reachWith = (left: boolean, fist: THREE.Vector3, wrist: THREE.Vector3, h: Hand, held: THREE.Object3D, r: number) => {
+  const tmp = new THREE.Vector3(), at = new THREE.Vector3(), headAt = new THREE.Vector3(), wrist = new THREE.Vector3();
+  const poleL = V(1, -0.6, -0.5).normalize(), poleR = V(-1, -0.6, -0.5).normalize(), up = V(0, 1, 0);
+  const turn = new THREE.Quaternion(), along = new THREE.Quaternion();
+  const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(v.clone());
+  const handOf = (left: boolean): Hand => (left ? handL : handR);
+  /** one arm to its goal: a fist seated round what it holds (solved twice, so the grip lands where it's sent), a fist
+   *  round a handle, or an open hand, flat */
+  const reach = (left: boolean, g: HandGoal) => {
     const [shoulder, elbow, pole] = left ? [j.shoulderL, j.elbowL, poleL] : [j.shoulderR, j.elbowR, poleR];
-    for (let pass = 0; pass < 2; pass++) {
-      reachArm(shoulder, elbow, P.upperL, P.foreL, chestLocal(wrist.clone()), pole, 1, 0.08);
-      grip(h, held, r, up);
+    const h = handOf(left);
+    if (g.on) {
       j.root.updateMatrixWorld(true);
-      j.root.worldToLocal(held.getWorldPosition(at));
-      wrist.add(tmp.subVectors(fist, at));
+      g = { ...g, at: g.on.thing.localToWorld(new THREE.Vector3(0, g.on.along, 0)), dir: new THREE.Vector3(0, 1, 0).applyQuaternion(g.on.thing.getWorldQuaternion(turn)), grip: true };
+    }
+    const dir = g.dir ?? up;
+    // (the wrist guessed a hand's length back towards him from the grip, then moved by how far the grip landed off)
+    j.root.getWorldQuaternion(turn);
+    wrist.copy(g.at).add(tmp.set(left ? 0.02 : -0.02, 0.06, -0.07).applyQuaternion(turn));
+    const passes = g.held || g.grip ? 2 : 1;
+    for (let pass = 0; pass < passes; pass++) {
+      reachArm(shoulder, elbow, P.upperL, P.foreL, chestLocal(wrist), pole, 1, 0.08);
+      j.root.updateMatrixWorld(true);
+      if (g.held) {
+        hold(h, dir, g.r ?? 0.02);
+        seatHeld(h, g.held, g.r ?? 0.02);
+        // (the thing stood along its axis in the world, whatever the hand's turn)
+        g.held.parent!.getWorldQuaternion(turn).invert();
+        g.held.quaternion.copy(turn.multiply(along.setFromUnitVectors(up, dir)));
+        j.root.updateMatrixWorld(true);
+        g.held.getWorldPosition(at);
+      } else if (g.grip) {
+        hold(h, dir, g.r ?? 0.015);
+        h.vis.updateWorldMatrix(true, false);
+        h.vis.localToWorld(at.set(0, -0.085, 0.03));
+      } else {
+        poseHand(h, 0.18, 0.08, 0, 0, 0);
+        return;
+      }
+      wrist.add(tmp.subVectors(g.at, at));
     }
   };
 
-  function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean): void {
-    clock += dt;
-    loop = (loop + dt * (1 - 0.7 * gaze)) % KEEP_LOOP;
-    if (serveT >= 0) { serveT += dt; if (serveT > SERVE.long) serveT = -1; }
-    const t = loop;
-    // --- whether he's looking at the hero: a glance as one comes near, held while talked to ---
-    let heroNear = false;
-    if (heroAt) {
-      j.root.updateWorldMatrix(true, false);
-      hero.copy(heroAt);
-      j.root.worldToLocal(hero);
-      heroNear = Math.hypot(hero.x, hero.z) < GLANCE.near;
-      hero.y += 1.55;
-    }
-    if (talking && heroAt) { gazeWant = 1; gazeUntil = clock + 1; }
-    else if (heroNear && clock > nextGlance) { gazeWant = 1; gazeUntil = clock + GLANCE.hold; nextGlance = clock + GLANCE.hold + GLANCE.rest; }
-    else if (clock > gazeUntil) gazeWant = 0;
-    if (!heroAt) gazeWant = 0;
-    gaze = damp(gaze, gazeWant, gazeWant > gaze ? 3.2 : 2.2, dt);
-
-    // --- the beats: of his loop, or of a serving over it ---
-    const st = Math.max(0, serveT), serving = serveT >= 0 ? span(st, 0, SERVE.long, 0.3) : 0;
-    const fill = serveT >= 0 ? span(st, SERVE.fill[0] - 0.25, SERVE.fill[1] + 0.1, 0.25) : 0;
-    const slide = serveT >= 0 ? span(st, SERVE.slide[0] - 0.2, SERVE.slide[1] + 0.25, 0.2) : 0;
-    const slideK = serveT >= 0 ? smooth(along(st, SERVE.slide[0], SERVE.slide[1])) : 0;
-    const idle = 1 - serving;
-    const wipe = span(t, ...BEATS.wipe, 1.2) * idle, polish = span(t, ...BEATS.polish, 1.2) * idle, look = span(t, ...BEATS.look, 1.0) * idle;
-    const lookK = along(t, ...BEATS.look);
-    const breath = Math.sin((t / KEEP_LOOP) * Math.PI * 2 * 8);
-    // (his mug across the bar from as he lets it go till he takes up another: his left hand open on the bar meanwhile)
-    const gone = serveT >= SERVE.slide[0] + 0.05 && serveT < SERVE.long - 0.15;
-
-    // --- body, neck, head ---
-    for (const o of [j.hips, j.spine, j.chest, j.neck, j.head]) o.rotation.set(0, 0, 0);
-    j.spine.rotation.x = 0.04 + polish * 0.12 + fill * 0.05 + slide * 0.1 + breath * 0.006;
-    j.chest.rotation.x = 0.02 + polish * 0.04 - breath * 0.01;
-    j.chest.rotation.y = polish * 0.08 * Math.sin(clock * 1.4) + look * 0.14 * Math.sin(lookK * Math.PI * 2) + fill * 0.1;
-    // (he looks at what his hands do: the mug he wipes, the bar, the tap as it runs, the mug as it slides)
-    let headX = 0.12 + wipe * 0.28 + polish * 0.32 + fill * 0.3 + slide * 0.28 - look * 0.2, headY = fill * 0.3;
-    headY += look * 0.55 * Math.sin(lookK * Math.PI * 2);
-    let neckX = 0.04;
-    if (gaze > 0.001) {
-      j.root.updateMatrixWorld(true);
+  function pose(dt: number, p: KeeperPose): void {
+    resetPose(j);
+    // --- the legs: the walk cycle at his speed, the leg IK planting each foot; crouched, his hips down over them ---
+    phase = legs.setOff(phase) + dt * p.speed * gaitRate(p.speed, leg) * legs.cadence;
+    const move = Math.min(1, p.speed / 0.8);
+    walkCycle(j, phase, move, { stride: 0.5, knee: 0.9, arm: 0.3, bob: 0.04 });
+    // (his lean and his crouch eased, never snapped: a step's end drops both at once)
+    bend = damp(bend, p.bend, 5, dt);
+    crouch = damp(crouch, p.crouch, 4, dt);
+    j.hips.position.y = hipY - crouch * 0.32;
+    // (the legs set on the floor first, the body over them: the arms are solved after, from where that leaves the body)
+    j.root.updateMatrixWorld(true);
+    legs.update(dt, phase, -1);
+    // --- the body: leaning over his work, the head on what he looks at ---
+    j.spine.rotation.x += 0.03 + bend * 0.42 + crouch * 0.2;
+    j.chest.rotation.x += bend * 0.18;
+    j.root.updateMatrixWorld(true);
+    gaze = damp(gaze, p.look ? 1 : 0, 4, dt);
+    if (p.look) {
       j.neck.getWorldPosition(headAt);
+      tmp.copy(p.look);
+      j.root.worldToLocal(tmp);
       j.root.worldToLocal(headAt);
-      tmp.subVectors(hero, headAt);
-      const yaw = clamp(Math.atan2(tmp.x, tmp.z), -1.2, 1.2), pitch = clamp(Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z)), -0.5, 0.5);
+      tmp.sub(headAt);
+      const yaw = clamp(Math.atan2(tmp.x, tmp.z), -1.1, 1.1), pitch = clamp(Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z)) + bend * 0.5, -0.9, 0.5);
       lookYaw.v = damp(lookYaw.v, yaw, 6, dt);
       lookPitch.v = damp(lookPitch.v, pitch, 6, dt);
-      const g = gaze * (1 - 0.6 * fill);
-      j.chest.rotation.y = lerp(j.chest.rotation.y, lookYaw.v * 0.25, g);
-      neckX = lerp(neckX, -lookPitch.v * 0.4, g);
-      headX = lerp(headX, -lookPitch.v * 0.6, g);
-      headY = lerp(headY, lookYaw.v * 0.6, g);
-      j.neck.rotation.y = lookYaw.v * 0.15 * g;
     }
-    j.neck.rotation.x = neckX;
-    j.head.rotation.set(headX, headY, -headY * 0.05);
-    const eyeX = 0.18 * (1 - gaze) * (1 - look);
-    for (const e of eyes) e.rotation.set(eyeX, 0, 0);
+    j.chest.rotation.y += lookYaw.v * 0.2 * gaze;
+    j.neck.rotation.set(-lookPitch.v * 0.4 * gaze, lookYaw.v * 0.15 * gaze, 0);
+    j.head.rotation.set(-lookPitch.v * 0.6 * gaze, lookYaw.v * 0.6 * gaze, 0);
+    for (const e of head.eyes) e.rotation.set(0.05, 0, 0);
     j.root.updateMatrixWorld(true);
-
-    // --- where his fists go: the mug's grip (its foot on the bar at rest) and the rag ---
-    const onBar = bar.top + MUG.foot;
-    fistL.set(0.24, onBar, bar.near + 0.12);
-    fistR.set(-0.2, bar.top + RAG_R + 0.01, bar.near + 0.12);
-    fistL.y += breath * 0.002;
-    // wiping the mug: held up before his belly in his left fist, the rag in his right rubbed round its outside, over
-    // the side nearest him and up and down its staves (on its mouth, the rag hung outside the mug from a fist over it)
-    const round = clock * 3.4, rub = Math.sin(round), lift = 0.5 + 0.5 * Math.sin(round * 0.5);
-    const mugAt = tmp.set(0.08, 1.1, 0.36), aside = -0.75 + 0.55 * rub, reach = MUG.rimR + RAG_R + 0.004;
-    fistL.lerp(mugAt, wipe);
-    fistR.lerp(V(mugAt.x + reach * Math.sin(aside), 1.1 + lerp(-0.02, MUG.up - 0.02, lift), mugAt.z - reach * Math.cos(aside)), wipe);
-    // polishing the bar: the mug set by on it, the rag pressed on its top in wide rounds
-    const sweep = clock * 1.6;
-    fistR.lerp(tmp.set(-0.1 + 0.13 * Math.cos(sweep), bar.top + RAG_R + 0.005, bar.near + 0.24 + 0.08 * Math.sin(sweep)), polish);
-    fistL.lerp(tmp.set(0.28, onBar, bar.near + 0.1), polish);
-    // serving: the mug under the tap, its rim a little under the spout, his right fist on the tap's handle; then set
-    // down and slid across
-    fistL.lerp(tmp.copy(bar.tap).add(V(0, -0.05 - MUG.up, 0)), fill);
-    fistR.lerp(tmp.copy(bar.tap).add(V(0, 0.05, 0.01)), fill);
-    slid.lerpVectors(slideFrom, V(0.04, bar.top, bar.near + 0.55), slideK);
-    fistL.lerp(tmp.set(slid.x, onBar, slid.z), slide);
-    // (lifted over the bar there and back, never through it)
-    fistL.y += 0.06 * Math.sin(Math.PI * fill) * (1 - fill) + 0.05 * Math.sin(Math.PI * Math.min(1, polish + wipe)) * (1 - Math.max(polish, wipe));
-    // --- the arms, each solved so its fist lands there ---
-    wristL.copy(fistL).add(V(0.02, 0.06, -0.07));
-    wristR.copy(fistR).add(V(-0.02, 0.06, -0.07));
-    if (gone) {
-      // (his left hand open behind the mug as he pushes it across, its fingers on its side, then back to rest flat on
-      // the bar while the mug glides on and is drunk; the room's mug follows his push, `served`)
-      const pushing = smooth(clamp((SERVE.slide[1] + 0.15 - st) / 0.3, 0, 1));
-      tmp.copy(slid).add(V(0.0, MUG.foot + 0.02, -MUG.rimR - 0.1)).lerp(V(0.22, bar.top + 0.05, bar.near + 0.06), 1 - pushing);
-      reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(wristL.copy(tmp)), poleL, 1, 0.08);
-      poseHand(handL, lerp(0.15, 0.35, pushing), 0.1, 0, clock, 0);
-    } else reachWith(true, fistL, wristL, handL, mug, MUG.gripR);
-    reachWith(false, fistR, wristR, handR, rag, RAG_R);
-    // (the rag tucked away while his hand is on the tap; his mug at its size but while it's across the bar)
-    rag.scale.setScalar(Math.max(0.001, 1 - smooth(clamp(fill * 3 - 1, 0, 1))));
-    mug.scale.setScalar(gone ? 0.001 : 1);
+    // --- the arms: each to its goal, eased there, or swinging with his walk; between the two blended ---
+    for (const left of [true, false]) {
+      const i = left ? 0 : 1, goal = left ? p.left : p.right;
+      weight[i] = damp(weight[i], goal ? 1 : 0, GOAL_EASE, dt);
+      if (!goal) { easedSet[i] = false; continue; }
+      if (!easedSet[i]) { eased[i].copy(goal.at); easedSet[i] = true; } else eased[i].lerp(goal.at, 1 - Math.exp(-GOAL_EASE * dt));
+      const [shoulder, elbow] = left ? [j.shoulderL, j.elbowL] : [j.shoulderR, j.elbowR];
+      swing.qs.copy(shoulder.quaternion); swing.qe.copy(elbow.quaternion);
+      reach(left, { ...goal, at: eased[i] });
+      if (weight[i] < 0.999) { shoulder.quaternion.slerpQuaternions(swing.qs, shoulder.quaternion.clone(), weight[i]); elbow.quaternion.slerpQuaternions(swing.qe, elbow.quaternion.clone(), weight[i]); }
+    }
+    if (!p.left) poseHand(handL, 0.3, 0.05, 0, 0, 0);
+    if (p.right) { /* posed by its goal */ }
+    else if (!ragTucked) {
+      // (his rag in his hanging right hand: the fist closed round it as it swings)
+      j.root.updateMatrixWorld(true);
+      hold(handR, up, RAG_R);
+      seatHeld(handR, rag, RAG_R);
+      rag.parent!.getWorldQuaternion(turn).invert();
+      rag.quaternion.copy(turn);
+    } else poseHand(handR, 0.3, 0.05, 0, 0, 0);
   }
 
-  update(0, null, false);
+  pose(0, { speed: 0, bend: 0, crouch: 0, look: null, left: null, right: null });
 
   return {
     root: j.root,
-    update,
-    serve() { if (serveT >= 0) return false; serveT = 0; return true; },
-    get serving() { return serveT; },
-    served() {
-      if (serveT < SERVE.slide[0] + 0.05) return null;
-      return slid.clone();
+    pose,
+    carry(side, thing) { (side === 'left' ? j.handL : j.handR).attach(thing); },
+    drop(thing, to) { to.attach(thing); },
+    rag,
+    tuckRag(tucked) {
+      if (tucked === ragTucked) return;
+      ragTucked = tucked;
+      if (tucked) {
+        j.hips.add(rag);
+        rag.position.copy(TUCKED);
+        rag.quaternion.identity();
+      } else j.handR.add(rag);
     },
-    get loopAt() { return loop; },
-    set loopAt(v: number) { loop = ((v % KEEP_LOOP) + KEEP_LOOP) % KEEP_LOOP; },
+    placed() { legs.reset(); easedSet[0] = easedSet[1] = false; },
+    hands(out) {
+      for (const [i, h] of [handL, handR].entries()) h.vis.localToWorld(out[i].set(0, -0.085, 0.03));
+    },
+    feet(out) {
+      j.ankleL.getWorldPosition(out[0]);
+      j.ankleR.getWorldPosition(out[1]);
+      return [legs.feet[0].state === 'plant', legs.feet[1].state === 'plant'];
+    },
     parts,
   };
 }

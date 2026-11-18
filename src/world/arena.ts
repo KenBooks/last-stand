@@ -329,6 +329,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     groupOf(id: PlaceId): THREE.Group { return places[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) places[id].b.setCalm(v); },
     update(dt: number, t: number) {
+      // (what goes on in the houses whether they're shown or not: the tavern's keeper at his work)
+      for (const r of Object.values(rooms ?? {}) as Room[]) r.always?.(dt);
       if (room) rooms![room].update(dt, t);
       else if (hallShown) hall.update(dt, t); else active.update(dt, t);
       if (!VILLAGE) {
