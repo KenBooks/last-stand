@@ -6,7 +6,9 @@
 // pause menu's button it goes back to the pause menu. Each place is pictured as the player sees it: the panel open, and
 // a shot set up with the panel hidden. In a battleground it is the time before a wave it opens in; during a fight
 // (the run's phase held at `fighting`) P must open nothing, the pause menu's button must be disabled, and a wave begun
-// while it is open must close it.
+// while it is open must close it. In each of the village's houses its camera stays in the room (what it turns round
+// inside the walls, the camera itself at most a few metres beyond them, the walls it stands beyond cut away as the
+// game's own camera has them) and the time of day is greyed out; and P opens nothing over a dialog (How to play).
 //
 // `--canary` plants two faults the checks must catch: the page's UI shown again (`body.photo` taken off) and the
 // world's overlays drawn over the frame again.
@@ -20,6 +22,9 @@ import { programsCompiledInGame } from '../../../src/core/shaders';
 import { HIDDEN_LAYER } from '../../../src/core/layers';
 import { holdHour } from '../../../src/game/clock';
 import { START_SPOTS } from '../../../src/data/village';
+import { HOUSES, ROOM_IDS, type RoomId } from '../../../src/data/houses';
+import { enterRoom, leaveRoom } from '../../../src/game/rooms';
+import { hideHelp, showHelp } from '../../../src/ui/menus';
 import { standInVillage } from './readmeShots';
 import { standIn } from './light';
 
@@ -455,6 +460,71 @@ async function shotSetUp(lab: Lab, filter: string, hour: number | null): Promise
   await lab.step(READ_FRAMES);
 }
 
+/** how far photo mode's camera may stand beyond a room's walls and over its ceiling (m: `ROOM_OUT`), and how far out
+ *  the check sends what it turns round and the camera (m) */
+const ROOM_OUT_MOST = 6;
+const ROOM_SENT = 40;
+/** frames for a room to be warmed and shown, a door's way in */
+const ROOM_FRAMES = 30;
+
+/** How far `p` stands beyond room `id`'s walls (m; negative inside them). */
+function beyondWalls(id: RoomId, p: THREE.Vector3): number {
+  const [halfX, halfZ] = HOUSES[id].half;
+  return Math.max(Math.abs(p.x) - halfX, Math.abs(p.z) - halfZ);
+}
+
+/** In house `id`: photo mode opened by P, the time of day greyed out, what it turns round sent far out by the keys and
+ *  kept inside the walls, the camera drawn back far kept a few metres beyond them, and the walls it stands beyond cut
+ *  away; pictured from outside its walls, as a dollhouse. */
+async function inHouse(lab: Lab, id: RoomId): Promise<Found & { moment: Pictured }> {
+  const where = `house ${id}`;
+  enterRoom(id);
+  await lab.step(ROOM_FRAMES);
+  const problems: string[] = [];
+  if (G.arena.room !== id) problems.push(`${where}: the hero was not taken in`);
+  const opened = await openedByKey(lab, where);
+  problems.push(...opened.problems);
+  const hour = document.querySelector<HTMLInputElement>('[data-photo="hour"]')!;
+  if (!hour.disabled) problems.push(`${where}: the time of day settable in a house, whose light is its own`);
+  const camera = photoCamera();
+  camera.target.x += ROOM_SENT;
+  await lab.step(1, () => ({ keys: ['w'] }));
+  const targetOut = beyondWalls(id, camera.target);
+  if (targetOut > 0) problems.push(`${where}: what the camera turns round went ${targetOut.toFixed(1)} m out of the room`);
+  camera.distance = ROOM_SENT;
+  camera.pitch = 0.3;
+  await lab.step(READ_FRAMES);
+  const eyeOut = beyondWalls(id, G.camera.position);
+  if (eyeOut > ROOM_OUT_MOST + 0.01) problems.push(`${where}: the camera stood ${eyeOut.toFixed(1)} m beyond the walls`);
+  const cut = G.arena.rooms![id].cutNow();
+  if (eyeOut > 0 && cut.length === 0) problems.push(`${where}: no wall cut away with the camera beyond them`);
+  const moment = await lab.screen(`house-${id}`, ['photo mode in a house, the camera beyond its walls']);
+  await lab.press('Escape');
+  await lab.step(READ_FRAMES);
+  leaveRoom();
+  await lab.step(READ_FRAMES);
+  const said = `${where}: the time of day ${hour.disabled ? 'greyed out' : 'SETTABLE'}, what it turns round `
+    + `${targetOut.toFixed(1)} m past the walls, the camera ${eyeOut.toFixed(1)} m, cut away: ${cut.join(', ') || 'none'}`;
+  return { lines: [...opened.lines, said], problems, moment };
+}
+
+/** P pressed with How to play open: no photo mode over a dialog, whose state would wait unseen under it. */
+async function notOverADialog(lab: Lab, where: string): Promise<Found> {
+  showHelp();
+  await lab.step(READ_FRAMES);
+  await lab.press('KeyP');
+  await lab.step(READ_FRAMES);
+  const opened = photoOn();
+  if (opened) {
+    await lab.press('Escape');
+    await lab.step(READ_FRAMES);
+  }
+  hideHelp();
+  await lab.step(READ_FRAMES);
+  const problems = opened ? [`${where}: P opened photo mode over How to play`] : [];
+  return { lines: [`${where}: P over How to play ${opened ? 'OPENED photo mode' : 'opened nothing'}`], problems };
+}
+
 /** One place's checks and pictures, photo mode opened in it by P and left by Esc. */
 async function inPlace(lab: Lab, where: string, canary: boolean, settable: boolean, shot: { filter: string }):
   Promise<Found & { moments: Pictured[] }> {
@@ -485,12 +555,15 @@ export async function photo(lab: Lab, options: PhotoOptions): Promise<Report> {
   const village = await inPlace(lab, 'village', canary, true, { filter: 'cinematic' });
   holdHour(null);
   const pause = await fromPauseMenu(lab, 'village');
+  const dialog = await notOverADialog(lab, 'village');
+  const houses: (Found & { moment: Pictured })[] = [];
+  for (const id of ROOM_IDS) houses.push(await inHouse(lab, id));
   await standIn(lab, { biome: 'forest', view: 'third', facing: 0 });
   const forest = await inPlace(lab, 'forest', canary, false, { filter: 'warm' });
   await standIn(lab, { biome: 'crypt', view: 'third', facing: 0 });
   const crypt = await inPlace(lab, 'crypt', canary, false, { filter: 'mono' });
   const fight = await notInAFight(lab, 'crypt');
-  const places = [village, pause, forest, crypt, fight];
+  const places = [village, pause, dialog, ...houses, forest, crypt, fight];
   const lines = places.flatMap((place) => place.lines);
   let problems = places.flatMap((place) => place.problems);
   if (canary) {
@@ -502,5 +575,6 @@ export async function photo(lab: Lab, options: PhotoOptions): Promise<Report> {
     problems = problems.filter((problem) => !PHOTO_CANARIES.some((plant) => problem.includes(plant.name)));
     problems.push(...missed.map((plant) => `the canary's ${plant.what} went unseen`));
   }
-  return { text: lines.join('\n'), problems, moments: [...village.moments, ...forest.moments, ...crypt.moments] };
+  const moments = [...village.moments, ...houses.map((house) => house.moment), ...forest.moments, ...crypt.moments];
+  return { text: lines.join('\n'), problems, moments };
 }

@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { VILLAGE } from '../core/beta';
 import { ARENA } from '../data/balance';
+import { HOUSES } from '../data/houses';
 import { isCoop } from '../net/role';
 import { isDown, wasPressed, input } from '../core/input';
 import { frameShot, showOverlays, bloomDrawn } from '../core/renderer';
@@ -42,6 +43,11 @@ const LEASH = 70;
 const ARENA_EDGE = ARENA.radius + 1;
 const OVER_GROUND = 0.04;
 const TARGET_HIGHEST = 50;
+/** in a house's room, how far inside its walls what it turns round stays (m), and how far beyond them the camera may
+ *  stand (m: outside, the walls it stands beyond are cut away, a dollhouse; further out there is only the dark, as
+ *  the room is all that's drawn) */
+const ROOM_INSET = 0.25;
+const ROOM_OUT = 6;
 /** how fast it flies (m/s), Shift's share more, how far a dragged pixel turns it (rad), and a roll key's speed (deg/s) */
 const FLY_SPEED = 4;
 const FLY_FAST = 3;
@@ -124,7 +130,23 @@ const fighting = (): boolean => G.mode === 'run' && G.run?.phase === 'fighting';
 export const photoAllowed = (): boolean => G.mode === 'menu' || (G.mode === 'run' && G.player.inRun && !fighting());
 
 /** Whether the time of day can be set where he is: the village's hour (a battleground keeps its own light). */
-const hourSettable = (): boolean => VILLAGE && G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+const hourSettable = (): boolean => VILLAGE && G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown
+  && !G.arena.room;
+
+/** Why the time of day can't be set here (null: it can). */
+const hourOff = (): string | null => (hourSettable() ? null
+  : G.arena.room ? 'A house keeps its own light' : 'The battlegrounds keep their own light');
+
+/** `p` kept within the house's room he stands in (the room stands at the origin), `out` m beyond its walls, `up` m
+ *  over its ceiling, or within it (`out` negative); nothing done outside a room. */
+function keepInRoom(p: THREE.Vector3, out: number, up: number): void {
+  const room = G.arena.room;
+  if (!room) return;
+  const [hx, hz] = HOUSES[room].half;
+  p.x = THREE.MathUtils.clamp(p.x, -hx - out, hx + out);
+  p.z = THREE.MathUtils.clamp(p.z, -hz - out, hz + out);
+  p.y = Math.min(p.y, HOUSES[room].high + up);
+}
 
 /** The hero's chest, where the camera turns round at first. */
 function heroChest(out: THREE.Vector3): THREE.Vector3 {
@@ -249,7 +271,7 @@ function keepTarget(target: THREE.Vector3): void {
   const home = state.kept?.home ?? G.player.pos;
   const dx = target.x - home.x, dz = target.z - home.z;
   const away = Math.hypot(dx, dz);
-  if (G.arena.place === 'village' && away > LEASH) {
+  if (G.arena.place === 'village' && !G.arena.room && away > LEASH) {
     target.set(home.x + (dx / away) * LEASH, target.y, home.z + (dz / away) * LEASH);
   }
   if (G.arena.place !== 'village') {
@@ -258,6 +280,7 @@ function keepTarget(target: THREE.Vector3): void {
   }
   const ground = G.arena.groundHeight(target.x, target.z);
   target.y = THREE.MathUtils.clamp(target.y, ground + OVER_GROUND, ground + TARGET_HIGHEST);
+  keepInRoom(target, -ROOM_INSET, -ROOM_INSET);
 }
 
 /** The keys' flight this frame: WASD or the arrows over the ground, Q and E down and up, Z and C rolled. */
@@ -293,6 +316,7 @@ function placeCamera(): void {
     const edge = Math.hypot(cam.position.x, cam.position.z);
     if (edge > ARENA_EDGE) cam.position.set((cam.position.x / edge) * ARENA_EDGE, cam.position.y, (cam.position.z / edge) * ARENA_EDGE);
   }
+  keepInRoom(cam.position, ROOM_OUT, ROOM_OUT);
   cam.up.set(0, 1, 0);
   cam.lookAt(camera.target);
   cam.rotateZ(THREE.MathUtils.degToRad(camera.roll));
@@ -302,6 +326,8 @@ function placeCamera(): void {
     cam.updateProjectionMatrix();
   }
   cam.updateMatrixWorld();
+  // (in a house, the walls this camera stands beyond cut away, as the game's own camera has them: game/rooms.ts)
+  if (G.arena.room) G.arena.rooms![G.arena.room].cutAway(cam.position);
   // (nothing stands thinned between the camera and him: a photo shows the place whole)
   const p = G.player.pos;
   updateSeeThrough(p.x, G.player.obj.position.y + G.player.model.height * 0.6, p.z, 0, 0);
@@ -445,7 +471,7 @@ const SLIDERS: Record<string, Slider[]> = {
       get: () => state.hour ?? hourNow(),
       set: (value) => { state.hour = value; holdHour(value); state.hourChanged = true; },
       shown: clock,
-      off: () => (hourSettable() ? null : 'The battlegrounds keep their own light'),
+      off: hourOff,
     },
     {
       id: 'exposure', label: 'Exposure', min: -2, max: 2, step: 0.05,

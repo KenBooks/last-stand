@@ -857,9 +857,11 @@ function reportClosed() {
 
 /** Photo mode (P, the pause menu's button: ui/photo.ts), from the pause menu (which it goes back to) or the game; never
  *  over the hero selection screen or the save slots, which stage the camera themselves, nor over the bug report's
- *  form. */
+ *  form, a talk, Odo's trade, a co-op trade or Play together and How to play (a talk frames the camera itself, and a
+ *  trade's or a dialog's state would wait unseen under it). */
 function openPhoto(): void {
   if (photoOn() || !photoAllowed() || heroSelectOpen() || savesOpen() || profiling() || bugReportOpen()) return;
+  if (dialogOpen() || guideOpen()) return;
   const fromPause = G.menuOpen;
   if (fromPause) showPause(false);
   enterPhoto(fromPause);
