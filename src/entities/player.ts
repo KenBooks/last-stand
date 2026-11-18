@@ -24,7 +24,7 @@ import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seen
 import { floatText } from '../ui/floaters';
 import { dazedStars } from '../fx/dazed';
 import { particles, col } from '../fx/particles';
-import { sfx } from '../core/audio';
+import { sfx, type Denial } from '../core/audio';
 import { SHINE } from '../core/materials';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
@@ -62,6 +62,8 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 const AIM_HOLD = 0.45;
 /** s: how long the hero must have been free of any action before the hotbar shows a consumable usable again */
 const BUSY_HOLD = 0.15;
+/** s: the least time between two denied sounds (`denied`): a key mashed on a cooling skill knocks at most this often */
+const DENIED_EVERY = 0.3;
 /** how near a point on his way to a spot the hero comes before heading for the next (m: about a stride) */
 const ROUTE_PASSED = 0.6;
 /** how far round his middle a hero's body keeps off what's round it (m) */
@@ -297,6 +299,11 @@ export class Player {
   flashAt = -1;
   lastLowEnergy = 0;
   private lastNoTarget = -99;
+  /** why the last cast tried was refused, as a press hears it (`denied`): cooling, short of energy, nothing to cast
+   *  at; null when it cast, or was only held up by another action */
+  refused: Denial | null = null;
+  /** the game time the last denied sound played (the lab's `denied` canary sets it back to break the throttle) */
+  deniedAt = -99;
 
   // co-op
   /** at 0 health (alive false) but waiting for a teammate: seconds left before bleeding out */
@@ -661,7 +668,7 @@ export class Player {
     this.holdAim();
     if ((input.mouse.overUI && !input.touchMode) || this.dashShut() || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
-    if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key, q.at); }
+    if (this.queued && !this.casting && !this.channel) this.castQueued();
     const busy = !!(this.casting || this.channel);
     for (const key of SKILL_KEYS) {
       const pressed = wasPressed(key);
@@ -671,9 +678,12 @@ export class Player {
       if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
       // (a tap up again within the frame still casts: read only while held, a 60 ms tap was lost at 10 fps)
       if (!isDown(key) && busy) continue;
+      this.refused = null;
       if (skill.impl.channel) { if ((!this.channel || this.channel.skill.def.block) && !this.casting) this.startChannel(skill, key); }
       else if (skill.def.aimed) { if (this.aiming?.key !== key) this.startAim(skill, key); }
       else this.tryCast(skill, key);
+      // (a press refused is heard; a key held on is tried every frame, and isn't: it casts once the skill is ready)
+      if (pressed && this.refused) this.denied(this.refused);
     }
   }
 
@@ -699,7 +709,14 @@ export class Player {
     // mark went on another)
     const impl = a.skill.impl, at = (!impl.channel && impl.settle?.(this, a.skill.def, this.aim)) || this.aim.clone();
     if (this.casting || (this.channel && !this.channel.skill.def.block) || this.dashShut() || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
-    else this.tryCast(a.skill, a.key, at);
+    else if (!this.tryCast(a.skill, a.key, at) && this.refused) this.denied(this.refused);
+  }
+
+  /** The shot remembered from a press while busy, cast now the hero is free: refused, heard as its press would be. */
+  private castQueued(): void {
+    const q = this.queued!;
+    this.queued = null;
+    if (!this.tryCast(q.skill, q.key, q.at) && this.refused) this.denied(this.refused);
   }
 
   /**
@@ -722,14 +739,16 @@ export class Player {
   /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go; `at`: where it's cast (the
    *  aim by default) */
   tryCast(s: KnownSkill, key?: SkillKey, at: THREE.Vector3 = this.aim): boolean {
-    if (this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
+    this.refused = null;
+    if (this.staggered || !this.alive) return false;
+    if (this.cooldownLeft(s.def.impl) > 0) { this.refused = 'cooldown'; return false; }
     // (over a cast or a channel only a skill cast over one, which leaves it going: Bull Rush as Steel Tempest spins; in
     // a dash only as an open one lets, and no charge or blink)
     if ((this.casting || (this.channel && !this.channel.skill.def.block)) && !s.def.overCast) return false;
     if (this.dash && (this.dashShut() || s.impl.dashes)) return false;
-    if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
+    if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); this.refused = 'energy'; return false; }
     const target = at.clone();
-    if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
+    if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); this.refused = 'target'; return false; }
     // Only a cast that can actually start lowers the shield; failed cooldown/energy/target checks keep it up.
     if (this.channel?.skill.def.block) this.stopChannel();
     // (the house of records' favourite skill: the local hero's casts in a run)
@@ -980,7 +999,7 @@ export class Player {
     if (this.channel && !this.channel.skill.def.block) return;
     // a broken guard can't be raised again until the shield recovers
     if (this.staggered) return;
-    if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
+    if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); this.refused = 'energy'; return; }
     if (this.channel) this.stopChannel();
     if (this.local) recorder.mark(`channel ${s.def.impl}`);
     // (the hand its key casts it from, before it starts: its look is made for it)
@@ -1035,6 +1054,19 @@ export class Player {
     floatText(this.pos.x, 2.6, this.pos.z, 'Not enough energy', 'info', '#62d0ff');
   }
 
+  /**
+   * A press that cast nothing (#572): a soft sound saying so, a knock for a skill cooling or with nothing to cast at
+   * and a fizzle for one short of energy (`sfx.denied`). At most one every `DENIED_EVERY` s of the game's time, so a
+   * key mashed doesn't rattle; this game's own hero's alone (a partner's copy never presses), and never in free
+   * casting, where nothing is refused.
+   */
+  denied(why: Denial): void {
+    if (!this.local || this.sandbox) return;
+    if (G.time - this.deniedAt < DENIED_EVERY) return;
+    this.deniedAt = G.time;
+    sfx.denied(why);
+  }
+
   /** a skill that needs something to cast at (a mark, a foe) found nothing */
   private noTarget(): void {
     if (G.time - this.lastNoTarget < 1.2) return;
@@ -1079,7 +1111,7 @@ export class Player {
         this.casting = null;
         // (a shot queued behind it is drawn at once: started next frame, the pose had a frame with no shot between the
         // two, and the archer's bow and draw hand stepped out to rest for it and back)
-        if (this.queued && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key, q.at); }
+        if (this.queued && !this.channel) this.castQueued();
       }
     }
     if (this.casting || this.channel || this.dash || this.staggered) this.busyAt = t;

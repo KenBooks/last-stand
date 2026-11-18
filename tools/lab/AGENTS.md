@@ -117,6 +117,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
 - `sound [scenes]`: a skill's sounds rendered offline as the game plays them and written as WAV files to listen to (Splintering Bolt held and its bursts, Void Lance's portal, beam and release, or any sound of the game's played once: each one's peak, loudest half second, level over time, brightness (centroid, share above 2 kHz), share above 150 Hz, most tonal peak, the nodes it made, its silence at its end)
+- `denied`: the sound a press that casts nothing makes (#572: a skill pressed while it cools, held, mashed no faster than its throttle, short of energy, a channel short of energy, an aimed skill let go while it cools: each heard once as a knock or a fizzle; ready, in free casting and for a partner's copy, nothing; `--canary` breaks the throttle)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
 Options every command takes:

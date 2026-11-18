@@ -1691,6 +1691,40 @@ function strawSink(sink: number): void {
   v.start(); v.stopAt(v.t + sink + 0.9);
 }
 
+// A press that casts nothing (#572): a skill cooling, short of energy, or with nothing to cast at. Heard so the player
+// knows the press was taken and refused, not lost, and soft, as it comes under every fight: noise alone (a beep would
+// be a note over the music), short, dry (the hall barely), its weight in the mids, and the two told apart by ear.
+
+/** Why a press cast nothing: the skill cooling, the hero short of its energy, or nothing for it to cast at. */
+export type Denial = 'cooldown' | 'energy' | 'target';
+
+/** Refused while it cools, or with nothing to cast at: a muted knock twice, a knuckle on a shut door, "not yet". Each
+ *  knock a broad band of noise round 500 Hz dying in a tenth of a second, a duller tap over it; the second softer and
+ *  lower, 75 ms on. Drawn a little apart each time, so a run of them isn't one sample on repeat. */
+function deniedKnock(): void {
+  const v = voice(0, 0.04);
+  const { c } = v;
+  const k = 0.94 + Math.random() * 0.12;
+  for (const [delay, level, low] of [[0, 1, 1], [0.075, 0.6, 0.86]]) {
+    const body = c.createBiquadFilter(); body.type = 'bandpass'; body.frequency.value = 480 * k * low; body.Q.value = 1.2;
+    v.loop(body); body.connect(blowAt(v, delay, 0.5 * level, 0.1, v.out, 0.002));
+    const tap = c.createBiquadFilter(); tap.type = 'bandpass'; tap.frequency.value = 1500 * k * low; tap.Q.value = 0.9;
+    v.loop(tap); tap.connect(blowAt(v, delay, 0.14 * level, 0.035, v.out, 0.001));
+  }
+  v.start(); v.stopAt(v.t + 0.3);
+}
+
+/** Refused for want of energy: a fizzle, a spark that won't take. A soft breath of noise falling from bright to dark
+ *  over a fifth of a second, and a little sputter of crackle in it dying sooner. */
+function deniedFizzle(): void {
+  const v = voice(0, 0.04);
+  const air = v.sweep('bandpass', 2600, 520, 0.22, 1.1);
+  v.loop(air); air.connect(blowAt(v, 0, 0.4, 0.24, v.out, 0.015));
+  const spit = v.sweep('bandpass', 3200, 1100, 0.16, 1.4);
+  v.crackle(spit, 0.8); spit.connect(blowAt(v, 0.01, 0.5, 0.15));
+  v.start(); v.stopAt(v.t + 0.4);
+}
+
 /** The loading screen's exit (`ui/logoWind.ts`): a gust from the right blows the logo's letters away to the left as
  *  dust and snow (its front crossing them in 1.1 s), and the swirl gathers into the lobby's logo, top left (from 1.45
  *  s, landed by about 2.95). Timed to it, and soft, as the first sound a visit hears (from the owner's review of
@@ -1878,6 +1912,9 @@ export const sfx = {
   draught: guard(() => { draught(); }),
   rush: guard(() => { noise({ dur: 0.45, freq: 220, sweep: 600, type: 'lowpass', gain: 0.45, attack: 0.04 }); tone({ freq: 70, to: 45, dur: 0.4, gain: 0.3 }); }),
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
+  /** a press that cast nothing (#572): a knock for a skill cooling or with nothing to cast at, a fizzle for one short
+   *  of energy (the player throttles it by the game's time and plays it for its own hero alone) */
+  denied: guard((why: Denial) => { if (why === 'energy') deniedFizzle(); else deniedKnock(); }),
   /** a co-op ping (game/ping.ts): two bright notes, rising */
   ping: guard(() => { if (throttle('ping', 150)) return; tone({ freq: 1320, dur: 0.18, gain: 0.05 }); tone({ freq: 1760, dur: 0.28, gain: 0.045, delay: 0.09 }); }),
   /** a partner's chat message (ui/chat.ts): a soft rising pair */

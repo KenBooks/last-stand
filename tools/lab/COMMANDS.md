@@ -1198,7 +1198,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   its least draw into the ground, a foe, a log and off a stone; `nockshotHeld`, held at full for 4 s; `briar`;
   `lancewood` and `lancewoodShort`; `hail`, Hailfletch held for three volleys of 24; `rangerMany`, the loudest a
   ranger gets (two in co-op, a volley landing as a fan and a full Lancewood Shot are loosed); `quarry`, the mark and
-  its refresh; `strawman`, raised, struck and sinking; `glance`; `arrowLands`. A cue marked `optional` is a sound an
+  its refresh; `strawman`, raised, struck and sinking; `glance`; `arrowLands`; a press that casts nothing (`DENIED`, #572): `deniedCooldown`, the knock, `deniedEnergy`, the fizzle,
+  `deniedMashed`, four knocks at the player's throttle. A cue marked `optional` is a sound an
   older game played nothing for (the bow's creak, an arrow into the ground), skipped quietly on the other side of
   an `--ab`. Any other name is a sound of `sfx` played once (`bow`, `swing`, `clang`), for a loudness to
   hold a spell against. Each scene renders until the hall's ring after its last cue has died (3.5 s), and says its
@@ -1214,6 +1215,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   -60 dB in its last quarter second) are problems. `--canary` renders the first scene again under a 440 Hz note
   never stopped, which must be caught as both. `--ab` runs only against a commit that has `playInto`. The
   measures are pure functions in `page/soundMeasure.ts`, tested in `test/soundMeasure.test.mjs`.
+- `denied`: the sound a press that casts nothing makes (`page/denied.ts`; `Player.denied` in
+  `src/entities/player.ts`, `sfx.denied` in `src/core/audio.ts`, #572). A skill on a key that's pressed to cast, with
+  a cooldown and a cost and needing no target (the warrior's Iron Bellow, the mage's Glacial Nova, the ranger's
+  Briarflight), is pressed as the player presses it, a set-up each: once while it cools (a knock, once); held down 2 s
+  while it cools (once: the key is tried every frame it's held, and only its press is heard); mashed 3 s while it
+  cools, down a frame of every four (no more knocks than the throttle's 0.3 s allows, and at least half of that, or
+  the presses went unheard); once short of energy (a fizzle); once ready (nothing, and one cast); once in free casting
+  with its cooldown set by hand (refused, and nothing). A channel with a cost is held short of energy (a fizzle,
+  once), and an aimed skill with a cooldown aimed and let go while it cools (a knock). A partner's copy runs no input
+  (`updateRemote`), so it never presses: the player is asked itself, as a hero not this game's own, to refuse a press
+  and play its sound (nothing), and then as this game's own (one, or nothing was asked). What's read is what the game
+  asks the sound module to play (`sfx.denied` wrapped), and the casts it fired. `--canary` breaks the throttle (the
+  last sound's time set back before every frame), which the mashing must catch. How each sounds is `sound`'s
+  `deniedCooldown,deniedEnergy,deniedMashed`.
 - `dev`: developer controls through their real panel: Hero/Dev tabs, checked frame inclusion, world labels outside flight, opacity floor, five required desktop/phone/tablet layouts, flight speed in the hint, a training start from frozen flight with harmless enemies, continuous No costs refill, reset, and head meshes hidden during 0.1x first-person entry. `--canary` plants a drained resource and requires its detection. Pictures go to `out/dev`.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
   hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:

@@ -328,6 +328,25 @@ const RANGER: Record<string, Scene> = {
   },
 };
 
+/** the least time between two denied sounds as the player plays them (s, `DENIED_EVERY` in src/entities/player.ts) */
+const DENIED_EVERY = 0.3;
+
+/** A press refused (#572), once and mashed at the most the player lets it sound. */
+const DENIED: Record<string, Scene> = {
+  deniedCooldown: {
+    what: 'a press refused while its skill cools: the knock',
+    cues: [{ at: 0, sound: ['denied'], args: ['cooldown'] }],
+  },
+  deniedEnergy: {
+    what: 'a press refused short of energy: the fizzle',
+    cues: [{ at: 0, sound: ['denied'], args: ['energy'] }],
+  },
+  deniedMashed: {
+    what: `a cooling skill's key mashed: a knock every ${DENIED_EVERY} s, four times`,
+    cues: [0, 1, 2, 3].map((press) => ({ at: press * DENIED_EVERY, sound: ['denied'], args: ['cooldown'] })),
+  },
+};
+
 const SCENES: Record<string, Scene> = {
   bolt: {
     what: 'Splintering Bolt held: four casts, each bursting on a foe and its two splits on two others',
@@ -382,6 +401,7 @@ const SCENES: Record<string, Scene> = {
   },
   ...WARRIOR,
   ...RANGER,
+  ...DENIED,
   lanceEarly: {
     what: 'Void Lance let go as its portal is drawn, before the beam',
     cues: [
