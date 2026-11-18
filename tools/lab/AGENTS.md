@@ -17,7 +17,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 
 - `cloud --google`: real sign-in controls/window and lightweight callback, with local OAuth replies: no game reload, one nonce-bound finish, link, cancel and blocked-popup redirect; `--canary` supplies an invalid code.
 
-- `bank`: a bank on Random in the panels' lobby (#558): the wave in the save under the battleground rolled, offered as the starting wave (and read back from the save), Random rolling only where it is unlocked (`--canary` takes the bank's record out of the save).
+- `bank`: a bank on Random in the panels' lobby (#558): the wave in the save under the battleground rolled, offered as the starting wave (and read back from the save), Random rolling only where it is unlocked; the choice taught for the first three banks and compact after, its count kept in storage (#347; `--canary` takes the bank's record out of the save and the count out of storage).
 
 - `dev`: developer controls, Hero/Dev tabs, five viewport layouts, frozen training start, refills and reset, and slow first-person entry (`--canary` plants a drained resource).
 

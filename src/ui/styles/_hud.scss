@@ -197,6 +197,14 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
 .dc-bag { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 10px; max-height: 120px; overflow: auto; }
 .dc-bag .chip { font-size: 13px; padding: 2px 7px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.1); pointer-events: auto; }
 .dc-risk { color: var(--danger); font-size: 15px; margin-bottom: 12px; }
+/* what each choice stakes, a small line under each button's label (#347): the buttons' padding gives the line its
+   room, so they stay main's height and the choice main's size */
+#decision .dc-buttons .btn { display: inline-flex; align-items: center; justify-content: center; }
+#decision .dc-label { display: inline-flex; flex-direction: column; align-items: center; }
+#decision .stake { font-family: var(--font-body); font-weight: normal; font-size: 10.5px; line-height: 1.15; letter-spacing: .3px; color: var(--ink-dim); }
+#decision .stake:empty { display: none; }
+#decision.staked .dc-buttons .btn { padding-block: 6px; }
+#decision.staked .dc-label > :first-child { line-height: 1.1; }
 .dc-buttons { display: flex; gap: 12px; justify-content: center; }
 /* the badge flares and gives way as the choice grows out of it, and pops back once it folds in again */
 #wavebadge { transition: opacity .3s, transform .3s; }
