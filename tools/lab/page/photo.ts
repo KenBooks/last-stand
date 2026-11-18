@@ -322,7 +322,19 @@ function rowsOf(image: ImageBitmap, shares: readonly number[]): { mean: number; 
 }
 
 /** A photo taken by Space: saved under a dated name at the canvas's pixels, lit; with the letterbox, its bar black. */
-async function photoTaken(lab: Lab, where: string, letterbox: boolean): Promise<Found> {
+/** A photo as saved, as a picture of its own (`<where>-photo`): what the player's PC gets, its letterbox in it. */
+function photoPictured(where: string, image: ImageBitmap): Pictured {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  canvas.getContext('2d')!.drawImage(image, 0, 0);
+  const tile = { view: 'photo', png: canvas.toDataURL('image/png'), width: image.width, height: image.height };
+  return { label: `${where}-photo`, tiles: [tile], notes: ['the photo as saved'] };
+}
+
+/** A photo taken by Space and checked as the browser was handed it; pictured as saved if `letterbox` (the shot set
+ *  up). */
+async function photoTaken(lab: Lab, where: string, letterbox: boolean): Promise<Found & { saved?: Pictured }> {
   const caught = catchPhoto();
   await lab.press('Space');
   lab.drawing = true;
@@ -343,8 +355,9 @@ async function photoTaken(lab: Lab, where: string, letterbox: boolean): Promise<
   const bar = letterbox ? `, its bar's brightest ${top.brightest}` : '';
   const lines = [`${where}: saved ${name.replace(/\d/g, '#')} at ${image.width}x${image.height}, `
     + `its middle's light ${middle.mean.toFixed(1)}${bar}`];
+  const saved = letterbox ? photoPictured(where, image) : undefined;
   image.close();
-  return { lines, problems };
+  return { lines, problems, saved };
 }
 
 /** Each mesh of the hero, and whether every one is on the hidden layer alone. */
@@ -645,7 +658,9 @@ async function inPlace(lab: Lab, where: string, canary: boolean, settable: boole
   parts.push(await heroHiddenAndShown(lab, where), await photoTaken(lab, where, false));
   await shotSetUp(lab, shot.filter, settable ? DUSK : null);
   moments.push(await lab.screen(`${where}-shot`, [`the panel hidden, letterboxed, ${shot.filter}`]));
-  parts.push(await photoTaken(lab, where, true));
+  const taken = await photoTaken(lab, where, true);
+  parts.push(taken);
+  if (taken.saved) moments.push(taken.saved);
   parts.push(await leftByEsc(lab, where, false));
   return {
     lines: parts.flatMap((part) => part.lines),
