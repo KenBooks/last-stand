@@ -232,11 +232,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           totalEmissiveRadiance *= mix(1.0, nearGlow(), uNear);
-          // (the rim at glancing angles, none where the normal turns away from the eye: in a fold, the inside of a
-          // closed fist under the thumb, a normal turned away read as the most glancing of all and lit a white spot
-          // there, from play: "he still has sperm in his fist")
-          float rimFacing = dot(normal, normalize(vViewPosition));
-          totalEmissiveRadiance += uRim * pow(1.0 - clamp(rimFacing, 0.0, 1.0), 3.0) * smoothstep(-0.25, 0.0, rimFacing);
+          totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
           if (uAuraLoop.w > 0.0 && dot(uAura, uAura) > 0.0) {
             // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop; passed over
             // with the setting off (its strength 0) as on plain gear

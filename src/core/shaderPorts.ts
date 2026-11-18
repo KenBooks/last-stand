@@ -380,11 +380,9 @@ function kitNodes(node: N, kit: KitLooks): void {
   const kept = dissolve.lessThanEqual(0).or(dn.greaterThanEqual(dissolve));
   node.maskNode = node.maskNode ? node.maskNode.and(kept) : kept;
   const edge = select(dissolve.greaterThan(0), smoothstep(dissolve, dissolve.add(0.09), dn).oneMinus(), 0);
-  // (no rim where the normal turns away from the eye: WebGL's patch says why)
-  const rimFacing = dot(normalView, positionViewDirection);
-  const facing = clamp(rimFacing, 0, 1);
+  const facing = clamp(dot(normalView, positionViewDirection), 0, 1);
   node.emissiveNode = materialEmissive.mul(mix(1, near, read('near', 'float')))
-    .add(read('rim', 'color').mul(pow(facing.oneMinus(), 3)).mul(smoothstep(-0.25, 0, rimFacing)))
+    .add(read('rim', 'color').mul(pow(facing.oneMinus(), 3)))
     .add(read('u.uEdge', 'color').mul(edge).mul(3))
     .add(vec3(0.25, 0.55, 0.9).mul(frozen).mul(0.35))
     .mul(char.mul(-0.7).add(1))
