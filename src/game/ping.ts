@@ -9,6 +9,7 @@ import { aimedFoe } from '../combat/skills/quarryMark';
 import type * as THREE from 'three';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
+import { onMessages } from '../net/messages';
 
 /** What a ping points out: a place on the ground, or a foe (followed while it lives). Every ping is one size (from
  *  play: "do not increase radius, just have same size for all"). */
@@ -74,6 +75,8 @@ export function ping(m: PingMessage, foe: Enemy | null = null): boolean {
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /** A partner's ping, as its game sent it (`m` is checked: it came over the link). */
+onMessages(['ping'], (m, _from, by) => { if (by) pingHeard(by, m); });
+
 export function pingHeard(by: Player, m: Record<string, unknown>): void {
   const kind = m.k === 'foe' ? 'foe' : 'spot';
   if (!finite(m.x) || !finite(m.z) || Math.hypot(m.x, m.z) > 200) return;

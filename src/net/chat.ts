@@ -5,6 +5,7 @@
 // by every game that hears it: a partner's game is another's code, and nothing it sends is trusted as it comes.
 import { CHAT } from '../data/balance';
 import type { Player } from '../entities/player';
+import { onMessages } from './messages';
 
 /** A line of the chat: who wrote it (none: the game's own word), what, and when it came (s, the page's clock). */
 export interface ChatLine { by: Player | null; text: string; at: number }
@@ -63,6 +64,8 @@ export function say(me: Player, text: string): ChatSent {
 }
 
 /** A partner's message, as its game sent it (`m.text`: checked, cleaned and held to the burst again here). */
+onMessages(['chat'], (m, _from, by) => { if (by) chatHeard(by, m); });
+
 export function chatHeard(by: Player, m: Record<string, unknown>): void {
   if (typeof m.text !== 'string' || m.text.length > CHAT.most * 8) return;
   const clean = cleanChat(m.text);

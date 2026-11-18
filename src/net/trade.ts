@@ -22,6 +22,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { applySwap, cleanOffer, offerProblem, swapProblem, tradeLocked } from '../loot/trade';
 import { throwItem } from '../game/groundItems';
 import { netLog } from './netlog';
+import { onMessages } from './messages';
 import type { Player } from '../entities/player';
 import type { Item, Profile } from '../types';
 
@@ -224,6 +225,9 @@ export function updateTrade(): void {
 }
 
 /** A trade message from the partner `from` (or one of the host's rulings). */
+/** the trade's messages: an ask and its answer, an offer, an accept, a cancel, the host's rulings */
+onMessages(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend'], (m, from) => tradeHeard(from, m));
+
 export function tradeHeard(from: string, m: Record<string, unknown>): void {
   if (!net || typeof m.id !== 'string') return;
   const id = m.id;
