@@ -832,8 +832,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (flattened as the palm is, its end inside it: round, a 7 cm tube's rim stood out of a 3 cm palm)
     H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.034, 0.016], [-0.285, 0.04, 0.025], [-0.265, 0.043, 0.032], [-0.235, 0.047, 0.042], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
     // The gambeson ends in a turned-back cuff. The old cuff hid the winding up the forearm.
-    const foreSleeve = lathe([[0.045, BARE_CUFF], [0.057, -0.12], [0.0655, -0.045], [0.064, 0]], 16);
-    const cuff = lathe([[0.043, 0.001], [0.050, 0], [0.052, 0.005], [0.055, 0.029], [0.052, 0.040]], 16);
+    // (a fighter's forearm, the wrap under its cuff 9.2 cm across: "its a warrior dude")
+    const foreSleeve = lathe([[0.053, BARE_CUFF], [0.063, -0.12], [0.0685, -0.045], [0.066, 0]], 16);
+    const cuff = lathe([[0.051, 0.001], [0.058, 0], [0.060, 0.005], [0.063, 0.029], [0.060, 0.040]], 16);
     B.add(scaleUV(foreSleeve, 2, 1), cloth, el);
     B.add(scaleUV(cuff, 2, 0.3), cloth, el, [0, BARE_CUFF, 0]);
     yield;
