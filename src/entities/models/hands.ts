@@ -137,7 +137,7 @@ function wrinkled(material: THREE.MeshStandardMaterial): void {
   material.map = maps.map;
   material.normalMap = maps.normalMap;
   material.roughnessMap = maps.roughnessMap;
-  material.normalScale.copy(maps.normalScale);
+  material.normalScale.set(0, 0);
 }
 
 /** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
