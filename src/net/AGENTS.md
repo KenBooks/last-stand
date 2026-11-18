@@ -77,3 +77,11 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - **A partner's best wave rides its look** (`Look.best`, the save's `records.bestWave`, PROTOCOL 38 with the rooms): Play together's party cards show each player's gear level (the mean item level of what `Look.eq` says it wears, nothing new on the wire) and best wave cleared, read through `lookOf(p)`; a wave not a whole number from 0 to 9999 shows as unsaid (`bestOf` in `ui/coop.ts`), as a look is a partner's word.
 - **A hero's look crosses with him** (`Look.hl` in `session.ts`, `PROTOCOL` 40): his look and hair colour as his game shows him (`Player.heroLook`). A new look is a new copy, built in a look already made where his isn't yet (`buildableLook`) and again once the workers have made his (`readyLook`, `makePlayer`'s `made`); a hair colour alone colours the copy's hair (a uniform's). `npm run lab -- coop --scenarios looks` (`--pictures`: `out/coop/looks-guest.png`, `--canary` a look the room is never told of).
 - **The Ossuary Twins in co-op** (PROTOCOL 41): a boss's phase goes through enemyAI's `fx` (`bossPhase`), decided where the fight is simulated (the host's) and shown on every game (`entities/bossKit.ts`). Their life is one (each copy given the pair's whole, the host's snapshots carrying each's, the same), the collapse at half (`twinFall`, the host's: who took more is counted where the hits are dealt), the chain's snap (`chainSnap`), the charge (`twinCharge`), the skulls (`skullVolley`) and the mend (`twinMend`, `twinMended`) all go through fx, each game judging its own hero; a guest's own kill of one twin fells its copy of the other at once, as the host's report will.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->

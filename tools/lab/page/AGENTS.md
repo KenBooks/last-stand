@@ -36,3 +36,11 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 - Pure helpers a measure uses get a unit test in `test/` (`flashes.ts`, `patches.ts`, `sweptArea.ts`, `jumps.ts` have theirs).
 - `portraits` checks the real party card at the five required desktop/phone/tablet sizes: class accent, name/class alignment, host portrait star, own border, ordering and overflow. Show the HUD before measuring it (the solo lobby hides it), and yield to the browser after opening native `details`: its deferred `toggle` populates the picker after the click.
 - `heropick` checks Escape/pause before any hero is chosen, with navigation blocked behind pause. It then navigates to an unfinished alternate hero, repeats its tab and presses Enter: none may save or choose him, nor show his cold model. After choosing, real W and Escape events must reach play immediately. `behind` ensures cached spares exist, disposes them before drawing (the live hero's shared lights must stay), rebuilds them, chooses a cached hero and really draws the first lobby frame: no new shader programs.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->

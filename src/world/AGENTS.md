@@ -36,3 +36,13 @@ Adding a biome is in the root's Architecture.
 ## The village
 
 The lobby's village, with the beta on (`village.ts`, `villagePlan.ts`, `villageWays.ts`, `rooms.ts` and `houses/`, `places/`, `fountain.ts`, `meadow.ts`, `signposts.ts`, `heroHall.ts`, `lampShadows.ts`, `moonShadow.ts`, `walkPath.ts`, `hoardPieces.ts`, `villageNodes.ts`): read [`docs/agents/village.md`](../../docs/agents/village.md) before changing any of it, and [`docs/agents/village-grass.md`](../../docs/agents/village-grass.md) before changing its grass.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->
+- `houses.ts`, `houses/`: each house's room built by its file (`build(group)`), found by the folder and matched to its data (`data/houses/<id>.ts`) by id; a house with data and no build fails as the village is built (`builderOf`). What every room has (walls, roof, door, sign, bookcase, chandelier) is the kit, `rooms.ts`.
+- `places.ts`, `places/`: a place's build of its own (`build(kit)`, `placeKit.ts`: the scene, the wall, the village's materials, its obstacles and updaters), built where the village built the weapons rack, before the lamps; a place with nothing to build has its data file alone (`data/places/<id>.ts`).

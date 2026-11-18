@@ -46,3 +46,11 @@ Gear-driven skills and block (`Player.gear`, `tryBlock`) are in `src/combat/skil
 - Training is also per enemy (`EnemyOpts.training`, defaulting to the run's mode), so individually spawned practice enemies stay harmless outside a training run. Their attack damage is zero; `hurtPlayer` also rejects a training attacker. Projection uniforms and shadow suppression use this flag, and summons inherit it.
 
 - **A rival** (`rival.ts`, #406): an opposing hero of a duel as a foe of the local game's, so every skill meets him (`src/net/AGENTS.md`'s duel). An `Enemy` with `standIn`: its own definition and a body of one unseen column (on the crowd's layer, which no camera draws, so it compiles nothing; the aim, a shot and a lodged arrow meet it), in no crowd, placed each frame where the hero's reports have him, alive while he is, its life his, its bar over him. It never dies, thinks or is thrown; what would hurt, daze or carry it is told to the hero's own game.
+
+## Notes by module
+
+What's learned about one module or folder here goes in this list, one bullet a note, led by the module's name in
+backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the end: two PRs appending at a file's
+end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
+
+<!-- sorted -->

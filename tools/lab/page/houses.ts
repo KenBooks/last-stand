@@ -1,5 +1,5 @@
 // `lab houses`: the village's houses walked into and out of as a player does (`src/game/rooms.ts`, the rooms in
-// `src/world/rooms.ts`, the library's in `src/world/library.ts`): stood at each cottage's door, its name the object
+// `src/world/rooms.ts`, the library's in `src/world/houses/library.ts`): stood at each cottage's door, its name the object
 // near and E taking him in; inside, the village hidden and the room shown, the yard's dummies gone from it, no program
 // compiled, the walls the camera stands outside of cut away from above and none through the close views (the camera
 // kept inside them), a walk at the back wall held in; the house of records' trophies shown for the bosses beaten

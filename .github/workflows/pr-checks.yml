@@ -47,6 +47,9 @@ jobs:
       - name: Test the lab's own code
         run: npm run lab:test
 
+      - name: Test the scaffold
+        run: npm run new:test
+
       - name: Install the traces page's build
         run: npm ci --prefix server/traces/web
 

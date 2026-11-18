@@ -15,6 +15,7 @@ npm run check:pages  # after build: every asset path must work under the Pages b
 npm run stalls       # the game in the installed Chrome, traced: the browser's own stalls (tools/stalls/README.md)
 npm run icons -- sheet  # every class's skill icons side by side at a slot's size (check, add: tools/icons/README.md)
 npm run music -- loops piece.wav  # where a piece can loop; make, seam: the game's tracks (tools/music/README.md)
+npm run new -- foe spitter  # a new foe, boss, house, place, screen or lab command, from a sibling (tools/new/README.md)
 npm run photos -- ground <id> <name>  # a Poly Haven ground into a map's two photos (tools/photos/README.md)
 npm run fire-bake -- stir=4  # the fire's simulation alone, a sheet of its frames, in seconds (tools/lab/commands/fire.md)
 ```
@@ -37,10 +38,13 @@ The game has no test suite. Verify changes with `npm run build` and by playing t
   - a foe: `src/data/foes/<foe>.ts` (its stats, guide note and trophy; its id declared there) and `src/entities/foes/<foe>.ts` (its model, its `fx`, its way of fighting), found by the folder; a boss's in `src/entities/bosses/<boss>.ts` instead, loaded and warmed at its wave (`game/bossReady.ts`);
   - a sound of a foe's or a skill's own: `src/core/sounds/<name>.ts`, built of `core/audio.ts`'s voices;
   - a co-op message: registered from its feature's module (`onMessages`, `net/messages.ts`), and its protocol a line of its own in `net/protocol.ts`'s parts (never a number bumped by hand);
+  - a house of the village: `src/data/houses/<id>.ts` (its cottage, room and objects; its id declared there) and `src/world/houses/<id>.ts` (its room's build, from the kit `world/rooms.ts`); a place of the village (an object out of doors): `src/data/places/<id>.ts`, and `src/world/places/<id>.ts` if it builds something of its own (`world/placeKit.ts`);
+  - a screen (a window of the UI): a folder `src/ui/screens/<id>/` with its module, markup (`<id>.html`, any other `.html` there too) and styles (`_<id>.scss`), all found by the folder: the module registers itself (`screen`, `ui/screenKit.ts`), the markup goes in at `index.html`'s `<!-- screens -->` and the styles at `styles/index.scss`'s `// screens` (`vite.config.ts`);
+  - `npm run new -- <kind> <id>` starts a foe, a boss, a house, a place, a screen or a lab command as a copy of a sibling's files, marked so the typecheck names each until it's rewritten (`tools/new/README.md`);
   - a dialog: registered from its module (`dialog`, `ui/dialogs.ts`); a kind of village object: what it does, registered by its owner (`villageUse`, `game/villageUses.ts`); a panel's markup: `src/ui/html/<id>.html`, named in `index.html` by a `<!-- part: id -->` line;
   - a quality setting: one block of `SETTINGS` in `data/quality.ts`;
   - a lab command: its own module (`tools/lab/AGENTS.md`);
-  - what's learned about a feature: its directory's AGENTS.md, as a bullet of its own (not a rewrite of a neighbour's), or a note of its own in `docs/agents/` once it's long.
+  - what's learned about a feature: its directory's AGENTS.md, as a bullet of its own in its `## Notes by module` list, led by the module's name in backticks and in its alphabetical place (not at a section's end, where every PR appended and the AGENTS.md files were the most conflicted files of all: `src/ui/AGENTS.md` was edited by 131 PRs from Oct 10 to Nov 18), or a note of its own in `docs/agents/` once it's long.
 - **Lists every PR adds to are kept sorted, and each entry is added in its alphabetical place**, never at the end: two PRs appending at one list's end touch the same lines and conflict, two in their places rarely do. A list marked `// sorted` (`<!-- sorted -->` before a Markdown one) is checked by `npm run check:sorted` in the PR checks.
 - **Shared engine work lands first, once, in a PR of its own; content built on it follows.** A piece lifted out of a stack and merged with its own copy of the stack's base (#705 took the boss toolkit of #668) left every PR of the stack conflicting in 27 files.
 - The PR checks say which shared files a PR touches (`scripts/hubs.mjs`, a warning in the run's summary, never a failure): a feature's PR that touches one should say why.

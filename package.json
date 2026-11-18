@@ -15,6 +15,8 @@
     "facelab": "node tools/facelab/facelab.mjs",
     "icons": "node tools/icons/icons.mjs",
     "music": "node tools/music/music.mjs",
+    "new": "node tools/new/new.mjs",
+    "new:test": "node --test \"tools/new/test/*.test.mjs\"",
     "photos": "node tools/photos/photos.mjs",
     "lab": "node tools/lab/lab.mjs",
     "lab:serve": "node tools/lab/lab.mjs serve",

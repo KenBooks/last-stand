@@ -15,7 +15,9 @@ export const HUBS = {
   'src/core/renderer.ts': 'shared rendering: edit only for rendering work',
   'src/data/enemies.ts': 'a foe is data/foes/<foe>.ts',
   'src/data/guide.ts': 'a foe\'s note is in its data/foes file',
+  'src/data/houses.ts': 'a house is data/houses/<id>.ts and world/houses/<id>.ts',
   'src/data/quality.ts': 'a setting is one block, in its alphabetical place',
+  'src/data/village.ts': 'a place of the village is data/places/<id>.ts (its spot stays on the plan)',
   'src/entities/enemyAI.ts': 'a foe\'s fx and way of fighting register from entities/foes/<foe>.ts',
   'src/entities/models/index.ts': 'a foe\'s model registers from entities/foes/<foe>.ts',
   'src/game/warmup.ts': 'shared warm-up: edit only for warm-up work',
@@ -23,9 +25,13 @@ export const HUBS = {
   'src/net/session.ts': 'a feature\'s messages register in net/messages.ts; its protocol part is a line of net/protocol.ts',
   'src/types.ts': 'a foe\'s ai kind is declared from its own file (`declare module`)',
   'src/ui/menus.ts': 'a panel of its own is a module of its own',
+  'src/ui/styles/index.scss': 'a screen\'s styles are its folder\'s, src/ui/screens/<id>/',
+  'src/world/rooms.ts': 'the rooms\' kit: a house\'s room is world/houses/<id>.ts',
+  'src/world/village.ts': 'a place\'s build is world/places/<id>.ts',
   'tools/lab/COMMANDS.md': 'its list is made by npm run lab -- docs (a conflict there: make it again)',
   'tools/lab/node/commandKit.mjs': 'a lab command is node/commands/<name>.mjs and page/commands/<fn>.ts',
   'tools/lab/node/optionKit.mjs': 'a lab command\'s own options are in its own module',
+  'tools/lab/page/ui.ts': 'a ui state is tools/lab/page/uiStates/<state>.ts',
 };
 
 /** The files changed since `base` (the merge base), each with its lines added and removed. */

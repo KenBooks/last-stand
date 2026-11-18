@@ -1,5 +1,5 @@
 // `lab merchant`: Odo's trade as a player makes it (`src/loot/merchant.ts`, its screen `src/ui/merchant.ts`, his shop
-// `src/world/shop.ts`), and his prices against the drop rates. First the rates: for each rarity he sells, from the wave
+// `src/world/houses/merchant.ts`), and his prices against the drop rates. First the rates: for each rarity he sells, from the wave
 // he sells it, a run's lesser gear must be worth no more than he asks for each piece of it the run drops (else trading
 // beats playing), and no stock at any level holds anything above epic or a rarity before its wave. Then the trade: a
 // hero of wave 6 given 40 commons, 6 rares and a legendary walks into the shop and presses E at the counter. The screen
