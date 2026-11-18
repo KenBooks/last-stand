@@ -79,7 +79,7 @@ const SKIN_CAST = 0.1;
 const WRAP_GAP = 0.0045;
 /** how far over the resting skin a strip's edges lie (m): a wrap pulled tight is drawn into the skin at its edges, and
  *  at the middle's gap the backdrop was seen through the slit under an edge (`lab hands`' seen through) */
-const EDGE_GAP = 0.0015;
+const EDGE_GAP = 0.003;
 /** where across a wrap's strip its section's points lie (0 one edge, 1 the other): each laid on the skin under it */
 const ACROSS = [0, 0.53, 1];
 const _ray = new THREE.Raycaster(), _rayFrom = new THREE.Vector3(), _rayAxis = new THREE.Vector3();
