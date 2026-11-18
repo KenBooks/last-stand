@@ -85,7 +85,7 @@ export function refreshFriends(now = false): Promise<void> {
   }
   if (asking && !now) return asking;
   asking = api.sayPresence(presence()).then(took, (e: unknown) => {
-    problem = e instanceof api.CloudError && e.status ? e.message : 'The friends list could not be reached.';
+    problem = problemOf(e, 'The friends list could not be reached.');
     for (const fn of listeners) fn();
   }).finally(() => {
     asking = null;
@@ -119,6 +119,13 @@ export function initFriends(): void {
   void refreshFriends(true);
 }
 
+/** What the player is told of a failed call: the service's own words, or, where its server has no friends yet (a
+ *  PR's preview runs against the deployed service, which gets them only as the change merges), that. */
+function problemOf(e: unknown, offline: string): string {
+  if (e instanceof api.CloudError && e.status === 404) return 'Friends aren\'t on the cloud saves server yet.';
+  return e instanceof api.CloudError && e.status ? e.message : offline;
+}
+
 /** Runs a change to the friends (a request, an accept, a removal...), takes the view it answers, and resolves to
  *  what went wrong ('' when nothing did). */
 export async function changeFriends(change: () => Promise<api.FriendsView>): Promise<string> {
@@ -126,7 +133,7 @@ export async function changeFriends(change: () => Promise<api.FriendsView>): Pro
     took(await change());
     return '';
   } catch (e) {
-    return e instanceof api.CloudError && e.status ? e.message : 'The friends list could not be reached.';
+    return problemOf(e, 'The friends list could not be reached.');
   }
 }
 
@@ -139,6 +146,6 @@ export async function invite(id: string): Promise<string> {
     await api.inviteFriend(id, { ...room, friends: true });
     return '';
   } catch (e) {
-    return e instanceof api.CloudError && e.status ? e.message : 'The invite could not be sent.';
+    return problemOf(e, 'The invite could not be sent.');
   }
 }

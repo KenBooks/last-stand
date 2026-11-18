@@ -71,6 +71,11 @@ async function befriend(a, b) {
   assert.equal(accepted.status, 200, accepted.body);
 }
 
+test('the health says friends are on', async () => {
+  const health = await call('GET', '/saves/health');
+  assert.equal(health.body.friends, true);
+});
+
 test('a friend code is asked by, typed any way, and accepted: friends on both sides', async () => {
   const ysolde = await player('Ysolde');
   const kenneth = await player('Kenneth');
