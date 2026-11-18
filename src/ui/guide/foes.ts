@@ -37,8 +37,12 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
   return { common, bosses };
 }
 
-/** `def` as it comes as a guard: its `asGuard` share of its life and damage. */
-const asGuard = (def: EnemyDef): EnemyDef => ({ ...def, life: def.life * (def.asGuard?.life ?? 1), damage: def.damage * (def.asGuard?.damage ?? 1) });
+/** `def` as it comes as a guard: its `asGuard` share of its life and damage, and no speed where it stands. */
+const asGuard = (def: EnemyDef): EnemyDef => ({
+  ...def, life: def.life * (def.asGuard?.life ?? 1), damage: def.damage * (def.asGuard?.damage ?? 1),
+  // (a guard that stands where it rises walks nowhere)
+  speed: def.asGuard?.stands ? 0 : def.speed,
+});
 
 /** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there (and the boss it
  *  guards, where it comes on its ladder as a guard alone). */
@@ -85,7 +89,7 @@ function figures(foe: Foe): string {
   const items = [
     tile('Health', whole(life(d, foe.from)), `wave ${foe.from} · ${whole(life(d, LATER))} at wave ${LATER}`),
     tile('Damage', `${whole(damage(d, foe.from))} ${typed(d)}`, `a blow · ${whole(damage(d, LATER))} at wave ${LATER}`),
-    tile('Speed', `${num(d.speed)} m/s`, pace(d)),
+    tile('Speed', d.speed > 0 ? `${num(d.speed)} m/s` : 'stands', d.speed > 0 ? pace(d) : 'where it rises'),
     tile('Reach', metres(d.range), d.ai === 'ranged' ? `keeps ${metres(d.keepAway ?? 8)} away` : 'its blow'),
     tile('Wind-up', secs(d.windup), 'your time to get out of it'),
     tile('Between attacks', secs(d.cooldown)),
@@ -229,7 +233,7 @@ function glance(foe: Foe): string {
     { label: 'Health', share: d.life / most((x) => x.life), text: whole(d.life), colour: 'var(--life-bar)' },
     { label: 'Blow', share: d.damage / most((x) => x.damage), text: whole(d.damage), colour: 'var(--danger)' },
     { label: 'A second', share: dps(d) / most(dps), text: whole(dps(d)), colour: 'var(--danger)' },
-    { label: 'Speed', share: d.speed / fastest, text: `${num(d.speed)} m/s`, colour: 'var(--highlight)',
+    { label: 'Speed', share: d.speed / fastest, text: d.speed > 0 ? `${num(d.speed)} m/s` : 'stands', colour: 'var(--highlight)',
       mark: hero ? { share: hero / fastest, label: 'you' } : undefined },
     { label: 'Reach', share: reach(d) / most(reach), text: metres(reach(d)), colour: 'var(--ally)' },
   ]) + `<p class="gd-note">At wave 1, against the ${foe.def.boss ? 'other bosses' : 'other foes'}; damage a second is a blow over the time between attacks.</p>`;

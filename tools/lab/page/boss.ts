@@ -33,6 +33,7 @@ import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { cantorLook } from './bossCantor';
 import { guardSpots } from './bossGuardSpots';
+import { putAway } from '../../../src/perf/consent';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -780,7 +781,7 @@ async function pictures(lab: Lab, options: BossOptions, lines: string[]): Promis
     const at = boss.pos.clone().setY(PICTURE_Y);
     moments.push(lab.picture(label, views, [note], { at, distance: PICTURE_FROM }));
   };
-  const seen = async (label: string, note: string): Promise<void> => { moments.push(await lab.screen(label, [note])); };
+  const seen = async (label: string, note: string): Promise<void> => { moments.push(await screenClear(lab, label, note)); };
   const still = (): void => { boss.dazed = 1e4; boss.cancelAction(); };
   const sides = boss.def.bossKit!.parts!;
   const breakChain = (i: number): void => {
@@ -887,7 +888,7 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
     const at = cantor.pos.clone().setY(3.6);
     moments.push(lab.picture(label, views, [note], { at, distance: 13 }));
   };
-  const seen = async (label: string, note: string): Promise<void> => { moments.push(await lab.screen(label, [note])); };
+  const seen = async (label: string, note: string): Promise<void> => { moments.push(await screenClear(lab, label, note)); };
   const actUntil = async (foe: Enemy, name: string, share: number): Promise<void> => {
     foe.cd = 0;
     const reached = (): boolean => foe.action?.name === name && foe.action.t / foe.action.dur >= share;
@@ -907,9 +908,11 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   await pictureBeside(lab, moments, guards[1], hero, cantor);
   // 1b. a guard's toll: its ring rolling out
   await actUntil(guards[0], 'toll', 0.98);
-  // (its ring out past the guard's own glow on the floor, short of where it fades)
-  await lab.step(36, keepWhole);
-  await seen('1b a guard tolls', "a guard Bell-Warden's toll, its ring rolling out");
+  // (its ring out past the guard's own glow on the floor, short of where it fades; pictured at the guard, which
+  // stands across the arena from the hero, out of his view)
+  await lab.step(TOLL_SEEN_AFTER, keepWhole);
+  const tolling = guards[0].pos.clone().setY(1);
+  moments.push(lab.picture('1b a guard tolls', ['above'], ["a guard Bell-Warden's toll, its ring rolling out"], { at: tolling, distance: TOLL_SEEN_FROM }));
   guards[0].cd = 99;
   await lab.step(60, keepWhole);
   // 2-3. grave hands: the rings under the hero, then the hands
@@ -955,17 +958,34 @@ const ABOVE = 95;
 const BESIDE = 2.4;
 
 /** The hero stood `BESIDE` off a guard where it rose (it stands: it's never moved), on its side away from the Cantor
- *  (which floats over him otherwise), the two as the player sees them: the lesser bell's size against a man's (pictured from round them, the props of the arena stood
- *  between the camera and them). */
+ *  (which floats over him otherwise), the two as the player sees them: the lesser bell's size against a man's
+ *  (pictured from round them, the props of the arena stood between the camera and them); then back where he stood. */
 async function pictureBeside(lab: Lab, moments: Pictured[], guard: Enemy, hero: typeof G.player, cantor: Enemy): Promise<void> {
   const toHero = guard.pos.clone().sub(cantor.pos).setY(0).normalize();
+  const stood = hero.pos.clone();
   hero.pos.copy(guard.pos).addScaledVector(toHero, BESIDE);
   guard.cd = 99;
   // (a few frames for the camera to follow him there)
-  await lab.step(30);
+  await lab.step(FOLLOW_FRAMES);
   const note = `a guard Bell-Warden beside the hero, ${BESIDE} m apart: a lesser bell, ` +
     `${guard.def.asGuard?.size ?? 1} of a Bell-Warden's size`;
-  moments.push(await lab.screen('1a a guard beside the hero', [note]));
+  moments.push(await screenClear(lab, '1a a guard beside the hero', note));
+  // (back where he stood, the Cantor in view for the moments after)
+  hero.pos.copy(stood);
+  await lab.step(FOLLOW_FRAMES);
+}
+
+/** Frames after a guard's toll rings that it's pictured, and from how far (m): its ring out past its glow. */
+const TOLL_SEEN_AFTER = 36, TOLL_SEEN_FROM = 16;
+
+/** Frames for the camera to follow the hero stood somewhere else. */
+const FOLLOW_FRAMES = 30;
+
+/** The screen as the player sees it, the slow game's prompt put away first: the lab's boot is slow, and the prompt
+ *  lay over the boss's bar. */
+async function screenClear(lab: Lab, label: string, note: string): Promise<Pictured> {
+  putAway();
+  return lab.screen(label, [note]);
 }
 
 /** `cantorLook`: the Cantor risen alone at 12 m (bossCantor.ts). */
