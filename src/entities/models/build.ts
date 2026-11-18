@@ -11,7 +11,8 @@ export interface HandBuild {
   name: string;
   /** the digits' widths (the fingers' and the thumb's) */
   digits: number;
-  /** the palm's breadth across, and the wrist's with it */
+  /** the palm's breadth across, the digits' roots spread across it, and the wrist's with it (at least `digits`, or the
+   *  fingers press into each other) */
   wide: number;
   /** the palm's depth from its back to its front, and the wrist's with it */
   deep: number;
@@ -24,7 +25,7 @@ export const PLAIN: HandBuild = { name: 'plain', digits: 1, wide: 1, deep: 1, kn
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
  *  some 12% wider at their joints than an office worker's, the palm deeper; from play, "need bigger fists tho") */
-export const HEAVY: HandBuild = { name: 'heavy', digits: 1.16, wide: 1.07, deep: 1.14, knuckles: 1.15 };
+export const HEAVY: HandBuild = { name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, knuckles: 1.15 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
 export const HAND_BUILDS: Record<string, HandBuild> = { plain: PLAIN, heavy: HEAVY };

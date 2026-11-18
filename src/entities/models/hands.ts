@@ -86,7 +86,8 @@ const NAIL_ROUGH = 0.5;
 /** A digit's joints on the hand (`s` its side), as `spec` places and sizes them, its width by `build`'s. */
 function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec, build: HandBuild): Digit {
   const j: THREE.Group[] = [];
-  let at = joint(vis, -s * spec.u, spec.y, spec.z);
+  // (across the hand by its breadth: narrower than its digits are wide, they'd press into each other)
+  let at = joint(vis, -s * spec.u * build.wide, spec.y, spec.z);
   j.push(at);
   spec.len.forEach((l, n) => {
     if (n < 2) {
@@ -383,8 +384,12 @@ const FIST_FAN = [5, 2, -2, -10];
 const THUMB_BASE = [0.012, -0.042, -0.021] as const;
 // Seat the thumb just above the middle shaft's centre and one pad radius off its axis.
 const THUMB_CONTACT = { across: 0.005, down: 0.011, pad: 0.010 };
-// The rest joints and lengths are the same for every hand of a side. Solve once, outside the animation loop.
-const CLOSED_FISTS = new Map<number, THREE.Quaternion[][]>();
+// A fingertip's pad's half-depth over its finger's half-width at its root: a thicker finger's tip sits further off
+// the palm by the difference (`HandBuild.digits`).
+const PAD_DEPTH = 0.58;
+// The rest joints and lengths are the same for every hand of a side and build. Solve once, outside the animation
+// loop.
+const CLOSED_FISTS = new Map<string, THREE.Quaternion[][]>();
 
 /** Solve two bent links from their lengths and the distance to their endpoint. */
 function linkBend(a: number, b: number, distance: number): number {
@@ -398,7 +403,10 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     const root = digit.j[0].position;
     const [a, b, c] = digit.len;
     const yaw = THREE.MathUtils.degToRad(-h.s * FIST_FAN[i]);
-    const [y, z] = FIST_CREASE[i];
+    // (the crease on a deeper palm deeper, and the tip off it by its pad: the plain hand's numbers for its build)
+    const [y, plainZ] = FIST_CREASE[i];
+    const { deep, digits } = h.build;
+    const z = plainZ * deep - PAD_DEPTH * FINGERS[i].width * (digits - 1);
     // In the finger's plane, start at the end of the proximal phalanx and solve backwards from the tip.
     const dy = y - root.y + a * Math.cos(STRIKE_BEND);
     const dz = (z - root.z) / Math.cos(yaw) + a * Math.sin(STRIKE_BEND);
@@ -417,7 +425,8 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
 
   const [a, b, c] = h.thumb.len;
   const base = new THREE.Vector3(-h.s * THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2]).normalize();
-  const target = middle.add(new THREE.Vector3(h.s * THUMB_CONTACT.across, -THUMB_CONTACT.down, -THUMB_CONTACT.pad));
+  const pad = THUMB_CONTACT.pad * h.build.digits;
+  const target = middle.add(new THREE.Vector3(h.s * THUMB_CONTACT.across, -THUMB_CONTACT.down, -pad));
   const to = target.sub(h.thumb.j[0].position).addScaledVector(base, -a);
   const last = linkBend(b, c, to.length());
   to.normalize();
@@ -449,10 +458,11 @@ export function wrapPoses(h: Hand): (() => void)[] {
 
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
 export function closeFist(h: Hand, line: THREE.Vector3): void {
-  let pose = CLOSED_FISTS.get(h.s);
+  const key = handKey(h.s, h.build);
+  let pose = CLOSED_FISTS.get(key);
   if (!pose) {
     pose = closedFistPose(h);
-    CLOSED_FISTS.set(h.s, pose);
+    CLOSED_FISTS.set(key, pose);
   }
   const wrist = h.vis.parent!;
   wrist.updateWorldMatrix(true, false);
