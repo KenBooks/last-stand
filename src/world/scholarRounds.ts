@@ -57,6 +57,9 @@ const BODY = 0.3;
  *  he holds one: ahead of him and its height (m) */
 const SHELF = { stand: 0.5, low: 0.85, high: 1.6 };
 const HOLD = { ahead: 0.3, high: 1.24, tilt: 0.55 };
+/** how far back from upright the open book is held to read (rad from horizontal of its pages' facing: 55 degrees,
+ *  the book 35 from upright) */
+const READ_TILT = 0.96;
 /** how long he reads at his table between rounds (s), and how long each beat of a round takes (s) */
 const READ = { least: 40, most: 90, first: 60 };
 const BEAT = { rise: 1.8, reach: 0.9, pull: 0.6, lift: 0.9, inspect: 2.6, scan: [2.5, 4.5], read: [6, 12], put: 0.9, push: 0.6 };
@@ -225,11 +228,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     out.turn.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     return out;
   };
-  /** where the open book is held to read: its pages up to his face, its spine along his front */
+  /** where the open book is held to read: at his mid-chest, near him, its pages to his face, tilted back from upright
+   *  by `READ_TILT` (its spine up and down his front). Held 44 degrees from flat, it read from the front as a plank
+   *  edge-on, from play: "I never seen someone hold a book like that" */
   const readPose = (out: typeof pose) => {
     const f = fwd(), l = left();
-    out.at.set(me.p.x, HOLD.high - 0.05, me.p.y).addScaledVector(f, HOLD.ahead + 0.02);
-    const y = f.clone().negate().multiplyScalar(0.72).add(new THREE.Vector3(0, 0.7, 0)).normalize();
+    out.at.set(me.p.x, HOLD.high + 0.03, me.p.y).addScaledVector(f, HOLD.ahead - 0.04);
+    const y = f.clone().negate().multiplyScalar(Math.cos(READ_TILT)).add(new THREE.Vector3(0, Math.sin(READ_TILT), 0)).normalize();
     const x = l.clone();
     const z = new THREE.Vector3().crossVectors(x, y);
     out.turn.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
@@ -428,18 +433,21 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       room.openHeld.position.copy(r.at);
       room.openHeld.quaternion.copy(r.turn);
       const y = new THREE.Vector3(0, 1, 0).applyQuaternion(r.turn), x = new THREE.Vector3(1, 0, 0).applyQuaternion(r.turn);
-      // (behind each half near its lower outer corner, the palm on its back, the fingers up it)
+      // (each hand behind its half's board near the bottom, its palm on the board, its fingers spread up it, a little
+      // out: the book resting in his hands. Under its ends, the fingers up past its edges, they pinched it like claws)
       const upPage = new THREE.Vector3(0, 1, 0).addScaledVector(y, -y.y).normalize();
       for (const [sd, hand] of [[1, 'L'], [-1, 'R']] as const) {
-        const at = r.at.clone().addScaledVector(x, sd * open.x * 0.36).addScaledVector(upPage, -0.05).addScaledVector(y, -0.03);
-        const held = aim(at, y, upPage.clone().addScaledVector(x, sd * 0.3));
+        const at = r.at.clone().addScaledVector(x, sd * open.x * 0.28).addScaledVector(upPage, -open.z * 0.36).addScaledVector(y, -0.02);
+        const held = aim(at, y, upPage.clone().addScaledVector(x, sd * 0.35));
         if (hand === 'L') act.handL = held; else act.handR = held;
       }
       act.reachL = act.reachR = 1;
+      act.grip = 0.35;
       look(r.at);
     });
     room.openHeld.visible = false;
     room.held.visible = true;
+    act.grip = 1;
   }
 
   /** The book in his hands put back in its gap: brought to it, pushed in, his hand let go of it. */
