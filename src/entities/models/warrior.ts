@@ -205,10 +205,13 @@ const EYES = tunable('warriorEyes', {
   oneOn: [0.58, -1.3, 0.6], oneDir: [0.43, 0.5, -0.39], bladeOn: [0.6, -0.42, 0.8], bladeDir: [0.62, 1, -0.5],
   bladeFlat: [-0.45, 0, 0.9], oneFlat: [-1, 0, 0.2],
   spinOn: [0.75, -3.2, 0.42], spinDir: [0.9, -0.35, -0.3], spinFlat: [-0.35, 0.9, 0],
-  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.35, held: [8, 0, 1, 0, 0],
+  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.14, held: [8, 0, 1, 0, 0],
 });
-/** the hands' scale (`buildHand`'s `k`) */
-const HAND_K = 1.08;
+/** the hands' scale (`buildHand`'s `k`): a fighter's heavy hands, 14% of his height to a man's 11% (at 1.08 a man's,
+ *  from play: "need bigger fists tho, he's a warrior right?", "these are fists of a software engineer"). Broader
+ *  across the knuckles alone by the hand's own scale, its skinned fingers were torn into strands: a skeleton's bones
+ *  under a scale not the same every way shear as they turn */
+const HAND_K = 1.28;
 // The turned cuff stops 6.6 cm above the bare wrist so the strip can wind up the forearm before tucking under it.
 const BARE_CUFF = -0.204;
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
