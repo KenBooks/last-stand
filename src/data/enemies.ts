@@ -52,8 +52,9 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     cost: 0, score: 70, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x5a7cff,
     // (as the Ossuary Cantor's guard: about a quarter of its life and three quarters of its damage, two of them at once)
     // (as a guard: a lesser bell, about half its height, so its Cantor towers over it: from play, two full-size
-    // Bell-Wardens were "too big (almost like main boss)")
-    asGuard: { life: 0.26, damage: 0.75, size: 0.55 },
+    // Bell-Wardens were "too big (almost like main boss)"); standing where it rises, tolling from there (from play:
+    // "They stay stationary")
+    asGuard: { life: 0.26, damage: 0.75, size: 0.55, stands: true },
     bossKit: {
       phases: [
         { below: 1 },

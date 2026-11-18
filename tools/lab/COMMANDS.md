@@ -780,12 +780,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `encounter`: the Ossuary Cantor and two Bell-Wardens as its guards
   risen round the hero at wave 10's strength, each guard at most half the Cantor's height (from play, whole ones were "almost
   like main boss"), and left to fight him (kept whole) for 28 s: no stun from a guard's toll further than its `BELL_WARDEN.guard.stunsTo`
-  (the hero's body and 0.5 m over), no frame seized by a guard's ghost, and a guard at 15% of its life still in its first phase; the Cantor warded every
+  (the hero's body and 0.5 m over), no frame seized by a guard's ghost, a guard at 15% of its life still in its first phase, and neither guard moved
+  over 1 mm from where it rose (from play: "They stay stationary"); the Cantor warded every
   frame (2 frames' slack) and taking the ward's `taken` of the damage; then the guards killed and 24 s more: never
   warded, at least one cast landed, its heart bared after one (`weak`); every one of the Cantor's hits landed 0.9 to
   3 s after a ring of its own; the guards tolled, and no two bosses' warned hits (tolls, grave hands, dirges) landed
-  closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards, their tolls a whole
-  bell's. `compiles`: its tolls, a shard, the
+  closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards that walk, their tolls a
+  whole bell's. `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, the Cantor's grave hands, a dirge, a ring, its ward and its heart bared,
   drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the

@@ -163,6 +163,12 @@ function bellWardenAttacks(foe: Foe): string[] {
   ].filter(Boolean);
 }
 
+/** The behaviour its words are read for: a guard that stands where it rises has words of its own. */
+function behaviour(foe: Foe): string {
+  const d = foe.def;
+  return foe.guards && d.asGuard?.stands && `${d.ai}Guard` in AI_NOTES ? `${d.ai}Guard` : d.ai;
+}
+
 /** A Bell-Warden as an encounter's guard: a lesser bell, its toll short and soft, a ghost that takes no one, no phases
  *  (data/enemies.ts `BELL_WARDEN.guard`). */
 function guardBellAttacks(foe: Foe): string[] {
@@ -170,7 +176,7 @@ function guardBellAttacks(foe: Foe): string[] {
   const warn = kit.attacks?.toll?.warn ?? d.windup;
   return [
     `<b>Toll:</b> the bell swings back and glows for ${secs(warn)}, then a ring rolls out to ${metres(g.reach)}. Within ${metres(g.stunsTo)} it stuns whoever it reaches for ${secs(g.stun)} and deals ${whole(hit * g.hurt)} ${typed(d)} damage. A shield raised towards it, a dash or a leap carries you through.`,
-    `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size; it raises no Hollow Husks, its one ghost takes no one, and it never grows stronger as it is hurt.`,
+    `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size${d.asGuard?.stands ? ', standing where it rises' : ''}; it raises no Hollow Husks, its one ghost takes no one, and it never grows stronger as it is hurt.`,
     `<b>Its chains:</b> each bearer's chain breaks under hits from its side; with all four broken the bell drops for ${secs(BELL_WARDEN.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
   ];
 }
@@ -247,7 +253,7 @@ export function foePage(foe: Foe): string {
     + `<div class="gd-title"><h2 style="${d.accent ? `color:${css(d.accent)}` : ''}">${d.name}</h2>`
     + `<div class="gd-sub">${note.role} · ${BIOMES[foe.biome].title}</div>`
     + `<p class="gd-p">${note.does}</p>`
-    + `<p class="gd-ai">${AI_NOTES[d.ai] ?? ''}</p></div></div>`;
+    + `<p class="gd-ai">${AI_NOTES[behaviour(foe)] ?? ''}</p></div></div>`;
   html += `<div class="gd-glance">${glance(foe)}</div>`;
   html += head('Figures') + figures(foe);
   if (you) html += para(`<b>Its blow against you now:</b> ${you} at wave ${foe.from}.`);

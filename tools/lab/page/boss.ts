@@ -17,7 +17,7 @@
 // - `encounter`: the Crypt's second rung as it comes, the Ossuary Cantor and its two Bell-Warden guards fighting the
 //   hero: warded (a quarter of the damage) while a guard stands and not after; each of its casts ringed on the floor
 //   before its hands burst; no two bosses' warned hits closer than its beat; its heart bared after a cast once the
-//   guards are down.
+//   guards are down; the guards a lesser bell's size, standing where they rose.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
 //   takes at the wave it comes on (the Colossus at 5, the Bell-Warden alone and the Cantor's encounter at 10), with
 //   and without its weak windows.
@@ -27,7 +27,7 @@
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
 // one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts
-// that seize no one, a ward that wards nothing, a program compiled in the fight, and an attack that deals nothing.
+// that seize no one, a ward that wards nothing, guards that walk, a program compiled in the fight, and an attack that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { cantorLook } from './bossCantor';
@@ -522,17 +522,20 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
   const ward = ENEMIES.cantor.bossKit!.ward!;
   const asGuard = ENEMIES.bellwarden.asGuard!;
   const lesser = { ...BELL_WARDEN.guard };
-  const planted = { taken: ward.taken, size: asGuard.size };
-  // (the canary: a ward that wards nothing, and guards as whole Bell-Wardens, their tolls a whole bell's)
+  const planted = { taken: ward.taken, size: asGuard.size, stands: asGuard.stands };
+  // (the canary: a ward that wards nothing, and guards as whole Bell-Wardens that walk, their tolls a whole bell's)
   if (options.canary) {
     ward.taken = 1;
     asGuard.size = 1;
+    asGuard.stands = false;
     Object.assign(BELL_WARDEN.guard, { reach: BELL_WARDEN.toll.reach, stunsTo: BELL_WARDEN.toll.stunsTo });
   }
   const taken = planted.taken;
   try {
     const { cantor, guards } = await encounterAt(lab);
     lesserGuards(cantor, guards, lines, problems);
+    const rose = guards.map((guard) => guard.pos.clone());
+    let moved = 0;
     const landed: Landed[] = [], rings: Landed[] = [];
     let wardedFrames = 0, frames = 0, wardTaken = 1, seizedFrames = 0, wasStunned = false;
     const stunsFrom: number[] = [];
@@ -545,8 +548,10 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
       // (each stun begun, and how far the nearest guard stood: only a guard tolls in this span)
       if (hero.stunned && !wasStunned) stunsFrom.push(Math.min(...guards.map((g) => Math.hypot(g.pos.x - hero.pos.x, g.pos.z - hero.pos.z))));
       wasStunned = hero.stunned;
+      moved = Math.max(moved, ...guards.map((guard, i) => guard.pos.distanceTo(rose[i])));
     });
     guardTolls(stunsFrom, seizedFrames, lesser.stunsTo, lines, problems);
+    guardsStood(moved, lines, problems);
     guards[0].takeDamage(guards[0].life - 0.15 * guards[0].maxLife, {});
     await lab.step(3);
     lines.push(`encounter: a guard at 15% of its life in phase ${guards[0].bossPhase}`);
@@ -581,6 +586,7 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
   } finally {
     ward.taken = planted.taken;
     asGuard.size = planted.size;
+    asGuard.stands = planted.stands;
     Object.assign(BELL_WARDEN.guard, lesser);
   }
 }
@@ -595,6 +601,15 @@ function lesserGuards(cantor: Enemy, guards: Enemy[], lines: string[], problems:
   lines.push(`encounter: the guards ${fixed(tallest, 2)} m tall against the Cantor's ${fixed(cantor.height, 2)} m (${fixed(share, 2)}), `
     + `${fixed(guards[0].radius, 2)} m round`);
   if (share > GUARD_HEIGHT_MOST) problems.push(`encounter: a guard stands ${fixed(share, 2)} of the Cantor's height, over ${GUARD_HEIGHT_MOST}`);
+}
+
+/** The furthest a guard may move from where it rose (m): none, but a float's rounding. */
+const GUARD_MOVED_MOST = 0.001;
+
+/** The guards stood where they rose through the fight (from play: "They stay stationary"). */
+function guardsStood(moved: number, lines: string[], problems: string[]): void {
+  lines.push(`encounter: the guards moved ${fixed(moved, 3)} m at most from where they rose`);
+  if (moved > GUARD_MOVED_MOST) problems.push(`encounter: a guard moved ${fixed(moved, 2)} m from where it rose: they stand`);
 }
 
 /** The guards' tolls as a lesser bell's: no stun from further than its `stunsTo` (and the hero's body), no seizing. */

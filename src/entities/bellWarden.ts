@@ -16,7 +16,8 @@
 // - **Phase 3**: the bearers kneel; it stands where it is and tolls every `lastEvery` s.
 // - **As an encounter's guard** (`Enemy.guard`, data/enemies.ts `asGuard` and `BELL_WARDEN.guard`): a lesser bell,
 //   about half its height, its ring shorter and softer, its stun short, one ghost that seizes no one, no phases (from
-//   play, two whole Bell-Wardens beside the Cantor were "too big (almost like main boss)").
+//   play, two whole Bell-Wardens beside the Cantor were "too big (almost like main boss)"), and it stands where it
+//   rose, tolling from there (from play: "They stay stationary").
 import * as THREE from 'three';
 import { G } from '../state';
 import { BELL_WARDEN, CANTOR } from '../data/enemies';
@@ -68,7 +69,8 @@ export function bellWardenAI(e: Enemy): void {
     e.cd = last ? Math.max(0.2, B.lastEvery - telegraphTime(e, 'doubleToll')) : e.def.cooldown * rand(0.9, 1.1);
     return;
   }
-  if (last) return;
+  // (a guard stands where it rose)
+  if (last || (e.guard && e.def.asGuard?.stands)) return;
   // (up to its reach, no nearer: it shuffles, it doesn't press)
   if (e.toPlayer().dist > e.def.range + p.radius) chase(e);
 }

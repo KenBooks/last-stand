@@ -410,9 +410,9 @@ export interface EnemyDef {
   throws?: ThrowDef;
   /** a boss's fight in phases, its telegraphed attacks and its weak-spot window (entities/bossKit.ts) */
   bossKit?: BossKitDef;
-  /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life and damage then, as
-   *  shares of its own */
-  asGuard?: { life: number; damage: number; size: number };
+  /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life, damage and size
+   *  then, as shares of its own, and whether it stands where it rises (`stands`: it never walks, and no foe shoves it) */
+  asGuard?: { life: number; damage: number; size: number; stands?: boolean };
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says

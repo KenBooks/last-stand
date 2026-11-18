@@ -214,6 +214,9 @@ function holdOffBoss(boss: Enemy, p: Player): void {
   }
 }
 
+/** An encounter's guard that stands where it rose (`EnemyDef.asGuard.stands`): no foe pushes it aside. */
+const stands = (e: Enemy): boolean => e.guard && !!e.def.asGuard?.stands;
+
 /** A co-op guest's copy its own game places (its own hero's charge swept it up), not the host's reports. */
 const placedHere = (e: Enemy): boolean => e.carried !== null || e.ownFor >= 0;
 
@@ -243,7 +246,8 @@ export function separateEnemies(ownOnly = false): void {
       if (d2 < min * min && d2 > 1e-6) {
         const d = Math.sqrt(d2), push = (min - d) * 0.5;
         const shared = b.mass / (a.mass + b.mass);
-        const wa = !moves(b) ? 1 : !moves(a) ? 0 : shared, wb = 1 - wa;
+        // (an encounter's guard that stands where it rose, `asGuard.stands`: the other gives way all of it)
+        const wa = !moves(b) || stands(b) ? 1 : !moves(a) || stands(a) ? 0 : shared, wb = 1 - wa;
         a.pos.x -= (dx / d) * push * wa * 2; a.pos.z -= (dz / d) * push * wa * 2;
         b.pos.x += (dx / d) * push * wb * 2; b.pos.z += (dz / d) * push * wb * 2;
       }
