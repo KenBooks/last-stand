@@ -60,6 +60,49 @@ async function frameCost(lab: Lab): Promise<number> {
   return total / COST_FRAMES;
 }
 
+/** how far back from upright the open book may be held to read (deg: a reader's 30 to 45, and some), how squarely its
+ *  pages must face his eyes (deg off), and how far past its boards a palm may be (m) */
+const READ_TILT = { least: 25, most: 42 };
+const PAGES_OFF = 40;
+const PAST_BOARDS = 0.03;
+/** how far his fingertips are down the hand from its joint (m), and how far past the book's edges they may reach (m):
+ *  over its pages' edges a thumb's length, no more (up past its edges, his fingers stood up like claws) */
+const FINGERTIP = 0.17;
+const TIPS_PAST = 0.025;
+/** how far behind the boards his fingertips may stand (m): fingers lying along them, a little curled */
+const TIPS_OFF = 0.04;
+
+/** The open book as he reads it standing: how far back from upright it's held (deg), how far its pages face off his
+ *  eyes (deg), and how far each palm is from behind its boards (m past them: in front of the pages, or out past an
+ *  edge; 0 where it's behind them within their outline). */
+function readHold(s: Scholar): { tilt: number; off: number; palms: number[]; tips: number; tipsOff: number } | null {
+  let book: THREE.Object3D | undefined;
+  G.scene.traverse((o) => { if (o.name === 'library open held book' && o.visible) book = o; });
+  if (!book) return null;
+  book.updateMatrixWorld(true);
+  const normal = new THREE.Vector3(0, 1, 0).transformDirection(book.matrixWorld);
+  const at = book.getWorldPosition(new THREE.Vector3());
+  const eyes = s.root.getObjectByName('scholar cap')!.parent!.getWorldPosition(new THREE.Vector3());
+  const tilt = 90 - THREE.MathUtils.radToDeg(Math.asin(Math.min(1, normal.y)));
+  const off = THREE.MathUtils.radToDeg(normal.angleTo(eyes.sub(at).normalize()));
+  // (its boards' outline in its own frame: halves along x either side of the spine, z its height, its pages +y)
+  const half = { x: 0.135, z: 0.095 };
+  const palms = hands(s).map((h) => {
+    const p = book!.worldToLocal(h.clone());
+    const outside = Math.max(0, Math.abs(p.x) - half.x, Math.abs(p.z) - half.z);
+    return Math.max(outside, p.y - 0.01);
+  });
+  // (each hand's fingertips, out past the book's outline in its own plane)
+  let tips = 0, tipsOff = 0;
+  for (const n of ['scholar handL', 'scholar handR']) {
+    const tip = book.worldToLocal(s.root.getObjectByName(n)!.localToWorld(new THREE.Vector3(0, -FINGERTIP, 0)));
+    tips = Math.max(tips, Math.abs(tip.x) - half.x, Math.abs(tip.z) - half.z);
+    // (and out behind its boards: fingers standing up off them, as claws, not lying along them)
+    tipsOff = Math.max(tipsOff, -tip.y);
+  }
+  return { tilt, off, palms, tips, tipsOff };
+}
+
 /** What a round did, frame by frame. */
 interface Followed { frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number }
 
@@ -160,7 +203,7 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     restore();
   };
   let pictured = new Set<string>(), glance = 180, continued = false, stillFrom: THREE.Vector3 | null = null, moved = 0, faced = 180;
-  let nearAtE = '', opened = false;
+  let nearAtE = '', opened = false, readTilt = [Infinity, -Infinity], readOff = 0, palmPast = 0, readFrames = 0, tipsPast = 0, tipsOff = 0;
   let scanFrames = 0, talkFrames = 0, talked = false, walkFrames = 0, blockedAt: THREE.Vector3 | null = null, wentRound = false;
   let walking = 0;
   const browse = await follow(lab, s, rounds, canary, async (f) => {
@@ -192,6 +235,18 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
         restore();
       }
     } else if (scanFrames && !continued) { continued = true; hero.place(away, Math.PI); }
+    // (the open book as he reads it: its pages to his face, tilted back as a reader's, his palms behind its boards)
+    if (doing === 'reading a book standing') {
+      const held = readHold(s);
+      if (held) {
+        readFrames++;
+        readTilt = [Math.min(readTilt[0], held.tilt), Math.max(readTilt[1], held.tilt)];
+        readOff = Math.max(readOff, held.off);
+        palmPast = Math.max(palmPast, ...held.palms);
+        tipsPast = Math.max(tipsPast, held.tips);
+        tipsOff = Math.max(tipsOff, held.tipsOff);
+      }
+    }
     // (talked to as he reads standing: still, turned to the hero; let go after two seconds)
     if (doing === 'reading a book standing' && !talked) {
       talkFrames++;
@@ -218,6 +273,15 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   if (talkOpen()) closeTalk();
   lines.push(lineOf('browse', browse));
   problems.push(...problemsOf('browse', browse));
+  lines.push(`the open book as he read it (${readFrames} frames): ${readTilt[0].toFixed(0)} to ${readTilt[1].toFixed(0)}° back from upright, its pages at most `
+    + `${readOff.toFixed(0)}° off his eyes, a palm at most ${(palmPast * 100).toFixed(1)} cm past its boards, a fingertip at most `
+    + `${(tipsPast * 100).toFixed(1)} cm out past its edges and ${(tipsOff * 100).toFixed(1)} cm out behind its boards`);
+  if (tipsOff > TIPS_OFF) problems.push(`rounds: a fingertip ${(tipsOff * 100).toFixed(1)} cm out behind the open book's boards (at most ${TIPS_OFF * 100}: his fingers standing up off it like claws)`);
+  if (tipsPast > TIPS_PAST) problems.push(`rounds: a fingertip ${(tipsPast * 100).toFixed(1)} cm out past the open book's edges (at most ${TIPS_PAST * 100}: his fingers up past it like claws)`);
+  if (!readFrames) problems.push('rounds: he never read a book standing (nothing measured)');
+  if (readTilt[0] < READ_TILT.least || readTilt[1] > READ_TILT.most) problems.push(`rounds: the open book held ${readTilt[0].toFixed(0)} to ${readTilt[1].toFixed(0)}° from upright (a reader's ${READ_TILT.least} to ${READ_TILT.most})`);
+  if (readOff > PAGES_OFF) problems.push(`rounds: the open book's pages ${readOff.toFixed(0)}° off his eyes (at most ${PAGES_OFF})`);
+  if (palmPast > PAST_BOARDS) problems.push(`rounds: a palm ${(palmPast * 100).toFixed(1)} cm past the open book's boards (in front of its pages or out past an edge; at most ${PAST_BOARDS * 100})`);
   lines.push(`a hero stood a metre off as he looked for a book: ${continued ? 'he went on to take one' : 'he never went on'}, his face at least `
     + `${glance.toFixed(0)}° off the hero meanwhile`);
   if (!continued) problems.push('rounds: a hero stood close as he looked for a book, and he never went on');
