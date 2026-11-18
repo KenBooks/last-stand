@@ -137,6 +137,8 @@ export const TIPS_PAGES: Tip[] = [
     id: 'coop', title: 'Playing together',
     html: () => points('', [
       `Up to ${COOP.maxPlayers} heroes play together. Open a room at the campfire (Play together) and share its code.`,
+      'A public room is listed for anyone to join; a private one is joined by its code; a password room is listed but needs its password.',
+      'Signed in to cloud saves, Play together\'s Friends tab gives you a friend code to share. Friends see when you are online and in which room, join it from their list, and you can invite them into yours.',
       'Each player keeps their own loot: nothing is shared or stolen.',
       `A fallen partner bleeds out over ${secs(COOP.bleedOut)}. Stand within ${num(COOP.reviveRange)} m and hold E (or the Revive button) for ${secs(COOP.reviveTime)} to raise them with ${pct(COOP.reviveLife)} of their Health.`,
       `Waves grow with the party: ${PARTY.foes.map((f, i) => `${i + 1}: ${num(f, 2)}× the foes`).join(', ')}, each with more Health.`,

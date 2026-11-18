@@ -8,6 +8,7 @@
 const PARTS = [
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
   'frenzy-1: the Frenzy stacks of a warrior, StateMsg fz (combat/frenzy.ts)',
+  'friends-1: the welcome says the room as its host opened it, kind, name, max and fr (net/friends.ts)',
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
   'lobby-1: a room has no lobby of its own (the village is every game\'s): none in hello, refuse or a room\'s card',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',

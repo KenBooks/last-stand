@@ -6,7 +6,8 @@ import { cloudServerHttp } from './cloudServer';
 
 const SAVES_SERVER: string = import.meta.env.VITE_COOP_SERVER ?? 'wss://ls.wellscoped.dev';
 const savesHost = (): string => cloudServerHttp(SAVES_SERVER,
-  import.meta.env.DEV ? new URLSearchParams(location.search).get('server') : null);
+  // (the lab may run the saves apart from the co-op relay: `?saves=` before `?server=`, dev builds alone)
+  import.meta.env.DEV ? new URLSearchParams(location.search).get('saves') ?? new URLSearchParams(location.search).get('server') : null);
 
 export class CloudError extends Error {
   constructor(readonly status: number, message: string, readonly body: unknown = null) { super(message); }
@@ -173,3 +174,36 @@ export async function writePart(name: string, value: unknown, base: number, devi
 export const deleteSave = async (): Promise<void> => { await call('DELETE', '/save'); };
 export const copyCode = (): Promise<{ code: string; until: number }> => json(call('POST', '/copy-code'));
 export const copyProduction = async (code: string): Promise<void> => { await call('POST', '/copy-production', { json: { code } }); };
+
+// --- friends (#676, server/saves/friends.mjs): this site's friends, who of them is online, invites ------------
+/** A room as a friend's presence or an invite says it. */
+export interface FriendRoom {
+  code: string; name: string; map: string; wave: number; players: number; size: number;
+  kind: 'public' | 'private' | 'password'; friends: boolean; locked: boolean;
+}
+/** A friend as the service shows them: online or not, their room if they let friends see it, when last seen. */
+export interface Friend {
+  id: string; name: string; cls: string; since: number; online: boolean; room: FriendRoom | null; busy: boolean; seen: number;
+}
+/** Someone asking (or asked) to be friends. */
+export interface FriendAsk { id: string; name: string; cls: string; when: number }
+/** A friend's invite into their room. */
+export interface FriendInvite extends FriendAsk { room: FriendRoom }
+/** This account's friends on this site, as the service last said. */
+export interface FriendsView {
+  id: string; code: string; name: string; friends: Friend[]; incoming: FriendAsk[]; outgoing: FriendAsk[]; invites: FriendInvite[];
+}
+/** What a page says of itself every half minute. */
+export interface Presence { name: string; cls: string; room: Omit<FriendRoom, 'locked'> | null; hidden: boolean }
+
+export const friends = (): Promise<FriendsView> => json(call('GET', '/friends'));
+export const sayPresence = (p: Presence): Promise<FriendsView> => json(call('POST', '/friends/presence', { json: p }));
+export const newFriendCode = (): Promise<FriendsView> => json(call('POST', '/friends/code'));
+export const askFriend = (code: string): Promise<FriendsView> => json(call('POST', '/friends/request', { json: { code } }));
+export const acceptFriend = (id: string): Promise<FriendsView> => json(call('POST', '/friends/accept', { json: { id } }));
+export const declineFriend = (id: string): Promise<FriendsView> => json(call('POST', '/friends/decline', { json: { id } }));
+export const removeFriend = (id: string): Promise<FriendsView> => json(call('DELETE', `/friends/${encodeURIComponent(id)}`));
+export const inviteFriend = async (id: string, room: Presence['room']): Promise<void> => {
+  await call('POST', '/friends/invite', { json: { id, room } });
+};
+export const dismissInvite = (id: string): Promise<FriendsView> => json(call('POST', '/friends/invite/dismiss', { json: { id } }));
