@@ -29,6 +29,8 @@ export interface HandsOptions {
   look?: Look;
   /** the hand in its glove, or bare (false); as the hero's is unless said */
   glove?: boolean;
+  /** the warrior's bare fist in its wrap, or without it (false), to set beside a reference of a bare fist */
+  wrap?: boolean;
   /** canaries: an empty studio, where nothing may be found drawn, and the hand built larger, which must measure so */
   canary?: boolean;
 }
@@ -563,7 +565,7 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
     const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
-    const wrapped = bareFist ? lab.model.arm : undefined;
+    const wrapped = bareFist && options.wrap !== false ? lab.model.arm : undefined;
     const { hand, root } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose, 1, wrapped);
     const { tiles, least } = pictureOf(lab, hand, root, views, look);
     if (bareFist) {

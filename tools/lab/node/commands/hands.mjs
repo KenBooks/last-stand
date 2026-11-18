@@ -27,6 +27,10 @@ export default {
     },
     look: LOOK_OPTION,
     glove: { kind: 'switch', help: 'the hand in its glove (=false: bare; as the hero\'s is by default)' },
+    wrap: {
+      kind: 'switch',
+      help: 'the warrior\'s bare fist in its wrap (=false: without it, beside a bare reference)',
+    },
     canary: {
       kind: 'switch',
       help: 'an empty studio pictured too, where nothing may be found drawn, and the hand built 10% larger, '
@@ -45,6 +49,7 @@ export default {
       views: options.views,
       look: options.look,
       glove: options.glove,
+      wrap: options.wrap,
       canary: Boolean(options.canary),
     };
     return side.command('hands', command);
