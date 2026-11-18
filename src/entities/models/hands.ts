@@ -379,7 +379,7 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
 const FIST_CREASE = [[-0.058, -0.0315], [-0.062, -0.020], [-0.061, -0.015], [-0.058, -0.016]];
 // Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
-const FIST_FAN = tunable('fistFan', { fan: [5, 2, -2, -7.5] });
+const FIST_FAN = [5, 2, -2, -8.7];
 // Point down the thenar mound. Pointed further out, the thumb left a window beside the index in the guard.
 const THUMB_BASE = [0.012, -0.042, -0.021] as const;
 // Seat the thumb just above the middle shaft's centre and one pad radius off its axis.
@@ -402,7 +402,7 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
   const rotations = h.f.map((digit, i) => {
     const root = digit.j[0].position;
     const [a, b, c] = digit.len;
-    const yaw = THREE.MathUtils.degToRad(-h.s * FIST_FAN.fan[i]);
+    const yaw = THREE.MathUtils.degToRad(-h.s * FIST_FAN[i]);
     // (the crease on a deeper palm deeper, and the tip off it by its pad: the plain hand's numbers for its build)
     const [y, plainZ] = FIST_CREASE[i];
     const { deep, digits } = h.build;
