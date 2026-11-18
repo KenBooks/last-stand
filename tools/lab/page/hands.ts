@@ -9,8 +9,9 @@ import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
 import { meshesOf, wearLook, type Look } from './looks';
 import * as handsCode from '../../../src/entities/models/hands';
 import { clench, hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
-import { FIST } from '../../../src/entities/models/warriorFists';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
+import { fistLine } from '../../../src/entities/models/warriorFists';
+import { fistContact, wristBend } from './fistContact';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
 const sculpting = handsCode as Partial<typeof handsCode>;
@@ -112,7 +113,7 @@ const POSES: Record<string, Pose> = {
   // (the mage's free hand held into Void Lance's portal, half way into its kick)
   strained: (hand) => strainHand(hand, 0.75, 0.65),
   fist: (hand) => poseHand(hand, 1.45, 0),
-  // (the warrior's bare fist, #400: turned as round a thin handle, then clenched, as `models/warrior.ts` closes it)
+  // The warrior's bare fist, as the guard closes it.
   clenched: clenchedFist,
   handle: closedRound,
 };
@@ -147,13 +148,45 @@ function closedRound(hand: Hand, wrist: THREE.Object3D): void {
   grip.add(new THREE.Mesh(new THREE.CylinderGeometry(HANDLE_RADIUS, HANDLE_RADIUS, HANDLE_LENGTH, 24), HANDLE));
 }
 
-/** The warrior's bare fist (`FIST`, tunable `fist`): the hand turned by `hold` as round its thin handle across the
- *  palm, the handle not drawn, and clenched (`clench`): the fingertips in the palm, the thumb across them. */
 function clenchedFist(hand: Hand, wrist: THREE.Object3D): void {
-  const across = new THREE.Vector3(-hand.s, 0, 0);
+  if (sculpting.closeFist) sculpting.closeFist(hand, new THREE.Vector3(-hand.s, 0, 0));
+  else handleFist(hand, wrist);
+}
+
+/** Canary from 0ffdabdfe. The phantom handle left the thumb beside the index and a hole inside the curl. */
+function handleFist(hand: Hand, wrist: THREE.Object3D, across = new THREE.Vector3(-hand.s, 0, 0)): void {
   wrist.updateMatrixWorld(true);
-  hold(hand, across, FIST.r);
-  clench(hand, FIST.clench, FIST.thumb);
+  hold(hand, across, 0.012);
+  clench(hand, [2.05, 1.6, 0.8], 0);
+}
+
+/** Check both hands in the guard the player actually gets after punching, with a real elbow to judge the wrist. */
+async function guardContact(lab: Lab, fixture: Fixture, canary?: boolean) {
+  await lab.setup({ ...fixture, view: 'third', gear: 'bare', weapon: undefined, wear: [] });
+  await lab.step(200);
+  const [punched] = await lab.step(1, () => ({ m0: true }), () => lab.player.casting?.skill.impl.anim === 'punch');
+  await lab.step(50);
+  const hands = lab.model.hands;
+  if (!punched || lab.player.casting || !hands || fistLine.R.lengthSq() === 0 || fistLine.L.lengthSq() === 0) {
+    throw new Error('hands: the warrior did not return to his bare guard after the punch');
+  }
+  const lines: string[] = [], problems: string[] = [];
+  for (const [side, wrist, elbow] of [['R', lab.joints.handR, lab.joints.elbowR],
+    ['L', lab.joints.handL, lab.joints.elbowL]] as const) {
+    const hand = hands[side];
+    if (!hand || hand.glove.visible) throw new Error(`hands: the warrior's ${side} hand was not bare`);
+    const reading = fistContact(hand, wristBend(hand, elbow));
+    lines.push(`guard ${side}: ${reading.line}`);
+    problems.push(...reading.problems.map((problem) => `guard ${side}: ${problem}`));
+    if (!canary) continue;
+    const up = UP.clone().transformDirection(wrist.matrixWorld);
+    const across = fistLine[side].clone().transformDirection(lab.joints.body.matrixWorld).projectOnPlane(up);
+    handleFist(hand, wrist, across.normalize());
+    const old = fistContact(hand, wristBend(hand, elbow));
+    lines.push(`old hold + clench ${side}: ${old.line} (${old.problems.join(', ')})`);
+    if (old.contacts.length === 0) problems.push(`guard ${side}: the old fist passed contact`);
+  }
+  return { lines, problems };
 }
 
 /** A point of the hand's surface where it's drawn (the world), and the joint it moves with. */
@@ -435,13 +468,19 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const problems = [...knobs.problems, ...sculpted.problems];
   const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
-    const { hand, wrist } = posedCopy(copier, pose);
+    const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
+    const { hand, wrist } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose);
     const { tiles, least } = pictureOf(lab, hand, wrist, views, look);
     const { triangles, meshes } = countsOf(hand.vis);
     freed(wrist);
     if (least < LEAST_DRAWN) problems.push(`the ${name} hand covers ${share(least)} of a picture: not drawn`);
     const notes = [`${triangles.toLocaleString('en')} triangles in ${meshes} meshes`];
     moments.push({ label: name, tiles, notes: name === 'flat' ? [...lines, ...notes] : notes });
+  }
+  if (lab.player.cls.id === 'warrior' && sculpting.closeFist && poses.some(({ name }) => name === 'clenched')) {
+    const contact = await guardContact(lab, options.fixture, options.canary);
+    lines.push(...contact.lines);
+    problems.push(...contact.problems);
   }
   if (options.canary) {
     const found = canaries(lab, copier, views, size);

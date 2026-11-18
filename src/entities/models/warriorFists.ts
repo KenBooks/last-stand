@@ -23,15 +23,11 @@ import { POUNCE } from '../../data/balance';
 import { tunable } from '../../core/tuning';
 
 /** a hand closing: its curl and its fingers' spread on the way (models/hands.ts `poseHand`), and from how far closed
- *  it is a fist, the hand shut as round a handle this thin (m, `hold`) */
+ *  it takes the closed fist's pose (`closeFist`) */
 export const FIST = tunable('fist', {
-  curl: 1.7, spread: 0.02, from: 0.6, r: 0.012,
+  curl: 1.7, spread: 0.02, from: 0.6,
   /** share of the arm's reach at impact: about 20 degrees of elbow bend */
   reach: 0.985, eyesReach: 0.93,
-  /** each finger's bends in a clenched fist (rad: its knuckle, middle joint and last), and the thumb's swing across
-   *  them (`clench` in hands.ts; 0: `hold`'s, wrapped round the thin handle, which tucks it over the index finger: swung
-   *  as `poseHand`'s, it stood out sideways and tore the mesh, `lab hands --poses clenched`) */
-  clench: [2.05, 1.6, 0.8], thumb: 0,
 });
 
 /** where each fist is held in the guard, from the point between the shoulders, in the body's frame (m: to his left,
@@ -74,8 +70,8 @@ const HAMMER_DOWN: Keys = [[0, 0], [0.3, 0], [0.5, 1], [0.75, 1], [1, 0.2]];
 /**
  * The line of each fist's knuckles this frame, in the body's frame (to his left, up, ahead; the model clears both
  * before it poses, and a fist with none keeps the hand's own): upright in the guard, the palms in towards each other,
- * and across in a punch, the palm turned down as it goes out. The visible hand is turned to it about the forearm, as a
- * fist is turned on a handle (`hold`), and the wrist's joint left straight: turned at the joint, the bare wrist's skin
+ * and across in a punch, the palm turned down as it goes out. `closeFist` turns the visible hand about the forearm.
+ * The wrist's joint is left alone: turned at the joint, the bare wrist's skin
  * was wrung flat into a ribbon standing off the arm.
  */
 export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };

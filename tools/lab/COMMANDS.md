@@ -1159,7 +1159,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   change to a model with `--ab`. The studio, its camera and its pictures are `page/studio.ts`, which `hands` shares.
 - `hands`: the hero's right hand alone (`page/hands.ts`): a copy of it on a wrist of its own (`handLike` in
   `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed,
-  strained as a caster's (`strainHand`), in a fist, clenched as the warrior's bare fist (`clenched`: `hold` then `clench`, `FIST` tunable as `fist`) and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
+  strained as a caster's (`strainHand`), in a fist, clenched as the warrior's bare fist (`closeFist`) and closed
+  round a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
   little finger's, the fingertips and three-quarters (`--views`), and close up when asked for: `cuffs`, the glove's
   cuffs over the fingers, `web`, the thumb's web (where a bent thumb once pressed the glove into the skin), and `joints`, the fingers'
   knuckles and the bones between them from the little finger's side. Said
@@ -1175,6 +1176,10 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   measured against the shafts either side of it on the flat hand (`knobsOf`): under 1.04 as broad the finger is an
   even tube, over 1.16 its joint is swollen (from play: "a hand of 90 year old, with bones problems", read 1.25),
   each a problem. It has no canary yet.
+  `--poses clenched` defaults to the warrior and shows his bare fist unless `--glove` is set. It also casts a
+  punch in game and measures both fists after they return to guard. Every fingertip must reach the palm within
+  6 mm, adjacent middle phalanges must come within 3 mm, the thumb must lie over the middle shaft within 12 mm,
+  and each wrist must bend less than 10 degrees. `--canary` applies the old `hold` + `clench` to the same guard.
 - `hood`: the mage's hood against its reference, by numbers: in full in [`commands/hood.md`](commands/hood.md).
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows

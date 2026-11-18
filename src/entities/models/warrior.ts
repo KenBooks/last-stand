@@ -21,7 +21,7 @@ import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
-import { buildHand, poseHand, hold, loosen, clench, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
+import { buildHand, poseHand, hold, loosen, closeFist, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -128,7 +128,7 @@ const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1,
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
-const ZERO = new THREE.Vector3(), _v = new THREE.Vector3(), _fa = new THREE.Vector3();
+const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
@@ -4130,14 +4130,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
-    // (a fist's handle, the line of its knuckles: the one the pose gives it in the body's frame, `fistLine`, or the
-    // hand's own grip's; square across its forearm, where a weapon's grip slants out of the hand (the fist shut on that
-    // hung 38 degrees off the wrist, past its range, in a punch). The visible hand turns to it, the wrist's joint doesn't)
-    const knuckles = (g: THREE.Object3D, hand: THREE.Object3D, line: THREE.Vector3) => {
-      const dir = line.lengthSq() > 0 ? _hd.copy(line).transformDirection(j.body.matrixWorld) : along(g);
-      _fa.set(0, 1, 0).transformDirection(hand.matrixWorld);
-      return dir.addScaledVector(_fa, -dir.dot(_fa)).normalize();
-    };
+    // The pose sets the knuckle line. `closeFist` keeps it square to the forearm even on a slanted grip line.
+    const knuckles = (g: THREE.Object3D, line: THREE.Vector3) =>
+      line.lengthSq() > 0 ? _hd.copy(line).transformDirection(j.body.matrixWorld) : along(g);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held && twoSits && twoSit.stood) holdStood(held, slantR);
     else if (held) {
@@ -4151,12 +4146,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
         loosen(handR, SIT_HANDS.offOpen * off);
       }
     }
-    // (a fist is the hand closed as round a thin handle, the fingers into the palm and the thumb over them: curled
-    // joint by joint it was a claw, from play, "fists need some work")
     else if (fistedR > FIST.from) {
       if (fp) rollForearm(handR, j.elbowR, j.handR, fistLine.R);
-      hold(handR, knuckles(grip, j.handR, fistLine.R), FIST.r);
-      if (FIST.clench[0] > 0) clench(handR, FIST.clench, FIST.thumb);
+      closeFist(handR, knuckles(grip, fistLine.R));
     }
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
@@ -4164,8 +4156,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     else if (fisted > FIST.from) {
       if (fp) rollForearm(handL, j.elbowL, j.handL, fistLine.L);
-      hold(handL, knuckles(gripL, j.handL, fistLine.L), FIST.r);
-      if (FIST.clench[0] > 0) clench(handL, FIST.clench, FIST.thumb);
+      closeFist(handL, knuckles(gripL, fistLine.L));
     }
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 

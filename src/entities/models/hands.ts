@@ -352,6 +352,94 @@ export function clench(h: Hand, bends: readonly number[], thumb: number): void {
   if (thumb > 0) thumbAcross(h, thumb, 0);
 }
 
+// Keep the index and middle striking face square to the forearm. The old 117 degree fold left a ring under it.
+const STRIKE_BEND = THREE.MathUtils.degToRad(96);
+// Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
+const FIST_CREASE = [[-0.058, -0.030], [-0.062, -0.020], [-0.061, -0.015], [-0.058, -0.016]];
+// Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
+const FIST_FAN = [9, 2, -1, -8];
+// Point down the thenar mound. Pointed further out, the thumb left a window beside the index in the guard.
+const THUMB_BASE = [0.012, -0.042, -0.021] as const;
+// Seat the thumb just above the middle shaft's centre and one pad radius off its axis.
+const THUMB_CONTACT = { across: 0.005, down: 0.011, pad: 0.010 };
+// The rest joints and lengths are the same for every hand of a side. Solve once, outside the animation loop.
+const CLOSED_FISTS = new Map<number, THREE.Quaternion[][]>();
+
+/** Solve two bent links from their lengths and the distance to their endpoint. */
+function linkBend(a: number, b: number, distance: number): number {
+  return Math.acos(clamp((distance ** 2 - a ** 2 - b ** 2) / (2 * a * b), -1, 1));
+}
+
+/** The warrior's bare fist, solved from the rest joints with the fingertips seated at the palm's crease. */
+function closedFistPose(h: Hand): THREE.Quaternion[][] {
+  const middle = new THREE.Vector3();
+  const rotations = h.f.map((digit, i) => {
+    const root = digit.j[0].position;
+    const [a, b, c] = digit.len;
+    const yaw = THREE.MathUtils.degToRad(-h.s * FIST_FAN[i]);
+    const [y, z] = FIST_CREASE[i];
+    // In the finger's plane, start at the end of the proximal phalanx and solve backwards from the tip.
+    const dy = y - root.y + a * Math.cos(STRIKE_BEND);
+    const dz = (z - root.z) / Math.cos(yaw) + a * Math.sin(STRIKE_BEND);
+    const last = Math.min(THREE.MathUtils.degToRad(80), linkBend(b, c, Math.hypot(dy, dz)));
+    const angle = Math.atan2(-dz, -dy) + 2 * Math.PI - Math.atan2(c * Math.sin(last), b + c * Math.cos(last));
+    const pip = clamp(angle - STRIKE_BEND, 0, THREE.MathUtils.degToRad(110));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(STRIKE_BEND, yaw, 0, 'YXZ'));
+    if (i === 1) {
+      middle.set(0, -b / 2, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), pip);
+      middle.y -= a;
+      middle.applyQuaternion(q).add(root);
+    }
+    const bend = (r: number) => new THREE.Quaternion().setFromEuler(new THREE.Euler(r, 0, 0));
+    return [q, bend(pip), bend(last)];
+  });
+
+  const [a, b, c] = h.thumb.len;
+  const base = new THREE.Vector3(-h.s * THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2]).normalize();
+  const target = middle.add(new THREE.Vector3(h.s * THUMB_CONTACT.across, -THUMB_CONTACT.down, -THUMB_CONTACT.pad));
+  const to = target.sub(h.thumb.j[0].position).addScaledVector(base, -a);
+  const last = linkBend(b, c, to.length());
+  to.normalize();
+  // Fold in one plane, continuing the metacarpal toward the outside of the fist before returning to the pad.
+  const axis = new THREE.Vector3().crossVectors(base, to).normalize();
+  const near = to.clone().applyAxisAngle(axis, -Math.atan2(c * Math.sin(last), b + c * Math.cos(last)));
+  const up = base.clone().negate();
+  const frame = new THREE.Matrix4().makeBasis(axis, up, new THREE.Vector3().crossVectors(axis, up));
+  const bend = (r: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), r);
+  const atKnuckle = Math.atan2(axis.dot(new THREE.Vector3().crossVectors(base, near)), base.dot(near));
+  rotations.push([new THREE.Quaternion().setFromRotationMatrix(frame), bend(atKnuckle), bend(last)]);
+  return rotations;
+}
+
+/** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
+export function closeFist(h: Hand, line: THREE.Vector3): void {
+  let pose = CLOSED_FISTS.get(h.s);
+  if (!pose) {
+    pose = closedFistPose(h);
+    CLOSED_FISTS.set(h.s, pose);
+  }
+  const wrist = h.vis.parent!;
+  wrist.updateWorldMatrix(true, false);
+  _q2.setFromRotationMatrix(_m.extractRotation(wrist.matrixWorld));
+  _u.set(0, 1, 0).applyQuaternion(_q2);
+  _d.copy(line).addScaledVector(_u, -line.dot(_u)).normalize();
+  if (_d.lengthSq() < 1e-6) _d.set(-h.s, 0, 0).applyQuaternion(_q2);
+  fist(h, _d, _u, _q);
+  h.vis.position.set(0, 0, 0);
+  if (wrist.parent) {
+    // Keep the pose's roll but take out its bend. Projecting the line onto the elbow's plane moved the pronation.
+    _q.premultiply(wrist.parent.getWorldQuaternion(_q2).invert());
+    _q.set(0, _q.y, 0, _q.w).normalize();
+    h.vis.quaternion.copy(wrist.quaternion).invert().multiply(_q);
+  } else {
+    h.vis.quaternion.copy(_q2.invert()).multiply(_q);
+  }
+  for (let i = 0; i < pose.length; i++) {
+    const digit = i < h.f.length ? h.f[i] : h.thumb;
+    for (let n = 0; n < digit.j.length; n++) digit.j[n].quaternion.copy(pose[i][n]);
+  }
+}
+
 /** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:
  *  a claw, as reference photographs of a hand straining against a force hold it (#425), the knuckle nearly straight
  *  and the middle joint bent hard, graded from the index, nearly straight, to the little finger, most; bent gently

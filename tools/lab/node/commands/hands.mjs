@@ -30,10 +30,13 @@ export default {
     canary: {
       kind: 'switch',
       help: 'an empty studio pictured too, where nothing may be found drawn, and the hand built 10% larger, '
-        + 'which must measure so',
+        + 'which must measure so. The warrior’s old handle-based fist must fail the clenched contact check',
     },
     ...SETUP_OPTIONS,
     ...COMMON_OPTIONS,
+  },
+  check(options) {
+    if (options.poses?.length === 1 && options.poses[0] === 'clenched') options.class ??= 'warrior';
   },
   each(side, options) {
     const command = {
