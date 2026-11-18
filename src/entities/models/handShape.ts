@@ -327,7 +327,12 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     // joined over 12 mm, the row swelled, and short and low, a groove ran across the back above the fingers)
     palm(ellipsoid(k.x, k.y + 0.004, k.z + 0.003 * deep, w * 0.8, 0.012, w * 0.66), 0.008);
     const head = w * knuckles;
-    palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
+    // The knuckles stand proud as the skin pulls taut over the heads of the metacarpals.
+    if (closed) {
+      palm(ellipsoid(k.x, k.y + 0.004, k.z + 0.009 * deep, head * 0.74, head * 0.96, head * 0.54), 0.005);
+    } else {
+      palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
+    }
     palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
   // the little finger's mound along the palm's edge
@@ -760,7 +765,7 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
   for (let a = 0; a <= NAIL_ALONG; a++) {
     const t = NAIL_FROM + (NAIL_TO - NAIL_FROM) * (a / NAIL_ALONG);
     // (rounded at its root, as a nail's moon is)
-    const bed = shutThumb ? Math.sqrt(1 - 0.55 * Math.pow(2 * a / NAIL_ALONG - 1, 4)) : 1;
+    const bed = shutThumb ? Math.sqrt(1 - 0.75 * Math.pow(2 * a / NAIL_ALONG - 1, 2)) : 1;
     const across = half * bed * Math.sqrt(clamp((t - NAIL_FROM) / 0.1, 0.15, 1));
     const row: number[] = [];
     for (let c = 0; c <= NAIL_ACROSS; c++) {
@@ -773,6 +778,11 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
       if (!on) throw new Error(`handShape: a nail found no fingertip under it (bone ${bone}, hand ${!!hand}, own at start ${own(from.x, from.y, from.z).toFixed(4)})`);
       const normal = normalAt(hand ? field : own, on);
       row.push(into.add(on.addScaledVector(normal, lift), normal, bone));
+      if (shutThumb) {
+        // The bed shows through the plate up to the pale free edge.
+        const edge = Math.max(0, (a / NAIL_ALONG - 0.84) / 0.16);
+        into.colours.push(0.87 + 0.13 * edge, 0.76 + 0.21 * edge, 0.74 + 0.21 * edge);
+      }
     }
     rows.push(row);
   }
@@ -795,6 +805,7 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
 
 /** The nails' mesh as it's made. */
 class NailMesh {
+  colours: number[] = [];
   positions: number[] = [];
   normals: number[] = [];
   bones: number[] = [];
@@ -811,6 +822,7 @@ class NailMesh {
   sunk(vertex: number, depth: number, bone: number): number {
     const at = new THREE.Vector3().fromArray(this.positions, vertex * 3);
     const normal = new THREE.Vector3().fromArray(this.normals, vertex * 3);
+    if (this.colours.length) this.colours.push(...this.colours.slice(3 * vertex, 3 * vertex + 3));
     return this.add(at.addScaledVector(normal, -depth), normal, bone);
   }
 
@@ -830,6 +842,7 @@ class NailMesh {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(this.normals, 3));
+    if (this.colours.length) geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.colours, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2));
     geometry.setAttribute('skinIndex', new THREE.BufferAttribute(bones, 4));
     geometry.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));

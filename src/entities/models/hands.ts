@@ -330,6 +330,7 @@ function shutOf(h: Hand, bones: THREE.Bone[], bareSkin: THREE.Material, skin: TH
   const nails = skinnedOn(h.vis, shape.nails, skin, skeleton, false);
   const nail = nails.material as THREE.MeshStandardMaterial;
   nail.color.copy(material.color).lerp(NAIL_TINT, 0.45);
+  nail.vertexColors = true;
   nail.roughness = NAIL_ROUGH;
   fist.visible = false;
   nails.visible = false;
