@@ -8,7 +8,9 @@
 //   From the room, Brannoch invites Pell: Pell's game shows the invite's toast, whose Join takes him in.
 //   All leave; Brannoch opens a private room kept from friends: Ysolde's list shows him in a room with no Join.
 // `--canary` starts the saves service with the faults it must catch: a request counted as a friendship before it's
-// accepted, and a room kept from friends shown to them. Pictures of each step in `out/friends/<screen>/`.
+// accepted, and a room kept from friends shown to them; and each page lays a room's cards out as they were before
+// Victor's review of #700 (a narrow card's class name run on over the stats' labels), which the text check of each
+// picture must find. Pictures of each step in `out/friends/<screen>/`, each checked for text over other text.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
@@ -63,6 +65,8 @@ class Findings {
     this.lines = [];
     this.problems = [];
     this.faultsSeen = new Set();
+    /** the pictures whose text was checked */
+    this.checked = new Set();
   }
 
   say(line) {
@@ -87,7 +91,8 @@ async function until(games, done, what) {
     const states = await Promise.all(games.map((game) => game.state()));
     if (done(...states)) return states;
     if (Date.now() - start > STEP_MS) {
-      const said = states.map((s, i) => `${games[i].name}: ${s.session}, rows ${
+      const said = states.map((s, i) => `${games[i].name}: ${s.session}${s.open ? ', dialog open' : ''}, invites ${
+        s.invites.join(', ') || 'none'}, rows ${
         s.rows.map((r) => `${r.section}/${r.name}[${r.acts.join(',')}]`).join(' ') || 'none'}${s.note ? `, "${s.note}"` : ''}`);
       throw labError(`friends: ${what} (${said.join('; ')})`);
     }
@@ -102,10 +107,15 @@ async function until(games, done, what) {
 /** A row of `state` by its section and name. */
 const rowOf = (state, section, name) => state.rows.find((r) => r.section === section && r.name === name);
 
-/** A picture of a game's screen, as the player sees it, kept under `dir`. */
-async function picture(game, dir, name) {
+/** A picture of a game's screen, as the player sees it, kept under `dir`, and its text checked: none drawn over other
+ *  text in a room's cards, the friends' rows or the invite's banner (`textOverlap` the canary's fault). */
+async function picture(game, dir, name, found) {
   await game.call('roomsStep', { frames: 3 });
   await pause(FADE_MS);
+  const over = await game.call('friendsTextOver', { where: `${game.name}'s ${name}` });
+  if (over.length) found.say(`text over text: ${over.join('; ')}`);
+  for (const problem of over) found.expect(false, problem, 'textOverlap');
+  found.checked.add(name);
   const cdp = await game.page.context().newCDPSession(game.page);
   try {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
@@ -143,7 +153,7 @@ async function signUpAll(games, relayUrl, savesUrl) {
 async function befriend(games, codes, found, dir) {
   const [brannoch, ysolde, pell] = games;
   for (const game of games) await game.call('friendsOpenTab');
-  await picture(brannoch, dir, '1-friends');
+  await picture(brannoch, dir, '1-friends', found);
   await ysolde.call('friendsAdd', { code: codes.Brannoch });
   const [asked, asking] = await until([brannoch, ysolde], (b) => rowOf(b, 'Requests', 'Ysolde'),
     'Brannoch never saw Ysolde\'s request');
@@ -152,7 +162,7 @@ async function befriend(games, codes, found, dir) {
   found.expect(Boolean(rowOf(asking, 'Sent', 'Brannoch')), 'Ysolde\'s tab doesn\'t list her request as sent');
   const early = asking.service.some((f) => f.name === 'Brannoch');
   found.expect(!early, 'Ysolde lists Brannoch as a friend before he accepted', 'oneWay');
-  await picture(brannoch, dir, '2-request');
+  await picture(brannoch, dir, '2-request', found);
   await brannoch.call('friendsAct', { name: 'Ysolde', act: 'accept' });
   await until([brannoch, ysolde], (b, y) => rowOf(b, 'Online', 'Ysolde') && rowOf(y, 'Online', 'Brannoch'),
     'Brannoch and Ysolde never listed each other online');
@@ -177,7 +187,7 @@ async function joinFromList(games, found, dir) {
   const row = rowOf(seen, 'Online', 'Brannoch');
   found.say(`Brannoch hosting ${code}: Ysolde's list says "${row.line}"`);
   found.expect(/In a room/.test(row.line), `Ysolde's list says "${row.line}" of Brannoch in a room`);
-  await picture(ysolde, dir, '3-friend-in-room');
+  await picture(ysolde, dir, '3-friend-in-room', found);
   await ysolde.call('friendsAct', { name: 'Brannoch', act: 'join' });
   await until([brannoch, ysolde], (b, y) => y.session === 'joined' && y.roomCode === code && b.partners === 1,
     'Ysolde never joined Brannoch\'s room from her list');
@@ -190,19 +200,20 @@ async function inviteToRoom(games, code, found, dir) {
   const [brannoch, , pell] = games;
   const [inRoom] = await until([brannoch], (b) => rowOf(b, 'Invite friends', 'Pell'), 'the room never offered to invite Pell');
   found.say(`the room's invite list: ${inRoom.rows.filter((r) => r.section === 'Invite friends').map((r) => r.name).join(', ')}`);
-  await picture(brannoch, dir, '4-room-invite');
+  await picture(brannoch, dir, '4-room-invite', found);
   // (Pell out in the village: with Play together open the invite waits in its Friends tab, not a toast)
   await pell.call('friendsClose');
   await brannoch.call('friendsAct', { name: 'Pell', act: 'invite' });
-  const [invited] = await until([pell], (p) => p.toast !== '', 'Pell\'s game never showed the invite');
+  await until([pell], (p) => p.invites.includes('Brannoch'), 'the service never held Brannoch\'s invite for Pell');
+  const [invited] = await until([pell], (p) => p.toast !== '', 'Pell\'s game held the invite and never showed it');
   found.say(`Pell's toast: "${invited.toast}"`);
   found.expect(/Brannoch/.test(invited.toast), `Pell's invite doesn't name Brannoch: "${invited.toast}"`);
-  await picture(pell, dir, '5-invite');
+  await picture(pell, dir, '5-invite', found);
   await pell.call('friendsToastJoin');
   await until([brannoch, pell], (b, p) => p.session === 'joined' && p.roomCode === code && b.partners === 2,
     'Pell never joined from the invite');
   found.say('Pell joined from the invite: three in the room');
-  await picture(brannoch, dir, '6-party');
+  await picture(brannoch, dir, '6-party', found);
 }
 
 /** Everyone out; Brannoch opens a room kept from friends: Ysolde sees him in a room, with no Join. */
@@ -245,13 +256,14 @@ export async function runFriends(side, { canary = false } = {}) {
     for (const partner of partners) await prepare(partner, screen);
     const games = [new Game(side.page, NAMES[0]), new Game(partners[0], NAMES[1]), new Game(partners[1], NAMES[2])];
     const codes = await signUpAll(games, relayUrl, saves.url);
+    if (canary) for (const game of games) await game.call('friendsPlantOverlap');
     found.say(`signed up: ${games.map((g) => g.name).join(', ')}, each with a friend code`);
     await befriend(games, codes, found, dir);
     const code = await joinFromList(games, found, dir);
     await inviteToRoom(games, code, found, dir);
     await hiddenRoom(games, code, found);
     if (canary) {
-      for (const fault of ['oneWay', 'hiddenRooms']) {
+      for (const fault of ['oneWay', 'hiddenRooms', 'textOverlap']) {
         const seen = found.faultsSeen.has(fault);
         found.say(`canary: ${fault} ${seen ? 'caught' : 'went unseen'}`);
         if (!seen) found.problems.push(`friends: the canary's ${fault} went unseen`);

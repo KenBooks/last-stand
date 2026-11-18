@@ -8,6 +8,7 @@ import { session } from '../../../src/net/session';
 import { refreshFriends, friendsView } from '../../../src/net/friends';
 import { signUpWithPasskey, signedIn } from '../../../src/loot/cloud';
 import type { Lab } from './lab';
+import { textOverOtherText } from './textOverlap';
 
 /** A person's row in the Friends tab (or a room's invite list), as it shows. */
 export interface FriendRow {
@@ -29,6 +30,10 @@ export interface FriendsState {
   toast: string;
   /** the friends as the service last said them, by name: online, and their room's code */
   service: { name: string; online: boolean; room: string; busy: boolean }[];
+  /** the invites the service last said are waiting, by who sent them */
+  invites: string[];
+  /** whether Play together is open */
+  open: boolean;
   session: string; roomCode: string; partners: number;
   status: string;
 }
@@ -85,6 +90,8 @@ export function friendsState(): FriendsState {
     note: text(inDialog('.coop-friend-note:not(.hidden)')),
     toast: toast && !toast.classList.contains('hidden') ? text(toast) : '',
     service: (view?.friends ?? []).map((f) => ({ name: f.name, online: f.online, room: f.room?.code ?? '', busy: f.busy })),
+    invites: (view?.invites ?? []).map((i) => i.name),
+    open: coopOpen(),
     session: session.status, roomCode: session.code, partners: session.peers.size,
     status: text(inDialog('.coop-checking')) || text(inDialog('.coop-error')),
   };
@@ -131,6 +138,22 @@ export async function friendsAct(lab: Lab, { name, act }: { name: string; act: s
   const rows = [...document.querySelectorAll<HTMLElement>('#coop .coop-friend')];
   const row = rows.find((r) => text(r.querySelector('.coop-friend-who b')) === name);
   await click(lab, row?.querySelector<HTMLElement>(`.coop-friend-act[data-act="${act}"]`) ?? null, `${act} on ${name}'s row`);
+}
+
+/** The text drawn over other text in a room's cards, the friends' rows and the invite's banner, as `where` says. */
+export function friendsTextOver(_lab: Lab, { where }: { where: string }): string[] {
+  return ['#coop .coop-card', '#coop .coop-friend', '#friend-invite:not(.hidden)']
+    .flatMap((selector) => textOverOtherText(selector, where));
+}
+
+/** The canary's fault: a room's cards laid out as before Victor's review of #700, each card's name and class let run
+ *  on past their column over the stats beside them, as a narrow card showed them. */
+export function friendsPlantOverlap(): void {
+  const style = document.createElement('style');
+  // (the name's column held to 12 px, as a narrow card squeezed it, and its text let run on past it)
+  style.textContent = '#coop .coop-list > .coop-card { grid-template-columns: 36px 12px auto minmax(48px, auto) !important; } '
+    + '#coop .coop-card-who b, #coop .coop-card-who small { overflow: visible !important; }';
+  document.head.append(style);
 }
 
 /** Play together put away, as a player walks off into the village. */
