@@ -314,7 +314,7 @@ function gearLevel(look: Look | null): number {
 const bestOf = (look: Look | null): number | null =>
   Number.isInteger(look?.best) && look!.best! >= 0 && look!.best! < 10000 ? look!.best! : null;
 /** one figure of a card: its number over its name */
-const statHtml = (value: string, name: string): string => `<span class="coop-stat"><b>${value}</b><small>${name}</small></span>`;
+const statHtml = (value: string, name: string, short: string): string => `<span class="coop-stat"><b>${value}</b><small><span class="long">${name}</span><span class="short">${short}</span></small></span>`;
 
 /** A player's card in the room: portrait, colour, name tag, class in its accent, the gear's level and best wave, the
  *  host's mark; an empty place. Every card is one size (from Victor's review of #682: "Card need to be same size,
@@ -331,7 +331,7 @@ function partyCardHtml(p: Player | null): string {
   return `<li class="coop-card${p.local ? ' own' : ''}"><span class="coop-card-face">${portraitHtml(p)}</span>
     <span class="coop-card-who"><b><span class="coop-dot"${dotColour(p)}></span><span class="coop-card-name">${esc(nameOf(p))}</span></b>
       <small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>
-    <span class="coop-card-stats">${statHtml(String(gearLevel(look)), 'Gear level')}${statHtml(best === null ? '–' : String(best), 'Best wave')}</span>
+    <span class="coop-card-stats">${statHtml(String(gearLevel(look)), 'Gear level', 'Gear')}${statHtml(best === null ? '–' : String(best), 'Best wave', 'Best')}</span>
     <span class="coop-card-mark">${host}${tradeButton(p)}</span></li>`;
 }
 

@@ -39,6 +39,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
 - `fire`: each biome's fire as the player meets it (read from beside it with its own light and without: how tall and wide it burns, its light and hue from its base up, what of it is blown out white, its tongues, the smoke over it, how it moves and swells, its flashes on the screen; its flames alone from round them, turning with the camera or holding their shape; the plants over it; from above, the flames over the logs in it; the see-through hole cutting it in two; `--cost` what its flames take of the GPU, `--levels` at each quality level within one page; pictured beside it, alone, from above, round it and in the game's views) (in full: [`commands/fire.md`](commands/fire.md))
 - `form`: the run judged against a runner's (published runners' cadence, time on the ground, joint curves over the stride, lean, bounce and arm swing, at a man's size, with each way the hero holds his weapons: stick figures of his stride over a runner's, and the hero pictured from both sides, in the game's views and his arms close up, at eight points of it; the set-up's `--gear` holds them any way his class can)
+- `friends`: co-op's friends end to end, three games against a saves service and a relay of the lab's own (a friend code asked and accepted, a friend's room joined from the list, an invite joined from its toast, a room kept from friends shown with no Join, every picture's text checked for text drawn over other text; `--canary` a request counted as a friendship, a hidden room shown and the room's cards laid out as before #700's review)
 - `gait`: the walk judged as a person's, on level ground and the steps, drawn and not, tapping, turning and circling: each foot's time on the ground, the steps' rate, length and width, hops and gallops, the hips, the hands' swing, the jerks (in full in `commands/gait.md`)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `glance`: the hero's casual look round as he stands idle (the head's turn from the chest and the eyes' in their sockets, frame by frame: in the countdown, the lobby and the hall after his showcase; none walking, attacking or through the eyes; within a neck's range, its speed, a jerk, the eyes leading, never a loop; a strip of the first glance)
@@ -610,7 +611,10 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   room opened without the tick shown to friends as in a room, with no Join and no code. Pictures in
   `out/friends/<WxH>` (the tab, a request, a friend in a room, the room's invite list, the invite, the party).
   `--canary` starts the saves service with its faults (`setFriendFaults` in `server/saves/friends.mjs`: a request
-  counted as a friendship, a hidden room shown), each of which must be caught.
+  counted as a friendship, a hidden room shown), each of which must be caught. Each picture's text is checked: none
+  drawn over other text in a room's cards, the friends' rows or the invite's banner (`page/textOverlap.ts`, from
+  Victor's review of #700); the canary lays the cards out as they were before it (a class name run on over the stats'
+  labels), which must be found.
 
 - `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
   second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
