@@ -30,6 +30,7 @@ import { SCHOLAR_LOOP, type Scholar } from '../../../src/entities/models/scholar
 import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
+import { holdThroughDoor } from './housesDoor';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -556,7 +557,9 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   await viewAs(lab, 'third');
   const door = villageObject('libraryDoor')!;
   await stand(lab, door.stand, 0);
-  await useByE(lab, door, problems);
+  // (a house's door takes E held, as a player holds it: tapped, as it was opened when this was written, it took him
+  // nowhere and the command failed at the door)
+  problems.push(...await holdThroughDoor(lab, door, moments, null));
   await lab.until(() => G.arena.room === 'library', DOOR_FRAMES, "the library's door never took him in");
   await lab.step(15);
   const s = room.folk?.();
