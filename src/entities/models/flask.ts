@@ -17,7 +17,7 @@ import type { MaterialKit } from '../../types';
 const _t = new THREE.Vector3(), _f = new THREE.Vector3(), _m = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3();
 const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _a = new THREE.Vector3(), _t0 = new THREE.Vector3(), _f0 = new THREE.Vector3(), _p0 = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _e = new THREE.Quaternion(), _fist = new THREE.Quaternion(), _sl = new THREE.Quaternion();
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 
 /**
@@ -192,6 +192,27 @@ const FIST: Keys = [[0, 0], [0.12, 1], [0.89, 1], [1, 0]];
 interface DrinkKeys { hip: Keys; reach: Keys; lift: Keys; tip: Keys; out: Keys; fist: Keys }
 const NONE: Keys = [[0, 0], [1, 0]];
 const DRAUGHT_KEYS: DrinkKeys = { hip: HIP, reach: NONE, lift: LIFT, tip: TIP, out: OUT, fist: FIST };
+/**
+ * How the ale is drunk from its mug, beside the beats (`ALE_KEYS`):
+ * - `tilts`: how far the mug is tipped from upright (degrees, in the world) at its lips before a swallow, and at each of
+ *   the three swallows' height: as far as the ale left in it needs, never past 65 (a full mug spills at the lip near
+ *   40; tipped as the flask is, its foot over the lips, it read as drunk upside down).
+ * - `lowerLip`: how far under the head's `mouth` point the rim's near edge rests (m: on the lower lip).
+ * - `headBack`: the share of the draught's tip of the head back (a little, not thrown back).
+ * - `pole`, `tippedPole`: where the elbow would rather point (the chest's frame), as the mug comes to the lips and at a
+ *   swallow's height: out to his side, rising as it tips.
+ */
+const ALE_DRINK = tunable('aleDrink', {
+  tilts: [22, 42, 53, 64], lowerLip: 0.006, headBack: 0.35, pole: [1, -0.1, 0.45], tippedPole: [0.9, 0.3, 0.5],
+});
+
+/** the mug's tilt from upright (rad) at `k` of the drink with the swallow's tip at `tip`: from its tilt at the lips to the
+ *  swallow under way's */
+function aleTilt(k: number, tip: number): number {
+  const [lips, ...swallows] = ALE_DRINK.tilts, at = k < 0.38 ? 0 : k < 0.54 ? 1 : 2;
+  return (lips + (swallows[at] - lips) * tip) * Math.PI / 180;
+}
+
 /** the ale's, over its 5 s (data/tavern.ts `ALE_BEATS`): the hand out to the bar and the mug taken off it, up to the
  *  lips, three long swallows tipped up with a breath between (each gulp heard at its middle), lowered to the chest
  *  and held there through a contented breath (the skill's sigh), and the mug set down out of sight. (A wipe of the
@@ -226,7 +247,10 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, h: Hand, flas
   // to the belt on the hip, or out before him to the bar
   sh.rotation.x += 0.35 * hip - 0.75 * reach; sh.rotation.z += 0.12 * hip; el.rotation.x += -0.6 * hip - 0.35 * reach;
   // the head and shoulders tip back as it drinks
-  j.neck.rotation.x += -0.3 * tip; j.head.rotation.x += -0.2 * tip; j.spine.rotation.x += -0.08 * tip;
+  // the head and shoulders tip back as it drinks (a mug's ale is drunk with the head tipped back a little, not
+  // thrown back: the mug tips, not the man)
+  const back = ale ? ALE_DRINK.headBack : 1;
+  j.neck.rotation.x += -0.3 * tip * back; j.head.rotation.x += -0.2 * tip * back; j.spine.rotation.x += -0.08 * tip * back;
   flask.userData.lift = e;
   // (kept for the lab: `lift` is spent by `holdFlask` each frame)
   flask.userData.lifted = e;
@@ -248,16 +272,27 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, h: Hand, flas
     // neck pointing from there at the lips and its mouth on them
     mouth.getWorldPosition(_m);
     j.head.getWorldQuaternion(_q);
-    // (a mug's rim is wide: its near edge on the lips, its middle before them)
     if (ale) {
-      const sc0 = j.root.scale.x;
-      _m.addScaledVector(_v.set(0, 0, 1).applyQuaternion(_q), MUG.rimR * 0.8 * sc0);
+      // a mug as a man drinks from it: its rim's near edge on his lower lip, the mug before his face tipped from
+      // upright towards him only as far as the ale left in it needs (more each swallow, `ALE_DRINK.tilts`, in the
+      // world, whatever his head does), its middle a rim's radius up and out from that edge (tipped by the flask's
+      // aim, its foot over the lips, the mug stood upside down out past his brow, its rim off his mouth: from play,
+      // "tilting cup too much upwards, and cup not even close to face")
+      const tilt = aleTilt(k, tip);
+      _v.set(0, 0, 1).applyQuaternion(_q).setY(0).normalize();
+      _f.set(0, Math.cos(tilt), 0).addScaledVector(_v, -Math.sin(tilt)).normalize();
+      _w.set(0, Math.sin(tilt), 0).addScaledVector(_v, Math.cos(tilt)).normalize();
+      _m.addScaledVector(_v2.set(0, -1, 0).applyQuaternion(_q), ALE_DRINK.lowerLip * sc);
+      _t.copy(_m).addScaledVector(_w, MUG.rimR * sc).addScaledVector(_f, -mouthUp * sc);
+      // (the elbow out to his side and rising as the mug tips, the forearm coming in to the mouth)
+      _p.fromArray(ALE_DRINK.pole).lerp(_w.fromArray(ALE_DRINK.tippedPole), tip);
+    } else {
+      _w.fromArray(DRINK.sip).lerp(_p.fromArray(DRINK.tipped), tip);
+      _w.x *= h.s;
+      _f.copy(_w).negate().applyQuaternion(_q).normalize();
+      _t.copy(_m).addScaledVector(_f, -mouthUp * sc);
+      _p.fromArray(DRINK.pole).lerp(_w.fromArray(DRINK.tippedPole), tip);
     }
-    _w.fromArray(DRINK.sip).lerp(_p.fromArray(DRINK.tipped), tip);
-    _w.x *= h.s;
-    _f.copy(_w).negate().applyQuaternion(_q).normalize();
-    _t.copy(_m).addScaledVector(_f, -mouthUp * sc);
-    _p.fromArray(DRINK.pole).lerp(_w.fromArray(DRINK.tippedPole), tip);
     _p.x *= h.s;
     j.chest.getWorldQuaternion(_q);
     _p.applyQuaternion(_q).normalize();

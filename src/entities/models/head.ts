@@ -2,6 +2,7 @@
 // workers), glossy eyes under lids with lashes, sculpted ears, hair and a full beard (a volume, with tufts of cards), and
 // the neck below it. Built on the rig's head joint, in metres, the chin's underside level with the joint;
 // the head is 1/7.5 of the heroes' stature (a realistic figure: an ideal one is 8 heads, a heroic 8.5).
+import { VILLAGE } from '../../core/beta';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lod, heroDetail } from './armor';

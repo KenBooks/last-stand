@@ -1,35 +1,40 @@
-// Bertram Tunwell, keeper of the Ember & Oak (world/rooms.ts stands him behind the tavern's bar; data/tavern.ts): a big,
-// broad, ruddy innkeeper, drawn to read as his own man beside the library's Brother Hollis (brown wool, a white beard,
-// a cap) and Odo the merchant (saffron, teal, a plumed hat, a dark beard): bald on top with a ginger fringe round the
-// back of his head, a great ginger walrus moustache and bushy brows, a cream shirt striped in bottle green with its
-// sleeves rolled, a red neckerchief, a long apron of dark oiled leather from his chest to below his knees on straps
-// over his shoulders, a linen towel over his left shoulder, grey-blue trousers and boots. Built on the heroes' own rig,
-// head (the warrior's face, heavier and older) and hands, as the other folk are.
+// Bertram Tunwell, keeper of the Ember & Oak (world/tavern.ts stands him behind the tavern's bar; data/tavern.ts):
+// an innkeeper of fifty, drawn to read as his own man beside the library's Brother Hollis (brown wool, a long white
+// beard, a cap) and Odo the merchant (saffron and teal, a plumed hat, a dark beard). His own face (face.ts
+// `FACES.keeper`, from the warrior's skull: older, a broad bulbous nose, fuller lips, flushed cheeks) with the head's
+// own short crop and full beard in ginger going grey (`LOOKS.keeper`), made by the head workers as the heroes' are; a
+// normal build; a cream shirt striped in bottle green, its placket buttoned and its sleeves rolled in cuffs above the
+// elbow; a red neckerchief knotted at the throat; a long apron of oiled leather on straps, stitched round its edges, a
+// pocket on its front; a striped linen towel over his left shoulder; grey-blue trousers and boots.
 // His idle is a loop that never snaps (`KEEP_LOOP` long: every motion a pulse still at both its ends): he breathes,
-// wipes the inside of a mug with a cloth, sets his hands on the bar, polishes its top in wide rounds, looks round his
-// room; a hero coming near is looked up at, and one talking to him held in his eye. Asked for ale (`serve`), he holds a
-// mug under the cask's tap on the bar and fills it, sets it down and slides it across (`SERVE`): the room takes the
-// mug as it leaves his hand (`served`) and slides it on to the hero.
+// wipes the inside of a mug with a rag, polishes the bar in wide rounds, looks round his room; a hero coming near is
+// looked up at, one talking to him held in his eye. His left fist closes round his mug and his right round his rag
+// (hands.ts `hold`, `seatHeld`, as a hero's round a handle), each arm solved twice so the fist, not the wrist, lands
+// where it's sent. Asked for ale (`serve`), he holds the mug under the cask's tap, his right hand on its handle, then
+// sets it down and slides it across (`SERVE`): the room takes the mug as it leaves his hand (`served`).
+// (His first form, from play: "Character is bad... make him thinner, work on hair, body, clothing detail. Work on his
+// face, mouth, textures. What the hell is happening with his hands": a barrel of a man on the warrior's head, its
+// hair taken off and cards stuck on a bare shell, claws for hands, a fist through his mug.)
 import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createKit } from '../../core/materials';
-import { cloth as clothMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
+import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, type Joints } from './rig';
 import { stripRig } from './shapes';
-import { buildHead, buildNeck, hairCard, handSkin, toGroup, HEAD_MM, HERO_HEADS, type Head } from './head';
-import { buildHand, bare, poseHand } from './hands';
+import { buildHead, buildNeck, handSkin, HERO_HEADS, type Head } from './head';
+import { buildHand, bare, hold, poseHand, seatHeld, type Hand } from './hands';
 import { cord, oval, rowsSurface, sleeve } from './merchant';
-import { mergeAll } from './scholar';
-import { buildMug } from './flask';
+import { buildMug, MUG } from './flask';
 import { SERVE } from '../../data/tavern';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 
 /** how long his idle loop is (s) */
 export const KEEP_LOOP = 32;
-/** what happens when in the loop (s): a mug wiped with his cloth, the bar polished, a look round the room */
+/** what happens when in the loop (s): a mug wiped with his rag, the bar polished, a look round the room */
 const BEATS = { wipe: [1, 13], polish: [15, 26], look: [27.5, 30.5] } as const satisfies Record<string, readonly [number, number]>;
 /** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again */
 const GLANCE = { near: 4.5, hold: 3, rest: 9 };
+/** the rag's radius where his fist closes round it bunched (m) */
+const RAG_R = 0.022;
 
 /** Where his bar and what's on it stand, in his frame (x across him, his left +x; +z ahead; up from the floor). */
 export interface KeeperBar {
@@ -63,31 +68,32 @@ const span = (t: number, a: number, b: number, rise: number): number =>
 /** where `t` is between a and b (0 to 1) */
 const along = (t: number, a: number, b: number): number => clamp((t - a) / (b - a), 0, 1);
 
-/** The stripes of his shirt: cream, a bottle-green stripe and a thin one beside it, run down the cloth (u across it). */
-function stripes(): THREE.CanvasTexture {
+/** Stripes run down a cloth (u across it) on a ground, `repeat` times across a unit of its uv. */
+function stripes(ground: string, stripe: string, bands: [number, number][], repeat: number): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 64; c.height = 8;
   const cx = c.getContext('2d')!;
-  cx.fillStyle = '#efe4c8'; cx.fillRect(0, 0, 64, 8);
-  cx.fillStyle = '#2c5236'; cx.fillRect(0, 0, 12, 8);
-  cx.fillRect(20, 0, 3, 8);
+  cx.fillStyle = ground; cx.fillRect(0, 0, 64, 8);
+  cx.fillStyle = stripe;
+  for (const [x, w] of bands) cx.fillRect(x, 0, w, 8);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  t.repeat.set(9, 1);
+  t.repeat.set(repeat, 1);
   t.anisotropy = 4;
   return t;
 }
 
 type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
 interface Mats {
-  shirt: THREE.Material; apron: THREE.Material; strap: THREE.Material; scarf: THREE.Material; towel: THREE.Material;
-  arm: THREE.Material; brass: THREE.Material; trousers: THREE.Material; boot: THREE.Material;
+  shirt: THREE.Material; apron: THREE.Material; strap: THREE.Material; thread: THREE.Material; scarf: THREE.Material;
+  towel: THREE.Material; arm: THREE.Material; brass: THREE.Material; bone: THREE.Material; trousers: THREE.Material;
+  boot: THREE.Material;
 }
 
 /**
- * The keeper, behind `bar`. His head and hands are the heroes': build him once their workers have made them
- * (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
+ * The keeper, behind `bar`. His head and hands are made as the heroes' are: build him once their workers have made
+ * them (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
 export function buildKeeper(bar: KeeperBar): Keeper {
   const kit = createKit(0xffc27a);
@@ -95,66 +101,36 @@ export function buildKeeper(bar: KeeperBar): Keeper {
     const m = pbrMaterialMaps(maps, 1, ns);
     return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale };
   };
-  // (his palette is a tavern's: cream and bottle green, dark oiled leather, a red scarf; Hollis wears brown and
+  // (his palette is a tavern's: cream and bottle green, oiled brown leather, a red scarf; Hollis wears brown and
   // oxblood, Odo saffron and teal)
-  const shirt = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 1.2), map: stripes(), side: THREE.DoubleSide }, 0xfff0d0, 0.3);
-  const apron = kit.std({ color: 0x3a2416, roughness: 0.5, ...tex(leatherMaps(), 1.3), side: THREE.DoubleSide });
-  const strap = kit.std({ color: 0x24160c, roughness: 0.55, ...tex(leatherMaps(), 1) });
-  const scarf = kit.rim({ color: 0x9a2018, roughness: 0.95, ...tex(clothMaps(), 1) }, 0xd04030, 0.3);
-  const towel = kit.rim({ color: 0xe6dcc4, roughness: 1, ...tex(clothMaps(), 1.4), side: THREE.DoubleSide }, 0xfff4e0, 0.25);
-  const arm = kit.rim({ color: 0xd0907a, roughness: 0.75 }, 0xf0b0a0, 0.25);
+  const shirtMap = stripes('#ece0c4', '#2c5236', [[0, 10], [17, 3]], 9);
+  const shirt = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 0.9), map: shirtMap, side: THREE.DoubleSide }, 0xfff0d0, 0.3);
+  const apron = kit.std({ color: 0x74503a, roughness: 0.78, ...tex(oiledMaps(), 0.45), side: THREE.DoubleSide });
+  const strap = kit.std({ color: 0x3a2414, roughness: 0.5, ...tex(leatherMaps(), 0.7) });
+  const thread = kit.std({ color: 0xc8b088, roughness: 0.9 });
+  const scarf = kit.rim({ color: 0x9a2018, roughness: 0.95, ...tex(clothMaps(), 0.8), side: THREE.DoubleSide }, 0xd04030, 0.3);
+  const towelMap = stripes('#e8decb', '#9a3a2a', [[6, 3], [11, 2]], 1);
+  const towel = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 1.2), map: towelMap, side: THREE.DoubleSide }, 0xfff4e0, 0.25);
   const brass = kit.std({ color: 0xc89a48, metalness: 0.9, roughness: 0.35 });
+  const bone = kit.std({ color: 0xe6dcc6, roughness: 0.5 });
   const trousers = kit.std({ color: 0x343c4a, roughness: 1, ...tex(woolMaps(), 1) });
   const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
-  const rag = kit.rim({ color: 0xd8ccb0, roughness: 1, ...tex(clothMaps(), 1.6) }, 0xfff0d8, 0.2);
 
-  // --- the rig: big and broad, a deep chest and a round belly, a head taller than the others ---
-  const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.27, chestD: 0.18, waistW: 0.25 });
+  // --- the rig: a man of an ordinary build, a little thick at the waist ---
+  const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.21, chestD: 0.14, waistW: 0.17 });
   stripRig(j.root);
-  j.root.scale.setScalar(1.04);
   for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `keeper ${name}`;
   const P = j.P;
 
-  // --- the head: the warrior's face, ruddy and older, bald on top; a ginger fringe, moustache and brows ---
-  const head: Head = buildHead(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior);
-  buildNeck(j.neck, kit, 'warrior', P.neckL, j.head);
-  const faceMat = head.face.material as THREE.MeshStandardMaterial;
-  faceMat.color.multiply(new THREE.Color(1.08, 0.88, 0.8));
-  const cards = (head.hair[1]?.material ?? head.hair[0]?.material) as THREE.MeshStandardMaterial | undefined;
-  const ginger = (cards ?? new THREE.MeshStandardMaterial()).clone();
-  ginger.color.setRGB(0.95, 0.48, 0.2);
-  ginger.roughness = 0.85;
-  if (cards) {
-    // (a clone loses the kit's hooks: the ginger keeps its card's, so it draws with its program)
-    ginger.onBeforeCompile = cards.onBeforeCompile;
-    ginger.customProgramCacheKey = cards.customProgramCacheKey;
-    (ginger as unknown as { litBothSides: boolean }).litBothSides = true;
-    Object.defineProperty(ginger, 'kitLooks', { value: (cards as unknown as { kitLooks: unknown }).kitLooks, configurable: true });
-  }
-  // --- the hands: the heroes' own, bare, big ---
-  const skin = handSkin(kit, 'warrior');
-  skin.color.multiply(new THREE.Color(1.06, 0.92, 0.86));
-  // (his crown bare and his chin shaved, the walrus moustache alone on his face: the locks and the beard taken off the
-  // head, not hidden, as the room's warm-up shows every hidden mesh to compile it; the scalp's shell kept, in his skin,
-  // over the face's painted hair)
-  for (const h of [...head.hair.slice(1), ...head.beards]) h.removeFromParent();
-  const scalp = head.hair[0];
-  if (scalp) {
-    // (its own copy, smoothed: the shell is shared with every warrior's head, and its grooves under the locks read as
-    // stripes on bare skin; a shade darker than the hands, as his face is under the bar's lamps)
-    const smooth = mergeVertices(scalp.geometry.clone().deleteAttribute('normal').deleteAttribute('uv'), 1e-4);
-    smooth.computeVertexNormals();
-    scalp.geometry = smooth;
-    const pate = skin.clone();
-    pate.color.multiply(new THREE.Color(0.78, 0.68, 0.64));
-    pate.onBeforeCompile = skin.onBeforeCompile;
-    pate.customProgramCacheKey = skin.customProgramCacheKey;
-    Object.defineProperty(pate, 'kitLooks', { value: (skin as unknown as { kitLooks: unknown }).kitLooks, configurable: true });
-    scalp.material = pate;
-  }
-  dressHead(head, ginger);
-  const handL = buildHand(j.handL, 1, skin, skin, 1.14, skin), handR = buildHand(j.handR, -1, skin, skin, 1.14, skin);
+  // --- the head: his own face, short crop and full beard, all the head's own (face.ts, head.ts) ---
+  const head: Head = buildHead(j.head, kit, HERO_HEADS.keeper.who, HERO_HEADS.keeper);
+  buildNeck(j.neck, kit, 'keeper', P.neckL, j.head);
+
+  // --- the hands: the heroes' own, bare, his forearms in his own skin ---
+  const skin = handSkin(kit, 'keeper');
+  const handL = buildHand(j.handL, 1, skin, skin, 1.06, skin), handR = buildHand(j.handR, -1, skin, skin, 1.06, skin);
   bare(handL, true); bare(handR, true);
+  const arm = kit.rim({ color: (skin as THREE.MeshStandardMaterial).color.clone().multiplyScalar(0.96), roughness: 0.7 }, 0xf0b0a0, 0.22);
 
   // --- his clothes ---
   const parts: THREE.Mesh[] = [];
@@ -166,34 +142,45 @@ export function buildKeeper(bar: KeeperBar): Keeper {
     parts.push(m);
     return m;
   };
-  dressBody(j, add, { shirt, apron, strap, scarf, towel, arm, brass, trousers, boot });
+  dressBody(j, add, { shirt, apron, strap, thread, scarf, towel, arm, brass, bone, trousers, boot });
 
-  // --- what he holds: a mug in his left hand, a cloth in his right ---
+  // --- what he holds: his mug in his left fist, a rag in his right ---
   const mug = buildMug(kit);
-  mug.position.set(0.0, -0.085, 0.03);
   j.handL.add(mug);
-  const clothGeo = new THREE.IcosahedronGeometry(0.045, 1);
-  {
-    const p = clothGeo.attributes.position, rng = mulberry(17);
-    for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * (0.9 + rng() * 0.4), p.getY(i) * 0.7, p.getZ(i) * (0.9 + rng() * 0.5));
-    clothGeo.computeVertexNormals();
-  }
-  const clothMesh = add(clothGeo, rag, j.handR, 'cloth', false);
-  clothMesh.position.set(0, -0.09, 0.025);
+  const rag = add(ragGeometry(), towel, j.handR, 'rag', false);
 
   // --- his pose, a frame at a time ---
   const eyes = head.eyes;
   let loop = 3, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0, serveT = -1;
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
   const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
-  const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
+  const fistL = new THREE.Vector3(), fistR = new THREE.Vector3(), wristL = new THREE.Vector3(), wristR = new THREE.Vector3();
+  const poleL = V(1, -0.6, -0.5).normalize(), poleR = V(-1, -0.6, -0.5).normalize();
+  const up = V(0, 1, 0), turn = new THREE.Quaternion(), rootTurn = new THREE.Quaternion(), at = new THREE.Vector3();
+  const slideFrom = V(0.04, bar.top, bar.near + 0.3), slid = new THREE.Vector3();
   const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
-  /** where his hands rest on the bar: just in from its near edge, a little wider than his shoulders */
-  const rest = (s: number, out: THREE.Vector3) => out.set(s * 0.22, bar.top + 0.04, bar.near + 0.1);
-  /** where the mug stands as he lets it go on the bar, sliding it */
-  const slideFrom = V(0.02, bar.top, bar.near + 0.3);
-  const slid = new THREE.Vector3();
-  const mugTurn = new THREE.Quaternion(), rootTurn = new THREE.Quaternion();
+  /** a hand's fist closed round what it holds, `dir` its axis (world), the held thing seated in it and stood the
+   *  world's way up */
+  const grip = (h: Hand, held: THREE.Object3D, r: number, dir: THREE.Vector3) => {
+    j.root.updateMatrixWorld(true);
+    hold(h, dir, r);
+    seatHeld(h, held, r);
+    held.parent!.getWorldQuaternion(turn);
+    j.root.getWorldQuaternion(rootTurn);
+    held.quaternion.copy(turn.invert().multiply(rootTurn));
+  };
+  /** an arm sent so its fist's grip (where `held` is seated) lands at `fist` (his frame): solved once to the wrist
+   *  guessed from the hand's length, and again by how far the grip landed off */
+  const reachWith = (left: boolean, fist: THREE.Vector3, wrist: THREE.Vector3, h: Hand, held: THREE.Object3D, r: number) => {
+    const [shoulder, elbow, pole] = left ? [j.shoulderL, j.elbowL, poleL] : [j.shoulderR, j.elbowR, poleR];
+    for (let pass = 0; pass < 2; pass++) {
+      reachArm(shoulder, elbow, P.upperL, P.foreL, chestLocal(wrist.clone()), pole, 1, 0.08);
+      grip(h, held, r, up);
+      j.root.updateMatrixWorld(true);
+      j.root.worldToLocal(held.getWorldPosition(at));
+      wrist.add(tmp.subVectors(fist, at));
+    }
+  };
 
   function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean): void {
     clock += dt;
@@ -224,14 +211,16 @@ export function buildKeeper(bar: KeeperBar): Keeper {
     const wipe = span(t, ...BEATS.wipe, 1.2) * idle, polish = span(t, ...BEATS.polish, 1.2) * idle, look = span(t, ...BEATS.look, 1.0) * idle;
     const lookK = along(t, ...BEATS.look);
     const breath = Math.sin((t / KEEP_LOOP) * Math.PI * 2 * 8);
+    // (his mug across the bar from as he lets it go till he takes up another: his left hand open on the bar meanwhile)
+    const gone = serveT >= SERVE.slide[0] + 0.05 && serveT < SERVE.long - 0.15;
 
     // --- body, neck, head ---
     for (const o of [j.hips, j.spine, j.chest, j.neck, j.head]) o.rotation.set(0, 0, 0);
-    j.spine.rotation.x = 0.04 + polish * 0.14 + fill * 0.06 + slide * 0.12 + breath * 0.006;
-    j.chest.rotation.x = 0.02 + polish * 0.05 - breath * 0.01;
-    j.chest.rotation.y = polish * 0.1 * Math.sin(clock * 1.4) + look * 0.14 * Math.sin(lookK * Math.PI * 2) + fill * 0.12;
+    j.spine.rotation.x = 0.04 + polish * 0.12 + fill * 0.05 + slide * 0.1 + breath * 0.006;
+    j.chest.rotation.x = 0.02 + polish * 0.04 - breath * 0.01;
+    j.chest.rotation.y = polish * 0.08 * Math.sin(clock * 1.4) + look * 0.14 * Math.sin(lookK * Math.PI * 2) + fill * 0.1;
     // (he looks at what his hands do: the mug he wipes, the bar, the tap as it runs, the mug as it slides)
-    let headX = 0.15 + wipe * 0.25 + polish * 0.35 + fill * 0.35 + slide * 0.3 - look * 0.25, headY = fill * 0.35;
+    let headX = 0.12 + wipe * 0.28 + polish * 0.32 + fill * 0.3 + slide * 0.28 - look * 0.2, headY = fill * 0.3;
     headY += look * 0.55 * Math.sin(lookK * Math.PI * 2);
     let neckX = 0.04;
     if (gaze > 0.001) {
@@ -255,42 +244,44 @@ export function buildKeeper(bar: KeeperBar): Keeper {
     for (const e of eyes) e.rotation.set(eyeX, 0, 0);
     j.root.updateMatrixWorld(true);
 
-    // --- the arms ---
-    rest(1, tL); rest(-1, tR);
-    tL.y += breath * 0.002; tR.y += breath * 0.002;
-    // wiping the mug: held before his belly, mouth up, the cloth going round inside it
-    const round = clock * 4.2;
-    tL.lerp(tmp.set(0.08, 1.12, 0.3), wipe);
-    tR.lerp(tmp.set(0.05 + 0.025 * Math.cos(round), 1.2 + 0.012 * Math.sin(round * 2), 0.3 + 0.025 * Math.sin(round)), wipe);
-    // polishing the bar: the mug set by, the cloth in wide rounds on its top
+    // --- where his fists go: the mug's grip (its foot on the bar at rest) and the rag ---
+    const onBar = bar.top + MUG.foot;
+    fistL.set(0.24, onBar, bar.near + 0.12);
+    fistR.set(-0.2, bar.top + RAG_R + 0.01, bar.near + 0.12);
+    fistL.y += breath * 0.002;
+    // wiping the mug: held up before his belly in his left fist, the rag in his right rubbed round its outside, over
+    // the side nearest him and up and down its staves (on its mouth, the rag hung outside the mug from a fist over it)
+    const round = clock * 3.4, rub = Math.sin(round), lift = 0.5 + 0.5 * Math.sin(round * 0.5);
+    const mugAt = tmp.set(0.08, 1.1, 0.36), aside = -0.75 + 0.55 * rub, reach = MUG.rimR + RAG_R + 0.004;
+    fistL.lerp(mugAt, wipe);
+    fistR.lerp(V(mugAt.x + reach * Math.sin(aside), 1.1 + lerp(-0.02, MUG.up - 0.02, lift), mugAt.z - reach * Math.cos(aside)), wipe);
+    // polishing the bar: the mug set by on it, the rag pressed on its top in wide rounds
     const sweep = clock * 1.6;
-    tR.lerp(tmp.set(-0.12 + 0.14 * Math.cos(sweep), bar.top + 0.03, bar.near + 0.22 + 0.08 * Math.sin(sweep)), polish);
-    tL.lerp(tmp.set(0.26, bar.top + 0.06, bar.near + 0.08), polish);
-    // serving: the mug held under the tap and filled, the right hand on the tap's handle; set down and slid across
-    tL.lerp(tmp.copy(bar.tap).add(V(0, -0.16, -0.02)), fill);
-    tR.lerp(tmp.copy(bar.tap).add(V(-0.03, 0.06, -0.06)), fill);
-    slid.lerpVectors(slideFrom, V(0.02, bar.top, bar.near + 0.55), slideK);
-    tL.lerp(tmp.copy(slid).add(V(0.04, 0.09, -0.03)), slide);
-    tR.lerp(tmp.set(-0.2, bar.top + 0.05, bar.near + 0.12), slide);
-    // (in an arc over the bar there and back, never through it)
-    tL.y += 0.05 * Math.sin(Math.PI * fill) * (1 - fill) + 0.04 * Math.sin(Math.PI * Math.min(1, polish));
-    // (the elbows out and a little back, as a big man leans on his bar)
-    poleL.set(1, -0.6, -0.5).normalize();
-    poleR.set(-1, -0.6, -0.5).normalize();
-    reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(tL.clone()), poleL, 1, 0.08);
-    reachArm(j.shoulderR, j.elbowR, P.upperL, P.foreL, chestLocal(tR.clone()), poleR, 1, 0.08);
-    j.root.updateMatrixWorld(true);
-    // (his hands: round the mug and the cloth, curled; flat on the bar at rest)
-    poseHand(handL, lerp(0.2, 0.75, Math.max(wipe, fill, slide, polish)), 0.12, 0, clock, 0);
-    poseHand(handR, lerp(0.2, 0.62, Math.max(wipe, polish)), 0.15, 0, clock, 0);
-    // (his mug at its size but for the moment it's gone across the bar: from as he lets it go till he takes another)
-    // (his mug stands upright in his hand, mouth up, however the hand is turned)
-    j.handL.getWorldQuaternion(mugTurn);
-    j.root.getWorldQuaternion(rootTurn);
-    mug.quaternion.copy(mugTurn.invert().multiply(rootTurn));
-    const gone = serveT >= SERVE.slide[0] + 0.05 && serveT < SERVE.long - 0.15;
+    fistR.lerp(tmp.set(-0.1 + 0.13 * Math.cos(sweep), bar.top + RAG_R + 0.005, bar.near + 0.24 + 0.08 * Math.sin(sweep)), polish);
+    fistL.lerp(tmp.set(0.28, onBar, bar.near + 0.1), polish);
+    // serving: the mug under the tap, its rim a little under the spout, his right fist on the tap's handle; then set
+    // down and slid across
+    fistL.lerp(tmp.copy(bar.tap).add(V(0, -0.05 - MUG.up, 0)), fill);
+    fistR.lerp(tmp.copy(bar.tap).add(V(0, 0.05, 0.01)), fill);
+    slid.lerpVectors(slideFrom, V(0.04, bar.top, bar.near + 0.55), slideK);
+    fistL.lerp(tmp.set(slid.x, onBar, slid.z), slide);
+    // (lifted over the bar there and back, never through it)
+    fistL.y += 0.06 * Math.sin(Math.PI * fill) * (1 - fill) + 0.05 * Math.sin(Math.PI * Math.min(1, polish + wipe)) * (1 - Math.max(polish, wipe));
+    // --- the arms, each solved so its fist lands there ---
+    wristL.copy(fistL).add(V(0.02, 0.06, -0.07));
+    wristR.copy(fistR).add(V(-0.02, 0.06, -0.07));
+    if (gone) {
+      // (his left hand open behind the mug as he pushes it across, its fingers on its side, then back to rest flat on
+      // the bar while the mug glides on and is drunk; the room's mug follows his push, `served`)
+      const pushing = smooth(clamp((SERVE.slide[1] + 0.15 - st) / 0.3, 0, 1));
+      tmp.copy(slid).add(V(0.0, MUG.foot + 0.02, -MUG.rimR - 0.1)).lerp(V(0.22, bar.top + 0.05, bar.near + 0.06), 1 - pushing);
+      reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(wristL.copy(tmp)), poleL, 1, 0.08);
+      poseHand(handL, lerp(0.15, 0.35, pushing), 0.1, 0, clock, 0);
+    } else reachWith(true, fistL, wristL, handL, mug, MUG.gripR);
+    reachWith(false, fistR, wristR, handR, rag, RAG_R);
+    // (the rag tucked away while his hand is on the tap; his mug at its size but while it's across the bar)
+    rag.scale.setScalar(Math.max(0.001, 1 - smooth(clamp(fill * 3 - 1, 0, 1))));
     mug.scale.setScalar(gone ? 0.001 : 1);
-    clothMesh.scale.setScalar(Math.max(0.001, 1 - fill * 0.999));
   }
 
   update(0, null, false);
@@ -310,10 +301,28 @@ export function buildKeeper(bar: KeeperBar): Keeper {
   };
 }
 
-/** His clothes on the rig: the striped shirt over a deep chest and round belly, its collar under a red neckerchief
- *  knotted at the throat; the long leather apron, a bib on his chest on straps over his shoulders and a skirt from his
- *  waist to below his knees; a linen towel over his left shoulder; sleeves rolled above the elbow, bare forearms;
- *  trousers and boots. */
+/** A rag bunched in a fist and hanging from it in soft folds, its hem uneven: its origin where the fist holds it,
+ *  hanging down its -y. */
+function ragGeometry(): THREE.BufferGeometry {
+  const rng = mulberry(29), rows: THREE.Vector3[][] = [], N = 24, phase = rng() * 6;
+  for (let k = 0; k <= 8; k++) {
+    const s = k / 8, row: THREE.Vector3[] = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      // (gathered tight in the fist, opening as it falls; deep folds round it, flattened front to back)
+      const r = lerp(0.012, 0.055, smooth(Math.min(1, s * 1.4))) * (1 + 0.28 * Math.sin(a * 5 + phase) * s);
+      const hem = s * (0.13 + 0.03 * Math.sin(a * 3 + phase * 2) + 0.015 * Math.sin(a * 7));
+      row.push(V(r * Math.cos(a), 0.012 - hem, r * Math.sin(a) * 0.55));
+    }
+    rows.push(row);
+  }
+  return rowsSurface(rows, 4);
+}
+
+/** His clothes on the rig: the striped shirt, its placket buttoned, soft folds at the waist, its collar under a red
+ *  neckerchief knotted at the throat; the long oiled-leather apron, a bib on his chest on straps over his shoulders
+ *  and a skirt from his waist to below his knees, stitched round its edges, a pocket on its front; a striped linen
+ *  towel over his left shoulder; sleeves rolled in a thick cuff above the elbow, bare forearms; trousers and boots. */
 function dressBody(j: Joints, add: Add, M: Mats): void {
   const N = 40;
   const ring = (y: number, w: number, d: number, fold: number, belly: number, seed: number) => {
@@ -329,14 +338,15 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
   type Row = [number, number, number, number, number];
   // --- the shirt: chest, up over the shoulders to the collar ---
   const chestRows: Row[] = [
-    [-0.1, 0.25, 0.2, 0.006, 0.08], [0.0, 0.255, 0.195, 0.007, 0.06], [0.08, 0.262, 0.185, 0.007, 0.03],
-    [0.14, 0.27, 0.17, 0.005, 0.01], [0.185, 0.272, 0.155, 0.003, 0], [0.215, 0.25, 0.135, 0.002, 0],
-    [0.238, 0.19, 0.112, 0, 0], [0.255, 0.12, 0.092, 0, 0], [0.285, 0.068, 0.07, 0, 0],
+    [-0.1, 0.205, 0.165, 0.012, 0.04], [0.0, 0.208, 0.16, 0.01, 0.03], [0.08, 0.215, 0.152, 0.008, 0.015],
+    [0.14, 0.222, 0.142, 0.006, 0], [0.185, 0.225, 0.13, 0.004, 0], [0.215, 0.208, 0.115, 0.002, 0],
+    [0.238, 0.16, 0.096, 0, 0], [0.255, 0.105, 0.08, 0, 0], [0.285, 0.062, 0.064, 0, 0],
   ];
   add(rowsSurface(chestRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 1.1)), 1.2), M.shirt, j.chest, 'shirt chest');
+  // (gathered where it's tucked in at the waist: deeper folds low)
   const waistRows: Row[] = [
-    [-0.12, 0.27, 0.22, 0.008, 0.06], [-0.06, 0.27, 0.225, 0.009, 0.1], [0.02, 0.265, 0.225, 0.01, 0.12],
-    [0.1, 0.258, 0.215, 0.009, 0.105], [0.2, 0.25, 0.2, 0.007, 0.085],
+    [-0.12, 0.2, 0.17, 0.022, 0.03], [-0.06, 0.2, 0.172, 0.018, 0.05], [0.02, 0.198, 0.17, 0.014, 0.06],
+    [0.1, 0.196, 0.165, 0.012, 0.05], [0.2, 0.196, 0.16, 0.01, 0.04],
   ];
   add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.4)), 1.2), M.shirt, j.spine, 'shirt belly');
   const front = (rows: Row[], y: number) => {
@@ -349,156 +359,135 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     const { w, d, b } = front(rows, y), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
     return new THREE.Vector3(x, y, z + b * Math.cos(a) ** 2 + lift);
   };
-  // --- the neckerchief: a red band round his neck, knotted at the throat, its two ends hanging ---
+  // --- the shirt's placket down his chest above the bib, two bone buttons on it ---
   {
-    const band: THREE.Vector3[] = [];
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2, [x, z] = oval(a, 0.075, 0.074, 2);
-      band.push(new THREE.Vector3(x, 0.275 - 0.012 * Math.cos(a), z));
+    const rows: THREE.Vector3[][] = [];
+    for (let k = 0; k <= 4; k++) {
+      const y = lerp(0.2, 0.262, k / 4), row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 2; i++) row.push(onFront(chestRows, lerp(-0.012, 0.012, i / 2), y, 0.004));
+      rows.push(row);
     }
-    add(cord(band, 0.016, true, 32), M.scarf, j.chest, 'neckerchief');
-    const knot = add(new THREE.SphereGeometry(0.024, 10, 8).scale(1.2, 0.9, 0.8), M.scarf, j.chest, 'neckerchief knot', false);
-    knot.position.set(0, 0.255, 0.085);
-    for (const s of [1, -1]) {
-      add(cord([new THREE.Vector3(s * 0.006, 0.245, 0.09), new THREE.Vector3(s * 0.025, 0.2, 0.11), new THREE.Vector3(s * 0.035, 0.16, 0.13)], 0.011, false, 10),
-        M.scarf, j.chest, 'neckerchief end', false);
+    add(rowsSurface(rows, 3), M.shirt, j.chest, 'shirt placket');
+    for (const y of [0.21, 0.235]) {
+      add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.003, 10).rotateX(Math.PI / 2), M.bone, j.chest, 'shirt button', false)
+        .position.copy(onFront(chestRows, 0, y, 0.007));
     }
   }
-  // --- the apron's bib: a panel on his chest, on straps over his shoulders crossing his back ---
+  // --- the neckerchief: a red band round his neck, a knot at his throat, its two ends falling as flat cloth ---
+  {
+    const band: THREE.Vector3[] = [];
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2, [x, z] = oval(a, 0.07, 0.07, 2);
+      band.push(new THREE.Vector3(x, 0.275 - 0.012 * Math.cos(a), z));
+    }
+    add(cord(band, 0.013, true, 36), M.scarf, j.chest, 'neckerchief');
+    const knot = add(new THREE.TorusKnotGeometry(0.011, 0.006, 36, 6, 2, 3), M.scarf, j.chest, 'neckerchief knot', false);
+    knot.position.set(0, 0.252, 0.082);
+    knot.rotation.set(0.3, 0, 0);
+    // (each end a narrowing strip of the cloth, falling down his chest and a little out)
+    for (const s of [1, -1]) {
+      const rows: THREE.Vector3[][] = [];
+      for (let k = 0; k <= 6; k++) {
+        const q = k / 6, x = s * (0.006 + 0.03 * q), y = 0.248 - 0.085 * q, z = 0.09 + 0.022 * q - 0.012 * q * q;
+        const w = lerp(0.016, 0.004, q);
+        rows.push([new THREE.Vector3(x - w, y, z), new THREE.Vector3(x + w, y, z + 0.004 * Math.sin(q * 6))]);
+      }
+      add(rowsSurface(rows, 6), M.scarf, j.chest, 'neckerchief end', false);
+    }
+  }
+  // --- the apron's bib: a panel on his chest, stitched round, on straps over his shoulders crossing his back ---
+  const BIB = { from: -0.1, to: 0.19, half: [0.165, 0.11] as const };
   {
     const rows: THREE.Vector3[][] = [];
     for (let k = 0; k <= 8; k++) {
-      const y = lerp(-0.1, 0.2, k / 8), half = lerp(0.2, 0.13, k / 8), row: THREE.Vector3[] = [];
+      const y = lerp(BIB.from, BIB.to, k / 8), half = lerp(BIB.half[0], BIB.half[1], k / 8), row: THREE.Vector3[] = [];
       for (let i = 0; i <= 8; i++) row.push(onFront(chestRows, lerp(-half, half, i / 8), y, 0.012));
       rows.push(row);
     }
     add(rowsSurface(rows, 2), M.apron, j.chest, 'apron bib');
+    // (its stitching: a line of pale thread a centimetre in from its edges)
+    const edge: THREE.Vector3[] = [];
+    for (let k = 0; k <= 8; k++) edge.push(onFront(chestRows, -lerp(BIB.half[0], BIB.half[1], k / 8) + 0.01, lerp(BIB.from, BIB.to, k / 8) - 0.01, 0.0145));
+    for (let i = 0; i <= 6; i++) edge.push(onFront(chestRows, lerp(-BIB.half[1] + 0.01, BIB.half[1] - 0.01, i / 6), BIB.to - 0.01, 0.0145));
+    for (let k = 8; k >= 0; k--) edge.push(onFront(chestRows, lerp(BIB.half[0], BIB.half[1], k / 8) - 0.01, lerp(BIB.from, BIB.to, k / 8) - 0.01, 0.0145));
+    add(cord(edge, 0.0012, false, 160), M.thread, j.chest, 'apron stitching', false);
     for (const s of [1, -1]) {
       const pts = [
-        onFront(chestRows, s * 0.12, 0.2, 0.014), new THREE.Vector3(s * 0.13, 0.25, 0.07), new THREE.Vector3(s * 0.14, 0.262, -0.02),
-        new THREE.Vector3(s * 0.11, 0.22, -0.13), new THREE.Vector3(-s * 0.04, 0.06, -0.205), new THREE.Vector3(-s * 0.15, -0.08, -0.2),
+        onFront(chestRows, s * 0.095, 0.185, 0.014), new THREE.Vector3(s * 0.11, 0.245, 0.06), new THREE.Vector3(s * 0.12, 0.258, -0.02),
+        new THREE.Vector3(s * 0.1, 0.22, -0.11), new THREE.Vector3(-s * 0.04, 0.06, -0.17), new THREE.Vector3(-s * 0.13, -0.08, -0.165),
       ];
-      add(cord(pts, 0.008, false, 24), M.strap, j.chest, 'apron strap');
-      const ring = add(new THREE.TorusGeometry(0.012, 0.003, 5, 12), M.brass, j.chest, 'apron buckle', false);
-      ring.position.copy(onFront(chestRows, s * 0.12, 0.185, 0.016));
+      add(cord(pts, 0.007, false, 30), M.strap, j.chest, 'apron strap');
+      const ring = add(new THREE.TorusGeometry(0.011, 0.0028, 6, 14), M.brass, j.chest, 'apron buckle', false);
+      ring.position.copy(onFront(chestRows, s * 0.095, 0.175, 0.016));
     }
   }
-  // --- the apron's skirt: from his waist to below his knees, round his front and sides, a tie at the back ---
+  // --- the apron's skirt: from his waist to below his knees round his front and sides, stitched at its hem, a pocket
+  // on its front, a tie at the back ---
   {
+    const at = (t: number, i: number) => {
+      const y = lerp(-0.64, 0.06, t), w = lerp(0.24, 0.21, t), d = lerp(0.2, 0.18, t), half = lerp(0.23, 0.19, t);
+      const x = lerp(-half, half, i / 10), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
+      return new THREE.Vector3(x, y, z + lerp(0.015, 0.04, t) * Math.cos(a) ** 2 + 0.02 + 0.008 * Math.sin(i * 1.9 + t * 9) * (1 - t));
+    };
     const lap: THREE.Vector3[][] = [];
     for (let k = 0; k <= 12; k++) {
-      const t = k / 12, y = lerp(-0.66, 0.06, t), w = lerp(0.3, 0.28, t), d = lerp(0.26, 0.235, t), half = lerp(0.29, 0.25, t);
       const row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 10; i++) {
-        const x = lerp(-half, half, i / 10), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
-        row.push(new THREE.Vector3(x, y, z + lerp(0.02, 0.07, t) * Math.cos(a) ** 2 + 0.02 + 0.006 * Math.sin(i * 1.7 + k)));
-      }
+      for (let i = 0; i <= 10; i++) row.push(at(k / 12, i));
       lap.push(row);
     }
     add(rowsSurface(lap, 2), M.apron, j.hips, 'apron skirt');
-    add(rowsSurface([ring(-0.005, 0.282, 0.242, 0, 0.1, 0), ring(0.035, 0.28, 0.24, 0, 0.1, 0)], 2), M.strap, j.spine, 'apron tie');
+    const hem: THREE.Vector3[] = [];
+    for (let i = 0; i <= 20; i++) hem.push(at(0.025, i / 2).add(new THREE.Vector3(0, 0, 0.003)));
+    add(cord(hem, 0.0012, false, 80), M.thread, j.hips, 'apron hem stitching', false);
+    // (a pocket: a patch of the leather over the skirt, its sides and foot stitched)
+    const pocket: THREE.Vector3[][] = [];
+    for (let k = 0; k <= 3; k++) {
+      const row: THREE.Vector3[] = [];
+      for (let i = 3; i <= 7; i++) row.push(at(lerp(0.45, 0.66, k / 3), i).add(new THREE.Vector3(0, 0, 0.005)));
+      pocket.push(row);
+    }
+    add(rowsSurface(pocket, 2), M.apron, j.hips, 'apron pocket', false);
+    const seam = [at(0.66, 3.1), at(0.45, 3.1), at(0.45, 6.9), at(0.66, 6.9)].map((p) => p.add(new THREE.Vector3(0, 0, 0.008)));
+    add(cord(seam, 0.0012, false, 40), M.thread, j.hips, 'apron pocket stitching', false);
+    add(rowsSurface([ring(-0.005, 0.212, 0.182, 0, 0.05, 0), ring(0.03, 0.21, 0.18, 0, 0.05, 0)], 2), M.strap, j.spine, 'apron tie');
   }
-  // --- the towel over his left shoulder: down his chest a hand's length, over the shoulder's top and down his back ---
+  // --- the towel over his left shoulder: down his chest a hand's length, over the shoulder and down his back, its
+  // cloth folded in long creases along it ---
   {
     const path = [
-      new THREE.Vector3(0.17, 0.02, 0.2), new THREE.Vector3(0.175, 0.14, 0.18), new THREE.Vector3(0.18, 0.235, 0.12),
-      new THREE.Vector3(0.18, 0.268, 0.0), new THREE.Vector3(0.18, 0.235, -0.12), new THREE.Vector3(0.175, 0.12, -0.17),
-      new THREE.Vector3(0.17, 0.0, -0.18),
+      new THREE.Vector3(0.15, 0.0, 0.17), new THREE.Vector3(0.155, 0.12, 0.155), new THREE.Vector3(0.16, 0.215, 0.105),
+      new THREE.Vector3(0.16, 0.25, 0.0), new THREE.Vector3(0.16, 0.215, -0.105), new THREE.Vector3(0.155, 0.1, -0.145),
+      new THREE.Vector3(0.15, -0.02, -0.15),
     ];
     const curve = new THREE.CatmullRomCurve3(path), rows: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 16; k++) {
-      const p = curve.getPointAt(k / 16), row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 4; i++) {
-        const x = lerp(-0.05, 0.05, i / 4);
-        row.push(new THREE.Vector3(p.x + x, p.y, p.z + (p.z > 0 ? 0.012 : -0.012) + 0.004 * Math.sin(i * 2.1 + k * 0.7)));
+    for (let k = 0; k <= 20; k++) {
+      const p = curve.getPointAt(k / 20), out = p.z > 0 ? 1 : -1, row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 8; i++) {
+        const x = lerp(-0.05, 0.05, i / 8), crease = 0.006 * Math.sin(i * Math.PI * 0.9 + k * 0.4);
+        row.push(new THREE.Vector3(p.x + x, p.y, p.z + out * (0.012 + crease)));
       }
       rows.push(row);
     }
-    add(rowsSurface(rows, 3), M.towel, j.chest, 'towel');
+    add(rowsSurface(rows, 4), M.towel, j.chest, 'towel');
   }
   // --- trousers from the hips to the boots ---
-  add(rowsSurface([0, 1, 2, 3, 4].map((k) => ring(lerp(-0.1, 0.08, k / 4), lerp(0.27, 0.275, k / 4), 0.22, 0.01, lerp(0.03, 0.06, k / 4), 5.1)), 1.2),
+  add(rowsSurface([0, 1, 2, 3, 4].map((k) => ring(lerp(-0.1, 0.08, k / 4), lerp(0.215, 0.2, k / 4), 0.175, 0.012, lerp(0.02, 0.03, k / 4), 5.1)), 1.2),
     M.trousers, j.hips, 'trouser seat');
   for (const [thigh, knee, ankle, s] of [[j.thighL, j.kneeL, j.ankleL, 1], [j.thighR, j.kneeR, j.ankleR, -1]] as const) {
-    add(sleeve([[0.088, -j.P.thighL - 0.02], [0.094, -0.3], [0.1, -0.15], [0.105, 0.02]], 0.03, 1 + s), M.trousers, thigh, 'trouser thigh');
-    add(sleeve([[0.062, -0.42], [0.064, -0.3], [0.068, -0.15], [0.074, 0], [0.082, 0.06]], 0.03, 3 + s), M.trousers, knee, 'trouser');
-    add(new THREE.CylinderGeometry(0.068, 0.062, 0.24, 14).translate(0, 0.08, 0), M.boot, ankle, 'boot');
-    add(new THREE.SphereGeometry(1, 14, 10).scale(0.06, 0.05, 0.125), M.boot, ankle, 'boot toe').position.set(0, -0.04, 0.07);
+    add(sleeve([[0.08, -j.P.thighL - 0.02], [0.086, -0.3], [0.092, -0.15], [0.098, 0.02]], 0.04, 1 + s), M.trousers, thigh, 'trouser thigh');
+    add(sleeve([[0.058, -0.42], [0.06, -0.3], [0.064, -0.15], [0.07, 0], [0.078, 0.06]], 0.04, 3 + s), M.trousers, knee, 'trouser');
+    add(new THREE.CylinderGeometry(0.064, 0.058, 0.24, 14).translate(0, 0.08, 0), M.boot, ankle, 'boot');
+    add(new THREE.SphereGeometry(1, 14, 10).scale(0.056, 0.047, 0.12), M.boot, ankle, 'boot toe').position.set(0, -0.04, 0.07);
   }
-  // --- the sleeves: the shirt's, full, rolled above the elbow in a thick band; his forearms bare below ---
+  // --- the sleeves: the shirt's, full, rolled above the elbow in a thick cuff of two turns; his forearms bare below ---
   for (const [shoulder, elbow, s] of [[j.shoulderL, j.elbowL, 1], [j.shoulderR, j.elbowR, -1]] as const) {
-    add(sleeve([[0.074, -0.27], [0.082, -0.2], [0.088, -0.1], [0.094, -0.03], [0.092, 0.03], [0.064, 0.075], [0.026, 0.09]], 0.06, 5 + s),
+    add(sleeve([[0.066, -0.26], [0.074, -0.2], [0.08, -0.1], [0.086, -0.03], [0.084, 0.03], [0.058, 0.075], [0.024, 0.09]], 0.08, 5 + s),
       M.shirt, shoulder, 'sleeve');
-    add(sleeve([[0.066, -0.315], [0.08, -0.3], [0.084, -0.27], [0.082, -0.24], [0.07, -0.225]], 0.05, 7 + s), M.shirt, shoulder, 'sleeve roll');
+    // (the cuff: two turns of the shirt rolled up, the lower one fatter)
+    add(sleeve([[0.064, -0.3], [0.076, -0.292], [0.079, -0.276], [0.074, -0.264], [0.07, -0.262]], 0.03, 7 + s), M.shirt, shoulder, 'sleeve cuff');
+    add(sleeve([[0.07, -0.265], [0.078, -0.258], [0.08, -0.247], [0.075, -0.238], [0.066, -0.235]], 0.03, 9 + s), M.shirt, shoulder, 'sleeve cuff');
     const fore = -j.P.foreL;
-    add(sleeve([[0.029, fore - 0.012], [0.034, fore + 0.02], [0.044, fore * 0.55], [0.054, -0.05], [0.058, 0.02], [0.06, 0.06]], 0, 13 + s),
+    add(sleeve([[0.027, fore - 0.012], [0.031, fore + 0.02], [0.04, fore * 0.55], [0.048, -0.05], [0.052, 0.02], [0.054, 0.06]], 0, 13 + s),
       M.arm, elbow, 'forearm');
   }
-}
-
-/** His head dressed: a ginger fringe round the back of his bald head from ear to ear, a great walrus moustache from
- *  under his nose down over his mouth's corners, and bushy brows: cards in `ginger`, by the face's frame (mm). */
-function dressHead(head: Head, ginger: THREE.Material): void {
-  const G = head.group, rng = mulberry(73), out: THREE.BufferGeometry[] = [];
-  /** a point on the skin (mm) towards (az, el), `lift` mm off it */
-  const skin = (az: number, el: number, lift = 0) => {
-    const p = head.surface(az, el, lift);
-    return new THREE.Vector3(p.x / HEAD_MM, p.y / HEAD_MM, p.z / HEAD_MM + 5);
-  };
-  /** the ray (az, el) through the skin at height y (mm) towards az, found by halving */
-  const elAt = (az: number, y: number) => {
-    let lo = -1.4, hi = 1.5;
-    for (let k = 0; k < 22; k++) { const mid = (lo + hi) / 2; if (skin(az, mid).y < y) lo = mid; else hi = mid; }
-    return (lo + hi) / 2;
-  };
-  /** the skin at (x, y) mm on the front of the face, `lift` off it */
-  const skinXY = (x: number, y: number, lift = 0) => {
-    let az = Math.atan2(x, 70), el = 0, p = skin(az, el, lift);
-    for (let k = 0; k < 14; k++) {
-      az += Math.atan2(x - p.x, 70) * 0.9;
-      el = elAt(az, y);
-      p = skin(az, el, lift);
-    }
-    return p;
-  };
-  const toG = (p: THREE.Vector3) => toGroup(p.x, p.y, p.z);
-  // --- the fringe: short hair lying down the back and sides of his head, from over one ear round to the other ---
-  for (let c = 0; c < 420; c++) {
-    // (round from his temples, where it stands highest over the painted hairline, past his ears to his nape, longest
-    // there, down over where the scalp's paint ends)
-    const u = rng() ** 0.7, az = (rng() < 0.5 ? 1 : -1) * lerp(0.58, Math.PI, u);
-    const front = 1 - smooth(clamp((Math.abs(az) - 0.58) / 0.9, 0, 1)), back = smooth(clamp((Math.abs(az) - 2.2) / 0.9, 0, 1));
-    const top = lerp(138, 150, rng()) + 30 * front, long = lerp(38, 56, rng()) + 22 * back - 6 * front;
-    const el0 = elAt(az, top), el1 = elAt(az, top - long), pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 3; k++) pts.push(toG(skin(az + (rng() - 0.5) * 0.05, lerp(el0, el1, k / 3), 2.5 + 3 * Math.sin(Math.PI * k / 3))));
-    const w = (11 + rng() * 8) * HEAD_MM, shade = 0.75 + rng() * 0.3;
-    out.push(hairCard(pts, (s) => w * (1 - 0.45 * s), toGroup(0, top - 20, -40), 3, (rng() - 0.5) * 0.4, (s) => shade * (0.9 + 0.1 * s)));
-  }
-  // --- the moustache: thick, from under the nose out and down over his mouth's corners to past his chin's line ---
-  for (let c = 0; c < 220; c++) {
-    const side = c % 2 ? 1 : -1, x0 = side * (rng() * 26), y0 = 50 + rng() * 14, pts: THREE.Vector3[] = [];
-    const xEnd = side * (40 + rng() * 14), yEnd = 6 - rng() * 18;
-    for (let k = 0; k <= 5; k++) {
-      const s = k / 5, x = lerp(x0, xEnd, smooth(s * 0.85 + 0.15 * s)), y = lerp(y0, yEnd, s * s * 0.9 + s * 0.1);
-      const lift = 2.5 + 9 * Math.sin(Math.PI * Math.min(1, s * 1.1)) + rng() * 2;
-      pts.push(toG(skinXY(x, y, lift)));
-    }
-    const w = (10 + rng() * 6) * HEAD_MM, shade = 0.75 + rng() * 0.3;
-    out.push(hairCard(pts, (s) => w * (1 - 0.65 * s), toGroup(0, 60, 20), 5, (rng() - 0.5) * 0.5, () => shade));
-  }
-  // --- the brows: bushy, a few long hairs ---
-  for (let c = 0; c < 50; c++) {
-    const side = c % 2 ? 1 : -1, x0 = side * (12 + rng() * 38), y0 = 134 + rng() * 6 + (Math.abs(x0) - 30) * -0.05, pts: THREE.Vector3[] = [];
-    const len = 9 + rng() * (rng() < 0.15 ? 14 : 7);
-    for (let k = 0; k <= 3; k++) {
-      const s = k / 3;
-      pts.push(toG(skinXY(x0 + side * len * s, y0 + 4 * s - 5 * s * s, 1 + 3 * s)));
-    }
-    const w = (3.5 + rng() * 2) * HEAD_MM, shade = 0.8 + rng() * 0.2;
-    out.push(hairCard(pts, (s) => w * (1 - 0.6 * s), toGroup(0, 120, 0), 3, 0, () => shade));
-  }
-  const mesh = new THREE.Mesh(mergeAll(out), ginger);
-  mesh.name = 'keeper hair';
-  mesh.castShadow = true;
-  G.add(mesh);
 }

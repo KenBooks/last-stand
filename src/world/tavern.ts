@@ -106,15 +106,19 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     if (pouring && !wasPouring) sfx.alePour(SERVE.fill[1] - SERVE.fill[0]);
     wasPouring = pouring;
     // (his hand lets the mug go on the bar: it glides on to the bar's front, scraping)
-    // (once a serving: the mug let go, glided and taken, it isn't let go again before his next)
+    // (once a serving: the mug set down on the bar is pushed across by his hand, following it, `served`; let go at the
+    // push's end, it glides on to the bar's front, scraping; taken, it isn't set down again before his next)
     if (st < 0) released = false;
-    const letGo = keeper.served();
-    if (letGo && !released) {
-      released = true;
-      glideT = 0;
+    const pushed = keeper.served();
+    if (pushed && !released) {
+      if (!onBar) sfx.mugSlide(SERVE.slide[1] - SERVE.slide[0] + GLIDE);
       onBar = true;
-      from.copy(letGo).setY(BAR.top + MUG.foot);
-      sfx.mugSlide(GLIDE);
+      slid.position.copy(pushed).setY(BAR.top + MUG.foot);
+      if (st >= SERVE.slide[1]) {
+        released = true;
+        glideT = 0;
+        from.copy(slid.position);
+      }
     }
     if (glideT >= 0) {
       glideT += dt;

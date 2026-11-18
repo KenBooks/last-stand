@@ -8,11 +8,13 @@
 // the talk card, the pour and the slide, and the drink a frame at each of its beats.
 // `--canary`: the ale made a cast he may walk through, which must be caught.
 import * as THREE from 'three';
+import { lerp } from '../../../src/util';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
 import { enterRoom } from '../../../src/game/rooms';
 import { ALE, ALE_BEATS, KEEPER_SPOT, SERVE } from '../../../src/data/tavern';
+import { MUG } from '../../../src/entities/models/flask';
 import { toVillage } from './village';
 import { stand, useByE, viewAs } from './houses';
 
@@ -28,21 +30,32 @@ const SERVED_IN = Math.ceil((SERVE.long + 1) * 60);
 /** the drink's beats pictured (shares of its time), and the frames W is held over its start */
 const PICTURED = [0.06, 0.15, 0.3, 0.46, 0.62, 0.74, 0.86, 0.95];
 const HELD_W = 40;
-/** how far the rim may stand from his lips at a swallow's middle (m: its middle 3 cm before them, its edge on them), and
- *  how far he may move while drinking */
-const RIM_NEAR = 0.07, STILL_WITHIN = 0.02;
+/** how far the rim's nearest point may stand from his lower lip at a swallow's middle (m), the most the mug may tip
+ *  from upright (degrees: a mug is never drunk upside down), and how far he may move while drinking */
+const RIM_NEAR = 0.015, MOST_TILT = 70, STILL_WITHIN = 0.02;
 /** the keeper's chest, his close-up framed on it (m), and how far off it's taken */
-const KEEPER_CHEST = 1.45, KEEPER_FROM = 2.3, KEEPER_FACE = 1.74;
+const KEEPER_CHEST = 1.45, KEEPER_FROM = 2.3, KEEPER_FACE = 1.6;
 
 /** the bar's middle between the hero and the keeper (world), `y` up */
-function barMiddle(y = 1.3): THREE.Vector3 {
+function barMiddle(y = 1.3, towardHim = 0.5): THREE.Vector3 {
   const room = G.arena.rooms!.tavern;
   room.group.updateMatrixWorld(true);
-  return room.group.localToWorld(new THREE.Vector3((G.player.pos.x + KEEPER_SPOT.x) / 2, y, KEEPER_SPOT.z));
+  return room.group.localToWorld(new THREE.Vector3(lerp(G.player.pos.x, KEEPER_SPOT.x, towardHim), y, KEEPER_SPOT.z));
+}
+
+/** a point of the keeper's frame (x his left, z ahead across the bar, up from the floor) in the world: he stands at
+ *  his spot facing west, his left the room's +z */
+function inHisFrame(x: number, y: number, z: number): THREE.Vector3 {
+  const room = G.arena.rooms!.tavern;
+  room.group.updateMatrixWorld(true);
+  return room.group.localToWorld(new THREE.Vector3(KEEPER_SPOT.x - z, y, KEEPER_SPOT.z + x));
 }
 
 const programs = (): number => G.renderer.info.programs?.length ?? 0;
-const _lips = new THREE.Vector3(), _rim = new THREE.Vector3(), _foot = new THREE.Vector3();
+const _lips = new THREE.Vector3(), _rim = new THREE.Vector3(), _foot = new THREE.Vector3(), _axis = new THREE.Vector3();
+const _turn = new THREE.Quaternion();
+/** how far under the head's `mouth` point the lower lip is (m: models/flask.ts `ALE_DRINK.lowerLip`) */
+const LOWER_LIP = 0.006;
 
 /** How far into his drink the hero is (0..1), or -1 while he isn't drinking the ale. */
 function drinkShare(): number {
@@ -50,22 +63,28 @@ function drinkShare(): number {
   return c?.skill.def.ale ? c.t / c.dur : -1;
 }
 
-/** The mug in his hand as drawn: shown in the flask's place, its rim from his lips (m) and how far it's tipped up
- *  (degrees, its foot over its rim). */
-function mugInHand(): { shown: boolean; flaskHidden: boolean; rimOff: number; tipped: number } {
+/** The mug in his hand as drawn: shown in the flask's place, how far its rim's nearest point is from his lower lip
+ *  (m: the head's `mouth` point, under it by the drink's `lowerLip`), and how far it's tipped from upright in the world
+ *  (degrees). (Read off the rim's middle against the mouth point, a mug stood upside down past his brow read 3.7 cm.) */
+function mugInHand(): { shown: boolean; flaskHidden: boolean; rimOff: number; tilt: number } {
   const root = G.player.model.root;
-  const flask = root.getObjectByName('flask'), mouth = root.getObjectByName('mouth');
-  const mug = flask?.getObjectByName('mug'), lip = flask?.getObjectByName('flaskLip');
-  if (!flask || !mouth || !mug || !lip) return { shown: false, flaskHidden: false, rimOff: Infinity, tipped: 0 };
+  const flask = root.getObjectByName('flask'), mouth = root.getObjectByName('mouth'), head = mouth?.parent;
+  const mug = flask?.getObjectByName('mug');
+  if (!flask || !mouth || !mug || !head) return { shown: false, flaskHidden: false, rimOff: Infinity, tilt: 0 };
   root.updateWorldMatrix(true, true);
-  mouth.getWorldPosition(_lips);
-  lip.getWorldPosition(_rim);
-  flask.getWorldPosition(_foot);
+  const scale = root.getWorldScale(_foot).x;
+  // (the lower lip: under the mouth point, down the head)
+  mouth.getWorldPosition(_lips).add(_axis.set(0, -LOWER_LIP * scale, 0).applyQuaternion(head.getWorldQuaternion(_turn)));
+  // (the rim: its middle up the mug's axis from where the fist holds it, a circle of its radius round that)
+  const axis = _axis.set(0, 1, 0).applyQuaternion(mug.getWorldQuaternion(_turn)).normalize();
+  const middle = mug.getWorldPosition(_rim).addScaledVector(axis, MUG.up * scale);
+  const toLip = _foot.subVectors(_lips, middle);
+  toLip.addScaledVector(axis, -toLip.dot(axis));
+  const edge = middle.clone().addScaledVector(toLip.normalize(), MUG.rimR * scale);
   const parts = (flask.userData.flaskParts as THREE.Object3D[] | undefined) ?? [];
-  const tipped = Math.asin(THREE.MathUtils.clamp(_foot.sub(_rim).normalize().y, -1, 1)) * 180 / Math.PI;
   return {
     shown: flask.visible && mug.visible, flaskHidden: parts.every((o) => !o.visible),
-    rimOff: _rim.distanceTo(_lips), tipped,
+    rimOff: edge.distanceTo(_lips), tilt: Math.acos(THREE.MathUtils.clamp(axis.y, -1, 1)) * 180 / Math.PI,
   };
 }
 
@@ -77,15 +96,18 @@ async function keeperPictured(lab: Lab, moments: Pictured[]): Promise<void> {
   const at = room.group.localToWorld(new THREE.Vector3(KEEPER_SPOT.x, KEEPER_CHEST, KEEPER_SPOT.z));
   // (the hero out of the way of the views from his side of the bar)
   G.player.obj.visible = false;
+  const spot = (y: number) => room.group.localToWorld(new THREE.Vector3(KEEPER_SPOT.x, y, KEEPER_SPOT.z));
+  // (his whole body from the aisle behind the bar, either way along it)
+  moments.push(lab.picture('keeper-body', ['left', 'right'], ['the keeper, all of him, from behind his bar'], { at: spot(1.0), distance: 2.6 }));
+  moments.push(lab.picture('keeper-face', ['back', 'left', 'right'], ['his face close'], { at: spot(KEEPER_FACE), distance: 0.75 }));
   for (const [loopAt, what] of [[6, 'wiping a mug'], [20, 'polishing the bar']] as const) {
     keeper.loopAt = loopAt;
     await lab.step(SETTLE);
     // (the hero faces the bar, so his 'back' view looks at the keeper's front)
-    moments.push(lab.picture(`keeper-${loopAt}`, ['back', 'left', 'right'], [`the keeper, ${what}`], { at, distance: KEEPER_FROM }));
+    moments.push(lab.picture(`keeper-${loopAt}`, ['back'], [`the keeper, ${what}`], { at, distance: KEEPER_FROM }));
+    const hands = loopAt === 6 ? inHisFrame(0.05, 1.12, 0.38) : inHisFrame(0, 1.1, 0.6);
+    moments.push(lab.picture(`keeper-hands-${loopAt}`, ['back', 'left', 'right'], [`his hands, ${what}`], { at: hands, distance: 0.8 }));
   }
-  const face = room.group.localToWorld(new THREE.Vector3(KEEPER_SPOT.x, KEEPER_FACE, KEEPER_SPOT.z));
-  moments.push(lab.picture('keeper-face', ['back', 'left', 'right'], ['his face close'], { at: face, distance: 0.9 }));
-  moments.push(lab.picture('keeper-tap', ['back', 'left'], ['the cask and its tap on the bar'], { at: barMiddle(1.2), distance: 0.9 }));
   G.player.obj.visible = true;
   // (the hero and the keeper either side of the bar, from its side)
   moments.push(lab.picture('keeper-bar', ['left', 'right'], ['at the bar'], { at: barMiddle(), distance: 3 }));
@@ -135,11 +157,15 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       const st = keeper.serving;
       if (!pouredShot && st >= (SERVE.fill[0] + SERVE.fill[1]) / 2) {
         pouredShot = true;
-        moments.push(lab.picture('tavern-pour', ['back', 'left'], ['he fills the mug under the tap'], { at: barMiddle(1.25), distance: 2.2 }));
+        G.player.obj.visible = false;
+        moments.push(lab.picture('tavern-pour', ['left', 'right'], ['his hands as he fills the mug under the tap'], { at: inHisFrame(0.3, 1.2, 0.5), distance: 0.85 }));
+        G.player.obj.visible = true;
       }
-      if (!slidShot && room.mugOnBar?.()) {
+      if (!slidShot && st >= (SERVE.slide[0] + SERVE.slide[1]) / 2 - 0.25) {
         slidShot = true;
-        moments.push(lab.picture('tavern-slide', ['left'], ['the mug slid across the bar'], { at: barMiddle(), distance: 2.6 }));
+        G.player.obj.visible = false;
+        moments.push(lab.picture('tavern-slide', ['back', 'left'], ['his hand sliding the mug across the bar'], { at: inHisFrame(0.04, 1.12, 0.75), distance: 0.9 }));
+        G.player.obj.visible = true;
       }
     }
     lines.push(`served: the hero drinking ${(frames / 60).toFixed(2)} s after he asked`);
@@ -150,7 +176,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
 
     // --- the drink: still whatever's pressed, the mug at his lips through each swallow ---
     const from = G.player.pos.clone(), start = frames;
-    let moved = 0, worstRim = 0, notShown = 0, onBarAfter = 0, dur = 0;
+    let moved = 0, worstRim = 0, notShown = 0, onBarAfter = 0, dur = 0, mostTilt = 0;
+    const tilts: number[] = [];
     const shots = [...PICTURED], gulps: number[] = [...ALE_BEATS.gulps];
     for (let f = 0; drinkShare() >= 0 && f < 600; f++) {
       await lab.step(1, () => (f < HELD_W ? { keys: ['w'] } : {}));
@@ -160,11 +187,13 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       moved = Math.max(moved, G.player.pos.distanceTo(from));
       const mug = mugInHand();
       if (k > 0.12 && k < 0.92 && !(mug.shown && mug.flaskHidden)) notShown++;
+      if (mug.shown && k > 0.2 && k < 0.75) mostTilt = Math.max(mostTilt, mug.tilt);
       if (k > 0.12 && room.mugOnBar?.()) onBarAfter++;
       if (gulps.length && k >= gulps[0]) {
         gulps.shift();
         worstRim = Math.max(worstRim, mug.rimOff);
-        lines.push(`swallow at ${(k * 100).toFixed(0)}%: the rim ${(mug.rimOff * 100).toFixed(1)} cm from the lips, tipped ${mug.tipped.toFixed(0)}°`);
+        tilts.push(mug.tilt);
+        lines.push(`swallow at ${(k * 100).toFixed(0)}%: the rim ${(mug.rimOff * 100).toFixed(1)} cm from his lower lip, tipped ${mug.tilt.toFixed(0)}° from upright`);
       }
       if (shots.length && k >= shots[0]) {
         const share = shots.shift()!;
@@ -174,7 +203,10 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     lines.push(`drink: ${(dur / 60).toFixed(2)} s (from frame ${start}), moved ${(moved * 100).toFixed(1)} cm with W held, the mug not shown in hand ${notShown} frames`);
     if (Math.abs(dur / 60 - ALE.castTime) > 0.1) problems.push(`the drink took ${(dur / 60).toFixed(2)} s, not ${ALE.castTime}`);
     if (moved > STILL_WITHIN) problems.push(`he moved ${(moved * 100).toFixed(1)} cm while drinking, W held`);
-    if (worstRim > RIM_NEAR) problems.push(`the rim stood ${(worstRim * 100).toFixed(1)} cm from his lips at a swallow`);
+    if (worstRim > RIM_NEAR) problems.push(`the rim stood ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
+    if (mostTilt > MOST_TILT) problems.push(`the mug tipped ${mostTilt.toFixed(0)}° from upright, past ${MOST_TILT}`);
+    if (tilts.some((t, i) => i > 0 && t <= tilts[i - 1])) problems.push(`the swallows' tilts don't grow: ${tilts.map((t) => t.toFixed(0)).join(', ')}`);
+    lines.push(`the mug tipped at most ${mostTilt.toFixed(0)}° from upright`);
     if (notShown) problems.push(`the mug wasn't in his hand for ${notShown} frames of the drink`);
     if (onBarAfter) problems.push(`the mug stood on the bar ${onBarAfter} frames after his hand took it`);
     // (after it, he walks again)
