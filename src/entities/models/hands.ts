@@ -336,6 +336,11 @@ function shutOf(h: Hand, bones: THREE.Bone[], bareSkin: THREE.Material, skin: TH
   h.shut = { skin: fist, nails, on: false };
 }
 
+/** The hand's skin as it's drawn bare (or what the glove leaves bare): a fighter's sculpted shut while his fist is. */
+export function drawnSkin(h: Hand): THREE.SkinnedMesh {
+  return h.shut?.on ? h.shut.skin : h.bareSkin ?? h.skin;
+}
+
 /** A fighter's bare hand shown shut in its fist (`on`), or open: its sculpt shut in place of its open one. A gloved
  *  hand, or one with no sculpt shut, keeps its own. */
 export function shut(h: Hand, on: boolean): void {
@@ -449,7 +454,7 @@ const FIST_FAN = [5, 2, -2, -8.7];
 // fingers with a hole under it (from play: "he still has sperm in his fist"); with its last joint placed first and its
 // knuckle wherever its bones met, the joint stood near the end of its reach, the thumb a straight stick standing off
 // the fist from the wrist with the web open under it (from play: "this is not a natural fist shape").
-const THUMB_ON = { corner: 1, front: 0.5, press: 0.9 };
+const THUMB_ON = { corner: 1, front: 0.5, round: Math.PI / 4, press: 0.9 };
 /** the shares along the index's middle phalanx and the turns round its front its middle bone's end is tried at */
 const THUMB_TRIES = { shares: 20, turns: 9 };
 // A fingertip's pad's half-depth over its finger's half-width at its root: a thicker finger's tip sits further off
@@ -545,7 +550,7 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
       const turn = (Math.PI / 2) * (r / (THUMB_TRIES.turns - 1));
       const round = indexFront.clone().multiplyScalar(Math.cos(turn)).addScaledVector(outer, Math.sin(turn));
       const at = along(index, s / THUMB_TRIES.shares).addScaledVector(round, lift(0));
-      const miss = Math.abs(at.distanceTo(knuckle) - b) + turn * 0.004;
+      const miss = Math.abs(at.distanceTo(knuckle) - b) + Math.abs(turn - THUMB_ON.round) * 0.004;
       if (miss < best) {
         best = miss;
         joint = at;

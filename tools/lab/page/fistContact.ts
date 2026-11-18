@@ -16,10 +16,15 @@ type Region = 'palm' | `base${number}` | `shaft${number}` | `end${number}` | `ti
 interface Sample { at: THREE.Vector3; region?: Region; along: number }
 
 /** Vertices blended as in dualQuaternion.ts, including the scale of the hand and of the model. */
+/** The hand's skin as it's drawn: a fighter's sculpted shut while his fist is (`drawnSkin` in hands.ts, read here as
+ *  its fields are, so an A/B's other commit without it loads this too). */
+function drawnSkin(hand: Hand): THREE.SkinnedMesh {
+  return hand.shut?.on ? hand.shut.skin : hand.bareSkin ?? hand.skin;
+}
+
 function skinSamples(hand: Hand): Sample[] {
   hand.vis.updateWorldMatrix(true, true);
-  // (the skin drawn: a fighter's sculpted shut while his fist is, `shut` in hands.ts)
-  const mesh = hand.shut?.on ? hand.shut.skin : hand.bareSkin ?? hand.skin;
+  const mesh = drawnSkin(hand);
   const { position, skinWeight, skinIndex } = mesh.geometry.attributes;
   const { bones, boneInverses } = mesh.skeleton;
   const restFrames = boneInverses.map((inverse) => inverse.clone().multiply(mesh.bindMatrix));
@@ -78,7 +83,7 @@ function skinSamples(hand: Hand): Sample[] {
 }
 
 function surface(hand: Hand, samples: Sample[], region: Region): THREE.Triangle[] {
-  const index = (hand.bareSkin ?? hand.skin).geometry.index!;
+  const index = drawnSkin(hand).geometry.index!;
   const triangles: THREE.Triangle[] = [];
   for (let i = 0; i < index.count; i += 3) {
     const a = samples[index.getX(i)], b = samples[index.getX(i + 1)], c = samples[index.getX(i + 2)];

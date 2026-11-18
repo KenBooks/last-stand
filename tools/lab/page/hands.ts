@@ -403,7 +403,7 @@ function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
     elbow.add(wrist);
     wrist.position.y = -STUDIO_FOREARM;
     const sculpt = new shapes.Sculpt();
-    const skin = [hand.bareSkin ?? hand.skin];
+    const skin = () => [sculpting.drawnSkin?.(hand) ?? hand.bareSkin ?? hand.skin];
     const poses = handsCode.wrapPoses?.(hand) ?? [];
     updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, wrap, skin, poses);
     sculpt.build();

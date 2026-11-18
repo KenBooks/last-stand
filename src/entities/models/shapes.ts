@@ -105,6 +105,9 @@ function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3
   return elbow.worldToLocal(_rayHit.copy(hits[hits.length - 1].point)).distanceTo(axis) / reach;
 }
 
+/** the skin a wrap is laid over: its meshes, or what gives the meshes drawn in the hand's pose as it's posed */
+type SkinShown = readonly THREE.Object3D[] | (() => readonly THREE.Object3D[]);
+
 /** each wrap's rows laid on its hand's skin (`skinShare`), kept by the hand's size and side: made once a hand */
 const wrapShares = new Map<string, number[][]>();
 
@@ -118,8 +121,11 @@ const wrapShares = new Map<string, number[][]>();
  * strip and buried it.
  */
 export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THREE.Object3D,
-  palm: THREE.Object3D, towardThumb: number, arm: ArmBuild, skin: readonly THREE.Object3D[] = [],
+  palm: THREE.Object3D, towardThumb: number, arm: ArmBuild, skinShown: SkinShown = [],
   poses: readonly (() => void)[] = []): () => void {
+  // (a fighter's hand draws another skin in its fist than open: the wrap is laid over the one each pose draws)
+  const skinNow = () => (typeof skinShown === 'function' ? skinShown() : skinShown);
+  const skin = skinNow();
   const wrist = palm.parent!;
   const length = -wrist.position.y;
   const wristSection = wristOf(arm.hand, arm.k);
@@ -178,7 +184,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       const [rx, rz] = radii(y, angle, z);
       axis.set(wrist.position.x, y + wrist.position.y, wrist.position.z);
       at.set(towardThumb * x * rx, y, z * rz).add(wrist.position);
-      const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, skin);
+      const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, skinNow());
       return out === 1 ? null : THREE.MathUtils.clamp(out + gap / reach, 0.6, 1.4);
     };
     const posed = (angle: number, y: number, gap: number): number | null => {
