@@ -1,6 +1,7 @@
 // The Bell-Warden (entities/bellWarden.ts): a cracked bronze bell taller than a house, hung in a wooden frame on two
 // carrying poles, borne by four ghouls, one at each end of each pole, each chained by an iron collar to the frame. A pale
-// light swings inside the bell as its clapper, and ghosts circle it (models/bellGhosts.ts). It shuffles, swaying; for
+// light swings inside the bell as its clapper, and ghosts circle it (models/bellGhosts.ts). A guard that stands where it
+// rises (`userData.planted`) has no bearers: its frame stands on its poles on the ground, its chains hanging to it. It shuffles, swaying; for
 // a toll the bell swings back on its headstock,
 // its cracks and its clapper glowing, and comes down through the warning (`ActionState.hit`). What its fight shows
 // (`AnimState.boss`): a chain broken hangs loose from the frame, all four broken the frame sinks and the bell rests on
@@ -27,6 +28,8 @@ const POLE_Y = 1.62, POLE_X = 1.7, POST_X = 2.1, BEAM_Y = 6.7, BEARER_Z = 2.8, A
 const LIP = 1.62, BELL_H = 4.6, HEAD_DROP = 0.35;
 /** how far the frame sinks with the bell down, and with the bearers kneeling (m) */
 const SINK_DOWN = 1.05, SINK_KNEEL = 0.45;
+/** how far a standing guard's frame is set down (m): its poles on the ground, its bell's lip a hand over it */
+const SINK_PLANTED = POLE_Y - 0.12;
 
 /** A bearer's joints, posed by the walk. */
 interface Bearer {
@@ -147,6 +150,8 @@ export function buildBellWarden(): Model {
   const ghosts = bellGhosts(root);
   // (where the game finds them: a ghost seizes a hero who comes too near, entities/bellWarden.ts)
   root.userData.ghosts = ghosts.seen;
+  // (its bearers' bodies, each from its hips: `lab boss` reads that a planted bell draws none)
+  root.userData.bearers = bearers.map((b) => b.hips);
   const cue: GhostCue = { rush: 0, burst: 0, scatter: 0, count: 2, bell: new THREE.Vector3() };
 
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, -1, 0), _q = new THREE.Quaternion();
@@ -161,7 +166,9 @@ export function buildBellWarden(): Model {
     const k = 1 - Math.exp(-dt * 3);
     down += ((allBroken || dead > 0 ? 1 : 0) - down) * k;
     kneel += (((look?.phase ?? 0) >= 2 ? 1 : 0) - kneel) * k;
-    sink = Math.max(down * SINK_DOWN, kneel * SINK_KNEEL);
+    // (a guard that stands where it rose has no bearers: its frame stands on its poles, and sinks no further)
+    const planted = !!root.userData.planted;
+    sink = planted ? SINK_PLANTED : Math.max(down * SINK_DOWN, kneel * SINK_KNEEL);
     frame.position.y = -sink;
     // the shuffle's sway, the frame rocking over the bearers' steps
     const walk = st.move * (1 - down), ph = st.phase;
@@ -196,6 +203,8 @@ export function buildBellWarden(): Model {
 
     // the bearers: a hunched shuffle under the poles, kneeling in the last phase and slumped with the bell down
     bearers.forEach((b, i) => poseBearer(b, t, ph + b.lag * Math.PI * 2, walk, Math.max(kneel, down), dead, i));
+    // (none under a planted bell: drawn at no size, as its crowd draws each joint as placed)
+    for (const b of bearers) b.hips.scale.setScalar(planted ? 0 : 1);
 
     // the ghosts: round the bell, into it for a toll, scattered while it's down or as it falls, three in the last phase
     cue.scatter = Math.max(down, dead);
@@ -209,10 +218,11 @@ export function buildBellWarden(): Model {
     _inv.copy(frame.matrixWorld).invert();
     chains.forEach((c, i) => {
       const broken = !!look && (look.broken & (1 << i)) !== 0;
-      hang[i] += ((broken ? 1 : 0) - hang[i]) * (1 - Math.exp(-dt * 6));
+      // (a planted bell's chains hang from their rings to the floor, no collar to reach)
+      hang[i] += ((broken || planted ? 1 : 0) - hang[i]) * (1 - Math.exp(-dt * 6));
       c.to.chest.getWorldPosition(_a).applyMatrix4(_inv);
       _b.copy(_a).sub(c.j.position);
-      const len = _b.length();
+      const len = planted ? (c.j.position.y - sink) / (broken ? 1 : 1 - 0.55) : _b.length();
       _b.normalize();
       // (from taut towards the collar to hanging straight down, swinging a little)
       _b.lerp(_up.set(Math.sin(t * 2 + i) * 0.08, -1, 0), hang[i]).normalize();

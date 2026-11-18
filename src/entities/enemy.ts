@@ -272,6 +272,8 @@ export class Enemy {
     if (size !== 1) this.model.root.scale.multiplyScalar(size);
     // (its model told it's a guard: the Bell-Warden's shows one ghost)
     this.model.root.userData.guard = this.guard;
+    // (and that it stands where it rose: the Bell-Warden's then has no bearers)
+    this.model.root.userData.planted = this.guard && !!this.def.asGuard?.stands;
     this.reach = standIn?.reach ?? reachOf(this.model.root);
     if (!standIn) {
       applyShadowDetail(this.obj);

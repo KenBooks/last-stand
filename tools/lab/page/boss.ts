@@ -28,13 +28,14 @@
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
 // one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts
-// that seize no one, a ward that wards nothing, guards that walk or rise at the gates, a program compiled in the fight, and an attack that deals nothing.
+// that seize no one, a ward that wards nothing, guards that walk (with their bearers) or rise at the gates, a program compiled in the fight, and an attack that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { cantorLook } from './bossCantor';
 import { guardSpots } from './bossGuardSpots';
 import { putAway } from '../../../src/perf/consent';
 import type { Enemy } from '../../../src/entities/enemy';
+import type { GhostsSeen } from '../../../src/entities/models/bellGhosts';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { SkillKey } from '../../../src/types';
@@ -539,6 +540,7 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
     lesserGuards(cantor, guards, lines, problems);
     const rose = guards.map((guard) => guard.pos.clone());
     let moved = 0;
+    const ghostsMost = guards.map(() => 0);
     const landed: Landed[] = [], rings: Landed[] = [];
     let wardedFrames = 0, frames = 0, wardTaken = 1, seizedFrames = 0, wasStunned = false;
     const stunsFrom: number[] = [];
@@ -552,7 +554,9 @@ async function encounter(lab: Lab, options: BossOptions, lines: string[], proble
       if (hero.stunned && !wasStunned) stunsFrom.push(Math.min(...guards.map((g) => Math.hypot(g.pos.x - hero.pos.x, g.pos.z - hero.pos.z))));
       wasStunned = hero.stunned;
       moved = Math.max(moved, ...guards.map((guard, i) => guard.pos.distanceTo(rose[i])));
+      guards.forEach((guard, i) => { ghostsMost[i] = Math.max(ghostsMost[i], ghostsFree(guard.model.root)); });
     });
+    bearersGone(guards, ghostsMost, lines, problems);
     guardTolls(stunsFrom, seizedFrames, lesser.stunsTo, lines, problems);
     guardsStood(moved, lines, problems);
     guards[0].takeDamage(guards[0].life - 0.15 * guards[0].maxLife, {});
@@ -604,6 +608,39 @@ function lesserGuards(cantor: Enemy, guards: Enemy[], lines: string[], problems:
   lines.push(`encounter: the guards ${fixed(tallest, 2)} m tall against the Cantor's ${fixed(cantor.height, 2)} m (${fixed(share, 2)}), `
     + `${fixed(guards[0].radius, 2)} m round`);
   if (share > GUARD_HEIGHT_MOST) problems.push(`encounter: a guard stands ${fixed(share, 2)} of the Cantor's height, over ${GUARD_HEIGHT_MOST}`);
+}
+
+/** A Bell-Warden's bearers: each a body off its root, from its hips (models/bellWarden.ts `userData.bearers`). */
+const BEARERS = 4;
+
+/** Each standing guard drawn with no bearers (from play: "Remove the little guys under holding the bell, it's not
+ *  stationary"): its bearers' bodies at no size, as its crowd draws their joints; and its one ghost about it through
+ *  the fight (`ghostsMost`, the most seen free at once: "ghosts should still be there"). */
+function bearersGone(guards: Enemy[], ghostsMost: number[], lines: string[], problems: string[]): void {
+  const gone = guards.map((guard) => bodiesAtNoSize(guard.model.root));
+  lines.push(`encounter: the guards' bearers drawn at no size: ${gone.join(', ')} of ${BEARERS}; `
+    + `ghosts about each at most: ${ghostsMost.join(', ')}`);
+  gone.forEach((count, i) => {
+    if (count < BEARERS) problems.push(`encounter: guard ${i + 1} is drawn with ${BEARERS - count} bearers: a planted bell has none`);
+  });
+  ghostsMost.forEach((count, i) => {
+    if (count !== 1) problems.push(`encounter: guard ${i + 1} had ${count} ghosts about it at most, not its one`);
+  });
+}
+
+/** How many of a Bell-Warden's bearers are drawn at no size (their hips' world matrix collapsed). */
+function bodiesAtNoSize(root: THREE.Object3D): number {
+  root.updateMatrixWorld(true);
+  const hips = (root.userData.bearers ?? []) as THREE.Object3D[];
+  return hips.filter((joint) => Math.abs(joint.matrixWorld.determinant()) < 1e-9).length;
+}
+
+/** How many of a Bell-Warden's ghosts are about it now, shown and free (models/bellGhosts.ts's `seen`). */
+function ghostsFree(root: THREE.Object3D): number {
+  const seen = root.userData.ghosts as GhostsSeen | undefined;
+  if (!seen) return 0;
+  const at = new THREE.Vector3();
+  return Array.from({ length: seen.most }, (_, i) => seen.freeAt(i, at)).filter((place) => place !== null).length;
 }
 
 /** The furthest a guard may move from where it rose (m): none, but a float's rounding. */
@@ -906,6 +943,10 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
   // 1a. a guard beside the hero, for its size against his
   await pictureBeside(lab, moments, guards[1], hero, cantor);
+  // (a guard close, planted on its frame with no bearers, its ghost about it: from straight above and from its side)
+  const planted = guards[1].pos.clone().setY(1.2);
+  moments.push(lab.picture('1c a guard from above', ['plan'], ['a guard close from straight above: its bell in its frame on the ground, no bearers, its ghost about it'], { at: planted, distance: GUARD_SEEN_FROM }));
+  moments.push(lab.picture('1d a guard from its side', ['left', 'front'], ['a guard close from its side: its frame standing on its poles, its chains hanging to the floor'], { at: planted, distance: GUARD_SEEN_FROM }));
   // 1b. a guard's toll: its ring rolling out
   await actUntil(guards[0], 'toll', 0.98);
   // (its ring out past the guard's own glow on the floor, short of where it fades; pictured at the guard, which
@@ -974,6 +1015,9 @@ async function pictureBeside(lab: Lab, moments: Pictured[], guard: Enemy, hero: 
   hero.pos.copy(stood);
   await lab.step(FOLLOW_FRAMES);
 }
+
+/** How far a guard is pictured close from (m). */
+const GUARD_SEEN_FROM = 12;
 
 /** Frames after a guard's toll rings that it's pictured, and from how far (m): its ring out past its glow. */
 const TOLL_SEEN_AFTER = 36, TOLL_SEEN_FROM = 16;
