@@ -429,17 +429,26 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
   const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };
   const book = openBook(d, M, 0, BOOK.y, BOOK.z, Math.PI, SIZE, 5);
   // (beside it, his things: a stack of books, the candle on its dish, the inkwell and quill, a scroll)
-  for (let k = 0; k < 4; k++) box(d, 0.26 - k * 0.015, 0.05, 0.19, 0.42, 0.76 + k * 0.05, 0.72, M.leather).rotation.y = (k % 2 ? 0.25 : -0.1);
-  drum(d, 0.05, 0.06, 0.02, -0.4, 0.76, 0.78, M.brass, 10);
+  for (let k = 0; k < 4; k++) {
+    const stacked = box(d, 0.26 - k * 0.015, 0.05, 0.19, 0.42, 0.76 + k * 0.05, 0.72, M.leather);
+    stacked.rotation.y = (k % 2 ? 0.25 : -0.1);
+    stacked.name = 'scholar desk books';
+  }
+  drum(d, 0.05, 0.06, 0.02, -0.4, 0.76, 0.78, M.brass, 10).name = 'scholar desk candle dish';
   candle(d, M, -0.4, 0.78, 0.78, 0.18, CANDLE);
-  drum(d, 0.028, 0.032, 0.045, 0.3, 0.76, 0.42, M.dark, 10);
+  // (his inkwell and its quill in the table's far corner on his left, past his books, the quill leant away from him: by
+  // his book, under where his left forearm rests and his hand goes as he turns a page, the quill stood up through his
+  // sleeve, from play: "fix weird spike sticking through his arm")
+  drum(d, 0.028, 0.032, 0.045, 0.48, 0.76, 0.9, M.dark, 10).name = 'scholar desk inkwell';
   const quill = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.8 }));
-  quill.position.set(0.32, 0.9, 0.45);
-  quill.rotation.set(-0.35, 0, -0.3);
+  quill.position.set(0.51, 0.9, 0.94);
+  quill.rotation.set(0.35, 0, -0.3);
+  quill.name = 'scholar desk quill';
   d.add(quill);
   const scroll = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.36, 10).rotateZ(Math.PI / 2), M.paper);
   scroll.position.set(-0.12, 0.79, 0.86);
   scroll.rotation.y = 0.2;
+  scroll.name = 'scholar desk scroll';
   d.add(scroll);
   // (its circles where they stand in the room, and his chair's)
   d.updateMatrix();
