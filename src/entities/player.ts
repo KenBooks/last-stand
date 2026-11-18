@@ -14,6 +14,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FULL_DRAW, PVP } from '../data/balance';
+import { ALE } from '../data/tavern';
 import { recorder } from '../perf/recorder';
 import { SCHOOLS } from '../data/schools';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout } from '../loot/loadout';
@@ -619,7 +620,7 @@ export class Player {
     if (mx || mz) this.walkTo = null;
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
-    if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
+    if (this.casting && !this.casting.skill.def.freeMove) speed *= this.casting.skill.def.still ? 0 : 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     if (this.rooted || this.stunned) speed = 0;
     if (this.chilledUntil > G.time) speed *= PVP.chill;
@@ -726,6 +727,8 @@ export class Player {
     // (over a cast or a channel only a skill cast over one, which leaves it going: Bull Rush as Steel Tempest spins; in
     // a dash only as an open one lets, and no charge or blink)
     if ((this.casting || (this.channel && !this.channel.skill.def.block)) && !s.def.overCast) return false;
+    // (nothing over a cast he stands still through: the tavern's ale is drunk to its end)
+    if (this.casting?.skill.def.still) return false;
     if (this.dash && (this.dashShut() || s.impl.dashes)) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const target = at.clone();
@@ -734,7 +737,8 @@ export class Player {
     if (this.channel?.skill.def.block) this.stopChannel();
     // (the house of records' favourite skill: the local hero's casts in a run)
     if (this.local) countCast(s.def.impl);
-    const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
+    // (a cast he stands still through is the time it takes whatever his casting speed: the ale is drunk in its 5 s)
+    const dur = s.def.still ? s.def.castTime : s.def.castTime / (1 + this.stats.castSpeed / 100);
     const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
@@ -810,6 +814,17 @@ export class Player {
     return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0;
   }
 
+  /** A skill he knows by its id: his class's, or the tavern's ale every hero knows off his bar (data/tavern.ts). */
+  skillOf(id: string): KnownSkill | undefined {
+    return this.known.get(id) ?? (id === ALE.impl ? { def: ALE, impl: SKILL_IMPLS.ale } : undefined);
+  }
+
+  /** The ale the tavern's keeper slid across to him, drunk facing `at` (the bar): false if he's busy, out or dead. */
+  drinkAle(at: THREE.Vector3): boolean {
+    const ale = this.skillOf(ALE.impl);
+    return !!ale && this.tryCast(ale, undefined, at);
+  }
+
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
     if (a.t === 'chh') { this.hands = a.h; return; }
@@ -818,7 +833,7 @@ export class Player {
     if (a.t === 'stun') { this.stun(a.d); return; }
     if (a.t === 'halt') { this.haltDash(); return; }
     if (a.t === 'held') { this.heldUntil = G.time + a.s; this.heldFrozen = a.f === 1; return; }
-    const s = this.known.get(a.s);
+    const s = this.skillOf(a.s);
     // (a hidden partner's casts let go: away, banked or out of the hall of heroes, its spells were drawn all the same)
     if (!s || !this.alive || !this.obj.visible) return;
     if (a.t === 'cast') {
@@ -1241,7 +1256,7 @@ export class Player {
     else if (d?.ride) action = { name: d.ride.anim ?? 'charge', t: Math.min(1, d.ride.t / d.ride.dur) };
     else if (this.casting) {
       const c = this.casting, impl = c.skill.impl;
-      action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      action = { name: impl.anim || 'cast', t: c.t / c.dur, ...(c.skill.def.ale ? { ale: true } : {}) };
       if (impl.anim === 'bow' && !impl.channel) {
         // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
         const nk = c.nockT ?? 0, draw = c.fired ? (c.power ?? 1) : Math.min(1, Math.max(0, c.t - nk) / Math.max(1e-3, c.drawT ?? c.fireAt - nk));

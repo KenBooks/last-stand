@@ -46,6 +46,7 @@ import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCar
 import { initPvp, renderPvp } from './ui/pvpMenu';
 import { initTalk, openTalk, closeTalk, talkOpen, talkKeys } from './ui/talk';
 import { scholarTalk } from './world/library';
+import { keeperTalk } from './world/tavern';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
@@ -294,8 +295,13 @@ async function boot() {
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
     initMerchant(() => closedFrom(villageObject('shopCounter')));
     // (in or out of a house: what was open put away, the partners told and shown only where they stand)
-    // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-    initTalk((on) => { scholarTalk.talking = on; if (!on) closedFrom(villageObject('scholar')); });
+    // (a talk with the village's folk: the one talked to holds the hero in his eye while it's open, and the village
+    // forgets it as it ends; the tavern's keeper pours the ale asked of him)
+    initTalk((on, id) => {
+      if (id === 'scholar') scholarTalk.talking = on;
+      if (id === 'keeper') keeperTalk.talking = on;
+      if (!on) closedFrom(villageObject(id));
+    }, (act) => { if (act === 'ale' && G.player) G.arena.rooms?.tavern?.serveAle?.(G.player); });
     onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)

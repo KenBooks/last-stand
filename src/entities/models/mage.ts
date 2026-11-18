@@ -1319,7 +1319,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
         }
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: taken from the belt and drunk (models/flask.ts)
-        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body); drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body, a.ale); drinkLift = drinkUp(k, a.ale);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);

@@ -1951,6 +1951,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  tavern: {
+    each(side, options) {
+      return side.command('tavern', { canary: Boolean(options.canary) });
+    },
+    // (its moments written: the keeper, the talk, the pour and the slide, the drink's beats)
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('tavern'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   merchant: {
     each(side, options) {
       return side.command('merchant', { canary: Boolean(options.canary) });

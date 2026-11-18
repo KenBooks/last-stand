@@ -2314,7 +2314,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
         // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
-        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body); aw = 1; guard = 0; drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body, a.ale); aw = 1; guard = 0; drinkLift = drinkUp(k, a.ale);
       } else if (a.name === 'buff') {
         // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
         // head back in the roar (held as the cast ends: the fade out of it is slow)

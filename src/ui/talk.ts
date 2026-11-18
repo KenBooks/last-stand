@@ -1,7 +1,7 @@
 // Talking to the village's folk (`#talk`, opened by using one: data/talk.ts has what each says): a card at the foot of
 // the screen with his emblem, his name and what he is, what he says, and the replies to pick, each a button (a click, a
 // tap, or its number's key). A reply leads on to what he says next, or ends the talk; Escape ends it too (main.ts).
-import { SPEAKERS, type Speaker } from '../data/talk';
+import { SPEAKERS, type Speaker, type TalkAct } from '../data/talk';
 import { sfx } from '../core/audio';
 import { wasPressed } from '../core/input';
 
@@ -9,12 +9,15 @@ const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = do
 
 let speaker: Speaker | null = null;
 let node = 'start';
-/** told as the talk opens (true) and ends (false) */
-let changed: (on: boolean) => void = () => undefined;
+/** told as a talk with `id` opens (true) and ends (false) */
+let changed: (on: boolean, id: string) => void = () => undefined;
+/** told what a reply picked does (the keeper's ale), once the talk has ended */
+let acted: (act: TalkAct, id: string) => void = () => undefined;
 
-/** The card's handlers bound: `onChange` told as a talk opens and ends. */
-export function initTalk(onChange: (on: boolean) => void): void {
+/** The card's handlers bound: `onChange` told as a talk opens and ends, `onAct` what a reply does. */
+export function initTalk(onChange: (on: boolean, id: string) => void, onAct: (act: TalkAct, id: string) => void = () => undefined): void {
   changed = onChange;
+  acted = onAct;
   $('#talk .tk-replies').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-reply]');
     if (b) pick(Number(b.dataset.reply));
@@ -32,15 +35,16 @@ export function openTalk(id: string): void {
   node = 'start';
   render();
   $('#talk').classList.remove('hidden');
-  changed(true);
+  changed(true, speaker.id);
 }
 
 /** The talk ended. */
 export function closeTalk(): void {
   if (!talkOpen()) return;
   $('#talk').classList.add('hidden');
+  const id = speaker?.id ?? '';
   speaker = null;
-  changed(false);
+  changed(false, id);
 }
 
 /** The keys while it's up: a reply's number picks it. */
@@ -54,7 +58,9 @@ function pick(i: number): void {
   const r = speaker?.nodes[node].replies[i];
   if (!r) return;
   sfx.click();
-  if (!r.to) { closeTalk(); return; }
+  const id = speaker?.id ?? '';
+  if (!r.to) { closeTalk(); if (r.act) acted(r.act, id); return; }
+  if (r.act) acted(r.act, id);
   node = r.to;
   render();
 }

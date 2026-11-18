@@ -1356,6 +1356,53 @@ function draught(): void {
   v.start(); v.stopAt(v.t + 2.2);
 }
 
+// The tavern's ale (data/tavern.ts): liquid, wood and breath, noise alone as every sound (no notes over the music).
+
+/** Ale drawn from the cask's tap into a wooden mug over `long` s: the stream's hiss, a hollow band under it falling
+ *  as the mug fills (the air in it shorter), a last few drips, and the foam's fizz. */
+function alePour(long = 1.4): void {
+  const v = voice(0.02, 0.2);
+  const stream = v.c.createBiquadFilter(); stream.type = 'bandpass'; stream.frequency.value = 3200; stream.Q.value = 0.9;
+  v.loop(stream); stream.connect(swellAt(v, 0, 0.12, 0.16, long));
+  const body = glide(v, 'bandpass', 3, [[0, 900], [long, 420]]);
+  v.loop(body); body.connect(swellAt(v, 0.05, 0.2, 0.3, long));
+  for (let i = 0; i < 3; i++) {
+    const drip = v.c.createBiquadFilter(); drip.type = 'bandpass'; drip.frequency.value = 1300 + Math.random() * 400; drip.Q.value = 5;
+    v.loop(drip); drip.connect(blowAt(v, long + 0.12 + i * 0.16 + Math.random() * 0.05, 0.22, 0.05, v.out, 0.002));
+  }
+  grit(v, 26, long * 0.5, long, 4000, 7500, 0.03);
+  v.start(); v.stopAt(v.t + long + 0.8);
+}
+
+/** A full mug slid across the bar: wood on wood, its scrape fading as it slows, a soft knock as it stops. */
+function mugSlide(long = 0.6): void {
+  const v = voice(0.01, 0.15);
+  const scrape = glide(v, 'bandpass', 1.4, [[0, 1200], [long, 700]]);
+  v.loop(scrape); scrape.connect(swellAt(v, 0, 0.03, 0.18, long));
+  knock(v, long, 520, 0.2, 0.06);
+  whump(v, long, 0.12, 0.06);
+  v.start(); v.stopAt(v.t + long + 0.4);
+}
+
+/** A long swallow of ale from a mug: the liquid's hollow glug falling in the mug, and the throat's swallow under it. */
+function aleGulp(): void {
+  const v = voice(0, 0.2);
+  const top = 480 + Math.random() * 60;
+  const glug = glide(v, 'bandpass', 4, [[0, top], [0.03, top], [0.16, top * 0.5]]);
+  v.loop(glug); glug.connect(blowAt(v, 0.03, 0.7, 0.16, v.out, 0.01));
+  whump(v, 0.13, 0.3, 0.1);
+  v.start(); v.stopAt(v.t + 0.5);
+}
+
+/** The ale drunk: a long, contented breath out (a dark rush of air rising and settling), and the mug set down. */
+function aleSigh(): void {
+  const v = voice(0.05, 0.2);
+  const breath = glide(v, 'lowpass', 0.8, [[0, 500], [0.25, 1300], [0.9, 600]]);
+  v.loop(breath); breath.connect(swellAt(v, 0, 0.25, 0.22, 0.65));
+  knock(v, 0.85, 480, 0.12, 0.05);
+  v.start(); v.stopAt(v.t + 1.3);
+}
+
 // The ranger's sounds: wood, string, air and straw, each the thing it shows (before, a shot was a hiss and a
 // triangle note falling from 180 Hz, the full draw two sine notes, an arrow in a foe the wizard's old tick, Quarry
 // Mark a note gliding up and its refresh three notes of a chord; an arrow into the ground, the draw and the
@@ -1876,6 +1923,10 @@ export const sfx = {
   chip: guard((kind?: string) => { if (throttle('chip', 60)) return; chip(kind); }),
   /** Healing Draught drunk */
   draught: guard(() => { draught(); }),
+  alePour: guard((long?: number) => { alePour(long); }),
+  mugSlide: guard((long?: number) => { mugSlide(long); }),
+  aleGulp: guard(() => { aleGulp(); }),
+  aleSigh: guard(() => { aleSigh(); }),
   rush: guard(() => { noise({ dur: 0.45, freq: 220, sweep: 600, type: 'lowpass', gain: 0.45, attack: 0.04 }); tone({ freq: 70, to: 45, dur: 0.4, gain: 0.3 }); }),
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
   /** a co-op ping (game/ping.ts): two bright notes, rising */

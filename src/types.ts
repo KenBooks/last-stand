@@ -109,6 +109,10 @@ export interface SkillDef {
   moveMult?: number;
   /** a cast that leaves the hero free to move (drinking a draught): full speed, facing the way they go, not the aim; it still blocks every other skill */
   freeMove?: boolean;
+  /** a cast the hero stands still through, nothing cast over it (the tavern's ale, data/tavern.ts) */
+  still?: boolean;
+  /** the drink is the tavern's ale, not a draught: its own beats and a mug in the flask's place (models/flask.ts) */
+  ale?: boolean;
   /** cast over another skill being cast or held, which goes on and lands as it would (Bull Rush: a Power Strike
    *  charged, then the charge, the strike landing as it runs; Steel Tempest held, the charge spinning) */
   overCast?: boolean;
@@ -419,6 +423,8 @@ export interface EnemyDef {
  *  or at once without one). */
 export interface ActionState {
   name: string; t: number; hit?: number; time?: number; open?: number;
+  /** a drink of the tavern's ale (`name` 'drink'): its beats and its mug, not the draught's (models/flask.ts) */
+  ale?: boolean;
   /** a channel cast with no weapon held: the hands it's cast from (`Player.hands`) */
   hands?: CastHands;
   /** a spin: how far round the body has turned since it began (rad, to the left) */

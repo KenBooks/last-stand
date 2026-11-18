@@ -4,6 +4,7 @@
 
 - **A hero's charge stop and stagger are his own game's (#397, #560, protocol 33):** a Bull Rush stopped short by its load or a boss (`Player.haltDash`) and the stagger after a crowd (`Player.stun`) are judged by the game that moves him, from the foes its own screen showed the charge meet, and sent as `halt` and `stun` actions (`d`, its seconds); a partner's copy's charge stops with it, and it reels in the stagger's pose with stars over its head as long. Every game plays the charge for its look, so the stun is judged only where `player.local`. `npm run lab -- rush --scenarios stun` checks the stun itself; no `coop` scenario reads the copy's stagger yet.
 
+- **The tavern's ale** (`combat/skills/ale.ts`): a cast as any, by the skill's id `ale`, which every game knows off the bar (`Player.skillOf`), so a partner's copy drinks it and is heard within 10 m; no message is new (a game without the ale lets the cast go, as any unknown skill). The keeper's pour and slide are the asking game's alone.
 - Protocol 29 includes `tr` on enemy spawn reports and a battlefield biome event. The Training flag survives on guests; an explicit arena swap clears old foes/attacks before its replacement spawn reports play.
 
 Co-op.

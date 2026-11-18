@@ -2350,6 +2350,16 @@ export const COMMANDS = {
       canary: { kind: 'switch', help: 'plant a shield that fails to lower for an attack and detect it' },
     },
   },
+  tavern: {
+    help: "the tavern's keeper and his ale: into the Ember & Oak, the keeper pictured close wiping a mug and "
+      + 'polishing the bar, talked to by E (the card within the window, a free beer its first reply), the beer poured '
+      + 'and slid across and the hero drinking it for its 5 s, still with W held, the mug in hand and its rim at his lips '
+      + 'at each swallow, gone from the bar once taken; no program compiled; the drink pictured at its beats',
+    options: {
+      canary: { kind: 'switch', help: 'the ale made a cast he may walk through, which must be caught' },
+      ...COMMON_OPTIONS,
+    },
+  },
   merchant: {
     help: "Odo's trade at his counter: the screen within the window and his full stock, a trade one common short "
       + 'held off and refused, one with enough made (the gear given gone, his piece in the stash, the stock one '

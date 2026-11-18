@@ -3,6 +3,7 @@
 // bosses beaten. A room is a small place of its own, shown in the village's stead as the hall of heroes' room is: the
 // village is the heaviest place to draw, and a house seen open from it would add its inside to every frame there.
 // A room's frame: x across it, z from its back wall (-) to its door (+), its middle at the origin, its floor at 0.
+import { BAR, KEEPER, KEEPER_SPOT } from './tavern';
 import type { EnemyId } from './enemies';
 import { COTTAGES, type VillageObject } from './village';
 
@@ -98,6 +99,9 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
       return { id: 'scholar', use: 'talk', room: 'library', at: [x + s * 0.1, z + c * 0.1], reach: 2.4,
         stand: [x + s * 1.45, z + c * 1.45], label: 1.62, tall: 1.5, name: 'Brother Hollis', verb: 'Talk' } satisfies VillageObject;
     })(),
+    // (the tavern's keeper behind his bar: talked to across it, a free ale poured)
+    { id: 'keeper', use: 'talk', room: 'tavern', at: [KEEPER_SPOT.x, KEEPER_SPOT.z], reach: 2.2, stand: [BAR.x - 0.95, KEEPER_SPOT.z],
+      label: 1.95, tall: 2.0, name: KEEPER.name, verb: 'Talk' },
     // (the merchant behind his counter across the back of his shop: gear for gear)
     { id: 'shopCounter', use: 'merchant', room: 'merchant', at: [0, -mz + 1.5], reach: 2.0, stand: [0, -mz + 2.6], label: 1.9,
       tall: 2.0, name: 'Odo the Merchant', verb: 'Trade gear' },

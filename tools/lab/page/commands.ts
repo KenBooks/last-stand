@@ -846,6 +846,12 @@ export async function scholar(lab: Lab, command: ScholarOptions): Promise<Report
   return measure(lab, command);
 }
 
+/** The tavern's keeper and his ale: talked to, a mug poured and slid across, drunk standing still for its 5 s. */
+export async function tavern(lab: Lab, command: { canary: boolean }): Promise<Report> {
+  const { tavern: measure } = await import('./tavern');
+  return measure(lab, command);
+}
+
 /** Odo's trade: a trade refused one short, made with enough, the stock one fewer, and his restock. */
 export async function merchant(lab: Lab, command: { canary: boolean }): Promise<Report> {
   const { merchant: measure } = await import('./merchant');

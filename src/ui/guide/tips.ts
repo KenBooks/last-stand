@@ -1,5 +1,6 @@
 // The guide's tips: how a run works and what helps, each with its figures from the game's data (the run's and the
 // loot's rules, block, co-op, the skills that daze, freeze or slow), so none goes stale as the tuning moves.
+import { ALE, KEEPER } from '../../data/tavern';
 import { BLOCK, COOP, PARTY, PVP, RUN } from '../../data/balance';
 import { DUEL_WINS, WINS_USUAL } from '../../game/duel';
 import { LOOT, WAVES } from '../../data/waves';
@@ -171,6 +172,7 @@ export const TIPS_PAGES: Tip[] = [
     html: () => para(`Some of the village's houses have someone in them. Walk up and press <b>E</b> (or tap Use, or click them); pick what to say with a click, a tap or its number's key, and Esc ends the talk.`)
       + points('', [
         `<b class="gold">${HOLLIS.name}</b>, ${HOLLIS.title.toLowerCase()}, reads at his table in the library, south of the square. He knows the village's old books, and maybe a secret or two: ask him if he has heard anything strange.`,
+        `<b class="gold">${KEEPER.name}</b>, ${KEEPER.title.toLowerCase()}, keeps the bar of ${HOUSES.tavern.name}, east of the square. Talk to him and he will pour you a free beer: he fills a mug from the cask on his bar and slides it across, and your hero drinks it down in ${whole(ALE.castTime)} seconds, standing still. It does nothing for you but taste good.`,
         `<b class="gold">Odo the Merchant</b> keeps ${HOUSES.merchant.name}, on the Thornwood's road by the campfire. He trades gear for gear, no coin: press E at his counter, choose one of his wares, then offer banked gear from your stash until its value reaches his price (a piece's own value and ${pct(CUT - 1)} more). He takes and sells only ${TRADED.map((r) => RARITIES.find((x) => x.id === r)?.name.toLowerCase()).join(', ')} gear (rares once you have reached wave ${whole(STOCKED_FROM.rare)}, epics once you have reached wave ${whole(STOCKED_FROM.epic)}), keeps all you give him, and has new wares every ${whole(RESTOCK_RUNS)} runs.`,
       ]),
   },
