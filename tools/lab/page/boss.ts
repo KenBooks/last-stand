@@ -898,9 +898,12 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   await lab.step(90, keepWhole);
   await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
   close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
+  // 1a. a guard beside the hero, for its size against his
+  await pictureBeside(lab, moments, guards[1], hero, cantor);
   // 1b. a guard's toll: its ring rolling out
   await actUntil(guards[0], 'toll', 0.98);
-  await lab.step(18, keepWhole);
+  // (its ring out past the guard's own glow on the floor, short of where it fades)
+  await lab.step(36, keepWhole);
   await seen('1b a guard tolls', "a guard Bell-Warden's toll, its ring rolling out");
   guards[0].cd = 99;
   await lab.step(60, keepWhole);
@@ -938,6 +941,23 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   close('10 its fall', 'killed: it sinks and tips forward into the dark');
   lines.push(`encounterPictures: ${moments.length} moments`);
   return moments;
+}
+
+/** How far from a guard the hero is stood for their picture together (m). */
+const BESIDE = 2.4;
+
+/** The hero stood `BESIDE` off a guard where it rose (it stands: it's never moved), on its side away from the Cantor
+ *  (which floats over him otherwise), the two as the player sees them: the lesser bell's size against a man's (pictured from round them, the props of the arena stood
+ *  between the camera and them). */
+async function pictureBeside(lab: Lab, moments: Pictured[], guard: Enemy, hero: typeof G.player, cantor: Enemy): Promise<void> {
+  const toHero = guard.pos.clone().sub(cantor.pos).setY(0).normalize();
+  hero.pos.copy(guard.pos).addScaledVector(toHero, BESIDE);
+  guard.cd = 99;
+  // (a few frames for the camera to follow him there)
+  await lab.step(30);
+  const note = `a guard Bell-Warden beside the hero, ${BESIDE} m apart: a lesser bell, ` +
+    `${guard.def.asGuard?.size ?? 1} of a Bell-Warden's size`;
+  moments.push(await lab.screen('1a a guard beside the hero', [note]));
 }
 
 /** `cantorLook`: the Cantor risen alone at 12 m (bossCantor.ts). */
