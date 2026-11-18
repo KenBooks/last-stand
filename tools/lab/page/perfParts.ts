@@ -9,7 +9,8 @@ import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
-import { QUALITY } from '../../../src/data/quality';
+import { QUALITY, type SimpleTrees } from '../../../src/data/quality';
+import { setSimpleTrees } from '../../../src/world/simpleTrees';
 import { setMarkedShown } from '../../../src/dev/marked';
 import { canaryCost, flameCost, turnCost } from './fireCost';
 import { medianOf, timedRenders, timerOf } from './gpuTurns';
@@ -192,10 +193,19 @@ function switches(): Switch[] {
     { name: 'no depth pass (off: what stands still first)', turn: depthPassOf(stillMeshes()) },
     // (every tree, its bark and leaves, as the developer mode's Trees checkbox takes them out: what a level's trees cost)
     { name: 'the trees (the developer mode\'s Trees)', turn: (on) => setMarkedShown('tree', on) },
+    ...treeLooks(preset.simpleTrees),
     { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
       G.renderer.shadowMap.autoUpdate = on;
     } },
   ];
+}
+
+/** On a level that draws simple trees, its crown against the other simple one (Very low's cartoon clumps against Low's
+ *  leafy lumps, #688), swapped in turns within one page: two pages a look each read their first side faster. */
+function treeLooks(look: SimpleTrees): Switch[] {
+  if (!look) return [];
+  const other = look === 'cartoon' ? 'simple' : 'cartoon';
+  return [{ name: `the trees' look, ${look} (off: ${other})`, turn: (on) => setSimpleTrees(on ? look : other) }];
 }
 
 /** Each switch's time on the GPU, on and off in turns. */
@@ -205,7 +215,7 @@ async function switchCosts(draw: () => void): Promise<string[]> {
     const cost = await turnCost(G.renderer, turn, draw);
     if (!cost) continue;
     const took = cost.apart.toFixed(2);
-    lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
+    lines.push(`  ${took} ms (±${cost.error.toFixed(2)}): ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
   }
   return lines;
 }
