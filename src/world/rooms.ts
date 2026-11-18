@@ -23,6 +23,7 @@ import { Wall } from './wall';
 import { buildDoor, type Door } from './door';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
+import { lengthSeat, stoolSeat, type Seat } from './seats';
 
 /** A board of rows the house of records writes on a surface (a ledger's page, a board, a plaque): its title and each
  *  row's words and figure. */
@@ -61,6 +62,9 @@ export interface Room {
   seatFolk?(): void;
   /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */
   folk?(): Scholar | undefined;
+  /** what a hero sits on in it (from the owner: "dont forget to add sitting in houses, where possible, some houses have
+   *  armchair etc"): its benches, stools and chairs, none the folk sit on */
+  seats: Seat[];
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */
@@ -502,27 +506,45 @@ export function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: numbe
   }
 }
 
+/** A piece of furniture as built: all of it (outlined as a seat), and its top (what a body sits on). */
+export interface Furniture { group: THREE.Group; top: THREE.Mesh }
+
 /** A bench at (x, z), `w` long along x (turned `turn`). */
-export function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn = 0): void {
+export function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn = 0): Furniture {
   const b = new THREE.Group();
   b.position.set(x, 0, z);
   b.rotation.y = turn;
   g.add(b);
-  box(b, w, 0.06, 0.32, 0, 0.42, 0, M.oak);
+  const top = box(b, w, 0.06, 0.32, 0, 0.42, 0, M.oak);
   for (const sx of [-1, 1]) box(b, 0.06, 0.42, 0.28, sx * (w / 2 - 0.15), 0, 0, M.timber);
+  return { group: b, top };
 }
 
+/** how far either way of a tavern bench's middle a body sits along it (m) */
+export const BENCH_SAT = 0.7;
+
+/** A stool's top's radius (m). */
+const STOOL_R = 0.17;
+
 /** A stool at (x, z). */
-export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): void {
-  drum(g, 0.17, 0.17, 0.05, x, high - 0.05, z, M.oak, 12);
+export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): Furniture {
+  const s = new THREE.Group();
+  g.add(s);
+  const top = drum(s, STOOL_R, STOOL_R, 0.05, x, high - 0.05, z, M.oak, 12);
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2;
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, high - 0.05, 5), M.timber);
     leg.position.set(x + Math.cos(a) * 0.11, (high - 0.05) / 2, z + Math.sin(a) * 0.11);
     leg.rotation.set(Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12);
     leg.castShadow = true;
-    g.add(leg);
+    s.add(leg);
   }
+  return { group: s, top };
+}
+
+/** A stool sat on, where it stands (`x`, `z`, as built). */
+export function stoolSeatOf(f: Furniture, x: number, z: number): Seat {
+  return stoolSeat(x, z, STOOL_R, [f.top], [{ root: f.group }]);
 }
 
 /** A barrel on its side or standing at (x, y, z): staves and iron hoops. */
@@ -632,12 +654,12 @@ const SIDE_NAMES = ['back', 'front', 'west', 'east', 'ceiling'] as const;
 
 /** What both rooms share as they're built. */
 export interface Build { g: THREE.Group; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
-  sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door }
+  sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door; seats: Seat[] }
 
 export function begin(id: RoomId, group: THREE.Group, seed: number): Build {
   const M = makeMats(), wall = new Wall('village');
   const { sides, door } = shell(group, M, id, wall);
-  return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides, door };
+  return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides, door, seats: [] };
 }
 
 /** A room as built, its walls sealed. */
@@ -658,7 +680,7 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
     }
   });
   return {
-    id, group: b.g, look: ROOM_LOOK, wall: b.wall, obstacles: b.obstacles,
+    id, group: b.g, look: ROOM_LOOK, wall: b.wall, obstacles: b.obstacles, seats: b.seats,
     relief: { half: 1, cell: 1, n: 2, heights: new Float32Array(4), dais: false },
     update(dt, t) { for (const u of b.updaters) u(dt, t); },
     cutAway(eye) { for (const s of b.sides) s.group.visible = !s.outside(eye); },

@@ -70,11 +70,21 @@ export function readKept(key) {
   }
 }
 
-/** Keeps a side's run under `key`: its result, the notes its page left (errors, warnings) and its problems. */
+/** Keeps a side's run under `key`: its result, the notes its page left (errors, warnings) and its problems. Says
+ *  whether it was kept: a result too long for one string (`lab sit` with a greatsword, its close-ups' pictures over
+ *  Node's longest string) isn't, and that side runs again next time (thrown, it failed the A/B after both sides ran). */
 export function keep(key, { result, notes, problems }) {
   mkdirSync(CACHE_DIR, { recursive: true });
   const entry = { result, notes, problems, ranAt: new Date().toISOString() };
-  writeFileSync(join(CACHE_DIR, `${key}.json`), JSON.stringify(entry));
+  let text;
+  try {
+    text = JSON.stringify(entry);
+  } catch (error) {
+    if (error instanceof RangeError) return false;
+    throw error;
+  }
+  writeFileSync(join(CACHE_DIR, `${key}.json`), text);
+  return true;
 }
 
 /** Where the cache is, for a note: relative to the repo. */

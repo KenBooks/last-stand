@@ -19,8 +19,11 @@ const PAGE_COMMANDS = `${PAGE}/commands`;
 const COMMAND_KIT = `${NODE}/commandKit.mjs`;
 /** the options the commands share: only how the command line reads them, whose values the key holds already */
 const OPTION_KIT = `${NODE}/optionKit.mjs`;
-/** a page function called by name (`side.command('gait', ...)`), and its name */
-const PAGE_CALL = /\.command\(\s*'(\w+)'/g;
+/**
+ * a page function called by name, and its name: `side.command('gait', ...)`, `side.picturedCommand('sit', ...)`
+ * (its pictures over a page that may close) and `live`'s `replayable('liveSit', ...)` (a step its log replays)
+ */
+const PAGE_CALL = /\.(?:command|picturedCommand|replayable)\(\s*'(\w+)'/g;
 
 /** The code every command's side runs whatever it is: how its page boots (kept whole). */
 const BOOT_FILES = [`${NODE}/side.mjs`];

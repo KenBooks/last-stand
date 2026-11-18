@@ -1,5 +1,5 @@
-// An outline round one thing on screen (the foe a held Quarry Mark would mark): its solid meshes drawn into a mask of
-// their own, and the mask's edge drawn over the finished frame, in front of everything (it shows through a pillar or
+// An outline round one thing on screen (the foe a held Quarry Mark would mark, the seat E would sit him on): its solid
+// meshes (or one instance of an instanced mesh: a stone among the biome's boulders) drawn into a mask of their own, and the mask's edge drawn over the finished frame, in front of everything (it shows through a pillar or
 // a crowd), under the world's overlays. Only what's outlined is drawn again, on a render of its own: a render of the
 // scene with only its layer shown would see none of the scene's lights, and every lit material would look for its
 // program again in the next frame. Each mesh is drawn with a mask material made for its own, its alpha test kept (a
@@ -21,22 +21,40 @@ const GLOW_SHARE = 0.4;
 /** how far round the outlined thing's box on screen the edge is drawn (px of the canvas, past the glow) */
 const BOX_MARGIN = 4;
 
-/** What's outlined: its root, the colour (as the screen shows it), and how strongly (0 to 1). */
-interface Outlined {
+/** What an outline goes round: an object and every mesh under it, or one instance of an instanced mesh. */
+export interface OutlineTarget {
   root: THREE.Object3D;
+  instance?: number;
+}
+
+/** An object outlined whole, or a target. */
+type Outlinable = THREE.Object3D | OutlineTarget;
+
+/** What's outlined: its targets, what they were given as (kept as they are while it's given again), the colour (as
+ *  the screen shows it), and how strongly (0 to 1). */
+interface Outlined {
+  targets: OutlineTarget[];
+  given: Outlinable | readonly Outlinable[];
   color: THREE.Color;
   strength: number;
 }
 let current: Outlined | null = null;
 
-/** `root`'s solid meshes outlined in `color` at `strength` (0 to 1), from now until it's changed; null: nothing. */
-export function outline(root: THREE.Object3D | null, color = 0xff3030, strength = 1): void {
-  if (!root || strength <= 0) {
+const targetOf = (what: Outlinable): OutlineTarget =>
+  ((what as THREE.Object3D).isObject3D ? { root: what as THREE.Object3D } : what as OutlineTarget);
+
+/** `what`'s solid meshes outlined in `color` at `strength` (0 to 1), from now until it's changed; null: nothing.
+ *  Given the same object or list each frame, nothing is made again. */
+export function outline(what: Outlinable | readonly Outlinable[] | null, color = 0xff3030, strength = 1): void {
+  const many = Array.isArray(what);
+  if (!what || strength <= 0 || (many && !what.length)) {
     current = null;
     return;
   }
-  current ??= { root, color: new THREE.Color(), strength };
-  current.root = root;
+  if (current?.given !== what) {
+    const targets = many ? (what as readonly Outlinable[]).map(targetOf) : [targetOf(what as Outlinable)];
+    current = { targets, given: what, color: new THREE.Color(), strength };
+  }
   current.color.setHex(color, THREE.LinearSRGBColorSpace);
   current.strength = Math.min(1, strength);
 }
@@ -44,7 +62,8 @@ export function outline(root: THREE.Object3D | null, color = 0xff3030, strength 
 /** What's outlined now, its colour (as a hex) and how strongly, if anything (tools/lab measures it). */
 export function outlinedLook(): { root: THREE.Object3D; color: number; strength: number } | null {
   if (!current) return null;
-  return { root: current.root, color: current.color.getHex(THREE.LinearSRGBColorSpace), strength: current.strength };
+  const root = current.targets[0].root;
+  return { root, color: current.color.getHex(THREE.LinearSRGBColorSpace), strength: current.strength };
 }
 
 /** the mask's material for each of the meshes' own, and every one of them */
@@ -193,11 +212,41 @@ const edgeQuad = new FullScreenQuad(edgeMaterial);
 /** the edge's pass compiled on a triangle of its own, as its quad's is three's */
 const edgeStandIn = new THREE.Mesh(passTriangle(), edgeMaterial);
 
-/** Draws `root`'s mask into the mask's target, at the canvas's size. */
-function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRenderTarget {
+/** One instance of an instanced mesh, drawn alone as a mesh of its own (`lone`): its geometry, its mask and its place. */
+const lone = new THREE.Mesh();
+lone.matrixAutoUpdate = false;
+lone.matrixWorldAutoUpdate = false;
+lone.frustumCulled = false;
+const instanceMatrix = new THREE.Matrix4();
+
+/** `target`'s instance made `lone`'s, with its mask material. */
+function loneOf(target: OutlineTarget): THREE.Mesh {
+  const mesh = target.root as THREE.InstancedMesh;
+  mesh.getMatrixAt(target.instance!, instanceMatrix);
+  lone.matrixWorld.multiplyMatrices(mesh.matrixWorld, instanceMatrix);
+  lone.geometry = mesh.geometry;
+  lone.material = maskFor(Array.isArray(mesh.material) ? mesh.material[0] : mesh.material);
+  return lone;
+}
+
+/** Draws `target` into the mask's target, as it's bound. */
+function drawTarget(gl: THREE.WebGLRenderer, target: OutlineTarget): void {
+  if (target.instance !== undefined) {
+    gl.render(loneOf(target), G.camera);
+    return;
+  }
+  const swapped = swapIn(target.root);
+  try {
+    gl.render(target.root, G.camera);
+  } finally {
+    swapOut(swapped);
+  }
+}
+
+/** Draws `targets`' mask into the mask's target, at the canvas's size. */
+function drawMask(gl: THREE.WebGLRenderer, targets: readonly OutlineTarget[]): THREE.WebGLRenderTarget {
   gl.getDrawingBufferSize(canvasSize);
   const target = maskOfSize(canvasSize.x, canvasSize.y);
-  const swapped = swapIn(root);
   const clear = gl.getClearColor(new THREE.Color());
   const clearAlpha = gl.getClearAlpha();
   const autoClear = gl.autoClear;
@@ -209,10 +258,9 @@ function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRen
     gl.setClearColor(0x000000, 0);
     gl.clear(true, false, false);
     gl.autoClear = false;
-    gl.render(root, G.camera);
+    for (const each of targets) drawTarget(gl, each);
   } finally {
     if (!crowd) G.camera.layers.disable(CROWD_LAYER);
-    swapOut(swapped);
     gl.autoClear = autoClear;
     gl.setClearColor(clear, clearAlpha);
   }
@@ -220,13 +268,29 @@ function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRen
 }
 
 const box = new THREE.Box3();
+const each = new THREE.Box3();
 const corner = new THREE.Vector3();
 const area = new THREE.Vector4();
 
+/** `targets`' box in the world, into `box`. */
+function boxOf(targets: readonly OutlineTarget[]): THREE.Box3 {
+  box.makeEmpty();
+  for (const target of targets) {
+    if (target.instance === undefined) {
+      box.union(each.setFromObject(target.root));
+      continue;
+    }
+    const mesh = loneOf(target);
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    box.union(each.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));
+  }
+  return box;
+}
+
 /** The outlined thing's box on the canvas (pixels from its bottom left, as the scissor takes them, within the canvas),
  *  with `room` round it; null when it reaches behind the camera (the whole canvas then). */
-function boxOnCanvas(root: THREE.Object3D, room: number): THREE.Vector4 | null {
-  box.setFromObject(root);
+function boxOnCanvas(targets: readonly OutlineTarget[], room: number): THREE.Vector4 | null {
+  boxOf(targets);
   if (box.isEmpty()) return null;
   const camera = G.camera;
   let left = Infinity;
@@ -261,7 +325,7 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   u.uGlow.value.set(glow / canvasSize.x, glow / canvasSize.y);
   u.uColor.value.copy(look.color);
   u.uStrength.value = look.strength;
-  const within = boxOnCanvas(look.root, glow + BOX_MARGIN);
+  const within = boxOnCanvas(look.targets, glow + BOX_MARGIN);
   const autoClear = gl.autoClear;
   gl.autoClear = false;
   gl.setRenderTarget(null);
@@ -280,33 +344,34 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
 /** Draws the outline over the finished frame, if anything is outlined (under the world's labels, `layer.ts`). */
 export function drawOutline(): void {
   const look = current;
-  if (!look || !look.root.parent) return;
+  if (!look || look.targets.some((target) => !target.root.parent)) return;
   const gl = G.renderer;
-  const mask = drawMask(gl, look.root);
+  const mask = drawMask(gl, look.targets);
   if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
   else drawEdge(gl, mask, look);
 }
 
 /**
- * Compiles the outline's programs at load: `roots` (one of every foe) each drawn into the mask, its meshes unculled,
- * and the edge drawn once, at no strength, unless `edge` is false (its program is the lobby's: behind it, a part's
- * outline draws its masks alone, as the edge's pass is the whole canvas's).
+ * Compiles the outline's programs at load: `roots` (one of every foe, every biome's seats) each drawn into the mask,
+ * its meshes unculled, and the edge drawn once, at no strength, unless `edge` is false (its program is the lobby's:
+ * behind it, a part's outline draws its masks alone, as the edge's pass is the whole canvas's).
  */
-export function warmOutline(roots: THREE.Object3D[], { edge = true } = {}): void {
+export function warmOutline(roots: readonly Outlinable[], { edge = true } = {}): void {
   const gl = G.renderer;
   let target: THREE.WebGLRenderTarget | null = null;
-  for (const root of roots) {
+  const targets = roots.map(targetOf);
+  for (const each of targets) {
     const culled: THREE.Object3D[] = [];
-    root.traverse((object) => {
+    each.root.traverse((object) => {
       if (!object.frustumCulled) return;
       object.frustumCulled = false;
       culled.push(object);
     });
-    target = drawMask(gl, root);
+    target = drawMask(gl, [each]);
     for (const object of culled) object.frustumCulled = true;
   }
-  if (!edge || !target || !roots[0]) return;
-  const look = { root: roots[0], color: new THREE.Color(), strength: 0 };
+  if (!edge || !target || !targets[0]) return;
+  const look = { targets, given: targets, color: new THREE.Color(), strength: 0 };
   const mask = target;
   if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
   else drawEdge(gl, mask, look);
@@ -314,7 +379,12 @@ export function warmOutline(roots: THREE.Object3D[], { edge = true } = {}): void
 
 /** `root`'s masks compiled into the mask's target, alone (no lights, no fog, as `drawMask` draws it), what draws no
  *  mask left out (a compile passes over a mesh with no material), into `compiled`. */
-function compileMasks(gl: THREE.WebGLRenderer, root: THREE.Object3D, compiled: Set<THREE.Material>): void {
+function compileMasks(gl: THREE.WebGLRenderer, target: OutlineTarget, compiled: Set<THREE.Material>): void {
+  if (target.instance !== undefined) {
+    for (const material of gl.compile(loneOf(target), G.camera)) compiled.add(material);
+    return;
+  }
+  const root = target.root;
   const swapped = swapIn(root);
   const unmasked = new Map<THREE.Mesh, THREE.Mesh['material']>();
   root.traverse((object) => {
@@ -336,13 +406,13 @@ function compileMasks(gl: THREE.WebGLRenderer, root: THREE.Object3D, compiled: S
  * edge's pass, over the canvas. Gives back their materials, for a warm-up to wait for their links: drawn with none
  * linked, each was linked inside its draw, the page held up (a first visit's lobby, the dummies' mask and the edge).
  */
-export function compileOutline(roots: THREE.Object3D[], { edge = true } = {}): Set<THREE.Material> {
+export function compileOutline(roots: readonly Outlinable[], { edge = true } = {}): Set<THREE.Material> {
   const gl = G.renderer;
   const prev = gl.getRenderTarget();
   const compiled = new Set<THREE.Material>();
   gl.getDrawingBufferSize(canvasSize);
   gl.setRenderTarget(maskOfSize(canvasSize.x, canvasSize.y));
-  for (const root of roots) compileMasks(gl, root, compiled);
+  for (const root of roots) compileMasks(gl, targetOf(root), compiled);
   if (edge) {
     gl.setRenderTarget(null);
     for (const material of gl.compile(edgeStandIn, passCamera)) compiled.add(material);

@@ -49,8 +49,9 @@ What the lab gives a probe (`page/lab.ts`):
   off itself (`G.run.wave`, its `timer` to 0) and reads its foes as they rise;
 - `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
-  (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
-  run the measure's input to them and picture each);
+  (`out/probes/<probe>/sheet.png`, and `sheet-2.png`... past 8 rows: `writeSheet`, as one page of every row was too
+  big for the browser, which closed) and compares them in an A/B, as the sheet's (to see the frames a measure
+  flagged, run the measure's input to them and picture each);
 - `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
   page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
   selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the

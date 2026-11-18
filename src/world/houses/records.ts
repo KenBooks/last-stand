@@ -9,7 +9,7 @@ import { granite, pbrMaterialMaps, wood } from '../../core/textures';
 import {
   banner, begin, type Board, BODY, bookcase, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
   framed, hearth, inkedPage, lantern, LANTERN, type Mats, onWall, parchment, type RecordsShown, RIDGE_UNDER, type Room, rug,
-  stool, table, type Writing, writing,
+  stool, stoolSeatOf, table, type Writing, writing,
 } from '../rooms';
 
 /** The Chronicle's lectern, in its frame (its reader at +z): a stepped octagonal base, a turned column with a brass
@@ -378,7 +378,7 @@ export function build(group: THREE.Group): Room {
   const feats = writing(M, 512, 640, 1.0, 1.25);
   framed(east, M, feats, 1.95, 1.8, 1.0, 1.25);
   table(g, M, hx - 0.65, 1.95, 0.7, 1.1, obstacles, 0.76);
-  stool(g, M, hx - 1.35, 1.95, 0.5);
+  b.seats.push(stoolSeatOf(stool(g, M, hx - 1.35, 1.95, 0.5), hx - 1.35, 1.95));
   for (const [dz, r] of [[-0.3, 0.035], [0.1, 0.03], [0.32, 0.04]]) {
     const scroll = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.42, 10).rotateX(Math.PI / 2), M.paper);
     scroll.position.set(hx - 0.6 + dz * 0.3, 0.76 + r, 1.95 + dz);

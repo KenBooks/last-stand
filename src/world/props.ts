@@ -20,6 +20,7 @@ import type { Prop } from './destructible';
 import type { Relief } from './ground';
 import type { Wall } from './wall';
 import { runPhase } from './runPhase';
+import type { Seat } from './seats';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -52,6 +53,8 @@ export interface Biome {
   obstacles: Obstacle[];
   /** the breakable ones among them (a prop's index is its id on the network) */
   props: Prop[];
+  /** what an idle hero sits on (`world/seats.ts`) */
+  seats?: Seat[];
   portals: Portal[];
   /** what lies on its floor that feet step onto (`world/ground.ts`) */
   relief?: Relief;

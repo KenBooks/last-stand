@@ -93,6 +93,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `shadows`: the hero's shadow cast as one against his pieces cast alone (each weapon style, armoured and bare, each view: the frame drawn both ways, pixels apart past a texel's rounding; `--cost` the shadow map's draw)
 - `sheet`: pictures the hero in the player's views with each arm's load beside them
 - `shots`: the bow's shots at a boss with its foes packed round it (each biome and view, the bow drawn to full over points across them and loosed, its flight followed frame by frame: the first foe drawn along it struck, none if none, and one aimed inside a foe reaching it unless another is in the way)
+- `sit`: an idle hero's sit on every seat (logs, stones, columns, by fires, the village's bench and campfire, the tavern's stools and bench, the library's armchair): E on the seat pointed at, walked to, sat on its top, every joint within its range, up first when asked to act; --poses a sheet from round him (in full in `commands/sit.md`)
 - `sound [sounds]`: a skill's sounds rendered offline as the game plays them and written as WAV files to listen to (Splintering Bolt held and its bursts, Void Lance's portal, beam and release, or any sound of the game's played once: each one's peak, loudest half second, level over time, brightness (centroid, share above 2 kHz), share above 150 Hz, most tonal peak, the nodes it made, its silence at its end)
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
 - `spin`: mouse look turned one way for a long while in each close view, then the other, the browser's own jump under the lock sent mid-spin (no frame turning the view past three times the spin's steady turn, #318)
@@ -1231,6 +1232,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   top, from play), the ranger's and the mage's too; 0.0 since (`setInSleeve` gives the ring the tunic's normal,
   `surfaceNormal`). `--each` lists every seam; `--canary` moves one sewn piece's points 1 cm for a frame's measure (the
   mesh itself moved reads nothing: a skinned mesh is drawn where its bones are). About 50 s a hero on a cold server.
+- `sit`: an idle hero's sit on a log, a stone or the floor by a fire: in full in [`commands/sit.md`](commands/sit.md).
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own

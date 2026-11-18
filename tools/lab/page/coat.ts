@@ -67,7 +67,7 @@ export interface CoatOptions {
 
 /** a point's move a frame changing by this much from the frame before is a jerk (m): standing, the cloth sways a few
  *  millimetres a frame with his weight, and a point snapped behind a hand jumps by its width */
-const JERK_FROM = 0.01;
+export const JERK_FROM = 0.01;
 /** how long he stands by default (s), and the frames let go first for the pose to settle */
 const SECONDS = 5;
 const SETTLE = 30;
@@ -83,7 +83,7 @@ const LISTED = 40;
 const FACING_OUT = 0.8;
 
 /** One skirt followed: its mesh and geometry, its points over the last two frames, and its jerks. */
-interface Followed {
+export interface Followed {
   name: string;
   mesh: THREE.Mesh;
   geometry: THREE.BufferGeometry;
@@ -98,7 +98,7 @@ interface Followed {
   listed: string[];
 }
 
-const cm = (metres: number): string => (metres * 100).toFixed(1);
+export const cm = (metres: number): string => (metres * 100).toFixed(1);
 /** a frame's length at `rate` Hz (ms), in steps the clock adds exactly */
 const frameMs = (rate: number): number => Math.round((1000 / rate) * 1024) / 1024;
 
@@ -109,7 +109,7 @@ const OLD_NAMES = ['tunic hem'];
 const CLOTHS = ['skirt', 'hood'];
 
 /** Each skirt and hood the hero wears that's shown. */
-function skirtsOf(root: THREE.Object3D): Followed[] {
+export function skirtsOf(root: THREE.Object3D): Followed[] {
   const found: Followed[] = [];
   root.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
@@ -151,7 +151,7 @@ function nearestHand(skirt: Followed, point: number, joints: Joints): string {
 }
 
 /** The frame's jerks of `skirt` (`judged`: the frame counts), its points moved on. Returns the largest. */
-function follow(skirt: Followed, frame: number, judged: boolean, listing: boolean, joints: Joints): number {
+export function follow(skirt: Followed, frame: number, judged: boolean, listing: boolean, joints: Joints): number {
   const now = skirt.geometry.attributes.position.array as Float32Array;
   const { last, before, cols } = skirt;
   const rows = now.length / 3 / cols;

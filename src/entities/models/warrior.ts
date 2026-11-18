@@ -7,19 +7,21 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
+import { footToFloor, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { buildTrousers, type TrouserCut } from './trousers';
+import { ovalTube, wristBent, wristOf } from './wrist';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
-import { fitArm, solveArm, type ArmResult } from './armIK';
+import { fitArm, solveArm, type ArmResult, recall, remembered, type ArmMemory } from './armIK';
 import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
-import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
+import { buildHand, poseHand, hold, loosen, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -38,10 +40,89 @@ import {
   ONE_POWER,
   TWO_SPINS, TWO_POWERS, TWO_SMITES,
 } from './warriorEyes';
-import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
 import { built, type ModelSteps } from './steps';
 import { Dye } from './dye';
 import { ItemGlows } from './itemGlow';
+import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, SitHands, SitTurn, Struck } from '../../types';
+
+/** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
+ *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
+ *  his shield-side forearm over the thigh. */
+/**
+ * The pick-up by a fire, keyed whole: getting up, he steps to stand alongside what he laid down, squats, takes it in
+ * both hands, lifts it before him and puts it on his shoulder. Each row of `keys` is one moment of it, his whole body
+ * and the weapon at once, posed by hand (`npm run lab -- live hold`) and eased between by a monotone cubic
+ * (`motion.ts`), where it was made of a dozen ramps each timed apart, whose in-betweens nobody posed (from play: "weapon
+ * manipulation is very awkward near campfire"). The weapon is placed as keyed and his arms reach it; `PICK_COLUMNS`
+ * says what each number is.
+ */
+const PICK_COLUMNS = [
+  // (of his hands' stage getting up, 0 to 1)
+  'k',
+  // (how far turned and stepped to where he stands to take it up: alongside it, facing across it, `pickStance`)
+  'stepped',
+  // (his body: down (m), his hips back (m), his trunk bent forward and turned to his left (rad))
+  'drop', 'back', 'lean', 'twist',
+  // (of the weapon: how much it still lies where he laid it, 1 lying; and how much it goes with his right fist, 1, or
+  // stays where it's keyed, 0, as his hand slides along it to take it again higher up)
+  'lies', 'held',
+  // (its handle's butt from his feet (m: to his right, up, ahead) and the way it points from there to its head)
+  'buttRight', 'buttUp', 'buttAhead', 'wayLeft', 'wayUp', 'wayAhead',
+  // (each fist up its handle from the butt (m), and how far on it each hand is, 1 holding it)
+  'rightAlong', 'leftAlong', 'rightOn', 'leftOn',
+  // (how far it's on his shoulder, as he carries it standing, and how far his head looks down at it (rad))
+  'carry', 'look',
+] as const;
+type PickColumn = typeof PICK_COLUMNS[number];
+const PICK = tunable('warriorPick', {
+  keys: [
+    // (the body's numbers read off a real squat pick-up, CMU's clip 69_70: `npm run lab -- live mocap`. The hips drop
+    // 0.62 m and go 10 cm back, the trunk leans 0.54 going down and 0.37 at the bottom: guessed, he folded over at 1.2
+    // with his hips high. The clip's 0.8 s down, 0.4 at the bottom and 0.6 up, with a step before and the shoulder
+    // after, don't fit the 2.6 s of his hands' stage: shared out so nothing is hurried most, the tip-up the longest)
+    // k   step drop back  lean twist lies held butt: right up  ahead  way: left up   ahead  along: R   L    on: R L  carry look
+    0,     0,   0,    0,    0,    0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0,   0,   0,   0,
+    0.15,  1,   0,    0.02, 0.25, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0,   0,   0,   0.3,
+    0.26,  1,   0.3,  0.11, 0.5,  0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0.5, 0.2, 0,   0.15,
+    // (the clip's chest up at the bottom, his hips lower to reach the floor: leaned over 0.75 to reach it, he folded
+    // over his knees, his head down to them, from review; his right hand on it, then his left)
+    0.37,  1,   0.66, 0.08, 0.55, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   0.6, 0,   0.1,
+    0.45,  1,   0.66, 0.08, 0.55, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   1,   0,   0.1,
+    // (its head tipped up off the floor, its butt left on it to turn about, as a heavy tool is taken up: leaning out
+    // to his right, clear of his face, where it stood up before his face from ahead of him on 50 frames. Over a tenth
+    // of the stage its head went 40 cm a frame)
+    0.6,   1,   0.55, 0.08, 0.5,  0,    0,   1,   0.3,  0.03, 0.33,  -0.15, 0.95, 0.15,  0.3,  0.6,  1,   1,   0,   0.05,
+    // (his legs drive him up, the haft upright at his right side, its butt by his knee)
+    0.74,  1,   0.03, 0,    0.15, 0,    0,   1,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.3,  0.6,  1,   1,   0,   -0.05,
+    // (held still by both hands while his right one slides up it at his side, never across his chest: on his shoulder
+    // his right fist is 88 cm up it, near its head; slid up before his chest, his forearm went 22 cm into it)
+    0.82,  1,   0,    0,    0.05, 0,    0,   0,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.85, 0.6,  1,   1,   0,   0,
+    // (tipped back over his right shoulder over the rest, its butt coming forward, both hands on it until it's there:
+    // tipped over a tenth, it swung from upright to over his shoulder at once, from review)
+    0.91,  1,   0,    0,    0.03, 0,    0,   1,   0.15, 0.6,  0.45,  -0.12, 0.92, -0.25, 0.86, 0.6,  1,   1,   0.35, 0,
+    1,     1,   0,    0,    0,    0,    0,   1,   0.03, 0.79, 0.89,  -0.26, 0.67, -0.7, 0.88, 0.5,  1,   0,   1,   0,
+  ],
+}, { keys: PICK_COLUMNS.length }, { keys: PICK_COLUMNS });
+/** The value of one of the pick-up's columns at `k` of it, eased between its keys. */
+const pickKeys = { from: [] as number[], columns: new Map<PickColumn, Keys>() };
+function pickAt(column: PickColumn, k: number): number {
+  const keys = PICK.keys, row = PICK_COLUMNS.length;
+  // (made again when a number changes: tuned, the list is changed in place)
+  if (keys.length !== pickKeys.from.length || keys.some((value, i) => value !== pickKeys.from[i])) {
+    pickKeys.from = [...keys];
+    pickKeys.columns.clear();
+    PICK_COLUMNS.forEach((name, c) => {
+      const pairs: [number, number][] = [];
+      for (let r = 0; r + row <= keys.length; r += row) pairs.push([keys[r], keys[r + c]]);
+      pickKeys.columns.set(name, pairs);
+    });
+  }
+  return curve(pickKeys.columns.get(column)!, k);
+}
+
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.2, 1.05, 0.35], floorFrontWay: [-0.9, 0.35, 0.25], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.35, 0.25], floorLowY: 0.58, floorCrouch: [0.22, 0.08, 0.22], floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.8, 0.6], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, floorLiftBy: 0.42, floorTurnIn: 0.88, floorFistFromButt: 0.12, floorHandsApart: 0.38, floorStandOff: 0.27, floorPickFist: [0.15, 0.8, 0.3], floorPickTilt: [0.6, 0.55], floorHeadHeld: 0.25, floorShoulderAt: 0.2, floorTakeFrom: 0.9, floorTakeBy: 0.8, floorPickFrom: 0.75, floorPickCrouch: [0.22, 0.22, 0.85], floorPickDownFrom: 0.97, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
+const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
+const _lifted: number[] = [], _resting: number[] = [];
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
@@ -188,6 +269,7 @@ const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
 const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
+const _letW = new THREE.Vector3(), _letQ = new THREE.Quaternion(), _letP = new THREE.Vector3(), _letS = new THREE.Vector3();
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
 /** the legs' own blend over the pose this frame (left, right), see `legs.update` */
 const _legW: [number, number] = [1, 1];
@@ -229,6 +311,7 @@ const _fn = new THREE.Vector3(), _ft = new THREE.Vector3(), _fc = new THREE.Vect
 const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
 const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
+const HALF_ROUND = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -702,7 +785,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   yield;
   // --- arms: navy sleeves strapped at the upper arm, fur at the elbow, leather bracers with a steel
   // plate, fingerless gloves (the hands item: without it the sleeves run on to the wrist, the hands bare)
-  for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
+  const wrists = { L: wristOf(j.handL, true), R: wristOf(j.handR, false) };
+  for (const [s, sh, el, wrist] of [[1, j.shoulderL, j.elbowL, wrists.L], [-1, j.shoulderR, j.elbowR, wrists.R]] as const) {
     // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
     // (set into its armhole, and shaped as the arm in it: `armShape`)
     { const at = sets.restOf(s); S.skinChain(deepen(sets.sleeve(s, { ...SLEEVE, bulge: 0, at: 0.24, cap: lod(10, 6), tube: lod(18, 9), shape: armShape }), at.x, at.y, at.z), cloth, sh, [...sets.chainOf(s), el]); }
@@ -716,16 +800,19 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     H.add(plate(vb, 10, 8, 0.005), plateM, el);
     for (const y of [-0.09, -0.2]) H.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
     // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
-    H.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
+    // (flattened as the palm is, its end inside it: round, a 7 cm tube's rim stood out of a 3 cm palm)
+    H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.034, 0.016], [-0.285, 0.04, 0.025], [-0.265, 0.043, 0.032], [-0.235, 0.047, 0.042], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
     // bare: the gambeson's sleeve on down the forearm (its top inside the upper sleeve's end, which follows the
     // forearm), a turned-back cuff at the wrist, and the wrist into the palm
     B.add(scaleUV(lathe([[0.045, -0.245], [0.048, -0.2], [0.057, -0.12], [0.0655, -0.045], [0.064, 0]], 16), 2, 1), cloth, el);
     B.add(scaleUV(lathe([[0.044, -0.25], [0.051, -0.245], [0.053, -0.215], [0.05, -0.205]], 16), 2, 0.3), cloth, el);
-    B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
+    B.skinChain(wristBent(ovalTube([[-0.292, 0.029, 0.021], [-0.28, 0.03, 0.024], [-0.265, 0.033, 0.027], [-0.235, 0.038, 0.032], [-0.2, 0.042, 0.04]], 16), j.P.foreL), bareSkin, el, wrist.chain);
     yield;
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
+  // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
+  body.legCapsules = true;
 
   yield;
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
@@ -795,11 +882,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
   // armOffThigh)
   const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
-  const placeBodies = (free: boolean) => {
+  const placeBodies = (free: number) => {
     const [ra, rb] = cuffR();
     for (const f of fores) { f.ra = ra + HAND_GAP; f.rb = rb + HAND_GAP; }
     legBodies.place(skirtMesh);
-    if (free) { freePts[freePts.length - 2][1] = ra; freePts[freePts.length - 1][1] = rb; armOffThigh(skirtMesh, j.shoulderL, 1, legBodies.list[0], HAND_GAP, freePts); }
+    if (free) { freePts[freePts.length - 2][1] = ra; freePts[freePts.length - 1][1] = rb; armOffThigh(skirtMesh, j.shoulderL, 1, legBodies.list[0], HAND_GAP, freePts, free); }
     handBodies.place(skirtMesh);
   };
   const tassets: { g: THREE.Group; s: number }[] = [];
@@ -1001,6 +1088,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
   // front of the fist, facing out of the hand. Its face is local +Z.
   const shield = joint(j.handL, 0, -0.1, 0);
+  shield.userData.strapped = true;
   shield.name = 'shield';
   shield.visible = false;
   {
@@ -1391,6 +1479,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  /** which way the shield hangs as it eases off: out beside his leg from a sit, else before his chest from a draught
+   *  (from which is the more now, it turned from out to ahead as the sit ended, eased 5% on, and went 50 cm) */
+  let hangOut = false;
   /** how far a two-hander is on the shoulder (`SHOULDER_AT`), and how long the left hand has left to take its lower
    *  grip as it comes off (s: `TAKE_HOLD`) */
   let shouldered = 0, shoulderT = 0, takingHold = 0;
@@ -1405,10 +1496,23 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const twoHold = { at: new THREE.Vector3(), dir: new THREE.Vector3(), flat: new THREE.Vector3(), pole: SW2_POLE, k: 0, flatK: 0 };
   /** how surely the left hand holds a two-hander's lower grip: it lets go of one no turn of the hand keeps the arm within its ranges for */
   let twoGood = 1;
+  // (his left arm faded over `LEFT_SWITCH` s from as it was drawn, as he sits or stands, when how it's placed changes:
+  // its own pose fitted, eased towards a two-hander's lower grip, or on it. Solved each its own way, its elbow went 13 to
+  // 25 cm in the frame it changed)
+  const leftShown = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const leftFrom = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  // (and each joint's turn over the frame before, carried on through the fade: faded from the arm frozen as drawn, his
+  // hand stopped dead for a frame, 8 cm a frame to none)
+  const leftWas = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const leftTurn = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _turnNow = new THREE.Quaternion();
+  let leftModeWas = -1, leftFadeW = 0;
   /** the lower grip as the left hand held it this frame (`Model.lowerGrip`) */
   const grasp: LowerGrip = { held: false, free: false, short: 0, past: 0, into: 0 };
   /** each hand's slant on its handle this frame (rad, armIK.ts) */
   let slantR = 0, slantL = 0;
+  /** what the standing hold's solves remembered as each arm's sit began, for it to take up again (`recall`) */
+  let standR: ArmMemory | null = null, standL: ArmMemory | null = null;
   /** the slant a swing through the eyes holds each fist's handle at (rad, `ViewSwing.slant`), kept while its hold fades */
   let swingSlantR = 0, swingSlantL = 0;
   yield;
@@ -1616,8 +1720,802 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     shouldersMoved = true;
   }
 
-  /** The grip and the weapon's way as the arm holds them now, into `at` and `dir`, in the chest's frame (and with
-   *  `pole`, where the elbow is from the shoulder): a way back leaves from the drawn ones and goes to the pose's. */
+  /** a model's hands with nothing to do as he sits */
+  const NO_HANDS = { before: 0, after: 0 };
+  /** a two-hander's lift to the port, before he goes down, and his way up with its weight (s) */
+  const TWO_SIT_HANDS = { before: 2.6, after: 0, up: 1.4, last: true };
+  /** a maul's or a greataxe's on a seat: off his shoulder to before him, head up, and down with him (no regrip) */
+  const TWO_UP_HANDS = { before: 0, after: 2, up: 1.4 };
+  // (by a fire he doesn't turn his hand round on it: held still for that time, he stood frozen, lowered. `after`: his hand
+  // coming off it, once he's sat)
+  /** how long his left arm's fade lasts as how it's placed changes, sitting or standing (s: `fadeLeftSwitch`) */
+  const LEFT_SWITCH = 0.2;
+  /** how many times faster that fade goes once his hand holds the grip */
+  const LEFT_HELD_FASTER = 3;
+  /** how far his left elbow may go in a frame as his hand eases on or off a two-hander far from its grip (m): free, from one
+   *  side of a fire it went to its other side in a frame as he let go, his hand 41 cm */
+  const EASE_ELBOW = 0.05;
+  /** how far ahead of the straight way his left hand goes at most as it eases on or off a two-hander (rig units) */
+  const EASE_AHEAD = 0.15;
+  const TWO_FLOOR_HANDS = { before: 2.6, after: 0.6, up: 1.4, last: true };
+  /** the length a two-hander is lifted off his shoulder by a fire in `floorLiftBy` (m): the maul's */
+  const FLOOR_LIFT_LEN = 1.1;
+  /** by a fire, of the lift by when his arm is placed by the weapon's path alone, the carry's joints eased off */
+  const FLOOR_JOINTS_BY = 0.3;
+  const _rightArm = [j.shoulderR, j.elbowR, j.handR];
+  const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
+  const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
+  const _lapQ = new THREE.Quaternion(), _lapNow = new THREE.Quaternion();
+  const _lapWas = new THREE.Quaternion(), _lapRoot = new THREE.Quaternion(), _lapVia = new THREE.Quaternion();
+  const _lapFore = new THREE.Vector3(), _lapDown = new THREE.Vector3();
+  const _lapFloor = new THREE.Vector3(0, -1, 0);
+  /** how each hand's turned in his frame as he began to sit (the left's, the right's), once taken */
+  const _lapStood = [new THREE.Quaternion(), new THREE.Quaternion()], _lapTaken = [false, false];
+  /** A hand keeping its one-hander as he sits: its weapon turned by `w` to lie along `way` (the root's frame: out to
+   *  his left, up, ahead), across his lap, and the back of the hand on from the forearm, as a man rests a weapon
+   *  across his thighs. Said in those terms, as the arm's reach alone stood an axe up before his face. */
+  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number, from: number, st: NonNullable<AnimState["sit"]>, down = 0, edge?: readonly number[]): void {
+    const hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
+    root.updateMatrixWorld(true);
+    const fore = hand.getWorldPosition(_lapFore).sub(elbow.getWorldPosition(_lapZ));
+    // (the handle's way in the hand's frame, and down the fingers, square to it)
+    const inHand = _s1.set(0, 1, 0).applyQuaternion(handle.quaternion);
+    const fingers = _s2.set(0, -1, 0);
+    fingers.addScaledVector(inHand, -fingers.dot(inHand)).normalize();
+    _lapHand.makeBasis(inHand, fingers, _s3.crossVectors(inHand, fingers)).invert();
+    const turnAlong = (to: readonly number[], out: THREE.Quaternion, downBy = 0): void => {
+      const along = _lapX.set(to[0], to[1], to[2]).transformDirection(root.matrixWorld);
+      // (the way the hand's length lies, which is the way an axe's edge faces: off the forearm towards the floor by
+      // `downBy`. Along a forearm held level by a fire, the axe lay flat with its edge ahead)
+      _lapDown.copy(fore).normalize().lerp(_lapFloor, downBy);
+      if (edge) _lapDown.set(edge[0], edge[1], edge[2]).transformDirection(root.matrixWorld);
+      const square = _lapY.copy(_lapDown).addScaledVector(along, -_lapDown.dot(along)).normalize();
+      _lapWorld.makeBasis(along, square, _lapZ.crossVectors(along, square));
+      out.setFromRotationMatrix(_lapWorld.multiply(_lapHand));
+    };
+    turnAlong(way, _lapQ, down);
+    // (low on a seat: higher, seen from ahead it stood across his face at two thirds of the way. Higher by a fire, whose
+    // arm is out over his knee: low there, his forearm went 3 cm into his thigh and the blade 38 cm in a frame)
+    const floorWay = left ? SIT_HANDS.viaFloorL : SIT_HANDS.viaFloorR;
+    turnAlong(onFloor(st) ? floorWay : left ? SIT_HANDS.viaL : SIT_HANDS.viaR, _lapVia);
+    // (once the hand is on its way down: turned from the start, the blade swept past his face; its pace the sit's own,
+    // as eased again its tip went up to 19 cm a frame)
+    // (from how it stood as he began, kept in his own frame until then: left in the hand as the arm came in, two blades
+    // tipped across his face at a third of the way down)
+    const side = left ? 0 : 1, stood = _lapStood[side];
+    hand.getWorldQuaternion(_lapNow);
+    root.getWorldQuaternion(_lapRoot);
+    if (!_lapTaken[side]) {
+      stood.copy(_lapRoot).invert().multiply(_lapNow);
+      _lapTaken[side] = true;
+    }
+    // (tipped ahead of him first, then turned across: straight from upright to across his lap, it levered up over his
+    // neck and two blades crossed on his face, at about half way)
+    const across = ramp(w, from, 1);
+    const via = Math.min(1, across / SIT_HANDS.viaAt), on = ramp(across, SIT_HANDS.viaAt, 1);
+    _lapWas.copy(_lapRoot).multiply(stood).slerp(_lapVia, smooth(via)).slerp(_lapQ, smooth(on));
+    // (and back onto the pose's own as he's nearly up, which it's come to at his last frame)
+    _lapNow.slerp(_lapWas, smooth(ramp(w, 0, SIT_HANDS.turnIn)));
+    hand.parent!.getWorldQuaternion(_lapQ).invert();
+    hand.quaternion.copy(_lapQ).multiply(_lapNow);
+  }
+  /** Where the arm holds a two-hander as he sits: each joint as he stood with it (`from`, kept every frame he stands,
+   *  as drawn) and as it'll rest (`rest`, found once as a sit begins, by posing him sat for a moment). */
+  const twoSit = {
+    taken: false,
+    /** the weapon stood in the ground, where it stays as he sits (world): set as it's lowered */
+    stood: false,
+    /** how much lower his hips will be than on the seat its rest is set for (m) */
+    lower: 0,
+    /** how far his hand has turned round on the handle, from the fist that lowered it to the one that holds it upright:
+     *  the weapon's head under his little finger, not past his thumb */
+    turned: 0,
+    standAt: new THREE.Vector3(),
+    standQ: new THREE.Quaternion(),
+    /** the weapon as it came down in his fist, slanted as his wrist lets it, and upright on its far end as he'll leave it */
+    loweredAt: new THREE.Vector3(),
+    loweredQ: new THREE.Quaternion(),
+    uprightQ: new THREE.Quaternion(),
+    endFrom: new THREE.Vector3(),
+    endTo: new THREE.Vector3(),
+    /** his hand as it held the sword going in, and as it holds it stood, turned round on the handle (world) */
+    handFrom: new THREE.Quaternion(),
+    handTo: new THREE.Quaternion(),
+    /** the grip's turn in his hand as it went into the ground, which it's given back as it leaves it */
+    gripWas: new THREE.Quaternion(),
+    /** the weapon's way now, in his frame, as his hand takes it */
+    wayNow: new THREE.Vector3(),
+    from: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
+    fromAt: new THREE.Vector3(),
+    fromSlant: 0,
+    /** whether `from` was kept standing still at least once */
+    fromStill: false,
+    /** the path it comes down, in his frame: taken in both hands before him, then lowered till its far end is on the ground */
+    frontAt: new THREE.Vector3(),
+    frontWay: new THREE.Vector3(),
+    frontSlant: 0,
+    lowAt: new THREE.Vector3(),
+    lowWay: new THREE.Vector3(),
+    lowSlant: 0,
+    /** the flat's way along the path (the palm's side, as his hand holds it) */
+    flatFrom: new THREE.Vector3(),
+    /** how far his hands come out from him as it passes level */
+    pathOut: 0,
+    /** of the way down by which it's out at the rest's side and ahead (0: at the path's own pace) */
+    sideBy: 0,
+    /** how far his hand goes out to his side as it passes level, by a fire */
+    pathSide: 0,
+    /** whether its way turns at one pace, by a fire: from head up to head down */
+    turnsEvenly: false,
+    /** by a fire, getting up from it laid on the floor: turned to face it and taken up head first before him, his left
+     *  hand by its head (`floorPickAt`, `floorPickWay`, `SitHands.turn`) */
+    pickingUp: false,
+    /** taking it up keyed (`PICK`), from it laid until he's up */
+    keyedUp: false,
+    /** by a fire, the sit's own turn in the world, which its path is in whichever way he turns as he takes it up */
+    sitQ: new THREE.Quaternion(),
+    /** by a fire, the path's first key laying it down, kept as the one taking it up stands in for it */
+    layAt: new THREE.Vector3(),
+    layWay: new THREE.Vector3(),
+    /** by a fire, the path's low key laying it down (`floorLowHand`, `floorLowOut`): getting up, it's where it lies */
+    layLowAt: new THREE.Vector3(),
+    layLowWay: new THREE.Vector3(),
+    /** by a fire, whether he's getting up from it, his body rising */
+    rising: false,
+    /** by a fire, taking it up: where he stands to (world, on the floor), the way he faces then (rad), the weapon's way
+     *  along the floor and how far its handle runs behind his fist where he fights with it (m) (`pickStance`) */
+    pickAt: new THREE.Vector3(),
+    pickYaw: 0,
+    pickAlong: new THREE.Vector3(),
+    pickBehind: 0,
+    /** by a fire, how far the weapon was slid forward through his fist last frame (m), to be taken off before the path
+     *  places it again (`floorPickSlide`) */
+    slid: 0,
+    /** by a fire, how far down the sit was last frame, and his hands' stage once sat */
+    wWas: 0,
+    afterWas: 0,
+    /** by a fire, the grip's place and the weapon's way on his shoulder this frame, in his frame: it's lifted off from there
+     *  along a path of its own (`weaponOnPath`'s `lifted`) */
+    carryAt: new THREE.Vector3(),
+    carryWay: new THREE.Vector3(),
+    /** a maul or a greataxe stood head up on a seat this frame, its grip placed under his fist (`buttDown`) */
+    upright: false,
+    /** where it's stood head up between his feet and its way there, in his frame, before it's leant out to his right */
+    uprightAt: new THREE.Vector3(),
+    uprightWay: new THREE.Vector3(),
+    /** his hands' stage sat last frame, and whether it's setting the weapon down (else taking it up) */
+    handsWas: 0,
+    settingDown: true,
+    /** where it lies by a fire, in his frame */
+    restGrip: new THREE.Vector3(),
+    restWay: new THREE.Vector3(),
+    /** by a fire, let go of: where it lies (world), and the grip's place and turn in his hand as he let it go */
+    laid: false,
+    laidAt: new THREE.Vector3(),
+    laidQ: new THREE.Quaternion(),
+    laidGrip: new THREE.Quaternion(),
+    laidGripAt: new THREE.Vector3(),
+    /** the arm as it holds what it's laid, by a fire: eased from it to his knee */
+    holding: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
+  };
+  const _allJoints = Object.values(j).filter((o): o is THREE.Object3D => o instanceof THREE.Object3D);
+  const _jointsWere = _allJoints.map((o) => ({ at: new THREE.Vector3(), q: new THREE.Quaternion() }));
+  const _standTurn = new THREE.Quaternion(), _gripHome = new THREE.Vector3(), _seatWas = new THREE.Vector3();
+  const _noTurn = new THREE.Quaternion(), _restRight: number[] = [1];
+  const _pathAt = new THREE.Vector3(), _pathWay = new THREE.Vector3(), _pathFlat = new THREE.Vector3(), _pathTurn = new THREE.Quaternion();
+  const _liftTurn = new THREE.Quaternion();
+  const _sitFrame = new THREE.Matrix4(), _sitFrameInverse = new THREE.Matrix4();
+  const _frameAt = new THREE.Vector3(), _frameScale = new THREE.Vector3(), _frameQ = new THREE.Quaternion();
+  /** by a fire, how far the weapon is slid forward through his fist this frame (m), his fist by its butt to take it up */
+  let pickSlide = 0;
+  /** by a fire, this frame is the keyed pick-up's (`PICK`), and how far into it (0 to 1) */
+  let pickKeyed = false;
+  let pickK = 0;
+  const _pickOwn = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _pickFrom = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _pickReach = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _pickButt = new THREE.Vector3(), _pickWay = new THREE.Vector3(), _pickQ = new THREE.Quaternion();
+  const _carryButt = new THREE.Vector3(), _carryQ = new THREE.Quaternion(), _pickFist = new THREE.Vector3();
+  const _pickPole = new THREE.Vector3(), _pickUp = new THREE.Vector3(0, 1, 0), _pickFeet = new THREE.Vector3();
+  const _pickHeld = new THREE.Vector3(), _pickSeatedAt = new THREE.Vector3(), _pickSeatedQ = new THREE.Quaternion();
+  /** how far the weapon is still eased from where the keyed pick-up left it in the world (1 to 0, over `PICK_OFF` s) */
+  let pickOff = 0;
+  /** his right arm as the standing pose has it this frame, its shoulder's place, and the slant its fit last took */
+  const _standArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _standAt = new THREE.Vector3();
+  let _carrySlant = 0;
+  /** by a fire, taking it up: his right hand sliding along it, and how far that hand is still open, off it */
+  let pickSliding = false;
+  let pickOpen = 0;
+  const PICK_OFF = 0.3;
+  const _pickLastAt = new THREE.Vector3(), _pickLastQ = new THREE.Quaternion();
+  const _slideWay = new THREE.Vector3(), _slideScale = new THREE.Vector3();
+  const _behind = new WeakMap<Weapon, number>();
+  const _behindInverse = new THREE.Matrix4(), _behindBox = new THREE.Box3();
+  const _stanceFacing = new THREE.Vector3(), _stanceLeft = new THREE.Vector3(), _stanceFloor = new THREE.Vector3();
+  const _floorTurn: SitTurn = { angle: 0, inTo: 0, backFrom: 0, backTo: 0, yaw: 0, at: [0, 0] };
+  // (taking it up by a fire his hands' stage is a real body's pick-up long: CMU's clip 69_70 squats and rises in about
+  // 1.8 s, and there's a step before and the shoulder after. In 2.6 s its head swung up off the floor at 15 m/s, from
+  // review "a snap, not a lift")
+  const _floorHands: SitHands = { ...TWO_FLOOR_HANDS, before: 3.6, turn: _floorTurn };
+  const _lean = new THREE.Vector3(), _leanWay = new THREE.Vector3();
+  const _inverseRoot = new THREE.Matrix4();
+  const _pathEnd = new THREE.Vector3(), _pathEnd2 = new THREE.Vector3(), _pathPole = new THREE.Vector3();
+  const _fistWas = new THREE.Quaternion(), _fistNow = new THREE.Quaternion(), _rootTurn = new THREE.Quaternion();
+  const _portHand = new THREE.Vector3(), _besideAt = new THREE.Vector3(), _besidePole = new THREE.Vector3();
+  /** What a two-hander's own shape asks of its rest: how far its far end's line stands over the floor by a fire and when
+   *  stood (a sword's point goes into the ground), how far out it lies by a fire, and how far his fist slides down the
+   *  handle as he sits (a sword's stops at the guard: past it, he held the blade), how far ahead of him it stands, where its handle ends, how far it slants across his palm stood there, and how far out to his side it's lowered. */
+  /** Whether `weapon` stands on a seat head up, on the butt of its haft (a maul's, a greataxe's): a sword stands on its point. */
+  function headUp(weapon: Weapon): boolean {
+    return floorRest(weapon) !== SIT_HANDS.swordRest;
+  }
+  /** Whether he sits with `weapon` stood head up beside him, as `sit` has it. */
+  function standsUp(sit: NonNullable<AnimState['sit']>, weapon: Weapon): boolean {
+    return !onFloor(sit) && headUp(weapon);
+  }
+  /** By a fire, of his hands' stage by when `weapon` is off his shoulder and out at his right side: `floorLiftBy` for a
+   *  maul's length, longer for a longer one, as a pendulum's swing takes the root of its length (a greatsword's blade
+   *  swept 13 cm a frame in the maul's time). */
+  function floorLiftBy(weapon: Weapon): number {
+    const lifting = SIT_HANDS.floorLiftBy - SIT_HANDS.helpBy;
+    return SIT_HANDS.helpBy + lifting * Math.sqrt(weapon.len / FLOOR_LIFT_LEN);
+  }
+  function floorRest(weapon: Weapon): readonly number[] {
+    const name = weapon.group.name;
+    return name === 'Maul' ? SIT_HANDS.maulRest : name === 'Greataxe' ? SIT_HANDS.axeRest : SIT_HANDS.swordRest;
+  }
+  /** The sword as it's stood in the ground, where it stays, and his hand's turn round on the handle to hold it as a cane
+   *  is held: the hand's length ahead of him along the forearm, its thumb up, the blade under his little finger. (Turned
+   *  about the palm's normal instead, half round, the forearm's turn went 78 degrees past its range.) */
+  function takeStood(weapon: Weapon, hip: number): void {
+    twoSit.lower = Math.max(0, SIT_HANDS.seatHip - hip);
+    root.updateMatrixWorld(true);
+    root.updateMatrixWorld(true);
+    // (all in his own frame: he goes back to the seat with it in his fist, and it stands where it's to in the frame he sits in)
+    const turnedBy = root.getWorldQuaternion(_rootTurn).invert();
+    root.worldToLocal(grip.getWorldPosition(twoSit.loweredAt));
+    grip.getWorldQuaternion(twoSit.loweredQ).premultiply(turnedBy);
+    twoSit.handFrom.copy(j.handR.quaternion);
+    // (a wrist leaves the handle slanting as he stands: tipped upright as it goes into the ground, his hand turning round
+    // it, or the weapon stands slanted for good)
+    const way = _hd.set(0, 1, 0).applyQuaternion(twoSit.loweredQ);
+    twoSit.endFrom.copy(twoSit.loweredAt).addScaledVector(way, weapon.len);
+    const [, over, , , ez] = floorRest(weapon);
+    // (a sword's handle is too short to slide down: on a lower seat it goes deeper, or his fist is over his shoulder)
+    const deeper = floorRest(weapon) === SIT_HANDS.swordRest ? twoSit.lower * SIT_HANDS.sinkBy : 0;
+    twoSit.endTo.set(SIT_HANDS.plantX, over - deeper, ez);
+    twoSit.uprightQ.setFromUnitVectors(way, _s1.set(0, -1, 0)).multiply(twoSit.loweredQ);
+    _gripHome.copy(grip.position);
+    twoSit.gripWas.copy(grip.quaternion);
+    // (the hand's own frame: along its length, and towards its thumb. Taken from the way the weapon leaves the fist, as it
+    // was, a maul let down almost along his forearm left its palm off the handle: what was left of it across the hand
+    // pointed anywhere)
+    const length = _s2.set(0, -1, 0);
+    const thumb = _s1.set(-handR.s, 0, 0);
+    const side = _s3.crossVectors(length, thumb);
+    _lapHand.makeBasis(length, thumb, side).invert();
+    // (and where they go in his)
+    const [ax, ay, az] = SIT_HANDS.caneAhead;
+    const ahead = _lapX.set(ax, ay, az).normalize();
+    const up = _lapY.set(0, 1, 0);
+    up.addScaledVector(ahead, -up.dot(ahead)).normalize();
+    _lapWorld.makeBasis(ahead, up, _lapZ.crossVectors(ahead, up));
+    twoSit.handTo.setFromRotationMatrix(_lapWorld.multiply(_lapHand));
+    twoSit.stood = true;
+  }
+  /** How far `weapon`'s handle runs behind his fist where he fights with it (m), read once from its meshes. */
+  function behindFist(weapon: Weapon): number {
+    const known = _behind.get(weapon);
+    if (known !== undefined) return known;
+    root.updateMatrixWorld(true);
+    _behindInverse.copy(grip.matrixWorld).invert();
+    let most = 0;
+    weapon.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      mesh.geometry.computeBoundingBox();
+      _behindBox.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_behindInverse);
+      most = Math.min(most, _behindBox.min.y);
+    });
+    const behind = -most * _slideScale.setFromMatrixScale(grip.matrixWorld).y;
+    _behind.set(weapon, behind);
+    return behind;
+  }
+  /** Where he stands to take up what he laid by a fire, as a man takes up a long haft lying on the floor: alongside it,
+   *  facing it across, its butt to his right, his right fist by the butt and his left half a metre along (`floorFistFromButt`,
+   *  `floorHandsApart`), stood back from it (`floorStandOff`). From where it lies, whatever he laid. */
+  function pickStance(weapon: Weapon): void {
+    const along = twoSit.pickAlong.set(0, 1, 0).applyQuaternion(twoSit.laidQ).setY(0).normalize();
+    twoSit.pickBehind = behindFist(weapon);
+    // (his facing across it, its butt to his right: right is (-facing.z, facing.x) as the game turns him)
+    const facing = _stanceFacing.set(-along.z, 0, along.x);
+    twoSit.pickYaw = Math.atan2(facing.x, facing.z);
+    const fistAlong = SIT_HANDS.floorFistFromButt + SIT_HANDS.floorHandsApart / 2 - twoSit.pickBehind;
+    twoSit.pickAt.copy(twoSit.laidAt).addScaledVector(along, fistAlong).addScaledVector(facing, -SIT_HANDS.floorStandOff);
+  }
+  /** The first key taking it up, in the path's frame: his right fist before his belly and the haft head up, leaning to
+   *  his left, as he faces now (`floorPickFist`: right, up, ahead of him; `floorPickTilt`: to his left, ahead). Off him
+   *  as he stands and turns, not where he stood to take it: kept there as he turned back after lifting it, his arms
+   *  stood out at his side holding it upright before his face */
+  function pickKey(): void {
+    root.updateMatrixWorld(true);
+    const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
+    const left = _stanceLeft.set(facing.z, 0, -facing.x);
+    const [right, up, ahead] = SIT_HANDS.floorPickFist;
+    const [tiltLeft, tiltAhead] = SIT_HANDS.floorPickTilt;
+    const stands = root.getWorldPosition(_stanceFloor);
+    _sitFrameInverse.copy(pathFrame()).invert();
+    twoSit.frontAt.copy(stands).setY(stands.y + up * root.scale.y).addScaledVector(left, -right)
+      .addScaledVector(facing, ahead).applyMatrix4(_sitFrameInverse);
+    twoSit.frontWay.set(0, 1, 0).addScaledVector(left, tiltLeft).addScaledVector(facing, tiltAhead).normalize()
+      .transformDirection(_sitFrameInverse);
+  }
+  /** How far turned and stepped he is to take it up at his hands' stage `before` (`PICK`'s `stepped`). */
+  function pickStepped(before: number): number {
+    return pickAt('stepped', 1 - before);
+  }
+  /** A place given in his frame (m: to his right, up, ahead of his feet) in the world, into `out`. */
+  function inHisFrame(out: THREE.Vector3, right: number, up: number, ahead: number): THREE.Vector3 {
+    root.updateMatrixWorld(true);
+    const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
+    const left = _stanceLeft.set(facing.z, 0, -facing.x);
+    const scale = root.scale.y;
+    return root.getWorldPosition(out).addScaledVector(left, -right * scale).addScaledVector(_pickUp, up * scale)
+      .addScaledVector(facing, ahead * scale);
+  }
+  /** A way given in his frame (to his left, up, ahead) in the world, into `out`. */
+  function wayInHisFrame(out: THREE.Vector3, left: number, up: number, ahead: number): THREE.Vector3 {
+    const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
+    const leftWay = _stanceLeft.set(facing.z, 0, -facing.x);
+    return out.set(0, 0, 0).addScaledVector(leftWay, left).addScaledVector(_pickUp, up).addScaledVector(facing, ahead)
+      .normalize();
+  }
+  /** The pick-up by a fire at `k` of it (`PICK`): the weapon placed as keyed, between where it lies, where the keys
+   *  hold it in his frame and on his shoulder as he carries it, and his right arm reaching it from its own pose. */
+  function pickUpKeyed(weapon: Weapon, k: number): void {
+    const behind = behindFist(weapon);
+    // (his arm hanging at rest, which his hand reaches from: from the arm as other stages had left it, it stood straight
+    // out at his side as he stepped to it)
+    _rightArm.forEach((_joint, i) => _pickOwn[i].identity());
+    // (on his shoulder as he'll carry it standing: his arm as this frame's pose has it, fitted as the game fits it once
+    // he's up, the weapon seated in his fist by the slant that fit took. Ended on his arm as it was last kept standing,
+    // the pick-up ended in another carry than the one he was drawn in once up, and the weapon went 192 cm in a frame)
+    // (turned in his fist as he held it before he laid it down: `seat` puts it on the fist's axis and leaves its turn,
+    // so the keys' last turn stayed in his hand for good, 95 degrees off how he held it before he sat)
+    _rightArm.forEach((joint, i) => joint.quaternion.copy(_standArm[i]));
+    j.shoulderR.position.copy(_standAt);
+    grip.quaternion.copy(twoSit.laidGrip);
+    seat(handR, grip, weapon.r, _carrySlant);
+    root.updateMatrixWorld(true);
+    _carrySlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, undefined).slant;
+    seat(handR, grip, weapon.r, _carrySlant);
+    root.updateMatrixWorld(true);
+    grip.getWorldQuaternion(_carryQ);
+    _pickWay.set(0, 1, 0).applyQuaternion(_carryQ);
+    grip.getWorldPosition(_carryButt).addScaledVector(_pickWay, -behind);
+    _rightArm.forEach((joint, i) => _pickFrom[i].copy(joint.quaternion));
+    // (as keyed in his frame, turned from as it lies by the least turn)
+    inHisFrame(_pickButt, pickAt('buttRight', k), pickAt('buttUp', k), pickAt('buttAhead', k));
+    wayInHisFrame(_pickWay, pickAt('wayLeft', k), pickAt('wayUp', k), pickAt('wayAhead', k));
+    const laidWay = _s1.set(0, 1, 0).applyQuaternion(twoSit.laidQ);
+    _pickQ.setFromUnitVectors(laidWay, _pickWay).multiply(twoSit.laidQ);
+    // (from where it lies)
+    const lies = pickAt('lies', k);
+    _pickButt.lerp(_hw1.copy(twoSit.laidAt).addScaledVector(laidWay, -behind), lies);
+    _pickQ.slerp(twoSit.laidQ, lies);
+    // (onto his shoulder)
+    const carry = pickAt('carry', k);
+    _pickButt.lerp(_carryButt, carry);
+    _pickQ.slerp(_carryQ, carry);
+    _pickWay.set(0, 1, 0).applyQuaternion(_pickQ);
+    // (his right fist up its handle, reached from his arm's own pose as far as his hand is on it)
+    _pickFist.copy(_pickButt).addScaledVector(_pickWay, pickAt('rightAlong', k) * root.scale.y);
+    _rightArm.forEach((joint, i) => joint.quaternion.copy(_pickOwn[i]));
+    j.shoulderR.position.copy(_standAt);
+    seat(handR, grip, weapon.r, _carrySlant);
+    wayInHisFrame(_pickPole, -0.6, -0.7, -0.2);
+    holdInWorld(ARM_R, _pickFist, _pickWay, _pickPole, 1);
+    const on = pickAt('rightOn', k);
+    // (blended from a copy of the arm reaching it: blended onto itself, three copies the first before reading the second)
+    _rightArm.forEach((joint, i) => joint.quaternion.copy(_pickReach[i].copy(joint.quaternion)).slerpQuaternions(_pickOwn[i], _pickReach[i], on));
+    _rightArm.forEach((joint, i) => joint.quaternion.slerp(_pickFrom[i], carry));
+    // (the weapon where it's keyed while it lies or his hand isn't on it; taken up, in his fist wherever his hand
+    // got to, the keys saying which way it points: pinned where keyed, his arm short of a key left it floating 10 to
+    // 17 cm out of his fist as he rose. As a pick-up is made elsewhere: the hand reaches the object, then the object
+    // goes with the hand)
+    root.updateMatrixWorld(true);
+    grip.quaternion.copy(twoSit.laidGrip);
+    seat(handR, grip, weapon.r, _carrySlant);
+    _pickSeatedAt.copy(grip.position);
+    _pickSeatedQ.copy(grip.quaternion);
+    grip.updateMatrixWorld(true);
+    grip.getWorldPosition(_pickHeld).addScaledVector(_pickWay, behind - pickAt('rightAlong', k) * root.scale.y);
+    _hw1.copy(_pickButt).addScaledVector(_pickWay, behind).lerp(_pickHeld, on * (1 - lies) * pickAt('held', k));
+    j.handR.worldToLocal(_hw1);
+    grip.position.copy(_hw1);
+    grip.quaternion.copy(j.handR.getWorldQuaternion(_standTurn).invert().multiply(_pickQ));
+    // (on his shoulder, seated in his fist as he carries it standing: kept where the keys had it up the handle, it went
+    // 16 cm along his fist and turned 25 degrees in the frame he was up)
+    grip.position.lerp(_pickSeatedAt, carry);
+    grip.quaternion.slerp(_pickSeatedQ, carry);
+    grip.updateMatrixWorld(true);
+    grip.getWorldPosition(_pickLastAt);
+    grip.getWorldQuaternion(_pickLastQ);
+    weapon.group.userData.laid = lies >= 1;
+    pickSliding = lies <= 0 && pickAt('held', k) < 1;
+    pickOpen = 1 - on;
+    // (where it lay is kept, `laidAt`, and his fist has it as the keys place it: not laid, so it's seated again once he's up)
+    twoSit.laid = false;
+    twoSit.keyedUp = true;
+    // (his body, and his head down at it)
+    j.neck.rotation.x += pickAt('look', k);
+  }
+  /** The weapon slid `by` (m) forward through his fist, along its handle (a negative `by` slides it back). */
+  function slideGrip(by: number): void {
+    if (by === 0) return;
+    _slideWay.set(0, 1, 0).applyQuaternion(grip.quaternion);
+    const scale = _slideScale.setFromMatrixScale(j.handR.matrixWorld).x;
+    grip.position.addScaledVector(_slideWay, by / scale);
+    grip.updateMatrixWorld(true);
+  }
+  /** Where a weapon lying let go of is to be held, `pickSlide` back along it from where it lies (its fist by its butt). */
+  function laidHeldAt(out: THREE.Vector3): THREE.Vector3 {
+    _slideWay.set(0, 1, 0).applyQuaternion(twoSit.laidQ);
+    return out.copy(twoSit.laidAt).addScaledVector(_slideWay, -pickSlide);
+  }
+  /** The grip back in his fist, from where it was left for a weapon lying let go of. */
+  function gripAsHeld(): void {
+    if (!twoSit.laid) return;
+    grip.quaternion.copy(twoSit.laidGrip);
+    grip.position.copy(twoSit.laidGripAt);
+    grip.updateMatrixWorld(true);
+  }
+  /** His left arm faded from as it was last drawn over `LEFT_SWITCH` s when `mode` (how it's placed, -1 not sitting)
+   *  changes from one frame to the next, until his hand `holds` the grip, and its joints as drawn kept for the next. */
+  function fadeLeftSwitch(mode: number, holds: boolean, dt: number): void {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    if (mode >= 0 && leftModeWas >= 0 && mode !== leftModeWas) {
+      for (let i = 0; i < arm.length; i++) {
+        leftFrom[i].copy(leftShown[i]);
+        leftTurn[i].copy(leftShown[i]).multiply(leftWas[i].invert());
+      }
+      leftFadeW = 1;
+    }
+    if (mode < 0) leftFadeW = 0;
+    if (leftFadeW > 0) {
+      // (and quicker once his hand holds the grip: faded on at its pace, the closed fist was dragged 4.6 cm off the
+      // handle; ended there, his hand went 10 cm in a frame as it took hold)
+      leftFadeW = Math.max(0, leftFadeW - (holds ? LEFT_HELD_FASTER : 1) * dt / LEFT_SWITCH);
+      const eased = smooth(leftFadeW);
+      for (let i = 0; i < arm.length; i++) {
+        // (the old arm going on as it went, slowing as the fade goes)
+        _turnNow.identity().slerp(leftTurn[i], leftFadeW);
+        leftFrom[i].premultiply(_turnNow);
+        arm[i].quaternion.slerp(leftFrom[i], eased);
+      }
+    }
+    for (let i = 0; i < arm.length; i++) {
+      leftWas[i].copy(leftShown[i]);
+      leftShown[i].copy(arm[i].quaternion);
+    }
+    leftModeWas = mode;
+  }
+
+  /** By a fire, once he's sat: what he's laid stays on the floor, whatever his body does, and his hand comes off it to his
+   *  knee ("he keeps it in hand and floating parallel to ground, also moving as he moves"). */
+  function layDown(sit: NonNullable<AnimState['sit']>, weapon: Weapon, floor: boolean): void {
+    // (getting up to take it up, it's left lying as he rises and turns to it, and taken again once he's crouched by it,
+    // `floorTakeFrom` to `floorTakeBy` of his hands' stage: his fist kept on it, he couldn't reach it on the floor as he
+    // stood, and lifted it in one hand as he rose, 54 cm)
+    const takenUp = 1 - smooth(ramp(sit.before, SIT_HANDS.floorTakeFrom, SIT_HANDS.floorTakeBy));
+    const off = !floor ? 0 : twoSit.rising ? Math.max(smooth(sit.after), takenUp) : smooth(sit.after);
+    if (off <= 0) {
+      twoSit.laid = false;
+      weapon.group.userData.laid = false;
+      return;
+    }
+    if (!twoSit.laid) {
+      root.updateMatrixWorld(true);
+      grip.getWorldPosition(twoSit.laidAt);
+      grip.getWorldQuaternion(twoSit.laidQ);
+      twoSit.laidGrip.copy(grip.quaternion);
+      twoSit.laidGripAt.copy(grip.position);
+      twoSit.laid = true;
+    }
+    weapon.group.userData.laid = off >= 1;
+    _rightArm.forEach((joint, i) => twoSit.holding[i].copy(joint.quaternion));
+    _restRight[0] = 1;
+    restHands(j, sit, _restRight);
+    _rightArm.forEach((joint, i) => joint.quaternion.slerp(twoSit.holding[i], 1 - off));
+    root.updateMatrixWorld(true);
+    j.handR.worldToLocal(laidHeldAt(grip.position));
+    grip.quaternion.copy(j.handR.getWorldQuaternion(_standTurn).invert().multiply(twoSit.laidQ));
+    grip.updateMatrixWorld(true);
+  }
+  /** Out of the ground, his fist has the weapon as it had it going in: left as the last frame in the ground had it, it came
+   *  out upside down in his fist as he was up. */
+  function leaveGround(): void {
+    if (twoSit.stood) grip.quaternion.copy(twoSit.gripWas);
+    twoSit.stood = false;
+  }
+  /** His hand on its forearm, `round` of the way from how it held the weapon lowered to its cane's hold: eased on the
+   *  forearm, it stays within what a wrist and a forearm can do (eased in the world, it went 90 degrees past either way). */
+  function handRound(round: number): void {
+    // (his cane's hold is found for the weapon upright: leaning, the fist leans with it, or it closes off the handle)
+    _standTurn.setFromUnitVectors(_s1.set(0, -1, 0), twoSit.wayNow).premultiply(_rootTurn).multiply(twoSit.handTo);
+    j.elbowR.getWorldQuaternion(_pq).invert().multiply(_standTurn);
+    j.handR.quaternion.slerpQuaternions(twoSit.handFrom, _pq, round);
+    j.handR.updateMatrixWorld(true);
+  }
+  /** His arm to the weapon, in his frame where it's `tip` of the way from as he lowered it to upright and its far end `ends`
+   *  of the way to where it stands in the ground, his hand `round` of the way round on its handle. */
+  function standBy(tip: number, ends: number, round: number, slid: number, weapon: Weapon, slant: number): void {
+    const r = weapon.r;
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(_rootTurn);
+    twoSit.standQ.slerpQuaternions(twoSit.loweredQ, twoSit.uprightQ, tip);
+    const way = _hd.set(0, 1, 0).applyQuaternion(twoSit.standQ);
+    twoSit.wayNow.copy(way);
+    twoSit.standAt.lerpVectors(twoSit.endFrom, twoSit.endTo, ends).addScaledVector(way, -weapon.len);
+    root.localToWorld(twoSit.standAt);
+    twoSit.standQ.premultiply(_rootTurn);
+    const [polX, polY, polZ] = SIT_HANDS.plantPole;
+    // (the path's own pole: the elbow as it was lies almost along an arm so straight, and as a pole it twisted the arm half
+    // round in a frame, the weapon 170 degrees in his fist)
+    _besidePole.set(polX, polY, polZ);
+    twoSit.turned = round;
+    for (let i = 0; i < 3; i++) {
+      handRound(round);
+      // (where the fist has the handle, eased from the one to the other. The upright fist is seated the way that fist has
+      // it: the usual way, a handle running under the little finger is read as a hand turned over, its palm away from it
+      // and its fingers round nothing)
+      grip.quaternion.copy(j.handR.getWorldQuaternion(_standTurn).invert().multiply(twoSit.standQ));
+      seat(handR, grip, r, slant);
+      _seatWas.copy(grip.position);
+      grip.quaternion.multiply(_pq.setFromAxisAngle(_s1.set(1, 0, 0), Math.PI));
+      seat(handR, grip, r, floorRest(weapon)[6]);
+      grip.position.lerpVectors(_seatWas, grip.position, round);
+      grip.updateMatrixWorld(true);
+      j.handR.getWorldPosition(_hp).add(twoSit.standAt).sub(grip.getWorldPosition(_cur));
+      _hp.y -= slid * root.scale.y;
+      reachArm(j.shoulderR, j.elbowR, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), _besidePole);
+      j.shoulderR.updateMatrixWorld(true);
+    }
+    handRound(round);
+    grip.quaternion.copy(j.handR.getWorldQuaternion(_standTurn).invert().multiply(twoSit.standQ));
+    // (the fist slid down the handle: the sword itself where it stands)
+    j.handR.worldToLocal(grip.position.copy(twoSit.standAt));
+    grip.updateMatrixWorld(true);
+  }
+  /** His fist on the weapon he has stood in the ground: eased round from the one he lowered it in, his left hand has it meanwhile, as a
+   *  regrip is ("keep his hand on two handed weapon"). */
+  function holdStood(weapon: Weapon, slant: number): void {
+    hold(handR, along2(grip), weapon.r, undefined, slant);
+    _fistWas.copy(handR.vis.quaternion);
+    hold(handR, along2(grip).negate(), weapon.r, undefined, floorRest(weapon)[6]);
+    _fistNow.copy(handR.vis.quaternion);
+    // (through the hand as it lies on the wrist, open: from one fist straight to the other it went half round on the wrist)
+    const round = twoSit.turned;
+    if (round < 0.5) handR.vis.quaternion.copy(_fistWas).slerp(_noTurn, round * 2);
+    else handR.vis.quaternion.copy(_noTurn).slerp(_fistNow, round * 2 - 1);
+    // (no further than it must to go round: flat open, it read as a hand let go of the weapon)
+    loosen(handR, SIT_HANDS.regripOpen * Math.min(1, 2 * Math.sin(Math.PI * round)));
+  }
+  /** The way a grip's weapon runs from the fist to its far end, in the world. */
+  function along2(g: THREE.Object3D): THREE.Vector3 {
+    return _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
+  }
+  /** The frame the weapon's path is in: his own, and by a fire his own place with the sit's turn, so the path stays put
+   *  as he turns to take it up (`twoSit.pickingUp`). */
+  function pathFrame(): THREE.Matrix4 {
+    root.updateMatrixWorld(true);
+    if (!twoSit.turnsEvenly) return _sitFrame.copy(root.matrixWorld);
+    root.matrixWorld.decompose(_frameAt, _frameQ, _frameScale);
+    return _sitFrame.compose(_frameAt, twoSit.sitQ, _frameScale);
+  }
+  /** His arm to the weapon, `down` of the way along its path from before him to its far end on the ground, and by a fire
+   *  `laid` of the way from there to lying beside him, its far end along the floor; by a fire, `lifted` of the way to
+   *  the path's start from where it lay on his shoulder (`twoSit.carryAt`, `carryWay`). */
+  function weaponOnPath(down: number, weapon: Weapon, laid = 0, lifted = 1): void {
+    root.updateMatrixWorld(true);
+    // (his hands out from him as it passes level: straight down, the butt of its handle came 21 cm into his chest)
+    _pathAt.lerpVectors(twoSit.frontAt, twoSit.lowAt, down);
+    _pathAt.z += twoSit.pathOut * Math.sin(Math.PI * down);
+    // (a maul or an axe head up out at his side early on his way down and back before him only at the end of his way up:
+    // out at the path's pace, it came back before him as he rose, its head through his face as he leant into the rise)
+    if (twoSit.sideBy > 0) {
+      const side = smooth(ramp(down, 0, twoSit.sideBy));
+      _pathAt.x = lerp(twoSit.frontAt.x, twoSit.lowAt.x, side);
+      _pathAt.z = lerp(twoSit.frontAt.z, twoSit.lowAt.z, side);
+    }
+    // (by a fire out to his side instead: ahead of him, his arm stood straight out with the blade level at the flames)
+    _pathAt.x -= twoSit.pathSide * Math.sin(Math.PI * down);
+    // (by a fire at one turning pace: its way eased in a straight line, nearly half a turn went by in a moment of the middle)
+    // (and by a fire whatever its side: head up to head down, eased in a line, its head fell from his face to his belt in a
+    // fifth of a second, through his arms)
+    if (twoSit.pathSide > 0 || twoSit.turnsEvenly) {
+      _pq.setFromUnitVectors(twoSit.frontWay, twoSit.lowWay);
+      _pathWay.copy(twoSit.frontWay).applyQuaternion(_pathTurn.identity().slerp(_pq, down));
+    }
+    else _pathWay.lerpVectors(twoSit.frontWay, twoSit.lowWay, down).normalize();
+    // (not just over nothing: his way back from `w` comes out at 5e-17 with him standing, and read as lying, this took the
+    // weapon straight from his shoulder to low, past the port, 25 cm a frame through the flames)
+    if (laid > 1e-6) {
+      _pathEnd.copy(twoSit.lowAt).addScaledVector(twoSit.lowWay, weapon.len);
+      _pathEnd2.copy(twoSit.restGrip).addScaledVector(twoSit.restWay, weapon.len);
+      _pathEnd.lerp(_pathEnd2, laid);
+      // (his hand out beside his hip first, his arm hanging: a fist points a blade down only with the forearm near hanging,
+      // and held before him as his shoulder dropped, his wrist went 75 degrees past. Its far end stays on the floor)
+      // (and down as his body goes down: let down at the sit's pace, his chest came down onto it, the handle's end 19 cm
+      // into it)
+      // (out to his side first and back to his hip last: in together, his body came down onto its handle's end, the
+      // chest or the thigh by when)
+      _pathAt.x = lerp(twoSit.lowAt.x, twoSit.restGrip.x, smooth(ramp(laid, 0, SIT_HANDS.besideBy)));
+      _pathAt.z = lerp(twoSit.lowAt.z, twoSit.restGrip.z, smooth(ramp(laid, SIT_HANDS.besideFrom, 1)));
+      _pathAt.y = lerp(twoSit.lowAt.y, twoSit.restGrip.y, smooth(ramp(laid, 0, SIT_HANDS.handDownBy)));
+      const falls = THREE.MathUtils.clamp((_pathAt.y - _pathEnd.y) / weapon.len, -1, 1), level = Math.sqrt(1 - falls * falls);
+      _pathWay.subVectors(_pathEnd, _pathAt).setY(0).normalize().multiplyScalar(level).setY(-falls);
+    }
+    // (off his shoulder by the weapon's own place and way, its head out past his shoulder to his right: with his arm's joints
+    // eased from the carry to the path's start, the head came forward past his face and down before his belly)
+    if (lifted < 1) {
+      _pathAt.lerpVectors(twoSit.carryAt, _pathAt, lifted);
+      _liftTurn.setFromUnitVectors(twoSit.carryWay, _pathWay.normalize());
+      _pathWay.copy(twoSit.carryWay).applyQuaternion(_pathTurn.identity().slerp(_liftTurn, lifted));
+    }
+    const frame = pathFrame();
+    _pathAt.applyMatrix4(frame);
+    _pathWay.transformDirection(frame);
+    const [laidX, laidY, laidZ] = SIT_HANDS.floorLaidFlat;
+    _pathPole.set(laidX, laidY, laidZ);
+    // (taken up from where it lies, it lies as laid until it's lifted: turned as it rose from the rest, its head stood up
+    // on its edge on the floor beside him as he rose)
+    const lies = twoSit.rising ? Math.max(laid, down) : laid;
+    _pathFlat.copy(twoSit.flatFrom).lerp(_pathPole, lies).normalize().transformDirection(frame);
+    const [polX, polY, polZ] = SIT_HANDS.plantPole;
+    const [sidePolX, sidePolY, sidePolZ] = SIT_HANDS.besidePole;
+    _besidePole.set(polX, polY, polZ).lerp(_pathPole.set(sidePolX, sidePolY, sidePolZ), lies);
+    holdInWorld(ARM_R, _pathAt, _pathWay, _besidePole, 1, _pathFlat, lifted);
+  }
+  /** The hold he'll rest a two-hander in, found as a sit begins: the arm's search makes up its mind differently frame to
+   *  frame on the way there (fitted every frame, the blade jumped 310 cm), and a hold known beforehand is one the arm can
+   *  go to straight, joint by joint, its fist never turning on the handle. */
+  function takeTwoRest(sit: NonNullable<AnimState['sit']>, t: number, weapon: Weapon): void {
+    _allJoints.forEach((o, i) => {
+      _jointsWere[i].at.copy(o.position);
+      _jointsWere[i].q.copy(o.quaternion);
+    });
+    // (the path it comes down: the owner's "he should lower the sword down, then sit, then stick it into the ground, and
+    // when standing up, same but reverse". In both hands before him, his arms low, and let down ahead of him till its far
+    // end is on the ground, as a heavy weapon is held at rest; out to his right, its far end clear of his feet. A fist has a
+    // blade leave past its thumb, so that's as far down as it points: straight under him, a greatsword held his fist at his
+    // shoulder, one arm out stiff. Its arm's joints eased from key to key swung it round in one fist, and its way between
+    // those keys went across his belly and over his head)
+    // (by a fire, at his right side, out at 45 degrees: ahead of him, it went into the flames, and straight out to his right
+    // a palm-down hand can't lay it, as a blade leaves past the thumb: his forearm went 90 degrees past)
+    const toFloor = onFloor(sit);
+    const over = SIT_HANDS.lowerOver;
+    const [fx, fy, fz] = toFloor ? SIT_HANDS.floorFrontAt : SIT_HANDS.frontAt;
+    const [wx, wy, wz] = toFloor ? SIT_HANDS.floorFrontWay : SIT_HANDS.frontWay;
+    const [sx, sy, sz] = toFloor ? SIT_HANDS.floorFlat : SIT_HANDS.flatSide;
+    twoSit.frontAt.set(fx, fy, fz);
+    twoSit.frontWay.set(wx, wy, wz).normalize();
+    twoSit.flatFrom.set(sx, sy, sz);
+    // (in both hands by a fire too: close in, the handle lay against his belly, his left forearm in his side)
+    twoSit.pathOut = toFloor ? SIT_HANDS.floorPathAhead : SIT_HANDS.pathOut;
+    twoSit.sideBy = 0;
+    twoSit.pathSide = toFloor ? SIT_HANDS.floorPathOut : 0;
+    twoSit.turnsEvenly = toFloor;
+    twoSit.pickingUp = false;
+    root.getWorldQuaternion(twoSit.sitQ);
+    twoSit.layAt.copy(twoSit.frontAt);
+    twoSit.layWay.copy(twoSit.frontWay);
+    // (by a fire at his hip, his arms near hanging: at the seat's height, his chest's, his arms stood straight out before him)
+    // (and below his hip, near, as he crouches to it (`floorCrouch`): at its height, 42 cm ahead, standing straight, his
+    // arms stood stiff and straight out and down for a second as he laid it, "jerky and lame", his right wrist 29 degrees
+    // past its range)
+    const lowY = toFloor ? SIT_HANDS.floorLowY : floorRest(weapon)[7];
+    const [lowX, lowZ] = toFloor ? SIT_HANDS.floorLowHand : SIT_HANDS.lowHand;
+    const falls = THREE.MathUtils.clamp((lowY - over) / weapon.len, 0, 1), level = Math.sqrt(1 - falls * falls);
+    // (a maul's and an axe's haft runs further behind the fist than a sword's grip: held as near, its end went 11 cm into
+    // his chest as he began to lay it)
+    const longHaft = toFloor && floorRest(weapon) !== SIT_HANDS.swordRest ? SIT_HANDS.floorHaftAhead : 0;
+    twoSit.lowAt.set(lowX, lowY, lowZ + longHaft);
+    if (toFloor) {
+      // (out to his right, his palm ahead: a blade leaves past the thumb, so from a hanging arm that's the way it points. At
+      // the angle it will lie at, it went through his crouch ahead of him, towards the flames)
+      const [outX, outZ] = SIT_HANDS.floorLowOut;
+      twoSit.lowWay.set(outX * level, -falls, outZ * level);
+      twoSit.layLowAt.copy(twoSit.lowAt);
+      twoSit.layLowWay.copy(twoSit.lowWay);
+      twoSit.rising = false;
+      twoSit.wWas = sit.w;
+      twoSit.afterWas = sit.after;
+    }
+    else {
+      const outBy = THREE.MathUtils.clamp((SIT_HANDS.lowEndX - lowX) / (weapon.len * level), -1, 1);
+      twoSit.lowWay.set(outBy * level, -falls, Math.sqrt(1 - outBy * outBy) * level);
+    }
+    // (lying on the floor beside him: its far end's height and his hand's are what its own shape lies on)
+    const [endY, , gripX] = floorRest(weapon);
+    const liesFall = (SIT_HANDS.floorGripY - endY) / weapon.len, liesLevel = Math.sqrt(1 - liesFall * liesFall);
+    const [restX, restZ] = SIT_HANDS.floorOut;
+    twoSit.restGrip.set(gripX, SIT_HANDS.floorGripY, SIT_HANDS.floorGripZ);
+    twoSit.restWay.set(restX * liesLevel, -liesFall, restZ * liesLevel);
+    if (standsUp(sit, weapon)) takeUpright(sit);
+    // (each fitted afresh, and the arm left remembering what it did: fitted from whatever the arm last did, a sit by a fire
+    // after one on a log took other slants, and its right wrist went 64 degrees past its range where alone it went 26)
+    const armWas = remembered(j.shoulderR);
+    recall(j.shoulderR, {});
+    weaponOnPath(0, weapon);
+    twoSit.frontSlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, SLANT).slant;
+    recall(j.shoulderR, {});
+    weaponOnPath(1, weapon);
+    twoSit.lowSlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, SLANT).slant;
+    recall(j.shoulderR, armWas);
+    twoSit.taken = true;
+    twoSit.stood = false;
+    _allJoints.forEach((o, i) => {
+      o.position.copy(_jointsWere[i].at);
+      o.quaternion.copy(_jointsWere[i].q);
+    });
+    root.updateMatrixWorld(true);
+  }
+  /** A maul's or a greataxe's spot on a seat: stood head up between his feet once he's sat, his hands' stage all sat
+   *  (`TWO_UP_HANDS`), so it's never stood on its butt by him standing, where its head was at his chin's height
+   *  wherever it stood (before him, at his cheek from the front; out to his right, beyond his left hand's reach). The
+   *  way never turned over (a fist holds a haft head up past the thumb, so no regrip). */
+  function takeUpright(sit: NonNullable<AnimState['sit']>): void {
+    const [wx, wy, wz] = SIT_HANDS.upWay;
+    const [rx, ry, rz] = SIT_HANDS.upRestAt;
+    twoSit.lowWay.set(wx, wy, wz).normalize();
+    twoSit.lowAt.set(rx, sit.hip / root.scale.y + ry, rz);
+    twoSit.frontAt.copy(twoSit.lowAt);
+    twoSit.frontWay.copy(twoSit.lowWay);
+    twoSit.pathOut = 0;
+    twoSit.sideBy = 0;
+    twoSit.uprightAt.copy(twoSit.lowAt);
+    twoSit.uprightWay.copy(twoSit.lowWay);
+  }
+  /** A maul stood between his feet leant out to his right on its butt, `lean` of the way, his left hand off it: stood
+   *  there, its head was before his face from the front, and stood out at his right knee his left hand couldn't reach it
+   *  to lift it. Turned about its butt, which stays where it was stood (moved with his fist, it dragged on the floor). */
+  function leanUpright(lean: number): void {
+    const [lx, ly, lz] = SIT_HANDS.upLeanWay;
+    const along = twoSit.uprightAt.y / twoSit.uprightWay.y;
+    _lean.copy(twoSit.uprightAt).addScaledVector(twoSit.uprightWay, -along);
+    _leanWay.set(lx, ly, lz).normalize();
+    twoSit.lowWay.copy(twoSit.uprightWay).lerp(_leanWay, lean).normalize();
+    twoSit.lowAt.copy(_lean).addScaledVector(twoSit.lowWay, along);
+  }
+  /** Its butt let down onto the ground as he's `sat` of the way down, his fist going up the haft (the grip moved along
+   *  the weapon under the hand, as far as its handle goes). */
+  function buttDown(weapon: Weapon, sat: number, before: number, slips: boolean): void {
+    seat(handR, grip, weapon.r, slantR);
+    root.updateMatrixWorld(true);
+    const scale = _cur.setFromMatrixScale(grip.matrixWorld).y;
+    const was = grip.position.clone();
+    footToFloor(grip, -SIT_HANDS.upButt / scale, 1, (floorRest(weapon)[5] - 0.1) / scale);
+    const stood = !!grip.userData.stoodOn;
+    const full = was.distanceTo(grip.position);
+    // (`sat` of the way from his fist's grip to where its butt is on the floor)
+    grip.position.lerpVectors(was, grip.position, sat);
+    grip.userData.stoodOn = stood && sat >= 1;
+    // (his left hand on the haft over where his right fist has it once it's on the floor, and kept there on the haft: it's
+    // what lets it down through his loosened right fist and lifts it back up through it. Kept by the right fist instead,
+    // the haft slid through both of them with nothing lifting it, from play "maul slides up with jedi force, still")
+    // (by his right fist as it comes off his shoulder, and up the haft only once it stands before him: up there from the
+    // start, it reached for a spot by his face, his forearm into his head)
+    const up = sat > 0 ? 1 : smooth(ramp(before, SIT_HANDS.upLeftFrom, SIT_HANDS.upPlantFrom));
+    // (set down, let slip through both his loosened fists under its own weight, his left closed round it over his
+    // right, where it stays: carried down by his left instead, it was first lifted overhead off his shoulder, his left
+    // hand reaching up across his face, and in his fist as he carries it, his fist went past his reach sat. Taken up, it
+    // can't rise through his fist by itself, so his left lifts it)
+    offGrip.position.y = SIT_HANDS.upLeftAbove + full * (slips ? sat : up);
+    grip.updateMatrixWorld(true);
+    twoSit.upright = true;
+  }
   function weaponNow(at: THREE.Vector3, turn: THREE.Quaternion, pole: THREE.Vector3): void {
     root.updateMatrixWorld(true);
     j.chest.worldToLocal(grip.getWorldPosition(at));
@@ -1699,6 +2597,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const dir = st.moveDir ?? 1;
     const two = held?.off != null;
     twoHold.k = 0;
+    // (what a sit chose kept until he's up)
+    if (!st.sit) _lapTaken.fill(false);
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
     handL.vis.scale.setScalar(handK); handR.vis.scale.setScalar(handK);
@@ -2352,7 +3252,52 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (out of a fight on the shoulder, at a run too; in one, at high port)
     const onShoulder = shouldered;
     leftOff = shouldered > 0 ? Math.max(shouldered, leftOff) : Math.max(0, leftOff - dt / TAKE_HOLD);
-    const leftAway = shouldered > 0 ? shouldered : smooth(leftOff);
+    // (and off the lower grip as he goes down, to rest on his thigh)
+    const leftOffIt = Math.max(shouldered > 0 ? shouldered : smooth(leftOff), st.sit ? smooth(ramp(satBy(st.sit), 0, 0.25)) : 0);
+    // (his left hand has a two-hander as his right goes round on it, hand over hand, and is gone as he sits)
+    // (by a fire until its far end is on the floor, then let go as his right lays it down: from play, "as soon as sword
+    // lifts off ground, he needs both hands to manipulate it", of it held out level in one fist)
+    // (by a fire, once its far end is on the floor and before he goes down, `floorLetGo` on of his hands' stage: let go as
+    // it came onto the floor, the arm went back across his belly; as he started down, his thighs rising into his arm
+    // as his body dropped, the hand went 50 cm in 6 frames, the arm's solve flipping, 13 to 26 cm a frame)
+    // (a maul head up on a seat, until it stands on its butt)
+    const planted = st.sit && held && standsUp(st.sit, held);
+    // (his hands' stage: a maul's once he's sat, `after`, every other two-hander's before he goes down)
+    const handsAt = st.sit ? (planted ? st.sit.after : st.sit.before) : 0;
+    // (taking it up, his left comes onto it as his right takes it again: on from `floorLetGo`, after his right, it closed
+    // on the haft 13 cm in a frame)
+    const letGoFrom = twoSit.pickingUp ? SIT_HANDS.floorTakeBy : SIT_HANDS.floorLetGo;
+    const letGoTo = twoSit.pickingUp ? SIT_HANDS.floorTakeFrom : 1;
+    const letGo = pickKeyed ? pickAt('leftOn', pickK)
+      : st.sit && onFloor(st.sit) ? 1 - smooth(ramp(st.sit.before, letGoFrom, letGoTo))
+      : planted ? 1 - smooth(ramp(handsAt, SIT_HANDS.plantLetGo, 1))
+      : 1 - smooth(ramp(st.sit ? satBy(st.sit) : 0, 0, SIT_HANDS.helpOff));
+    const leftHelps = st.sit && handsAt > 0 && held && two && !fp && st.dead < 0
+      ? smooth(ramp(handsAt, SIT_HANDS.helpFrom, SIT_HANDS.helpBy)) * letGo : 0;
+    // (by a fire, as far on it as it helps: eased off it by `leftOffIt` there, it stayed on till he was a quarter sat,
+    // then went in a few frames, 13 to 17 cm a frame)
+    const leftAway = leftHelps >= 1 ? 0 : st.sit && onFloor(st.sit) && handsAt > 0 ? 1 - leftHelps : Math.min(leftOffIt, 1 - leftHelps);
+    // (right against his right hand on a long handle, his arm low: where it holds it to fight, his elbow stood level across
+    // his chest)
+    if (held?.off != null) {
+      const near = leftHelps > 0 && floorRest(held) !== SIT_HANDS.swordRest;
+      // (over his right fist on a haft held head up, as one lifts a maul)
+      offGrip.position.y = planted ? SIT_HANDS.upLeftAbove : near ? SIT_HANDS.leftAbove : held.off;
+      // (by a fire, taking it up off the floor, his left hand by its head, down the haft to his right once it's nearly
+      // upright: with both fists at its butt, its head a metre out on the floor, no one lifts it, from play "he can put it
+      // down with one hand, but he cannot lift it up with one hand", "one hand needs to be closer to head")
+      if (near && pickKeyed) {
+        const scale = _slideScale.setFromMatrixScale(grip.matrixWorld).y;
+        // (his metres, scaled with him, from the butt, less how far it runs behind the grip in the world's)
+        offGrip.position.y = (pickAt('leftAlong', pickK) * root.scale.y - behindFist(held!)) / scale;
+      }
+      else if (near && twoSit.pickingUp && st.sit) {
+        const lift = floorLiftBy(held);
+        const byHead = smooth(ramp(st.sit.before, lift, lift + SIT_HANDS.floorHeadHeld));
+        const takeAt = SIT_HANDS.floorFistFromButt + SIT_HANDS.floorHandsApart - twoSit.pickBehind;
+        offGrip.position.y = lerp(SIT_HANDS.floorShoulderAt, takeAt, byHead);
+      }
+    }
     if (!fp && two && !a && runK > 0 && st.dead < 0) holdInChest(ARM_R, RUN_TWO_AT, RUN_TWO_DIR, RUN_TWO_POLE, runK * (1 - onShoulder));
     if (!fp && two && onShoulder > 0 && st.dead < 0) holdInChest(ARM_R, SHOULDER_AT, SHOULDER_DIR, SHOULDER_POLE, onShoulder, SHOULDER_FLAT);
     // (a two-handed move placed by the weapon)
@@ -2371,7 +3316,126 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       // from there, its head went 55 cm into the pillar's side for a frame)
       stop = 1;
     }
+    // (by a fire he crouches as he lays a two-hander down, and up again as he lifts it, his knees bent and his hips back,
+    // so his shoulders come down to it: standing straight, his arms were held stiff and straight out to it for a second,
+    // "jerky and lame". Before the sit's pose, which takes his body on from there as he goes down)
+    // (taking it up, his body as the pick-up's keys pose it, `PICK`)
+    if (!st.sit || st.sit.before <= 0 || twoSit.settingDown) twoSit.keyedUp = false;
+    pickKeyed = !!st.sit && onFloor(st.sit) && st.sit.before > 0 && two && !fp && st.dead < 0 && !!held
+      && twoSit.pickingUp && twoSit.rising && (twoSit.laid || twoSit.keyedUp) && st.sit.w <= 0;
+    pickK = pickKeyed ? 1 - st.sit!.before : 0;
+    if (pickKeyed) {
+      const standing = 1 - smooth(st.sit!.w);
+      j.body.position.y -= pickAt('drop', pickK) * standing;
+      j.body.position.z -= pickAt('back', pickK) * standing;
+      j.spine.rotation.x += pickAt('lean', pickK) * standing;
+      j.spine.rotation.y += pickAt('twist', pickK) * standing;
+    }
+    else if (st.sit && onFloor(st.sit) && st.sit.before > 0 && two && !fp && st.dead < 0 && held && !standsUp(st.sit, held)) {
+      const [drop, back, lean] = SIT_HANDS.floorCrouch;
+      const crouch = smooth(ramp(st.sit.before, floorLiftBy(held), SIT_HANDS.lowerBy));
+      const standing = 1 - smooth(st.sit.w);
+      j.body.position.y -= drop * crouch;
+      j.body.position.z -= back * crouch * standing;
+      j.spine.rotation.x += lean * crouch * standing;
+      // (and down low to take it up, turned to it, as one squats to lift a maul and stands with it: his left hand by its
+      // head on the floor was out of reach of his crouch)
+      if (twoSit.pickingUp) {
+        const [pickDrop, pickBack, pickLean] = SIT_HANDS.floorPickCrouch;
+        // (risen into from the floor, so his hand stays on it where it lies, and out as he lifts it: stood up first, his
+        // hand couldn't reach it on the floor and lifted it in one fist as he rose, 54 cm; and come in all at once once
+        // he was up, his body dropped 20 cm in a frame)
+        // (and down only as he comes to stand by it: crouched from the first, he turned and stepped to it on his knees,
+        // his left arm swept through his thigh)
+        const arrive = 1 - smooth(ramp(st.sit.before, SIT_HANDS.floorTurnIn, SIT_HANDS.floorPickDownFrom));
+        const low = smooth(ramp(st.sit.before, floorLiftBy(held), SIT_HANDS.floorTurnIn)) * arrive;
+        j.body.position.y -= pickDrop * low * standing;
+        j.body.position.z -= pickBack * low * standing;
+        j.spine.rotation.x += pickLean * low * standing;
+      }
+    }
+    const legW = sitPose(j, st.sit, t);
+    // (and he leans into its weight as he lets it down: bolt upright, it was no weight at all)
+    if (st.sit && st.sit.before > 0 && two && !fp && st.dead < 0 && !(held && standsUp(st.sit, held)) && !pickKeyed) {
+      const liftBy = onFloor(st.sit) && held ? floorLiftBy(held) : SIT_HANDS.liftBy;
+      j.spine.rotation.x += SIT_HANDS.leanTo * smooth(ramp(st.sit.before, liftBy, SIT_HANDS.lowerBy)) * (1 - smooth(st.sit.w));
+    }
+    // (a maul head up, sat: his shoulders turned and leant to his right while his hands work it beside his right knee,
+    // as a man reaches for what's at his side. Square, his left hand reached a haft only near his middle, where its head
+    // stood before his face from ahead, and tilted off it the butt went into a shin or his wrist 39 degrees past)
+    if (st.sit && st.sit.w > 0 && two && !fp && st.dead < 0 && held && standsUp(st.sit, held)) {
+      const h = st.sit.after;
+      const turned = smooth(ramp(h, SIT_HANDS.helpBy, SIT_HANDS.upLeftFrom)) * (1 - smooth(ramp(h, SIT_HANDS.plantLetGo, 1)));
+      const [ahead, round, aside] = SIT_HANDS.upTurn;
+      j.spine.rotation.x += ahead * turned;
+      j.spine.rotation.y += round * turned;
+      j.spine.rotation.z += aside * turned;
+    }
+    // (a two-hander laid on the floor; a one-hander stays in his fist, over his thigh, as he sits anywhere)
+    const floorSit = !!st.sit && onFloor(st.sit);
+    _sitTurn.roll[0] = offHeld && !sheathed ? SIT_HANDS.roll[0] : 0;
+    _sitTurn.roll[1] = held && !two ? SIT_HANDS.roll[1] : 0;
+    const further = floorSit ? SIT_HANDS.floorBack : SIT_HANDS.along;
+    // (two swords on a seat crossed, the left resting on the right: a fist lays its blade across his lap past its thumb,
+    // so from each knee they cross, and at one height they went through each other, from play "this is messed up".
+    // Side by side, one across his hips and one across his knees, they read from ahead as one bar)
+    const dualSeat = !floorSit && !!offHeld && !sheathed && !!held && !two;
+    _sitTurn.along![1] = held ? further + (dualSeat ? SIT_HANDS.twoAlong[1] : 0) : 0;
+    _sitTurn.over![1] = held ? SIT_HANDS.over : 0;
+    const heldIn = floorSit ? SIT_HANDS.floorIn : SIT_HANDS.armIn;
+    _sitTurn.armIn![1] = held ? heldIn : 0;
+    _sitTurn.arc![1] = held ? SIT_HANDS.arc : 0;
+    _sitTurn.along![0] = offHeld && !sheathed ? further + (dualSeat ? SIT_HANDS.twoAlong[0] : 0) : 0;
+    _sitTurn.over![0] = offHeld && !sheathed ? SIT_HANDS.over + (dualSeat ? SIT_HANDS.twoOverL : 0) : 0;
+    _sitTurn.armIn![0] = offHeld && !sheathed ? heldIn : 0;
+    _sitTurn.arc![0] = offHeld && !sheathed ? SIT_HANDS.arc : 0;
+    // (the shield's arm outside the thigh, the shield clear of it: on the thigh, his knee came through it on a low seat)
+    // (by a fire, down beside his knee, its rim on the floor: on the knee, it hung upright in the air beside him)
+    _sitTurn.out![0] = shield.visible ? (floorSit ? SIT_HANDS.floorShieldOut : SIT_HANDS.shieldOut) : 0;
+    _sitTurn.low![0] = shield.visible && floorSit ? SIT_HANDS.floorShieldLow : 0;
     st.look?.();
+    _lifted.length = 0;
+    _lifted.push(1);
+    _lifted.push(0);
+    _resting.length = 0;
+    _resting.push(0);
+    const twoSits = !!(st.sit && (st.sit.w > 0 || st.sit.before > 0) && held && two && !fp && st.dead < 0);
+    if (!twoSits) _resting.push(1);
+    if (!twoSits && held) {
+      held.group.userData.stoodOn = false;
+      grip.userData.slidesAlong = false;
+      held.group.userData.tipping = false;
+      held.group.userData.stuckIn = 0;
+    }
+    if (!twoSits) {
+      gripAsHeld();
+      twoSit.laid = false;
+      if (held) held.group.userData.laid = false;
+      leaveGround();
+      twoSit.taken = false;
+    }
+    else if (!twoSit.taken) takeTwoRest(st.sit!, t, held!);
+    // (his arm as the standing pose has it, before the sit places his hands: the carry the keyed pick-up ends on)
+    _rightArm.forEach((joint, i) => _standArm[i].copy(joint.quaternion));
+    _standAt.copy(j.shoulderR.position);
+    restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
+    if (st.sit && !fp && st.dead < 0) {
+      // (ahead over his far knee on a seat, down across his shins by a fire, as a palm on the knee holds it: straight
+      // across his lap, an axe's haft went through his shield, a sword over his other hand and two swords made one bar;
+      // level over his raised knees by a fire it floated, and down beside his shin the wrist was at its stops for as
+      // long as he sat and the blade went 37 cm in a frame)
+      // (turned once the hands are low by a fire: from the start, the blade lay flat at shin height from a hand hanging
+      // straight down)
+      const both = offHeld && !sheathed, lapR = both ? SIT_HANDS.twoR : SIT_HANDS.lapR;
+      const from = floorSit ? SIT_HANDS.turnLate : SIT_HANDS.turnFrom;
+      const edgeDown = floorSit ? SIT_HANDS.edgeDown : 0;
+      // (a two-hander as a one-hander, lowered with his arm and its fist closed, its weight taken by his thighs. Stood
+      // upright in the fist, "too heavy, this won't work"; on its point ahead, the blade ran along the forearm with the
+      // arm at its stops; flipped point down in the fist, it spun in his hand)
+      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : lapR, satBy(st.sit), from, st.sit, edgeDown);
+      if (both) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.twoL, satBy(st.sit), from, st.sit, edgeDown);
+    }
+    body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
@@ -2380,7 +3444,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       // the feet: side-on, the left forward and the right back and turned out; fighting, the left steps further in
       const F = feet ?? (t - fightT < 1.6 ? FIGHT_FEET : REST_FEET);
       legs.stance(0, F[0], F[1], F[2]); legs.stance(1, F[3], F[4], F[5]);
-      legs.update(dt, st.phase, st.dead, 1 - legOwn, fp ? 0 : 1, _legW);
+      legs.update(dt, st.phase, st.dead, (1 - legOwn) * legW, fp ? 0 : 1, _legW);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
@@ -2520,17 +3584,29 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     shield.position.lerpVectors(SIDE_POS, FRONT_POS, guard);
     // drinking, the forearm comes up across the face: the shield hangs from it before the chest instead, facing
     // ahead and shifted towards the elbow, the face and the flask clear above it
-    shieldHang = damp(shieldHang, drinkLift, 12, dt); drinkOn = damp(drinkOn, a?.name === 'drink' ? 1 : 0, 12, dt);
+    // (and sat, from the forearm resting on his thigh, beside his leg facing out)
+    const sat = st.sit?.w ?? 0;
+    shieldHang = damp(shieldHang, Math.max(drinkLift, sat), 12, dt); drinkOn = damp(drinkOn, a?.name === 'drink' ? 1 : 0, 12, dt);
     regrip = drinkOn >= 0.5 ? TAKE_HOLD : Math.max(0, regrip - dt);
-    if (shieldHang > 0.01 && shield.visible) {
+    // (eased off to nothing: cut off at 1%, the shield went 10 cm in that frame as he stood up)
+    if (shieldHang > 1e-4 && shield.visible) {
       root.updateMatrixWorld(true);
       j.elbowL.getWorldPosition(_s1); j.handL.getWorldPosition(_s2);
-      const a = _s3.subVectors(_s2, _s1).normalize(), n = _s4.set(0, 0, 1).transformDirection(root.matrixWorld);
+      if (sat !== drinkLift) hangOut = sat > drinkLift;
+      const out = hangOut ? 1 : 0;
+      const a = _s3.subVectors(_s2, _s1).normalize(), n = _s4.set(out, 0, 1 - out).transformDirection(root.matrixWorld);
       n.addScaledVector(a, -a.dot(n)).normalize();
       _sm.makeBasis(_s5.crossVectors(a, n), a, n);
       _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
+      // (a round shield, turned half round its face whichever is nearer how it's held: a half turn off, the way it
+      // eased flipped as the hand turned, and it went 49 cm in a frame)
+      _shq.copy(_sq).multiply(HALF_ROUND);
+      if (_shq.angleTo(shield.quaternion) < _sq.angleTo(shield.quaternion)) _sq.copy(_shq);
       shield.quaternion.slerp(_sq, shieldHang);
-      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.07 * root.scale.x);
+      // (sat, round the fist that holds it, its face out: hung 26 cm down the forearm, it slid back up the arm as he
+      // stood, and the fist came out through its face, "whats this hand clipping through shield ?")
+      if (out) _s1.copy(_s2).addScaledVector(n, SIDE_POS.x * _s3.setFromMatrixScale(j.handL.matrixWorld).x);
+      else _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x);
       shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
     }
 
@@ -2540,7 +3616,184 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // a two-hander held square couldn't point its blade ahead of the arms, where the eyes see it, and stood upright)
     slantR = 0; slantL = 0;
     if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
-    if (!fp && st.dead < 0) slantR = fitArm(j, false, held ? gripTurn(handR, grip, _vr) : undefined, body, held && !two ? SLANT : undefined).slant;
+    // (the hold he stood with remembered as he begins to sit, and taken up again once he's up: from where the carry's
+    // solves left the arm, it came back on another slant, the weapon 4 to 7 cm along his fist)
+    if (st.sit && st.sit.w > 0 && held && !fp) standR ??= remembered(j.shoulderR);
+    else if (standR) {
+      recall(j.shoulderR, standR);
+      standR = null;
+    }
+    if (st.sit && st.sit.w > 0 && offHeld && !sheathed && !fp) standL ??= remembered(j.shoulderL);
+    else if (standL) {
+      recall(j.shoulderL, standL);
+      standL = null;
+    }
+    const gripped = !!held;
+    if (twoSits) {
+      // (up to the port, then let down onto what takes its weight)
+      // (lifted off his shoulder to the port before his body goes down, as a weight is, and let down as he sits: both in
+      // the sit's own time, its tip went 29 cm a frame)
+      // (and down over the first of his way, ahead of his thighs: over all of it, its butt met them rising, 11 cm in)
+      // (let down at one pace over his way down and a moment more, `after`: eased on top of his own easing, in his
+      // 1.1 s, it went 17 cm a frame at its fastest. `w` is `smooth` of his way: this is that way back.)
+      const way = 0.5 - Math.sin(Math.asin(1 - 2 * st.sit!.w) / 3);
+      const loweredBy = onFloor(st.sit!) ? 1 : SIT_HANDS.lowerBy;
+      const upright = standsUp(st.sit!, held!);
+      // (head up on a seat, his hands' stage is once he's sat, `after`: he sits with it on his shoulder, takes it off to
+      // beside his knee and stands it there, and getting up shoulders it before he stands. Stood on its butt as he
+      // stood, its head was at his chin's height wherever it stood, from play "the maul head is at his cheek")
+      const before = upright ? st.sit!.after : st.sit!.before;
+      // (by a fire, taken up with his fist by its butt: held where he fights with it, a greataxe's 78 cm of haft behind
+      // his fist swept through his thighs toward the flames as he lifted it, from review "the haft goes into or under his
+      // knee and shin", "the haft's butt sweeps over the ring of stones". Slid back up to where he fights with it as he
+      // shoulders it. Taken off first, as the path places the weapon by his fist's own grip)
+      slideGrip(-twoSit.slid);
+      twoSit.slid = 0;
+      if (twoSit.pickingUp && held && twoSit.laid && !twoSit.keyedUp) pickStance(held);
+      const slideMost = Math.max(0, twoSit.pickBehind - SIT_HANDS.floorFistFromButt);
+      pickSlide = twoSit.pickingUp && held && !pickKeyed
+        ? slideMost * (1 - smooth(ramp(before, floorLiftBy(held), SIT_HANDS.helpBy))) : 0;
+      // (and otherwise off it once his left hand has it: lifted as it came, it was up in one fist a moment)
+      // (off his shoulder once his left hand has it: lifted as it came, it was up in one fist a moment)
+      // (by a fire over longer: its head goes further, out past his shoulder to his right, and over his hands' stage to
+      // `liftBy` its haft went 15 cm a frame)
+      const floor = onFloor(st.sit!);
+      const liftBy = floor ? floorLiftBy(held!) : SIT_HANDS.liftBy;
+      const up = smooth(ramp(before, SIT_HANDS.helpBy, upright ? SIT_HANDS.upLeftFrom : liftBy));
+      // (head up: setting it down as his hands' stage goes on, taking it up as it goes back; held where it is between)
+      if (before > twoSit.handsWas) {
+        twoSit.settingDown = true;
+        twoSit.pickingUp = false;
+      }
+      else if (before < twoSit.handsWas) {
+        // (only from it laid all the way down: taken back up from part way, it goes back the way it came)
+        if (floor && twoSit.settingDown && twoSit.handsWas >= 1) twoSit.pickingUp = true;
+        twoSit.settingDown = false;
+      }
+      twoSit.handsWas = before;
+      // (getting up from it laid, it stays where it lies as he rises into a crouch beside it, his fist on its butt, and is
+      // taken up from there in both hands: the low key is where it lies. Through the key he laid it down by, his fist
+      // stood it on its head beside him as he rose, and swung it end over end up into his hands, one-handed, from review:
+      // "it is then rotated end over end through horizontal", "never lifted head-up in front of him from where it lay".
+      // Switched as his body starts up, while it lies at rest where that key doesn't count, and back as he starts laying
+      // it down, while it's on his shoulder)
+      if (floor) {
+        if ((st.sit!.w < twoSit.wWas || st.sit!.after < twoSit.afterWas) && before >= 1) {
+          twoSit.rising = true;
+          twoSit.pickingUp = true;
+        }
+        if (twoSit.settingDown && !twoSit.pickingUp && before > 0 && before < 1 && st.sit!.w === 0) twoSit.rising = false;
+        twoSit.wWas = st.sit!.w;
+        twoSit.afterWas = st.sit!.after;
+        // (where it truly lies, in the path's frame: its key for lying in his frame moved with him as his body slid
+        // forward getting up, and his fist took it there, 46 cm off where it lay, in a frame)
+        if (twoSit.rising && twoSit.laid) {
+          _sitFrameInverse.copy(pathFrame()).invert();
+          laidHeldAt(twoSit.lowAt).applyMatrix4(_sitFrameInverse);
+          twoSit.lowWay.set(0, 1, 0).applyQuaternion(twoSit.laidQ).transformDirection(_sitFrameInverse);
+        }
+        else if (!twoSit.rising) {
+          twoSit.lowAt.copy(twoSit.layLowAt);
+          twoSit.lowWay.copy(twoSit.layLowWay);
+        }
+      }
+      if (pickKeyed) pickUpKeyed(held!, pickK);
+      // (taken up, the path's first key is it head up before him as he's turned to it: the same at its far end on the
+      // floor, where the two meet)
+      if (floor && !pickKeyed) {
+        if (twoSit.pickingUp) pickKey();
+        else {
+          twoSit.frontAt.copy(twoSit.layAt);
+          twoSit.frontWay.copy(twoSit.layWay);
+        }
+      }
+      // (its butt onto the floor: let slip down as it comes off his shoulder, and lifted back up through his fist by his
+      // left once that's on it)
+      const planting = twoSit.settingDown ? smooth(ramp(before, SIT_HANDS.upSlipFrom, SIT_HANDS.upSlipBy))
+        : smooth(ramp(before, SIT_HANDS.upPlantFrom, SIT_HANDS.upPlantBy));
+      // (taken up, left on the floor till he's turned to it)
+      const lowEnd = twoSit.pickingUp ? SIT_HANDS.floorPickFrom : loweredBy;
+      const falling = upright ? 1 : smooth(ramp(before, liftBy, lowEnd));
+      const down = floor ? smooth(way) : 0;
+      // (the arm solved for the grip as his fist had it, not as the weapon lying let go of left it: it flipped as he took it up)
+      if (!pickKeyed) gripAsHeld();
+      // (head up, the arm solved for the grip seated in his fist, not as last frame's slide down the haft left it: solved
+      // for that, his fist stood 60 cm over where it was asked, at his shoulder, and the butt off the floor)
+      if (upright) seat(handR, grip, held!.r, slantR);
+      if (upright) leanUpright(smooth(ramp(before, SIT_HANDS.upLeanFrom, 1)));
+      // (placed by the weapon, off the arm as he carried it)
+      if (!pickKeyed) _rightArm.forEach((joint, i) => joint.quaternion.copy(twoSit.from[i]));
+      if (!pickKeyed) j.shoulderR.position.copy(twoSit.fromAt);
+      if (floor && up < 1 && !pickKeyed) {
+        _sitFrameInverse.copy(pathFrame()).invert();
+        ARM_R.grip.getWorldPosition(twoSit.carryAt).applyMatrix4(_sitFrameInverse);
+        twoSit.carryWay.set(0, 1, 0).transformDirection(ARM_R.grip.matrixWorld).transformDirection(_sitFrameInverse);
+      }
+      if (!pickKeyed) weaponOnPath(falling, held!, down, floor ? up : 1);
+      // (by a fire the path already starts where it lay on his shoulder, so the carry's joints are eased off over the
+      // lift's first part alone, as his elbow settles: over all of it, they held its head up by his face until late, and
+      // it was made up at the end, from his face to his hip in a tenth of a second)
+      const fromCarry = pickKeyed ? 0 : floor ? 1 - smooth(ramp(up, 0, FLOOR_JOINTS_BY)) : 1 - up;
+      _rightArm.forEach((joint, i) => joint.quaternion.slerp(twoSit.from[i], fromCarry));
+      // (his shoulder too, which the path's hold may have lowered: left there, a maul on his shoulder stood 5 cm off it
+      // as he sat with it, and jumped 13 cm back as he came up)
+      if (!pickKeyed) j.shoulderR.position.lerp(twoSit.fromAt, fromCarry);
+      // (head up, from his shoulder's slant to the one it stands with by his knee as it comes off: at that one already, it
+      // stood 5 cm off his shoulder and slid 7 cm in his fist as he walked to the seat)
+      slantR = upright ? lerp(twoSit.fromSlant, twoSit.lowSlant, up)
+        : lerp(lerp(twoSit.fromSlant, twoSit.frontSlant, up), twoSit.lowSlant, falling);
+      // (once it's in the ground it stays there, whatever his body does: his hand turns round on it, and his arm follows
+      // it as he sits, so it can't spin or jump)
+      const inGround = !floor && !upright && before >= SIT_HANDS.lowerBy;
+      if (inGround && !twoSit.stood) takeStood(held!, st.sit!.hip);
+      if (!inGround) leaveGround();
+      // (his right hand round on it as he stands, lowered, his left holding it; stood in the ground as his hips come down,
+      // the owner's "he should lower the sword down, then sit, then stick it into the ground": the wrist can't hold it
+      // upright with him stood, and at the seat's spot his arm wouldn't reach it)
+      const round = smooth(ramp(before, SIT_HANDS.lowerBy, 1));
+      const turned = smooth(ramp(way, SIT_HANDS.plantFrom, SIT_HANDS.plantBy));
+      const [, , , slides, , handleEnd] = floorRest(held!);
+      const slide = slides + (floorRest(held!) === SIT_HANDS.swordRest ? 0 : twoSit.lower);
+      // (and leaning up, its far end drawn back a little along the ground, as his hand goes round: a cane's hold has it leave
+      // under his little finger, so it can't lie as low as the fist that lowered it. Drawn back all the way his hands came in,
+      // his left forearm 23 cm into his chest; not at all, his right went out of reach)
+      const leans = lerp(round * floorRest(held!)[8], 1, turned);
+      const drawn = lerp(round * floorRest(held!)[8] * SIT_HANDS.leanDraws, 1, turned);
+      if (inGround) standBy(leans, drawn, round, Math.min(slide, handleEnd - 0.1) * smooth(way), held!, slantR);
+      // (his fist loosened on it as it's tipped upright on its far end: the lab's `sit` passes this over, and no other turn)
+      held!.group.userData.tipping = inGround && (round < 1 || turned < 1);
+      held!.group.userData.handleTo = floorRest(held!)[5];
+      held!.group.userData.stoodOn = (inGround && turned >= 1) || down >= 1 || (upright && planting >= 1);
+      // (stood on its butt while he still stands, and planted there as long as his body moves, his fist going down the haft
+      // as he sits and up it as he stands: let down with his hips and taken up with them as he rose, it slid up through his
+      // fist on its own, from play "maul cannot slide up without jedi force he doesn't have")
+      if (upright) buttDown(held!, planting, before, twoSit.settingDown);
+      // (said on the grip, which `lab sit` follows as the piece hung from his hand)
+      // (his hand sliding up it to take it again higher, the weapon held still by the keys: `held`)
+      grip.userData.slidesAlong = upright || pickSliding;
+      grip.userData.stoodOn = false;
+      if (!pickKeyed) layDown(st.sit!, held!, floor);
+      const stuck = inGround && turned > 0 && floorRest(held!) === SIT_HANDS.swordRest;
+      held!.group.userData.stuckIn = stuck ? SIT_HANDS.stuckIn + twoSit.lower * SIT_HANDS.sinkBy : 0;
+    }
+    else if (!fp && st.dead < 0) {
+      // (sat, kept near the slant he stood with: free, the weapon went 10 cm along his fist; held to it, the wrist went
+      // 12 degrees past its range)
+      const stood = st.sit ? standR?.slant : undefined;
+      const slant: number | [number, number] = stood === undefined ? SLANT : [stood - SIT_HANDS.slant, stood + SIT_HANDS.slant];
+      slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && (!two || st.sit) ? slant : undefined).slant;
+      // (the arm as it's drawn standing still, which it's lifted from as he sits and carried in as he's taken it up
+      // again: kept as he walked to the seat, his arm caught mid-swing, the pick-up ended on another carry than the one he
+      // stood in once up, and the weapon turned a metre at its tip in a frame)
+      // (and walking, until he has stood still once: `lab sit` walks him to the fire from his set-up, and no carry was
+      // kept at all, so he ended the pick-up holding it upright at his side, his arm hanging)
+      if (move < 0.05 || !twoSit.fromStill) {
+        twoSit.fromStill ||= move < 0.05;
+        _rightArm.forEach((joint, i) => twoSit.from[i].copy(joint.quaternion));
+        twoSit.fromAt.copy(j.shoulderR.position);
+        twoSit.fromSlant = slantR;
+      }
+    }
     // (a two-hander through the eyes is held as its swings key it: fitted so, its weapon turned off its place and the
     // lower grip went out of the left hand's reach)
     // (and a swing that holds its fist on the handle is held as it puts it, `fitInView`'s `hold`)
@@ -2558,7 +3811,35 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // keep it within, so the clamp has nothing left to do once the view's fade back from it is over)
     const posed = viewHold < 1 || eyesR.fading > 0;
     if (fp && st.dead < 0 && held && (!two || posed)) wristInGrip(false, gripTurn(handR, grip, _vr, slantR));
-    if (held) seat(handR, grip, held.r, slantR);
+    if (held && !twoSit.stood && !twoSit.laid && !twoSit.upright && !pickKeyed) seat(handR, grip, held.r, slantR);
+    // (taken up by the keys, eased from how they left it in his fist into how he holds it standing: his arm fitted
+    // afresh once he's up picks its turn in his fist from the keyed arm, and it turned 25 degrees in a frame)
+    // (eased in the world: his wrist turned as his arm was fitted, the weapon seated alike in his fist)
+    if (pickKeyed) pickOff = 1;
+    else if (held && pickOff > 0) {
+      pickOff = Math.max(0, pickOff - dt / PICK_OFF);
+      const ease = smooth(pickOff);
+      // (from it seated as he holds it each frame: blended from last frame's blend, it never came back to his grip)
+      grip.quaternion.copy(twoSit.laidGrip);
+      seat(handR, grip, held.r, slantR);
+      root.updateMatrixWorld(true);
+      grip.getWorldPosition(_hw1).lerp(_pickLastAt, ease);
+      grip.getWorldQuaternion(_pickSeatedQ).slerp(_pickLastQ, ease);
+      grip.position.copy(j.handR.worldToLocal(_hw1));
+      grip.quaternion.copy(j.handR.getWorldQuaternion(_standTurn).invert().multiply(_pickSeatedQ));
+      grip.updateMatrixWorld(true);
+    }
+    twoSit.upright = false;
+    // (by a fire, his fist by its butt to take it up: `pickSlide`)
+    if (twoSits && pickSlide > 0) {
+      slideGrip(pickSlide);
+      twoSit.slid = pickSlide;
+      grip.userData.slidesAlong = true;
+    }
+    else {
+      pickSlide = 0;
+      twoSit.slid = 0;
+    }
     if (stop > 0 && held && st.dead < 0) {
       const lifted = groundStop(stop, fall >= 1, settle < 0 ? stop : settle);
       // (lifted off something standing high, a pillar's face, a stone, a foe's top, before the blow reached the floor
@@ -2575,6 +3856,12 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
     let twoHeld = false;
+    // (his left arm solved already for where his hand eases to on or off a two-hander, so not fitted again: solved twice
+    // a frame, each from the other's last elbow, his hand went 15 to 20 cm one way and back in turn as it came on)
+    let leftEased = false;
+    // (how his left arm is placed this frame, sat or getting up: 0 its own pose, 1 eased from it a hand far off the grip,
+    // 2 at the grip or held)
+    let leftMode = 0;
     if (two) {
       root.updateMatrixWorld(true);
       offGrip.getWorldPosition(_grip);
@@ -2586,8 +3873,25 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       // wrist bent 52 degrees; held halfway to the shoulder, the lower grip's turn bent it 30)
       let k = (1 - ramp(out, 0.07, 0.2)) * Math.min(1, 2 * (1 - drinkOn)) * (1 - leftAway);
       const reach = out < 0.07 && drinkOn < 0.5 && leftAway === 0;
+      // (sat or getting up, coming onto it or letting go: his hand goes from where the pose has it to the grip, the arm
+      // solved for each place on the way. Blended by the joints' turns between the two arms, his hand went 50 cm along
+      // a crooked path in 6 frames as he let go by a fire, 13 to 17 cm a frame off its line)
+      const easing = k > 0 && k < 1 && !!st.sit && leftHelps > 0;
+      leftEased = easing;
+      leftMode = easing ? (k < 0.5 ? 1 : 2) : k > 0 ? 2 : 0;
       if (k > 0) {
         _sq.copy(j.shoulderL.quaternion); _eq.copy(j.elbowL.quaternion); _wq.copy(j.handL.quaternion);
+        if (easing) {
+          // (from the pose's own arm as fitted, as it's drawn when his hand is off it: from the pose's own as posed,
+          // the elbow went 25 cm in the ease's first frame. Fitted with no memory, or the grip's solve after it starts
+          // from it, and the two take turns)
+          j.handL.getWorldPosition(_letW); j.handL.getWorldQuaternion(_letQ);
+          j.elbowL.getWorldPosition(_letP).sub(j.shoulderL.getWorldPosition(_letS));
+          solveArm(j, true, { wrist: _letW, hand: _letQ, pole: _letP, body, remember: false });
+          j.handL.getWorldPosition(_letW); j.handL.getWorldQuaternion(_letQ);
+          j.elbowL.getWorldPosition(_letP).sub(j.shoulderL.getWorldPosition(_letS)).normalize();
+          j.shoulderL.quaternion.copy(_sq); j.elbowL.quaternion.copy(_eq); j.handL.quaternion.copy(_wq);
+        }
         // the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's length along
         // the line to the shoulder, turned about the handle as far as the arm needs to stay within a body's ranges
         // (armIK.ts); a grip no turn makes possible, or one the arm reaches only through the body, it lets go of
@@ -2604,17 +3908,34 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
         // (its turn on the grip found between the few tried, `glide`: picked from them, the greataxe's left wrist jumped
         // 6 degrees in a frame, 2 past its range)
         const shoulder = fp ? _fw[5].copy(j.shoulderL.position) : undefined;
-        const fit = solveArm(j, true, { wrist: _cur.negate().add(_gw), hand: _fq, roll: { axis: _hd, range: 1.1, at: _gw }, pole: _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq)), body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION });
+        _cur.negate().add(_gw);
+        _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq));
+        // (and its elbow from where the pose had it: from the grip's pole alone, the elbow went 20 cm in the first
+        // frame of the ease, the hand still nearly where the pose had it)
+        // (taking it up by a fire, its elbow's move capped a frame through the whole keyed pick-up: from the capped solve to
+        // the free one halfway through the ease, it went over to its other side, 57 cm in a frame)
+        // (its turn about the handle, about an axis through the grip, as far as the hand is on it: in full off it, the
+        // hand went 15 to 20 cm round the grip in a frame as it began to ease)
+        if (easing) {
+          _cur.lerp(_letW, 1 - k); _fq.slerp(_letQ, 1 - k); _pw.normalize().lerp(_letP, 1 - k);
+          // (round in front of him: straight from the grip at his right front to his left side, his forearm went 8 cm
+          // into his chest, and its elbow went over to its other side in a frame, his hand 41 cm)
+          _cur.add(_letS.set(0, 0, 1).transformDirection(root.matrixWorld).multiplyScalar(EASE_AHEAD * j.root.scale.x * Math.sin(Math.PI * k)));
+        }
+        const fit = easing && k < 0.5 ? solveArm(j, true, { wrist: _cur, hand: _fq, pole: _pw, body, maxMove: EASE_ELBOW / j.root.scale.x }) : solveArm(j, true, { wrist: _cur, hand: _fq, roll: { axis: _hd, range: easing ? 1.1 * k : 1.1, at: _gw }, pole: _pw, body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION, maxMove: pickKeyed ? EASE_ELBOW / j.root.scale.x : undefined });
         slantL = fit.slant;
         _up.applyAxisAngle(_hd, fit.roll);
         // (a grip out of reach for a frame or two is held through: a hand doesn't let go for 50 ms; and while the hand
         // comes onto it off the shoulder, it's taking hold, not failing to: counted so, it was still easing back after)
-        twoGood = takingHold > 0 ? 1 : damp(twoGood, reach && fit.excess < 15 && fit.depth < 0.03 ? 1 : 0, 6, dt);
+        // (nor does it let go while the right goes round: nothing else has the weapon then)
+        // (and while his left comes onto it as he sits or stands, `leftHelps`, eased by it alone: counted as holding
+        // only once fully on, it eased from nothing, and the arm went 37 cm onto the haft in a frame as it got there)
+        twoGood = takingHold > 0 || leftHelps > 0 ? 1 : damp(twoGood, reach && fit.excess < 15 && fit.depth < 0.03 ? 1 : 0, 6, dt);
         twoHeld = reach && twoGood > 0.5;
         grasp.past = fit.excess; grasp.into = fit.depth;
         // (the arm eases back to the pose's own only once the hand has let go: easing it back while still holding bent the wrist)
         if (!twoHeld) k *= Math.min(1, 2 * twoGood);
-        if (k < 1) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.quaternion.slerp(_eq, 1 - k); j.handL.quaternion.slerp(_wq, 1 - k); }
+        if (k < 1 && !easing) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.quaternion.slerp(_eq, 1 - k); j.handL.quaternion.slerp(_wq, 1 - k); }
       } else { grasp.past = 0; grasp.into = 0; }
       // (coming back onto it off the flask, it's taking hold too: counted as let go, the hand on its way back read as off
       // the grip for 4 frames after every draught)
@@ -2622,9 +3943,18 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     }
 
     // the other arm within a body's ranges too, its hand where the pose put it
-    if (!fp && st.dead < 0 && !twoHeld) { slantL = fitArm(j, true, offHeld && !sheathed ? gripTurn(handL, gripL, _vl) : undefined, body, offHeld && !sheathed ? SLANT : undefined).slant; }
+    const grippedL = offHeld && !sheathed;
+    if (!fp && st.dead < 0 && !twoHeld && !leftEased) {
+      const stoodL = st.sit ? standL?.slant : undefined;
+      const slantRange: number | [number, number] = stoodL === undefined ? SLANT : [stoodL - SIT_HANDS.slant, stoodL + SIT_HANDS.slant];
+      slantL = fitArm(j, true, grippedL ? gripTurn(handL, gripL, _vl) : undefined, body, grippedL ? slantRange : undefined).slant;
+    }
     else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
+    fadeLeftSwitch(st.sit && !fp && st.dead < 0 && two ? leftMode : -1, twoHeld, dt);
+    // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
+    // (on a seat it stays on his forearm, hung beside his leg: stood on its rim by his shin, its grip was lower than
+    // his hand reaches sat, and it flew there off his arm, "weapons are being pulled around with jedi force")
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
@@ -2643,9 +3973,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (the cloth round each armhole part of the way with its arm, as posed)
     sets.bend();
     root.updateMatrixWorld(true);
-    placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld);
+    // (sat, the free hand rests on the thigh)
+    placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld ? 1 - satBy(st.sit) : 0);
     // (through the eyes the body isn't drawn, nor its shadow: the mail swings undraped)
-    skirt.update(fL, fR, move, t, dt, fp ? undefined : legBodies.list, fp ? undefined : handBodies.list);
+    skirt.update(fL, fR, move, t, dt, fp ? undefined : legBodies.list, fp ? undefined : handBodies.list, satBy(st.sit));
 
     // the flask comes out of the fist and is put away again (before the fist closes round it: shown a frame before
     // it was first held, it lay the way the last drink left it, 70 degrees off, for that frame)
@@ -2653,12 +3984,26 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
-    if (held) hold(handR, along(grip), held.r, undefined, slantR);
+    if (held && twoSits && twoSit.stood) holdStood(held, slantR);
+    else if (held) {
+      hold(handR, along(grip), held.r, undefined, slantR);
+      // (reaching for it as it lies, his hand open until it's on it: closed, his fist was 90 cm off its handle)
+      if (pickKeyed && pickOpen > 0) loosen(handR, SIT_HANDS.offOpen * smooth(pickOpen));
+      // (off what he laid down, its hand as an empty one lies on his knee)
+      if (twoSit.laid) {
+        const off = smooth(st.sit?.after ?? 0);
+        handR.vis.quaternion.slerp(_noTurn, off);
+        loosen(handR, SIT_HANDS.offOpen * off);
+      }
+    }
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+
+    wrists.L.bend(handL.vis);
+    wrists.R.bend(handR.vis);
 
     if (dt > 0) for (const f of furs) f.update(dt);
 
@@ -2674,10 +4019,34 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     swingBones: (left: boolean) => ({ ...armBones(left ? offHeld : held) }),
     get offTip() { return offHeld ? tipL : null; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
+    // (a two-hander lifted before he goes down, and its weight brought up slower: in the sit's own time, its
+    // tip went 15 cm a frame coming off the shoulder)
+    sitHandsUp: (floor) => (floor && held?.off != null ? _floorHands : NO_HANDS),
+    sitHands: (floor) => {
+      if (held?.off == null) return NO_HANDS;
+      if (floor && !twoSit.pickingUp) return TWO_FLOOR_HANDS;
+      if (floor) {
+        // (turned and stepped to stand alongside it, facing it across, `pickStance`: from where he sat his hands
+        // couldn't reach it on the floor short of folding him double, his left 16 cm short of its haft; turned 75 degrees
+        // and stepped by set amounts, he crouched facing along it, its haft under his thigh)
+        _floorTurn.yaw = twoSit.pickYaw;
+        _floorTurn.at = [twoSit.pickAt.x, twoSit.pickAt.z];
+        _floorTurn.by = pickStepped;
+        _floorTurn.inTo = SIT_HANDS.floorTurnIn;
+        // (and left facing the way he took it up, shouldering it there, as a man does: turned back to the seat's way
+        // as he lifted it, its haft swung round upright before his face at arm's length, from review "the lift snaps
+        // from horizontal to near-vertical in front of his face", "his arms lock straight out at shoulder height")
+        _floorTurn.backFrom = 0;
+        _floorTurn.backTo = -1;
+        return _floorHands;
+      }
+      return headUp(held) ? TWO_UP_HANDS : TWO_SIT_HANDS;
+    },
     get offGrip() { return held?.off != null ? offGrip : null; },
     get fists() {
       const fists: Fist[] = [];
-      if (held) fists.push({ hand: 'right', ...fistOn(handR, grip, held.r) });
+      // (a weapon stood or laid down as he sits isn't held by its grip: his palm on its top, or his hand on a knee)
+      if (held && !twoSit.laid && !(pickKeyed && pickOpen > 0.01)) fists.push({ hand: 'right', ...fistOn(handR, grip, held.r) });
       if (offHeld && !sheathed) fists.push({ hand: 'left', ...fistOn(handL, gripL, offHeld.r) });
       else if (held?.off != null && grasp.held) fists.push({ hand: 'left', ...fistOn(handL, offGrip, held.r) });
       return fists;

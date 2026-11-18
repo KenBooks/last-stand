@@ -117,6 +117,7 @@ import { frameScreens, initScreens } from './ui/screens';
 import { cancelTrade, endTrades, onTradeChange, tradeBusy } from './net/trade';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits, openCoop, coopOpen, layOutCoopAhead, nameOf } from './ui/coop';
 import { updatePingInput } from './ui/ping';
+import { updateSitHint } from './ui/sitHint';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { DevApi } from './dev/index';
@@ -1242,6 +1243,7 @@ function update(dt: number): void {
   syncPractice();
   updateNameTags();
   if (VILLAGE) updateHouseMarks();
+  updateSitHint();
   if (G.mode === 'run') {
     updateHud();
     updateDuelHud();
@@ -1259,7 +1261,7 @@ function update(dt: number): void {
   setViewShift(vs.x, vs.y);
   const focus = cameraFocus(dt);
   // (on the floor he stands on: the village's terrace, a stair; a free camera on the ground under it)
-  updateCamera(dt, focus.pos, focus.height, focusFloor(focus));
+  updateCamera(dt, focus.pos, focus.player ? focus.player.framedHeight() : focus.height, focusFloor(focus));
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show

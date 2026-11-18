@@ -10,7 +10,7 @@ import { G } from '../../../src/state';
 import type { Lab, Fixture, Pictured, Report, ViewName } from './lab';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import {
-  armOf, bodyBreaches, describeBreach, drawnHand, grippingSides, whyLetGo, wristCanary,
+  armOf, bodyBreaches, describeBreach, drawnHand, FIST_OPEN, grippingSides, whyLetGo, wristCanary,
 } from './range';
 import type { Fist, LowerGrip } from '../../../src/types';
 import { SKILL_IMPLS } from '../../../src/combat/skills';
@@ -201,7 +201,6 @@ const CANARY_DROP = 1.6;
 /** a fist this far off its handle's axis (m), or with its fingers curled less than this (rad, their joints' mean
  *  bend), holds it as an open hand: through the eyes the fingers stood straight out beside the handle */
 const FIST_OFF = 0.012;
-const FIST_OPEN = 0.5;
 /** and one this far along its handle from where it holds it (m) has slid off its grip: measured square to the handle
  *  alone, a weapon lifted 15 cm along its own length out of both fists read as held */
 const FIST_SLID = 0.02;

@@ -377,8 +377,10 @@ export class SkirtLimbs {
  *  thigh rests on the skirt, never in it): points on the arm (`pts`, each with its radius: the ends of the hand's capsules, the
  *  cuff's) against the thigh's body (in `space`, placed) grown by `cloth` (what lies between), the shoulder turned out about its
  *  z (`side`: +1 the left arm) by the deepest's depth over its distance from the shoulder, a few times over. Pressed in between
- *  the hand and the thigh, the drape had no room to hold the skirt in behind the hand. */
-export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][]): void {
+ *  the hand and the thigh, the drape had no room to hold the skirt in behind the hand. `weight` eases it out (sat, a hand
+ *  rests on its thigh: swung out off it, it hung beside the knee). */
+export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][], weight = 1): void {
+  if (weight <= 0) return;
   _sab.subVectors(thigh.b, thigh.a);
   const L2 = Math.max(1e-9, _sab.lengthSq());
   for (let it = 0; it < 3; it++) {
@@ -390,7 +392,7 @@ export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, sid
       if (d > deep) { deep = d; at = _sp.distanceTo(space.worldToLocal(shoulder.getWorldPosition(_sn))); }
     }
     if (deep <= 0.001) return;
-    shoulder.rotation.z += side * Math.min(0.12, deep / Math.max(0.2, at));
+    shoulder.rotation.z += side * weight * Math.min(0.12, deep / Math.max(0.2, at));
     shoulder.updateMatrixWorld(true);
   }
 }
@@ -461,8 +463,11 @@ export class Skirt {
   }
 
   /** `fL`, `fR`: how far forward each thigh swings (radians); `move` 0..1; `t`, `dt` in seconds; `legs` and `hands`, the
-   *  limbs it keeps clear of from inside and from outside (the skirt's own space) */
-  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): void {
+   *  limbs it keeps clear of from inside and from outside (the skirt's own space); `settle`, how far it's eased to where
+   *  it's draped instead of put there (0 to 1: sat, `satBy`); `tuck`, how far its back swings in under him (rad: sat on
+   *  the floor, he sits on it) */
+  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[], settle = 0,
+    tuck = 0): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
     if (this.rests(fL, fR, move, dt, legs, hands)) return;
@@ -472,7 +477,14 @@ export class Skirt {
       const a = this.ang[i], sx = Math.sin(a), cz = Math.cos(a);
       const wl = clamp(0.5 + sx * 0.9, 0, 1);
       const legPush = (fL * wl + fR * (1 - wl)) * cz;
-      const target = Math.max(-0.1, legPush * push) + (0.04 + move * 0.08 + Math.sin(t * 3 + a * 3) * 0.015) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
+      // (no flutter sat: its few millimetres tipped the drape between his raised knees from one side to the other
+      // every 2 s, 54 cm by a fire)
+      const flutter = Math.sin(t * 3 + a * 3) * 0.015 * (1 - settle);
+      // (sat on the floor, its back under him: hung straight down behind him it stood round his hips as a sack wider
+      // than his shoulders, its hem laid out on the floor beyond)
+      // (and its sides half as far in, against his thighs: hung straight down they stood out past his shoulders)
+      const under = tuck * (1 - cz) / 2;
+      const target = Math.max(-0.1 - under, legPush * push - under) + (0.04 + move * 0.08 + flutter) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
       // a stiff, damped spring: cloth follows the legs a moment late and settles without wobbling
       if (h > 0) {
         this.vel[i] += ((target - this.theta[i]) * 260 - this.vel[i] * 26) * h;
@@ -486,7 +498,10 @@ export class Skirt {
         p.setXYZ(j, sx * nr + this.open[j], ny, cz * nr * depth);
       }
     }
+    this.tucked = tuck > 0;
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
+    // (eased while sat; followed at once otherwise, so a sit begins from where it was drawn)
+    this.ease(settle, h);
     p.needsUpdate = true;
     vertexNormals(this.geo);
   }
@@ -520,6 +535,74 @@ export class Skirt {
     laid.fL = fL; laid.fR = fR;
     return false;
   }
+
+  /** whether its back is tucked under him this frame (`update`'s `tuck`) */
+  private tucked = false;
+  /** where it was drawn last frame, eased from */
+  private drawn?: Float32Array;
+  /** The cloth eased from where it was drawn last frame to where it's draped now, by `settle` (0 to 1) of `SETTLE`'s
+   *  ease (s) over `h`. Sat, his raised thighs across every column and his hanging feet swinging slowly, the drape put a
+   *  point between his knees round one or the other as they moved a millimetre, and his robe jumped up to 17 cm a frame,
+   *  a few times a second ("on log cloth is jerking"); walking it follows at once. */
+  private ease(settle: number, h: number): void {
+    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const was = this.drawn ??= Float32Array.from(P);
+    // (only as he comes to rest: eased all the way down, his rising thigh passed the cloth lagging behind it, 8 to 9 cm)
+    const k = 1 - settle ** SETTLE_IN * Math.exp(-h / SETTLE);
+    for (let n = 0; n < P.length; n++) P[n] = was[n] += (P[n] - was[n]) * k;
+  }
+
+  /** Every point kept over the floor at `y` (the mesh's own space), the cloth lying on it there: a robe sat in, its hem
+   *  hung down through the floor. Down each column from where it first meets the floor, the rest lies out along it,
+   *  bunched up the more the further under the floor it hung: each point only lifted onto the floor, a coat hanging
+   *  straight down from a man sat on the ground piled up in a ring round his hips, a sack wider than his shoulders.
+   *  Call after `update`. */
+  keepAbove(y: number): void {
+    const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array, C = this.cols;
+    const rows = P.length / 3 / C;
+    const hung = (this.hung ??= new Float32Array(P.length));
+    hung.set(P);
+    let moved = false;
+    for (let i = 0; i < C; i++) {
+      // (out along its column's own way where it hung straight down: out through the point above it, a point tucked
+      // under him near the middle went out one way or the other as it moved a millimetre)
+      const ox = Math.sin(this.ang[i]), oz = Math.cos(this.ang[i]);
+      for (let k = 1; k < rows; k++) {
+        const j = (k * C + i) * 3, above = j - C * 3;
+        const under = y - hung[j + 1];
+        if (under <= 0) continue;
+        moved = true;
+        // (its length to the point above it as it hung, from that point down to the floor and on along it, bunched by
+        // how far under the floor it hung: laid out whole, a coat's sides lay round him in a ring half a metre across;
+        // where it first meets the floor it lies where it hung, or it jumped there as it dipped under: by its length
+        // as cut, the drape's stretch made it jump 1 to 2 cm)
+        const len = Math.hypot(hung[j] - hung[above], hung[j + 1] - hung[above + 1], hung[j + 2] - hung[above + 2]);
+        const drop = Math.max(0, P[above + 1] - y);
+        const bunch = 1 - (1 - LIES_OUT) * Math.min(1, under / len);
+        const far = Math.sqrt(Math.max(0, len * len - drop * drop)) * bunch;
+        // (the way it hung from the point above, and on out its column's way as far as it lies)
+        let dx = hung[j] - hung[above], dz = hung[j + 2] - hung[above + 2];
+        const hangs = Math.hypot(dx, dz);
+        if (hangs >= far) {
+          const scale = hangs > 1e-6 ? far / hangs : 0;
+          dx *= scale;
+          dz *= scale;
+        } else {
+          dx += ox * (far - hangs);
+          dz += oz * (far - hangs);
+        }
+        P[j] = P[above] + dx;
+        P[j + 1] = y;
+        P[j + 2] = P[above + 2] + dz;
+      }
+    }
+    if (!moved) return;
+    p.needsUpdate = true;
+    vertexNormals(this.geo);
+  }
+
+  /** the points as they hung before `keepAbove` laid them on the floor */
+  private hung?: Float32Array;
 
   /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,
    *  where it is between the waist and the hem. Whether it moved. (A sleeve hanging beside it: kept off an ellipse the size of
@@ -596,6 +679,9 @@ export class Skirt {
             const k = q * 6;
             if (x1 < B[k] || x0 > B[k + 1] || y1 < B[k + 2] || y0 > B[k + 3] || z1 < B[k + 4] || z0 > B[k + 5]) continue;
             if (!leg) { this.off(P, j, body(q), 0, true); continue; }
+            // (tucked under him, its back lies under his seat: put out of the thighs' tops there, up and out, it stood
+            // back up round his hips)
+            if (this.tucked && Math.cos(this.ang[c]) < TUCKED_FROM) continue;
             const b = body(q);
             this.off(P, j, b, layer, false);
             if (!lines) continue;
@@ -758,6 +844,15 @@ const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vec
 const DRAPE = tunable('drape', { passes: 3 });
 /** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
 const HAND_REACH = 0.035;
+/** the share of its length a skirt's cloth on the floor lies out over, bunched (`Skirt.keepAbove`) */
+const LIES_OUT = 0.35;
+/** the columns tucked under a hero sat on the floor are kept off his thighs no more: those further round than this
+ *  from the front (the cosine of their angle) */
+const TUCKED_FROM = -0.3;
+/** how long a sat hero's skirt takes to ease to where it's draped (s): `Skirt.ease` */
+const SETTLE = 0.4;
+/** how late in the sit that ease comes in (a power of the way down) */
+const SETTLE_IN = 8;
 /** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points
  *  lying on a thigh the line dips a millimetre or two into the gap, and moving them for it pushed the cloth out into the free
  *  hand's cuff */

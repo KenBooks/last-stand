@@ -7,7 +7,7 @@
 // the pole said: behind the back, up past the head, the wrist bent double round a handle.
 import * as THREE from 'three';
 import type { Joints } from './rig';
-import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape } from './anatomy';
+import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape, type Solid } from './anatomy';
 
 const N = 24, REFINE = 7, ROLLS = 5;
 
@@ -59,14 +59,23 @@ export interface ArmGoal {
    *  and it slows as it nears where it would be: its speed capped alone, it set off, turned its way and stopped at the
    *  cap in a frame. `maxMove` is then the swing's cap, not the elbow's whole move's */
   maxJerk?: number;
+  /** with `maxMove`: how far past the best's ranges (degrees) the elbow held back may go before it gives way
+   *  (`REACH_SLACK` if absent) */
+  slack?: number;
   /** with `roll` or `slant`: how much of the way from the last solve's turn about the handle and slant on it to the best
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
   glide?: number;
+  /** false: a solve over the one this frame keeps its elbow from (its last elbow, girdle, slant and roll left as the
+   *  first left them): solved again over the warrior's fitted arm to stand his weapon, each solve started from the
+   *  other's last frame, and the carried greatsword turned 10 to 20 degrees a frame back and forth */
+  remember?: boolean;
   /** the wrist's flexion range (degrees): a hand gripping a handle, a gripping wrist's (anatomy.ts `GRIPPED_FLEXION`);
    *  the open hand's by default. (Solved within the open hand's, a two-hander's lower fist flexed 50 to 75 degrees
    *  round its grip, through the eyes and out of them, where a fist can't stay closed) */
   flexion?: readonly [number, number];
+  /** how far short of its ends (degrees) the wrist is kept, a resting hand's (`models/sit.ts` `WRIST_INSIDE`) */
+  inside?: number;
   /** the hand turned as asked whatever the forearm's and the wrist's ranges (the elbow still chosen to keep them): through
    *  the eyes, the bow hand, so the bow stays as it's posed (stopped at the wrist's end, the fist turned the bow with the
    *  elbow, and a frame's other elbow coming in for a fan turned it 40 px in the view) */
@@ -98,6 +107,8 @@ const lastR = new WeakMap<THREE.Object3D, number>();
 const lastMove = new WeakMap<THREE.Object3D, THREE.Vector3>();
 const _mv = new THREE.Vector3(), _e0 = new THREE.Vector3();
 const _wy = new THREE.Vector3();
+const _legLines = [new THREE.Line3(), new THREE.Line3()], _noLegLines: THREE.Line3[] = [];
+const _legPoint = new THREE.Vector3(), _legNear = new THREE.Vector3();
 /** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
 const REACH_SLACK = 2;
 /** and one swinging within `maxJerk`: for the few frames its swing takes (at 2 degrees it gave way at once, and the
@@ -114,6 +125,24 @@ const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [G
 const G_HOME = 0.01;
 const G_PLACES = G_ELEV.flatMap((e) => G_PRO.map((pr): [number, number] => [e, pr]));
 
+/** What an arm's solves remember from frame to frame (its elbow in its shoulder's parent's frame, girdle, slant on a
+ *  handle and turn about it), for `recall` to set back. */
+export interface ArmMemory { elbow?: THREE.Vector3; girdle?: [number, number]; slant?: number; roll?: number }
+/** What the arm `sh` (its shoulder) remembers now. */
+export function remembered(sh: THREE.Object3D): ArmMemory {
+  const girdle = lastG.get(sh);
+  return { elbow: last.get(sh)?.clone(), girdle: girdle && [girdle[0], girdle[1]], slant: lastS.get(sh), roll: lastR.get(sh) };
+}
+/** The arm `sh` remembering `memory` again, as if its last solve had left it (a hold taken up again after another
+ *  solve has held the arm meanwhile, from where it was as it was let go). */
+export function recall(sh: THREE.Object3D, memory: ArmMemory): void {
+  const pairs: [WeakMap<THREE.Object3D, unknown>, unknown][] = [[last, memory.elbow?.clone()], [lastG, memory.girdle && [...memory.girdle]], [lastS, memory.slant], [lastR, memory.roll]];
+  for (const [map, value] of pairs) {
+    if (value === undefined) map.delete(sh);
+    else map.set(sh, value);
+  }
+}
+
 /** Pose the arm (`left` or right) for `g`. The arm's joints are set, not their world matrices. */
 export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
@@ -124,7 +153,21 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   const rest = g.shoulder ?? (sh.userData.rest as THREE.Vector3 | undefined) ?? sh.position;
   _S.copy(rest);
   const keep = g.keep ?? 8, prev = last.get(sh);
-  const solids = g.body?.solids.filter((s) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck');
+  // (sat on the floor, the thighs too: the knees up, the elbow hung beside the thigh and the forearm went up through
+  // it to the hand on the knee, 6 to 10 cm. Weighed as he goes down: in full as he started, the arm hanging by the
+  // thigh was pushed 4 cm into the belly)
+  const trunk = (s: Solid) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck';
+  const legs = g.body?.legs ?? 0;
+  // The warrior's forearm crossed his thigh 5 cm into it: an ellipsoid narrows towards the knee, unlike the leg's
+  // capsule. Read the whole thigh for him; keep the other heroes' fits, which also hold their clothes in place.
+  const capsules = legs > 0 && g.body?.legCapsules;
+  const solids = g.body?.solids.filter((s) => trunk(s) || (legs > 0 && !capsules && s.name.startsWith('thigh')));
+  const weights = solids?.map((s) => trunk(s) ? 1 : legs);
+  if (capsules) {
+    j.thighL.getWorldPosition(_legLines[0].start); j.kneeL.getWorldPosition(_legLines[0].end);
+    j.thighR.getWorldPosition(_legLines[1].start); j.kneeR.getWorldPosition(_legLines[1].end);
+  }
+  const legLines = capsules ? _legLines : _noLegLines, legScale = j.root.scale.x;
   // (each solid's frame, once for the whole search)
   const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new THREE.Matrix4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
   // (and a sphere round each, world: a limb clear of it needs no closer look)
@@ -187,7 +230,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     bad = 0;
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));
-      cost += 2 * clampWrist(_rel, left, _cl, g.flexion);
+      cost += 2 * clampWrist(_rel, left, _cl, g.flexion, g.inside);
       if (g.wristW) cost += g.wristW * Math.acos(Math.max(-1, Math.min(1, _wy.set(0, 1, 0).applyQuaternion(_rel).y))) * 57.3;
     }
     if (solids && ROM_ON) {
@@ -195,7 +238,16 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       _wa.copy(_S).applyMatrix4(par.matrixWorld); _wb.copy(_E).applyMatrix4(par.matrixWorld);
       let deep = near(_wa, _wb, j.P.upperR, head) ? Math.max(0, capsuleDepth(_wa, _wb, j.P.upperR, solids[head], invs![head])) : 0;
       _wa.copy(_W).applyMatrix4(par.matrixWorld);
-      for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
+      for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, weights![i] * capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
+      let legDepth = 0;
+      for (const line of legLines) for (let i = 0; i <= 4; i++) {
+        _legPoint.lerpVectors(_wb, _wa, i / 4);
+        line.closestPointToPoint(_legPoint, true, _legNear);
+        legDepth = Math.max(legDepth, legs * ((j.P.thighR + j.P.foreR) - _legPoint.distanceTo(_legNear) / legScale));
+      }
+      // Without the elbow's drop the least-penetrating arm lifted it level with the shoulder.
+      cost += 1600 * Math.max(0, legDepth - 0.005) + (capsules ? 600 * legs * Math.max(0, _E.y - _S.y + 0.15) : 0);
+      deep = Math.max(deep, legDepth);
       if (final) depthAt = deep;
       cost += 400 * Math.max(0, deep - 0.005);
     }
@@ -264,7 +316,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     return [roll, slant, bestC];
   };
   /** what the ranges leave over for the elbow found (degrees), the arm as `at` last left it */
-  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl, g.flexion) : 0) : 0;
+  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl, g.flexion, g.inside) : 0) : 0;
 
   const pr = lastR.get(sh);
   /** the turn and slant found, gliding from the last solve's */
@@ -336,7 +388,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     } else _e0.copy(prev);
     const far = (): boolean => _E.distanceTo(_e0) > cap || (!!was && _mv.copy(_E).sub(_e0).distanceTo(was) > jerk);
     if (far()) {
-      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over(), slack = jerk ? SWING_SLACK : REACH_SLACK;
+      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over(), slack = jerk ? SWING_SLACK : g.slack ?? REACH_SLACK;
       let lo = 0, hi = 1;
       for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (far()) hi = mid; else lo = mid; }
       // (further, past the cap, as far as the ranges need: held back, an elbow swinging up over the shoulder for the quiver
@@ -354,12 +406,14 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   }
   if (!g.maxJerk || !g.maxMove || !prev) lastMove.delete(sh);
   // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
-  if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
-  else if (pg) pg.splice(0, 2, 0, 0);
-  if (g.slant) lastS.set(sh, slant);
-  if (g.glide !== undefined) lastR.set(sh, roll);
+  if (g.remember !== false) {
+    if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
+    else if (pg) pg.splice(0, 2, 0, 0);
+    if (g.slant) lastS.set(sh, slant);
+    if (g.glide !== undefined) lastR.set(sh, roll);
+    (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
+  }
   sh.position.copy(_S);
-  (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
   // the joints: the upper arm on its parent, the elbow a hinge, the hand within the forearm's turn and the wrist's bend
   sh.quaternion.copy(_Qu);
   const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
@@ -369,7 +423,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // (the visible hand's turn on the forearm: as wanted, or as it was)
   if (want) eased(g, _rel.copy(_Qf).invert().multiply(want));
   else { _rel.copy(hd.quaternion); if (vis) _rel.multiply(vis); }
-  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel, g.flexion);
+  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel, g.flexion, g.inside);
   hd.quaternion.copy(_rel);
   // (the hand joint under the visible hand: its turn on the joint, and the slant)
   if (vis || slant) hd.quaternion.multiply(_hx.copy(vis ?? _sz.identity()).multiply(_sz.setFromAxisAngle(Z, slant)).invert());
@@ -382,12 +436,13 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
  * turn the hand will be given on its joint this frame (`gripTurn` for a held weapon), none for a hand that isn't
  * turned, and a hand so turned grips what it holds: its wrist within a gripping wrist's range. (It reads the joints'
  * world matrices through their parents, so needs no update of the whole model first.)
+ * `inside`: how far short of its ends (degrees) the wrist is kept.
  */
-export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number): ArmResult {
+export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number | [number, number], inside?: number): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
   const wrist = hd.getWorldPosition(new THREE.Vector3());
   const hand = hd.getWorldQuaternion(new THREE.Quaternion());
   if (vis) hand.multiply(vis);
   const pole = el.getWorldPosition(new THREE.Vector3()).sub(sh.getWorldPosition(new THREE.Vector3()));
-  return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined });
+  return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined, inside });
 }

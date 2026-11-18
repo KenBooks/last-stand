@@ -402,7 +402,8 @@ const MAUL_FACE = 0.054;
 /** A maul's striking face at the end of its head on `side`: a flared, bevelled drum, and on it a knurl of pyramids
  *  (+X) or a boss (-X). */
 function maulFace(w: Sculpt, g: THREE.Group, M: WeaponMaterials, side: 1 | -1): void {
-  const profile: [number, number][] = [[0.092, 0], [0.104, 0.012], [0.108, 0.034], [0.101, 0.047], [0.07, 0.052], [0.001, 0.054]];
+  // (closed behind: open there, the sky showed through it past the octagon's flats, whose middles stand inside its ring)
+  const profile: [number, number][] = [[0.001, 0], [0.092, 0], [0.104, 0.012], [0.108, 0.034], [0.101, 0.047], [0.07, 0.052], [0.001, 0.054]];
   const out = side * MAUL_BODY;
   w.add(made(() => lathe(profile, 16).rotateZ(-side * Math.PI / 2)), M.steel, g, [out, MAUL_AT, 0]);
   const face = out + side * MAUL_FACE;

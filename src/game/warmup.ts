@@ -42,7 +42,7 @@ import { riftBoltSamples } from '../fx/riftBolts';
 import { vineSamples } from '../fx/vine';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
-import { compileOutline, warmOutline } from '../ui/overlay/outline';
+import { compileOutline, warmOutline, type OutlineTarget } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
 import { buildHallAhead, prepareSpareHero } from './hall';
@@ -190,8 +190,10 @@ export function compileTheLobby(): void {
   compileOutline([]);
 }
 
-/** the lobby's dummies' bodies, which its warm-up outlines */
+/** the lobby's dummies' bodies, which its warm-up outlines, and every place's seats, outlined as E would sit on
+ *  them */
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
+const outlined = (): (THREE.Object3D | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
@@ -209,7 +211,7 @@ export async function warmLobby(hall = false): Promise<void> {
   for (const dummy of G.enemies) for (const slot of crowdSlots(dummy.model)) slot.visible = true;
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     // (the hero's masks too: the hero selection screen outlines the hero under the mouse)
-    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline([...dummies(), hero.root]),
+    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline([...outlined(), hero.root]),
   });
   // (its compile is made as it's called, the scene walked before the foes are built, then the hall's heroes)
   const ahead = buildAhead(theFight()).then(() => (hall ? buildHeroesAhead() : undefined));
@@ -223,7 +225,7 @@ export async function warmLobby(hall = false): Promise<void> {
     hallWarm = true;
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
-  warmOutline(dummies());
+  warmOutline(outlined());
   clearEffects(); clearLights(); particles.clear();
   await ahead;
 }

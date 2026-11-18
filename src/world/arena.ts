@@ -31,6 +31,7 @@ import { emit } from '../events';
 import { G } from '../state';
 import { VILLAGE } from '../core/beta';
 import { stumpPreloaded } from './stump';
+import type { Seat } from './seats';
 
 export { groundHeight };
 export type { Portal } from './props';
@@ -254,6 +255,15 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** the place shown: the village (the lobby), or the run's biome */
     get place(): PlaceId { return shown; },
     get obstacles() { return room ? rooms![room].obstacles : active.obstacles; },
+    /** what a hero sits on (a house's room's while it's shown, none while the hall is) */
+    get seats(): readonly Seat[] { return hallShown ? [] : room ? rooms![room].seats : active.seats ?? []; },
+    /** every place's and room's seats, shown or not (their outlines warmed at load) */
+    allSeats(): Seat[] {
+      const inPlaces = (Object.values(places) as { b: Biome }[]).flatMap((p) => p.b.seats ?? []);
+      return [...inPlaces, ...Object.values(rooms ?? {}).flatMap((r) => r.seats)];
+    },
+    /** what an idle hero sits on in place `id`, shown or not */
+    seatsOf(id: PlaceId): readonly Seat[] { return places[id].b.seats ?? []; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */

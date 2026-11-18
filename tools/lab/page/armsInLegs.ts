@@ -27,7 +27,7 @@ export interface ArmInLeg {
 }
 
 /** A leg's part: its name and its capsule, in the world. */
-interface LegPart {
+export interface LegPart {
   name: string;
   from: THREE.Vector3;
   to: THREE.Vector3;
@@ -81,7 +81,7 @@ function deepestIn(arm: ArmPart, legs: LegPart[]): ArmInLeg | null {
 }
 
 /** The thighs and shins as capsules round their bones, at their drawn radii, in the world. */
-function legsOf(j: Joints): LegPart[] {
+export function legsOf(j: Joints): LegPart[] {
   const scale = j.root.scale.x;
   const legs: LegPart[] = [];
   for (const side of ['L', 'R'] as const) {

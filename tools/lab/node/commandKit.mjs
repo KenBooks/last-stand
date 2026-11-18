@@ -124,19 +124,17 @@ export function problemsIn(result) {
 }
 
 /**
- * Writes the moments the sides' results pictured (a report's `moments`) as one sheet in `dir`; returns its path, or
- * null when none pictured any.
+ * Writes the moments the sides' results pictured (a report's `moments`) as a sheet in `dir`; returns the images it
+ * was written in (`writeSheet`'s parts), none when none pictured any.
  */
 export async function writeMoments(results, dir, browser, name = 'sheet.png') {
   const runs = results
     .filter(([, result]) => result?.moments?.length)
     .map(([side, result]) => [side.name, { moments: result.moments }]);
-  if (runs.length === 0) return null;
+  if (runs.length === 0) return [];
   mkdirSync(dir, { recursive: true });
-  const image = join(dir, name);
   const views = Math.max(...runs.flatMap(([, { moments }]) => moments.map((moment) => moment.tiles.length)));
-  await writeSheet(browser, runs, views, image);
-  return image;
+  return writeSheet(browser, runs, views, join(dir, name));
 }
 
 /**
@@ -152,8 +150,8 @@ export async function textWithSheetEach(results, dir, browser) {
     const moments = result?.moments ?? [];
     for (const [index, moment] of moments.entries()) {
       const one = [side, { ...result, moments: [moment] }];
-      const image = await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`);
-      if (image) images.push(relative(REPO, image));
+      const written = await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`);
+      images.push(...written.map((image) => relative(REPO, image)));
     }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
@@ -179,8 +177,8 @@ export async function textWithSheetsByGroup(results, dir, browser) {
     for (const group of groups) {
       const moments = result.moments.filter((moment) => groupOf(moment) === group);
       const name = `${prefix}${fileNameOf(group)}.png`;
-      const image = await writeMoments([[side, { ...result, moments }]], dir, browser, name);
-      if (image) images.push(relative(REPO, image));
+      const written = await writeMoments([[side, { ...result, moments }]], dir, browser, name);
+      images.push(...written.map((image) => relative(REPO, image)));
     }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
@@ -223,6 +221,6 @@ function pictureList(written, dir) {
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
 export async function textWithMoments(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
-  const image = await writeMoments(results, dir, browser);
-  return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
+  const images = (await writeMoments(results, dir, browser)).map((image) => relative(REPO, image));
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }

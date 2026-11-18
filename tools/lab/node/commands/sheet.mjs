@@ -47,11 +47,10 @@ export default {
     const runs = results.map(([side, sheet]) => [side.name, sheet]);
     const dir = session.outFor(join('sheets', options.tag));
     mkdirSync(dir, { recursive: true });
-    const image = join(dir, 'sheet.png');
-    await writeSheet(session.browser, runs, options.views.length, image);
+    const images = await writeSheet(session.browser, runs, options.views.length, join(dir, 'sheet.png'));
     const notes = runs.map(([name, sheet]) => `${name}, ${sheetNotes(sheet)}`);
     writeFileSync(join(dir, 'notes.txt'), notes.join('\n\n'));
-    return `${notes.join('\n\n')}\n\nsheet: ${relative(REPO, image)}`;
+    return `${notes.join('\n\n')}\n\nsheet: ${images.map((image) => relative(REPO, image)).join(', ')}`;
   },
   textOf: sheetNotes,
   pictures: picturePairs,

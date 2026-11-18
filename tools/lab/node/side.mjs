@@ -17,6 +17,7 @@ import { watchLayers } from './layers.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { stampOf } from './sideCache.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
+import { readPicturedReport } from './picturedReport.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
 /** the size every page of the lab's is given, in a context of its own or the browser's kept one */
@@ -734,6 +735,23 @@ export class Side {
       window.__lab.begin(afresh);
       return command[fn](window.__lab, options);
     }, [fn, options, this.afresh]);
+  }
+
+  /**
+   * Calls the page function `fn` (page/commands/<fn>.ts) as `command` does, for a picture-heavy report: run once, then
+   * each moment fetched over Playwright's pipe on its own.
+   */
+  async picturedCommand(fn, options) {
+    const report = await this.page.evaluateHandle(async ([fn, options, afresh]) => {
+      const command = await import(`/tools/lab/page/commands/${fn}.ts`);
+      window.__lab.begin(afresh);
+      return command[fn](window.__lab, options);
+    }, [fn, options, this.afresh]);
+    try {
+      return await readPicturedReport(report);
+    } finally {
+      await report.dispose();
+    }
   }
 
   /**

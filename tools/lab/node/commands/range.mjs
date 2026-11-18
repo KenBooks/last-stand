@@ -13,8 +13,8 @@ async function textWithSheetPerSide(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
   const images = [];
   for (const [side, result] of results) {
-    const image = await writeMoments([[side, result]], dir, browser, `${side.filePrefix}sheet.png`);
-    if (image) images.push(relative(REPO, image));
+    const written = await writeMoments([[side, result]], dir, browser, `${side.filePrefix}sheet.png`);
+    images.push(...written.map((image) => relative(REPO, image)));
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }

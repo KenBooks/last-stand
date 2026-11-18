@@ -128,6 +128,13 @@ const warrior: ClassDef = {
     { slot: 'weapon', rarity: 'common', ilvl: 1 },
     { slot: 'offhand', rarity: 'common', ilvl: 1 },
   ],
+  // (a two-hander of each kind in his stash, so its style can be tried from the first: he starts with a one-hander and
+  // a shield, and found one only by luck)
+  starterStash: [
+    { slot: 'weapon', rarity: 'common', ilvl: 1, base: 'Greataxe' },
+    { slot: 'weapon', rarity: 'common', ilvl: 1, base: 'Greatsword' },
+    { slot: 'weapon', rarity: 'common', ilvl: 1, base: 'Maul' },
+  ],
 
   // Health, cast speed, cooldowns and so on still roll; arcane damage has no warrior skill to feed
   bases: {

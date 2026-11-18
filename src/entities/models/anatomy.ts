@@ -184,7 +184,9 @@ export function breaches(a: BodyAngles, tolerance = 0): Breach[] {
 export interface Solid { name: string; at: THREE.Object3D; c: THREE.Vector3; r: THREE.Vector3 }
 /** a limb: a capsule from a point on one joint to a point on another (each in its joint's frame), its radius */
 export interface Limb { name: string; a: THREE.Object3D; pa: THREE.Vector3; b: THREE.Object3D; pb: THREE.Vector3; r: number }
-export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid][] }
+/** `legs`: how much the arms' IK keeps them out of the thighs too (0 to 1: sat on the floor, set by the hero each
+ *  frame as he goes down). `legCapsules` uses the warrior's fuller thigh and a hanging elbow in that solve. */
+export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid][]; legs?: number; legCapsules?: boolean }
 
 /**
  * The body's solids (the head from its skin, the chest, belly and neck from the rig's proportions) and the arms as
@@ -197,6 +199,10 @@ export function bodyShape(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.Obj
     { name: 'chest', at: j.chest, c: V(0, P.torsoL * 0.12, 0), r: V(P.chestW, P.torsoL * 0.42, P.chestD) },
     { name: 'belly', at: j.spine, c: V(0, P.torsoL * 0.2, 0), r: V(P.waistW, P.torsoL * 0.35, P.chestD * 0.9) },
     { name: 'neck', at: j.neck, c: V(0, P.neckL * 0.45, 0), r: V(P.headR * 0.42, P.neckL * 0.75, P.headR * 0.42) },
+    // (the thighs, past the knee and the hip: an ellipsoid the thigh's length tapered to nothing at the knee, and the
+    // forearm crossing the knee's side went through it unseen)
+    { name: 'thighL', at: j.thighL, c: V(0, -P.thighL * 0.5, 0), r: V(P.thighR * 1.1, P.thighL * 0.75, P.thighR * 1.1) },
+    { name: 'thighR', at: j.thighR, c: V(0, -P.thighL * 0.5, 0), r: V(P.thighR * 1.1, P.thighL * 0.75, P.thighR * 1.1) },
   ];
   // the head: its skin's box in the head joint's frame (a little inside it, an ellipsoid fitted in a box)
   const face = j.head.getObjectByName('face') as THREE.Mesh | undefined;
@@ -315,10 +321,12 @@ export function wristAngles(q: THREE.Quaternion, left: boolean): { pronation: nu
 export const GRIPPED_FLEXION = [-70, 30] as const;
 
 /** the hand turned on its forearm (twist · swing) with the forearm's turn and the wrist's bend each within range (its
- *  flexion within `flexion`), into `out`; the degrees it was outside them */
-export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion']): number {
+ *  flexion within `flexion`; each `inside` degrees short of its ends), into `out`; the degrees it was outside them */
+export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion'], inside = 0): number {
   const w = wristAngles(q, left);
-  const [p0, p1] = ROM['forearm.pronation'], [f0, f1] = flexion, [r0, r1] = ROM['wrist.radial'];
+  const [p0, p1] = ROM['forearm.pronation'].map((end, i) => end + (i ? -inside : inside));
+  const [f0, f1] = flexion.map((end, i) => end + (i ? -inside : inside));
+  const [r0, r1] = ROM['wrist.radial'].map((end, i) => end + (i ? -inside : inside));
   const p = Math.max(p0, Math.min(p1, w.pronation)), f = Math.max(f0, Math.min(f1, w.flexion)), r = Math.max(r0, Math.min(r1, w.radial));
   const by = Math.abs(p - w.pronation) + Math.abs(f - w.flexion) + Math.abs(r - w.radial);
   if (!by) { out.copy(q); return 0; }

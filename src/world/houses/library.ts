@@ -14,9 +14,10 @@ import { G } from '../../state';
 import { buildScholar, type Scholar } from '../../entities/models/scholar';
 import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../entities/models/book';
 import { SCHOLAR_DESK } from '../../data/houses/library';
+import { chairSeat } from '../seats';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
-  parchment, rug, stool, table, writing, type Build, type Mats, type Room,
+  parchment, rug, stool, table, writing, type Build, type Furniture, type Mats, type Room,
 } from '../rooms';
 
 /** the library's light: as every room's, its sky's share warmer and fuller, for the books down every wall to read
@@ -297,25 +298,37 @@ function readingDesk(g: THREE.Group, M: Mats, b: Build, x: number, z: number, tu
   }
 }
 
+/** an armchair's width (m): wide enough for a hero sat in it to rest a weapon or a shield beside his thigh within its
+ *  arms (at 0.8 m, from review, every one he set down went through an arm) */
+const CHAIR_WIDE = 1.0;
+
 /** An armchair at (x, z) turned `turn`: a deep seat, a high back, rolled arms, all in red cloth on dark legs. */
-function armchair(g: THREE.Group, M: Mats, x: number, z: number, turn: number): void {
+function armchair(g: THREE.Group, M: Mats, x: number, z: number, turn: number): Furniture {
   const a = new THREE.Group();
   a.position.set(x, 0, z);
   a.rotation.y = turn;
   g.add(a);
   const cloth = new THREE.MeshStandardMaterial({ color: 0x6a1a14, roughness: 0.9 });
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(a, 0.06, 0.18, 0.06, sx * 0.34, 0, sz * 0.3, M.timber);
-  box(a, 0.8, 0.22, 0.72, 0, 0.18, 0, cloth);
-  box(a, 0.64, 0.12, 0.6, 0, 0.4, 0.04, cloth);
-  box(a, 0.8, 0.75, 0.16, 0, 0.4, -0.32, cloth);
+  const half = CHAIR_WIDE / 2, arm = half - 0.04;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(a, 0.06, 0.18, 0.06, sx * (half - 0.06), 0, sz * 0.3, M.timber);
+  box(a, CHAIR_WIDE, 0.22, 0.72, 0, 0.18, 0, cloth);
+  const top = box(a, CHAIR_WIDE - 0.16, 0.12, 0.6, 0, 0.4, 0.04, cloth);
+  box(a, CHAIR_WIDE, 0.75, 0.16, 0, 0.4, -0.32, cloth);
   for (const sx of [-1, 1]) {
-    box(a, 0.14, 0.26, 0.7, sx * 0.36, 0.4, 0, cloth);
+    box(a, 0.14, 0.26, 0.7, sx * arm, 0.4, 0, cloth);
     const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.7, 12).rotateX(Math.PI / 2), cloth);
-    roll.position.set(sx * 0.36, 0.68, 0);
+    roll.position.set(sx * arm, 0.68, 0);
     roll.castShadow = true;
     a.add(roll);
   }
+  return { group: a, top };
 }
+
+/** the armchair's turn, and where on it a body sits: his hips behind its middle, back on the cushion (m: 8 cm ahead
+ *  of it, from review, he sat perched on its front edge, his back well off its back), and how near its circle (round
+ *  its arms and back) he comes to sit (m: at `SEAT.near` his feet stood 0.7 m out) */
+const CHAIR_TURN = -Math.PI / 2 - 0.5;
+const CHAIR = { sit: -0.06, near: -0.04 };
 
 /** A cabinet of pigeonholes against a wall (its frame) at x, each holding a rolled scroll or two. */
 function scrollRack(frame: THREE.Object3D, M: Mats, x: number, rng: () => number): void {
@@ -536,8 +549,9 @@ export function build(group: THREE.Group): Room {
     cx.fillText('The Known Lands', w / 2, 44, w - 40);
   });
   framed(east, M, chart, 0.9, 1.75, 0.8, 1.0);
-  armchair(g, M, hx - 1.9, 0.9, -Math.PI / 2 - 0.5);
-  b.obstacles.push({ x: hx - 1.9, z: 0.9, r: 0.5, h: 1.1 });
+  const chair = armchair(g, M, hx - 1.9, 0.9, CHAIR_TURN), chairAt = { x: hx - 1.9, z: 0.9, r: 0.58, h: 1.1 };
+  b.obstacles.push(chairAt);
+  b.seats.push(chairSeat(chairAt, CHAIR_TURN, CHAIR.sit, CHAIR.near, [chair.top], [{ root: chair.group }]));
   // --- the floor: rugs, the Codex, two reading desks, the globe, stacks of books, the chandelier ---
   rug(g, M, 0, -2.4, 3.2, 2.0, ['#4a1414', '#c09a50', '#1e2a40'], 41);
   rug(g, M, 0, 1.2, 3.6, 2.4, ['#1e2a3a', '#b08a40', '#5a1a14'], 43);

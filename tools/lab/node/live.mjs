@@ -8,8 +8,8 @@
 // go of the input on a blur (session.mjs), so a command run beside the live page would have measured another game.
 // What's found here is measured by a command, on a page booted for it: the live page's state is wherever its steps
 // took it.
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, extname, join, relative, resolve } from 'node:path';
 import { launchBrowser } from './browser.mjs';
 import { fixtureFrom } from './commandKit.mjs';
 import { labError } from './errors.mjs';
@@ -17,6 +17,7 @@ import { LiveLog, describeStep, pictureName } from './liveLog.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { Side } from './side.mjs';
 import { pictureUrl } from './pictureFile.mjs';
+import { writeSheet } from './sheetImage.mjs';
 
 /** where the live session writes its pictures, and keeps its steps */
 const LIVE_DIR = join(OUT, 'live');
@@ -27,14 +28,31 @@ const DEFAULT_CLASS = 'warrior';
 const STEP_OPTIONS = {
   start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon', 'wear', 'rarity', 'screen'],
   picture: ['views', 'look', 'focus', 'on', 'distance', 'over', 'strength', 'crop', 'canary'],
+  mocap: ['views', 'look', 'focus', 'distance'],
+  holds: ['views', 'look', 'focus', 'distance'],
   inspect: ['depth'],
   eval: [],
+  read: [],
   frames: [],
+  sit: [],
+  hold: [],
+  keys: [],
+  key: [],
   log: [],
   stop: [],
 };
 /** the steps that need words after them, and what they are */
-const STEP_WORDS = { eval: 'expression', frames: 'count' };
+const STEP_WORDS = {
+  eval: 'expression',
+  read: 'expression',
+  frames: 'count',
+  sit: 'seat',
+  hold: 'moment of his hands\' stage',
+  mocap: 'clip (a BVH file) and its moments in seconds (.tmp/mocap/69_70.bvh 1,2.5,4)',
+  holds: 'moments of his hands\' stage (0.8,0.55,0.25,0)',
+  keys: 'keyed tunable (warriorPick.keys)',
+  key: 'keyed tunable, key and numbers (warriorPick.keys 3 drop=0.4,lean=0.9)',
+};
 /** a reference picture's types by its file's extension */
 
 /** A screen as `--screen` writes it: `832x384@3.75`. */
@@ -54,12 +72,31 @@ export function checkStep(options) {
   if (stray) throw labError(`live ${step} takes no --${stray} (it takes ${listed(STEP_OPTIONS[step])})`);
   if (STEP_WORDS[step] && options._.length < 2) throw labError(`live ${step} needs its ${STEP_WORDS[step]}`);
   if (step === 'frames' && !(Number(options._[1]) >= 1)) throw labError('live frames: a count of at least 1');
+  const hands = Number(options._[1]);
+  if (step === 'hold' && !(hands >= 0 && hands <= 1)) throw labError('live hold: his hands\' stage, 1 to 0 (0.4)');
   if (options.on && !isPlace(options.on.map(Number))) {
     throw labError('live picture --on: a place in the world as x,y,z in metres (7.5,0.4,17.1)');
   }
   if (options.crop && !isCrop(options.crop.map(Number))) {
     throw labError('live picture --crop: left,top,right,bottom as shares of the picture (0.5,0,1,0.6)');
   }
+}
+
+/** What an expression evaluated to, as text. */
+function said(result) {
+  return typeof result === 'string' ? result : JSON.stringify(result, null, 2) ?? String(result);
+}
+
+/** `name=value,...` (a key's numbers by name) as an object, each value a number. */
+function namedNumbers(text) {
+  const set = {};
+  for (const pair of text.split(',').filter(Boolean)) {
+    const [name, value] = pair.split('=');
+    if (!name || !Number.isFinite(Number(value))) throw labError(`live key: ${pair} is no name=number`);
+    set[name] = Number(value);
+  }
+  if (!Object.keys(set).length) throw labError('live key: the numbers to set, name=number,...');
+  return set;
 }
 
 /** the options read with a default whatever the step, which no step is faulted for */
@@ -87,6 +124,8 @@ export class LiveSession {
     this.side = null;
     /** the version of the source (the server's count of its changes) the page was booted from */
     this.version = null;
+    /** the clips the page has read, by name (sent once a boot) */
+    this.clipsSent = new Set();
   }
 
   /** Runs one step (`options._[0]`, the words after it, its options); `version` is the source's as the server counts
@@ -105,9 +144,25 @@ export class LiveSession {
   /** A step on the page kept: its text, and the problems it found. */
   async step(step, words, options) {
     if (step === 'eval') return { text: await this.evaluate(words.join(' ')) };
+    if (step === 'read') return { text: said(await this.side.evaluate(words.join(' '))) };
     if (step === 'inspect') {
       const depth = Math.round(options.depth);
       return { text: await this.side.command('liveInspect', { name: words[0], depth }) };
+    }
+    if (step === 'sit') {
+      const sat = { seat: words[0], fixture: this.log.start.fixture };
+      return { text: await this.replayable('liveSit', sat, `sit ${words[0]}`) };
+    }
+    if (step === 'hold') {
+      return { text: await this.replayable('liveHold', { hands: Number(words[0]) }, `hold ${words[0]}`) };
+    }
+    if (step === 'mocap') return this.mocap(words, options);
+    if (step === 'holds') return this.holds(words, options);
+    if (step === 'keys') return { text: await this.side.command('liveKeys', { path: words[0] }) };
+    if (step === 'key') {
+      const set = namedNumbers(words.slice(2).join(','));
+      const command = { path: words[0], row: Number(words[1]), set };
+      return { text: await this.replayable('liveKey', command, `key ${words.join(' ')}`) };
     }
     if (step === 'frames') {
       const count = Math.round(Number(words[0]));
@@ -116,6 +171,51 @@ export class LiveSession {
       return { text };
     }
     return this.picture(options);
+  }
+
+  /** `mocap`: the hero posed as a motion-capture clip has its person at each moment asked, pictured at each, the
+   *  pictures a sheet of a row a moment; the pose isn't kept to replay (a picture after it pictures it again). */
+  async mocap(words, options) {
+    const [file, times] = words;
+    const name = basename(file, extname(file));
+    const text = this.clipsSent.has(name) ? undefined : readFileSync(resolve(REPO, file), 'utf8');
+    const command = {
+      name,
+      text,
+      times: times ? times.split(',').map(Number) : [0],
+      picture: { views: options.views, look: options.look, focus: options.focus, distance: options.distance },
+    };
+    const { text: said, moments } = await this.side.command('liveMocap', command);
+    this.clipsSent.add(name);
+    return { text: await this.sheeted(said, moments, `mocap-${name}`) };
+  }
+
+  /** `holds`: his getting up held at each moment asked and pictured at each, the pictures a numbered sheet of a row a
+   *  moment (the holds aren't kept to replay: the last leaves him held there). */
+  async holds(words, options) {
+    const command = {
+      moments: words[0].split(',').map(Number),
+      picture: { views: options.views, look: options.look, focus: options.focus, distance: options.distance },
+    };
+    const { text, moments } = await this.side.command('liveHolds', command);
+    return { text: await this.sheeted(text, moments, 'holds') };
+  }
+
+  /** `said` with the sheet `moments` make written after it, as files named `name` (in parts of a few rows). */
+  async sheeted(said, moments, name) {
+    mkdirSync(LIVE_DIR, { recursive: true });
+    const number = String(this.log.nextPicture()).padStart(3, '0');
+    const sheet = join(LIVE_DIR, `${number}-${name}.png`);
+    const views = Math.max(...moments.map((moment) => moment.tiles.length));
+    const files = await writeSheet(this.browser, [['', { moments }]], views, sheet);
+    return [said, ...files.map((written) => relative(REPO, written))].join('\n');
+  }
+
+  /** A step run on the page as the page's command `name` with `args`, kept to replay as `said`; its text. */
+  async replayable(name, args, said) {
+    const text = await this.side.command(name, args);
+    this.log.add({ kind: 'command', name, args, said });
+    return text;
   }
 
   /** `start`: the page booted for the hero (on `--screen`'s screen, as a phone's: its layout, the touch controls'
@@ -135,7 +235,7 @@ export class LiveSession {
   async evaluate(expression) {
     const result = await this.side.evaluate(expression);
     this.log.add({ kind: 'eval', expression });
-    return typeof result === 'string' ? result : JSON.stringify(result, null, 2) ?? String(result);
+    return said(result);
   }
 
   /** `picture`: the page pictured, each picture written to its own file; their paths and notes, and the problems
@@ -195,6 +295,8 @@ export class LiveSession {
     });
     await this.side.serve();
     await this.side.boot(heroClass);
+    // (a page booted afresh has read no clip yet)
+    this.clipsSent = new Set();
     // (a fresh page each boot: a screen goes with its session)
     if (screen) await this.side.showOn(screen);
     this.version = version;
@@ -207,6 +309,7 @@ export class LiveSession {
     for (let i = 0; i < steps.length; i++) {
       try {
         if (steps[i].kind === 'eval') await this.side.evaluate(steps[i].expression);
+        else if (steps[i].kind === 'command') await this.side.command(steps[i].name, steps[i].args);
         else await this.side.command('liveFrames', { count: steps[i].count });
       } catch (error) {
         this.log.steps = steps.slice(0, i);

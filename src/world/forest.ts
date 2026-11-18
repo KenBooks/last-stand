@@ -29,6 +29,7 @@ import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { buildStumpGeos } from './stump';
 import { runPhase } from './runPhase';
+import { fireSeat, lengthSeat, stoneSeat, whereSat, type Seat } from './seats';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
@@ -69,6 +70,8 @@ const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WAL
 const FIRE_RING = 1.0, FIRE_FERN_CLEAR = 0.7, FROND_REACH = 0.9;
 /** how far past a fire's clearing what stood in it is moved (m, at most) */
 const FIRE_SPREAD = 0.8;
+/** how far round its root a plant reaches, a share of its scale (m): kept that far off where a hero sits */
+const PLANT_REACH = { tuft: 0.2, fern: 0.6, shroom: 0.3 };
 
 /** (`x`, `z`) moved out of every bonfire's clearing `reach` (m) round its middle, away from it and up to `FIRE_SPREAD`
  *  past its edge by its own place (moved rather than left out: a spot drawn again draws more random numbers, and every
@@ -151,6 +154,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const rng = mulberry(4242);
   const r = (a: number, b: number) => a + rng() * (b - a);
   const obstacles: Obstacle[] = [];
+  const seats: Seat[] = [];
   const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
   const wall = new Wall('forest');
@@ -383,6 +387,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     buildBonfire(g, x, z, stone, bonfireBark, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
     breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0), 'ember');
+    seats.push(fireSeat(obstacles[obstacles.length - 1], [{ root: g }]));
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
@@ -432,6 +437,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     // collision: circles along the log
     for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
     breakable.add(n0, 10, 0x4a3520, meshLook(...parts), 'wood');
+    // (sat on along its middle, a little past its top on the side sat on: the fungus and the ends left out)
+    seats.push(lengthSeat(x, z, yaw, 1.4, 0.22, obstacles.slice(n0), parts.slice(0, 3), parts.map((root) => ({ root }))));
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
@@ -442,6 +449,9 @@ export const buildForest: BiomeBuilder = (scene) => {
     setInstance(boulders, i, x, s * 0.25, z, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * 0.8, s);
     obstacles.push({ x, z, r: s * 0.95, h: s * 1.05 });
     breakable.add(obstacles.length - 1, 6 + s * 4, 0x6a7060, instanceLook(boulders, i));
+    // (a stone of a seat's height, sat on at its rim: a smaller one is a step, a bigger one a ledge)
+    const stone = obstacles[obstacles.length - 1];
+    if (s >= 0.6 && s <= 0.8) seats.push(stoneSeat(stone, s * 0.7, [boulders], [{ root: boulders, instance: i }]));
   });
   boulders.castShadow = boulders.receiveShadow = true;
   boulders.name = 'boulders';
@@ -462,8 +472,10 @@ export const buildForest: BiomeBuilder = (scene) => {
     const a = r(0, TAU), rr = Math.sqrt(r(0.02, 1)) * (WALL_R + 1.5);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     if (clump(x / 130 + 0.5, z / 130 + 0.5) < 0.44 || !free(x, z, 0.1)) continue;
-    const s = r(0.7, 1.4), kind = gi++ % tufts.length;
-    setInstance(tufts[kind], placed[kind]++, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.8, 1.3), s);
+    const s = r(0.7, 1.4), kind = gi++ % tufts.length, turn = r(0, TAU), tall = r(0.8, 1.3);
+    // (none where a hero sits, every number still drawn: one drawn fewer moves every prop placed after it)
+    if (whereSat(seats, x, z, PLANT_REACH.tuft * s)) continue;
+    setInstance(tufts[kind], placed[kind]++, x, 0, z, 0, turn, 0, s, s * tall, s);
   }
   tufts.forEach((tuft, kind) => {
     tuft.count = placed[kind];
@@ -477,7 +489,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6, 0, TAU, 0, Math.PI / 2).scale(1, 0.55, 1), capMat, shroomN);
   const stems = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 1, 6).translate(0, 0.5, 0), stemMat, shroomN);
   let si = 0;
-  for (let tries = 0; si < shroomN && tries < 4000; tries++) {
+  for (let tries = 0, drawn = 0; drawn < shroomN && tries < 4000; tries++) {
     // cluster around stumps, logs and the edge
     const o = obstacles[Math.floor(rng() * obstacles.length)];
     const edge = rng() < 0.35;
@@ -486,8 +498,11 @@ export const buildForest: BiomeBuilder = (scene) => {
     const z = edge ? Math.sin(a) * rr : o.z + Math.sin(a) * (o.r + r(0.1, 0.6));
     if (!edge && !free(x, z, 0.05)) continue;
     const s = r(0.06, 0.16), sh = s * r(1.5, 2.6);
-    setInstance(stems, si, x, 0, z, r(-0.2, 0.2), 0, r(-0.2, 0.2), s * 0.5, sh, s * 0.5);
-    setInstance(caps, si, x, sh, z, r(-0.2, 0.2), 0, r(-0.2, 0.2), s * 1.1);
+    const stemX = r(-0.2, 0.2), stemZ = r(-0.2, 0.2), capX = r(-0.2, 0.2), capZ = r(-0.2, 0.2);
+    drawn++;
+    if (whereSat(seats, x, z, PLANT_REACH.shroom)) continue;
+    setInstance(stems, si, x, 0, z, stemX, 0, stemZ, s * 0.5, sh, s * 0.5);
+    setInstance(caps, si, x, sh, z, capX, 0, capZ, s * 1.1);
     si++;
   }
   caps.count = stems.count = si;
@@ -497,7 +512,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const fernN = 300;
   const ferns = new THREE.InstancedMesh(fernClumpGeo(rng), fernMat, fernN);
   let fi = 0;
-  for (let tries = 0; fi < fernN && tries < 8000; tries++) {
+  for (let tries = 0, drawn = 0; drawn < fernN && tries < 8000; tries++) {
     let x: number, z: number;
     if (rng() < 0.6) {
       const a = r(0, TAU), rr = WALL_R - r(-0.5, 3.5);
@@ -510,8 +525,11 @@ export const buildForest: BiomeBuilder = (scene) => {
     }
     const s = r(0.9, 1.7);
     [x, z] = clearOfFires(x, z, FIRE_FERN_CLEAR + FROND_REACH * s);
-    setInstance(ferns, fi, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.8, 1.2), s);
-    ferns.setColorAt(fi++, plantCol.setRGB(r(0.16, 0.26), r(0.26, 0.38), r(0.1, 0.16)));
+    const turn = r(0, TAU), tall = r(0.8, 1.2), red = r(0.16, 0.26), green = r(0.26, 0.38), blue = r(0.1, 0.16);
+    drawn++;
+    if (whereSat(seats, x, z, PLANT_REACH.fern * s)) continue;
+    setInstance(ferns, fi, x, 0, z, 0, turn, 0, s, s * tall, s);
+    ferns.setColorAt(fi++, plantCol.setRGB(red, green, blue));
   }
   ferns.count = fi;
   ferns.receiveShadow = true;
@@ -628,6 +646,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   });
 
   return {
+    seats,
     relief: tubesRelief(rootTops, WALL_R + 3),
     look: {
       // daylight: its ordinary scenes are about 2.3 times as bright as the night crypt's

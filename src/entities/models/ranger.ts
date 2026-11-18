@@ -9,25 +9,44 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, updateJoints } from './rig';
+import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
+import { tunable } from '../../core/tuning';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, ramp, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { ovalTube, wristBent, wristOf } from './wrist';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCutSteps, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type Head, type HeadSpec } from './head';
 import { EYE } from './face';
-import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
+import { buildHand, hold, fistOn, fistReach, fistTurn, loosen, poseHand, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
-import { fitArm, solveArm } from './armIK';
-import { bodyShape } from './anatomy';
+import { fitArm, recall, remembered, solveArm, type ArmMemory } from './armIK';
+import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { buildFlask, drink, holdFlask } from './flask';
 import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
-import type { AnimState, Model } from '../../types';
 import { built, type ModelSteps } from './steps';
+import { groundHeight } from '../../world/ground';
 import { Dye } from './dye';
 import { ItemGlows, drawnIn } from './itemGlow';
+import type { AnimState, Fist, Model } from '../../types';
+
+/** sat, how his hands turn as they rest on his thighs (`models/sit.ts`, `restHands`): what they hold lies as a man
+ *  resting lays it */
+const SIT_HANDS: RestTurn = tunable('rangerSit', { roll: [0, 0], bend: [0, 0] });
+/** sat, the bow across his thighs, its grip in his left hand on his thigh (how far down it from the hip, a share of it,
+ *  and over it, rig units); on the floor by a fire, laid flat beside him (rig units, the root's frame: out to his left,
+ *  ahead; and its half thickness over the floor). From review: held where he stands, its upper limb rose across his
+ *  face sat. */
+/** sat on the floor, how far the quiver tips back off it (rad) */
+const QUIVER_TIP = 0.4;
+/** By a fire, the bow carried down in his fist over `lay[0]` to `lay[1]` of the way down to the floor beside his left
+ *  hip (`floor`: out, ahead, over it, rig units; 0.4 out and 0.1 ahead, the limb ahead ended on his boot's toe), then
+ *  let go of once he's sat, over `hands` s (`Model.sitHands`): his fingers open (to `tip[0]` of that), it tips
+ *  over flat (to `tip[1]`) and his hand goes to his knee over an arc `arc` up; the reverse as he gets up (`layBow`). */
+const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.55, 0, 0.1], lay: [0.2, 1], tip: [0.08, 0.35], arc: 0.12, hands: 1.5, elbow: [0.3, -0.2, -1] });
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -246,21 +265,6 @@ const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 /** the coat's share of the arm round each armhole (`ArmBlend`; less above `topY`, under the baldric) */
 const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 
-/**
- * `share` of the turn `q` from rest into `out`, taken the way round that is nearer `middle` (the middle of the turns
- * it takes). Taken the shorter way (a slerp from rest), a turn near half round went one way and then the other as it
- * crossed it, and the joints blended through it jumped between two places: the bow hand is turned 90 to 180 degrees
- * on its forearm (through the eyes 140 to 180, and past it), and its cuff flickered between two shapes with the hand still (#161).
- * Measured from the middle, the way round flips only half a turn from it, where the hand never goes.
- */
-function blendTurn(out: THREE.Quaternion, q: THREE.Quaternion, share: number, middle: THREE.Quaternion): THREE.Quaternion {
-  // (q and -q are one turn, each the other way round: the one nearer the middle)
-  const sign = q.dot(middle) < 0 ? -1 : 1;
-  const w = THREE.MathUtils.clamp(q.w * sign, -1, 1), half = Math.acos(w), s = Math.sin(half);
-  if (s < 1e-6) return out.identity();
-  const k = Math.sin(half * share) / s * sign;
-  return out.set(q.x * k, q.y * k, q.z * k, Math.cos(half * share));
-}
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -281,21 +285,6 @@ function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): 
 
 /** the draw hand's fingers: index, middle and ring hooked round the string at their last joints, the little finger and the
  *  thumb tucked under (`k` 1), or relaxed open (0); `pinch` closes the thumb on the index, holding an arrow by its nock */
-/** a tube round the forearm joint's bone (along -y, its space), flattened: rings of [y, half across, half through] from
- *  the bottom up (the wrist wider across the back of the hand than through it, as the forearm is towards it) */
-function ovalTube(rings: [number, number, number][], segs: number): THREE.BufferGeometry {
-  const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]), segs), p = g.attributes.position;
-  if (!p) return g;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i); let k = 0;
-    while (k < rings.length - 2 && y > rings[k + 1][0]) k++;
-    const [y0, x0, z0] = rings[k], [y1, x1, z1] = rings[k + 1], t = clamp((y - y0) / (y1 - y0), 0, 1);
-    p.setZ(i, p.getZ(i) * (z0 + (z1 - z0) * t) / (x0 + (x1 - x0) * t));
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
 function hook(h: Hand, k: number, pinch: number): void {
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
@@ -501,14 +490,9 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
   yield;
-  // each wrist's part-turned joints: a quarter, half and three quarters of the hand's turn on the forearm (`bendWrists`)
-  /** the middle of each hand's turns on its forearm, about its length (`blendTurn`: the bow hand's -180 to -90 degrees,
-   *  past -180 through the eyes, the draw hand's 0 to 185, standing, walking, strafing and shooting, in third person and
-   *  through the eyes). A middle is a way round too: given as 225, the bow hand's, the cuff twisted the long way round
-   *  its wrist and pinched in under the bracer */
-  const wristMiddles = [[j.handL, -135], [j.handR, 135]].map(([hand, deg]) =>
-    new THREE.Quaternion().setFromAxisAngle((hand as THREE.Object3D).position.clone().normalize(), (deg as number) * Math.PI / 180));
-  const wrists = [j.handL, j.handR].map((h) => [1, 2, 3].map((q) => { const d = joint(h.parent!, ...(h.position.toArray() as [number, number, number])); d.name = (h === j.handL ? 'wristL' : 'wristR') + q; return d; }));
+  // each wrist's part-turned joints (`wrist.ts`; the middle of the bow hand's turns on its forearm is -135, of the draw
+  // hand's 135: given as 225, the bow hand's cuff twisted the long way round its wrist and pinched in under the bracer)
+  const wrists = [wristOf(j.handL, true), wristOf(j.handR, false)];
   for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
     // the elbow onto the forearm)
@@ -524,9 +508,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // off; pinched in under the bracer's end, it read as a doll's joint)
     // (bent through joints turned a quarter, half and three quarters as far as the hand, `wrists`, over 6 cm: blended
     // straight from the forearm to the hand over 3.5, the cuff kinked at the wrist and its inside collapsed)
-    const cuff = ovalTube([[-0.3, 0.04, 0.02], [-0.288, 0.04, 0.021], [-0.274, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.235, 0.039, 0.028]], 18), cp = cuff.attributes.position;
-    if (cp) cuff.setAttribute('skinK', new THREE.BufferAttribute(Float32Array.from({ length: cp.count }, (_, i) => smooth(clamp((-cp.getY(i) - (j.P.foreL - 0.03)) / 0.058, 0, 1))), 1));
-    S.skinChain(cuff, hide, el, [el, ...wrists[hand === j.handL ? 0 : 1], hand]);
+    const cuff = wristBent(ovalTube([[-0.3, 0.04, 0.02], [-0.288, 0.04, 0.021], [-0.274, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.235, 0.039, 0.028]], 18), j.P.foreL);
+    S.skinChain(cuff, hide, el, wrists[hand === j.handL ? 0 : 1].chain);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
     yield;
   }
@@ -561,6 +544,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   // \`lab village --class ranger --only heroBesideFire\`)
   const stowedVane = kit.std({ color: 0x5f5a50, roughness: 0.95, metalness: 0 });
   const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35; quiver.name = 'quiver';
+  // (worn on its strap: it swings there as he sits, no hand moves it; tools/lab `sit` judges it by its jumps alone)
+  quiver.userData.worn = true;
   S.add(lathe([[0.02, -0.52], [0.05, -0.5], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
   S.add(lathe([[0.045, -0.525], [0.055, -0.51], [0.056, -0.45]], 18), strapLeather, quiver);
   for (const y of [-0.36, -0.08, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
@@ -583,6 +568,10 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     .add('chest', [j.root], { only: (m) => drawnIn(m, [coat, coatHem]) })
     .add('hands', [j.elbowL, j.elbowR], { only: (m) => drawnIn(m, [hide]) })
     .add('hands', [handL.glove, handR.glove], { inPlace: true });
+  // (its grip's middle, the handle `Model.fists` reads the left fist round)
+  const bowGrip = new THREE.Object3D();
+  bowGrip.position.copy(GRIP);
+  bow.group.add(bowGrip);
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
   const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
@@ -628,10 +617,10 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   const stringAndArrowPts = [...stringPts, ...arrowPts, ...limbPts], stringAndLimbPts = [...stringPts, ...limbPts];
   /** how far the bow arm is swung out at its shoulder to keep the string off the thigh, as last held (rad) */
   let offThigh = 0;
-  const stringOffThigh = () => {
+  const stringOffThigh = (weight: number) => {
     stringPts.forEach(([[, p]], i) => (i <= STRING_PTS ? p.lerpVectors(bow.tipU, bow.nock, i / STRING_PTS) : p.lerpVectors(bow.nock, bow.tipL, i / STRING_PTS - 1)));
     const posed = j.shoulderL.rotation.z;
-    armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts);
+    armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts, weight);
     // (swung out as far as it needs at once, and let back no faster than `OFF_THIGH_BACK`: let go as the bow coming
     // in for a shot cleared the thigh, the arm it had held 10 cm out jumped onto its place in a frame, the bow's tip 24 cm)
     const need = j.shoulderL.rotation.z - posed;
@@ -726,7 +715,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     fistTurn(handL, _y, _e, _gq);
     const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0,
       // (the bow arm's elbow swung, not jumped, as the bow comes in from the side: free, it went 17 cm in a frame)
-      maxMove: dtNow ? FETCH_V * dtNow : undefined, maxJerk: dtNow ? ELBOW_ACC * dtNow * dtNow : undefined });
+      maxMove: dtNow ? FETCH_V * dtNow : undefined, maxJerk: dtNow ? ELBOW_ACC * dtNow * dtNow : undefined, flexion: GRIPPED_FLEXION });
     updateJoints(root);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -742,6 +731,146 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     j.handL.updateWorldMatrix(true, false);
     _m.compose(bp.p, bp.q, _s.setScalar(s));
     _m2.copy(j.handL.matrixWorld).invert().multiply(_m).decompose(bow.group.position, bow.group.quaternion, bow.group.scale);
+    heldBow.p.copy(bow.group.position); heldBow.q.copy(bow.group.quaternion); heldBow.s.copy(bow.group.scale);
+  };
+  /** the bow as he sits, eased in by `w`: across his thighs, flat, its upper limb to his right, its grip on his left
+   *  thigh (`placeBow` fits his hand to it there) */
+  const _lapQ = new THREE.Quaternion(), _lapAt = new THREE.Vector3(), _lapY = new THREE.Vector3();
+  const lapBow = (bp: BowPose, w: number) => {
+    const s = sc();
+    root.updateMatrixWorld(true);
+    j.thighL.localToWorld(_lapAt.set(0, -j.P.thighL * BOW_SIT.lap[0], j.P.thighR + BOW_SIT.lap[1]));
+    const across = _lapY.set(-1, 0, 0).transformDirection(root.matrixWorld).setY(0).normalize();
+    _lapQ.setFromRotationMatrix(_m.makeBasis(UP, across, _z.crossVectors(UP, across)));
+    _lapAt.sub(_c.copy(GRIP).multiplyScalar(s).applyQuaternion(_lapQ));
+    bp.p.lerp(_lapAt, w);
+    bp.q.slerp(_lapQ, w);
+  };
+  /** the bow as `placeBow` last had it in the fist (the hand's frame) */
+  const heldBow = { p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(1, 1, 1) };
+  /** where its grip is set down by a fire (world, into `out`): beside his left hip (`BOW_SIT.floor`: out, ahead, over
+   *  the floor, rig units) */
+  const floorAt = (out: THREE.Vector3) => {
+    const [side, ahead, over] = BOW_SIT.floor;
+    root.updateMatrixWorld(true);
+    root.localToWorld(out.set(side, 0, ahead));
+    out.y = groundHeight(out.x, out.z) + over * sc();
+    return out;
+  };
+  /** By a fire, the bow laid down beside him as a seated man lays one: carried down in his fist `down` of the way, the
+   *  arm hanging, the bow tipped forward in it to stand on its edge along his way beside his hip; then let go of, `free`
+   *  of the way, the fingers opening as it tips over flat (`BOW_SIT.tip` of it), and his hand going to his knee on an
+   *  arc over his shin (`towardKnee`). Getting up, the reverse. (Laid flat in his fist, no arm reached it: the palm had to face
+   *  down with the forearm level on the floor, and the wrist went 40 to 85 degrees past its range; eased out of his
+   *  hand while the hand went to his knee, nothing carried it, "ranger uses force pull to grab his bow from seated
+   *  near fire", 1.2 m in a frame as he stood) */
+  const _restL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _laidS = new THREE.Vector3(), _gripW = new THREE.Vector3(), _dirW = new THREE.Vector3(), _visWas = new THREE.Quaternion();
+  const _edgeQ = new THREE.Quaternion(), _tipQ = new THREE.Quaternion(), _edgeAt = new THREE.Vector3(), _down = new THREE.Vector3();
+  /** The left hand `w` of the way from where the arm has it now to where it rests on his knee (`_restL`'s arm), on an
+   *  arc `BOW_SIT.arc` up (rig units), the arm solved to it within the body's ranges and out of his legs. */
+  const _fromAt = new THREE.Vector3(), _fromQ = new THREE.Quaternion(), _kneeAt = new THREE.Vector3(), _kneeQ = new THREE.Quaternion();
+  const towardKnee = (w: number, elbowTo: THREE.Vector3) => {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    root.updateMatrixWorld(true);
+    j.handL.getWorldPosition(_fromAt);
+    j.handL.getWorldQuaternion(_fromQ);
+    _keyL.forEach((q, i) => q.copy(arm[i].quaternion));
+    arm.forEach((joint, i) => joint.quaternion.copy(_restL[i]));
+    root.updateMatrixWorld(true);
+    j.handL.getWorldPosition(_kneeAt);
+    j.handL.getWorldQuaternion(_kneeQ);
+    arm.forEach((joint, i) => joint.quaternion.copy(_keyL[i]));
+    root.updateMatrixWorld(true);
+    const at = _fromAt.lerp(_kneeAt, w).addScaledVector(UP, BOW_SIT.arc * sc() * Math.sin(Math.PI * w));
+    solveArm(j, true, { wrist: at, hand: _fromQ.slerp(_kneeQ, w), pole: elbowTo, keep: 20, body, free: fp });
+    // (and as it rests there, the arm as it rests)
+    if (w >= 1) arm.forEach((joint, i) => joint.quaternion.copy(_restL[i]));
+  };
+  const _keyL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _layPole = new THREE.Vector3();
+  /** the bow in the fist (the hand's frame) as he begins to lay it down by a fire, which it's carried in */
+  const inFist: BowPose = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+  /** the face it's laid on by a fire: its own +x up (1) or down (-1) */
+  let tipFace = 1;
+  /** what the standing hold's solves remembered as the lay began, for it to take up again (`recall`) */
+  let holdMemory: ArmMemory | null = null;
+  const layBow = (bp: BowPose, down: number, free: number, elbowTo: THREE.Vector3) => {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    arm.forEach((joint, i) => _restL[i].copy(joint.quaternion));
+    if (down <= 0) {
+      placeBow(bp, elbowTo);
+      inFist.p.copy(heldBow.p);
+      inFist.q.copy(heldBow.q);
+      return;
+    }
+    const s = sc();
+    // the grip from where he holds it to the floor, its length eased from how he holds it to along his way; the fist
+    // turned from that and the way to his shoulder, as `placeBow` turns it, and the bow where the fist has it
+    const grip = _gripW.copy(GRIP).multiplyScalar(s).applyQuaternion(bp.q).add(bp.p).lerp(floorAt(_c), down);
+    const was = _dirW.set(0, 1, 0).applyQuaternion(bp.q);
+    const along = _lapY.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
+    if (was.dot(along) < 0) along.negate();
+    _q.setFromUnitVectors(was, along);
+    const dir = was.applyQuaternion(_q3.identity().slerp(_q, down));
+    j.shoulderL.getWorldPosition(_d);
+    _e.copy(_d).sub(grip).normalize();
+    fistReach(handL, dir, _e, GRIP_R, _a);
+    fistTurn(handL, dir, _e, _gq);
+    // (its elbow from where the bow's held towards behind him, as an arm hangs: kept out and down as for holding the bow
+    // up, the arm hanging to the floor was at its shoulder's and forearm's stops)
+    const pole = _layPole.fromArray(BOW_SIT.elbow).normalize().transformDirection(root.matrixWorld).lerp(elbowTo, 1 - down).normalize();
+    solveArm(j, true, { wrist: _b.copy(grip).sub(_a), hand: _gq, pole, keep: 20, body, free: fp, flexion: GRIPPED_FLEXION });
+    root.updateMatrixWorld(true);
+    bow.group.position.copy(inFist.p);
+    bow.group.quaternion.copy(inFist.q);
+    bow.group.updateWorldMatrix(true, false);
+    bow.group.matrixWorld.decompose(_edgeAt, _edgeQ, _laidS);
+    // (the fist closed round its grip as it lies in the hand now: left as it was round it standing, the hand as drawn
+    // was bent 36 degrees past the wrist's range as the arm hung)
+    hold(handL, _y.set(0, 1, 0).applyQuaternion(_edgeQ), GRIP_R, _e.copy(_d).sub(grip).normalize());
+    // (which face it falls onto, taken while it's held: taken as it fell, the face stood level on its edge and it went
+    // over one way a frame and the other the next, half a turn)
+    if (free <= 0) {
+      tipFace = _e.set(1, 0, 0).applyQuaternion(_edgeQ).dot(UP) >= 0 ? 1 : -1;
+      return;
+    }
+    // let go of: its fingers opening as it tips over about its length to lie flat, falling the way it's nearer, and down
+    // onto the floor
+    const length = _dirW.set(0, 1, 0).applyQuaternion(_edgeQ);
+    const face = _e.set(1, 0, 0).applyQuaternion(_edgeQ);
+    const up = _down.copy(UP).multiplyScalar(tipFace);
+    const across = _x.crossVectors(face, up);
+    const tipBy = Math.sign(across.dot(length) || 1) * face.angleTo(up);
+    // (the fingers open before it goes over and close after it's up: closing as it rose into them, it turned 37
+    // degrees in the fist)
+    const [opens, tips] = BOW_SIT.tip;
+    const fall = ramp(free, opens, tips) ** 2;
+    _tipQ.setFromAxisAngle(length, tipBy * fall);
+    const flatAt = floorAt(_c).addScaledVector(_y.copy(GRIP).multiplyScalar(s).applyQuaternion(_q.copy(_tipQ).multiply(_edgeQ)), -1);
+    // (about its grip, lowered to the floor as it goes over)
+    const gripAt = _gripW.copy(GRIP).multiplyScalar(s).applyQuaternion(_edgeQ).add(_edgeAt);
+    _edgeAt.sub(gripAt).applyQuaternion(_tipQ).add(gripAt);
+    _edgeAt.y = lerp(_edgeAt.y, flatAt.y, fall);
+    _edgeQ.premultiply(_tipQ);
+    // (the arm stays on it as it opens, then the hand goes from there to his knee on an arc up over his shin, the arm
+    // solved to it: turned joint by joint, the hand went 7 cm through the shin)
+    _visWas.copy(handL.vis.quaternion);
+    const rest = smooth(ramp(free, tips, 1));
+    if (rest > 0) towardKnee(rest, elbowTo);
+    if (rest > 0) {
+      poseHand(handL, 0.35, 0.1);
+      handL.vis.quaternion.copy(_visWas).slerp(_q.identity(), rest);
+    } else loosen(handL, 0.7 * smooth(ramp(free, 0, opens)));
+    // (the hand as drawn kept within the wrist's range on its way: turned joint by joint from its fist round the bow on
+    // the floor to his knee, it bent 38 degrees past it to the thumb's side; and short of its ends, as a resting hand's
+    // is: clamped to them, it was held at two stops at once the last of its way to the knee)
+    _q.copy(j.handL.quaternion).multiply(handL.vis.quaternion);
+    if (clampWrist(_q, true, _q3, undefined, WRIST_INSIDE) > 0) j.handL.quaternion.copy(_q3).multiply(_q.copy(handL.vis.quaternion).invert());
+    root.updateMatrixWorld(true);
+    _m.compose(_edgeAt, _edgeQ, _s.setScalar(s));
+    _m2.copy(j.handL.matrixWorld).invert().multiply(_m).decompose(bow.group.position, bow.group.quaternion, _laidS);
+    bow.group.scale.copy(_laidS);
   };
   /** the draw hand's turn hooked on the string of a bow posed `q` (world, into `out`): its fingers forward along the arrow
    *  and the string across them, the palm to the face, the index finger on top, the hand coming down a little to it from
@@ -900,14 +1029,20 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     hook(handR, 0, 0);
     const drinkOut = drinking ? drink(j, a.t, mouth, handR, flask, fp ? undefined : body) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
+    const legW = sitPose(j, st.sit, st.t);
+    // (sat on the floor, the quiver's foot tipped back off it: hung as it stands, it stood on the floor)
+    const floorW = st.sit && onFloor(st.sit) ? smooth(st.sit.w) : 0;
+    quiver.rotation.x = -QUIVER_TIP * floorW;
     st.look?.(aim < 0.5 ? 1 : 0);
+    restHands(j, st.sit, [0, 1], SIT_HANDS);
+    body.legs = floorW;
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
     else {
       if (!fp) legs.captureArms();
       // (each foot on its own side of the pelvis's middle as the leg IK sees it: across it, it was moved back out and stepped again, over and over)
       if (aim > 0.4) { legs.stance(0, 0.07, 0.2, -1.1); legs.stance(1, -0.07, -0.22, -1.45); }
       else { legs.stance(0, 0.13, 0.06, 0.2); legs.stance(1, -0.13, -0.04, -0.3); }
-      legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1); groundFeet(j, 0.07);
+      legs.update(dt, st.phase, st.dead, legW, fp ? 0 : 1); groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
     updateJoints(root);
@@ -1034,7 +1169,29 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // clears the forearm; and so too with the bow brought up before the chest to put the arrow back: by the shot's ease alone,
     // nothing then, it stayed where it hangs as the bow came up)
     const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - Math.max(aim, stowIn)).clone();
-    if (hasBow) placeBow(shown, elbowTo);
+    const sitW = st.sit && !fp && hasBow ? smooth(st.sit.w) : 0, bowDown = sitW > 0 && onFloor(st.sit!);
+    if (sitW > 0 && !bowDown) lapBow(shown, sitW);
+    // (stood up from the floor, the hold taken up again as he let it go: kept from the carry's elbow and his crouch, it
+    // settled on another as he stood, the bow 5 to 10 cm and 11 to 24 degrees off how he held it before he sat)
+    if (hasBow && !bowDown && holdMemory) {
+      recall(j.shoulderL, holdMemory);
+      holdMemory = null;
+    }
+    if (hasBow && !bowDown) placeBow(shown, elbowTo);
+    else if (hasBow) {
+      // (the hold he stood with remembered as he begins to sit, for it to be taken up again once he's up)
+      holdMemory ??= remembered(j.shoulderL);
+      // (his arm within its ranges as his hand rests on his knee, the bow out of it: left as reached there, the wrist
+      // bent 13 degrees past its range)
+      // (fitted only once he lets go of the bow, which it's turned to: fitted while it carried it too, the carry's solve
+      // began from the knee's elbow each frame, and the elbow flipped 78 degrees in a frame)
+      root.updateMatrixWorld(true);
+      if (st.sit!.after > 0) fitArm(j, true, undefined, body);
+      // (let go of once he's sat, over his hands' own time: at the end of the way down, it tipped over in 3 frames and
+      // the hand went to his knee in 5)
+      const [from, set] = BOW_SIT.lay;
+      layBow(shown, smooth(ramp(sitW, from, set)), st.sit!.after, elbowTo);
+    }
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
     bow.nockArrows(hasBow ? Math.min(strung, n) : 0);
@@ -1137,7 +1294,9 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
       // a runner's hand before the chest took the shoulder's turn to its end and the elbow flipped up and out level with
       // it, the forearm hanging)
       if (onW === 0 && !shooting) {
-        if (!fp) fitArm(j, false, undefined, body);
+        // (sat, a resting hand's wrist kept short of its ends: fitted to them, it went to two stops at once on the way
+        // down)
+        if (!fp) fitArm(j, false, undefined, body, undefined, st.sit ? WRIST_INSIDE : 0);
       } else if (onW < 1) {
         const pole = fkPole.normalize().lerp(linePole, onW);
         // (the hand rides its forearm until the elbow is up and out, then turns onto the string: turned onto it with the
@@ -1188,19 +1347,22 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // (all of him, the meshes too: what reads them next, this frame's, finds them where they were always found)
     root.updateMatrixWorld(true);
     legBodies.place(hem);
-    if (!fp) { if (hasBow) stringOffThigh(); handBodies.place(hem); bowBodies.place(hem); arrowBodies.place(hem); }
+    // (sat, the bow lies on his lap: `lapBow`)
+    if (!fp) { if (hasBow) stringOffThigh(1 - satBy(st.sit)); handBodies.place(hem); bowBodies.place(hem); arrowBodies.place(hem); }
     const outer = fp ? [] : !hasBow ? handBodies.list : bow.arrows[0].visible ? outsideNocked : outside;
     // (through the eyes the body isn't drawn, nor its shadow, a layer the camera and the lights don't see: the coat swings
     // undraped, a tenth of the cost)
-    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer);
+    const tuck = st.sit && onFloor(st.sit) ? satBy(st.sit) * SKIRT_TUCK : 0;
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer,
+      satBy(st.sit), tuck);
+    // (sat on the floor, the coat's hem lies on it)
+    if (st.sit) tunic.keepAbove(floorUnder(hem));
     bendShoulders();
   }
-  /** each shoulder's part-turned joints (`SetInShoulders.bend`), and each wrist's (`blendTurn`) */
+  /** each shoulder's part-turned joints (`SetInShoulders.bend`), and each wrist's */
   function bendShoulders(): void {
-    for (let i = 0; i < 2; i++) {
-      const h = i ? j.handR : j.handL;
-      wrists[i].forEach((d, q) => { blendTurn(d.quaternion, h.quaternion, (q + 1) / 4, wristMiddles[i]); d.position.copy(h.position); });
-    }
+    wrists[0].bend(handL.vis);
+    wrists[1].bend(handR.vis);
     sets.bend();
   }
   return {
@@ -1208,6 +1370,12 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // (the coat, its hem and the hat's felt: his green)
     dye: new Dye('green').cloth(coat, coatHem, felt),
     setHair: head.setHair,
+    // (the left fist round the bow's grip: let go of on the floor by a fire, its fingers open)
+    get fists(): Fist[] {
+      return hasBow && !fp ? [{ hand: 'left', ...fistOn(handL, bowGrip, GRIP_R * sc()) }] : [];
+    },
+    // (by a fire, the bow let go of on the floor and taken again: `layBow`)
+    sitHands: (floor: boolean) => ({ before: 0, after: floor && hasBow ? BOW_SIT.hands : 0 }),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; glows.set(gear); },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },

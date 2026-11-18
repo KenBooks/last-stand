@@ -12,6 +12,13 @@ its door with the guest's name (`ui/houseMarks.ts`), a dot for him at the door o
 tavern's on the village's map; none of them before he goes in or once he's out. `--pictures` takes the marker and the
 map (`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn, which must be found.
 
+`coop --scenarios seats` runs alone, in the village with no run (`node/coopSeats.mjs`, `page/coopSeats.ts`): a seat a
+partner sits on can't be used (`seatTaken` in `world/seats.ts`; from the owner, "need to check if another player is
+already sitting, if yes, then cannot use an object", "it should work in coop ofc (in village)"). The guest sits on one
+of the campfire's logs; the host, stood by it, points at it as a cursor over its middle would: it must not be outlined
+for him while the guest's game reports him sat, a free log beside it must be, and once the guest is up his log must be
+again. `--canary` clears the host's copy of the guest's sit just before it points, which must read as the log free.
+
 `coop --scenarios looks` (alone, as `colours`) checks a hero's look across the room (`data/heroLooks.ts`, `Look.hl` in
 `src/net/session.ts`): the host opens its hero selection screen and picks another look and a hair colour on its Look
 page (`coopPickLook`: the hall's hero built again in it, the screen closed), and every partner must build its copy of

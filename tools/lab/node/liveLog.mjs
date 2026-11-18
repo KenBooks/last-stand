@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname } from 'node:path';
 
 /** the kinds of step a page is brought back by, in the order they ran */
-export const REPLAYED = ['eval', 'frames'];
+export const REPLAYED = ['eval', 'frames', 'command'];
 
 export class LiveLog {
   /** what the session started with (`{ heroClass, fixture }`), null before it starts */
@@ -81,6 +81,7 @@ export class LiveLog {
 export function describeStep(step) {
   if (step.kind === 'eval') return `eval ${step.expression}`;
   if (step.kind === 'frames') return `frames ${step.count}`;
+  if (step.kind === 'command') return step.said;
   return step.kind;
 }
 
