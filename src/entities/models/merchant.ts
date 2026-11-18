@@ -1,4 +1,4 @@
-// Odo the merchant (world/shop.ts stands him behind his counter; his trade is ui/merchant.ts): a stocky, cheerful
+// Odo the merchant (world/houses/merchant.ts stands him behind his counter; his trade is ui/merchant.ts): a stocky, cheerful
 // travelling trader, drawn to read nothing like the library's Brother Hollis (from review: "why Odo looks like
 // librarian?": both had a grey beard, spectacles, a felt cap and an oxblood front over brown): a saffron shirt with its
 // sleeves rolled to the elbow over bare forearms, a teal waistcoat with brass buttons, a wide belt hung with pouches, a

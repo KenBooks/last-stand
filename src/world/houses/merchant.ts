@@ -1,17 +1,17 @@
-// The village's merchant's shop, Odo's Wares (data/houses.ts `merchant`, built with the other houses' rooms by
-// world/rooms.ts; its trade is loot/merchant.ts and ui/merchant.ts): Odo behind a long counter across the back, a brass
+// The village's merchant's shop, Odo's Wares (data/houses/merchant.ts, its room found by world/houses.ts with
+// every other house's in this folder; its trade is loot/merchant.ts and ui/merchant.ts): Odo behind a long counter across the back, a brass
 // scale, his ledger and a candle on it, shelves of jars, bottles and boxes behind him under his sign; swords, axes and
 // a spear in a rack down one wall, shields and an armour stand by the hearth on the other; a display table of helms and
 // rings, a strongbox, crates and barrels by the door, a rug. As every room: 10 point lights, two casting (the hearth and
 // the chandelier).
 import * as THREE from 'three';
-import { HOUSES, type RoomId } from '../data/houses';
+import { HOUSES, type RoomId } from '../../data/houses';
 import {
   BODY, CANDLE, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
   writing, type Build, type Mats, type Room,
-} from './rooms';
-import { G } from '../state';
-import { buildOdo, type Odo } from '../entities/models/merchant';
+} from '../rooms';
+import { G } from '../../state';
+import { buildOdo, type Odo } from '../../entities/models/merchant';
 
 /** bright steel for what's for sale (the rooms' iron is dark, for brackets and hoops) */
 const steelMat = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 });
@@ -179,7 +179,7 @@ function shopSign(frame: THREE.Object3D, M: Mats, y: number): void {
 }
 
 /** The shop: built into `group`. */
-export function buildShop(group: THREE.Group): Room {
+export function build(group: THREE.Group): Room {
   const id: RoomId = 'merchant', b: Build = begin(id, group, 1618), { g, M } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   const steel = steelMat();

@@ -1,4 +1,4 @@
-// An open book's shape, shared by what builds it and what turns its pages: world/library.ts lays the books open on the
+// An open book's shape, shared by what builds it and what turns its pages: world/houses/library.ts lays the books open on the
 // library's tables, the scholar (models/scholar.ts) turns the top page of his, and tools/lab `scholar` reads the turned
 // page against it. Each half is a block of pages from its outer edge to the spine, its top curving up from the gutter
 // to a crest near it and down to the outer edge, as an open book's pages lie; the two halves meet at the spine, the

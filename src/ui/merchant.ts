@@ -1,4 +1,4 @@
-// Odo's trade (`#merchant`, opened at his counter in his shop: game/rooms.ts, world/shop.ts), in three steps (from
+// Odo's trade (`#merchant`, opened at his counter in his shop: game/rooms.ts, world/houses/merchant.ts), in three steps (from
 // play: "make it more intuitive to follow"): 1, choose one of his wares (its price shown on it); 2, offer gear from the
 // stash for it (each piece's value in the same unit, the stash dimmed with a hint until a ware is chosen); 3, the deal:
 // what you get beside what you give, its value against his price as a filled bar ("Value 18 of 20"), what's missing

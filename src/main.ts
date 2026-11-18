@@ -48,7 +48,7 @@ import { initPvp, renderPvp } from './ui/pvpMenu';
 import { initTalk, closeTalk } from './ui/talk';
 import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
-import { scholarTalk } from './world/library';
+import { scholarTalk } from './world/houses/library';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';

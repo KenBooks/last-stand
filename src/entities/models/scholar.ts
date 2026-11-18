@@ -1,4 +1,4 @@
-// Brother Hollis, the library's scholar (world/library.ts seats him at his reading table; data/houses.ts `scholar` is
+// Brother Hollis, the library's scholar (world/houses/library.ts seats him at his reading table; data/houses.ts `scholar` is
 // where he's talked to): an old monk in a brown wool habit, a rope belt knotted at his
 // side, his hood down in a cowl round his neck and a felt skullcap; a long white beard, a white moustache and bushy
 // brows, round brass spectacles. Built on the heroes' own rig, head and hands (the mage's face, its hair cropped white
