@@ -48,7 +48,11 @@ const CARD_EVERY = 20_000;
 /** What kind of room a host opens: listed for anyone, found by its code alone, or by its code and a password. */
 export type RoomKind = 'public' | 'private' | 'password';
 /** How a host opens its room (`hostRoom`). */
-export interface RoomPlan { kind: RoomKind; name: string; max: number; password: string }
+export interface RoomPlan {
+  kind: RoomKind; name: string; max: number; password: string;
+  /** whether the players' friends see the room and may join it from their Friends tab (net/friends.ts) */
+  friends?: boolean;
+}
 /** the most a room's name may be (characters, as the relay keeps it) */
 export const ROOM_NAME_MAX = 32;
 /** what a player is told when a room turns them away, by why */
@@ -129,6 +133,8 @@ export const session = {
   kind: 'private' as RoomKind,
   roomName: '',
   max: COOP.maxPlayers,
+  /** whether the players' friends see the room and may join it (the host's choice, told to its guests) */
+  friends: true,
   /** the local player's name tag in the room (net/nameTag) */
   tag: '',
   /** hosting, the room's link to the co-op server not yet open (the dialog says it's opening) */
@@ -309,6 +315,7 @@ export async function hostRoom(tag: string, plan: RoomPlan = { kind: 'private', 
   session.kind = plan.kind;
   session.roomName = roomNameOf(plan.name, session.tag);
   session.max = Math.max(2, Math.min(COOP.maxPlayers, Math.round(plan.max)));
+  session.friends = plan.friends !== false;
   cardSent = '';
   role.current = 'host';
   G.player.slot = 0;
@@ -356,6 +363,7 @@ export async function joinRoom(code: string, tag: string, password = ''): Promis
   session.lobbyAsked = null;
   session.kind = password ? 'password' : 'private';
   session.roomName = '';
+  session.friends = false;
   hooks.changed();
   try {
     link = await openLink(session.code, { password: password || undefined });
@@ -533,6 +541,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     const welcome = {
       t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, training: session.training,
       inRun: G.mode === 'run', tz: ownOffset(),
+      kind: session.kind, name: session.roomName, max: session.max, fr: session.friends,
     };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
@@ -598,6 +607,11 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
       session.training = m.training === true;
+      // (the room as its host opened it, for this player's friends: a room friends may not see stays unsaid)
+      if (m.kind === 'public' || m.kind === 'private' || m.kind === 'password') session.kind = m.kind;
+      if (typeof m.name === 'string') session.roomName = roomNameOf(m.name, '');
+      if (typeof m.max === 'number') session.max = Math.max(2, Math.min(COOP.maxPlayers, Math.round(m.max)));
+      session.friends = m.fr === true;
       if (G.mode === 'menu' && BIOME_IDS.includes(session.biome)) G.arena.setBiome(session.biome);
       // (the village lit by the host's clock: the party stands in the same light)
       if (typeof m.tz === 'number') setHostOffset(m.tz);

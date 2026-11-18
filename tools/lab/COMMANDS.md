@@ -574,6 +574,19 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `out/rooms/relay.log`. `--canary` starts the relay with its `faults` (any password let in, private rooms listed), each
   of which must be caught. About a minute after the boot.
 
+- `friends`: co-op's friends end to end (#676, part 2; `node/friends.mjs`, `page/friends.ts`), three games against a
+  saves service (`savesService.mjs`, as `cloud` starts it) and a co-op relay of the command's own, each page pointed at
+  them by `?saves=` and `?server=` (dev builds alone read them, loopback alone). The command's page is Brannoch and two
+  partners' pages Ysolde and Pell, on the command's screen, each signed up with a passkey of its own (a virtual
+  authenticator its browser is given), each press their own: a friend code typed and sent, the request shown in the
+  asked one's tab with the tab's badge and not a friendship till accepted from its row, then both listing each other
+  online; a private room opened with "Friends can see and join it", shown in a friend's list with Join, which takes
+  them in; a friend invited from the room's invite list, the invite's toast on their game, its Join taking them in; a
+  room opened without the tick shown to friends as in a room, with no Join and no code. Pictures in
+  `out/friends/<WxH>` (the tab, a request, a friend in a room, the room's invite list, the invite, the party).
+  `--canary` starts the saves service with its faults (`setFriendFaults` in `server/saves/friends.mjs`: a request
+  counted as a friendship, a hidden room shown), each of which must be caught.
+
 - `beta`: the village beta as a player opts into it and out again (`src/core/beta.ts`, `src/ui/beta.ts`), and a
   co-op room keeping to its host's lobby (`src/net/session.ts` `onHello`). The command's own page is the room's
   host; a second page, the visitor's, is booted in the lobby without the village (cold: what a game warms behind

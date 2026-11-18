@@ -12,14 +12,14 @@ import { OUT } from './paths.mjs';
 const DATA = join(OUT, 'saves-service');
 
 /**
- * Starts the service for `origin`; resolves to its address (`url`), a way to read a site's save back (`readSave`) and
- * to close it.
+ * Starts the service for `origin` (with the canary's `faults`, server/saves/friends.mjs, if any); resolves to its
+ * address (`url`), a way to read a site's save back (`readSave`) and to close it.
  */
-export async function startSavesService(origin) {
+export async function startSavesService(origin, faults = {}) {
   const { start } = await import('../../../server/saves/saves.mjs');
   rmSync(DATA, { recursive: true, force: true });
   const settings = { DATA, ORIGINS: origin, PRODUCTION: origin, RP_IDS: 'localhost', GITHUB_REPO: '' };
-  const server = await start(0, settings);
+  const server = await start(0, settings, { faults });
   const url = `http://127.0.0.1:${server.address().port}`;
   return {
     url,

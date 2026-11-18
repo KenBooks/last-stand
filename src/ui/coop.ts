@@ -10,13 +10,14 @@ import {
 } from '../net/session';
 import { askProblem, askTrade } from '../net/trade';
 import { reloadWithVillage, VILLAGE } from '../core/beta';
+import { hideBetaNotice } from './beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
 import { listRooms, serverUp, SERVER_DOWN, type RoomListing } from '../net/transport';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
 import { CLASSES } from '../data/classes/index';
 import { isCoop } from '../net/role';
-import { cleanTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
+import { cleanTag, sameTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
 import { anchorLabel, removeLabel, onLayout, onScreenOrEdge } from './floaters';
 import { Label, ORDER } from './overlay/layer';
 import { ALLY_BAR, ALLY_NAME, barArt, barStep } from './overlay/bars';
@@ -32,6 +33,12 @@ import { portraitPickerHtml, bindPortraitPicker, portraitHtml, syncPortrait } fr
 import { heroColour } from '../data/heroColours';
 import type { Player } from '../entities/player';
 import { flyingFree, toggleFree, watchedPlayer, watchNext } from '../game/spectate';
+import { signedIn } from '../loot/cloud';
+import * as cloudApi from '../loot/cloudApi';
+import {
+  appearOffline, changeFriends, friendsProblem, friendsView, initFriends, invite, onFriendInvite, onFriends,
+  refreshFriends, setAppearOffline, watchFriends,
+} from '../net/friends';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -83,13 +90,13 @@ const join = whenWarm(['heroes'], (code: string, tag: string, password: string) 
 
 /** The dialog's page out of a room: the public rooms, a room of one's own to open, or (on a small screen, where it
  *  has no column beside them) the player's hero: name tag, colour, portrait. */
-type Pane = 'browse' | 'create' | 'hero';
+type Pane = 'browse' | 'create' | 'friends' | 'hero';
 let pane: Pane = 'browse';
 /** what the dialog's own fields hold, kept through its renders as `typed` is (the browser's filters, the room to
  *  create, a password) */
 const form = {
   search: '', map: '' as BiomeId | '', notFull: false,
-  kind: 'public' as RoomKind, name: '', password: '', max: COOP.maxPlayers,
+  kind: 'public' as RoomKind, name: '', password: '', max: COOP.maxPlayers, friends: true,
   /** the room picked in the list, and the password typed for it or for the room that asked for one */
   picked: '', joinPassword: '',
 };
@@ -150,6 +157,9 @@ export function initCoop(): void {
   rv.addEventListener('pointerdown', hold(true));
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) rv.addEventListener(ev, hold(false));
   bindSpectate();
+  initFriends();
+  onFriends(() => { if (friendsShown()) renderCoop(); });
+  onFriendInvite(showInviteToast);
   renderCoop();
 }
 
@@ -273,6 +283,8 @@ dialog({ open: () => coopOpen(), close: () => openCoop(false) });
 
 export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
+  watchFriends(open);
+  if (open) document.getElementById('friend-invite')?.classList.add('hidden');
   if (!open) { watchRooms(false); return; }
   if (session.status === 'off' || session.status === 'failed') void checkServer();
   else renderCoop();
@@ -365,7 +377,7 @@ function renderBody(body: HTMLElement): void {
           <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
             After each wave everyone decides: bank and leave, or continue together.</p>
         </section>
-        <aside class="coop-pane coop-hero">${colourPickerHtml(true)}${portraitPickerHtml()}</aside>
+        <aside class="coop-pane coop-hero">${colourPickerHtml(true)}${portraitPickerHtml()}${inviteFriendsHtml(s)}</aside>
       </div>
       ${footHtml('<button class="btn danger" id="btn-coop-leave">Leave room</button>')}`;
     const copy = $('#btn-coop-copy', body) as HTMLElement | null;
@@ -377,6 +389,7 @@ function renderBody(body: HTMLElement): void {
   bindColourPicker(body);
   bindPortraitPicker(body, renderCoop);
   bindReportLinks(body);
+  bindFriends(body);
   $('#btn-coop-leave', body).onclick = () => { sfx.click(); leaveRoom(); };
   body.querySelectorAll<HTMLButtonElement>('.coop-trade').forEach((b) => {
     b.onclick = () => {
@@ -407,7 +420,8 @@ const KINDS: { kind: RoomKind; label: string; says: string }[] = [
   { kind: 'password', label: 'Password', says: 'Listed, needs a password to join' },
 ];
 const PANES: { pane: Pane; label: string }[] = [
-  { pane: 'browse', label: 'Browse rooms' }, { pane: 'create', label: 'Create room' }, { pane: 'hero', label: 'Your hero' },
+  { pane: 'browse', label: 'Browse rooms' }, { pane: 'create', label: 'Create room' }, { pane: 'friends', label: 'Friends' },
+  { pane: 'hero', label: 'Your hero' },
 ];
 
 /** a room's players as pips, filled for each one in it */
@@ -471,7 +485,8 @@ function createHtml(open: boolean, tag: string): string {
     ${form.kind === 'password' ? `<label class="coop-field"><span>Password</span>
       <input id="coop-room-password" type="password" maxlength="64" placeholder="What your friends type to join" value="${esc(form.password)}" autocomplete="new-password"${open ? '' : ' disabled'}></label>
       <p class="coop-pass-note hidden" role="alert"></p>` : ''}
-    <div class="coop-sizes-row"><span>Players</span><div class="coop-sizes" role="radiogroup" aria-label="Players">${sizes}</div></div>
+    <div class="coop-sizes-row"><span>Players</span><div class="coop-sizes" role="radiogroup" aria-label="Players">${sizes}</div>
+      <label class="coop-check"><input type="checkbox" id="coop-room-friends"${form.friends ? ' checked' : ''}${open ? '' : ' disabled'}> Friends can see and join it</label></div>
     <p class="coop-intro">${form.kind === 'public' ? 'Anyone can find it in Browse rooms and join.'
       : form.kind === 'private' ? 'Only someone with its code or invite link can join.'
       : 'Listed for anyone, but only those with the password can join.'}</p>
@@ -512,7 +527,7 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
   const code = typed.code ?? (invited || (rename || session.passwordAsked ? session.code : ''));
   const tagValue = typed.tag ?? (rename ? session.tag : savedTag());
   const typingIn = fieldTypedIn(body);
-  const tabs = PANES.map((p) => `<button class="coop-tab coop-tab-${p.pane}${pane === p.pane ? ' on' : ''}" data-pane="${p.pane}" role="tab" aria-selected="${pane === p.pane}">${p.label}</button>`).join('');
+  const tabs = PANES.map((p) => `<button class="coop-tab coop-tab-${p.pane}${pane === p.pane ? ' on' : ''}" data-pane="${p.pane}" role="tab" aria-selected="${pane === p.pane}">${p.label}${p.pane === 'friends' ? friendsBadge() : ''}</button>`).join('');
   const quick = quickRoom();
   body.innerHTML = `
     ${headHtml(`<div class="coop-tabs" role="tablist">${tabs}</div>`)}
@@ -520,6 +535,7 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
     <div class="coop-main" data-pane="${pane}">
       <section class="coop-pane coop-browse${up ? '' : ' off'}">${browseHtml(open)}</section>
       <section class="coop-pane coop-create${up ? '' : ' off'}">${createHtml(open, cleanTag(tagValue))}</section>
+      <section class="coop-pane coop-friends${up ? '' : ' off'}">${pane === 'friends' ? friendsHtml(open) : ''}</section>
       <aside class="coop-pane coop-hero">
         <label class="coop-tag${rename ? ' taken' : ''}${up ? '' : ' off'}"><span>Your name tag</span>
           <input id="coop-tag" maxlength="${TAG_MAX}" value="${esc(tagValue)}" placeholder="Name" autocomplete="nickname" spellcheck="false" enterkeyhint="done"${open ? '' : ' disabled'}></label>
@@ -533,6 +549,7 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
       `<form class="coop-join"><input id="coop-code" maxlength="8" placeholder="ROOM CODE" value="${esc(code)}" autocomplete="off" spellcheck="false" aria-label="Room code"${open ? '' : ' disabled'}><button class="btn${pressed === 'join' ? ' pressed' : ''}" type="submit"${open ? '' : ' disabled'}>${pressed === 'join' ? 'Joining…' : 'Join'}</button></form>`,
       `${up ? '' : ' off'}${busy ? ' busy' : ''}`, busy ? ' aria-busy="true"' : '')}`;
   bindOutOfRoom(body, { open, rename, typingIn });
+  bindFriends(body);
 }
 
 /** the screens where the hero has a tab of its own, not a column beside the rooms (as `_coop.scss` lays it out) */
@@ -563,7 +580,12 @@ function bindOutOfRoom(body: HTMLElement, { open, rename, typingIn }: {
   bindPortraitPicker(body, renderCoop);
   const field = <T extends HTMLElement = HTMLInputElement>(id: string): T | null => body.querySelector<T>(`#${id}`);
   for (const tab of body.querySelectorAll<HTMLElement>('.coop-tab')) {
-    tab.onclick = () => { sfx.click(); pane = tab.dataset.pane as Pane; renderCoop(); };
+    tab.onclick = () => {
+      sfx.click();
+      pane = tab.dataset.pane as Pane;
+      if (pane === 'friends') void refreshFriends(true);
+      renderCoop();
+    };
   }
   // the browser: its filters, a room picked, its Join
   const search = field('coop-search');
@@ -602,6 +624,8 @@ function bindOutOfRoom(body: HTMLElement, { open, rename, typingIn }: {
   for (const size of body.querySelectorAll<HTMLElement>('.coop-size')) {
     size.onclick = () => { sfx.click(); form.max = Number(size.dataset.max); renderCoop(); };
   }
+  const roomFriends = field('coop-room-friends');
+  if (roomFriends) roomFriends.onchange = () => { form.friends = roomFriends.checked; };
   const name = field('coop-room-name');
   if (name) name.oninput = () => { form.name = name.value; };
   const password = field('coop-room-password');
@@ -614,7 +638,9 @@ function bindOutOfRoom(body: HTMLElement, { open, rename, typingIn }: {
       password?.focus();
       return;
     }
-    ask(body, 'host', (tag) => host(tag, { kind: form.kind, name: form.name, max: form.max, password: form.password }));
+    ask(body, 'host', (tag) => host(tag, {
+      kind: form.kind, name: form.name, max: form.max, password: form.password, friends: form.friends,
+    }));
   };
   // the hero: the name tag
   const tagField = field('coop-tag');
@@ -677,6 +703,244 @@ function joinListed(body: HTMLElement, code: string): void {
     return;
   }
   ask(body, 'join', (tag) => join(code, tag, room.locked ? form.joinPassword : ''));
+}
+
+// --- friends (#676, part 2; net/friends.ts) --------------------------------------------------------------------
+/** what the Friends tab last said of a change (a request sent, a code refused), and whether it went wrong */
+let friendNote: { text: string; bad: boolean } = { text: '', bad: false };
+/** the friend whose Remove was pressed once, asked to confirm */
+let removing = '';
+/** the friends invited from this room (their Invite says so) */
+const invitedFriends = new Set<string>();
+/** a friend to invite once the room opened for them is open (Invite pressed out of a room) */
+let inviteWhenOpen = '';
+
+/** Whether the friends are on the dialog's screen now (the Friends tab, or a room's invite list). */
+const friendsShown = (): boolean => coopOpen()
+  && (pane === 'friends' || session.status === 'hosting' || session.status === 'joined');
+
+/** a friend code as it's shown: two groups of four */
+const codeShown = (code: string): string => `${code.slice(0, 4)}-${code.slice(4)}`;
+
+/** How long ago `at` was, in words. */
+function agoOf(at: number): string {
+  if (!at) return 'Not seen yet';
+  const minutes = Math.max(0, Math.round((Date.now() - at) / 60_000));
+  if (minutes < 2) return 'Last seen just now';
+  if (minutes < 60) return `Last seen ${minutes} minutes ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Last seen ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `Last seen ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/** A friend's room in a line: its map, wave, players, and a lock where it needs a password. */
+function roomLine(room: cloudApi.FriendRoom): string {
+  const where = room.wave > 1 ? `${biomeLabel(room.map)} · Wave ${room.wave}` : biomeLabel(room.map);
+  return `In a room · ${where} · ${room.players}/${room.size}${room.locked ? ' · needs a password' : ''}`;
+}
+
+/** The number of things waiting in the Friends tab (requests and invites), as a badge on its tab. */
+function friendsBadge(): string {
+  const view = friendsView();
+  const waiting = view ? view.incoming.length + view.invites.length : 0;
+  return waiting ? ` <span class="coop-badge" aria-label="${waiting} waiting">${waiting}</span>` : '';
+}
+
+/** A person's row in the Friends tab: their class's mark, their name, a line under it, and their buttons. */
+function personHtml(who: Pick<cloudApi.FriendAsk, 'id' | 'name' | 'cls'>, line: string, acts: string, on = false): string {
+  const cls = classOf(who.cls);
+  const dot = cls ? ` style="--dot:${cls.accent}"` : '';
+  return `<li class="coop-friend"><span class="coop-cls"${dot}>${esc((cls?.name ?? who.name).slice(0, 1))}</span>
+    <span class="coop-friend-who"><b>${esc(who.name)}</b><small${on ? ' class="on"' : ''}>${esc(line)}</small></span>
+    <span class="coop-friend-acts">${acts}</span></li>`;
+}
+
+/** A row's button, acting on the person `id`. */
+const actHtml = (act: string, id: string, label: string, cls = '', off = false): string =>
+  `<button class="btn${cls ? ` ${cls}` : ''} coop-friend-act" data-act="${act}" data-id="${esc(id)}"${off ? ' disabled' : ''}>${label}</button>`;
+
+/** A section of the Friends tab: its heading with its count, and its rows. */
+const sectionHtml = (title: string, rows: string[]): string => rows.length
+  ? `<h3 class="coop-friends-head">${title} · ${rows.length}</h3><ul class="coop-friends-list">${rows.join('')}</ul>` : '';
+
+/** The Friends tab: signed out, why there are none and the way to sign in; signed in, the code to give and the one
+ *  to add, the invites, the requests, the friends online (their room and Join, or Invite) and offline. */
+function friendsHtml(open: boolean): string {
+  if (!signedIn()) {
+    return `<div class="coop-friends-out"><p><b>Friends follow your cloud save account.</b> Sign in on the save slots
+      screen, with Google or a passkey, to add friends by their friend code, see who is online and join their games.</p>
+      <button class="btn primary coop-friends-signin">Sign in to cloud saves</button></div>`;
+  }
+  const view = friendsView();
+  if (!view) {
+    const problem = friendsProblem();
+    return `<p class="coop-friends-empty" role="status">${esc(problem || 'Reading your friends…')}</p>`;
+  }
+  const invites = view.invites.map((i) => personHtml(i, `Invites you · ${roomLine(i.room)}`,
+    actHtml('join-invite', i.id, 'Join', 'primary', !open) + actHtml('dismiss', i.id, 'Later'), true));
+  const incoming = view.incoming.map((f) => personHtml(f, 'Wants to be friends',
+    actHtml('accept', f.id, 'Accept', 'primary') + actHtml('decline', f.id, 'Decline')));
+  const online = view.friends.filter((f) => f.online).map((f) => {
+    const join = f.room && f.room.code !== session.code ? actHtml('join', f.id, 'Join', 'primary', !open) : '';
+    const asks = !f.room && !f.busy ? actHtml('invite', f.id, invitedFriends.has(f.id) ? 'Invited' : 'Invite', '',
+      !open || invitedFriends.has(f.id)) : '';
+    const line = f.room ? roomLine(f.room) : f.busy ? 'In a room friends can\'t join' : 'Online, in no room';
+    return personHtml(f, line, join + asks + removeHtml(f.id), true);
+  });
+  const offline = view.friends.filter((f) => !f.online).map((f) => personHtml(f, agoOf(f.seen), removeHtml(f.id)));
+  const sent = view.outgoing.map((f) => personHtml(f, 'Asked to be friends', actHtml('remove', f.id, 'Cancel')));
+  const none = !view.friends.length && !incoming.length && !sent.length && !invites.length
+    ? '<p class="coop-friends-empty">No friends yet. Give your friend code to a friend, or type theirs above.</p>' : '';
+  return `<form class="coop-friend-add">
+      <input id="coop-friend-code" maxlength="12" placeholder="Add a friend by their friend code: e.g. K7QM-2XRA" autocomplete="off" spellcheck="false" aria-label="A friend's code">
+      <button class="btn" type="submit">Send request</button></form>
+    <p class="coop-friend-note${friendNote.bad ? ' bad' : ''}${friendNote.text ? '' : ' hidden'}" role="status">${esc(friendNote.text)}</p>
+    <div class="coop-friend-me"><span>Your friend code</span><b class="coop-friend-code">${esc(codeShown(view.code))}</b>
+      <button class="btn coop-copy-code">Copy</button><button class="link coop-new-code" title="A new code: the old one stops working">New code</button>
+      <label class="coop-check"><input type="checkbox" id="coop-offline"${appearOffline() ? ' checked' : ''}> Appear offline</label></div>
+    <div class="coop-friends-sections">${sectionHtml('Invites', invites)}${sectionHtml('Requests', incoming)}${
+      sectionHtml('Online', online)}${sectionHtml('Offline', offline)}${sectionHtml('Sent', sent)}${none}</div>
+`;
+}
+
+/** A friend's Remove, asking once more before it removes. */
+const removeHtml = (id: string): string => removing === id
+  ? actHtml('remove', id, 'Remove?', 'danger') : actHtml('ask-remove', id, 'Remove', 'quiet');
+
+/** In a room: the friends online who aren't in it, each with Invite (none signed out, or with none online). */
+function inviteFriendsHtml(s: string): string {
+  const view = friendsView();
+  if (!view || (s === 'joined' && !session.friends)) return '';
+  // (a friend just come in is left out by the room's own word too: their own word of it comes within seconds)
+  const here = partners().map(nameOf);
+  const free = view.friends.filter((f) => f.online && f.room?.code !== session.code && !here.some((t) => sameTag(t, f.name)));
+  if (!free.length) return '';
+  const rows = free.map((f) => personHtml(f, f.room ? roomLine(f.room) : 'Online, in no room',
+    actHtml('invite', f.id, invitedFriends.has(f.id) ? 'Invited' : 'Invite', '', invitedFriends.has(f.id) || session.opening), true));
+  return `<div class="coop-invite-friends">${sectionHtml('Invite friends', rows)}</div>`;
+}
+
+/** The friend `id` as the view has them. */
+const friendOf = (id: string): cloudApi.Friend | undefined => friendsView()?.friends.find((f) => f.id === id);
+
+/** What the Friends tab says of a change's answer: `fail` if it went wrong, `done` otherwise. */
+function said(fail: string, done: string): void {
+  friendNote = fail ? { text: fail, bad: true } : { text: done, bad: false };
+  renderCoop();
+}
+
+/** A friend's room joined from their row or their invite: the relay asks for its password where it's locked. */
+function joinFriend(body: HTMLElement, code: string): void {
+  ask(body, 'join', (tag) => join(code, tag, ''));
+}
+
+/** Invites `id` into this room; out of a room, opens a private room for friends first and invites them once it's open. */
+function inviteFriend(body: HTMLElement, id: string): void {
+  if (session.status === 'hosting' || session.status === 'joined') {
+    void invite(id).then((fail) => {
+      if (!fail) invitedFriends.add(id);
+      said(fail, fail ? '' : `Invited ${friendOf(id)?.name ?? 'your friend'}.`);
+    });
+    return;
+  }
+  inviteWhenOpen = id;
+  ask(body, 'host', (tag) => host(tag, { kind: 'private', name: '', max: COOP.maxPlayers, password: '', friends: true }));
+}
+
+/** The room opened for an Invite pressed out of a room: the friend invited now it's open. */
+function inviteOnceOpen(): void {
+  if (!inviteWhenOpen || session.status !== 'hosting' || session.opening) return;
+  const id = inviteWhenOpen;
+  inviteWhenOpen = '';
+  void invite(id).then((fail) => { if (!fail) { invitedFriends.add(id); renderCoop(); } });
+}
+
+/** The Friends tab's controls and a room's Invite buttons. */
+function bindFriends(body: HTMLElement): void {
+  inviteOnceOpen();
+  if (session.status === 'off' || session.status === 'failed') invitedFriends.clear();
+  const signIn = body.querySelector<HTMLElement>('.coop-friends-signin');
+  if (signIn) signIn.onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
+  const add = body.querySelector<HTMLFormElement>('.coop-friend-add');
+  if (add) add.onsubmit = (e) => {
+    e.preventDefault();
+    const typed = $<HTMLInputElement>('#coop-friend-code', body).value.trim();
+    if (!typed) return;
+    sfx.click();
+    void changeFriends(() => cloudApi.askFriend(typed)).then((fail) => said(fail, 'Request sent. You are friends once they accept.'));
+  };
+  const copy = body.querySelector<HTMLElement>('.coop-copy-code');
+  if (copy) copy.onclick = () => {
+    sfx.click();
+    const code = friendsView()?.code;
+    if (code) void navigator.clipboard?.writeText(codeShown(code)).then(() => { copy.textContent = 'Copied'; }, () => {});
+  };
+  const renew = body.querySelector<HTMLElement>('.coop-new-code');
+  if (renew) renew.onclick = () => {
+    sfx.click();
+    void changeFriends(() => cloudApi.newFriendCode()).then((fail) => said(fail, 'A new friend code: the old one works no more.'));
+  };
+  const offline = body.querySelector<HTMLInputElement>('#coop-offline');
+  if (offline) offline.onchange = () => setAppearOffline(offline.checked);
+  for (const button of body.querySelectorAll<HTMLButtonElement>('.coop-friend-act')) {
+    button.onclick = () => {
+      const id = button.dataset.id!;
+      const act = button.dataset.act!;
+      sfx.click();
+      if (act === 'accept') void changeFriends(() => cloudApi.acceptFriend(id)).then((fail) => said(fail, ''));
+      else if (act === 'decline') void changeFriends(() => cloudApi.declineFriend(id)).then((fail) => said(fail, ''));
+      else if (act === 'ask-remove') { removing = id; renderCoop(); }
+      else if (act === 'remove') {
+        removing = '';
+        void changeFriends(() => cloudApi.removeFriend(id)).then((fail) => said(fail, ''));
+      } else if (act === 'join') {
+        const room = friendOf(id)?.room;
+        if (room) joinFriend(body, room.code);
+      } else if (act === 'join-invite') {
+        const room = friendsView()?.invites.find((i) => i.id === id)?.room;
+        if (room) {
+          void changeFriends(() => cloudApi.dismissInvite(id));
+          joinFriend(body, room.code);
+        }
+      } else if (act === 'dismiss') void changeFriends(() => cloudApi.dismissInvite(id)).then((fail) => said(fail, ''));
+      else if (act === 'invite') inviteFriend(body, id);
+    };
+  }
+}
+
+/** an invite shown at the top of the lobby: its friend and room, Join and Later */
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+/** How long an invite's toast stays (ms): it waits in the Friends tab after. */
+const TOAST_MS = 20_000;
+
+/** A friend's invite shown at the top of the screen (in the lobby: in a run it waits in the Friends tab). */
+function showInviteToast(invite: cloudApi.FriendInvite): void {
+  // (with Play together open the invite shows in its Friends tab and its badge: a toast lay over the dialog's tabs)
+  if (G.mode !== 'menu' || invite.room.code === session.code || coopOpen()) return;
+  // (the beta's notice put away, as a screen over the village puts it away: both stood at the top's middle)
+  hideBetaNotice();
+  let toast = document.getElementById('friend-invite');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'friend-invite';
+    toast.setAttribute('role', 'alert');
+    document.body.append(toast);
+  }
+  const el = toast;
+  el.innerHTML = `<span class="fi-text"><b>${esc(invite.name)}</b> invites you to play<small>${esc(roomLine(invite.room))}</small></span>
+    <button class="btn primary fi-join">Join</button><button class="btn fi-later">Later</button>`;
+  el.classList.remove('hidden');
+  const hide = (): void => { clearTimeout(toastTimer); el.classList.add('hidden'); };
+  $('.fi-join', el).onclick = () => {
+    sfx.click();
+    hide();
+    void changeFriends(() => cloudApi.dismissInvite(invite.id));
+    joinInvited(invite.room.code);
+  };
+  $('.fi-later', el).onclick = () => { sfx.click(); hide(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hide, TOAST_MS);
 }
 
 /** The lobby's line about the room (hidden solo). */

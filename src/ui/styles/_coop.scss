@@ -76,7 +76,7 @@ body.touch .cc-swatch { width: calc(40px / var(--ui, 1)); height: calc(40px / va
 body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 // (a short screen keeps the name tag, Open a room, the code and Join in view: the colours come under them, a scroll
 // down in the box, as its row pushed Open a room under the fold of a phone held sideways asked to rename)
-@media (max-height: 520px) { .coop-colour { order: 1; } .coop-netlog { order: 2; } }
+@media (max-height: 520px) { .coop-colour { order: 1; } .coop-netlog, .coop-invite-friends { order: 2; } }
 @media (max-height: 520px) { body.touch #coop .modal-box { width: calc(94vw / var(--ui, 1)); } }
 .coop-wait { color: var(--ink-dim); }
 @media (max-height: 520px) { .coop-body { gap: 6px; } .coop-intro { font-size: 13px; } #coop .sm-title { font-size: 24px; } .coop-code { font-size: 24px; } }
@@ -117,7 +117,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 .coop-pane { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .coop-pane.off { opacity: .45; }
 .coop-main[data-pane="browse"] .coop-create, .coop-main[data-pane="create"] .coop-browse,
-.coop-main[data-pane="hero"] .coop-create { display: none; }
+.coop-main[data-pane="hero"] .coop-create, .coop-main[data-pane="friends"] .coop-browse,
+.coop-main[data-pane="friends"] .coop-create, .coop-main:not([data-pane="friends"]) .coop-friends { display: none; }
 .coop-hero {
   padding: 12px; border: 1px solid rgba($frame, .35); background: rgba(0,0,0,.3); align-items: stretch;
   .coop-tag, .coop-colour { justify-content: flex-start; }
@@ -199,6 +200,54 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 .coop-foot .coop-join input { width: 10.5em; letter-spacing: 2px; }
 // (a field in a column grows down, not across: the room name filled the create page's height)
 .coop-field input { flex: none; }
+// friends (#676, part 2): the Friends tab's code, sections and rows, a room's invite list, the create page's tick
+.coop-badge {
+  display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; font: 700 12px/18px var(--font-body);
+  color: #120e0a; background: $highlight; letter-spacing: 0;
+}
+.coop-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-dim); cursor: $cursor-hand;
+  input { width: 16px; height: 16px; accent-color: var(--accent); cursor: $cursor-hand; } }
+.coop-sizes-row .coop-check { margin-left: auto; }
+.coop-friend-add { display: flex; gap: 8px; flex: none; }
+#coop-friend-code {
+  flex: 1 1 200px; min-width: 0; padding: 7px 10px; font: 15px var(--font-body); color: var(--ink); background: #0a0909;
+  border: 1px solid rgba($frame, .5); border-radius: 3px; user-select: text; letter-spacing: 1px;
+}
+.coop-friend-note { margin: -4px 0 0; font-size: 14px; color: $ally-text; &.bad { color: var(--danger); } }
+.coop-friend-me {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; font-size: 14px; color: var(--ink-dim);
+  .coop-friend-code { font: 700 18px var(--font-display); letter-spacing: 3px; color: var(--accent); user-select: text; }
+  .coop-check { margin-left: auto; }
+}
+.coop-friends-sections { flex: 1; min-height: 0; overflow: auto; }
+.coop-friends-head {
+  margin: 10px 0 6px; font: 600 12px var(--font-display); letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim);
+}
+.coop-friends-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.coop-friend {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 10px;
+  background: rgba(0,0,0,.3); border: 1px solid rgba($frame, .3); border-radius: 3px;
+}
+.coop-friend-who { min-width: 0;
+  b { display: block; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  small { display: block; font-size: 13px; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  small.on { color: $ally-text; }
+  small.on::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: $ally; }
+}
+.coop-friend-acts { display: flex; gap: 6px; .btn { padding: 5px 12px; } .btn.quiet { opacity: .7; } }
+.coop-friends-empty { color: var(--ink-dim); text-align: center; padding: 20px 8px; }
+.coop-friends-out { margin: auto; max-width: 460px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  p { color: var(--ink-dim); line-height: 1.45; } b { color: var(--ink); } }
+.coop-invite-friends { .coop-friend { grid-template-columns: auto minmax(0, 1fr); } .coop-friend-acts { grid-column: 1 / -1; justify-content: flex-end; } }
+#friend-invite {
+  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; translate: -50% 0; z-index: 70; zoom: var(--ui, 1);
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; max-width: calc(96vw / var(--ui, 1));
+  background: rgba(10,9,8,.94); border: 1px solid rgba($frame, .8); border-radius: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.6);
+  &.hidden { display: none; }
+  .fi-text { min-width: 0; font-size: 15px; color: var(--ink); b { color: var(--accent); }
+    small { display: block; font-size: 13px; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+  .btn { flex: none; padding: 6px 14px; }
+}
 .coop-pass-ask { display: flex; gap: 6px; align-self: center; width: min(420px, 100%); }
 .coop-room-kind { margin: -4px 0 0; color: var(--ink-dim); font-size: 14px; }
 // a small screen (a phone held sideways, an upright one, a narrow window): one page at a time, the hero's a tab of
@@ -213,6 +262,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
   .coop-rooms-head { display: none; }
   .coop-room-pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; }
   .coop-pips { display: none; }
+  .coop-friend-me .coop-check { margin-left: 0; }
+  .coop-friend { padding: 5px 8px; gap: 8px; }
 }
 @media (max-height: 520px) {
   #coop .modal-box:has(.coop-main) { height: calc(96vh / var(--ui, 1)); max-height: calc(96vh / var(--ui, 1)); padding: 8px 14px 8px; }
@@ -228,7 +279,9 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 // on touch a finger's controls: the tabs, chips, rows' buttons and fields at least 36 real css px, fields' text 16 px
 // (under it a phone zooms the page into the field)
 body.touch {
-  .coop-tab, .coop-chip, .coop-room-join, .coop-kind, .coop-size, .coop-foot .btn { min-height: calc(36px / var(--ui, 1)); }
+  .coop-tab, .coop-chip, .coop-room-join, .coop-kind, .coop-size, .coop-foot .btn, .coop-friend-act, .coop-friend-add .btn,
+  .coop-friend-me .btn, #friend-invite .btn { min-height: calc(36px / var(--ui, 1)); }
+  #coop-friend-code { font-size: calc(16px / var(--ui, 1)); }
   #coop-search, .coop-field input, .coop-pass-ask input, #coop-room-pass, .coop-foot .coop-join input { font-size: calc(16px / var(--ui, 1)); }
 }
 
@@ -438,4 +491,10 @@ body.touch .portrait-none { min-height: calc(40px / var(--ui, 1)); }
   .colour-drop summary { gap: 6px; }
 }
 // (the network log's line squeezed to four lines in the foot of an upright tablet's dialog: off under 1100 px wide too)
-@media (max-width: 1100px) { .coop-foot > .coop-netlog { display: none; } }
+@media (max-width: 1100px) {
+  .coop-foot > .coop-netlog { display: none; }
+  // (four tabs beside the title: narrower, or an upright tablet's dialog grew past the window)
+  .coop-tab { padding: 7px 11px; font-size: 13px; letter-spacing: 1px; }
+  .coop-title { font-size: 21px; }
+  .coop-head { gap: 10px; min-width: 0; }
+}
