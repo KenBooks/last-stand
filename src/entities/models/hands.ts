@@ -89,13 +89,16 @@ function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec, build: HandBui
   // (across the hand by its breadth: narrower than its digits are wide, they'd press into each other)
   let at = joint(vis, -s * spec.u * build.wide, spec.y, spec.z);
   j.push(at);
-  spec.len.forEach((l, n) => {
+  // (the thumb as long as the palm is broad: a plain thumb on the heavy hand's broad, deep fist couldn't reach round
+  // onto the fingers' backs, and its end stopped 20 mm short of the middle finger)
+  const len = spec.len.map((l) => (spec === THUMB ? l * build.wide : l));
+  len.forEach((l, n) => {
     if (n < 2) {
       at = joint(at, 0, -l, 0);
       j.push(at);
     }
   });
-  return { j, len: [...spec.len], r: spec.width * build.digits * slimOf(spec === THUMB) * DEPTH };
+  return { j, len, r: spec.width * build.digits * slimOf(spec === THUMB) * DEPTH };
 }
 
 /** A copy of `material` of its own, for a skinned mesh (one shared with rigid meshes makes three rebuild its
@@ -390,7 +393,7 @@ const THUMB_BASE = [0.012, -0.042, -0.021] as const;
 // held down the mound, the thumb took up its spare length in an arch, a loop standing off the fingers with a hole
 // under it (from play: "he still has sperm in his fist"); laid over the index's back, its joint was out of reach by
 // 8 mm on the heavy hand and sank into the finger.
-const THUMB_ON = { joint: 0.15, round: Math.PI * 0.75, press: 0.9 };
+const THUMB_ON = { joint: 0.85, pad: 0.85, press: 0.9 };
 // A fingertip's pad's half-depth over its finger's half-width at its root: a thicker finger's tip sits further off
 // the palm by the difference (`HandBuild.digits`).
 const PAD_DEPTH = 0.58;
@@ -426,6 +429,22 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
 
   rotations.push(thumbOver(h, rotations));
   return rotations;
+}
+
+/** how many places round its circle the thumb's knuckle is tried at (`thumbOver`) */
+const THUMB_KNUCKLE_STEPS = 36;
+/** how many points along a bone `apart` reads it at */
+const APART_STEPS = 8;
+
+/** The least distance between two bones (segments), read at points along the first. */
+function apart(bone: THREE.Line3, other: THREE.Line3): number {
+  const point = new THREE.Vector3(), near = new THREE.Vector3();
+  let least = Infinity;
+  for (let k = 0; k <= APART_STEPS; k++) {
+    bone.at(k / APART_STEPS, point);
+    least = Math.min(least, other.closestPointToPoint(point, true, near).distanceTo(point));
+  }
+  return least;
 }
 
 /** A digit's joints placed by its joints' turns (in the hand's frame, from `root`), with its tip, and each segment's
@@ -487,21 +506,38 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
   const reach = clamp(toJoint.length(), Math.abs(a - b) + 1e-4, reachable);
   const way = toJoint.normalize();
   joint = root.clone().addScaledVector(way, reach);
-  // its knuckle where its two bones from the root and from the last joint meet (two spheres' circle), leaning in over
-  // the middle of the index's curl, so the thumb closes it (leaning down the mound, the curl's inside showed under the
-  // thumb as a hole from its side)
+  // its knuckle where its two bones from the root and from the last joint meet (two spheres' circle): the point of it
+  // nearest the thenar mound whose bones clear the index's (leaning down the mound alone, its first bone went 15 mm
+  // through the index's last joint; leaning out past the index, it stood 2 cm off the side of the fist)
   const fromRoot = (reach * reach + a * a - b * b) / (2 * reach);
   const off = Math.sqrt(Math.max(0, a * a - fromRoot * fromRoot));
   const centre = root.clone().addScaledVector(way, fromRoot);
-  const lean = outer.clone();
+  const base = new THREE.Vector3(-h.s * THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2]).normalize();
+  const lean = root.clone().addScaledVector(base, a).sub(centre);
   lean.addScaledVector(way, -lean.dot(way)).normalize();
-  const knuckle = centre.addScaledVector(lean, off);
-  // its last bone a chord of the circle round the index from its last joint on (a straight line to the middle finger
-  // went through the index: its pad sank 10 mm into it on the heavy hand), on to the middle finger's back as far as
-  // it reaches
-  const sweep = 2 * Math.asin(Math.min(1, c / (2 * lift(0))));
-  const tip = roundIndex(Math.min(Math.max(0, jointAngle) + sweep, THUMB_ON.round));
-  tip.sub(joint).setLength(c).add(joint);
+  const across = new THREE.Vector3().crossVectors(way, lean);
+  const indexBones = [0, 1, 2].map((n) => new THREE.Line3(index.points[n], index.points[n + 1]));
+  const touching = (h.f[0].r + h.thumb.r) * THUMB_ON.press;
+  let knuckle = centre.clone().addScaledVector(lean, off);
+  let best = -Infinity;
+  for (let step = 0; step < THUMB_KNUCKLE_STEPS; step++) {
+    // (round the circle from the mound's way, each way in turn: the first clear one is the mound's nearest)
+    const turn = Math.ceil(step / 2) * (step % 2 ? 1 : -1) * 2 * Math.PI / THUMB_KNUCKLE_STEPS;
+    const at = centre.clone()
+      .addScaledVector(lean, off * Math.cos(turn))
+      .addScaledVector(across, off * Math.sin(turn));
+    const bones = [new THREE.Line3(root, at), new THREE.Line3(at, joint)];
+    const clear = Math.min(...bones.flatMap((bone) => indexBones.map((other) => apart(bone, other)))) - touching;
+    if (clear > best) {
+      best = clear;
+      knuckle = at;
+    }
+    if (clear >= 0) break;
+  }
+  // its last bone straight across the backs of the index's and the middle finger's middle phalanges, its pad on the
+  // middle finger's (curled on round the index's back, it closed a ring round the index's side, a hole in it)
+  const pad = along(middle, THUMB_ON.pad).addScaledVector(middleBack, lift(1));
+  const tip = pad.sub(joint).setLength(c).add(joint);
   const turns = [
     segmentTurn(knuckle.clone().sub(root), back),
     segmentTurn(joint.clone().sub(knuckle), back),

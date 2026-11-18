@@ -11,8 +11,8 @@ export interface HandBuild {
   name: string;
   /** the digits' widths (the fingers' and the thumb's) */
   digits: number;
-  /** the palm's breadth across and the digits' roots spread across it (at least `digits`, or the fingers press into
-   *  each other) */
+  /** the palm's breadth across, the digits' roots spread across it (at least `digits`, or the fingers press into
+   *  each other) and the thumb's length with it */
   wide: number;
   /** the wrist's breadth and depth: a broad palm's wrist is not broader by as much (with the palm's 1.12, the wrapped
    *  forearm stood 8.6 cm across at the wrist, a stiff tube the fist looked small under) */
