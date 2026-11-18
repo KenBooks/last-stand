@@ -52,7 +52,7 @@ export default {
   },
   async each(side, options) {
     // (its result sent as the Performance tab's Send sends it, to a traces service of the lab's own, and read back)
-    const { checkProfileSent, startTracesService } = await import('./tracesService.mjs');
+    const { checkProfileSent, startTracesService } = await import('../tracesService.mjs');
     const service = await startTracesService(new URL(side.url).origin);
     try {
       const command = {

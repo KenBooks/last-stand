@@ -10,6 +10,7 @@ import { ENEMIES, type EnemyId } from '../data/enemies';
 import { isLazyFoe } from '../entities/bosses';
 import { foeWarm, warmFoes } from './warmup';
 import { readyingWhile } from './warm';
+import { READYING } from '../ui/readying';
 
 /** The foes wave `wave` of `biome` brings that are loaded at their wave: its boss and its twin. */
 export function bossesOf(biome: BiomeId, wave: number): EnemyId[] {
@@ -32,7 +33,7 @@ export function readyBoss(biome: BiomeId, wave: number): Promise<void> {
   let ready = readying.get(key);
   if (!ready) {
     const name = bossOfWave(biome, wave)?.short ?? ENEMIES[ids[0]].name;
-    ready = readyingWhile(`Readying ${name}`, (progress) => warmFoes(ids, progress))
+    ready = readyingWhile(READYING.boss(name), (progress) => warmFoes(ids, progress))
       .finally(() => readying.delete(key));
     readying.set(key, ready);
   }

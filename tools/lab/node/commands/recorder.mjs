@@ -21,7 +21,7 @@ export default {
   },
   async each(side, options) {
     // (a traces service of the lab's own, for the page's origin: the trace sent and read back as a report goes)
-    const { checkSent, startTracesService } = await import('./tracesService.mjs');
+    const { checkSent, startTracesService } = await import('../tracesService.mjs');
     const service = await startTracesService(new URL(side.url).origin);
     try {
       const command = { frames: Math.round(options.frames ?? 300), canary: Boolean(options.canary), send: service.url };

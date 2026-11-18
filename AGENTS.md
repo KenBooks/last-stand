@@ -34,7 +34,7 @@ The game has no test suite. Verify changes with `npm run build` and by playing t
 - Pages is served from the `gh-pages` branch, production alone (the PR previews are our own service's). Don't switch Pages to "GitHub Actions only" and don't delete that branch.
 - Keep PRs focused on one feature.
 - **A feature adds files; it edits shared ones only through a line of its own** (over the 300 PRs merged up to #706, the files most PRs touched were the lab's command lists, `main.ts`, `index.html`, `net/session.ts`'s `PROTOCOL`, the quality table and the AGENTS.md files, and the conflicts on rebase were there). Content goes where it touches no other PR's lines:
-  - a foe: `src/data/foes/<foe>.ts` (its stats, guide note and trophy; its id declared there) and `src/entities/foes/<foe>.ts` (its model, its `fx`, its way of fighting), found by the folder;
+  - a foe: `src/data/foes/<foe>.ts` (its stats, guide note and trophy; its id declared there) and `src/entities/foes/<foe>.ts` (its model, its `fx`, its way of fighting), found by the folder; a boss's in `src/entities/bosses/<boss>.ts` instead, loaded and warmed at its wave (`game/bossReady.ts`);
   - a sound of a foe's or a skill's own: `src/core/sounds/<name>.ts`, built of `core/audio.ts`'s voices;
   - a co-op message: registered from its feature's module (`onMessages`, `net/messages.ts`), and its protocol a line of its own in `net/protocol.ts`'s parts (never a number bumped by hand);
   - a dialog: registered from its module (`dialog`, `ui/dialogs.ts`); a kind of village object: what it does, registered by its owner (`villageUse`, `game/villageUses.ts`); a panel's markup: `src/ui/html/<id>.html`, named in `index.html` by a `<!-- part: id -->` line;

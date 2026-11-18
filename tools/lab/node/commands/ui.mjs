@@ -81,7 +81,7 @@ export default {
     const states = UI_STATES.filter((state) => (options.states ?? UI_STATES).includes(state));
     const canary = Boolean(options.canary);
     // (the bug report's form sends to a reports service of the lab's own, read back here: never production's)
-    const { checkReportSent, startTracesService } = await import('./tracesService.mjs');
+    const { checkReportSent, startTracesService } = await import('../tracesService.mjs');
     const service = states.includes('bugReport') ? await startTracesService(new URL(side.url).origin) : null;
     const reports = [];
     // (each state's asks of production its own problems; the canary lets the saves service's health go to

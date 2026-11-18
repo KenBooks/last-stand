@@ -19,7 +19,15 @@ export const READYING = {
   coop: 'Readying co-op',
   /** a co-op guest's, from the host's start till its run has begun (its fight's programs warm or not) */
   join: 'Joining the fight',
+  /** a boss readied at its wave, as Continue leads into it (game/bossReady.ts) */
+  boss: (short: string): string => `Readying ${short}`,
 };
+
+/** every boss's short name, each biome's own and those of its boss waves */
+const bossShorts = (): string[] => BIOME_IDS.flatMap((id) => [
+  BIOMES[id].bossShort,
+  ...(BIOMES[id].bossWaves ?? []).map((wave) => wave.short),
+]);
 
 /** Every label the bar can show (tools/lab `ui --states readyingHeroes` lays each out on its screen). */
 export const readyingLabels = (): string[] => [
@@ -29,6 +37,7 @@ export const readyingLabels = (): string[] => [
   ...SAVE_SLOTS.map(READYING.slot),
   READYING.coop,
   READYING.join,
+  ...bossShorts().map(READYING.boss),
 ];
 
 const el = (): HTMLElement => document.getElementById('readying')!;

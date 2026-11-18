@@ -36,7 +36,7 @@ export default {
   },
   async each(side, options) {
     if (options.google) {
-      const { runGoogleWindow } = await import('./googleWindow.mjs');
+      const { runGoogleWindow } = await import('../googleWindow.mjs');
       return runGoogleWindow(side, { canary: Boolean(options.canary), pictures: options.pictures !== false });
     }
     const { runCloud } = await import('./cloud.mjs');
