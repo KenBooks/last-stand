@@ -740,18 +740,20 @@ function normalAt(field: Field, point: THREE.Vector3): THREE.Vector3 {
 /** A nail on the back of `digit`'s tip: a plate laid on the skin, rounded at its root, its edge a rim into the skin,
  *  moving with the tip's joint (`bone`). Its vertices, normals and triangles are added to `into`. */
 function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: THREE.Object3D, into: NailMesh,
-  thumb: boolean): void {
+  thumb: boolean, shutThumb = false): void {
   const tip = digit.j[2];
   const toHand = new THREE.Matrix4().fromArray(frameIn(tip, space)).invert();
   const l2 = digit.len[2];
-  const half = digit.width * slimOf(thumb) * NAIL_HALF;
+  const half = digit.width * slimOf(thumb) * (shutThumb ? 0.67 : NAIL_HALF);
+  const lift = shutThumb ? 0.00085 : NAIL_OUT;
   const down = new THREE.Vector3(0, 0, -1).transformDirection(toHand);
   const { across: NAIL_ACROSS, along: NAIL_ALONG } = coarseHand ? COARSE_NAIL_GRID : NAIL_GRID;
   const rows: number[][] = [];
   for (let a = 0; a <= NAIL_ALONG; a++) {
     const t = NAIL_FROM + (NAIL_TO - NAIL_FROM) * (a / NAIL_ALONG);
     // (rounded at its root, as a nail's moon is)
-    const across = half * Math.sqrt(clamp((t - NAIL_FROM) / 0.1, 0.15, 1));
+    const bed = shutThumb ? Math.sqrt(1 - 0.55 * Math.pow(2 * a / NAIL_ALONG - 1, 4)) : 1;
+    const across = half * bed * Math.sqrt(clamp((t - NAIL_FROM) / 0.1, 0.15, 1));
     const row: number[] = [];
     for (let c = 0; c <= NAIL_ACROSS; c++) {
       const local = new THREE.Vector3(across * (2 * c / NAIL_ACROSS - 1), -t * l2, digit.width * 2);
@@ -762,7 +764,7 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
       const on = hand ?? surfaceAlong(own, from, down, digit.width * 3);
       if (!on) throw new Error(`handShape: a nail found no fingertip under it (bone ${bone}, hand ${!!hand}, own at start ${own(from.x, from.y, from.z).toFixed(4)})`);
       const normal = normalAt(hand ? field : own, on);
-      row.push(into.add(on.addScaledVector(normal, NAIL_OUT), normal, bone));
+      row.push(into.add(on.addScaledVector(normal, lift), normal, bone));
     }
     rows.push(row);
   }
@@ -776,7 +778,7 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
     ...[...rows[NAIL_ALONG]].reverse().slice(1),
     ...rows.slice(1, -1).reverse().map((row) => row[0]),
   ];
-  const sunk = edge.map((vertex) => into.sunk(vertex, NAIL_OUT + NAIL_DEPTH, bone));
+  const sunk = edge.map((vertex) => into.sunk(vertex, lift + NAIL_DEPTH, bone));
   for (let i = 0; i < edge.length; i++) {
     const next = (i + 1) % edge.length;
     into.quad(edge[i], edge[next], sunk[next], sunk[i]);
@@ -880,11 +882,12 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const nails = new NailMesh();
   digits.forEach((digit, i) => {
     const thumb = i === fingers.length;
+    if (closed && !thumb) return; // The four nail beds rest against the palm.
     // (its tip's segment alone: in a fist the finger's own first segment lies over its nail)
     const tipBone = 3 + i * 3;
     const own = fieldOf(digitParts(digit, 1 + i * 3, space, thumb)
       .filter((part) => !part.sayOnly && part.bones.every(([bone]) => bone === tipBone)));
-    nail(hand, own, digit, 3 + i * 3, space, nails, thumb);
+    nail(hand, own, digit, tipBone, space, nails, thumb, closed && thumb);
   });
   const skin = skinnedNet(hand, box, parts, COARSE_SHARE.skin);
   shadeSkin(skin, hand, digits, frames);
