@@ -11,7 +11,7 @@ import * as behind from '../../../src/game/behind';
 import * as hall from '../../../src/game/hall';
 import { perfClock } from '../../../src/ui/perfHud';
 import { openHall, toLobby } from './hallMoves';
-import { headsMadeHere } from '../../../src/entities/models/head';
+import { headsMadeHere, headsMadeHereSince } from '../../../src/entities/models/head';
 import { setQuality } from '../../../src/core/quality';
 
 /** Options of `lab behind`. */
@@ -127,7 +127,7 @@ async function builtByChoosing(
 }
 
 /** Auto can change detail with the hall open. Back alone must not sculpt the new detail on the input thread. */
-async function afterDetailChange(lab: Lab, canary: boolean): Promise<{ misses: number; building: Building }> {
+async function afterDetailChange(lab: Lab, canary: boolean): Promise<{ misses: number; building: Building; what: string[] }> {
   await openHall(lab);
   setQuality('medium');
   hall.dropSpareHeroes();
@@ -144,7 +144,7 @@ async function afterDetailChange(lab: Lab, canary: boolean): Promise<{ misses: n
     await openHall(lab);
     await lab.clickOn(document.querySelector<HTMLElement>('.hs-back')!);
     await lab.step(1);
-    return { misses: headsMadeHere() - before, building };
+    return { misses: headsMadeHere() - before, building, what: headsMadeHereSince(before) };
   } finally { perfClock.now = now; }
 }
 
@@ -170,7 +170,7 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
     `the slowest pieces: ${slowest}`,
     `then the hall's opening built ${opening} heroes, the ${G.player.cls.id} chosen in it ${choosing}`,
     `shared hero lights stayed in the scene; the first lobby draw compiled ${programs} programs`,
-    `Back after a detail change: ${changed.misses} head pieces sculpted on the input thread; `
+    `Back after a detail change: ${changed.misses} head pieces sculpted on the input thread${changed.what.length ? ` (${changed.what.join(', ')})` : ''}; `
       + `longest background build ${changed.building.longest.toFixed(1)} ms (at most ${MOST_MS}); repeated opening completed`,
   ];
   const slow = building.longest > MOST_MS;

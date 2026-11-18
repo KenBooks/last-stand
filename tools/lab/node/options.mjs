@@ -330,7 +330,7 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'trade'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'trade', 'looks'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
           + 'down, blink (a mage), rush and strike (a warrior), throws; ends alone: the ways a run ends that left a '
           + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
@@ -2225,6 +2225,22 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'plant a fault the measure must catch: the furthest push\'s finger slid back near the middle',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  herolooks: {
+    help: 'each class\'s looks (data/heroLooks.ts) made by the workers and a hero built in each: his head sculpted '
+      + 'nowhere on the page, its face, hair and beard there, no program compiled as the game draws him; each '
+      + 'pictured in the studio (face, three-quarters, behind, his figure), the hair colours on one hero of each, '
+      + 'two hair colours compared on the hair\'s cards, the brows and the beard (the cheeks left alone), and a '
+      + 'look picked kept in the profile: tools/lab/out/herolooks/sheet.png',
+    options: {
+      classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the measure must catch: a hair colour that leaves the face\'s paint and the cards\' '
+          + 'colour alone, and a look not kept',
       },
       ...COMMON_OPTIONS,
     },

@@ -59,7 +59,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   degrees, the other way) it must judge right. Run from the boot's camera along z 14, the warrior's `d` went -x into the
   crypt's wall and turned 60 to 80 degrees, the side views blocked, and its trunk's numbers measured the turn; turned
   +x, a prop at -5.6, 13.9 stood in the lane.
-- `coop`: two games playing together: in full in [`commands/coop.md`](commands/coop.md).
+- `coop`: two games playing together: in full in [`commands/coop.md`](commands/coop.md) (`--scenarios looks`: a
+  hero's look and hair colour seen by his partners).
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
   go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto
@@ -1030,6 +1031,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   A hero is rebuilt against such a sheet part by part from the same side (the mage against Codex's realistic render
   of him: in the forest the ferns and the light hid what he wore). `--canary` pictures the studio empty, which must
   read as nothing drawn. Writes `out/turnaround/sheet.png`.
+- `herolooks`: each class's looks (`data/heroLooks.ts`, `page/heroLooks.ts`; `--classes`): each made by the workers
+  (`readyLook`) and a hero built in it as the hall builds one, its head's pieces all from the workers (`headsMadeHere`
+  unmoved), a face, hair where the look has it and a full beard where its face has one, and drawn beside the lobby's
+  hero in the game's frame with no program compiled. Each pictured in the studio (his face, three-quarters, behind, his
+  figure), and one hero of each class in six hair colours. Black and white hair compared on his face from the front
+  with the hair's cards hidden (the brows' band and, where the look has a beard, the beard's: at least 1% of each
+  changed by over 12 levels), the cheeks' band left as it is (at most 2%), and his head from behind (the cards: at
+  least 5%). A look picked for the lobby's class kept in the stored profile and taken as the slot's look again
+  (`chooseLooks`), then put back. `--canary` plants a hair colour that leaves the face's paint and the cards' colour
+  alone, and a look taken out of the stored profile: each must be caught. Writes `out/herolooks/sheet.png`.
 - `neck`: each hero's neck (`page/neck.ts`; `--classes`, `--dresses bare,chest,hat`, `--poses rest,aside`), cut
   by level planes in the neck joint's frame and read up 72 lines round it (`neckSlices.ts`; what each says against
   its limit, `neckRead.ts`): ridges and shelves on the free neck (the column's flat top was a ledge under the

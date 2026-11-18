@@ -330,6 +330,12 @@ async function labelOnNeighbour(lab: Lab, screen: HTMLElement, choice: HTMLEleme
 let labelPictures: Pictured[] = [];
 
 /** The labels `heroes` pictured on the heroes under the mouse, handed over once. */
+/** A picture of the screen a page's check takes (`uiHeroPages.ts`: the Look page with a look picked), shown with the
+ *  labels' pictures. */
+export function addHeroPicture(picture: Pictured): void {
+  labelPictures.push(picture);
+}
+
 export function heroLabelPictures(): Pictured[] {
   const pictures = labelPictures;
   labelPictures = [];

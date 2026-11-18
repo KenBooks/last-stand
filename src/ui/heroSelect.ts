@@ -18,6 +18,7 @@ import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { renderAttributes } from './attributes';
 import { renderHeroGear } from './heroGear';
+import { renderHeroLook } from './heroLook';
 import { openSaves } from './saves';
 import { heroShare, onReadying } from '../game/warm';
 import type { ClassDef, Profile } from '../types';
@@ -64,7 +65,7 @@ const TAP_REACH = 0.12;
 const HERO_SHARE = 0.585;
 const ROOM_FILL = 0.8;
 /** the panel's pages, and where the one last chosen is kept (a player who keeps to the gear finds it there again) */
-const PAGES = ['hero', 'gear', 'attrs'] as const;
+const PAGES = ['hero', 'look', 'gear', 'attrs'] as const;
 type Page = (typeof PAGES)[number];
 const PAGE_KEY = 'last-stand.hero-page';
 
@@ -355,6 +356,7 @@ function shown(): void {
   $('#heroes').style.setProperty('--cc', cls.accent);
   renderHeroGear(hero.profile, $('.hs-equip'), $('.hs-stash'), $('.hs-stash-count'));
   renderAttributes($('.hs-stats'), hero.player, hero.profile);
+  renderHeroLook();
   readied();
   hover(lit >= 0);
   placeChoice();

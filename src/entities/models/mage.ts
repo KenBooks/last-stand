@@ -10,7 +10,7 @@ import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/e
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
-import { headSteps, HERO_HEADS, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { EYE } from './face';
 import { buildHand, poseHand, strainHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
@@ -243,7 +243,8 @@ const SL_BEND: Keys = [[0, 0], [0.4, -0.18], [0.5, -0.18], [0.64, 0.45], [0.72, 
 export const buildMage = (): Model => built(mageSteps());
 
 /** buildMage's pieces one at a time (`ModelSteps`): built behind the lobby, a piece a frame. */
-export function* mageSteps(): ModelSteps {
+/** `look`: his head (his look's face and hair; the one picked in the slot in play where none's given). */
+export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   const kit = createKit(0x5dffa8);
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
@@ -336,7 +337,7 @@ export function* mageSteps(): ModelSteps {
   // what comes off (setGear): the chest item's (the longcoat with its collar, shoulders, harness and skirts) and the
   // waistcoat shown without it, the hands item's (bracers over the forearms' runes)
   const A = new Sculpt(), T = new Sculpt(), H = new Sculpt();
-  const bareSkin = handSkin(kit, 'mage');
+  const bareSkin = handSkin(kit, look.who);
 
   yield;
   // --- the longcoat's body: fitted, open down the front over the charcoal waistcoat and the shirt's red at the throat; cut
@@ -709,11 +710,11 @@ export function* mageSteps(): ModelSteps {
 
   yield;
   // --- the head: face, a full beard, hair, and a hood (worn with a head item equipped: setGear) in the coat's wool
-  const head = yield* headSteps(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage);
+  const head = yield* headSteps(j.head, kit, look.who, look);
   yield;
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
-  buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
+  buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
   const hat = new THREE.Group(); hat.name = 'hat'; head.group.add(hat); hat.visible = false;
   let hood: HoodCloth;
   /** how deep the hood's shade on the face (the forehead and the eyes; `Head.shade`) */
@@ -1452,6 +1453,7 @@ export function* mageSteps(): ModelSteps {
     cloths,
     // (the longcoat, the shirt's red at the throat and the linings: his oxblood)
     dye: new Dye('red').cloth(coat, coatD, shirt, lining, hoodLining),
+    setHair: head.setHair,
     setGear: (gear: Gear) => {
       if (gear.helm && !hat.visible) hood.reset();
       hat.visible = gear.helm;

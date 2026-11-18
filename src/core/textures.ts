@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { VILLAGE } from './beta';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
+import type { FaceId } from '../entities/models/face';
 
 export function canvasOf(size: number, height = size): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -149,9 +150,9 @@ export const steel = (): PBRCanvases => pbrCanvases('steel');
 export const fur = (): PBRCanvases => pbrCanvases('fur');
 export const bowWood = (): PBRCanvases => pbrCanvases('bowWood');
 /** a hero's painted face (entities/models/face.ts), on its head's ray grid */
-export const faceCanvases = (who: 'warrior' | 'mage' | 'ranger'): PBRCanvases => pbrCanvases('face', who);
+export const faceCanvases = (who: FaceId): PBRCanvases => pbrCanvases('face', who);
 /** the ray grid a hero's face was painted on, once it has been (models/head.ts builds the head on it) */
-export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] => grids.get(recipeKey('face', [who]));
+export const faceGrid = (who: FaceId): PBRData['grid'] => grids.get(recipeKey('face', [who]));
 
 /** The key of the map `texture` is painted with (`bark()`), where it's one of these canvases. */
 export const mapKeyOf = (texture: THREE.Texture): string | undefined => keyOfCanvas.get(texture.image as HTMLCanvasElement);
@@ -179,13 +180,14 @@ export function everyMapCome(): Promise<void> {
 /** `PRELOAD` in the order the lobby needs its maps: the steel and `hero`'s face (the one it shows), the other maps,
  *  then the other heroes' faces (1.5 s each in a worker: on a first visit, made before the heroes' materials, the
  *  lobby waited 1.7 s for its maps). */
-function inTheLobbysOrder(hero: string): Job[] {
+function inTheLobbysOrder(hero: FaceId, faces: readonly FaceId[]): Job[] {
   const face = (job: Job): boolean => job[0] === 'face';
-  const own = (job: Job): boolean => face(job) && job[1][0] === hero;
   const steel = PRELOAD.filter((job) => job[0] === 'steel');
   // (the village's own maps, its chest's, made ahead only where it's the lobby: core/beta.ts)
   const rest = PRELOAD.filter((job) => job[0] !== 'steel' && !face(job) && (VILLAGE || !VILLAGE_MAPS.has(job[0])));
-  return [...steel, ...PRELOAD.filter(own), ...rest, ...PRELOAD.filter((job) => face(job) && !own(job))];
+  // (each hero's face as his look in the save slot has it, not PRELOAD's: a look not picked is painted only once it is)
+  const faceJob = (who: FaceId): Job => ['face', [who]] as Job;
+  return [...steel, faceJob(hero), ...rest, ...[...new Set(faces)].filter((who) => who !== hero).map(faceJob)];
 }
 
 /** The maps the workers are making: `ready` when one has come, `all` when every one has. */
@@ -220,8 +222,8 @@ const labMapsAs = (): string | undefined => (globalThis as { __labMapsAs?: strin
  * whether it was kept, how long the store took to answer, when its worker was asked for and when its script ran
  * (the stalls' boot lists them).
  */
-export function preloadTextures(hero: string): MapsComing {
-  const jobs = typeof Worker === 'undefined' ? [] : inTheLobbysOrder(hero);
+export function preloadTextures(hero: FaceId, faces: readonly FaceId[]): MapsComing {
+  const jobs = typeof Worker === 'undefined' ? [] : inTheLobbysOrder(hero, faces);
   for (const job of jobs) {
     let arrive = (): void => undefined;
     const at = new Promise<void>((resolve) => { arrive = resolve; });
@@ -236,8 +238,25 @@ export function preloadTextures(hero: string): MapsComing {
   // (this boot's alone: another tab's workers share out maps of their own)
   const boot = `${performance.timeOrigin} ${Math.random()}`;
   const workers: Worker[] = [];
-  const run = (worker: number): Promise<void> => new Promise((resolve) => {
-    const orders: MapOrders = { jobs, worker, workers: n, boot, keepAs: labMapsAs() };
+  const all = Promise.all(Array.from({ length: n }, (_, worker) => runWorker({ jobs, worker, workers: n, boot, keepAs: labMapsAs() }, workers))).then(async () => {
+    // (every map asked of the store by now: each worker keeps what it made, and closes)
+    for (const w of workers) w.postMessage('keep');
+    await makeWhatsLeft();
+  });
+  return { ready, all };
+}
+
+/** The maps still coming once their workers are done (a worker failed) made here. */
+async function makeWhatsLeft(): Promise<void> {
+  for (const [key, { job }] of [...coming]) {
+    await photosFor(job[0]);
+    arrived(key, make(job));
+  }
+}
+
+/** A maps worker given `orders`, kept in `workers`: resolved once it's finished its share (or failed). */
+function runWorker(orders: MapOrders, workers: Worker[]): Promise<void> {
+  return new Promise((resolve) => {
     let w: Worker;
     const asked = performance.now();
     try {
@@ -255,15 +274,36 @@ export function preloadTextures(hero: string): MapsComing {
     // a worker that fails leaves what it took on to the page
     w.onerror = () => { w.terminate(); resolve(); };
   });
-  const all = Promise.all(Array.from({ length: n }, (_, worker) => run(worker))).then(async () => {
-    // (every map asked of the store by now: each worker keeps what it made, and closes)
-    for (const w of workers) w.postMessage('keep');
-    for (const [key, { job }] of [...coming]) {
-      await photosFor(job[0]);
-      arrived(key, make(job));
-    }
-  });
-  return { ready, all };
+}
+
+/** Whether face `who`'s maps are made, or coming from the loading workers (a build of it paints nothing here). */
+export function faceComing(who: FaceId): boolean {
+  const key = recipeKey('face', [who]);
+  return cache.has(key) || made.has(key) || coming.has(key);
+}
+
+/**
+ * Face `who`'s maps made in a worker of its own, where they aren't made or coming already (a look picked after the
+ * game loaded, a partner's): resolved once they've come. Painted on the page as a build first asked for them, a face
+ * held the main thread 1.5 s and more. Kept across visits as the loading workers' are.
+ */
+export function readyFace(who: FaceId): Promise<void> {
+  const key = recipeKey('face', [who]);
+  const has = coming.get(key);
+  if (has) return has.arrived;
+  if (cache.has(key) || made.has(key)) return Promise.resolve();
+  if (typeof Worker === 'undefined') return Promise.resolve();
+  const job = ['face', [who]] as Job;
+  let arrive = (): void => undefined;
+  const at = new Promise<void>((resolve) => { arrive = resolve; });
+  coming.set(key, { job, arrive, arrived: at });
+  const workers: Worker[] = [];
+  void runWorker({ jobs: [job], worker: 0, workers: 1, boot: `${performance.timeOrigin} ${Math.random()}`, keepAs: labMapsAs() }, workers)
+    .then(async () => {
+      for (const w of workers) w.postMessage('keep');
+      await makeWhatsLeft();
+    });
+  return at;
 }
 
 /** How often a map's tile repeats across a surface's UVs: as often both ways, or `[along u, along v]`. */

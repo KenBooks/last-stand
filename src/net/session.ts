@@ -35,11 +35,13 @@ import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
 import { setTradeNet, tradeHeard, tradePeerLeft, endRoomTrades, endTrades, updateTrade } from './trade';
 
 import type { Profile } from '../types';
+import { lookOf as heroLookOf, type HeroLook } from '../data/heroLooks';
+import { buildableLook, readyLook } from '../game/looks';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
  *  rooms' cards, whose `v` keeps a list to the rooms this game can join; 39: a guest's `rdy` says how far
- *  along its readying is) */
-export const PROTOCOL = 39;
+ *  along its readying is; 40: a hero's look and hair colour, `Look.hl`) */
+export const PROTOCOL = 40;
 /** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
 const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
@@ -69,9 +71,9 @@ const ASKED_MOST = 64;
 /** room codes: no look-alike letters or digits */
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-/** A player's class and gear, which is all another game needs to show them. */
+/** A player's hero as the room sees him: his class, gear, portrait, and his look and hair colour (data/heroLooks.ts) */
 export interface Look {
-  cls: string; eq: Profile['equipped']; av?: string | null;
+  cls: string; eq: Profile['equipped']; av?: string | null; hl?: HeroLook;
   /** the player's best wave cleared, any battleground (the save's `records.bestWave`): Play together's party cards
    *  show it beside the gear's level (PROTOCOL 37) */
   best?: number;
@@ -239,7 +241,7 @@ export function invitedRoom(): string | null {
 }
 
 export const myLook = (): Look => ({
-  cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player), best: G.profile.records.bestWave,
+  cls: G.profile.classId, eq: G.profile.equipped, av: portraitOf(G.player), hl: G.player.heroLook, best: G.profile.records.bestWave,
 });
 
 /** A player's look as this game knows it: the local one's own, a partner's as its hello and look said it. */
@@ -806,10 +808,15 @@ function onLook(from: string, look: Look): void {
   const peer = session.peers.get(from);
   if (!peer || !CLASSES[look.cls]) return;
   peer.look = look;
-  // a new class is a new character; new gear re-dresses the one there
-  if (peer.player && peer.player.cls.id === look.cls) {
+  // a new class is a new character, and so is a new look (its head); new gear re-dresses the one there, a new hair
+  // colour colours his hair (a uniform's)
+  const hl = heroLookOf(CLASSES[look.cls].model, look.hl);
+  // (a look not made here yet keeps the copy he has, in the look it's built in, till it's made: `restyleWhenMade`)
+  if (peer.player && peer.player.cls.id === look.cls && peer.player.heroLook.preset === buildableLook(look.cls, hl).preset) {
     peer.player.recomputeStats(look.eq);
     receivePortrait(peer.player, look.av ?? null);
+    if (peer.player.heroLook.hair !== hl.hair) peer.player.setHair(hl.hair);
+    if (peer.player.heroLook.preset !== hl.preset) restyleWhenMade(peer, hl);
   } else {
     const at = peer.player?.pos.clone(), facing = peer.player?.facing ?? Math.PI;
     dropPlayer(peer);
@@ -941,10 +948,14 @@ function addPeer(id: string, slot: number, look: Look, tag: string, colour: Hero
   if (tag) chatNote(`${tag} is in the room`);
 }
 
-function makePlayer(peer: Peer): void {
+/** `made`: his look's workers have answered (built in it, made or not). */
+function makePlayer(peer: Peer, made = false): void {
   if (!peer.look || !CLASSES[peer.look.cls]) return;
   if (role.current === 'guest' && !peer.colour) return; // wait for the host's allocation, not another guest's claim
-  const p = new Player(peer.look.cls, peer.look.eq, false);
+  // (in his look where it's made here, else in one that is, and again in his once the workers have made it)
+  const look = heroLookOf(CLASSES[peer.look.cls].model, peer.look.hl), built = buildableLook(peer.look.cls, look);
+  if (!made && built.preset !== look.preset) restyleWhenMade(peer, look);
+  const p = new Player(peer.look.cls, peer.look.eq, false, undefined, made ? look : built);
   p.slot = peer.slot;
   p.tag = peer.tag;
   receivePortrait(p, peer.look.av ?? null);
@@ -954,6 +965,22 @@ function makePlayer(peer: Peer): void {
   placeSpawns();
   p.reset();
   syncAway();
+}
+
+/** `peer`'s copy built again in look `look` once the workers have made it here, if he still wants it then (his class
+ *  and look unchanged meanwhile; a message of new gear leaves it so). */
+function restyleWhenMade(peer: Peer, look: HeroLook): void {
+  const cls = peer.look!.cls;
+  void readyLook(cls, look).then(() => {
+    const now = peer.look, p = peer.player;
+    if (!now || now.cls !== cls || !p || !session.peers.has(peer.id)) return;
+    if (heroLookOf(CLASSES[cls].model, now.hl).preset !== look.preset || p.heroLook.preset === look.preset) return;
+    const at = p.pos.clone(), facing = p.facing;
+    dropPlayer(peer);
+    makePlayer(peer, true);
+    peer.player?.place(at, facing);
+    hooks.changed();
+  });
 }
 
 function dropPlayer(peer: Peer): void {

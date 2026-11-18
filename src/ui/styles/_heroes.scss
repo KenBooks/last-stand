@@ -99,6 +99,30 @@ body.touch .hs-key { font-size: 0; }
 .hs-stash .sitem { cursor: $cursor; }
 .hs-stats { padding-top: 10px; }
 
+/* the hero in focus's look (ui/heroLook.ts): a button a look, his name for it and what sets him apart, and a swatch a
+   hair colour, his look's own first (ringed); a finger's 40 css px on touch */
+.hs-look { display: flex; flex-direction: column; gap: ui(12px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: rgba($frame, .5) transparent; }
+.hl-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: ui(8px); }
+.hl-preset { display: flex; flex-direction: column; align-items: flex-start; gap: ui(3px); min-width: 0; padding: ui(9px) ui(11px);
+  text-align: left; color: var(--ink-dim); cursor: $cursor-hand; background: linear-gradient(135deg, rgba(40,32,22,.55), rgba(12,10,12,.8));
+  border: 1px solid rgba($frame, .35); font: inherit; }
+.hl-preset b { font: 700 ui(15px) var(--font-display); letter-spacing: ui(1px); color: var(--ink); }
+.hl-preset span { font-size: ui(13px); line-height: 1.3; font-style: italic; }
+.hl-preset:hover { border-color: rgba($frame, .8); }
+.hl-preset.on { border-color: var(--cc); box-shadow: inset 0 0 0 1px var(--cc), 0 0 ui(8px) color-mix(in srgb, var(--cc) 35%, transparent); }
+.hl-preset.on b { color: var(--cc); }
+.hl-preset.busy span { color: var(--cc); font-style: normal; }
+.hl-hairs { display: flex; flex-wrap: wrap; gap: ui(8px); }
+.hl-swatch { width: ui(32px); height: ui(32px); padding: 0; border-radius: 50%; cursor: $cursor-hand; background: var(--swatch);
+  border: 2px solid rgba($frame, .5); box-shadow: inset 0 0 0 1px rgba(0,0,0,.5); }
+.hl-swatch.hl-own { outline: 1px dashed rgba($frame, .8); outline-offset: 2px; }
+.hl-swatch:hover { border-color: var(--ink); }
+.hl-swatch[aria-checked="true"] { border-color: var(--cc); box-shadow: 0 0 0 2px var(--cc), inset 0 0 0 1px rgba(0,0,0,.5); }
+body.touch .hl-swatch { width: max(#{ui(32px)}, 40px); height: max(#{ui(32px)}, 40px); }
+body.touch .hl-preset { min-height: 44px; }
+.hl-note { margin: 0; font-size: ui(13px); font-style: italic; color: var(--ink-dim); }
+
 /* every class's card in one cell, the one in focus shown: the panel never changes size. Their parts on rows the
    cards share (a subgrid), each as tall as the tallest card's: in a column of their own, the ranger's tagline on two
    lines put his traits and skills 30 px lower than the others' as the hero changed */
@@ -154,6 +178,9 @@ body.touch .hs-key { font-size: 0; }
   .hs-choose { font-size: min(#{ui(16px)}, 4.5vh); }
   .hs-skills { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: ui(4px); }
   .hs-skills .slot .icon { font-size: ui(16px); }
+  .hs-look { gap: ui(8px); }
+  .hl-preset { padding: ui(6px) ui(9px); }
+  .hl-preset span { font-size: ui(12px); }
   .hs-tabs { gap: ui(10px); }
   .hs-tabs button { font-size: ui(17px); letter-spacing: ui(3px); padding: ui(6px) ui(14px) ui(12px); }
   body:not(.touch) .hs-tabs { --ks: max(#{ui(26px)}, 24px); }
@@ -178,6 +205,7 @@ body.touch .hs-key { font-size: 0; }
   .hs-card > :is(.hs-name, .hs-role, .hs-tag) { grid-column: 1 / -1; }
   .hs-card > .hs-label { display: none; }
   .hs-records { grid-column: 1 / -1; }
+  .hl-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .hs-name { width: min(100%, ui(420px)); justify-self: center; }
   .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   .hs-arrow { top: calc((100% - var(--ph)) / 2); }

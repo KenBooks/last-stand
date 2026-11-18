@@ -148,6 +148,19 @@ float fxNoise(vec3 x){
 }
 ${AURA_GLSL}`;
 
+/** A painted face's hair in another colour: the paint holds how much of the hair's colour each texel has (its roughness
+ *  map's blue, 4 at full: `HAIR_SHARE_MOST` in models/face.ts, `paintFace`), and the picked colour less the face's own
+ *  (`uHairShift`, in the paint's sRGB) is added in that share. A uniform's value: a colour picked compiles nothing, and
+ *  none (the face's own) leaves the paint as it is. */
+export const HAIR_SHIFT_GLSL = `
+  #ifdef USE_ROUGHNESSMAP
+  if (dot(uHairShift, uHairShift) > 0.0) {
+    float hairShare = texture2D(roughnessMap, vRoughnessMapUv).b * 4.0;
+    vec3 painted = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(1.0 / 2.2)) + hairShare * uHairShift;
+    diffuseColor.rgb = pow(max(painted, vec3(0.0)), vec3(2.2));
+  }
+  #endif`;
+
 /** A kit material's looks as WebGPU reads them (core/shaderPorts.ts `kitNodes`): the kit's uniforms, and the
  *  material's own near glow and rim. */
 export interface KitLooks {
@@ -158,6 +171,11 @@ export interface KitLooks {
   shade: { value: THREE.Vector4 };
   /** a worn item's glow in its rarity's colour (`ITEM_GLOW`), black for none: the material's own, never the kit's */
   aura: { value: THREE.Color };
+  /** a painted face's hair moved to another colour (`kit.face`, models/head.ts `setHair`): the picked colour less the
+   *  face's own, in the paint's sRGB, added in the share of hair its roughness map's blue holds; none, as painted */
+  hair: { value: THREE.Vector3 };
+  /** whether the material reads `hair` (`kit.face`'s alone) */
+  hairTinted: boolean;
 }
 
 export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
@@ -179,7 +197,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
    * Both are the material's uniforms, not variants of its shader: every kit's material of a kind shares one program
    * (a variant each made 26 more programs at boot, each compiled for half a second on a first visit's ANGLE).
    */
-  function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color): M {
+  function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color, hairTinted = false): M {
     // (in a hood's shade, `Head.shade`: x how deep, y where up the mesh it's full, z where it's gone, w how much more
     // towards the sides; the game's shadow map is too coarse to shade a face under a brim)
     const shade = { value: new THREE.Vector4() };
@@ -188,7 +206,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     // own, not copied to a clone, as its `onBeforeCompile` isn't)
     const looks: KitLooks = {
       u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new THREE.Color(0) }, shade,
-      aura: { value: new THREE.Color(0) },
+      aura: { value: new THREE.Color(0) }, hair: { value: new THREE.Vector3() }, hairTinted,
     };
     Object.defineProperty(m, 'kitLooks', { value: looks, configurable: true });
     // (a method: three calls it on the material it compiles for, so a copy's own glow (`kitCopy`) is read off the copy;
@@ -202,12 +220,14 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
       shader.uniforms.uNear = { value: near ? 1 : 0 };
       shader.uniforms.uRim = { value: rim ?? new THREE.Color(0) };
       shader.uniforms.uShade = shade;
+      if (hairTinted) shader.uniforms.uHairShift = ((this as { kitLooks?: KitLooks } | undefined)?.kitLooks ?? looks).hair;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vFxPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFxPos = position;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;\nuniform vec4 uShade;')
+        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;\nuniform vec4 uShade;' + (hairTinted ? '\nuniform vec3 uHairShift;' : ''))
         .replace('#include <color_fragment>', `#include <color_fragment>
+          ${hairTinted ? HAIR_SHIFT_GLSL : ''}
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -246,7 +266,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
             if (most > knee) reflectedLight.directSpecular = shine * (knee + (most - knee) / (1.0 + (most - knee) / (uShine - knee))) / most;
           }`);
     };
-    m.customProgramCacheKey = () => 'entityfx';
+    m.customProgramCacheKey = hairTinted ? () => 'entityfx-hair' : () => 'entityfx';
     mats.push(m);
     return m;
   }
@@ -259,6 +279,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     /** a standard material with a rim of `rim` light at glancing angles (skin, cloth) */
     rim: (p: THREE.MeshStandardMaterialParameters, rim: THREE.ColorRepresentation, strength = 1) =>
       patch(new THREE.MeshStandardMaterial(p), false, new THREE.Color(rim).multiplyScalar(strength)),
+    /** `rim`'s, for a painted face (models/head.ts): its hair's colour moved by a uniform (`KitLooks.hair`), a program of
+     *  its own every face shares, whatever colour (`HAIR_SHIFT_GLSL`) */
+    face: (p: THREE.MeshStandardMaterialParameters, rim: THREE.ColorRepresentation, strength = 1) =>
+      patch(new THREE.MeshStandardMaterial(p), false, new THREE.Color(rim).multiplyScalar(strength), true),
     // Unlit glow (eyes, crystals) - still dissolves via patch on MeshStandard with black base.
     // `near`: dims near the camera (enemies' glows; the heroes keep theirs)
     glow: (color: THREE.ColorRepresentation, intensity = 3, near = true) => patch(new THREE.MeshStandardMaterial({

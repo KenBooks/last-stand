@@ -33,6 +33,7 @@ import { updateChargeMark } from './ui/chargeMark';
 import { loadProfile, savedClass, saveClass, addToStash, hasSavedClass, peekProfile, saveProfile } from './loot/profile';
 import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
+import { buildableLook, chooseLooks, profileLook, readyLook } from './game/looks';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
@@ -151,7 +152,9 @@ async function boot() {
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
   // first, and the heroes' hands and the forest's stump sculpted: started before anything waits, as nothing they make
   // waits on the page
-  const textures = preloadTextures(CLASSES[savedClass()].model);
+  // (each hero's face as his look in the save slot has it, the one shown first: game/looks.ts)
+  const faces = chooseLooks(saveSlot(), savedClass());
+  const textures = preloadTextures(faces[0], faces);
   // (coarse at Very low's detail: a hand is 12,500 triangles otherwise, whatever the level)
   const hands = preloadHands(heroDetailAtBoot() <= COARSE_HANDS_UNDER);
   preloadStump();
@@ -237,7 +240,7 @@ async function boot() {
   // made by now)
   if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
   G.profile = loadProfile(savedClass());
-  G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped),
+  G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped, true, profileLook(G.profile)),
     () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
   G.players = [G.player];
   // (a frame painted between the boot's long pieces, so the loading screen moves on)
@@ -893,9 +896,11 @@ function chooseHero(id: string, profile: Profile) {
   sendLobbyChoice();   // its records set the starting wave
 }
 
-/** The selection screen closed (a hero chosen, or Back): the lobby again, its dummies back up. */
+/** The selection screen closed (a hero chosen, or Back): the lobby again, its dummies back up, the hero in the look
+ *  picked there (another look built again; another hair colour worn at once). */
 function heroSelectClosed() {
   if (G.mode !== 'menu') return;
+  restyleHero();
   spawnDummies();
   showMenu(true);
 }
@@ -906,6 +911,7 @@ function switchSaveSlot(n: number) {
   if (G.mode !== 'menu' || tradeBusy()) return;
   setSaveSlot(n);
   const id = savedClass(G.player.cls.id);
+  chooseLooks(n, id);
   saveClass(id);
   swapHero(id);
   heroSelectSlotSwitched(id);   // switched from over the hero selection screen: its hall on the slot's heroes
@@ -949,21 +955,38 @@ function openAtOneOfTheStarts(): void {
   faceCamera(start.facing);
 }
 
-/** The hero of `id` from the save slot in play takes the old one's place: a swap in place, not a respawn. */
-function swapHero(id: string) {
+/** The hero of `id` from the save slot in play takes the old one's place: a swap in place, not a respawn. `asked`:
+ *  in his look as his profile has it, made or not (its workers have answered). */
+function swapHero(id: string, asked = false) {
   const at = G.player.pos.clone(), facing = G.player.facing;
   G.player.dispose();
   // the old hero's skill visuals go with it
   clearProjectiles(); clearBurns(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   const old = G.player;
-  G.player = takeSpareHero(id, G.profile) ?? new Player(id, G.profile.equipped);
+  // (a look not made yet built in one that is, and built again once it's come: `restyleHero`)
+  const look = asked ? profileLook(G.profile) : buildableLook(id, profileLook(G.profile));
+  G.player = takeSpareHero(id, G.profile) ?? new Player(id, G.profile.equipped, true, undefined, look);
   G.player.slot = old.slot;
   G.player.spawn.copy(old.spawn);
   G.players[G.players.indexOf(old)] = G.player;
   G.player.place(at, facing);
   G.player.sandbox = !practising;
   buildHotbar(G.player);
+  sendLook();
+  if (G.player.heroLook.preset !== profileLook(G.profile).preset) {
+    void readyLook(id, profileLook(G.profile)).then(() => { if (G.mode === 'menu' && !heroSelectOpen()) restyleHero(true); });
+  }
+}
+
+/** The lobby's hero in the look his profile has: another hair colour at once, another look built again (`swapHero`,
+ *  its spare built in the hall as it was picked, `restyleHallHero`). */
+function restyleHero(asked = false): void {
+  const look = profileLook(G.profile);
+  if (G.player.cls.id !== G.profile.classId) return;
+  if (G.player.heroLook.preset !== look.preset) { swapHero(G.player.cls.id, asked); return; }
+  if (G.player.heroLook.hair === look.hair) return;
+  G.player.setHair(look.hair);
   sendLook();
 }
 

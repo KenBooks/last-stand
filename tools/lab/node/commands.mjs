@@ -1892,6 +1892,18 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  herolooks: {
+    each(side, options) {
+      return side.command('herolooks', { classes: options.classes, canary: Boolean(options.canary) });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('herolooks'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   heropick: {
     check(options) {
       // (a first visit's boot alone opens on the hero selection screen, its hero the mage)

@@ -8,6 +8,8 @@ import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
 import { buildModel, modelSteps } from './models/index';
+import { headFor, headOfPreset, presetOfHead } from './models/head';
+import { hairColour, type HeroLook } from '../data/heroLooks';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
@@ -344,14 +346,18 @@ export class Player {
   static built = 0;
 
   /** Class `classId`'s hero built a piece at a time (`models/steps.ts`): his model's pieces, then the rest. */
-  static *inSteps(classId: string, equipped: Profile['equipped'], local = true): Generator<void, Player, undefined> {
-    const model = yield* modelSteps(CLASSES[classId].model);
+  static *inSteps(classId: string, equipped: Profile['equipped'], local = true, look?: HeroLook): Generator<void, Player, undefined> {
+    const model = yield* modelSteps(CLASSES[classId].model, look && headOfPreset(CLASSES[classId].model, look.preset));
     yield;
-    return new Player(classId, equipped, local, model);
+    return new Player(classId, equipped, local, model, look);
   }
 
-  /** `model`: his model built already (`inSteps`). */
-  constructor(classId: string, equipped: Profile['equipped'], local = true, model?: Model) {
+  /** his look (data/heroLooks.ts) as built: the head his model has, and the hair colour it wears (`setHair`) */
+  heroLook: HeroLook;
+
+  /** `model`: his model built already (`inSteps`); `look`: his look (none: as the slot in play has it, `headFor`, and
+   *  his own hair colour). */
+  constructor(classId: string, equipped: Profile['equipped'], local = true, model?: Model, look?: HeroLook) {
     Player.built++;
     this.cls = CLASSES[classId];
     this.local = local;
@@ -365,7 +371,9 @@ export class Player {
       lights.hand.color.set(this.cls.aura.hand?.light ?? 0xffffff);
       lights.hand.intensity = 0;
     }
-    this.model = model ?? buildModel(this.cls.model);
+    this.model = model ?? buildModel(this.cls.model, look && headOfPreset(this.cls.model, look.preset));
+    this.heroLook = look ?? { preset: presetOfHead(this.cls.model, headFor(this.cls.model)), hair: null };
+    this.model.setHair?.(hairColour(this.heroLook.hair)?.rgb ?? null);
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
@@ -396,6 +404,13 @@ export class Player {
     this.recomputeStats(equipped);
     this.reset();
     if (this.local) this.setColour(ownColour());
+  }
+
+  /** His hair, brows and beard in hair colour `id` (data/heroLooks.ts; null: his look's own). Uniforms alone: nothing
+   *  compiles, and his head stays as built (another look is another build). */
+  setHair(id: string | null): void {
+    this.heroLook = { ...this.heroLook, hair: id };
+    this.model.setHair?.(hairColour(id)?.rgb ?? null);
   }
 
   /** Dyes the hero's cloth in `colour` (null: his own). A material's colour alone: nothing compiles. */
