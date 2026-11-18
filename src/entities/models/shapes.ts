@@ -77,6 +77,11 @@ const SKIN_FROM = 0, SKIN_TO = 0.04;
 const SKIN_CAST = 0.1;
 /** how far over the resting skin a wrap lies (m): laid on it, the closed fist's skin came through it in patches */
 const WRAP_GAP = 0.0045;
+/** how far over the resting skin a strip's edges lie (m): a wrap pulled tight is drawn into the skin at its edges, and
+ *  at the middle's gap the backdrop was seen through the slit under an edge (`lab hands`' seen through) */
+const EDGE_GAP = 0.0015;
+/** where across a wrap's strip its section's points lie (0 one edge, 1 the other): each laid on the skin under it */
+const ACROSS = [0, 0.53, 1];
 const _ray = new THREE.Raycaster(), _rayFrom = new THREE.Vector3(), _rayAxis = new THREE.Vector3();
 const _rayWay = new THREE.Vector3(), _rayHit = new THREE.Vector3();
 
@@ -100,16 +105,20 @@ function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3
 }
 
 /** each wrap's rows laid on its hand's skin (`skinShare`), kept by the hand's size and side: made once a hand */
-const wrapShares = new Map<string, number[]>();
+const wrapShares = new Map<string, number[][]>();
 
 /**
  * One strip from the hand's back through the thumb web, then around the forearm and under the sleeve. Where the hand
  * is under it (`skin`: the hand's skinned meshes, as it rests), each row is laid on the skin, as a wrap pulled tight
  * is: an oval of its own held the strip off the back of the hand, its edges standing out as a rigid cuff's rim with
- * the skin seen under them (an adversarial review: "notches showing skin", "a flared cuff").
+ * the skin seen under them (an adversarial review: "notches showing skin", "a flared cuff"). `poses` put the hand in
+ * each way it's held (`wrapPoses` in `hands.ts`: at rest and in a fist), and each point lies over the skin as the
+ * furthest out of them has it: laid over the hand at rest alone, the clenched fist's knuckles and back came through the
+ * strip and buried it.
  */
 export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THREE.Object3D,
-  palm: THREE.Object3D, towardThumb: number, skin: readonly THREE.Object3D[] = []): () => void {
+  palm: THREE.Object3D, towardThumb: number, skin: readonly THREE.Object3D[] = [],
+  poses: readonly (() => void)[] = []): () => void {
   const wrist = palm.parent!;
   const tau = 2 * Math.PI;
   // The hand turn runs diagonally over the back and folds narrower where it passes through the thumb web.
@@ -153,22 +162,40 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     palm.updateWorldMatrix(true, true);
     elbow.updateWorldMatrix(true, false);
     const axis = new THREE.Vector3(), at = new THREE.Vector3();
-    // (a row's share is the most any of its edges and middle needs; eased back to its oval above the hand, never under
-    // the skin: eased in under it, a bump of the wrist came through the strip as a hole)
-    const needed = (angle: number, y: number): number | null => {
+    // (each of a row's edges and its middle on the skin under it, eased back to its oval above the hand, never under
+    // the skin: eased in under it, a bump of the wrist came through the strip as a hole. A row laid at the most any of
+    // them needed stood an edge off the skin where it dipped under it, and the wrist was seen through under the strip's
+    // edge, on the little finger's side most: `lab hands`' seen through, 1.9% of the hand from that side)
+    const needed = (angle: number, y: number, gap: number): number | null => {
       const x = flatOval(Math.sin(angle)), z = flatOval(Math.cos(angle));
       const [rx, rz] = radii(y, angle, z);
       axis.set(wrist.position.x, y + wrist.position.y, wrist.position.z);
       at.set(towardThumb * x * rx, y, z * rz).add(wrist.position);
       const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, skin);
-      return out === 1 ? null : THREE.MathUtils.clamp(out + WRAP_GAP / reach, 0.6, 1.4);
+      return out === 1 ? null : THREE.MathUtils.clamp(out + gap / reach, 0.6, 1.4);
+    };
+    const posed = (angle: number, y: number, gap: number): number | null => {
+      let most: number | null = null;
+      for (const pose of poses.length ? poses : [() => {}]) {
+        pose();
+        palm.updateWorldMatrix(true, true);
+        const share = needed(angle, y, gap);
+        if (share !== null) most = Math.max(most ?? 0, share);
+      }
+      return most;
     };
     shares = path.map(([angle, centre, wide]) => {
-      if (centre > SKIN_CAST) return 1;
-      const found = [-0.5, 0, 0.5].map((side) => needed(angle, centre + side * wide)).filter((s) => s !== null);
-      if (!found.length) return 1;
-      const most = Math.max(...found);
-      return Math.max(most, THREE.MathUtils.lerp(most, 1, smooth(centre, SKIN_FROM, SKIN_TO)));
+      if (centre > SKIN_CAST) return ACROSS.map(() => 1);
+      const ys = ACROSS.map((across) => centre + (across - 0.5) * wide);
+      const found = ys.map((y, k) => posed(angle, y, ACROSS[k] === 0 || ACROSS[k] === 1 ? EDGE_GAP : WRAP_GAP));
+      const known = found.filter((s) => s !== null);
+      if (!known.length) return ACROSS.map(() => 1);
+      // (an edge with no skin under it takes the most the row's others need)
+      const most = Math.max(...known);
+      return found.map((s, k) => {
+        const on = s ?? most;
+        return Math.max(on, THREE.MathUtils.lerp(on, 1, smooth(ys[k], SKIN_FROM, SKIN_TO)));
+      });
     });
     if (skin.length) wrapShares.set(key, shares);
   }
@@ -181,7 +208,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     for (const [across, above] of section) {
       const y = centre + (across - 0.5) * wide;
       const [rx, rz] = radii(y, angle, z);
-      const share = shares![row];
+      const share = shares![row][ACROSS.indexOf(across)];
       positions.push(towardThumb * x * (rx * share + above) + wrist.position.x,
         y + wrist.position.y, z * (rz * share + above) + wrist.position.z);
       uvs.push((angle + 1) * 2 / tau, across * wide / 0.10);

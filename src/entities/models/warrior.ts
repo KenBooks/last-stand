@@ -21,7 +21,7 @@ import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, furTuftsSteps, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { headSteps, headFor, buildNeck, toGroup, handSkin, HEAD_MM, type HeadSpec } from './head';
 import { NECKLINE_BACK, onTunic, tunicCutSteps, SetInShoulders, type ArmBlend } from './tunic';
-import { buildHand, poseHand, hold, loosen, closeFist, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
+import { buildHand, poseHand, hold, loosen, closeFist, wrapPoses, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -840,8 +840,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
   const skinOf = (h: Hand) => [h.bareSkin ?? h.skin];
-  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s, skinOf(handL));
-  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s, skinOf(handR));
+  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s, skinOf(handL), wrapPoses(handL));
+  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s, skinOf(handR), wrapPoses(handR));
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
   body.legCapsules = true;

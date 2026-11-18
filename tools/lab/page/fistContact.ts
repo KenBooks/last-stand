@@ -3,14 +3,16 @@ import * as THREE from 'three';
 import type { Digit, Hand } from '../../../src/entities/models/hands';
 
 // Contact limits in metres and degrees. Distances include the hand's scale on the hero.
-const LIMIT = { tip: 0.006, gap: 0.003, thumb: 0.012, wrist: 10 };
+// `sunk`: how far a finger may sink into the one beside it (pressed together, the skins meet; past this they
+// fuse into one lump, as an adversarial review read the fist from the thumb's side)
+const LIMIT = { tip: 0.006, gap: 0.003, thumb: 0.012, wrist: 10, sunk: 0.0015 };
 // A fingertip is read near the axis of its cap, and shaft contact is read away from the joint blends.
 const CAP_HALF_WIDTH = 0.004;
 const SHAFT_END = 0.15;
 // Only the palmar face of the middle crease can count as fingertip contact.
 const CREASE = { top: -0.035, bottom: -0.086, face: -0.005 };
 
-type Region = 'palm' | `shaft${number}` | `tip${number}`;
+type Region = 'palm' | `base${number}` | `shaft${number}` | `end${number}` | `tip${number}`;
 interface Sample { at: THREE.Vector3; region?: Region; along: number }
 
 /** Vertices blended as in dualQuaternion.ts, including the scale of the hand and of the model. */
@@ -64,6 +66,12 @@ function skinSamples(hand: Hand): Sample[] {
     if (link === 1 && along > d.len[1] * SHAFT_END && along < d.len[1] * (1 - SHAFT_END)) {
       return { at, region: `shaft${digit}`, along };
     }
+    if (link === 0 && along > d.len[0] * SHAFT_END && along < d.len[0] * (1 - SHAFT_END)) {
+      return { at, region: `base${digit}`, along };
+    }
+    if (link === 2 && along > d.len[2] * SHAFT_END && along < d.len[2] * (1 - SHAFT_END)) {
+      return { at, region: `end${digit}`, along };
+    }
     return { at, along };
   });
 }
@@ -103,6 +111,42 @@ function palmDistance(tip: THREE.Vector3, triangles: THREE.Triangle[]): number {
   return sign * Math.sqrt(least);
 }
 
+/** How deep the deepest of `points` lies under `triangles`' surface (0 where none is under it). */
+/** How deep the deepest of `points` lies inside a finger (0 where none is): under its nearest point of `triangles`,
+ *  its skin, inside where the point is nearer the finger's bones than that point of its skin is (a patch of skin's
+ *  own winding can't say which side is in: its edges' nearest triangles faced any way, and read 34 mm) */
+function sunkInto(points: THREE.Vector3[], triangles: THREE.Triangle[], bones: THREE.Line3[]): number {
+  const near = new THREE.Vector3(), best = new THREE.Vector3(), onBone = new THREE.Vector3();
+  const axisDistance = (at: THREE.Vector3) => Math.min(...bones.map((bone) =>
+    bone.closestPointToPoint(at, true, onBone).distanceTo(at)));
+  let deepest = 0;
+  for (const point of points) {
+    let least = Infinity;
+    for (const triangle of triangles) {
+      const distance = triangle.closestPointToPoint(point, near).distanceToSquared(point);
+      if (distance < least) { least = distance; best.copy(near); }
+    }
+    if (axisDistance(point) < axisDistance(best)) deepest = Math.max(deepest, Math.sqrt(least));
+  }
+  return deepest;
+}
+
+/** How deep each finger sinks into the next (both ways, the deeper), along its three bones: the skins of
+ *  fingers pressed into each other, fused into a lump where a hand's are pressed side by side. */
+function fingersSunk(hand: Hand, samples: Sample[]): number[] {
+  const parts = (i: number): Region[] => [`base${i}`, `shaft${i}`, `end${i}`];
+  const of = (i: number) => samples.filter(({ region }) => region !== undefined && parts(i).includes(region));
+  const points = hand.f.map((_, i) => of(i).map(({ at }) => at));
+  const fingerSurface = (i: number) => parts(i).flatMap((part) => surface(hand, samples, part));
+  const surfaces = hand.f.map((_, i) => fingerSurface(i));
+  const at = (joint: THREE.Object3D) => joint.getWorldPosition(new THREE.Vector3());
+  const bones = hand.f.map((finger) => [new THREE.Line3(at(finger.j[0]), at(finger.j[1])),
+    new THREE.Line3(at(finger.j[1]), at(finger.j[2])),
+    new THREE.Line3(at(finger.j[2]), finger.j[2].localToWorld(new THREE.Vector3(0, -finger.len[2], 0)))]);
+  return points.slice(1).map((next, i) => Math.max(sunkInto(points[i], surfaces[i + 1], bones[i + 1]),
+    sunkInto(next, surfaces[i], bones[i])));
+}
+
 function tipOf(samples: Sample[], i: number): THREE.Vector3 {
   const tips = samples.filter(({ region }) => region === `tip${i}`).sort((a, b) => b.along - a.along);
   if (!tips.length) throw new Error(`hands: the fist measure found no tip for digit ${i}`);
@@ -124,6 +168,7 @@ export function fistContact(hand: Hand, wrist: number): { line: string; contacts
   const shafts = hand.f.map((_, i) => surface(hand, samples, `shaft${i}`));
   const points = hand.f.map((_, i) => samples.filter(({ region }) => region === `shaft${i}`).map(({ at }) => at));
   const gaps = points.slice(1).map((p, i) => Math.min(clearance(p, shafts[i]), clearance(points[i], shafts[i + 1])));
+  const sunk = fingersSunk(hand, samples);
   const thumb = tipOf(samples, hand.f.length);
   const opposed = clearance([thumb], shafts[1]);
   const middle = hand.f[1];
@@ -135,11 +180,13 @@ export function fistContact(hand: Hand, wrist: number): { line: string; contacts
   const over = thumbInHand.z < nearInHand.z && Math.abs(thumbInHand.x - nearInHand.x) <= middle.r;
   const mm = (n: number) => (n * 1000).toFixed(1);
   const line = `tips ${tips.map(mm).join('/')} mm, shaft gaps ${gaps.map(mm).join('/')} mm, `
+    + `sunk ${sunk.map(mm).join('/')} mm, `
     + `thumb ${mm(opposed)} mm (${over ? 'over middle' : 'off middle'}), wrist ${wrist.toFixed(1)}°`;
   const contacts: string[] = [];
   if (Math.max(...tips.map(Math.abs)) > LIMIT.tip) contacts.push('fingertip missed the palm');
   if (Math.max(...gaps) > LIMIT.gap) contacts.push('adjacent shafts separated');
   if (opposed > LIMIT.thumb || !over) contacts.push('thumb missed the middle shaft');
+  if (Math.max(...sunk) > LIMIT.sunk) contacts.push('fingers sunk into each other');
   const problems = [...contacts];
   if (wrist >= LIMIT.wrist) problems.push('wrist bent 10° or more');
   if (!hand.f.every(inRange)) problems.push('finger joints out of range');
