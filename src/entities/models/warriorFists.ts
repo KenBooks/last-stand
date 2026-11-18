@@ -46,9 +46,11 @@ const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.0
  *  they were small fists far off (from play: "1st person looked terrible"); in the corners from shoulders under the
  *  eyes, they were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
-  lead: [-0.36, -0.62, 0.42], rear: [0.42, -0.7, 0.40],
-  /** Index end up, the palm turned towards the opposite cheek so the folded fingers show inside the thumb. */
-  line: [-1, 0.25, 0],
+  lead: [-0.32, -0.45, 0.36], rear: [0.36, -0.5, 0.34],
+  /** Across, the index end out: the palms towards his face and the thumbs on the fists' outer sides, as a boxer
+   *  holds his guard (from play: "thumbs are facing outward... and face looking at inside palms"); index end up and
+   *  low at the view's foot, the fists showed their knuckles from above, and index end in, their backs. */
+  line: [-1, 0, 0],
   /** The elbows down by the ribs so the palm can turn inward without winding the forearms past their range. */
   pole: 0.4,
   /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
