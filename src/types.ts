@@ -171,9 +171,9 @@ export interface SkillDef {
 export interface LowerGrip { held: boolean; free: boolean; short: number; past: number; into: number }
 
 /** How a hand holds a handle (`Model.fists`): how far the handle passes from where the fist closes round it (m), how
- *  far along it that is from where the fist holds it (m, up the handle positive), and how far its fingers are curled
- *  (rad, their joints' mean bend: 0 straight) */
-export interface Fist { hand: 'left' | 'right'; off: number; along?: number; curl: number }
+ *  far along it that is from where the fist holds it (m, up the handle positive), how far its fingers are curled
+ *  (rad, their joints' mean bend: 0 straight), and how far the handle is off the way across its palm (rad) */
+export interface Fist { hand: 'left' | 'right'; off: number; along?: number; curl: number; across?: number }
 
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
@@ -220,6 +220,9 @@ export interface ClassDef {
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];
+  /** items in his stash from the start, each of a named base: given once to his profile, a new one or one already
+   *  played (`Profile.starterGiven`), so every weapon style can be tried without finding one */
+  starterStash?: { slot: Slot; rarity: RarityId; ilvl: number; base: string }[];
   /** item base names per slot (default: data/items SLOT_INFO) */
   bases?: Partial<Record<Slot, string[]>>;
   /** stats that never roll on this class's items (no skill of the class uses them) */
@@ -297,6 +300,8 @@ export interface Profile {
   merchant?: { stock: Item[]; restockedAt: number };
   /** his look and hair colour (data/heroLooks.ts; none kept: his first look, his own hair) */
   look?: HeroLook;
+  /** its class's starter stash has been given to it (`ClassDef.starterStash`) */
+  starterGiven?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +503,38 @@ export interface AnimState {
    *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves; `weight` 0 eases the look back
    *  ahead (a drawn bow's aim: left uncalled, a glance's eyes stayed turned and its head snapped back) */
   look?: (weight?: number) => void;
+  /** sat on a log or a stone (`entities/sitting.ts`, posed by `models/sit.ts`), or none */
+  sit?: SitState | null;
 }
+
+/** How far a hero is sat (`w`: 0 standing, 1 sat), his hips' pivot over the floor and his feet ahead of it (m), on the
+ *  floor where he stood to sit if they reach it. */
+/** How far an idle hero has sat (`entities/sitting.ts`): his hands' work before his body goes down (`before`: 0..1,
+ *  `Model.sitHands`), his body's way down (`w`), his hands' work once he's sat (`after`), his hips' height and his
+ *  feet's way ahead (m). Getting up, each runs back in turn. */
+export interface SitHands {
+  before: number; after: number; /** his hands only once he's up, not on his way */ last?: boolean; /** his way up, if not the sit's own (s) */ up?: number;
+  /** getting up, his facing turned from the seat's by `angle` (radians, + to his left) as his hands' stage runs back:
+   *  in from its end to `inTo`, back from `backFrom` to `backTo` (a two-hander picked up off the floor by a fire, turned
+   *  to face it) */
+  turn?: SitTurn;
+}
+
+export interface SitTurn {
+  angle: number; inTo: number; backFrom: number; backTo: number;
+  /** and a step as he turns in, kept once he's up (m, in the seat's frame: x to his left, z ahead), to stand by what he
+   *  takes up */
+  step?: [number, number];
+  /** or turned to face `yaw` and stepped to `at`, both in the world (rad, m on the floor): to stand where what he takes
+   *  up lies, wherever it lies */
+  yaw?: number;
+  at?: [number, number];
+  /** or how far turned and stepped he is at each moment of his hands' stage (0 to 1), from a keyed move: in place of
+   *  `inTo`, `backFrom` and `backTo` */
+  by?: (before: number) => number;
+}
+
+export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
 
 /** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */
 export interface Struck { x: number; z: number; r: number; top: number }
@@ -559,6 +595,13 @@ export interface Model {
   /** a hero's hair, brows and beard in a hair colour (data/heroLooks.ts `HairColour.rgb`; null: his look's own), by
    *  uniforms alone (models/head.ts `Head.setHair`) */
   setHair?(rgb: readonly [number, number, number] | null): void;
+  /** how long his hands take to make ready before he sits (s, standing: a two-hander lowered off his shoulder), and
+   *  once he's sat (a blade stuck into the ground), on a seat or on the floor (`floor`); getting up, the same back in
+   *  turn (none if absent) */
+  sitHands?(floor: boolean): SitHands;
+  /** the hands' stage his getting up will take, asked while he's sat (a two-hander taken up off the floor by a fire
+   *  takes longer than it took to lay down), where it differs from `sitHands` */
+  sitHandsUp?(floor: boolean): SitHands;
   dispose(): void;
 }
 

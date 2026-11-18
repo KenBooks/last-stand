@@ -7,6 +7,7 @@ import { state as props, type Prop } from './destructible';
 import { placeBefore, stackBefore } from '../entities/carry';
 import type { Enemy } from '../entities/enemy';
 import type { Wall } from './wall';
+import type { Relaxed } from './seats';
 
 export function resolveWorld(pos: { x: number; z: number }, radius: number): void {
   resolveProps(pos, radius);
@@ -14,10 +15,11 @@ export function resolveWorld(pos: { x: number; z: number }, radius: number): voi
 }
 
 /** A body of `radius` at `pos` pushed off the static obstacles (not the wall). */
-export function resolveProps(pos: { x: number; z: number }, radius: number): void {
+export function resolveProps(pos: { x: number; z: number }, radius: number, relaxed?: Relaxed | null): void {
   for (const o of G.arena.obstacles) {
     const dx = pos.x - o.x, dz = pos.z - o.z;
-    const min = o.r + radius;
+    // (a seat's circles nearer: walking up to sit and leaving it, `entities/sitting.ts`)
+    const min = o.r + (relaxed?.circles.includes(o) ? Math.min(radius, relaxed.r) : radius);
     const d2 = dx * dx + dz * dz;
     if (d2 < min * min && d2 > 1e-6) {
       const d = Math.sqrt(d2);

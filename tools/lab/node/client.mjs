@@ -4,7 +4,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { codeStamp } from './codeStamp.mjs';
 import { labError } from './errors.mjs';
-import { LAB_PORT, SERVER_NOTE } from './paths.mjs';
+import { LAB_PORT, REPO, SERVER_NOTE } from './paths.mjs';
 
 /** how long a restarting server is waited for, ms */
 const RESTART_WAIT_MS = 60_000;
@@ -86,7 +86,7 @@ const SEND_ATTEMPTS = 3;
  * code isn't this command line's), is waited for and the command sent again.
  */
 export async function sendToServer(call) {
-  const stamped = { ...call, stamp: codeStamp() };
+  const stamped = { ...call, stamp: codeStamp(), root: REPO };
   for (let attempt = 0; attempt < SEND_ATTEMPTS; attempt++) {
     let reply;
     try {

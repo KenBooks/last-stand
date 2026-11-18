@@ -38,8 +38,9 @@ wrist at their ends, so a pose asking more of an arm than it gives is held there
 Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
 many frames, the first with the most stops pictured, and each stop's frames tallied: said, not failed, until every
 hero's are fixed, #307), and the weapon through the body (`page/weaponBody.ts`: every corner of the same surface
-against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
-anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
+against the thighs, shins and feet, capsules round their bones at their drawn radii (a foot's from its heel to
+its toes under the ankle: without them, the ranger's bow laid by a fire ended on his boot's toe unread), and the
+belly and chest, the anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
 failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
 shaft going through leg"). The arms against the body: each forearm and hand against the trunk and head
 (`page/armsIn.ts`, as `eyes` reads them) and against the thighs and shins (`page/armsInLegs.ts`, capsules at their

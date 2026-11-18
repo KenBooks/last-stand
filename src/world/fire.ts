@@ -623,6 +623,8 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   volume.position.copy(at);
   // (drawn after the smoke, before the glows)
   volume.renderOrder = 15;
+  // (the lab's handle on it: `lab sit` pictures a hero sat by it from beyond it, it hidden)
+  volume.name = 'flames';
   scene.add(volume);
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });

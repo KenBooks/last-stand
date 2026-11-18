@@ -9,7 +9,7 @@ import http from 'node:http';
 import { rmSync, writeFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { describeError } from './errors.mjs';
-import { REPO, SERVER_NOTE } from './paths.mjs';
+import { REPO, SERVER_NOTE, sameTree } from './paths.mjs';
 
 /** how long the source must be left alone after a change before the next page boots, ms (edits come in bursts) */
 const EDITS_SETTLE_MS = 800;
@@ -171,6 +171,15 @@ export async function serve(port, stamp) {
     return { ok: false, restarting: true, text: 'the lab server is restarting: its code changed' };
   };
 
+  /**
+   * A call from another tree's command line, refused: this server serves this tree's game, and restarted for it, it
+   * came back on this tree's code, and the other's command waited for it in vain.
+   */
+  const otherTree = (call) => {
+    if (!call.root || sameTree(call.root, REPO)) return null;
+    return { ok: false, text: `lab: port ${port} serves the lab of ${REPO}, not ${call.root}: give LAB_PORT another` };
+  };
+
   /** Runs a command once the ones before it are done; its reply carries the changes seen as it started. */
   const runCommand = (call) => queue.add(async () => {
     log(`${call.command} ${JSON.stringify(call.options ?? {})}`);
@@ -193,8 +202,10 @@ export async function serve(port, stamp) {
   });
 
   const routes = {
-    '/ping': async () => ({ ok: true, stamp }),
-    '/stop': async () => {
+    '/ping': async () => ({ ok: true, stamp, root: REPO }),
+    '/stop': async (call) => {
+      const refused = otherTree(call);
+      if (refused) return refused;
       setTimeout(() => stop(), 50);
       return { ok: true, text: 'the lab server stopped' };
     },
@@ -203,6 +214,8 @@ export async function serve(port, stamp) {
       return { changed, version: changes.count, files: changes.files };
     },
     '/run': async (call) => {
+      const refused = otherTree(call);
+      if (refused) return refused;
       if (call.stamp && call.stamp !== stamp) return otherCode();
       if (call.command === 'live') return runLive(call);
       const job = runCommand(call);

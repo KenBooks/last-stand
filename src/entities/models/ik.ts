@@ -173,6 +173,10 @@ const DRAG_SLACK = 0.03;
 const WALK_SUPPORT = 0.5;
 /** how much further behind its hip than its planned stance leaves it a planted foot is left behind (a share) */
 const BEHIND_SPARE = 1.2;
+/** a pose takes the legs from the IK under this weight (`update`): their feet follow the pose's from then on. (At 0.5, a
+ *  sit taking them as he goes down had the IK started afresh halfway, its feet, lean and twist reset while it was still
+ *  half the pose, and his whole upper body jumped 6 to 9 cm in a frame on every seat) */
+const OWNED_BELOW = 0.05;
 /** how fast the pelvis sinks or rises for the legs' reach at most (m/s) */
 const DROP_RATE = 1.5;
 /** the most the pelvis sinks for the stance the gait plans (leg lengths: a stalking walk's bent knees) */
@@ -902,8 +906,8 @@ export class LegIK {
     // them (restarting each frame where the pose has them) so the gait picks up from there when it gives them back
     this.w = damp(this.w, weight, 10, dt);
     // (and once more on the frame it gives them back: the pose has changed by then)
-    if (weight < 0.5 || this.owned) this.fresh = true;
-    this.owned = weight < 0.5;
+    if (weight < OWNED_BELOW || this.owned) this.fresh = true;
+    this.owned = weight < OWNED_BELOW;
     // only the chain down to the hips is brought up to date here (the renderer updates the rest): a crowd pays for
     // this every frame
     const root = this.j.root;

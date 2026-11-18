@@ -12,6 +12,7 @@ import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { partnerInHouse } from './coopHouses.mjs';
+import { partnerOnSeat } from './coopSeats.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
 import { runsEnds } from './coopEnds.mjs';
@@ -716,6 +717,7 @@ export async function runCoop(side, options) {
   }
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
+  if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
@@ -759,6 +761,12 @@ export async function runCoop(side, options) {
       // (in the village, no run: a partner gone into a house, node/coopHouses.mjs)
       const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
       problems.push(...await partnerInHouse(pair, callPage, lines, { tags: PARTY_TAGS, canary, pictures }));
+      return { text: lines.join('\n'), problems };
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'seats') {
+      // (in the village, no run: a seat a partner sits on, node/coopSeats.mjs)
+      const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
+      problems.push(...await partnerOnSeat(pair, callPage, lines, { canary, pictures }));
       return { text: lines.join('\n'), problems };
     }
     const start = await startTogether(pair, { ping, jitter }, lines, canary);

@@ -194,9 +194,12 @@ export function navTarget(x: number, z: number, r: number, tx: number, tz: numbe
  * Bends a heading (ux, uz: unit) round the obstacles within `reach` ahead, onto the tangent of the
  * nearest one in the way (plus the margin), on the side the heading already leans to. It starts
  * turning as soon as an obstacle is within reach, so the curve is smooth and never touches. Near
- * the arena edge the outward part of the heading fades out. Writes the unit heading into `out`.
+ * the arena edge the outward part of the heading fades out. Writes the unit heading into `out`. An obstacle `skip`
+ * says to (given it and how far ahead its centre is) is passed over: a hero walking to a seat goes round the seat on
+ * his own way, and leaves what lies past where he's going.
  */
-export function steerClear(x: number, z: number, r: number, ux: number, uz: number, reach: number, out: { x: number; z: number }): void {
+export function steerClear(x: number, z: number, r: number, ux: number, uz: number, reach: number, out: { x: number; z: number },
+  skip?: (o: Obstacle, ahead: number) => boolean): void {
   let last: Obstacle | null = null;
   for (let pass = 0; pass < 3; pass++) {
     let hit: Obstacle | null = null, hitT = Infinity, hitR = 0;
@@ -204,7 +207,7 @@ export function steerClear(x: number, z: number, r: number, ux: number, uz: numb
       if (o === last) continue;   // already on its tangent
       const ox = o.x - x, oz = o.z - z, R = o.r + r + MARGIN;
       const t = ox * ux + oz * uz, side = ox * uz - oz * ux;
-      if (t <= 0 || t - R > reach || Math.abs(side) >= R || t >= hitT) continue;
+      if (t <= 0 || t - R > reach || Math.abs(side) >= R || t >= hitT || skip?.(o, t)) continue;
       hit = o; hitT = t; hitR = R;
     }
     if (!hit) break;

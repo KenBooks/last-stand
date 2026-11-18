@@ -5,10 +5,11 @@ import * as THREE from 'three';
 import { HOUSES, type RoomId } from '../../data/houses';
 import { boards, pbrMaterialMaps, wood } from '../../core/textures';
 import {
-  banner, barrel, begin, bench, BODY, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
-  framed, hearth, lantern, type Mats, onWall, parchment, RIDGE_UNDER, type Room, rug, sign, stool, table, tankard,
+  banner, barrel, begin, bench, BENCH_SAT, BODY, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
+  framed, hearth, lantern, type Mats, onWall, parchment, RIDGE_UNDER, type Room, rug, sign, stool, stoolSeatOf, table, tankard,
   writing,
 } from '../rooms';
+import { lengthSeat } from '../seats';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
 function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
@@ -113,6 +114,8 @@ export function build(group: THREE.Group): Room {
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
   for (const [z, metal] of [[-1.9, false], [-1.2, true], [-0.1, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
+  // (no seats: at 0.72 m his feet reached the floor only with his legs near straight, as a man stood, from review; a
+  // bar stool's sit wants a rung for his feet)
   for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, T, barX - 0.75, z, 0.72);
   const east = onWall(g, id, 'east');
   const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
@@ -150,7 +153,8 @@ export function build(group: THREE.Group): Room {
   map.write((cx, w, h) => drawMap(cx, w, h));
   for (let k = 0; k < 5; k++) {
     const a = (k / 5) * Math.PI * 2 + 0.4;
-    stool(g, T, px + Math.cos(a) * 1.05, pz + Math.sin(a) * 1.05);
+    const [sx, sz] = [px + Math.cos(a) * 1.05, pz + Math.sin(a) * 1.05];
+    b.seats.push(stoolSeatOf(stool(g, T, sx, sz), sx, sz));
   }
   candle(g, M, px + 0.45, 0.76, pz - 0.3, 0.18, CANDLE);
   tankard(g, M, px - 0.5, 0.76, pz + 0.2);
@@ -158,13 +162,20 @@ export function build(group: THREE.Group): Room {
   // --- a long table with benches, west by the front ---
   const [lx, lz] = [-hx + 1.6, 1.4];
   inn(lx, lz, 0.9, 2.2);
-  for (const sx of [-1, 1]) bench(g, T, lx + sx * 0.75, lz, 2.0, Math.PI / 2);
-  for (const sx of [-1, 1]) obstacles.push({ x: lx + sx * 0.75, z: lz, r: 0.2, h: 0.45 });
+  for (const sx of [-1, 1]) {
+    const seat = bench(g, T, lx + sx * 0.75, lz, 2.0, Math.PI / 2), o = { x: lx + sx * 0.75, z: lz, r: 0.2, h: 0.45 };
+    obstacles.push(o);
+    // (along its length, its ends' legs left out)
+    b.seats.push(lengthSeat(o.x, o.z, Math.PI / 2, BENCH_SAT, 0.02, [o], [seat.top], [{ root: seat.group }]));
+  }
   candle(g, M, lx, 0.76, lz - 0.2, 0.2, CANDLE);
   for (const [dx, dz] of [[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]]) tankard(g, M, lx + dx, 0.76, lz + dz, dz < 0);
   // --- a small table in the middle ---
   inn(0.3, -0.2, 0.9, 0.9, true);
-  for (const a of [0.6, 2.2, 3.9]) stool(g, T, 0.3 + Math.cos(a) * 0.75, -0.2 + Math.sin(a) * 0.75);
+  for (const a of [0.6, 2.2, 3.9]) {
+    const [sx, sz] = [0.3 + Math.cos(a) * 0.75, -0.2 + Math.sin(a) * 0.75];
+    b.seats.push(stoolSeatOf(stool(g, T, sx, sz), sx, sz));
+  }
   candle(g, M, 0.3, 0.76, -0.2, 0.16, CANDLE);
   // --- barrels by the door, the party board beside it ---
   barrel(g, M, -hx + 0.5, 0, hz - 0.5);

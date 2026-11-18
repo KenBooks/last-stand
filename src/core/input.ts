@@ -288,6 +288,9 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
   canvas.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
 }
 
+/** The cursor's ray into the world this frame (the crosshair's in the close views), or none on touch. */
+export const cursorRay = (): THREE.Ray | null => (input.touchMode || input.aim ? null : ray.ray);
+
 export function updateInputRay(): void {
   if (input.aim || input.touchMode) input.foe = null;
   if (input.aim) { input.ground.copy(input.aim); return; }

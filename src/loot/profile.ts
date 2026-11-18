@@ -33,11 +33,24 @@ function fresh(classId: string): Profile {
     stash: [],
     records: { bestWave: 0, bestBanked: {}, bestReached: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
   };
+  giveStarterStash(p);
   seedPr423Gear(p, true); // PR 423's test gear
   seedPr499Gear(p, true); // PR 499's test gear
   seedPr527Gear(p, true); // PR 527's test gear
   seedPr487Staffs(p, true); // PR 487's test staffs
   return p;
+}
+
+/** Its class's starter stash into a profile that hasn't had it, as much as the bag holds; whether it gave any. */
+function giveStarterStash(p: Profile): boolean {
+  const cls = CLASSES[p.classId];
+  if (p.starterGiven || !cls?.starterStash) return false;
+  for (const g of cls.starterStash) {
+    if (p.stash.length >= RUN.bagLimit) break;
+    p.stash.push(makeItem({ ...g, cls }));
+  }
+  p.starterGiven = true;
+  return true;
 }
 
 /** Weapons saved before a class's weapons had schools are its first (the mage's: arcane, what they cast then). */
@@ -63,6 +76,8 @@ export function loadProfile(classId: string): Profile {
     const p = read(KEY(classId), classId);
     if (p) {
       const loaded = { ...p, classId };
+      // (a profile played before its class had a starter stash gets it now, once)
+      if (giveStarterStash(loaded)) saveProfile(loaded);
       if (seedPr423Gear(loaded, false)) saveProfile(loaded); // PR 423's test gear
       if (seedPr499Gear(loaded, false)) saveProfile(loaded); // PR 499's test gear
       if (seedPr527Gear(loaded, false)) saveProfile(loaded); // PR 527's test gear

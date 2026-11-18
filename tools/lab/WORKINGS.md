@@ -22,8 +22,8 @@ export: a page booted between two edits) throws a `SyntaxError` on the page. Wai
 alone, each was waited out to the timeout, three minutes: a module that wouldn't compile or link never runs, so its
 loading screen never says it failed, and the command after it waited behind it.
 - `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`, every command a module of its own
-  in `node/commands/`), and sends it to the server on 127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a
-  session of its own.
+  in `node/commands/`), and sends it to the server on 127.0.0.1 on this tree's own port (`treePort`, or `LAB_PORT`;
+  `node/client.mjs`), or runs it in a session of its own.
 - `node/`, the Node side:
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in

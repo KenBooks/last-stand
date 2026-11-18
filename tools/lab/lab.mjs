@@ -4,6 +4,7 @@
 import { request, sendToServer, waitForChange } from './node/client.mjs';
 import { describeError, labError } from './node/errors.mjs';
 import { COMMANDS, parseCommandLine, usage } from './node/options.mjs';
+import { REPO } from './node/paths.mjs';
 import { lowerPriority } from './node/priority.mjs';
 import { stopRunning, stopWhenAsked } from './node/running.mjs';
 
@@ -84,7 +85,7 @@ async function main() {
     return null;
   }
   if (call.command === 'stop') {
-    const reply = await request('/stop');
+    const reply = await request('/stop', { root: REPO });
     console.log(reply ? reply.text : 'no lab server is up');
     // (and every command running in a process of its own from this tree: a check, pwa, one run without the server)
     for (const line of await stopRunning()) console.log(line);

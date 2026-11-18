@@ -793,6 +793,11 @@ function promptFor(): HTMLElement {
   return el;
 }
 
+/** Whether the prompt to hold E to revive a partner is shown (the hint to sit gives way to it). */
+export function raisePromptShown(): boolean {
+  return !!raisePrompt && !raisePrompt.classList.contains('hidden');
+}
+
 /** In reach of a downed partner (keyboard and mouse: touch has its button), the prompt to hold E, and the revive. */
 function promptRaise(downed: Player | undefined, near: boolean): void {
   const el = promptFor();

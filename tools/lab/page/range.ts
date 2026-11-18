@@ -68,16 +68,23 @@ type Side = 'L' | 'R';
  */
 export const GRIPPING = { 'wrist.flexion': [-70, 30] } as const;
 
-/** The sides whose hands hold a handle now (`Model.fists`: none on a game without it). */
+/** a fist with its fingers curled less than this (rad, their joints' mean bend) is open, gripping nothing: through
+ *  the eyes the fingers stood straight out beside the handle */
+export const FIST_OPEN = 0.5;
+
+/** The sides whose hands hold a handle now (`Model.fists`, curled `FIST_OPEN` or more: none on a game without it). An
+ *  open hand's wrist is an empty hand's: judged as gripping, the ranger's hand opened off his bow laid by a fire, on
+ *  his knee, read 50 degrees past a gripping wrist's flexion. */
 export function grippingSides(lab: Lab): Side[] {
-  return (lab.model.fists ?? []).map((fist) => (fist.hand === 'right' ? 'R' : 'L'));
+  const gripping = (lab.model.fists ?? []).filter((fist) => fist.curl >= FIST_OPEN);
+  return gripping.map((fist) => (fist.hand === 'right' ? 'R' : 'L'));
 }
 
 /** the body's limits for an arm, as anatomy.ts has them, for `ArmsPinned` */
-const ARM_LIMITS: ArmLimits = { ranges: ROM, elevationLimit, rotationRange };
+export const ARM_LIMITS: ArmLimits = { ranges: ROM, elevationLimit, rotationRange };
 
 /** The ranges each gripping hand's wrist is judged by (`GRIPPING`), for `ArmsPinned`. */
-function grippingRanges(lab: Lab): Partial<Record<Side, Ranges>> {
+export function grippingRanges(lab: Lab): Partial<Record<Side, Ranges>> {
   return Object.fromEntries(grippingSides(lab).map((side) => [side, GRIPPING]));
 }
 

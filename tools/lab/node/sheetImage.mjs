@@ -1,5 +1,6 @@
-// The lab's picture sheet as one image (tools/lab): a row a moment, a column a view, each row's notes beside it.
-// With an A/B, each moment's row from the other commit sits above this tree's.
+// The lab's picture sheet as images (tools/lab): a row a moment, a column a view, each row's notes beside it, a few
+// moments an image. With an A/B, each moment's row from the other commit sits above this tree's.
+import { existsSync, rmSync } from 'node:fs';
 
 import { rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -14,6 +15,19 @@ const SCREEN_TILE_WIDTH = 960;
 const WHOLE_FRAME_VIEWS = ['screen', 'eyes'];
 const NOTES_WIDTH = 300;
 const GAP = 3;
+/**
+ * the most rows an image of the sheet holds: past it the sheet goes on in another (`sheet-2.png`, ...). Every row in
+ * one page was a page too big for the browser, which closed, and the command failed: the ranger's range A/B, eight
+ * films, the warrior's four ways of holding his weapons, each split by its own command until a sit on five seats hit
+ * it again.
+ */
+const ROWS_PER_IMAGE = 8;
+
+/** The file of a sheet's `part` (from 1): `file` itself, then `file` with `-2`, `-3`... before its extension. */
+export function partFile(file, part) {
+  if (part === 1) return file;
+  return file.replace(/(\.[^.\\/]+)?$/, (extension) => `-${part}${extension}`);
+}
 
 const STYLE = `
   body { margin: 0; background: #1b1c1f; color: #ddd; font: 13px/1.35 system-ui, sans-serif; }
@@ -96,25 +110,46 @@ export async function writeStack(browser, pictures, file) {
 }
 
 /**
- * Writes the sheet to `file`. `runs` is a list of [side name, sheet] (the other commit first in an A/B); a moment
- * is matched across sides by its place in the list.
+ * Writes the sheet to `file`, in parts of a few moments each (`partFile`); returns the files written. `runs` is a list
+ * of [side name, sheet] (the other commit first in an A/B); a moment is matched across sides by its place in the
+ * list, and its sides' rows are kept in one part.
  */
 export async function writeSheet(browser, runs, viewCount, file) {
-  const rows = [];
+  const groups = [];
   let width = NOTES_WIDTH + viewCount * (TILE_WIDTH + GAP);
   const moments = Math.max(...runs.map(([, sheet]) => sheet.moments.length));
   for (let i = 0; i < moments; i++) {
+    const rows = [];
     for (const [sideName, sheet] of runs) {
       const moment = sheet.moments[i];
       if (!moment) continue;
       rows.push(rowHtml(moment, runs.length > 1 ? sideName : ''));
       width = Math.max(width, rowWidth(moment));
     }
+    groups.push(rows);
   }
+  const perImage = Math.max(1, Math.floor(ROWS_PER_IMAGE / runs.length));
+  const files = [];
+  for (let start = 0; start < groups.length; start += perImage) {
+    const part = partFile(file, files.length + 1);
+    await drawRows(browser, groups.slice(start, start + perImage).flat(), width, part);
+    files.push(part);
+  }
+  removeLaterParts(file, files.length);
+  return files;
+}
+
+/** Draws `rows` (HTML) into one image, `file`. */
+async function drawRows(browser, rows, width, file) {
   const page = await browser.newPage({ viewport: { width, height: TILE_HEIGHT + GAP } });
   try {
     await pictureOf(page, `<!doctype html><style>${STYLE}</style>${rows.join('')}`, file);
   } finally {
     await page.close();
   }
+}
+
+/** Removes the parts of an earlier sheet in `file` past the `count` just written, so none is read as this one's. */
+function removeLaterParts(file, count) {
+  for (let part = count + 1; existsSync(partFile(file, part)); part++) rmSync(partFile(file, part));
 }

@@ -218,7 +218,8 @@ export class LabSession {
       problems.push(...sideProblems);
       // (kept only from a page that raised nothing: a browser that fell over would be read back for good)
       if (key && errors.length === 0) {
-        keep(key, { result: resultOf.get(turn), notes: sideNotes, problems: sideProblems });
+        const kept = keep(key, { result: resultOf.get(turn), notes: sideNotes, problems: sideProblems });
+        if (!kept) notes.push(`${turn.name}: not kept for the next A/B (its result is too long to keep)`);
       }
     }
     if (only === 'other') return { text: notes.join('\n'), problems, counts: [], booting };

@@ -360,7 +360,8 @@ export function updateVillage(dt = 0): void {
     return;
   }
   if (!p.walkTo) going = null;
-  near = nearest();
+  // (none named or used while E is the sit's: sat on the campfire's logs, it offered Play together over him)
+  near = p.sitting.takesKey ? null : nearest();
   // (what it opened put away by its own button: E opens it again where he stands, as he hadn't walked off it, "when I
   // press got it, I cannot press E again until I move away")
   if (opened && !hooks.shows(opened)) opened = null;

@@ -46,6 +46,7 @@ import { simpleTree } from './simpleTrees';
 import { leafClusterTexture } from './foliage';
 import { cullInCells, eachInstance, gridCell } from './culling';
 import { buildFountain, type FountainLight } from './fountain';
+import { fireSeat, lengthSeat, type Seat } from './seats';
 import {
   COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, solidAt,
   withinVillage,
@@ -780,10 +781,15 @@ export function buildVillage(scene: THREE.Group): Village {
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
   buildYard(scene, wall, M);
-  const campfire = buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
+  // (in a group of its own, which the outline of its seat draws: sat round on the floor, as a bonfire is)
+  const campfireGroup = new THREE.Group();
+  campfireGroup.name = 'campfire';
+  scene.add(campfireGroup);
+  const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   campfire.light.decay = 2 + CAMPFIRE_LIGHT.soft;
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
-  stillBuilt(scene, () => buildBenches(scene, M, obstacles));
+  const seats = [fireSeat(obstacles[obstacles.length - 1], [{ root: campfireGroup }])];
+  seats.push(...stillBuilt(scene, () => buildBenches(scene, M, obstacles)));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
   // (the places of their own, world/places/: the weapons rack; before the lamps, which keep off what stands)
   stillBuilt(scene, () => buildPlaces({ scene, wall, M, obstacles, updaters }));
@@ -824,6 +830,7 @@ export function buildVillage(scene: THREE.Group): Village {
     obstacles,
     wall,
     props: [],
+    seats,
     portals,
     relief: levels.relief,
     exits,
@@ -1273,8 +1280,10 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
     const w = (COTTAGE.w / 2 + 0.5) * c.size, d = (COTTAGE.d / 2 + 0.5) * c.size;
     mask.clearRect(c.x - w, c.z - d, c.x + w, c.z + d, 0, c.facing);
   }
-  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 1.6);
-  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 3.4, 0.45);
+  // (bare out past where a body sits on its logs or by it, legs and all, `world/seats.ts`: worn alone, its tall
+  // blades stood up through a hero sat on a log)
+  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], CAMPFIRE_BARE);
+  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], CAMPFIRE_BARE + 0.6, 0.45);
   mask.clearCircle(NOTICE.x, NOTICE.z, 1.3, 0.4);
   // (the rack's foot, and the ground before it trodden by who comes to it)
   mask.clearRect(RACK.x - RACK.half - 0.2, RACK.z - 0.7, RACK.x + RACK.half + 0.2, RACK.z + 0.7, 0.3, RACK.facing);
@@ -2522,18 +2531,36 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: Si
   return { walls, hall: inside, roofs, doors };
 }
 
-/** Logs to sit on round the campfire. */
-function buildBenches(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): void {
+/** how far round the campfire no grass grows (m): past its logs' far sides and a sat body's legs off them */
+const CAMPFIRE_BARE = 3.0;
+
+/** the logs round the campfire: where round it (rad), how far out (m), their radius at each end, length and how far
+ *  their middle stands up (their top a seat's height: at 0.22 m round, their top at 0.44 was under `SEAT.low`, a step),
+ *  and how far off their line a body sits on one (m) */
+const BENCH = { at: [0.4, 2.3, 4.2], out: 2.2, r: [0.26, 0.28], long: 1.7, y: 0.26, sit: 0.12 };
+
+/** Logs to sit on round the campfire, one draw (an instance each, as the outline of the one pointed at needs it
+ *  apart), each a seat along its middle (`world/seats.ts`). */
+function buildBenches(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): Seat[] {
   const [cx, cz] = CAMPFIRE;
-  for (const a of [0.4, 2.3, 4.2]) {
-    const x = cx + Math.cos(a) * 2.2, z = cz + Math.sin(a) * 2.2;
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 1.7, 10).rotateZ(Math.PI / 2), M.logs);
-    log.position.set(x, 0.22, z);
-    log.rotation.y = -a + Math.PI / 2;
-    log.castShadow = log.receiveShadow = true;
-    scene.add(log);
-    for (const k of [-0.5, 0, 0.5]) obstacles.push({ x: x + Math.cos(a + Math.PI / 2) * k, z: z + Math.sin(a + Math.PI / 2) * k, r: 0.3, h: 0.44 });
-  }
+  const geometry = new THREE.CylinderGeometry(BENCH.r[0], BENCH.r[1], BENCH.long, 10).rotateZ(Math.PI / 2);
+  const logs = new THREE.InstancedMesh(geometry, M.logs, BENCH.at.length);
+  logs.name = 'campfire benches';
+  logs.castShadow = logs.receiveShadow = true;
+  const seats: Seat[] = [];
+  BENCH.at.forEach((a, i) => {
+    const x = cx + Math.cos(a) * BENCH.out, z = cz + Math.sin(a) * BENCH.out, yaw = -a + Math.PI / 2;
+    setInstance(logs, i, x, BENCH.y, z, 0, yaw, 0, 1);
+    const n0 = obstacles.length;
+    for (const k of [-0.5, 0, 0.5]) {
+      const along = a + Math.PI / 2;
+      obstacles.push({ x: x + Math.cos(along) * k, z: z + Math.sin(along) * k, r: BENCH.r[1] + 0.04, h: BENCH.y + BENCH.r[1] });
+    }
+    seats.push(lengthSeat(x, z, yaw, BENCH.long / 2 - 0.25, BENCH.sit, obstacles.slice(n0), [logs], [{ root: logs, instance: i }]));
+  });
+  logs.computeBoundingSphere();
+  scene.add(logs);
+  return seats;
 }
 
 /** The notice board: two posts, a board under a little roof, notices pinned to it. */
