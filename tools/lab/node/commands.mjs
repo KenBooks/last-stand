@@ -692,6 +692,7 @@ export const COMMANDS = {
   fire: {
     check(options) {
       if (!(options.seconds > 0)) throw labError(`fire --seconds: ${options.seconds} is not a length of time`);
+      if (options.levels && !options.cost) throw labError('fire --levels times the flames: it needs --cost');
     },
     async each(side, options) {
       // (a biome at a time, each on its own: its pictures sent back with it)
@@ -701,6 +702,7 @@ export const COMMANDS = {
           biome,
           seconds: options.seconds,
           cost: Boolean(options.cost),
+          levels: Boolean(options.levels),
           canary: Boolean(options.canary),
         };
         reports.push(await side.command('fire', command));

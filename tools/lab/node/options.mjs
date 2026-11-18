@@ -582,6 +582,12 @@ export const COMMANDS = {
         help: 'time what its flames take of the GPU in the top-down view, drawn and not in turns (its times differ '
           + 'from run to run, as the machine\'s load does)',
       },
+      levels: {
+        kind: 'switch',
+        help: 'with --cost, its flames timed alone at each quality level in turn within one page, from beside them '
+          + '(the look left unread, nothing pictured): on a commit whose fire is the same at every '
+          + 'level, the rows\' spread is the noise',
+      },
       canary: {
         kind: 'switch',
         help: 'plant the faults the measures must catch: a still flame, one drawn white, none drawn, a strobe on the '

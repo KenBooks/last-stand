@@ -21,6 +21,8 @@ import { CAMERA } from '../../../src/data/balance';
 import { particles } from '../../../src/fx/particles';
 import type { BiomeId } from '../../../src/data/biomes';
 import { standIn } from './light';
+import { qualityLevel, useQuality } from '../../../src/core/quality';
+import type { QualityLevel } from '../../../src/data/quality';
 import { canvasOf, readOpaque, type Area } from './pixels';
 import { FrameReader } from './screenCells';
 import { worstFlashing } from './flashes';
@@ -42,6 +44,8 @@ export interface FireOptions {
   seconds: number;
   /** time what its flames take of the GPU (its times differ from run to run) */
   cost: boolean;
+  /** with `cost`, its flames timed at each quality level in turn, the look left unread (`levelCosts`) */
+  levels?: boolean;
   /** plant the faults the measures must catch: a still flame, one drawn white, a strobe on the screen, none drawn */
   canary: boolean;
 }
@@ -688,11 +692,65 @@ async function timedFrom<T>(lab: Lab, fire: Fire, shot: Shot, time: (draw: () =>
   }
 }
 
-/** What the flames take of the GPU from beside them. */
-function costLine(cost: FlameCost | null): string {
-  if (!cost) return '  its flames\' cost on the GPU: untimed (the browser has no timer)';
-  return `  its flames' cost on the GPU from beside them: the frame ${cost.shown.toFixed(2)} ms with them, `
-    + `${cost.hidden.toFixed(2)} without (the median of ${cost.renders} renders each, in turns)`;
+/** A frame's time as frames a second. */
+const fpsOf = (ms: number): number => (ms > 0 ? 1000 / ms : 0);
+
+/** What the flames take of the GPU from `where` (beside them, or as the game shows them): the frame with them and
+ *  without, each as frames a second too, and what they take, the median of each round's own difference (`apart`: the
+ *  two sides' medians drift with what else holds the GPU). */
+function costLine(cost: FlameCost | null, where: string): string {
+  if (!cost) return `  its flames' cost on the GPU ${where}: untimed (the browser has no timer)`;
+  const shown = `${cost.shown.toFixed(2)} ms, ${fpsOf(cost.shown).toFixed(0)} fps`;
+  const hidden = `${cost.hidden.toFixed(2)} ms, ${fpsOf(cost.hidden).toFixed(0)} fps`;
+  // (a cost under twice its own error says nothing: said, so it isn't read as a cost or a saving)
+  const told = Math.abs(cost.apart) > 2 * cost.error ? '' : ', inside the noise';
+  const takes = `${cost.apart.toFixed(2)} ms \u00b1${cost.error.toFixed(2)}${told}`;
+  return `  its flames' cost on the GPU ${where}: ${takes} (the frame ${shown}, with them; `
+    + `${hidden}, without; the median of ${cost.renders} renders each, in turns)`;
+}
+
+/** What the flames take of the GPU as the game shows them, over the shoulder with the hero before the fire, drawn and
+ *  not in turns. */
+async function gameViewCost(lab: Lab, biome: BiomeId, fire: Fire, at: THREE.Vector2, facing: number):
+  Promise<FlameCost | null> {
+  await standIn(lab, { biome, view: 'third', facing, at: [at.x, at.y] });
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    return await flameCost(G.renderer, fire.parts, () => renderer.render());
+  } finally {
+    lab.drawing = drawing;
+    await standIn(lab, { biome, view: 'top', facing, at: [at.x, at.y] });
+  }
+}
+
+/** the quality levels `levelCosts` times the flames at, and the frames each is given to settle */
+const COST_LEVELS: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
+const LEVEL_SETTLE = 20;
+
+/** `--cost --levels`: the flames timed at each quality level in turn within one page, from beside them, where they
+ *  fill the view (over the shoulder their few pixels read inside the timer's noise at every level, on main too), the
+ *  level put back after. Its canary is the cost's own (the flames drawn four times over), at High. */
+async function levelCosts(lab: Lab, biome: BiomeId, fire: Fire, canary: boolean): Promise<Report> {
+  const shots = shotsOf(fire);
+  const was = qualityLevel();
+  const lines = [`${biome}: its flames' cost at each quality level, in turns within one page`];
+  const problems: string[] = [];
+  try {
+    for (const level of COST_LEVELS) {
+      useQuality(level);
+      await lab.step(LEVEL_SETTLE);
+      const beside = await timedFrom(lab, fire, shots.beside, (draw) => flameCost(G.renderer, fire.parts, draw));
+      lines.push(`  ${level}:`, costLine(beside, 'from beside them'));
+      if (canary && level === 'high' && beside) {
+        problems.push(...(await costCanary(lab, fire, shots.beside, beside)).map((missed) => `${biome}: ${missed}`));
+      }
+    }
+  } finally {
+    useQuality(was);
+  }
+  // (nothing pictured: the command's pictures are each biome's moments)
+  return { text: lines.join('\n'), problems, moments: [] };
 }
 
 /** The cost's canary: the flames drawn four times over must cost `CANARY_COST_LEAST` times theirs or more; a problem
@@ -742,6 +800,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   await lab.step(SETTLE_FRAMES);
   const fire = found;
   if (!fire.parts.length) return { text: `${biome}: no fire drawn`, problems: [`${biome}: its fire draws nothing`] };
+  if (options.cost && options.levels) return levelCosts(lab, biome, fire, canary);
   const shots = shotsOf(fire);
   const reading = await readOver(lab, fire, shots.beside, seconds);
   // (a second at least: flashes are counted in a second, and over half of one the strobe flashed twice)
@@ -755,6 +814,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   const cost = options.cost
     ? await timedFrom(lab, fire, shots.beside, (draw) => flameCost(G.renderer, fire.parts, draw))
     : undefined;
+  const fromGame = options.cost ? await gameViewCost(lab, biome, fire, stand, facing) : undefined;
   const turned = readTurning(lab, fire, size.height);
   const lines = [
     `${biome}: ${counted(fires.length, 'fire')}; the first at ${fire.at.x.toFixed(1)}, ${fire.at.z.toFixed(1)}, `
@@ -763,7 +823,8 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
     ...motionLines(reading),
     turningLine(turned.turning),
     plantsLine(plants, column),
-    ...(cost === undefined ? [] : [costLine(cost)]),
+    ...(cost === undefined ? [] : [costLine(cost, 'from beside them')]),
+    ...(fromGame === undefined ? [] : [costLine(fromGame, 'over the shoulder, as the game shows them')]),
     `  the top-down view flashed at most ${flashes} times in a second`,
   ];
   const problems = faultsOf(reading).map((fault) => `${biome}: ${fault}`);

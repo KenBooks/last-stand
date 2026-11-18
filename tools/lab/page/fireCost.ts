@@ -12,6 +12,8 @@ export interface FlameCost {
    *  (`costInTurns`' `takes`: what else uses the GPU drifts within a run, and two whole sides' medians read parts as
    *  costing less than nothing) */
   apart: number;
+  /** how far `apart` may be off (ms): its median's standard error, from the rounds' spread */
+  error: number;
   /** the renders each side was timed over */
   renders: number;
 }
@@ -25,7 +27,7 @@ export const CANARY_COST_LEAST = 2;
 export async function turnCost(renderer: THREE.WebGLRenderer, turn: (on: boolean) => void, draw: () => void):
   Promise<FlameCost | null> {
   const cost = await costInTurns(renderer, turn, draw);
-  return cost && { shown: cost.on, hidden: cost.off, apart: cost.takes, renders: cost.renders };
+  return cost && { shown: cost.on, hidden: cost.off, apart: cost.takes, error: cost.error, renders: cost.renders };
 }
 
 /** What `parts` take of the GPU as `draw` renders the frame, drawn and not in turns; null where the browser times
