@@ -155,9 +155,11 @@ export function hurryPortraits(ids: Who[]): void {
 
 /** A harness's: every picture forgotten, to be made again as on a first visit (`lab guide`). */
 export function forgetPortraits(): void {
-  made.clear();
+  // (the guide's alone: the scholar's, first in the queue, made long before any guide is opened in play, was made
+  // again ahead of the guide's and held its pictures back, a page's own 284 ms after its opening)
+  for (const id of guides()) made.delete(id);
   portraitTimes.clear();
-  pending = everyone();
+  pending = [...(made.has('scholar') ? [] : ['scholar' as Who]), ...guides()];
   started = true;
   requeue();
 }
