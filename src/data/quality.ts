@@ -5,96 +5,108 @@ import { VILLAGE } from '../core/beta';
 export type QualityLevel = 'high' | 'medium' | 'low' | 'verylow';
 export type QualitySetting = 'auto' | QualityLevel;
 
-export interface QualityPreset {
-  label: string;
-  /** the most pixels the scene renders, counted on the screen (Infinity: all the screen's own); never by the OS's
-   *  scaling, which says nothing of what the hardware draws. Every level renders them all: what a level cuts is
-   *  other work ("I want to run the game at full phone res") */
-  pixels: number;
-  /** MSAA samples on the scene render target (0 = off) */
-  msaa: number;
-  /** directional (moon) shadow map resolution */
-  shadowMap: number;
-  /** character parts with a smaller bounding radius don't cast shadows (each caster is a draw call) */
-  minCasterRadius: number;
-  /** the heroes' geometric detail (hair locks, fur tufts, curve segments), 1 = full; taken when a hero is built */
-  heroDetail: number;
-  /** enemies further than this from the local player (m) skip the leg IK (models/ik.ts): their walk cycle's own legs */
-  ikRange: number;
-  /** the floors' relief: the most steps down each view ray (core/parallax.ts), 0 = flat */
-  relief: number;
+/**
+ * Each setting a block of its own, sorted, its value at every level: a PR adding a setting adds its block alone (as
+ * one line a level, every setting a column, any two PRs adding settings both rewrote all four lines and conflicted).
+ * `QUALITY` turns it round into a preset a level.
+ */
+// sorted
+const SETTINGS = {
+  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
+   *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
+  // (0: no bloom at all, Very low's)
+  bloomShare: { high: 1, medium: 1, low: 0.5, verylow: 0 },
+  /** the share of the floor's clutter drawn: grass, ferns, pebbles, rocks, bones (`setClutterShare` in
+   *  world/culling.ts) */
+  clutter: { high: 1, medium: 1, low: 1, verylow: 0.34 },
+  /** whether the props sculpted for close looks are drawn coarser (the crypt's skulls: `setSkullDetail` in
+   *  world/skull.ts) */
+  coarseProps: { high: false, medium: false, low: true, verylow: true },
+  /** the rounds a skirt's cloth is draped over the limbs a frame (`setDrapeRounds` in entities/models/armor.ts) */
+  drapeRounds: { high: 3, medium: 4, low: 2, verylow: 2 },
+  /** whether the flames take the lite path (`setFlameSteps` in world/fire.ts): the nearest loop frame alone and no
+   *  strands at each step, a third of the volume's reads, near the old fire's cost (#461) */
+  flameLite: { high: false, medium: false, low: true, verylow: true },
+  /** the share of a fire's ray-march steps its flames take (`setFlameSteps` in world/fire.ts): each step is up to
+   *  three reads of the flames' volume at every pixel they cover */
+  flameSteps: { high: 1, medium: 0.75, low: 0.75, verylow: 0.35 },
+  /** whether the floor's plants are drawn: weeds, ferns and fallen leaves, never the grass, which every level keeps
+   *  (`setFloorPlants` in world/culling.ts): counts alone. Very low's none (#599, from play: players on Very low
+   *  "desperate for fps"; its leaner trees left to the simple ones, #643) */
+  floorPlants: { high: true, medium: true, low: true, verylow: false },
+  /** whether worn gear glows in its rarity's colour where the player hasn't chosen (Settings' Gear glow,
+   *  `setGearGlowByLevel` in core/materials.ts): 3 to 10% of the frame where glowing gear fills the view */
+  gearGlow: { high: true, medium: true, low: true, verylow: false },
   /** how far apart the grass's blades stand, against High's, each as many times wider (`setGrassSpread` in
    *  world/meadow.ts): twice, a quarter of the blades cover the ground as before, a quarter of the vertices shaded
    *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame; Very low's four times, a sixteenth: a laptop's
    *  integrated GPU drew 5 frames a second over the shoulder, the grass 296k of its 534k triangles) */
-  grassSpread: number;
+  grassSpread: { high: 1, medium: 1, low: 2, verylow: 4 },
   /** whether the grass's near blades are tufts of thin blades, each its own way (`setGrassTufts` in world/meadow.ts):
    *  three times their vertices, High's alone */
-  grassTufts: boolean;
+  grassTufts: { high: true, medium: false, low: false, verylow: false },
+  /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
+   *  the frame at the screen's pixels cost a 4K laptop's integrated GPU 26 ms of 38 */
+  hdr: { high: true, medium: false, low: false, verylow: false },
+  /** the heroes' geometric detail (hair locks, fur tufts, curve segments), 1 = full; taken when a hero is built */
+  heroDetail: { high: 1, medium: 0.6, low: 0.35, verylow: 0.2 },
+  /** enemies further than this from the local player (m) skip the leg IK (models/ik.ts): their walk cycle's own legs */
+  ikRange: { high: Infinity, medium: Infinity, low: 14, verylow: 6 },
   /** the share of the village's lamps' reach, and whether they read the shadows' map of what stands round them
    *  (`setLampQuality` in core/lamps.ts) */
-  lampReach: number;
-  lampShadows: boolean;
+  lampReach: { high: 1, medium: 1, low: 0.7, verylow: 0.7 },
+  lampShadows: { high: true, medium: true, low: false, verylow: false },
+  /** the share of the thicket's leaf cards drawn (`setLeafShare` in world/culling.ts) */
+  leaves: { high: 1, medium: 1, low: 1, verylow: 0.5 },
+  /** character parts with a smaller bounding radius don't cast shadows (each caster is a draw call) */
+  minCasterRadius: { high: 0.09, medium: 0.11, low: 0.16, verylow: 0.3 },
+  /** MSAA samples on the scene render target (0 = off) */
+  msaa: { high: VILLAGE ? 2 : 4, medium: 2, low: 0, verylow: 0 },
+  /** the share of the particles a burst, a puff of smoke or debris spawns (`setParticleShare` in fx/particles.ts):
+   *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
+  particles: { high: 1, medium: 1, low: 1, verylow: 0.5 },
+  /** the most pixels the scene renders, counted on the screen (Infinity: all the screen's own); never by the OS's
+   *  scaling, which says nothing of what the hardware draws. Every level renders them all: what a level cuts is
+   *  other work ("I want to run the game at full phone res") */
+  pixels: { high: Infinity, medium: Infinity, low: Infinity, verylow: Infinity },
+  /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
+   *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
+  poseEvery: { high: 1, medium: 1, low: 1, verylow: 2 },
+  /** the floors' relief: the most steps down each view ray (core/parallax.ts), 0 = flat */
+  relief: { high: 12, medium: 8, low: 0, verylow: 0 },
+  /** whether the sun's (moon's) shadow is drawn every other frame, whatever the frame rate (`setShadowInTurns` in
+   *  core/renderer.ts): its pass draws every caster again */
+  shadowInTurns: { high: false, medium: false, low: false, verylow: true },
+  /** directional (moon) shadow map resolution */
+  shadowMap: { high: 3072, medium: 2048, low: 1024, verylow: 512 },
   /** whether the village draws what moves into its kept shadow maps only on frames it moved
    *  (`world/shadowsOnMove.ts`): every level's now (a hero on High is 134k triangles a shadow pass, drawn again each
    *  frame he stood still: from play, 1.28M triangles facing a wall, "our users are really struggling") */
-  shadowsOnMove: boolean;
-  /** the rounds a skirt's cloth is draped over the limbs a frame (`setDrapeRounds` in entities/models/armor.ts) */
-  drapeRounds: number;
-  /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
-   *  the frame at the screen's pixels cost a 4K laptop's integrated GPU 26 ms of 38 */
-  hdr: boolean;
-  /** whether the props sculpted for close looks are drawn coarser (the crypt's skulls: `setSkullDetail` in
-   *  world/skull.ts) */
-  coarseProps: boolean;
-  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
-   *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
-  bloomShare: number;   // (0: no bloom at all, Very low's)
-  /** whether the sun's (moon's) shadow is drawn every other frame, whatever the frame rate (`setShadowInTurns` in
-   *  core/renderer.ts): its pass draws every caster again */
-  shadowInTurns: boolean;
-  /** whether the sun's shadow is of what stands still alone, drawn only when that changes (`setSunShadowStill` in
-   *  world/props.ts): its pass drew the whole biome again each time; the heroes and foes cast none by it then */
-  stillSunShadow: boolean;
-  /** the share of the floor's clutter drawn: grass, ferns, pebbles, rocks, bones (`setClutterShare` in
-   *  world/culling.ts) */
-  clutter: number;
-  /** the share of the thicket's leaf cards drawn (`setLeafShare` in world/culling.ts) */
-  leaves: number;
-  /** the share of the particles a burst, a puff of smoke or debris spawns (`setParticleShare` in fx/particles.ts):
-   *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
-  particles: number;
-  /** whether worn gear glows in its rarity's colour where the player hasn't chosen (Settings' Gear glow,
-   *  `setGearGlowByLevel` in core/materials.ts): 3 to 10% of the frame where glowing gear fills the view */
-  gearGlow: boolean;
+  shadowsOnMove: { high: true, medium: true, low: true, verylow: true },
   /** whether the village's and the Thornwood's trees are drawn as simple ones, each a model of a few pieces
    *  (`setSimpleTrees` in world/simpleTrees.ts): geometries alone */
-  simpleTrees: boolean;
-  /** whether the floor's plants are drawn: weeds, ferns and fallen leaves, never the grass, which every level keeps
-   *  (`setFloorPlants` in world/culling.ts): counts alone. Very low's none (#599, from play: players on Very low
-   *  "desperate for fps"; its leaner trees left to the simple ones, #643) */
-  floorPlants: boolean;
-  /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
-   *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
-  poseEvery: number;
-  /** the share of a fire's ray-march steps its flames take (`setFlameSteps` in world/fire.ts): each step is up to
-   *  three reads of the flames' volume at every pixel they cover */
-  flameSteps: number;
-  /** whether the flames take the lite path (`setFlameSteps` in world/fire.ts): the nearest loop frame alone and no
-   *  strands at each step, a third of the volume's reads, near the old fire's cost (#461) */
-  flameLite: boolean;
-}
-
-export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: VILLAGE ? 2 : 4, shadowMap: 3072, minCasterRadius: 0.09, heroDetail: 1, ikRange: Infinity, relief: 12, grassSpread: 1, grassTufts: true, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 3, shadowInTurns: false, particles: 1, hdr: true, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true, simpleTrees: false, floorPlants: true, poseEvery: 1, flameSteps: 1, flameLite: false },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, grassTufts: false, lampReach: 1, lampShadows: true, shadowsOnMove: true, bloomShare: 1, drapeRounds: 4, shadowInTurns: false, particles: 1, hdr: false, coarseProps: false, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true, simpleTrees: false, floorPlants: true, poseEvery: 1, flameSteps: 0.75, flameLite: false },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5, drapeRounds: 2, shadowInTurns: false, particles: 1, hdr: false, coarseProps: true, stillSunShadow: false, clutter: 1, leaves: 1, gearGlow: true, simpleTrees: true, floorPlants: true, poseEvery: 1, flameSteps: 0.75, flameLite: true },
-  // (below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than low...
-  // all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
-  verylow: { label: 'Very low', pixels: Infinity, msaa: 0, shadowMap: 512, minCasterRadius: 0.3, heroDetail: 0.2, ikRange: 6, relief: 0, grassSpread: 4, grassTufts: false, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, drapeRounds: 2, hdr: false, coarseProps: true, bloomShare: 0, shadowInTurns: true, particles: 0.5, stillSunShadow: true, clutter: 0.34, leaves: 0.5, gearGlow: false, simpleTrees: true, floorPlants: false, poseEvery: 2, flameSteps: 0.35, flameLite: true },
+  simpleTrees: { high: false, medium: false, low: true, verylow: true },
+  /** whether the sun's shadow is of what stands still alone, drawn only when that changes (`setSunShadowStill` in
+   *  world/props.ts): its pass drew the whole biome again each time; the heroes and foes cast none by it then */
+  stillSunShadow: { high: false, medium: false, low: false, verylow: true },
 };
 
+/** a level's settings, every one (each documented in `SETTINGS`) */
+export type QualityPreset = { label: string } & {
+  -readonly [K in keyof typeof SETTINGS]: (typeof SETTINGS)[K][QualityLevel];
+};
+
+// (Very low is below Low, for a device that still lags there: from play, "a very low graphics mode, even lower than
+// low... all graphics reduced, effects that use less GPU processing"; the screen's pixels kept, as at every level)
+const LABELS: Record<QualityLevel, string> = { high: 'High', medium: 'Medium', low: 'Low', verylow: 'Very low' };
+
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low', 'verylow'];
+
+/** each level's preset, read from `SETTINGS` */
+export const QUALITY = Object.fromEntries(QUALITY_ORDER.map((level) => [level, {
+  label: LABELS[level],
+  ...Object.fromEntries(Object.entries(SETTINGS).map(([name, each]) => [name, each[level]])),
+}])) as Record<QualityLevel, QualityPreset>;
 
 /**
  * Auto quality: a level down when the average FPS stays below `minFps` for `window` seconds (frames over 250 ms,
