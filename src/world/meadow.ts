@@ -16,7 +16,7 @@ import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import { asGrass, type Updater } from './props';
 import { hiddenByHallDoor } from './hallPortal';
 import { wholeView } from '../core/wholeView';
-import { SOLID_RANGE } from './meadowSolids';
+import { BLADE_ROOM, SOLID_RANGE } from './meadowSolids';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
@@ -326,6 +326,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform float uTime;
   uniform float uWindWild;
   uniform sampler2D uSolid;
+  uniform float uRoom;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
@@ -393,6 +394,8 @@ const VERTEX_BLADE = /* glsl */ `
   float byStrand = uByStrand * uCombed * max(step(1.5, uWider), step(1.5, uTuft));
   float share = fract(h.z * 3.17) * ${(1 - BLADE_GROWS).toFixed(2)};
   on *= mix(smoothstep(share, share + ${BLADE_GROWS.toFixed(2)}, band), step(0.001, band), byStrand);
+  // (none grows where a solid leaves it no room: \`BLADE_ROOM\` in meadowSolids.ts)
+  on *= step(uRoom, texture2D(uSolid, root / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)});
   vGrowing = vec2(band, byStrand);
   // (a tuft's blades, where the grass isn't spread: each its own way, lean, bend and height, from one crown)
   float tufted = step(1.5, uTuft);
@@ -459,6 +462,10 @@ const VERTEX_BLADE = /* glsl */ `
   // (no part of it above the lowest solid over where that part is, \`solidsOver\` in meadowSolids.ts: rooted under a
   // log it lies under it, and leant into a post it's bent down where it meets it; from play, "grass grows through logs")
   float solidOver = texture2D(uSolid, bladePos.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)};
+  // (a part of it reaching in under a solid lower than a blade's room narrows to nothing there, never lying flat on the
+  // ground: flat, it fought the ground for the depth under a log)
+  // (a straight ramp, not a smoothstep: \`uRoom\` may come down to the ramp's foot, and a smoothstep's edges then meet)
+  bladePos -= across * (side * w * 0.5) * (1.0 - clamp((solidOver - 0.04) / max(uRoom - 0.04, 0.001), 0.0, 1.0));
   bladePos.y = min(bladePos.y, max(solidOver - 0.01, 0.0));
   vBladeAt = bladePos;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
@@ -485,7 +492,8 @@ const FRAGMENT_COLOUR = /* glsl */ `
   // (a card or a sheet is wide: its corners held under the solids leave its middle slanting up through a log between
   // them, short tips standing out of the seat logs' tops seen from above, a review's "Not fixed"; where the program
   // cuts its blades already, each point of it is held under the lowest solid over where it is)
-  if (vBladeAt.y > texture2D(uSolid, vBladeAt.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)} - 0.005) discard;
+  float solidHere = texture2D(uSolid, vBladeAt.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)};
+  if (vBladeAt.y > solidHere - 0.005 || solidHere < uRoom) discard;
   if (vTufted > 0.5) {
     // (a card is as many cards of the first ring side by side as it is wide: a far ring's sheet is drawn as theirs)
     float tuftsAcross = max(1.0, floor(sqrt(vStrands.x) + 0.5));
@@ -572,6 +580,8 @@ const FRAGMENT_COLOUR = /* glsl */ `
 interface RingUniforms extends MaskUniforms {
   /** the lowest solid over each cell of the meadow (meadowSolids.ts) */
   uSolid: { value: THREE.Texture };
+  /** the least room a blade needs under a solid (m: `BLADE_ROOM`, every ring's the same; a harness's canary lowers it) */
+  uRoom: { value: number };
   uOrigin: { value: THREE.Vector2 };
   uCell: { value: number };
   uWider: { value: number };
@@ -779,7 +789,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     shader.uniforms.uViewHigh = viewHigh;
     shader.uniforms.uDropByPixel = dropByPixel;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nvarying vec3 vBladeAt;\nuniform float uTuft;\nuniform float uDropByPixel;\nuniform sampler2D uSolid;\nuniform float uMeadowHalf;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nvarying vec3 vBladeAt;\nuniform float uTuft;\nuniform float uDropByPixel;\nuniform sampler2D uSolid;\nuniform float uMeadowHalf;\nuniform float uRoom;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,
@@ -940,6 +950,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   meadowHalf = mask.half;
   group.userData.maskTexture = maskTexture;
   group.userData.solids = solids;
+  const room = { value: BLADE_ROOM };
+  group.userData.room = room;
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
@@ -973,6 +985,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
       uSolid: { value: solids },
+      uRoom: room,
     };
     if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
     else bandOf(u.uBand.value, k, HAND_OVER);

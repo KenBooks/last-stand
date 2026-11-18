@@ -19,6 +19,8 @@ import { rayChunks } from './rayChunks';
 import { grassDrawnAt } from './grassDrawn';
 import { groundHeight } from '../../../src/world/ground';
 import { WEBGPU } from '../../../src/core/webgpu';
+import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
+import { viewBy } from './villageHallCull';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../../src/core/layers';
 import type { LightsChecked } from './villageLights';
 
@@ -63,11 +65,15 @@ const PICTURE_FROM = [2.6, 1.6];
 /** the hero's facing the pictures are turned by (rad): the `above` close-up then looks north, from the square's side,
  *  whatever way the boot faced him */
 const PICTURE_FACING = -0.35;
+/** the hours the grass by the props is pictured over the shoulder at (a review's own was by night) */
+const SEEN_AT = [0, 12];
 /** where round the campfire its seat logs lie (rad: village.ts `buildBenches`) */
 const SEAT_LOGS = [0.4, 2.3, 4.2];
 /** the hours the campfire's stones are pictured at, and how far off (m) */
 const STONES_AT = [12, 0];
 const STONES_FROM = 3;
+/** how far off a seat log's foot its low close-up stands (m) */
+const LOW_FROM = 1.1;
 
 /** the game's modules, as this run loaded them */
 let game: Game;
@@ -324,6 +330,19 @@ async function pictures(lab: Lab): Promise<Pictured[]> {
     await lab.step(2);
     moments.push(lab.picture(`the campfire's stones at ${hour}h`, ['above', 'plan'], [], { at: stones, distance: STONES_FROM }));
   }
+  // (each seat log close to and low, from the grass's side, by night and by day: a review's own angle, its foot where
+  // the grass held flat under it flickered against the ground)
+  for (const hour of SEEN_AT) {
+    holdHour(hour);
+    await lab.step(2);
+    SEAT_LOGS.forEach((angle, k) => {
+      // (the close-up turned by his facing, 0 along +z: the camera stands out on the grass's side of the log, as the
+      // review's did; on the fire's side the ground is bare)
+      lab.player.facing = Math.atan2(Math.cos(angle), Math.sin(angle));
+      const log = new THREE.Vector3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.1, CAMPFIRE[1] + Math.sin(angle) * 2.2);
+      moments.push(lab.picture(`seat log ${k + 1}'s foot, low, at ${hour}h`, ['front', 'above'], [], { at: log, distance: LOW_FROM }));
+    });
+  }
   lab.player.facing = facing;
   holdHour(null);
   return moments;
@@ -336,46 +355,93 @@ const STAND_OFF = 1.1;
 const SETTLE = 15;
 
 /** Where the hero stands to see each prop in the lobby's own view: beside each seat log, a street lamp, the board. */
-function stands(): { what: string; x: number; z: number }[] {
+function stands(): { what: string; x: number; z: number; lookX: number; lookZ: number }[] {
   const out = SEAT_LOGS.map((angle, k) => ({
     what: `seat log ${k + 1}`,
     x: CAMPFIRE[0] + Math.cos(angle) * (2.2 + STAND_OFF),
     z: CAMPFIRE[1] + Math.sin(angle) * (2.2 + STAND_OFF),
+    lookX: CAMPFIRE[0] + Math.cos(angle) * 2.2,
+    lookZ: CAMPFIRE[1] + Math.sin(angle) * 2.2,
   }));
   const lamp = picturedSpots().find((spot) => spot.label === 'a street lamp');
-  if (lamp) out.push({ what: 'a street lamp', x: lamp.at.x + STAND_OFF, z: lamp.at.z });
-  out.push({ what: 'the notice board', x: NOTICE.x + Math.sin(NOTICE.facing) * 1.6, z: NOTICE.z + Math.cos(NOTICE.facing) * 1.6 });
+  if (lamp) out.push({ what: 'a street lamp', x: lamp.at.x + STAND_OFF, z: lamp.at.z, lookX: lamp.at.x, lookZ: lamp.at.z });
+  out.push({
+    what: 'the notice board',
+    x: NOTICE.x + Math.sin(NOTICE.facing) * 1.6,
+    z: NOTICE.z + Math.cos(NOTICE.facing) * 1.6,
+    lookX: NOTICE.x,
+    lookZ: NOTICE.z,
+  });
   return out;
 }
 
 /** The grass drawn over a prop at each stand, as the game draws it: each pixel of grass put back into the world, and
  *  a ray from it down meeting a solid above the ground before the ground (a blade's tip on a log's top, from above). */
-async function drawnOverProps(lab: Lab, feet: Foot[], meshes: THREE.Mesh[], moments?: Pictured[]):
-  Promise<{ what: string; over: number; near: number }[]> {
+/** What the grass drawn at a stand does against the props there: pixels over one (a tip through a log's top), pixels
+ *  squeezed under one (a blade pressed flat on the ground under a log, its flat face fighting the ground's for the
+ *  depth: from review, "z fighting under log"), and the pixels of grass over the footprints' ground read. */
+interface Drawn { what: string; view: ViewMode; over: number; under: number; near: number }
+
+/** The views each stand is read from: the lobby's own from above, and over the shoulder, low, facing the prop. */
+const DRAWN_VIEWS: ViewMode[] = ['top', 'third'];
+/** how close over a pixel of grass a solid squeezes it (m), and how near the ground it lies flat there (m: the ground
+ *  is drawn at 1.6 cm, and a blade pressed down to it fights it for the depth) */
+const SQUEEZED = 0.12;
+const FLAT = 0.05;
+
+/** The grass drawn at each stand in each view, as the game draws it: each pixel of grass put back into the world, a ray
+ *  from it down meeting a solid above the ground (a blade's tip on a log's top), or, lying within `FLAT` of the ground,
+ *  one up meeting a solid within `SQUEEZED` (a blade pressed flat under it). `moments` takes each as the player sees it, at `hours`. */
+async function drawnOverProps(lab: Lab, feet: Foot[], meshes: THREE.Mesh[], moments?: Pictured[]): Promise<Drawn[]> {
   const ray = new THREE.Raycaster();
   const down = new THREE.Vector3(0, -1, 0);
+  const up = new THREE.Vector3(0, 1, 0);
   const from = new THREE.Vector3();
-  const counts: { what: string; over: number; near: number }[] = [];
-  for (const stand of stands()) {
-    G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
-    await lab.step(SETTLE);
-    let over = 0;
-    let near = 0;
-    for (const point of grassDrawnAt(lab, G.camera, DRAWN.across, DRAWN.down)) {
-      const foot = feet.find((f) => Math.hypot(point.x - f.x, point.z - f.z) <= f.r);
-      if (!foot || point.y < GROUND_UP) continue;
-      near++;
-      ray.set(from.set(point.x, point.y + 0.002, point.z), down);
-      ray.far = point.y;
-      const hits = ray.intersectObjects(meshesOver(meshes, foot), false).filter((hit) => hit.point.y > GROUND_UP);
-      if (hits.length) over++;
+  const counts: Drawn[] = [];
+  const was = viewMode();
+  for (const view of DRAWN_VIEWS) {
+    await viewBy(lab, view);
+    for (const stand of stands()) {
+      G.player.walkTo = null;
+      G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
+      // (over the shoulder, the camera turned to face what he stands by)
+      if (view !== 'top') faceCamera(Math.atan2(stand.lookX - stand.x, stand.lookZ - stand.z));
+      await lab.step(SETTLE);
+      const counted: Drawn = { what: stand.what, view, over: 0, under: 0, near: 0 };
+      for (const point of grassDrawnAt(lab, G.camera, DRAWN.across, DRAWN.down)) {
+        const foot = feet.find((f) => Math.hypot(point.x - f.x, point.z - f.z) <= f.r);
+        if (!foot) continue;
+        counted.near++;
+        const near = meshesOver(meshes, foot);
+        ray.set(from.set(point.x, point.y + 0.002, point.z), down);
+        ray.far = Math.max(0, point.y);
+        if (point.y > GROUND_UP && ray.intersectObjects(near, false).some((hit) => hit.point.y > GROUND_UP)) {
+          counted.over++;
+          continue;
+        }
+        if (point.y > FLAT) continue;
+        ray.set(from.set(point.x, point.y + 0.002, point.z), up);
+        ray.far = SQUEEZED;
+        if (ray.intersectObjects(near, false).length) counted.under++;
+      }
+      counts.push(counted);
+      if (moments) {
+        for (const hour of view === 'top' ? [NOON] : SEEN_AT) {
+          holdHour(hour);
+          await lab.step(2);
+          moments.push(await lab.screen(`beside ${stand.what}, ${view === 'top' ? "the lobby's view" : 'over the shoulder'} at ${hour}h`, []));
+        }
+        holdHour(NOON);
+      }
     }
-    counts.push({ what: stand.what, over, near });
-    // (as the player sees it there: the lobby's view over his shoulder from above, a review's own angle)
-    if (moments) moments.push(await lab.screen(`beside ${stand.what}, the lobby's view`, []));
   }
+  await viewBy(lab, was);
   return counts;
+}
+
+/** Each stand's and view's count on a line. */
+function drawnLine(c: Drawn): string {
+  return `${c.what} (${c.view}): ${c.over} over it, ${c.under} squeezed under it, of ${c.near}`;
 }
 
 /** The solids' map emptied while `run` runs (the drawn test's canary: every blade stands as if nothing were over it). */
@@ -390,6 +456,19 @@ async function withSolidsEmptied<T>(run: () => Promise<T>): Promise<T> {
   } finally {
     bytes.set(kept);
     texture.needsUpdate = true;
+  }
+}
+
+/** The blades' room taken away while `run` runs (the squeezed grass's canary: every blade under a prop held flat to the
+ *  ground there, as the hold alone left them under the seat logs, "z fighting under log"). */
+async function withoutRoom<T>(run: () => Promise<T>): Promise<T> {
+  const room = G.arena.village!.meadow.userData.room as { value: number };
+  const kept = room.value;
+  room.value = 0;
+  try {
+    return await run();
+  } finally {
+    room.value = kept;
   }
 }
 
@@ -416,8 +495,10 @@ export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<L
     const foot = under[0].foot;
     const mapCaught = through(withoutFoot(maps, foot), under.filter((point) => point.foot === foot)).length > 0;
     const drawnCaught = (await withSolidsEmptied(() => drawnOverProps(lab, feet, meshes))).some((c) => c.over > 0);
-    lines.push(`canary: the map's ${mapCaught ? 'caught' : 'missed'}, the drawn grass's ${drawnCaught ? 'caught' : 'missed'}`);
-    return { lines, problems: [], caught: mapCaught && drawnCaught, moments: [] };
+    const squeezedCaught = (await withoutRoom(() => drawnOverProps(lab, feet, meshes))).some((c) => c.under > 0);
+    const said = (caught: boolean): string => (caught ? 'caught' : 'missed');
+    lines.push(`canary: the map's ${said(mapCaught)}, the grass drawn over ${said(drawnCaught)}, under ${said(squeezedCaught)}`);
+    return { lines, problems: [], caught: mapCaught && drawnCaught && squeezedCaught, moments: [] };
   }
   holdHour(NOON);
   const seenThere: Pictured[] = [];
@@ -426,12 +507,15 @@ export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<L
   holdHour(null);
   const seen = drawn.reduce((sum, c) => sum + c.near, 0);
   if (!WEBGPU && seen < LEAST_DRAWN) throw new Error(`lab: village: only ${seen} pixels of grass drawn round the props`);
-  lines.push(WEBGPU ? 'the grass drawn: not read on WebGPU' : `the grass drawn from the lobby's view beside each (${DRAWN.across}x${DRAWN.down}): `
-    + drawn.map((c) => `${c.what} ${c.over} of ${c.near} pixels over it`).join('; '));
-  const moments = [...seenThere, ...await pictures(lab)];
+  lines.push(WEBGPU ? 'the grass drawn: not read on WebGPU' : `the grass drawn beside each (${DRAWN.across}x${DRAWN.down} pixels):`);
+  lines.push(...drawn.map((c) => `  ${drawnLine(c)}`));
+  const pictured = await pictures(lab);
+  // (the low close-ups of the seat logs' feet first: the review's own angle)
+  const low = pictured.filter((moment) => moment.label.includes("'s foot, low"));
+  const moments = [...low, ...seenThere, ...pictured.filter((moment) => !low.includes(moment))];
   const problems = [
     ...throughLines(maps, missed).map((line) => `grass through ${line}`),
-    ...drawn.filter((c) => c.over > 0).map((c) => `grass drawn over ${c.what}: ${c.over} pixels`),
+    ...drawn.filter((c) => c.over > 0 || c.under > 0).map((c) => `grass drawn against ${drawnLine(c)}`),
   ];
   return { lines, problems, caught: null, moments };
 }

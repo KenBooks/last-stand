@@ -28,6 +28,7 @@ export interface BladeUniforms {
   uMeadow: { value: THREE.Texture };
   uMeadowHalf: { value: number };
   uSolid: { value: THREE.Texture };
+  uRoom: { value: number };
 }
 
 /** `meadow.ts`'s numbers for a blade's width and how its strands rise. */
@@ -140,6 +141,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const half = u.uMeadowHalf.value;
   const mask = u.uMeadow.value;
   const solids = u.uSolid.value;
+  const room = number(u.uRoom);
   const vColour = varyingProperty('vec3', 'vBladeColour');
   const vBlade = varyingProperty('vec2', 'vBlade');
   const vStrands = varyingProperty('vec2', 'vStrands');
@@ -168,7 +170,9 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
     const byStrand = byStrandNow.mul(combedNow).mul(step(1.5, wider)).toVar();
     const share = fract(h.z.mul(3.17)).mul(1 - numbers.grows);
     const ringOn = mix(smoothstep(share, share.add(numbers.grows), inBand), step(0.001, inBand), byStrand);
-    const on = smoothstep(h.z.mul(0.85), h.z.mul(0.85).add(0.15), chance).mul(ringOn).toVar();
+    // (none grows where a solid leaves it no room, as `VERTEX_BLADE` has it)
+    const roomHere = texture(solids, maskUv).level(0).r.mul(SOLID_RANGE);
+    const on = smoothstep(h.z.mul(0.85), h.z.mul(0.85).add(0.15), chance).mul(ringOn).mul(step(room, roomHere)).toVar();
     vGrowing.assign(vec2(inBand, byStrand));
     const height = on.mul(mix(0.2, 0.46, h.w)).mul(mix(0.55, 1, grass)).mul(mix(0.75, 1.25, tuft)).mul(mix(0.8, 1.15, patchy)).toVar();
     const width = on.mul(cell).mul(wider).mul(numbers.widthInCells).mul(mix(0.8, 1.25, fract(h.z.mul(7.13)))).toVar();
@@ -214,8 +218,11 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
     const dry = smoothstep(0.72, 1, tuft).mul(0.7).add(smoothstep(0.75, 0.95, patchy).mul(0.25));
     vColour.assign(mix(green, vec3(0.36, 0.33, 0.1), dry));
     // (no part of it above the lowest solid over where that part is, as `VERTEX_BLADE` holds it)
-    const at = vec3(root.x, 0, root.y).add(local).add(wind).toVar();
-    const solidOver = texture(solids, at.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE);
+    const placed = vec3(root.x, 0, root.y).add(local).add(wind);
+    const solidOver = texture(solids, placed.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE);
+    // (narrowed to nothing where it reaches in under a solid lower than its room)
+    const narrowed = clamp(solidOver.sub(0.04).div(max(room.sub(0.04), 0.001)), 0, 1).oneMinus();
+    const at = placed.sub(across.mul(sideOf.mul(w).mul(0.5)).mul(narrowed));
     return vec3(at.x, min(at.y, max(solidOver.sub(0.01), 0)), at.z);
   })();
   // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
@@ -229,8 +236,9 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   // too, as `FRAGMENT_COLOUR` holds it)
   if (cutInto.cut) {
     const { positionWorld } = tsl as any;
-    const solidHere = texture(solids, positionWorld.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE).sub(0.005);
-    (m as N).maskNode = cutInto.cut.not().and(positionWorld.y.lessThanEqual(solidHere));
+    const solidHere = texture(solids, positionWorld.xz.div(half * 2).add(0.5)).level(0).r.mul(SOLID_RANGE);
+    const roomy = solidHere.greaterThanEqual(room);
+    (m as N).maskNode = cutInto.cut.not().and(positionWorld.y.lessThanEqual(solidHere.sub(0.005))).and(roomy);
   }
   stillNodes.add(m);
 }

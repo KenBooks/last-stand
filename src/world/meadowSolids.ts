@@ -16,6 +16,11 @@ import type { MeadowMask } from './meadow';
 /** a cell's size (m), and the heights a solid is read over (m: from the ground to past the tallest blade's top) */
 export const SOLID_CELL = 0.125;
 export const SOLID_RANGE = 1.5;
+/** the least room a blade needs under a solid (m): with less, none grows there, and any part of one reaching in under
+ *  a lower solid narrows to nothing. Pressed flat to the ground under a seat log instead, its blades lay a hair over
+ *  the ground and fought it for the depth, a flickering green patch under the log (from review, "z fighting under
+ *  log") */
+export const BLADE_ROOM = 0.1;
 /** where any grass grows, read from the mask in cells of `cell` m, each grown by `margin` (a blade leans that far) */
 const GRASS_NEAR = { cell: 0.5, margin: 1 };
 /** a cell with nothing solid over it within `SOLID_RANGE` */
