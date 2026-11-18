@@ -7,6 +7,8 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md).
 - `pwa.ts`: the Vite plugin for the installable, offline game (production builds only).
 - `check-pages-build.mjs`: `npm run check:pages`, after a build: every asset path in `dist/index.html` must work under the Pages base path (`PAGES_BASE` for one).
 - `issue.sh` and `commit.sh`: the fork workflow (a prompt starting `new issue:`, the root's Workflow).
+- `hubs.mjs`: `npm run check:hubs`, the shared files a branch touches since it left main (`HUBS`, each with the way a feature adds to it without editing it); the PR checks write it into their summary as warnings, never a failure.
+- `sorted.mjs`: `npm run check:sorted`, every list marked `// sorted` (or `<!-- sorted -->` before a Markdown list) in alphabetical order, so PRs adding entries add them in different places, not all at the end.
 
 ## Gotchas
 
