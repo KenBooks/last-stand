@@ -181,7 +181,7 @@ function guardBellAttacks(foe: Foe): string[] {
   return [
     `<b>Toll:</b> the bell swings back and glows for ${secs(warn)}, then a ring rolls out to ${metres(g.reach)}. Within ${metres(g.stunsTo)} it stuns whoever it reaches for ${secs(g.stun)} and deals ${whole(hit * g.hurt)} ${typed(d)} damage. A shield raised towards it, a dash or a leap carries you through.`,
     `<b>A lesser bell:</b> ${pct(d.asGuard?.size ?? 1)} of a Bell-Warden's size${d.asGuard?.stands ? ', standing where it rises' : ''}; it raises no Hollow Husks, its one ghost takes no one, and it never grows stronger as it is hurt.`,
-    `<b>Its chains:</b> each bearer's chain breaks under hits from its side; with all four broken the bell drops for ${secs(BELL_WARDEN.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
+    `<b>Its chains:</b> each of its four chains breaks under hits from its side; with all four broken the bell drops for ${secs(BELL_WARDEN.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage.`,
   ];
 }
 
