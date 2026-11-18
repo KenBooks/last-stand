@@ -1,5 +1,6 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
 import * as THREE from 'three';
+import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
@@ -364,7 +365,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
@@ -813,8 +814,17 @@ function chooseBank() {
 function chooseContinue() {
   const r = G.run;
   if (!r || r.phase !== 'cleared' || !G.player.active || r.votes.has(G.player.slot)) return;
+  // (into a boss wave: its boss loaded and warmed first, under the fight's bar, game/bossReady.ts)
+  const next = r.training ? r.wave : r.wave + 1;
+  if (!bossReady(G.arena.biome, next)) { void readyNextBoss(next).then(chooseContinue); return; }
   if (isGuest()) sendControl({ t: 'vote' });
   continueRun();
+}
+
+/** The lab's boot (window.__dev): every need warmed at once, and every boss with them (readied at its wave in play). */
+function labHurry(): void {
+  hurry();
+  void readyEveryBoss();
 }
 
 /** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */

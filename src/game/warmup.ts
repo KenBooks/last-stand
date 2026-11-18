@@ -10,6 +10,7 @@
 // pinning programs, nothing compiles mid-fight. Compiling a program took ANGLE a third of a second on a first visit,
 // and a third of the boot's are the fight's alone (`lab programs`).
 import { painted } from '../world/arena';
+import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
 import * as THREE from 'three';
 import { VILLAGE } from '../core/beta';
@@ -259,20 +260,9 @@ interface Built {
  * the foes' shots, each other biome. The training dummy is the lobby's own.
  */
 function fightParts(): Part[] {
-  const ids = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
-  const foes = ids.map((id): Part => ({
-    name: id,
-    build() {
-      const pair = [new Enemy(id, { pos: AWAY }), new Enemy(id, { pos: AWAY, hero: true })];
-      for (const e of pair) { G.scene.remove(e.obj); leaveCrowd(e); }
-      const roots = pair.map((e) => e.obj);
-      const slots = crowdSlots(pair[0].model);
-      const show = (): void => { for (const e of pair) joinCrowd(e); };
-      const hide = (): void => { for (const e of pair) leaveCrowd(e); };
-      const done = (): void => { for (const e of pair) e.dispose(); };
-      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, hide, done };
-    },
-  }));
+  // (a boss's are warmed at its wave, its code loaded then: game/bossReady.ts)
+  const ids = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy && !isLazyFoe(id));
+  const foes = ids.map(foePart);
   const shots: Part = {
     name: 'shots',
     build() {
@@ -289,6 +279,55 @@ function fightParts(): Part[] {
     },
   }));
   return [...foes, shots, ...biomes];
+}
+
+/** A foe kind's part: a plain one and a hero one of its kind, built away from the arena and kept out of the scene. */
+function foePart(id: EnemyId): Part {
+  return {
+    name: id,
+    build() {
+      const pair = [new Enemy(id, { pos: AWAY }), new Enemy(id, { pos: AWAY, hero: true })];
+      for (const e of pair) { G.scene.remove(e.obj); leaveCrowd(e); }
+      const roots = pair.map((e) => e.obj);
+      const slots = crowdSlots(pair[0].model);
+      const show = (): void => { for (const e of pair) joinCrowd(e); };
+      const hide = (): void => { for (const e of pair) leaveCrowd(e); };
+      const done = (): void => { for (const e of pair) e.dispose(); };
+      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, hide, done };
+    },
+  };
+}
+
+/** the foes warmed at their wave (`warmFoes`) */
+const foesWarmed = new Set<EnemyId>();
+/** Whether `id`'s programs are warm: a plain foe's with the fight's need, a boss's once `warmFoes` has warmed it. */
+export const foeWarm = (id: EnemyId): boolean => (isLazyFoe(id) ? foesWarmed.has(id) : isWarm('fight'));
+
+/**
+ * The foes of `ids` not warm yet loaded (a boss's code, entities/bosses.ts) and warmed, in their turn after the
+ * warm-ups before them, a lot at a time as the fight's are under its bar, `progress` told how far along (0 to 1).
+ */
+export async function warmFoes(ids: EnemyId[], progress: (share: number) => void): Promise<void> {
+  // (a foe already being warmed is waited for, not warmed again)
+  const under = ids.filter((id) => foesWarming.has(id)).map((id) => foesWarming.get(id)!);
+  const cold = ids.filter((id) => !foeWarm(id) && !foesWarming.has(id));
+  const warm = cold.length ? warmCold(cold, progress) : Promise.resolve();
+  for (const id of cold) foesWarming.set(id, warm);
+  await Promise.all([warm, ...under]);
+}
+
+/** the foes being warmed at their wave, each its warm-up's promise */
+const foesWarming = new Map<EnemyId, Promise<void>>();
+
+async function warmCold(cold: EnemyId[], progress: (share: number) => void): Promise<void> {
+  try {
+    await Promise.all(cold.map(loadFoe));
+    progress(0.1);
+    await inTurn(() => warmInTasks('fight', cold.map(foePart), (s) => progress(0.1 + 0.9 * s), PARTS_AT_ONCE));
+    for (const id of cold) foesWarmed.add(id);
+  } finally {
+    for (const id of cold) foesWarming.delete(id);
+  }
 }
 
 /** the fight's parts, made once: built ahead before the lobby shows, warmed after */

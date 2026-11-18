@@ -6,6 +6,8 @@
 // health goes down until a teammate raises them (or they bleed out); with nobody left standing
 // the run is lost for everyone still in it.
 import * as THREE from 'three';
+import { readyNextBoss } from './bossReady';
+import { foeWarm } from './warmup';
 import { G } from '../state';
 import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
@@ -172,6 +174,8 @@ export function startRun(wave = 1, training = false, duel: DuelSetup | null = nu
     p.reset();
   }
   G.run = blankRun(wave, training);
+  // (a run begun on a boss wave: its boss readied over the countdown, its spawn held till then)
+  void readyNextBoss(wave);
   if (!training) {
     G.profile.records.runs++;
     rememberReached();
@@ -400,7 +404,7 @@ export function updateRun(dt: number): void {
     }
     // the boss once the wave's first group has come, at its time (`bossAt`), or at once when the rest of the wave has
     // all come and none of it stands
-    if (r.boss && r.dealt > 0) {
+    if (r.boss && r.dealt > 0 && r.boss.every((unit) => foeWarm(unit.type))) {
       r.bossT -= dt;
       if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup(r.boss); r.boss = null; }
     }
@@ -502,6 +506,8 @@ export function startNextWave(): void {
   r.votes.clear();
   G.arena.setCalm(0);
   ui.hideDecision();
+  // (a game whose player didn't vote, out of the run and watching, readies the boss now: game/bossReady.ts)
+  void readyNextBoss(r.wave);
   const boss = bossOfWave(G.arena.biome, r.wave);
   ui.banner(`${r.training ? 'Training · ' : ''}Wave ${r.wave}`, r.training
     ? 'Holographic enemies · No damage, loot or score'

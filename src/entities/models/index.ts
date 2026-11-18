@@ -32,6 +32,6 @@ export function buildModel(id: string, look?: HeadSpec): Model {
   const steps = MODEL_STEPS[id];
   if (steps) return built(steps(look));
   const b = MODELS[id];
-  if (!b) throw new Error(`Unknown model "${id}"`);
+  if (!b) throw new Error(`Unknown model "${id}" (a boss's is loaded at its wave: entities/bosses.ts loadFoe)`);
   return b();
 }

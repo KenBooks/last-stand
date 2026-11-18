@@ -7,6 +7,8 @@
 // Its own character stays its own to move and cast, and what its skills hit, it deals there and
 // then on its copies and reports to the host, which deals it on its foes (the guest's kill).
 import * as THREE from 'three';
+import { readyNextBoss } from '../game/bossReady';
+import { foeWarm } from '../game/warmup';
 import { G } from '../state';
 import { setSpawnSink, spawnEnemy } from '../entities/spawner';
 import { setFxSink, fx, FX, type FxName } from '../entities/enemyAI';
@@ -295,6 +297,8 @@ function apply(ev: WorldEvent): void {
       G.arena.setBiome(ev.b);
       return;
     case 'spawn': {
+      // (a boss not readied here yet: readied now, its copy made when the host is asked of it again, `foes?`)
+      if (!foeWarm(ev.ty)) { void readyNextBoss(ev.w); return; }
       copied.add(ev.id);
       asked.delete(ev.id);
       if (G.enemies.some((e) => e.id === ev.id)) return;

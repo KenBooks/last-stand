@@ -22,10 +22,14 @@ export type FoeFile = Partial<Record<EnemyId, FoeEntry>>;
 
 /** every foe's entry, file by file in the folder's order (a foe's kind is its place in it on the wire: the roster is
  *  part of net/protocol.ts) */
-export const FOE_ENTRIES = Object.assign(
-  {},
-  ...Object.values(import.meta.glob<FoeFile>('./foes/*.ts', { eager: true, import: 'FOES' })),
-) as Record<EnemyId, FoeEntry>;
+const FOE_FILES = import.meta.glob<FoeFile>('./foes/*.ts', { eager: true, import: 'FOES' });
+export const FOE_ENTRIES = Object.assign({}, ...Object.values(FOE_FILES)) as Record<EnemyId, FoeEntry>;
+
+/** each foe's file's name in data/foes/ (and in entities/foes/ or entities/bosses/: `twins` for both Twins) */
+export const FOE_FILE = Object.fromEntries(Object.entries(FOE_FILES).flatMap(([path, file]) => {
+  const name = path.slice('./foes/'.length, -'.ts'.length);
+  return Object.keys(file).map((id) => [id, name]);
+})) as Record<EnemyId, string>;
 
 export const ENEMIES = Object.fromEntries(
   Object.entries(FOE_ENTRIES).map(([id, entry]) => [id, entry.def]),
