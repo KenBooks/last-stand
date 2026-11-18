@@ -8,6 +8,7 @@ joints' angles are a fist's as measured on people (FIST below), each turned abou
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 from dataclasses import dataclass
@@ -29,10 +30,13 @@ FIST = {
     'finger4-1.R': 92, 'finger4-2.R': 104, 'finger4-3.R': 65,
     'finger5-1.R': 94, 'finger5-2.R': 104, 'finger5-3.R': 65,
     'metacarpal3.R': 6, 'metacarpal4.R': 12,
-    'finger1-1.R': 35, 'finger1-2.R': 45, 'finger1-3.R': 55,
+    # (the thumb's, by `--fit-thumb`: hand-tuned, it ran down the index's side instead of across the fingers)
+    'finger1-1.R': 30, 'finger1-2.R': 50, 'finger1-3.R': 50, 'thumb-swing': 40,
 }
 # the thumb's metacarpal turned about its own length too, its pad towards the fingers (opposition)
-THUMB_TWIST = -60
+THUMB_TWIST = -40
+# the angle name of the thumb's base swung across the palm (degrees, about the hand's length)
+THUMB_SWING = 'thumb-swing'
 # the hand's bones: the wrist and all under it
 HAND_ROOT = 'wrist.R'
 # the mesh kept round the wrist: its forearm this far back from the wrist's joint (m)
@@ -112,14 +116,18 @@ def curl_sign(rig: Rig, bone: str) -> float:
     return 1.0 if np.dot(bent, rig.normal[bone]) >= 0 else -1.0
 
 
-def pose(rig: Rig, angles: dict[str, float], twist: float) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """Each hand bone's world transform (rotation, translation) with `angles` applied down the chain."""
+def pose(rig: Rig, angles: dict[str, float], twist: float, only: list[str] | None = None) -> dict:
+    """Each hand bone's world transform (rotation, translation) with `angles` applied down the chain (`only` these
+    bones, their parents' left at rest)."""
     world: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     sign = curl_sign(rig, 'finger3-1.R')
-    for name in under(rig, HAND_ROOT):
+    for name in only or under(rig, HAND_ROOT):
         local = turn(rig.normal[name], sign * angles.get(name, 0.0))
         if name == 'finger1-1.R':
             local = local @ turn(rig.tail[name] - rig.head[name], twist)
+            # swung across the palm about the hand's length, as the thumb's base joint lets it
+            hand_length = rig.head['finger3-1.R'] - rig.head[HAND_ROOT]
+            local = turn(hand_length, angles.get(THUMB_SWING, 0.0)) @ local
         pivot = rig.head[name]
         parent = rig.parent[name]
         rot_p, move_p = world.get(parent, (np.eye(3), np.zeros(3)))
@@ -176,13 +184,73 @@ def frame_of(wrist: np.ndarray, index: np.ndarray, middle: np.ndarray, little: n
     return np.array([np.cross(up, back), up, back]), float(np.linalg.norm(across))
 
 
-def reference(folder: Path, closed: bool) -> Model:
+# The thumb in a fist (the reference photographs' palm and thumb views): its last segment lies across the index and
+# middle fingers' middle segments, on their outer face (away from the palm's back), running across the hand.
+THUMB_OVER = 0.016
+THUMB = ['finger1-1.R', 'finger1-2.R', 'finger1-3.R']
+# the angles searched for the thumb (degrees): its base's bend, swing across the palm and turn, its two joints' bends
+THUMB_SEARCH = {
+    'finger1-1.R': range(-40, 61, 10),
+    THUMB_SWING: range(-60, 91, 10),
+    'twist': range(-120, 1, 20),
+    'finger1-2.R': range(0, 71, 10),
+    'finger1-3.R': range(0, 71, 10),
+}
+
+
+def placed(world: dict, bone: str, point: np.ndarray) -> np.ndarray:
+    """A rest-pose point moved with `bone`."""
+    rot, move = world[bone]
+    return rot @ point + move
+
+
+def thumb_miss(rig: Rig, world: dict, frame: np.ndarray) -> float:
+    """How far the posed thumb's last segment is from lying across the index and middle fingers' middle segments (m,
+    its two ends' distances from where they belong, and its way off the hand's across in the same unit)."""
+    middles = []
+    for finger in ('finger2-2.R', 'finger3-2.R'):
+        middle = (rig.head[finger] + rig.tail[finger]) / 2
+        middles.append(placed(world, finger, middle))
+    outward = -frame[2]
+    start_target = middles[0] + outward * THUMB_OVER
+    end_target = middles[1] + outward * THUMB_OVER
+    start = placed(world, 'finger1-3.R', rig.head['finger1-3.R'])
+    end = placed(world, 'finger1-3.R', rig.tail['finger1-3.R'])
+    way = (end - start) / (np.linalg.norm(end - start) or 1)
+    target_way = (end_target - start_target) / np.linalg.norm(end_target - start_target)
+    off_way = 1 - abs(float(np.dot(way, target_way)))
+    return float(np.linalg.norm(start - start_target) + np.linalg.norm(end - end_target) + 0.02 * off_way)
+
+
+def fit_thumb(folder: Path) -> dict[str, float]:
+    """The thumb's angles, from `THUMB_SEARCH`, that lay it best across the fingers (`thumb_miss`), the fingers closed
+    as `FIST` closes them."""
+    positions, _ = read_mesh(folder / '3dobjs' / 'base.obj')
+    rig = read_rig(folder / 'rigs' / 'default.mhskel', positions)
+    knuckle = [rig.head[f'finger{n}-1.R'] for n in (2, 3, 5)]
+    frame, _ = frame_of(rig.head[HAND_ROOT], *knuckle)
+    fingers = pose(rig, FIST, 0)
+    best = (np.inf, {})
+    names = list(THUMB_SEARCH)
+    for values in itertools.product(*THUMB_SEARCH.values()):
+        tried = dict(zip(names, values))
+        twist = tried.pop('twist')
+        world = {**fingers, **pose(rig, tried, twist, THUMB)}
+        miss = thumb_miss(rig, world, frame)
+        if miss < best[0]:
+            best = (miss, {**tried, 'twist': twist})
+    print(f'thumb: {best[1]}, missed by {best[0] * 1000:.1f} mm')
+    return best[1]
+
+
+
+def reference(folder: Path, closed: bool, angles: dict[str, float] | None = None, twist: float = THUMB_TWIST) -> Model:
     """MakeHuman's right hand, closed in its fist or open, its axes as they were at rest."""
     positions, quads = read_mesh(folder / '3dobjs' / 'base.obj')
     rig = read_rig(folder / 'rigs' / 'default.mhskel', positions)
     weights = json.loads((folder / 'rigs' / 'default_weights.mhw').read_text(encoding='utf-8'))['weights']
     faces = hand_faces(rig, positions, quads)
-    world = pose(rig, FIST if closed else {}, THUMB_TWIST if closed else 0)
+    world = pose(rig, {**FIST, **(angles or {})} if closed else {}, twist if closed else 0)
     posed = skin(positions, weights, world)
     knuckle = {name: rig.head[f'finger{n}-1.R'] for name, n in (('index', 2), ('middle', 3), ('little', 5))}
     frame, breadth = frame_of(rig.head[HAND_ROOT], knuckle['index'], knuckle['middle'], knuckle['little'])
@@ -304,9 +372,16 @@ def main() -> None:
     parser.add_argument('--size', type=int, default=300)
     parser.add_argument('--open', action='store_true', help='the reference open, at rest')
     parser.add_argument('--out', default=str(OUT / 'sheet.png'))
+    parser.add_argument('--angle', action='append', default=[], help="a joint's angle tried: finger1-2.R=60")
+    parser.add_argument('--twist', type=float, default=THUMB_TWIST, help="the thumb metacarpal's turn about itself")
+    parser.add_argument('--fit-thumb', action='store_true', help='search the thumb angles, print them and stop')
     parser.add_argument('--json', help="write the reference as `ourHand.ts` writes a hand, for `studio.mjs`, and stop")
     args = parser.parse_args()
-    rows = [('reference', reference(Path(args.makehuman), not args.open))]
+    if args.fit_thumb:
+        fit_thumb(Path(args.makehuman))
+        return
+    angles = {bone: float(value) for bone, value in (pair.split('=') for pair in args.angle)}
+    rows = [('reference', reference(Path(args.makehuman), not args.open, angles, args.twist))]
     if args.json:
         write_json(rows[0][1], Path(args.json))
         return

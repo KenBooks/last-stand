@@ -10,19 +10,20 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { png } from '../lab/node/png.mjs';
 
-/** where each camera stands from the hand, in its frame (across, up, back), and the camera's up */
+/** where each camera stands from the hand, in its frame (across, up, back), and the camera's up: the forearm at the
+ *  top, as the reference photographs hold the fist (`.tmp/refs/fiststudio`) */
 export const VIEWS = {
-  back: { stand: [0, 0, 1], up: [0, 1, 0] },
-  palm: { stand: [0, 0, -1], up: [0, 1, 0] },
-  'thumb side': { stand: [-1, 0, 0], up: [0, 1, 0] },
-  'little side': { stand: [1, 0, 0], up: [0, 1, 0] },
-  knuckles: { stand: [0, 1, 0], up: [0, 0, 1] },
-  quarter: { stand: [-0.6, 0.35, 0.72], up: [0, 1, 0] },
+  back: { stand: [0, 0, 1], up: [0, -1, 0] },
+  palm: { stand: [0, 0, -1], up: [0, -1, 0] },
+  'thumb side': { stand: [-1, 0, 0], up: [0, -1, 0] },
+  'little side': { stand: [1, 0, 0], up: [0, -1, 0] },
+  knuckles: { stand: [0, 1, 0], up: [0, 0, 1], down: 0.5 },
+  quarter: { stand: [-0.6, -0.35, 0.72], up: [0, -1, 0] },
 };
 /** the picture's width in knuckle breadths */
-const FIELD = 2.6;
+const FIELD = 2.0;
 /** the knuckles' place in the picture, down from its top as a share of its height */
-const KNUCKLES_DOWN = 0.4;
+const KNUCKLES_DOWN = 0.65;
 /** how far below the knuckles a hand is kept, in knuckle breadths: the palm's length to the wrist's crease */
 const KEPT_BELOW = 1.0;
 const SKIN = [224, 172, 150];
@@ -72,7 +73,7 @@ export function draw(hand, view, size) {
   for (let v = 0; v < count; v++) {
     const offset = sub(hand.positions.slice(v * 3, v * 3 + 3), hand.knuckles);
     screen[v * 3] = dot(offset, camera[0]) * pixels + size / 2;
-    screen[v * 3 + 1] = size * KNUCKLES_DOWN - dot(offset, camera[1]) * pixels;
+    screen[v * 3 + 1] = size * (VIEWS[view].down ?? KNUCKLES_DOWN) - dot(offset, camera[1]) * pixels;
     screen[v * 3 + 2] = dot(offset, camera[2]) * pixels;
     height[v] = dot(offset, hand.axes[1]) / hand.breadth + KEPT_BELOW;
   }

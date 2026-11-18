@@ -449,10 +449,15 @@ export function clench(h: Hand, bends: readonly number[], thumb: number): void {
 
 // Keep the index and middle striking face square to the forearm. The old 117 degree fold left a ring under it.
 const STRIKE_BEND = THREE.MathUtils.degToRad(96);
-// Tip centres at the middle crease (y, z in metres), with room for the pads. The little finger has less reach.
-const FIST_CREASE = [[-0.086, -0.011], [-0.088, -0.011], [-0.086, -0.011], [-0.08, -0.011]];
-// Fan the shafts inward. The index seats inside the thenar mound and the little finger closes the outer slit.
-const FIST_FAN = [6, 1.5, -2, -10];
+/** A fighter's fist (`HandBuild.fist`), tunable (`tools/handref` fits it to a real fist): `strike` its knuckle joints'
+ *  bend (degrees); `crease` each finger's tip centre at the palm's middle crease (y, z in metres, index first, with
+ *  room for the pads: the little finger has less reach); `fan` each shaft's turn inward (degrees: the index seats
+ *  inside the thenar mound and the little finger closes the outer slit). */
+const FIST_SHAPE = tunable('fistShape', {
+  strike: 77,
+  crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
+  fan: [6, 1.5, -2, -10],
+});
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
 // fill the side of the fist; its middle bone from there onto the front of the index's middle phalanx, at whatever
@@ -480,13 +485,13 @@ function linkBend(a: number, b: number, distance: number): number {
 /** The warrior's bare fist, solved from the rest joints with the fingertips seated at the palm's crease. */
 function closedFistPose(h: Hand): THREE.Quaternion[][] {
   // Leave the first phalanges sloping forward so their folded pads stand clear of the heel of the hand.
-  const strike = h.build.fist ? THREE.MathUtils.degToRad(77) : STRIKE_BEND;
+  const strike = h.build.fist ? THREE.MathUtils.degToRad(FIST_SHAPE.strike) : STRIKE_BEND;
   const rotations = h.f.map((digit, i) => {
     const root = digit.j[0].position;
     const [a, b, c] = digit.len;
-    const yaw = THREE.MathUtils.degToRad(-h.s * FIST_FAN[i]);
+    const yaw = THREE.MathUtils.degToRad(-h.s * FIST_SHAPE.fan[i]);
     // (the crease on a deeper palm deeper, and the tip off it by its pad: the plain hand's numbers for its build)
-    const [y, plainZ] = FIST_CREASE[i];
+    const [y, plainZ] = FIST_SHAPE.crease.slice(i * 2, i * 2 + 2);
     const { deep, digits } = h.build;
     const z = plainZ * deep - PAD_DEPTH * FINGERS[i].width * (digits - 1);
     // In the finger's plane, start at the end of the proximal phalanx and solve backwards from the tip.

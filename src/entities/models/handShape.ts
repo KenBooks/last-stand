@@ -13,6 +13,7 @@ import { above, beyond, capsule, distanceOf, ellipsoid, fieldOf, frameIn, IDENTI
 import type { Part, Shape } from './sdf';
 import { PLAIN, type HandBuild } from './build';
 import { clamp } from '../../util';
+import { tunable } from '../../core/tuning';
 
 /** A digit as the sculpt reads it: its joints from its root (each segment hangs down its joint's -y, the palm's side
  *  -z), each segment's length, and its half-width at its root. */
@@ -469,8 +470,9 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   return parts;
 }
 
-/** how wide the flesh filling a closed finger's curl is, a share of the finger's width */
-const CURL_FILL = 0.85;
+/** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
+ *  share of the finger's width; `mound`, `web` the thumb's mound and its web (`thenarFill`) */
+const SHUT_FILL = tunable('shutFill', { curl: 0.85, mound: 1.25, web: 0.85 });
 
 /**
  * The flesh inside a closed finger's curl, between its bones and the palm: capsules across the curl from its knuckle
@@ -483,7 +485,7 @@ function curlFill(finger: DigitShape, first: number, space: THREE.Object3D): Par
     .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert());
   const [knuckle, middle, last] = [0, 1, 2].map((n) => toSculpt(n));
   const tip = toSculpt(2, -finger.len[2]);
-  const r = finger.width * CURL_FILL;
+  const r = finger.width * SHUT_FILL.curl;
   const bones: [number, number][] = [[first, 0.5], [first + 1, 0.5]];
   return [[knuckle, last], [knuckle, tip], [middle, tip]].map(([a, b]) => (
     { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.004, bones, shapeOnly: true }
@@ -492,7 +494,6 @@ function curlFill(finger: DigitShape, first: number, space: THREE.Object3D): Par
 
 /** how thick the thumb's mound is round its bone in the palm in a hand sculpted closed, and the web from its
  *  knuckle to the index's, shares of the thumb's width */
-const THENAR_FILL = { mound: 1.25, web: 0.85 };
 
 /**
  * The thumb's mound and its web in a hand sculpted closed: thick round the thumb's bone in the palm, and a sheet from
@@ -514,11 +515,11 @@ function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D)
     { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.008, bones, shapeOnly: true }
   );
   return [
-    fill(root, knuckle, w * THENAR_FILL.mound),
-    fill(heel, knuckle, w * THENAR_FILL.mound),
-    fill(knuckle, indexKnuckle, w * THENAR_FILL.web),
-    fill(root, indexKnuckle, w * THENAR_FILL.web),
-    fill(root.clone().lerp(knuckle, 0.5), indexKnuckle, w * THENAR_FILL.web),
+    fill(root, knuckle, w * SHUT_FILL.mound),
+    fill(heel, knuckle, w * SHUT_FILL.mound),
+    fill(knuckle, indexKnuckle, w * SHUT_FILL.web),
+    fill(root, indexKnuckle, w * SHUT_FILL.web),
+    fill(root.clone().lerp(knuckle, 0.5), indexKnuckle, w * SHUT_FILL.web),
   ];
 }
 

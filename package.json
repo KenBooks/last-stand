@@ -20,6 +20,7 @@
     "photos": "node tools/photos/photos.mjs",
     "lab": "node tools/lab/lab.mjs",
     "lab:serve": "node tools/lab/lab.mjs serve",
+    "handref": "node tools/handref/run.mjs",
     "fire-bake": "node tools/lab/node/fireBakeSheet.mjs",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
     "stalls": "node tools/stalls/stalls.mjs",
