@@ -44,12 +44,14 @@ import { queuePortraitsBehind, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
-import { initTalk, openTalk, closeTalk, talkOpen, talkKeys } from './ui/talk';
+import { initTalk, closeTalk } from './ui/talk';
+import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
+import { useOf, villageUse, type UseOf } from './game/villageUses';
 import { scholarTalk } from './world/library';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
-import { initMerchant, merchantOpen, showMerchant } from './ui/merchant';
+import { initMerchant, showMerchant } from './ui/merchant';
 import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
@@ -564,60 +566,59 @@ const villageActive = (): boolean =>
 const villageClear = (): boolean =>
   villageActive() && !hallOpen() && !panelsOpen() && !villageCardOf() && !dialogOpen() && !isCoop();
 
-/** A village object used (game/village.ts): what it opens. */
+/** A village object used (game/village.ts): what it opens (game/villageUses.ts, each kind registered by its owner). */
 function useObject(o: VillageObject): void {
   sfx.click();
-  switch (o.use) {
-    case 'portal':
-      // (the portal's battleground the run's, a co-op host's shown its guests; a guest's card waits for the host)
-      if (o.biome && !isGuest()) { G.arena.setBiome(o.biome); selectTraining(false); sendLobbyChoice(); }
-      openPanels(null);
-      showVillageCard(o);
-      return;
-    case 'training':
-      // (the training grounds: the battleground's choice on its card, the ghost's own first)
-      if (!isGuest()) { G.arena.setBiome(ghostBiome()); sendLobbyChoice(); }
-      selectTraining(true);
-      openPanels(null);
-      showVillageCard(o);
-      return;
-    case 'stash': showVillageCard(null); openPanels('chest'); completeStep('stash'); return;
-    case 'heroes': showVillageCard(null); openPanels(null); askForHeroes(); return;
-    case 'coop': openCoop(true); return;
-    case 'chronicle': case 'pvp': openPanels(null); showVillageCard(o); return;
-    case 'help': showHelp(true); completeStep('notice'); return;
-    case 'enter': showVillageCard(null); openPanels(null); if (o.into) enterRoom(o.into); return;
-    case 'leave': showVillageCard(null); openPanels(null); leaveRoom(); return;
-    case 'records': openPanels(null); writeRecords(); showVillageCard(o); return;
-    case 'guide': showVillageCard(null); openPanels(null); showGuide(); return;
-    case 'talk': showVillageCard(null); openPanels(null); openTalk(o.id); return;
-    case 'merchant': showVillageCard(null); openPanels(null); showMerchant(true); return;
-  }
+  useOf(o.use).use(o);
 }
+
+/** What's put away before an object opens what it opens: a card, the panels. */
+function clearForUse(): void {
+  showVillageCard(null);
+  openPanels(null);
+}
+
+/** A card the object shows (a portal's, the chronicle's...), still up while it's that object's. */
+const cardUse = (use: (o: VillageObject) => void): UseOf => ({ use, shows: (o) => villageCardOf() === o });
+
+// the lobby's own kinds of object (a talk's and Odo's counter are ui/talk.ts's and ui/merchant.ts's)
+villageUse('portal', cardUse((o) => {
+  // (the portal's battleground the run's, a co-op host's shown its guests; a guest's card waits for the host)
+  if (o.biome && !isGuest()) { G.arena.setBiome(o.biome); selectTraining(false); sendLobbyChoice(); }
+  openPanels(null);
+  showVillageCard(o);
+}));
+villageUse('training', cardUse((o) => {
+  // (the training grounds: the battleground's choice on its card, the ghost's own first)
+  if (!isGuest()) { G.arena.setBiome(ghostBiome()); sendLobbyChoice(); }
+  selectTraining(true);
+  openPanels(null);
+  showVillageCard(o);
+}));
+villageUse('stash', {
+  use() { clearForUse(); openPanels('chest'); completeStep('stash'); },
+  leave() { if (panelsOpen() === 'chest') openPanels(null); },
+  shows: () => panelsOpen() === 'chest',
+});
+villageUse('heroes', { use() { clearForUse(); askForHeroes(); }, shows: () => heroSelectOpen() });
+villageUse('coop', { use() { openCoop(true); }, leave() { openCoop(false); }, shows: () => coopOpen() });
+villageUse('chronicle', cardUse((o) => { openPanels(null); showVillageCard(o); }));
+villageUse('pvp', cardUse((o) => { openPanels(null); showVillageCard(o); }));
+villageUse('help', { use() { showHelp(true); completeStep('notice'); }, leave() { hideHelp(); }, shows: () => helpOpen() });
+villageUse('enter', { use(o) { clearForUse(); if (o.into) enterRoom(o.into); }, shows: () => false });
+villageUse('leave', { use() { clearForUse(); leaveRoom(); }, shows: () => false });
+villageUse('records', cardUse((o) => { openPanels(null); writeRecords(); showVillageCard(o); }));
+villageUse('guide', { use() { clearForUse(); showGuide(); }, shows: () => guideOpen() });
 
 /** The hero walked off from `o`, whose panel or card was open: put away. */
 function leaveObject(o: VillageObject): void {
   if (villageCardOf() === o) showVillageCard(null);
-  if (o.use === 'stash' && panelsOpen() === 'chest') openPanels(null);
-  if (o.use === 'coop') openCoop(false);
-  if (o.use === 'help') hideHelp();
-  if (o.use === 'talk') closeTalk();
-  if (o.use === 'merchant') showMerchant(false);
+  useOf(o.use).leave?.(o);
 }
 
 /** Whether what `o` opened is still up. */
 function objectShows(o: VillageObject): boolean {
-  switch (o.use) {
-    case 'portal': case 'chronicle': case 'training': case 'pvp': case 'records': return villageCardOf() === o;
-    case 'enter': case 'leave': return false;
-    case 'guide': return guideOpen();
-    case 'talk': return talkOpen();
-    case 'merchant': return merchantOpen();
-    case 'stash': return panelsOpen() === 'chest';
-    case 'coop': return coopOpen();
-    case 'help': return helpOpen();
-    case 'heroes': return heroSelectOpen();
-  }
+  return useOf(o.use).shows(o);
 }
 
 /** The inventory or the stash opened or put away: the chest's lid follows; put away, the village forgets it. */
@@ -1049,10 +1050,6 @@ function syncView(): void {
   updateAltCursor();
 }
 
-/** Whether Play together, how to play, a talk, a trade with a partner or Odo's trade is up (the campfire's, the
- *  notice board's, the pause menu's links, the village's folk, a partner's ask, his counter). */
-const dialogOpen = (): boolean => coopOpen() || helpOpen() || talkOpen() || tradeOpen() || merchantOpen();
-
 /** The guide (ui/guide/), on `section` if given, opened over the pause menu: the menu opened under it if it wasn't (the
  *  game held as the pause menu holds it, and the pointer free), and put away with it then. */
 function showGuide(section?: GuideSection): void {
@@ -1091,12 +1088,10 @@ function handleGlobalKeys() {
   if (VILLAGE && villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
   // (and Play together or how to play, wherever they were opened from: from play, "esc on play together should close
   // play together, not open keys menu")
-  if (VILLAGE && talkOpen()) talkKeys();
+  // (each dialog registers itself, ui/dialogs.ts: Play together, how to play, a talk, a trade, Odo's counter)
+  if (VILLAGE) dialogKeys();
   if (VILLAGE && dialogOpen() && wasPressed('escape')) {
-    openCoop(false);
-    hideHelp();
-    closeTalk();
-    showMerchant(false);
+    closeDialogs();
     closedFrom();
     return;
   }

@@ -1,5 +1,6 @@
 // The lobby's panels (the inventory: equipment, attributes, skills; with the village's chest, the stash), summary,
 // pause and help modals. The village's objects open them (game/village.ts); I opens the inventory anywhere.
+import { dialog } from './dialogs';
 import { G } from '../state';
 import { holdToConfirm, resetHold } from './holdButton';
 import { restartTraining, trainingPending } from '../game/training';
@@ -518,6 +519,7 @@ export function layOutHelpAhead(on: boolean): void {
 
 /** Whether how to play is up. */
 export const helpOpen = (): boolean => !$('#help').classList.contains('hidden');
+dialog({ open: () => helpOpen(), close: () => hideHelp() });
 
 /** How to play put away. */
 export function hideHelp(): void { $('#help').classList.add('hidden'); }

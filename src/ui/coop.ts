@@ -1,5 +1,6 @@
 // Co-op UI: the "Play together" room dialog, the lobby's room bar, and in a run the partners'
 // frames and nameplates, the downed state and the revive prompt.
+import { dialog } from './dialogs';
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import {
@@ -268,6 +269,7 @@ export function layOutCoopAhead(look: typeof server | null): void {
 
 /** Whether the room dialog is up. */
 export const coopOpen = (): boolean => !$('#coop').classList.contains('hidden');
+dialog({ open: () => coopOpen(), close: () => openCoop(false) });
 
 export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);

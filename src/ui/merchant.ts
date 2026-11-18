@@ -10,6 +10,10 @@ import { fewestFor, offer, price, runsToRestock, stockOf, takes, trade, worth } 
 import { rarityOf } from '../loot/items';
 import { RUN } from '../data/balance';
 import { sfx } from '../core/audio';
+import { dialog } from './dialogs';
+import { villageUse } from '../game/villageUses';
+import { showVillageCard } from './villageCard';
+import { openPanels } from './menus';
 import { itemIconSVG } from './itemIcons';
 import { odoNods } from '../entities/models/merchant';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from './tooltip';
@@ -58,6 +62,13 @@ export function initMerchant(onClose: () => void): void {
 
 /** Whether the trade screen is up. */
 export const merchantOpen = (): boolean => !$('#merchant').classList.contains('hidden');
+dialog({ open: () => merchantOpen(), close: () => showMerchant(false) });
+// (his counter used in his shop: game/villageUses.ts)
+villageUse('merchant', {
+  use() { showVillageCard(null); openPanels(null); showMerchant(true); },
+  leave() { showMerchant(false); },
+  shows: () => merchantOpen(),
+});
 
 /** The trade screen shown (his stock restocked first if it's due), or put away. */
 export function showMerchant(on: boolean): void {

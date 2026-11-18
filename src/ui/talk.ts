@@ -4,6 +4,10 @@
 import { SPEAKERS, type Speaker } from '../data/talk';
 import { sfx } from '../core/audio';
 import { wasPressed } from '../core/input';
+import { dialog } from './dialogs';
+import { villageUse } from '../game/villageUses';
+import { showVillageCard } from './villageCard';
+import { openPanels } from './menus';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -44,6 +48,14 @@ export function closeTalk(): void {
 }
 
 /** The keys while it's up: a reply's number picks it. */
+dialog({ open: () => talkOpen(), close: () => closeTalk(), keys: () => talkKeys() });
+// (a talk opened by using one of the village's folk: game/villageUses.ts)
+villageUse('talk', {
+  use(o) { showVillageCard(null); openPanels(null); openTalk(o.id); },
+  leave() { closeTalk(); },
+  shows: () => talkOpen(),
+});
+
 export function talkKeys(): void {
   if (!talkOpen() || !speaker) return;
   const replies = speaker.nodes[node].replies;
