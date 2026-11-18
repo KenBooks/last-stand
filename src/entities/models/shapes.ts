@@ -68,6 +68,83 @@ export function horn(len: number, base: number, curl: number, axis = new THREE.V
 export const lathe = (profile: [number, number][], segs = 16): THREE.BufferGeometry => replaying ? NONE :
   new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-4, r), y)), segs);
 
+/** One strip from the hand's back through the thumb web, then around the forearm and under the sleeve. */
+export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THREE.Object3D,
+  palm: THREE.Object3D, towardThumb: number): () => void {
+  const wrist = palm.parent!;
+  const tau = 2 * Math.PI;
+  // The hand turn runs diagonally over the back and folds narrower where it passes through the thumb web.
+  const handTurn = [
+    [-1, -0.025, 0.026], [-0.5, -0.044, 0.043], [0, -0.054, 0.044], [0.56, -0.067, 0.043],
+    [1.10, -0.077, 0.033], [1.56, -0.077, 0.022], [1.95, -0.063, 0.031], [2.40, -0.049, 0.041],
+    [2.88, -0.035, 0.044], [3.40, -0.028, 0.044], [3.92, -0.025, 0.044], [4.45, -0.025, 0.044],
+    [4.90, -0.026, 0.044], [tau - 1, -0.027, 0.044],
+  ];
+  // A 30 mm rise per turn gives the overlap and slant on a flattened wrist. The outer end tucks under the cuff.
+  const turns = 4, segments = 16, rise = 0.030;
+  const [azimuth, start, width] = handTurn[handTurn.length - 1];
+  const path = handTurn.slice();
+  for (let i = 1; i <= turns * segments; i++) {
+    const turn = i / segments;
+    path.push([azimuth + tau * turn, start + rise * turn, width]);
+  }
+
+  // Separate normals on the 1.8 mm exposed edge. Rounded rings looked like a bracer even when stepped.
+  const section = [[0, 0.0010], [0, 0.0028], [0, 0.0028], [0.53, 0.0018], [1, 0.0010]];
+  const positions: number[] = [], uvs: number[] = [], skin: number[] = [], indices: number[] = [];
+  const smooth = THREE.MathUtils.smoothstep;
+  const flatOval = (x: number) => Math.sign(x) * Math.pow(Math.abs(x), 0.72);
+  const face = (a: number, b: number, c: number) => {
+    if (towardThumb > 0) indices.push(a, b, c);
+    else indices.push(a, c, b);
+  };
+  for (const [angle, centre, wide] of path) {
+    const x = flatOval(Math.sin(angle)), z = flatOval(Math.cos(angle));
+    for (const [across, above] of section) {
+      const y = centre + (across - 0.5) * wide;
+      const hand = smooth(-y, 0, 0.075), arm = smooth(y, 0, 0.085);
+      const thumb = Math.max(0, Math.sin(angle));
+      const rx = 0.035 + 0.014 * hand + 0.012 * arm + 0.005 * thumb * hand;
+      // The thenar mound is deeper than the centre of the palm. A symmetric oval cut through it in teeth.
+      const rz = 0.025 + 0.011 * arm + (z > 0 ? -0.005 : 0.004 + 0.017 * thumb) * hand;
+      positions.push(towardThumb * x * (rx + above) + wrist.position.x,
+        y + wrist.position.y, z * (rz + above) + wrist.position.z);
+      uvs.push((angle + 1) * 2 / tau, across * wide / 0.10);
+      // The hand's sculpt extends past the crease. Start bending the strip on the forearm above that extent.
+      skin.push(1 - smooth(y, 0.010, 0.065));
+    }
+  }
+  const stride = section.length;
+  for (let i = 0; i + 1 < path.length; i++) {
+    // Across the wrist a middle row keeps the broad strip close as it turns. The forearm needs only its two edges.
+    const bends = i < handTurn.length - 1 + 2 * segments;
+    for (const [left, right] of (bends ? [[0, 1], [2, 3], [3, 4]] : [[0, 1], [2, 4]])) {
+      const a = stride * i, b = a + stride;
+      face(a + left, b + left, a + right);
+      face(a + right, b + left, b + right);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('skinK', new THREE.Float32BufferAttribute(skin, 1));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  // Take up the turn in small steps around the wrist. Blending straight across the wrist pinched the strip flat.
+  const twists = Array.from({ length: 4 }, () => {
+    const bone = new THREE.Group();
+    bone.position.copy(wrist.position);
+    elbow.add(bone);
+    return bone;
+  });
+  sculpt.skinChain(geometry, leather, elbow, [elbow, ...twists, palm]);
+  const turn = new THREE.Quaternion(), rest = new THREE.Quaternion();
+  return () => {
+    turn.multiplyQuaternions(wrist.quaternion, palm.quaternion);
+    twists.forEach((bone, i) => bone.quaternion.slerpQuaternions(rest, turn, (i + 1) / (twists.length + 1)));
+  };
+}
+
 /** Push every vertex along its normal by smooth 3D noise: turns primitives into flesh, rock or bark. */
 export function organic(src: THREE.BufferGeometry, amp: number, freq: number, seed = 1): THREE.BufferGeometry {
   if (replaying) return NONE;

@@ -11,6 +11,7 @@ import * as handsCode from '../../../src/entities/models/hands';
 import { clench, hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
 import { fistLine } from '../../../src/entities/models/warriorFists';
+import * as shapes from '../../../src/entities/models/shapes';
 import { fistContact, wristBend } from './fistContact';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
@@ -135,6 +136,10 @@ const LEAST_DRAWN = 0.001;
 const CANARY_SCALE = 1.1;
 /** how many times the sculpt is timed (the middle time is said) */
 const SCULPT_TIMES = 3;
+/** An isolated wrist has room for the same forearm winding as the warrior's 270 mm forearm. */
+const STUDIO_FOREARM = 0.27;
+/** The wrap costs one small skinned draw, including both the hand turn and the exposed edges. */
+const WRAP_TRIANGLES = 400;
 
 /** The hand closed round a handle across its palm, as a fist holds a sword's grip, the handle drawn through it. */
 function closedRound(hand: Hand, wrist: THREE.Object3D): void {
@@ -363,14 +368,27 @@ function oldCopier(lab: Lab, glove?: boolean): Copier {
   };
 }
 
-/** A fresh copy of the hero's right hand on a wrist joint of its own, posed, in the studio. */
-function posedCopy(copier: Copier, pose: Pose, scale = 1): { hand: Hand; wrist: THREE.Group } {
+/** A fresh copy of the hero's right hand, with the game wrap when the studio shows his bare fist. */
+function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap = false) {
   const wrist = new THREE.Group();
   const hand = copier(wrist);
+  let root = wrist;
+  let updateWrap: (() => void) | undefined;
+  if (wrap) {
+    const elbow = new THREE.Group();
+    elbow.position.y = STUDIO_FOREARM;
+    elbow.add(wrist);
+    wrist.position.y = -STUDIO_FOREARM;
+    const sculpt = new shapes.Sculpt();
+    updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s);
+    sculpt.build();
+    root = elbow;
+  }
   hand.vis.scale.multiplyScalar(scale);
   pose(hand, wrist);
-  wrist.updateMatrixWorld(true);
-  return { hand, wrist };
+  updateWrap?.();
+  root.updateMatrixWorld(true);
+  return { hand, wrist, root };
 }
 
 /** `wrist` (a hand on it) pictured from `views` as `look` draws it, and the least and most of a picture drawn; the
@@ -469,12 +487,21 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
     const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
-    const { hand, wrist } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose);
-    const { tiles, least } = pictureOf(lab, hand, wrist, views, look);
-    const { triangles, meshes } = countsOf(hand.vis);
-    freed(wrist);
-    if (least < LEAST_DRAWN) problems.push(`the ${name} hand covers ${share(least)} of a picture: not drawn`);
+    const wrapped = bareFist && Boolean(shapes.fighterWrap);
+    const { hand, root } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose, 1, wrapped);
+    const { tiles, least } = pictureOf(lab, hand, root, views, look);
+    const handCounts = countsOf(hand.vis);
+    const { triangles, meshes } = wrapped ? countsOf(root) : handCounts;
     const notes = [`${triangles.toLocaleString('en')} triangles in ${meshes} meshes`];
+    if (wrapped) {
+      const strip = triangles - handCounts.triangles, draws = meshes - handCounts.meshes;
+      const line = `wrap: ${strip} triangles in ${draws} mesh`;
+      notes.push(line);
+      lines.push(line);
+      if (strip <= 0 || strip > WRAP_TRIANGLES || draws !== 1) problems.push(`hands: ${line} exceeds its budget`);
+    }
+    freed(root);
+    if (least < LEAST_DRAWN) problems.push(`the ${name} hand covers ${share(least)} of a picture: not drawn`);
     moments.push({ label: name, tiles, notes: name === 'flat' ? [...lines, ...notes] : notes });
   }
   if (lab.player.cls.id === 'warrior' && sculpting.closeFist && poses.some(({ name }) => name === 'clenched')) {

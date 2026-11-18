@@ -1176,7 +1176,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   measured against the shafts either side of it on the flat hand (`knobsOf`): under 1.04 as broad the finger is an
   even tube, over 1.16 its joint is swollen (from play: "a hand of 90 year old, with bones problems", read 1.25),
   each a problem. It has no canary yet.
-  `--poses clenched` defaults to the warrior and shows his bare fist unless `--glove` is set. It also casts a
+  `--poses clenched` defaults to the warrior and shows his bare fist and the game's wrist wrap unless `--glove`
+  is set. The wrap is checked against its 400-triangle, one-mesh budget. The command also casts a
   punch in game and measures both fists after they return to guard. Every fingertip must reach the palm within
   6 mm, adjacent middle phalanges must come within 3 mm, the thumb must lie over the middle shaft within 12 mm,
   and each wrist must bend less than 10 degrees. `--canary` applies the old `hold` + `clench` to the same guard.

@@ -9,7 +9,7 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { footToFloor, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
-import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { Sculpt, stripRig, limb, lathe, fighterWrap } from './shapes';
 import { buildTrousers, type TrouserCut } from './trousers';
 import { ovalTube, wristBent, wristOf } from './wrist';
 import { FurSway } from './furSway';
@@ -209,15 +209,8 @@ const EYES = tunable('warriorEyes', {
 });
 /** the hands' scale (`buildHand`'s `k`) */
 const HAND_K = 1.08;
-/** a bare hand's leather wrap round the wrist, [y, half across, half through] up the forearm from over the heel of the
- *  hand (`ovalTube`): flat across the wrist as the ranger's cuff is, its lowest turn rounded in onto the hand, wound in
- *  turns each a little proud of the one under it, its top under the sleeve's turned-back cuff (round, 4.2 to 4.9 cm
- *  out, it read as a rigid cylinder wider than the hand with a hard rim, an adversarial review) */
-const WRIST_WRAP: [number, number, number][] = [
-  [-0.328, 0.031, 0.022], [-0.322, 0.037, 0.026], [-0.316, 0.039, 0.028], [-0.304, 0.0385, 0.028],
-  [-0.297, 0.0405, 0.0295], [-0.284, 0.039, 0.029], [-0.277, 0.0415, 0.031], [-0.264, 0.0405, 0.031],
-  [-0.257, 0.0425, 0.033], [-0.244, 0.0415, 0.033], [-0.228, 0.044, 0.035],
-];
+// The turned cuff stops 6.6 cm above the bare wrist so the strip can wind up the forearm before tucking under it.
+const BARE_CUFF = -0.204;
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
  *  its hand over about 170 degrees from palm up to palm down (`rollForearm`) */
 const FOREARM_ROLL = 1.4;
@@ -835,17 +828,16 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
     // (flattened as the palm is, its end inside it: round, a 7 cm tube's rim stood out of a 3 cm palm)
     H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.034, 0.016], [-0.285, 0.04, 0.025], [-0.265, 0.043, 0.032], [-0.235, 0.047, 0.042], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
-    // bare: the gambeson's sleeve on down the forearm (its top inside the upper sleeve's end, which follows the
-    // forearm), a turned-back cuff at the wrist, and the wrist into the palm
-    B.add(scaleUV(lathe([[0.045, -0.245], [0.048, -0.2], [0.057, -0.12], [0.0655, -0.045], [0.064, 0]], 16), 2, 1), cloth, el);
-    B.add(scaleUV(lathe([[0.044, -0.25], [0.051, -0.245], [0.053, -0.215], [0.05, -0.205]], 16), 2, 0.3), cloth, el);
-    // (and a fighter's leather wrap wound round the wrist onto the heel of the hand, as the ranger's cuff is: a tube of
-    // bare skin there, cut off flat, had the hand's own wrist standing out of it in points, a seam at every wrist; from
-    // play, "does this look proper to you ?", "lets not reinvent the wheel, we already have hands for ranger")
-    B.skin(scaleUV(ovalTube(WRIST_WRAP, 18), 2, 1), leather, el, hd, 0.25, 0.29);
+    // The gambeson ends in a turned-back cuff. The old cuff hid the winding up the forearm.
+    const foreSleeve = lathe([[0.045, BARE_CUFF], [0.057, -0.12], [0.0655, -0.045], [0.064, 0]], 16);
+    const cuff = lathe([[0.043, 0.001], [0.050, 0], [0.052, 0.005], [0.055, 0.029], [0.052, 0.040]], 16);
+    B.add(scaleUV(foreSleeve, 2, 1), cloth, el);
+    B.add(scaleUV(cuff, 2, 0.3), cloth, el, [0, BARE_CUFF, 0]);
     yield;
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
+  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s);
+  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
   body.legCapsules = true;
@@ -4162,6 +4154,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
 
     wrists.L.bend(handL.vis);
     wrists.R.bend(handR.vis);
+    if (!gloved) { wrapL(); wrapR(); }
 
     if (dt > 0) for (const f of furs) f.update(dt);
 
