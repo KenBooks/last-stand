@@ -8,7 +8,8 @@
 // (the run's phase held at `fighting`) P must open nothing, the pause menu's button must be disabled, and a wave begun
 // while it is open must close it. In each of the village's houses its camera stays in the room (what it turns round
 // inside the walls, the camera itself at most a few metres beyond them, the walls it stands beyond cut away as the
-// game's own camera has them) and the time of day is greyed out; and P opens nothing over a dialog (How to play).
+// game's own camera has them) and the time of day is greyed out; P opens nothing over a dialog (How to play); and by
+// touch alone it opens from the pause menu, a finger's drag turns it, a pinch zooms it and Leave goes back.
 //
 // `--canary` plants two faults the checks must catch: the page's UI shown again (`body.photo` taken off) and the
 // world's overlays drawn over the frame again.
@@ -27,6 +28,8 @@ import { enterRoom, leaveRoom } from '../../../src/game/rooms';
 import { hideHelp, showHelp } from '../../../src/ui/menus';
 import { standInVillage } from './readmeShots';
 import { standIn } from './light';
+import { boxOf, touchMode } from './uiTouch';
+import { middleOf } from './lab';
 
 export interface PhotoOptions {
   /** plant the faults the checks must catch: the page's UI shown, the world's overlays drawn */
@@ -490,12 +493,16 @@ async function inHouse(lab: Lab, id: RoomId): Promise<Found & { moment: Pictured
   camera.target.x += ROOM_SENT;
   await lab.step(1, () => ({ keys: ['w'] }));
   const targetOut = beyondWalls(id, camera.target);
-  if (targetOut > 0) problems.push(`${where}: what the camera turns round went ${targetOut.toFixed(1)} m out of the room`);
+  if (targetOut > 0) {
+    problems.push(`${where}: what the camera turns round went ${targetOut.toFixed(1)} m out of the room`);
+  }
   camera.distance = ROOM_SENT;
   camera.pitch = 0.3;
   await lab.step(READ_FRAMES);
   const eyeOut = beyondWalls(id, G.camera.position);
-  if (eyeOut > ROOM_OUT_MOST + 0.01) problems.push(`${where}: the camera stood ${eyeOut.toFixed(1)} m beyond the walls`);
+  if (eyeOut > ROOM_OUT_MOST + 0.01) {
+    problems.push(`${where}: the camera stood ${eyeOut.toFixed(1)} m beyond the walls`);
+  }
   const cut = G.arena.rooms![id].cutNow();
   if (eyeOut > 0 && cut.length === 0) problems.push(`${where}: no wall cut away with the camera beyond them`);
   const moment = await lab.screen(`house-${id}`, ['photo mode in a house, the camera beyond its walls']);
@@ -504,7 +511,8 @@ async function inHouse(lab: Lab, id: RoomId): Promise<Found & { moment: Pictured
   leaveRoom();
   await lab.step(READ_FRAMES);
   const said = `${where}: the time of day ${hour.disabled ? 'greyed out' : 'SETTABLE'}, what it turns round `
-    + `${targetOut.toFixed(1)} m past the walls, the camera ${eyeOut.toFixed(1)} m, cut away: ${cut.join(', ') || 'none'}`;
+    + `${targetOut.toFixed(1)} m past the walls, the camera ${eyeOut.toFixed(1)} m, `
+    + `cut away: ${cut.join(', ') || 'none'}`;
   return { lines: [...opened.lines, said], problems, moment };
 }
 
@@ -525,6 +533,105 @@ async function notOverADialog(lab: Lab, where: string): Promise<Found> {
   return { lines: [`${where}: P over How to play ${opened ? 'OPENED photo mode' : 'opened nothing'}`], problems };
 }
 
+/** the camera's reach pictured: low, what it turns round at the ground's least height and the camera looking along it
+ *  (rad up), and far, drawn back its whole way (m) and looking down (rad) */
+const LOW_PITCH = 0.04;
+const FAR_DISTANCE = 60;
+const FAR_PITCH = 0.5;
+
+/** The camera at its reach, pictured with the panel hidden: down at the ground looking along it, and drawn far back. */
+async function cameraReach(lab: Lab, where: string): Promise<Pictured[]> {
+  const camera = photoCamera();
+  const kept = { target: camera.target.clone(), distance: camera.distance, pitch: camera.pitch };
+  await lab.press('KeyH');
+  camera.target.y = 0;
+  camera.distance = 1.2;
+  camera.pitch = LOW_PITCH;
+  await lab.step(FLY_FRAMES, () => ({ keys: ['q'] }));
+  const low = await lab.screen(`${where}-low`, ['the camera down at the ground']);
+  camera.target.copy(kept.target);
+  camera.distance = FAR_DISTANCE;
+  camera.pitch = FAR_PITCH;
+  await lab.step(READ_FRAMES);
+  const far = await lab.screen(`${where}-far`, [`the camera ${FAR_DISTANCE} m back`]);
+  camera.target.copy(kept.target);
+  camera.distance = kept.distance;
+  camera.pitch = kept.pitch;
+  await lab.press('KeyH');
+  await lab.step(READ_FRAMES);
+  return [low, far];
+}
+
+/** where on the screen a finger works the pad (shares of its width and height: clear of the panel at the right, and
+ *  of an upright screen's at the foot), how far apart a pinch's fingers start and end (css px), and the least share a
+ *  pinch outward must bring the camera in by */
+const PAD_AT = { x: 0.3, y: 0.3 };
+const PINCH_FROM = 40;
+const PINCH_TO = 160;
+const PINCH_NEARER = 0.5;
+
+/** A finger's drag on the pad from `from` by `by` (css px), `finger` lifted at its end. */
+async function fingerDrag(lab: Lab, from: { x: number; y: number }, by: { x: number; y: number }, finger = 0):
+  Promise<void> {
+  await lab.touchDown(from, finger);
+  await lab.touchMove({ x: from.x + by.x / 2, y: from.y + by.y / 2 }, finger);
+  await lab.touchMove({ x: from.x + by.x, y: from.y + by.y }, finger);
+  await lab.touchUp(finger);
+}
+
+/** Photo mode by touch alone: the pause button tapped, its Settings tab and Photo mode, the touch keys' line shown, a
+ *  finger's drag turning the camera as the mouse's does, two fingers spread bringing it nearer, and Leave tapped back
+ *  to the pause menu. */
+async function byTouch(lab: Lab, where: string): Promise<Found> {
+  await touchMode(lab);
+  await lab.tap(middleOf(document.getElementById('btn-pause')!));
+  await lab.step(READ_FRAMES);
+  await lab.tap(middleOf(document.querySelector('[data-pause-tab="settings"]')!));
+  await lab.tap(middleOf(document.getElementById('btn-photo')!));
+  await lab.step(READ_FRAMES);
+  const problems: string[] = [];
+  if (!photoOn()) {
+    problems.push(`${where}: a finger's taps on the pause menu opened no photo mode`);
+    return { lines: [`${where}: by touch, photo mode NOT OPENED`], problems };
+  }
+  const keysShown = boxOf('#photo .ph-keys-touch') !== null || innerHeight <= 520;
+  if (!keysShown) problems.push(`${where}: the touch keys' line not shown in touch mode`);
+  const camera = photoCamera();
+  const pad = { x: innerWidth * PAD_AT.x, y: innerHeight * PAD_AT.y };
+  const yaw = camera.yaw;
+  await fingerDrag(lab, pad, { x: DRAG_PX, y: 0 });
+  await lab.step(READ_FRAMES);
+  const turned = yaw - camera.yaw;
+  if (Math.abs(turned - DRAG_TURN) > TURN_SLACK) {
+    problems.push(`${where}: a finger's drag turned it ${turned.toFixed(3)} rad`);
+  }
+  const distance = camera.distance;
+  await lab.touchDown({ x: pad.x - PINCH_FROM / 2, y: pad.y }, 0);
+  await lab.touchDown({ x: pad.x + PINCH_FROM / 2, y: pad.y }, 1);
+  await lab.touchMove({ x: pad.x - PINCH_TO / 2, y: pad.y }, 0);
+  await lab.touchMove({ x: pad.x + PINCH_TO / 2, y: pad.y }, 1);
+  await lab.touchUp(0);
+  await lab.touchUp(1);
+  await lab.step(READ_FRAMES);
+  const nearer = camera.distance / distance;
+  if (nearer > PINCH_NEARER) {
+    problems.push(`${where}: a pinch outward left the camera at ${percentOf(nearer)} of its distance`);
+  }
+  await lab.tap(middleOf(document.getElementById('ph-leave')!));
+  await lab.step(READ_FRAMES);
+  const pauseShown = !document.getElementById('pause')!.classList.contains('hidden');
+  if (photoOn()) problems.push(`${where}: Leave tapped left photo mode open`);
+  if (!pauseShown) problems.push(`${where}: Leave tapped brought no pause menu back`);
+  await lab.press('Escape');
+  await lab.step(READ_FRAMES);
+  const said = `${where}: by touch, opened from the pause menu, a 200 px drag turned it ${turned.toFixed(3)} rad, a `
+    + `pinch outward brought it to ${percentOf(nearer)} of its distance, `
+    + `Leave ${pauseShown ? 'back to the pause menu' : 'NO PAUSE'}`;
+  return { lines: [said], problems };
+}
+
+const percentOf = (share: number): string => `${Math.round(share * 100)}%`;
+
 /** One place's checks and pictures, photo mode opened in it by P and left by Esc. */
 async function inPlace(lab: Lab, where: string, canary: boolean, settable: boolean, shot: { filter: string }):
   Promise<Found & { moments: Pictured[] }> {
@@ -533,6 +640,7 @@ async function inPlace(lab: Lab, where: string, canary: boolean, settable: boole
   parts.push(panelFits(where), uiHidden(where, canary), overridesHidden(where));
   parts.push(await overlaysLeftOut(lab, where, canary), await heldStill(lab, where));
   parts.push(await flownAndTurned(lab, where), await cameraRoom(lab, where, settable));
+  if (settable) moments.push(...await cameraReach(lab, where));
   parts.push(await lookSet(lab, where, settable));
   parts.push(await heroHiddenAndShown(lab, where), await photoTaken(lab, where, false));
   await shotSetUp(lab, shot.filter, settable ? DUSK : null);
@@ -556,6 +664,7 @@ export async function photo(lab: Lab, options: PhotoOptions): Promise<Report> {
   holdHour(null);
   const pause = await fromPauseMenu(lab, 'village');
   const dialog = await notOverADialog(lab, 'village');
+  const touch = await byTouch(lab, 'village');
   const houses: (Found & { moment: Pictured })[] = [];
   for (const id of ROOM_IDS) houses.push(await inHouse(lab, id));
   await standIn(lab, { biome: 'forest', view: 'third', facing: 0 });
@@ -563,7 +672,7 @@ export async function photo(lab: Lab, options: PhotoOptions): Promise<Report> {
   await standIn(lab, { biome: 'crypt', view: 'third', facing: 0 });
   const crypt = await inPlace(lab, 'crypt', canary, false, { filter: 'mono' });
   const fight = await notInAFight(lab, 'crypt');
-  const places = [village, pause, dialog, ...houses, forest, crypt, fight];
+  const places = [village, pause, dialog, touch, ...houses, forest, crypt, fight];
   const lines = places.flatMap((place) => place.lines);
   let problems = places.flatMap((place) => place.problems);
   if (canary) {
