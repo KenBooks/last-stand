@@ -14,6 +14,7 @@ import { clench, closeFist, hold, poseHand, seat, strainHand, type Hand } from '
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
 import { fistLine } from '../../../src/entities/models/warriorFists';
 import * as shapes from '../../../src/entities/models/shapes';
+import type { ArmBuild } from '../../../src/entities/models/build';
 import { fistContact, wristBend } from './fistContact';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
@@ -389,7 +390,7 @@ function oldCopier(lab: Lab, glove?: boolean): Copier {
 }
 
 /** A fresh copy of the hero's right hand, with the game wrap when the studio shows his bare fist. */
-function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap = false) {
+function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
   const wrist = new THREE.Group();
   const hand = copier(wrist);
   let root = wrist;
@@ -402,7 +403,7 @@ function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap = false) {
     const sculpt = new shapes.Sculpt();
     const skin = [hand.bareSkin ?? hand.skin];
     const poses = handsCode.wrapPoses?.(hand) ?? [];
-    updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, skin, poses);
+    updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, wrap, skin, poses);
     sculpt.build();
     root = elbow;
   }
@@ -483,6 +484,13 @@ const pct = (value: number) => (value * 100).toFixed(2);
 /** A copy's geometry freed, but what every hand of its side shares (`userData.shared`). */
 const freed = (wrist: THREE.Object3D) => disposeGeometries(wrist);
 
+/** A kept sculpt's side by its key (`1`, `-1 heavy`...): left or right, and its build where it has one. */
+function sideName(key: number | string): string {
+  const [side, build] = String(key).split(' ');
+  const name = side === '1' ? 'left' : 'right';
+  return build ? `${build} ${name}` : name;
+}
+
 /** How the hands were sculpted: how long a side takes afresh on the page (ms, the browser's own clock: the middle of
  *  a few times), and whether both were sculpted by workers as the game loaded (a problem if not: on the page they held
  *  the boot up half a second). Nothing on a game whose hands aren't sculpted. */
@@ -501,8 +509,9 @@ function sculptNotes(copier: Copier): { lines: string[]; problems: string[] } {
   }
   freed(wrist);
   const time = times.sort((a, b) => a - b)[Math.floor(SCULPT_TIMES / 2)];
-  const onPage = [1, -1].filter((s) => by.get(s) !== 'worker').map((s) => (s === 1 ? 'left' : 'right'));
-  const where = onPage.length ? `the ${onPage.join(' and ')} on the page` : 'both by workers as the game loaded';
+  // (kept by side, or by side and build where hands have builds: `handKey`)
+  const onPage = [...by.entries()].filter(([, how]) => how !== 'worker').map(([key]) => sideName(key));
+  const where = onPage.length ? `the ${onPage.join(' and ')} on the page` : 'every side by workers as the game loaded';
   const line = `a side sculpted in ${time.toFixed(0)} ms; ${where}`;
   return { lines: [line], problems: onPage.length ? [`hands: ${line}`] : [] };
 }
@@ -554,7 +563,7 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
     const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
-    const wrapped = bareFist && Boolean(shapes.fighterWrap);
+    const wrapped = bareFist ? lab.model.arm : undefined;
     const { hand, root } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose, 1, wrapped);
     const { tiles, least } = pictureOf(lab, hand, root, views, look);
     if (bareFist) {

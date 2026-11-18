@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { sameLooks } from '../../core/materials';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from '../../util';
+import { forearmAt, wristOf, type ArmBuild } from './build';
 
 /** while a Sculpt replays cached geometry, the builders return this stand-in instead of doing work */
 const NONE = new THREE.BufferGeometry();
@@ -117,9 +118,11 @@ const wrapShares = new Map<string, number[][]>();
  * strip and buried it.
  */
 export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THREE.Object3D,
-  palm: THREE.Object3D, towardThumb: number, skin: readonly THREE.Object3D[] = [],
+  palm: THREE.Object3D, towardThumb: number, arm: ArmBuild, skin: readonly THREE.Object3D[] = [],
   poses: readonly (() => void)[] = []): () => void {
   const wrist = palm.parent!;
+  const length = -wrist.position.y;
+  const wristSection = wristOf(arm.hand, arm.k);
   const tau = 2 * Math.PI;
   // The hand turn runs diagonally over the back and folds narrower where it passes through the thumb web.
   const handTurn = [
@@ -142,15 +145,17 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   const positions: number[] = [], uvs: number[] = [], weights: number[] = [], indices: number[] = [];
   const smooth = THREE.MathUtils.smoothstep;
   const flatOval = (x: number) => Math.sign(x) * Math.pow(Math.abs(x), 0.72);
-  // (over the forearm a heavy wrist's 7 by 5 cm, widening up the arm to 9.2 by 6.8 under the cuff: a fighter's
-  // forearm, from play: "and wrist/arm thickness, its a warrior dude"; a man's 5.8 by 4.2 read thin under the warrior's
-  // heavy hands. Growing from the hand's width at once, it was a straight tube as wide as the cuff, "rigid")
+  // (over the forearm its build's section (`build.ts`: from the hand's own wrist out to the belly), the wrap
+  // `WRAP_GAP` over it all round: from play, "and wrist/arm thickness, its a warrior dude", "we need parametric
+  // wrists". Over the hand an oval as wide as the palm, which the skin under it sets row by row, `skinShare`)
   const radii = (y: number, angle: number, z: number): [number, number] => {
-    const hand = smooth(-y, 0, 0.075), arm = smooth(y, 0.02, 0.12);
+    const hand = smooth(-y, 0, 0.075);
     const thumb = Math.max(0, Math.sin(angle));
-    const rx = 0.035 + 0.014 * hand + 0.011 * arm + 0.005 * thumb * hand;
+    const [ax, az] = forearmAt(arm.forearm, wristSection, length, Math.max(0, y));
+    const across = wristSection[0];
+    const rx = ax + WRAP_GAP + (0.4 + 0.14 * thumb) * across * hand;
     // The thenar mound is deeper than the centre of the palm. A symmetric oval cut through it in teeth.
-    const rz = 0.025 + 0.009 * arm + (z > 0 ? -0.005 : 0.004 + 0.017 * thumb) * hand;
+    const rz = az + WRAP_GAP + (z > 0 ? -0.14 : 0.11 + 0.49 * thumb) * across * hand;
     return [rx, rz];
   };
   // (each row's share of its oval the skin lies at, its middle's, with the rows above the hand eased back to 1)

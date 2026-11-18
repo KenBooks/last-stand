@@ -33,6 +33,7 @@ import {
   cutTurnAt, swingAt, swingHeldAt, swingShoulder, swingShoulderAt, turnWithTrunk, type ArmBones, type ViewSwing,
 } from '../viewSwing';
 import { tunable } from '../../core/tuning';
+import { armSection, FIGHTER_FOREARM, HEAVY, type ArmBuild } from './build';
 import { FANGS } from '../../data/balance';
 import {
   FIST, fistGuard, fistPunch, fistHammer, fistRampage, fistPounce, fistRush, fistWrath, fistLine, fistsLens,
@@ -212,6 +213,12 @@ const EYES = tunable('warriorEyes', {
  *  across the knuckles alone by the hand's own scale, its skinned fingers were torn into strands: a skeleton's bones
  *  under a scale not the same every way shear as they turn */
 const HAND_K = 1.28;
+/** his arms' build (`build.ts`): heavy hands at `HAND_K`, a fighter's forearms, which the wrap and the sleeve are
+ *  sized on (from play: "and wrist/arm thickness, its a warrior dude", "we need parametric wrists") */
+const ARM: ArmBuild = { hand: HEAVY, k: HAND_K, forearm: FIGHTER_FOREARM };
+/** how far the sleeve's open end stands off the forearm's widest across (m): the wrap's own thickness and its gap
+ *  over the skin, and the gambeson's give over it */
+const SLEEVE_EASE = 0.009;
 // The turned cuff stops 6.6 cm above the bare wrist so the strip can wind up the forearm before tucking under it.
 const BARE_CUFF = -0.204;
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
@@ -832,17 +839,20 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (flattened as the palm is, its end inside it: round, a 7 cm tube's rim stood out of a 3 cm palm)
     H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.034, 0.016], [-0.285, 0.04, 0.025], [-0.265, 0.043, 0.032], [-0.235, 0.047, 0.042], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
     // The gambeson ends in a turned-back cuff. The old cuff hid the winding up the forearm.
-    // (a fighter's forearm, the wrap under its cuff 9.2 cm across: "its a warrior dude")
-    const foreSleeve = lathe([[0.053, BARE_CUFF], [0.063, -0.12], [0.0685, -0.045], [0.066, 0]], 16);
-    const cuff = lathe([[0.051, 0.001], [0.058, 0], [0.060, 0.005], [0.063, 0.029], [0.060, 0.040]], 16);
+    // (sized on the forearm under it, `ARM`, its open end over the wrap: "its a warrior dude")
+    const open = armSection(ARM, j.P.foreL, j.P.foreL + BARE_CUFF)[0] + SLEEVE_EASE;
+    const foreSleeve = lathe([[open, BARE_CUFF], [open + 0.01, -0.12], [open + 0.0155, -0.045], [open + 0.013, 0]], 16);
+    const cuff = lathe([[open - 0.002, 0.001], [open + 0.005, 0], [open + 0.007, 0.005], [open + 0.01, 0.029],
+      [open + 0.007, 0.040]], 16);
     B.add(scaleUV(foreSleeve, 2, 1), cloth, el);
     B.add(scaleUV(cuff, 2, 0.3), cloth, el, [0, BARE_CUFF, 0]);
     yield;
   }
-  const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
+  const handL = buildHand(j.handL, 1, leather, bareSkin, ARM.k, bareSkin, ARM.hand);
+  const handR = buildHand(j.handR, -1, leather, bareSkin, ARM.k, bareSkin, ARM.hand);
   const skinOf = (h: Hand) => [h.bareSkin ?? h.skin];
-  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s, skinOf(handL), wrapPoses(handL));
-  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s, skinOf(handR), wrapPoses(handR));
+  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s, ARM, skinOf(handL), wrapPoses(handL));
+  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s, ARM, skinOf(handR), wrapPoses(handR));
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
   body.legCapsules = true;
@@ -4168,7 +4178,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   }
 
   return {
-    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear, dye, setHair: head.setHair,
+    root, kit, joints: j, hands: { L: handL, R: handR }, arm: ARM, animate, tip, palm, height: 2.05, setGear, dye,
+    setHair: head.setHair,
     get swing() { return side; },
     swung: struck,
     get swingKeyed() { return keyed; },

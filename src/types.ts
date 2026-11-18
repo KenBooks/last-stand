@@ -6,6 +6,7 @@ import type { Joints } from './entities/models/rig';
 import type { Dye } from './entities/models/dye';
 import type { HeroLook } from './data/heroLooks';
 import type { Hand } from './entities/models/hands';
+import type { ArmBuild } from './entities/models/build';
 import type { BiomeId } from './data/biomes';
 import type { EnemyId } from './data/enemies';
 
@@ -578,6 +579,8 @@ export interface Model {
   joints?: Joints;
   /** a hero's hands (models/hands.ts: the lab's `hands` builds one alone from them) */
   readonly hands?: { L: Hand; R: Hand };
+  /** its arms' build, where what dresses its forearms is sized on it (models/build.ts) */
+  readonly arm?: ArmBuild;
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;

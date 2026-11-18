@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { surfaceNets, type Field, type Net } from './surfaceNets';
 import { above, beyond, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
 import type { Part, Shape } from './sdf';
+import { PLAIN, type HandBuild } from './build';
 import { clamp } from '../../util';
 
 /** A digit as the sculpt reads it: its joints from its root (each segment hangs down its joint's -y, the palm's side
@@ -297,7 +298,8 @@ function gloveSeams(digits: DigitShape[], frames: Float64Array[][]): Lift {
 const THUMB_ROOT = 13;
 
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
-function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Part[] {
+function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild): Part[] {
+  const { wide, deep, knuckles } = build;
   const at = (u: number, y: number, z: number) => [u * toward, y, z] as const;
   const parts: Part[] = [];
   const palm = (shape: Shape, blend: number, bones: [number, number][] = [[0, 1]]) => {
@@ -308,9 +310,10 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
   // wrist whose back runs on into the fingers' backs: 7 mm narrower than the outer knuckles and 6 mm deeper than a
   // finger at its end, the hand swelled into a lump at the knuckle row, a shelf the fingers hung under; from play,
   // "this hand shape is not natural", "there should be no swelling")
-  palm(slab(-0.004, -0.097, 0.0285, 0.044, 0.0135, 0.0102, 0.42, 0.008), 0.006);
+  // (a build's breadth and depth scale it, and the wrist with it: `build.ts`' `wristOf` reads the wrist's)
+  palm(slab(-0.004, -0.097, 0.0285 * wide, 0.044 * wide, 0.0135 * deep, 0.0102 * deep, 0.42, 0.008), 0.006);
   // the wrist, into the cuff
-  palm(tube(0.0275, 0.029, -0.006, 0.014, 0.66), 0.012);
+  palm(tube(0.0275 * wide, 0.029 * wide, -0.006, 0.014, 0.66 * deep / wide), 0.012);
   for (const finger of fingers) {
     const k = finger.j[0].position;
     const w = finger.width;
@@ -321,23 +324,25 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
     // (within the finger's own width, long up the palm's back and as high as it: the head of the finger's bone in
     // the palm, carrying the back on into the finger with a valley between each two; broader than the finger and
     // joined over 12 mm, the row swelled, and short and low, a groove ran across the back above the fingers)
-    palm(ellipsoid(k.x, k.y + 0.004, k.z + 0.003, w * 0.8, 0.012, w * 0.66), 0.008);
-    palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062, w * 0.62, w * 0.62, w * 0.42), 0.004);
-    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055, w * 0.98, 0.0082, 0.0046), 0.006);
+    palm(ellipsoid(k.x, k.y + 0.004, k.z + 0.003 * deep, w * 0.8, 0.012, w * 0.66), 0.008);
+    const head = w * knuckles;
+    palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
+    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
   // the little finger's mound along the palm's edge
-  palm(ellipsoid(...at(-0.0275, -0.05, -0.0055), 0.0105, 0.03, 0.0085), 0.009);
+  palm(ellipsoid(...at(-0.0275 * wide, -0.05, -0.0055 * deep), 0.0105 * wide, 0.03, 0.0085 * deep), 0.009);
   // the thumb's mound, between the palm and its root, moving half with the thumb
   const root = thumb.j[0].position;
-  palm(ellipsoid(root.x * 0.62, -0.045, root.z - 0.0035, 0.021, 0.03, 0.015), 0.011, [[0, 0.5], [THUMB_ROOT, 0.5]]);
+  palm(ellipsoid(root.x * 0.62, -0.045, root.z - 0.0035 * deep, 0.021 * wide, 0.03, 0.015 * deep), 0.011,
+    [[0, 0.5], [THUMB_ROOT, 0.5]]);
   // the web between the thumb and the index finger, a sheet of skin moving with both (with none, the thumb stood
   // off the palm's side as a stick: three adversarial reviews)
-  palm(ellipsoid(...at(0.043, -0.078, -0.003), 0.008, 0.02, 0.006), 0.01, [[0, 0.6], [THUMB_ROOT, 0.4]]);
+  palm(ellipsoid(...at(0.043 * wide, -0.078, -0.003), 0.008, 0.02, 0.006 * deep), 0.01, [[0, 0.6], [THUMB_ROOT, 0.4]]);
   // (cut off flat inside the cuff: the wrist's rounded end rose 3 cm up the forearm)
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
   // the palm's hollow
   // (off the thumb's mound towards the little finger's: over against it, the mound read as a crater)
-  parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248), 0.02, 0.024, 0.0095), frame: IDENTITY,
+  parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
     blend: 0.006, cut: true, bones: [] });
   return parts;
 }
@@ -807,11 +812,11 @@ function pointOn(digit: DigitShape, n: number, along: number, space: THREE.Objec
  * hand's own): `fingers` index to little, then `thumb`; their joints are bones 1 on, in that order (0 is the hand's).
  * `toward` is the way across the hand to its thumb (+1 or -1 along x).
  */
-export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: DigitShape, toward: number):
-  HandGeometries {
+export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: DigitShape, toward: number,
+  build: HandBuild = PLAIN): HandGeometries {
   const digits = [...fingers, thumb];
   const parts = [
-    ...palmParts(fingers, thumb, toward),
+    ...palmParts(fingers, thumb, toward, build),
     ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length)),
   ];
   const hand = lifted(fieldOf(parts), tendons(fingers));
