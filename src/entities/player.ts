@@ -990,6 +990,9 @@ export class Player {
   }
 
   /** Whether a dash is running (not yet into its hold): the body kept on its way, not turned to the aim. */
+  /** a dash or a leap under way (not its hold): what passes over the Ossuary Twins' charge (entities/twins.ts) */
+  get airborne(): boolean { return this.dashRunning(); }
+
   private dashRunning(): boolean {
     return !!this.dash && this.dash.t < this.dash.dur;
   }

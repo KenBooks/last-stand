@@ -118,4 +118,6 @@ export const TROPHIES: Partial<Record<EnemyId, TrophyDef>> = {
   colossus: { name: "The Hollow Colossus's Mask", look: 'mask', colour: 0xd8d0c4, trim: 0xb070ff },
   // (the Elder Thornheart's crown of thorned antlers, a green heartwood knot at its root)
   thornheart: { name: "The Elder Thornheart's Crown", look: 'antlers', colour: 0xb89068, trim: 0x7aff50 },
+  // (the Ossuary Twins' link of their chain of bone, its gold light still in it: one trophy for the pair, Slab's)
+  twinslab: { name: "The Ossuary Twins' Bone Link", look: 'crest', colour: 0xd2c6a4, trim: 0xffd890 },
 };

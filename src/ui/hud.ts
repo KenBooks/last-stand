@@ -6,7 +6,8 @@ import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityCounts } from '../loot/items';
 import { WAVES } from '../data/waves';
-import { BIOMES } from '../data/biomes';
+import { BIOMES, bossOfWave } from '../data/biomes';
+import { partnerOf } from '../entities/bossKit';
 import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
@@ -210,7 +211,7 @@ export function showDecision(): void {
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();
     $('.cont-label', box).textContent = waiting ? 'Waiting for the others…'
-      : r.training ? `Repeat wave ${r.wave}` : next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
+      : r.training ? `Repeat wave ${r.wave}` : bossOfWave(G.arena.biome, next) ? `Face wave ${next} (${bossOfWave(G.arena.biome, next)!.short})` : `Continue to wave ${next}`;
     $<HTMLButtonElement>('.cont', box).disabled = waiting;
     const party = partyDecision();
     $('.dc-party', box).textContent = party;
@@ -221,7 +222,7 @@ export function showDecision(): void {
     box.classList.toggle('staked', !r.training);
     $('.bank-stake', box).textContent = r.training ? '' : isCoop() ? 'Keep yours · the rest fight on' : 'Keep all you carry · the run ends';
     const boss = Math.ceil(next / WAVES.bossEvery) * WAVES.bossEvery;
-    const bossShort = BIOMES[G.arena.biome].bossShort;
+    const bossShort = bossOfWave(G.arena.biome, boss)?.short;
     $('.cont-stake', box).textContent = r.training || waiting ? ''
       : boss !== next && boss - r.wave <= BOSS_NEAR ? `${bossShort} at wave ${boss} · better loot` : 'A harder wave · better loot';
   };
@@ -357,7 +358,8 @@ function updateTarget() {
   if (!e) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   box.classList.toggle('boss', e.boss);
-  setText(h('#target .t-name'), e.name);
+  // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
+  setText(h('#target .t-name'), e.def.pair && partnerOf(e) ? e.def.pair : e.name);
   setText(h('#target .t-sub'), e.boss ? 'Boss' : e.hero ? 'Hero' : '');
   const k = pct(e.life / e.maxLife);
   setStyle(h('#target .t-fill'), 'width', k);

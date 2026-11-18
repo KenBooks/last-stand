@@ -53,6 +53,7 @@ import type { AutoOptions } from './autoQuality';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
 import type { ThrowsOptions } from './throws';
+import type { TwinsOptions } from './twins';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
@@ -671,6 +672,16 @@ export async function evade(lab: Lab, command: EvadeOptions): Promise<Report> {
 export async function throws(lab: Lab, command: ThrowsOptions): Promise<Report> {
   const { throws: throwsRound } = await import('./throws');
   return throwsRound(lab, command);
+}
+
+/**
+ * `lab twins`: the Ossuary Twins: the Crypt's 15th wave and every 20th after sending them (the Colossus on its other
+ * boss waves), both risen within their chain's reach; one life between them, the chain snapping past its reach, the
+ * collapse at half and a mend a stun breaks; no program compiled in their fight; pictures of it and of each alone.
+ */
+export async function twins(lab: Lab, command: TwinsOptions): Promise<Report> {
+  const { twins: twinsRound } = await import('./twins');
+  return twinsRound(lab, command);
 }
 
 /**

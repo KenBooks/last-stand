@@ -20,6 +20,8 @@ import { lures, lureAt, type Lure } from '../combat/lures';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
+import { phaseBegun } from './bossKit';
+import { chainSnapped, chargeRan, mendBegun, mendDone, skullsLoosed, twinFell, twinsAI } from './twins';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
@@ -29,7 +31,7 @@ const _dir = new THREE.Vector3();
 const _way = { x: 0, z: 0 };
 
 /** Move along (dx, dz), bent round any obstacle ahead within `reach` (by default ~1s of walking). */
-function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reach = e.speed * speedMul): void {
+export function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reach = e.speed * speedMul): void {
   if (dist < 1e-3) return;
   steerClear(e.pos.x, e.pos.z, e.radius, dx / dist, dz / dist, Math.max(reach, e.radius + 1), _way);
   e.desired.set(_way.x * e.speed * speedMul, 0, _way.z * e.speed * speedMul);
@@ -169,6 +171,23 @@ export const FX = {
   vine(kind: number, ox: number, oz: number, angle: number, length: number) {
     vineAt(ENEMY_IDS[kind], ox, oz, angle, length);
   },
+  // --- the bosses (entities/bossKit.ts, and each boss's own) ---
+  /** boss `id` entered phase `phase` (its banner, its cue; its own gameplay where it's simulated) */
+  bossPhase(id: number, phase: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) phaseBegun(e, phase);
+  },
+  /** the Ossuary Twins' Slab `id` charging from (ox, oz) to (tx, tz), each game's hero judged as it passes (entities/twins.ts) */
+  twinCharge(id: number, ox: number, oz: number, tx: number, tz: number, damage: number) { chargeRan(id, ox, oz, tx, tz, damage); },
+  /** `n` skulls from the twin `id` at (ox, oz) curving in on (tx, tz) */
+  skullVolley(id: number, ox: number, oz: number, tx: number, tz: number, n: number, damage: number) { skullsLoosed(id, ox, oz, tx, tz, n, damage); },
+  /** the Twins' chain snapping tight between (ax, az) and (bx, bz), each game's hero judged against its line */
+  chainSnap(id: number, ax: number, az: number, bx: number, bz: number, damage: number) { chainSnapped(id, ax, az, bx, bz, damage); },
+  /** Reliquary `id` mending the pair over `warn` s, and done */
+  twinMend(_id: number, _slab: number, warn: number) { mendBegun(warn); },
+  twinMended(id: number, slab: number) { mendDone(id, slab); },
+  /** twin `id` collapsing at half, paying nothing */
+  twinFall(id: number) { twinFell(id); },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
@@ -234,6 +253,7 @@ function slamRing(e: Enemy, x: number, z: number, radius: number, dur: number, c
 
 export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
   idle() {},
+  twins: (e) => twinsAI(e),
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     const p = e.target!.pos;

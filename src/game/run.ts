@@ -10,7 +10,7 @@ import { G } from '../state';
 import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES, HERO, SCALING } from '../data/enemies';
-import { BIOMES } from '../data/biomes';
+import { BIOMES, bossOfWave } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { inObstacle, resolveWorld } from '../world/collision';
 import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
@@ -47,7 +47,7 @@ export function remapWaveSpawns(map: (type: EnemyId) => EnemyId): void {
   const r = G.run;
   if (!r) return;
   for (const group of r.queue) for (const unit of group) unit.type = map(unit.type);
-  if (r.boss) r.boss.type = map(r.boss.type);
+  for (const unit of r.boss ?? []) unit.type = map(unit.type);
   for (const unit of pendingUnits) unit.type = map(unit.type);
 }
 
@@ -79,7 +79,7 @@ export interface RunState {
   packs: number[];
   dealt: number;
   /** the wave's boss while it is still to come, and the seconds it comes in once the wave's first group has come */
-  boss: SpawnUnit | null;
+  boss: SpawnUnit[] | null;
   bossT: number;
   pending: number;
   remaining: number;
@@ -132,6 +132,11 @@ export function initRun(uiHooks: RunUI): void {
   ui = uiHooks;
   on('enemyKilled', onEnemyKilled);
   on('playerDied', onPlayerDied);
+  // (a boss's phase begun, on every game: its banner, by its name, where its phase has a line: entities/bossKit.ts)
+  on('bossPhase', (boss, phase) => {
+    const line = boss.def.bossKit?.phases[phase]?.banner;
+    if (line) ui.banner(boss.name, line);
+  });
 }
 
 function cleanupWorld(): void {
@@ -175,7 +180,7 @@ export function startRun(wave = 1, training = false, duel: DuelSetup | null = nu
   const biome = BIOMES[G.arena.biome];
   ui.banner(`${training ? 'Training · ' : ''}Wave ${wave}`, training
     ? 'Holographic enemies · No damage, loot or score'
-    : wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
+    : bossOfWave(G.arena.biome, wave)?.banner ?? `${biome.title} · Survive the onslaught`);
 }
 
 /** A run at its start. */
@@ -240,9 +245,11 @@ function buildWave(w: number): SpawnUnit[][] {
   return out.filter((g) => g.length);
 }
 
-/** The wave's boss, on a boss wave. */
-function bossOf(w: number): SpawnUnit | null {
-  return w % WAVES.bossEvery === 0 ? { type: BIOMES[G.arena.biome].boss, hero: false } : null;
+/** The wave's boss, on a boss wave (data/biomes.ts `bossOfWave`), and its twin where one rises with it. */
+function bossOf(w: number): SpawnUnit[] | null {
+  const boss = bossOfWave(G.arena.biome, w);
+  if (!boss) return null;
+  return [{ type: boss.id, hero: false }, ...(boss.twin ? [{ type: boss.twin, hero: false }] : [])];
 }
 
 function startWave(): void {
@@ -323,16 +330,17 @@ function gatesFor(r: RunState, count: number): number[] {
  * A group comes by a gate whole, or split over two, three or four, at random, in packs of random sizes, each pack
  * rising at its gate as the others do; the gates the wave has used least first, so none stands idle for a wave
  * (picked at random, two a group, often one twice, two or three were; dealt round all four one foe a gate, every group
- * came alike). The boss alone comes by any gate.
+ * came alike). The boss comes by any gate, its twin beside it (3.5 m either side of the gate's middle: their chain
+ * holds them within reach of each other).
  */
 function spawnGroup(group: SpawnUnit[]): void {
   const portals = G.arena.portals;
   const r = G.run!;
   // (the wave's first group sets the boss's time)
   const first = r.dealt === 0 && r.boss !== null;
-  const lone = group.length === 1 && !!ENEMIES[group[0].type].boss;
-  const sizes = lone ? [1] : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
-  const gates = lone ? [randInt(0, portals.length - 1)] : gatesFor(r, sizes.length);
+  const bosses = group.every((u) => !!ENEMIES[u.type].boss);
+  const sizes = bosses ? [group.length] : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
+  const gates = bosses ? [randInt(0, portals.length - 1)] : gatesFor(r, sizes.length);
   const reaches: number[] = [];
   const party = partyScale(r.party);
   r.pending += group.length;
@@ -345,9 +353,14 @@ function spawnGroup(group: SpawnUnit[]): void {
       const def = ENEMIES[u.type];
       portal.pulse();
       const pos = riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      if (bosses && group.length > 1) {
+        // (the twins abreast, rising together)
+        pos.addScaledVector(new THREE.Vector3(-portal.dir.z, 0, portal.dir.x), (j ? 1 : -1) * 3.5);
+        resolveWorld(pos, def.radius);
+      }
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
       pendingUnits.add(u);
-      schedule(j * SPAWN_GAP, () => {
+      schedule(bosses ? 0 : j * SPAWN_GAP, () => {
         pendingUnits.delete(u);
         r.pending--;
         if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult: def.boss ? party.boss : party.life });
@@ -389,9 +402,9 @@ export function updateRun(dt: number): void {
     // all come and none of it stands
     if (r.boss && r.dealt > 0) {
       r.bossT -= dt;
-      if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup([r.boss]); r.boss = null; }
+      if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup(r.boss); r.boss = null; }
     }
-    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0) + (r.boss ? 1 : 0);
+    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0) + (r.boss?.length ?? 0);
     if (r.remaining === 0) waveCleared();
   } else if (r.phase === 'cleared') {
     // on to the next wave once everyone still standing chose to (a partner leaving counts too)
@@ -489,10 +502,10 @@ export function startNextWave(): void {
   r.votes.clear();
   G.arena.setCalm(0);
   ui.hideDecision();
-  const boss = r.wave % WAVES.bossEvery === 0;
+  const boss = bossOfWave(G.arena.biome, r.wave);
   ui.banner(`${r.training ? 'Training · ' : ''}Wave ${r.wave}`, r.training
     ? 'Holographic enemies · No damage, loot or score'
-    : boss ? BIOMES[G.arena.biome].bossBanner : 'Hold the line');
+    : boss?.banner ?? 'Hold the line');
 }
 
 /** The local player banks: out of the run with the spoils (the others may carry on). */
@@ -621,9 +634,11 @@ function onEnemyKilled(e: Enemy): void {
   if (++r.multKills >= RUN.killsPerMultiplier && r.multiplier < RUN.multiplierMax) { r.multiplier++; r.multKills = 0; }
   // a boss pays everyone standing; any other kill pays whoever landed it
   if (e.boss) {
+    // (a twin felled with its brother pays nothing: the pair pays once)
+    const drops = e.noSpoils ? 0 : LOOT.bossDrops;
     for (const p of G.players) {
       if (!p.active) continue;
-      for (let i = 0; i < LOOT.bossDrops; i++) schedule(i * 0.25, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave + 1, 0.8)); });
+      for (let i = 0; i < drops; i++) schedule(i * 0.25, () => { if (G.run === r && p.active) giveLoot(p, rollDrop(p.cls, r.wave + 1, 0.8)); });
     }
     return;
   }
