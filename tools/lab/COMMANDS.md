@@ -142,7 +142,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 ## In full
 
 - `sheet`: the hero in the states the player sees (`--states stand,walk,full,cast`), pictured from the game's views
-  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`, the whole frame
+  and close up (`--views lobby,top,third,front,left,right,back,above,below`, `below` from under the chin and round to the left, as under a beard; `eyes` with `--view first`, the whole frame
   at the row's height; `--focus <joint>`
   frames the close-ups on a joint), with each arm's load and posture beside them. `cast` casts `--skill` (its key, its
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures

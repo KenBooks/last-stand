@@ -344,7 +344,7 @@ const ARMOUR = ['helm', 'chest', 'hands'] as const;
 type Armour = (typeof ARMOUR)[number];
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
-export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above', 'plan'] as const;
+export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above', 'below', 'plan'] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
 
 /** A moment pictured (`Lab.picture`): its label, its pictures, and notes to read beside them. */
@@ -381,6 +381,8 @@ const CLOSE_UPS: Partial<Record<ViewName, CloseUp>> = {
   right: { turn: -Math.PI / 2, rise: 0.25 },
   back: { turn: Math.PI, rise: 0.25 },
   above: { turn: Math.PI + 0.35, rise: 1.6 },
+  // (from below his chin, a little round to his left: as a player beside a seated man sees under a beard)
+  below: { turn: 1.1, rise: -2.6 },
   plan: { turn: 0, rise: 0, down: true },
 };
 

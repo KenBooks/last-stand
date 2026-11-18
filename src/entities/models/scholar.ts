@@ -824,9 +824,7 @@ function tabardMap(): THREE.CanvasTexture {
 
 /** His head dressed: the skullcap over his crown, his brows, his moustache and long beard (cards in `white`, the beard's
  *  body under them), and his spectacles. All in the head's group, by its face's frame (mm). */
-function* dressHead(
-  head: Head, white: THREE.Material, capFelt: THREE.Material, brass: THREE.Material, glass: THREE.Material,
-): Generator<void, void, undefined> {
+function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, brass: THREE.Material, glass: THREE.Material): Generator<void, void, undefined> {
   const G = head.group, rng = mulberry(41);
   /** a point on the skin (mm) towards (az, el), `lift` mm off it */
   const skin = (az: number, el: number, lift = 0) => {
@@ -859,77 +857,222 @@ function* dressHead(
     return V(p.x, py * Math.cos(a) - pz * Math.sin(a), py * Math.sin(a) + pz * Math.cos(a) + 40);
   };
 
-  // --- the beard's body: over the jaw and chin, sunk into the skin round the mouth and up the cheeks; below the chin
-  // it hangs to a rounded point ---
-  const azs = 34, AZ = 1.45;
-  /** where the beard stops up the face (mm) at azimuth `az`: under the lower lip in front, up to the ears at the sides */
-  const topAt = (az: number) => lerp(36, 98, smooth(clamp((Math.abs(az) - 0.32) / 0.85, 0, 1)));
-  const liftAt = (az: number, y: number) => {
-    const b = smooth(clamp((topAt(az) - y) / 12, 0, 1));
-    return -1.5 + b * (9 + 7 * smooth(clamp((40 - y) / 45, 0, 1)));
+  // --- his beard, grown as a beard grows: rooted over the cheeks, jaw, chin and under the lip, lying close on the face,
+  // then falling from the chin as a mass that rests against his throat and comes to a soft point, layered locks all
+  // over it. (From play: "thats not how beards grow": it was a sheet folded off the jaw like a bib, creased, a gap
+  // between it and the chin and neck, and the moustache's ends showing through as a dark tuft.) ---
+  const AZ = 1.75;
+  /** where the beard stops up the face (mm) at azimuth `az`: under the lower lip in front, up to the sideburns, and
+   *  behind the jaw's angle down along the jaw under the ear */
+  const topAt = (az: number) => {
+    const a = Math.abs(az);
+    return a < 1.45 ? lerp(36, 98, smooth(clamp((a - 0.32) / 0.85, 0, 1))) : lerp(98, 40, smooth((a - 1.45) / 0.3));
   };
-  const rows: THREE.Vector3[][] = [];
-  for (let y = 104; y >= -6; y -= 5) {
+  /** how far its close layer stands off the skin (mm): sunk under it at its edges (its top, and behind the jaw), so it
+   *  grows out of the face with no rim, thickening down to the chin (its volume below is the mass's). Stopped at a
+   *  line of its own behind the cheek, it ran down from the ear as a straight cut. */
+  const faceLift = (az: number, y: number) => -1.5 + smooth(clamp((topAt(az) - y) / 14, 0, 1)) * smooth(clamp((AZ - Math.abs(az)) / 0.28, 0, 1))
+    * (4.5 + 3.5 * smooth(clamp((40 - y) / 45, 0, 1)));
+  const faceAt = (az: number, y: number, lift: number) => skin(az, elAt(az, y), faceLift(az, y) + lift);
+  const TIP = -118, CHIN = -6;
+  /** the mass's section at height y (mm): half its width, half its depth, its middle's depth; wide under the jaw (its
+   *  top inside the head, so nothing parts it from the chin and throat), narrowing down to the point, drawn forward
+   *  as it falls (a beard's weight swings it out from the throat) */
+  const section = (y: number) => {
+    const t = clamp((CHIN - y) / (CHIN - TIP), 0, 1);
+    const up = smooth(clamp((y - CHIN) / 14, 0, 1));
+    return { a: (50 * (1 - t) ** 0.8 + 6 * t) * (1 - 0.25 * up), b: (40 * (1 - t) ** 0.85 + 5 * t) * (1 - 0.25 * up), z: 48 + 30 * smooth(t) };
+  };
+  /** the mass's outside at angle `th` round it (0 ahead, + to his left) and height y, `lift` out from it (mm), its
+   *  front fuller than its back, and lobed a little where its locks clump */
+  const massAt = (th: number, y: number, lift: number) => {
+    const s = section(y), lobe = 1 + 0.05 * Math.sin(th * 5 + y * 0.06);
+    const front = Math.cos(th) > 0 ? 1.1 : 0.8;
+    return V(Math.sin(th) * (s.a * lobe + lift), y, s.z + Math.cos(th) * (s.b * lobe * front + lift));
+  };
+  // (its close layer over the face, from its top down past the chin, each row his right to his left)
+  const faceRows: THREE.Vector3[][] = [];
+  for (let y = 104; y >= CHIN - 4; y -= 5) {
     const row: THREE.Vector3[] = [];
-    for (let i = 0; i <= azs; i++) {
-      const az = lerp(-AZ, AZ, i / azs);
-      row.push(skin(az, elAt(az, y), liftAt(az, y)));
-    }
-    rows.push(row);
+    for (let i = 0; i <= 44; i++) { const az = lerp(-AZ, AZ, i / 44); row.push(toG(faceAt(az, y, 0))); }
+    faceRows.push(row);
     yield;
   }
-  // (below the chin: each point drawn in to the beard's point, its front kept ahead of the throat)
-  const last = rows[rows.length - 1], TIP = -112;
-  for (let k = 1; k <= 12; k++) {
-    const s = k / 12, y = lerp(-6, TIP, s), narrow = (1 - s) ** 0.85 * 0.92 + 0.08;
-    rows.push(last.map((p, i) => {
-      const f = Math.cos(lerp(-AZ, AZ, i / azs) * 0.95);
-      return V(p.x * narrow, y + 6 * (1 - f) * s, lerp(p.z, 62 + 34 * f, smooth(Math.min(1, s * 1.6))) - 10 * s * s * f);
-    }));
+  // (the mass, ring by ring from inside the jaw down to its point: each ring closed, round from behind)
+  const rings: THREE.Vector3[][] = [];
+  for (let y = 8; y >= TIP; y -= 4) {
+    const ring: THREE.Vector3[] = [];
+    for (let i = 0; i <= 40; i++) ring.push(toG(bend(massAt(-Math.PI + (i / 40) * Math.PI * 2, y, 0))));
+    rings.push(ring);
+    yield;
   }
-  // (each row runs from his right to his left over the front: so read bottom to top)
-  const beardBody = rowsSurface(rows.reverse().map((r) => r.map((p) => toG(bend(p)))), 40);
   const strands = beardMap();
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xc8c4bc, map: strands, roughness: 0.9, side: THREE.DoubleSide });
-  const body = new THREE.Mesh(beardBody, bodyMat);
-  body.name = 'scholar beard';
-  body.castShadow = true;
-  G.add(body);
-  yield;
-
-  // --- the beard's locks: cards from all over its body, running down it to near its point ---
-  const out: THREE.BufferGeometry[] = [];
-  /** the beard's outside (mm) at (u, y): u from his right (-1) to his left (1) */
-  const beardAt = (u: number, y: number, lift: number) => {
-    if (y > -6) { const az = u * AZ; return skin(az, elAt(az, y), liftAt(az, y) + lift); }
-    const s = clamp((y + 6) / (TIP + 6), 0, 1), i = Math.round((u + 1) / 2 * azs), p = last[clamp(i, 0, azs)];
-    const f = Math.cos(u * AZ * 0.95), narrow = (1 - s) ** 0.85 * 0.92 + 0.08;
-    return V(p.x * narrow, y, lerp(p.z, 62 + 34 * f, smooth(Math.min(1, s * 1.6))) - 10 * s * s * f + lift);
-  };
-  const locks = 260;
-  for (let c = 0; c < locks; c++) {
-    const u0 = (rng() * 2 - 1) * 0.96, top = topAt(u0 * AZ) - 6, y0 = lerp(top, -30, rng() ** 1.4);
-    if (y0 < -40) continue;
-    const yEnd = lerp(TIP * 0.55, TIP - 4, rng()) + (Math.abs(u0) > 0.6 ? 25 : 0), pts: THREE.Vector3[] = [];
-    const lift = 1.2 + rng() * 2.5;
-    for (let k = 0; k <= 5; k++) {
-      const s = k / 5, y = lerp(y0, yEnd, s), u = u0 * (1 - 0.65 * smooth(s)) + (rng() - 0.5) * 0.04;
-      pts.push(toG(bend(beardAt(u, y, lift + 1.5 * Math.sin(Math.PI * s)))));
-    }
-    const w = (6 + rng() * 6) * HEAD_MM, shade = 0.72 + rng() * 0.3, axis = toG(bend(V(0, (y0 + yEnd) / 2, 30)));
-    out.push(hairCard(pts, (s) => w * (1 - 0.75 * s * s), axis, 6, (rng() - 0.5) * 0.7, (s) => shade * (0.85 + 0.15 * s)));
+  for (const [geo, name] of [[rowsSurface(faceRows.reverse(), 40), 'scholar beard'], [rowsSurface(rings, 40), 'scholar beard mass']] as const) {
+    const m = new THREE.Mesh(geo, bodyMat);
+    m.name = name;
+    m.castShadow = true;
+    G.add(m);
     yield;
   }
-  // --- the moustache: from under the nose out over the corners of the mouth, down into the beard ---
+
+  const out: THREE.BufferGeometry[] = [];
+  /** a point of the beard (mm) at u (his right -1 to his left 1) and height y, `lift` out from it: on the face's
+   *  layer above the chin, on the mass below, the one eased into the other across the jaw's line */
+  const beardAt = (u: number, y: number, lift: number) => {
+    const onFace = y > CHIN - 4 ? faceAt(u * AZ, Math.max(y, CHIN - 4), lift) : null;
+    const onMass = y < 12 ? bend(massAt(clamp(u, -1, 1) * 1.45, y, lift)) : null;
+    if (!onMass) return onFace!;
+    if (!onFace) return onMass;
+    // (eased from the one to the other, and kept as far out as the further of them: eased alone, a lock dipped under
+    // the face's layer across the jaw and showed as a dark slit round the chin)
+    const axisZ = section(y).z - 12, out = (p: THREE.Vector3) => Math.hypot(p.x, p.z - axisZ);
+    const p = onFace.clone().lerp(onMass, smooth(clamp((12 - y) / 20, 0, 1))), r = Math.max(out(onFace), out(onMass));
+    const now = out(p);
+    if (now > 1e-6) { p.x *= r / now; p.z = axisZ + (p.z - axisZ) * (r / now); }
+    return p;
+  };
+  /** A lock's card turned out from the beard all along it: each point's face away from the beard's axis at its height
+   *  (the head's middle on the face, the mass's middle below it). Turned away from one point behind the lock's middle,
+   *  a long lock's top faced up and showed its back, the cool rim light on it a blue-grey fleck round the chin. */
+  const outFromBeard = (ys: number[]) => {
+    const axis = ys.map((y) => toG(bend(V(0, y, y > CHIN ? 10 : section(y).z - 12))));
+    return (t: number, O: THREE.Vector3, p: THREE.Vector3) => {
+      const f = t * (axis.length - 1), k = Math.min(axis.length - 2, Math.floor(f));
+      O.subVectors(p, axis[k].clone().lerp(axis[k + 1], f - k)).normalize();
+    };
+  };
+  // (the locks, in three layers, the outer longest: each rooted over the face's beard, lying down it, off the chin and
+  // down the mass, drawn in towards the lock it's part of as it goes, its tip lifting a little off the rest)
+  const CLUMPS = 9;
+  for (let layer = 0; layer < 3; layer++) {
+    const n = [150, 130, 110][layer];
+    for (let c = 0; c < n; c++) {
+      const u0 = (rng() * 2 - 1) * 0.95, az0 = u0 * AZ, top = topAt(az0) - 4 - rng() * 10 * clamp((Math.abs(u0) - 0.75) / 0.2, 0, 1);
+      const y0 = lerp(top, CHIN - 20, rng() ** (1.2 + layer * 0.3));
+      const side = clamp((Math.abs(u0) - 0.55) / 0.4, 0, 1);
+      const yEnd = lerp(TIP * (0.45 + 0.15 * layer), TIP - 2, rng() ** 0.7) + side * 45;
+      if (yEnd > y0 - 18) continue;
+      const clump = (Math.round(((u0 + 1) / 2) * (CLUMPS - 1)) / (CLUMPS - 1)) * 2 - 1;
+      const rim = clamp((Math.abs(u0) - 0.78) / 0.17, 0, 1);
+      if (layer > 0 && rng() < rim * 1.4) continue;
+      const lift = (1.2 + layer * 2.2 + rng() * 1.6) * (1 - 0.6 * rim), pts: THREE.Vector3[] = [], ys: number[] = [];
+      for (let k = 0; k <= 6; k++) {
+        const s = k / 6, y = lerp(y0, yEnd, s);
+        ys.push(y);
+        const pull = smooth(clamp((CHIN - y) / 60, 0, 1));
+        const u = lerp(u0, clump * 0.8, pull * 0.7) * (1 - 0.35 * pull * s) + (rng() - 0.5) * 0.02;
+        // (rooted inside the close layer and growing out of it: rooted on it, the roots under the lip stood out as dark
+        // flakes, a card's root seen nearly edge on)
+        const out = smooth(Math.min(1, s / 0.3));
+        pts.push(toG(beardAt(u, y, lerp(-1.5, lift + 1.2 * Math.sin(Math.PI * s) + 0.6 * s * s, out))));
+      }
+      const w = (7 + rng() * 6) * HEAD_MM * (1 - 0.45 * rim), shade = (0.74 + rng() * 0.26) * (0.86 + 0.07 * layer);
+      // (barely twisted: a card's back turned to the light took the cool rim light as a blue-grey fleck)
+      out.push(hairCard(pts, (s) => w * (1 - 0.8 * s * s), toG(bend(V(0, (y0 + yEnd) / 2, 20))), 7, (rng() - 0.5) * 0.12,
+        (s) => shade * (0.92 + 0.08 * s), outFromBeard(ys)));
+      yield;
+    }
+    yield;
+  }
+  // (its underside and the sides of its back, as seen from below: locks from under the jaw down its back to the point)
+  for (let c = 0; c < 90; c++) {
+    const side = rng() < 0.5 ? -1 : 1, th = side * lerp(1.35, 2.9, rng()), y0 = lerp(CHIN, CHIN - 30, rng());
+    const yEnd = lerp(-60, TIP + 4, rng()), pts: THREE.Vector3[] = [], ys: number[] = [], lift = 1 + rng() * 2;
+    for (let k = 0; k <= 5; k++) {
+      const s = k / 5, y = lerp(y0, yEnd, s);
+      ys.push(y);
+      pts.push(toG(bend(massAt(th * (1 - 0.3 * s), y, lift + 1.5 * s))));
+      yield;
+    }
+    const w = (7 + rng() * 5) * HEAD_MM, shade = 0.62 + rng() * 0.22;
+    out.push(hairCard(pts, (s) => w * (1 - 0.75 * s * s), toG(bend(V(0, (y0 + yEnd) / 2, 40))), 5, 0, (s) => shade * (0.85 + 0.15 * s), outFromBeard(ys)));
+    yield;
+  }
+  // --- the moustache: from under the nose out over the corners of the mouth, its ends down into the beard (under its
+  // close layer: they ran past it and showed below it as a dark tuft) ---
   for (let c = 0; c < 70; c++) {
     const side = c % 2 ? 1 : -1, x0 = side * (1 + rng() * 22), y0 = 55 + rng() * 6, pts: THREE.Vector3[] = [];
-    const xEnd = side * (30 + rng() * 9), yEnd = 26 - rng() * 12;
+    const xEnd = side * (26 + rng() * 7), yEnd = 30 - rng() * 8;
     for (let k = 0; k <= 4; k++) {
-      const s = k / 4, x = lerp(x0, xEnd, smooth(s * 0.8 + 0.2 * s)), y = lerp(y0, yEnd, s * s), lift = 1 + 3.5 * Math.sin(Math.PI * Math.min(1, s * 1.2)) + rng() * 0.6;
+      const s = k / 4, x = lerp(x0, xEnd, smooth(s * 0.8 + 0.2 * s)), y = lerp(y0, yEnd, s * s);
+      const lift = 1 + 3.5 * Math.sin(Math.PI * Math.min(1, s * 1.2)) * (1 - 0.5 * s) + rng() * 0.6 - 1.5 * s * s;
       pts.push(toG(skinXY(x, y, lift)));
+      yield;
     }
     const w = (4 + rng() * 3) * HEAD_MM, shade = 0.8 + rng() * 0.25;
-    out.push(hairCard(pts, (s) => w * (1 - 0.7 * s), toGroup(0, 60, 20), 4, (rng() - 0.5) * 0.5, () => shade));
+    out.push(hairCard(pts, (s) => w * (1 - 0.7 * s), toGroup(0, 60, 20), 4, 0, () => shade));
+    yield;
+  }
+
+  // --- his hair: a fringe round the back and sides of his head below his cap, the crown bald under it (from play:
+  // "needs more work on hair, too basic": it was the mage's hair shell painted grey, a hard edge on the skin and a few
+  // white tufts on it). Layered locks lying down and back over the head, rooted under the cap's rim, thinning out at
+  // their lower edge to a soft hairline, and in front of each ear a sideburn running down into the beard. ---
+  if (head.hair[0]) head.hair[0].visible = false;
+  if (head.crop) head.crop.visible = false;
+  /** the cap's rim's height (mm) at azimuth `az` (as the cap's own, below) */
+  const capEdge = (az: number) => lerp(184, 192, (1 - Math.cos(az)) / 2) + 4 * Math.sin(az) ** 2;
+  /** the fringe's lower edge (mm) at azimuth `az`: down the temples into the sideburns, up over the ears, down
+   *  behind them to the nape */
+  const hairLow = (az: number) => {
+    const a = Math.abs(az);
+    if (a < 1.32) return lerp(150, 96, smooth(clamp((a - 1.02) / 0.3, 0, 1)));
+    if (a < 1.95) return lerp(124, 118, smooth((a - 1.32) / 0.63));
+    return lerp(118, 42, smooth(clamp((a - 1.95) / 0.9, 0, 1)));
+  };
+  const skull = toGroup(0, 150, -10);
+  // (under it all, short flat locks close on the scalp, side by side over the whole fringe: the face's paint under
+  // them is the mage's dark hair, which showed between the locks as dark streaks)
+  for (let a = 1.0; a <= Math.PI + 0.01; a += 0.085) {
+    for (const side of [-1, 1]) {
+      const az0 = side * a, low = hairLow(az0) - 2;
+      for (let y0 = capEdge(az0) + 4; y0 > low + 6; y0 -= 13) {
+        const yEnd = Math.max(y0 - 24, low - 4), pts: THREE.Vector3[] = [];
+        for (let k = 0; k <= 3; k++) {
+          const t = k / 3, y = lerp(y0, yEnd, t), az = az0 + side * 0.03 * t + (rng() - 0.5) * 0.02;
+          pts.push(toG(skin(az, elAt(az, y), 0.7 + 0.4 * Math.sin(Math.PI * t))));
+        }
+        const w = (15 + rng() * 5) * HEAD_MM, shade = 0.62 + rng() * 0.14;
+        out.push(hairCard(pts, (t) => w * (1 - 0.5 * t * t), skull, 3, 0, () => shade));
+      }
+      yield;
+    }
+    yield;
+  }
+  for (let layer = 0; layer < 3; layer++) {
+    const n = [170, 150, 120][layer];
+    for (let c = 0; c < n; c++) {
+      const side = rng() < 0.5 ? -1 : 1, a = lerp(1.06, Math.PI, rng() ** 0.85), az0 = side * a;
+      const low = hairLow(az0), top = capEdge(az0) + 6;
+      // (rooted anywhere from under the rim down, sparser and shorter towards the lower edge: a soft hairline)
+      const r = rng(), y0 = lerp(top, low + 6, r ** (0.9 + layer * 0.25));
+      const near = clamp((y0 - low) / 30, 0, 1);
+      const len = (16 + rng() * 22) * (0.55 + 0.45 * near) * (1 + 0.15 * layer);
+      const yEnd = Math.max(y0 - len, low - 10 * rng());
+      if (y0 - yEnd < 8) continue;
+      const lift = 1.2 + layer * 1.7 + rng() * 1.2, pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= 4; k++) {
+        const s = k / 4, y = lerp(y0, yEnd, s), az = az0 + side * 0.06 * s;
+        pts.push(toG(skin(az, elAt(az, y), lift + 1.4 * Math.sin(Math.PI * s) + 1.2 * s)));
+      }
+      const w = (6 + rng() * 6) * HEAD_MM * (0.6 + 0.4 * near), shade = (0.7 + rng() * 0.3) * (0.84 + 0.08 * layer);
+      out.push(hairCard(pts, (s) => w * (1 - 0.7 * s * s), skull, 4, (rng() - 0.5) * 0.5, (s) => shade * (0.8 + 0.2 * s)));
+      yield;
+    }
+    yield;
+  }
+  // (the sideburns: before each ear, down from the temple into the beard's top)
+  for (let c = 0; c < 70; c++) {
+    const side = c % 2 ? 1 : -1, az0 = side * lerp(1.08, 1.3, rng()), y0 = lerp(170, 120, rng()), yEnd = lerp(98, 84, rng());
+    const lift = 1.2 + rng() * 2.2, pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 4; k++) {
+      const s = k / 4, y = lerp(y0, yEnd, s), az = az0 - side * 0.05 * s;
+      pts.push(toG(skin(az, elAt(az, y), lift + 1.2 * Math.sin(Math.PI * s))));
+      yield;
+    }
+    const w = (6 + rng() * 4) * HEAD_MM, shade = 0.74 + rng() * 0.24;
+    out.push(hairCard(pts, (s) => w * (1 - 0.6 * s * s), skull, 4, 0, (s) => shade * (0.85 + 0.15 * s)));
     yield;
   }
   // --- the brows: bushy, white, a few long hairs curling out ---
@@ -939,6 +1082,7 @@ function* dressHead(
     for (let k = 0; k <= 3; k++) {
       const s = k / 3;
       pts.push(toG(skinXY(x0 + side * len * s, y0 + 4 * s - 5 * s * s, 1 + 3 * s)));
+      yield;
     }
     const w = (3 + rng() * 2) * HEAD_MM, shade = 0.85 + rng() * 0.2;
     out.push(hairCard(pts, (s) => w * (1 - 0.6 * s), toGroup(0, 120, 0), 3, 0, () => shade));
@@ -949,12 +1093,12 @@ function* dressHead(
   lockMesh.name = 'scholar beard locks';
   lockMesh.castShadow = true;
   G.add(lockMesh);
-  yield;
 
   // --- the skullcap: a felt cap over the crown, its rim rolled ---
   {
     const rowsCap: THREE.Vector3[][] = [], n = 40;
-    const edge = (az: number) => lerp(200, 192, (1 - Math.cos(az)) / 2) + 4 * Math.sin(az) ** 2;
+    // (low over the forehead: higher, it bared the top of the mage's painted hairline, his face's paint under it)
+    const edge = (az: number) => lerp(184, 192, (1 - Math.cos(az)) / 2) + 4 * Math.sin(az) ** 2;
     const edgeEl = Array.from({ length: n + 1 }, (_, i) => { const az = -Math.PI + (i / n) * Math.PI * 2; return elAt(az, edge(az)); });
     for (let k = 0; k <= 10; k++) {
       const row: THREE.Vector3[] = [];
@@ -972,7 +1116,6 @@ function* dressHead(
     G.add(Object.assign(new THREE.Mesh(cord(rim, 3.2 * HEAD_MM, true, 80), capFelt), { name: 'scholar cap rim' }));
   }
 
-  yield;
   // --- the spectacles: round brass rims low on his nose, a bridge, the arms back to his ears ---
   {
     const R = 14, y = 110, z = 98, rimGeo = new THREE.TorusGeometry(R * HEAD_MM, 0.9 * HEAD_MM, 6, 28);
@@ -991,6 +1134,7 @@ function* dressHead(
       // (the arm from the rim's outer edge back over the ear)
       const arm = [V(s * 45, y + 1, z - 4), V(s * 60, y + 4, 60), V(s * 66, y + 4, 20), V(s * 64, y - 8, 2)].map(toG);
       G.add(Object.assign(new THREE.Mesh(cord(arm, 0.8 * HEAD_MM, false, 16), brass), { name: 'scholar spectacles arm' }));
+      yield;
     }
     const bridge = [V(-17, y + 2, z), V(-6, y + 7, z + 6), V(6, y + 7, z + 6), V(17, y + 2, z)].map(toG);
     G.add(Object.assign(new THREE.Mesh(cord(bridge, 0.9 * HEAD_MM, false, 12), brass), { name: 'scholar spectacles bridge' }));
