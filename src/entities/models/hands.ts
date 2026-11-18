@@ -136,7 +136,7 @@ function wrinkled(material: THREE.MeshStandardMaterial): void {
   const maps = pbrMaterialMaps(skinMaps(), 1, SKIN_RELIEF);
   material.map = maps.map;
   material.normalMap = maps.normalMap;
-  material.roughnessMap = null; material.roughness = 0.7;
+  material.roughnessMap = maps.roughnessMap;
   material.normalScale.copy(maps.normalScale);
 }
 
