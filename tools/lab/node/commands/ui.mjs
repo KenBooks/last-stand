@@ -1,20 +1,46 @@
 // `npm run lab -- ui`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
+import { readdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { labError } from '../errors.mjs';
+import { REPO } from '../paths.mjs';
 import { canaryVerdict, withAsks } from '../production.mjs';
 import { picturePairs, asText, problemsIn, textWithPictureFiles } from '../commandKit.mjs';
 import { COMMON_OPTIONS } from '../optionKit.mjs';
 
-/** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
-export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
-  'behindProps', 'cloudIdentity',
-  'logLobby', 'perfAsk', 'pauseLobby', 'betaNotice', 'coop', 'coopRename', 'bugReport', 'panelLinks',
-  'villageMap', 'villageHud', 'villageHudTouch',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'panelLinksTouch', 'autoFull',
-  'run', 'scores', 'perf', 'perfMini', 'perfGraph', 'perfParty', 'decision', 'perfAskBreak', 'pause', 'pauseSettings',
-  'pausePerformance', 'pauseBeta', 'profiling', 'pauseVolume',
-  'pauseTabKept', 'pauseAbandon', 'summary', 'skillTips',
-  'log', 'logTouch', 'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch', 'bugReportTouch',
-];
+/** where the UI's states are, a module each (page/uiStates/<state>.ts, its name the state's) */
+export const UI_STATES_DIR = join(REPO, 'tools', 'lab', 'page', 'uiStates');
+/** a state module's place in the run, its `order: n` line (page/uiKit.ts `Steps`) */
+const ORDER_LINE = /^\s*order:\s*(\d+),?\s*$/gm;
+
+/** The place in the run of the state module `file` holds as `text`: its one `order: n` line's number. */
+function orderOf(file, text) {
+  const orders = [...text.matchAll(ORDER_LINE)];
+  if (orders.length !== 1) {
+    throw labError(`ui: ${file} has ${orders.length} \`order: n\` lines, not one (page/uiKit.ts \`Steps\`)`);
+  }
+  return Number(orders[0][1]);
+}
+
+/**
+ * The UI's states in `folder` (a TypeScript module each, read as text: the command line imports no TypeScript), by
+ * their names, in their `order`; two states at one place are refused, so the run's order is never left to chance.
+ */
+export function uiStatesIn(folder) {
+  const files = readdirSync(folder).filter((file) => file.endsWith('.ts'));
+  const states = files.map((file) => {
+    const order = orderOf(file, readFileSync(join(folder, file), 'utf8'));
+    return { name: basename(file, '.ts'), order };
+  });
+  states.sort((a, b) => a.order - b.order);
+  for (let i = 1; i < states.length; i++) {
+    if (states[i].order !== states[i - 1].order) continue;
+    throw labError(`ui: ${states[i - 1].name} and ${states[i].name} are both at order ${states[i].order}`);
+  }
+  return states.map((state) => state.name);
+}
+
+/** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/uiStates) */
+export const UI_STATES = uiStatesIn(UI_STATES_DIR);
 
 /** `lab ui`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {

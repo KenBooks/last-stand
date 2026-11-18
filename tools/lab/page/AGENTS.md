@@ -26,6 +26,7 @@ The lab inside the game's page: TypeScript, typechecked with the game (`tsconfig
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md) (what the lab gives a measure, and what keeps it repeatable).
 
+- **A state of `lab ui` is a module of `uiStates/`** (`uiStates/<state>.ts`, the file's name the state's), default-exporting its `Steps` (`uiKit.ts`): its `order` (steps of 10, the lobby's states before the run's, `inRun`), how it opens, checks and closes, its pictures and its canary's plants (`caught(...)`). `ui.ts` keeps what every state gets (the boxes, the cursors, the digits, the run set up) and loads each state's module as it runs (`import.meta.glob`); `node/commands/ui.mjs` reads the folder for `--states` and the run's order, and `labCode.mjs` keys `ui`'s A/B side on every module there. A new state adds its module and touches no shared list; what several states share is a module beside `ui.ts` (`uiKit.ts`, `uiLog.ts`, `uiSkillTips.ts`, `uiReadying.ts`, `uiPause.ts`...).
 - **A command's module is loaded as it runs** (`commands/`): an A/B copies these modules into the other commit's tree, and one importing game code that commit hasn't got would stop every command loading there.
 - **The mouse has its three buttons** (`lab.mouseDown(at, button)`, `mouseUp`, `clickWith`, `mouseTo` moving it
   held: a middle drag), sent through the DevTools protocol with the mask of those held, as a mouse sends them.

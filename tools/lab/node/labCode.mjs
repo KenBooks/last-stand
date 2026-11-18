@@ -1,10 +1,10 @@
 // The lab's code a command runs on an A/B's other side (tools/lab), for the key its result is kept under
 // (sideCache.mjs): its page modules (`page/lab.ts`, the page functions its work calls, `page/commands/<fn>.ts`, and
-// what they import in turn), its own module (`node/commands/<name>.mjs`), the parts of `node/commandKit.mjs` it
-// reaches and the modules it imports, how a page boots (`node/side.mjs`) and the scripts every page runs first
+// what they import or glob in turn: `ui`'s states, `page/uiStates/`), its own module (`node/commands/<name>.mjs`),
+// the parts of `node/commandKit.mjs` it reaches and the modules it imports, how a page boots (`node/side.mjs`) and the scripts every page runs first
 // (`node/browser.mjs`). Keyed on all of `page/` and the lab's tables whole, every lab PR (a measure added, a command's
 // options) ran main's side of every job of a check again.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { labError } from './errors.mjs';
 import { REPO } from './paths.mjs';
@@ -31,6 +31,8 @@ const DECLARATION = /^(?:export\s+)?(?:async\s+)?(?:function\*?\s+|class\s+|cons
 const STATIC_IMPORT = /^\s*(?:import|export)\s+(?!type\s)[^;'"]*?from\s+['"](\.[^'"]+)['"]|^\s*import\s+['"](\.[^'"]+)['"]/gm;
 /** a dynamic `import('...')`, and its module */
 const DYNAMIC_IMPORT = /\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/g;
+/** a Vite `import.meta.glob('./folder/*.ts')` (with or without its type), and its pattern */
+const GLOB_IMPORT = /\bimport\.meta\.glob(?:<[^>]*>)?\(\s*['"](\.[^'"]+)['"]/g;
 
 const read = (path) => readFileSync(join(REPO, path), 'utf8');
 const mentions = (text, name) => new RegExp(`\\b${name}\\b`).test(text);
@@ -97,14 +99,38 @@ function pageModule(from, specifier) {
   return candidates.find((candidate) => existsSync(join(REPO, candidate))) ?? null;
 }
 
+/** A glob's pattern (`*` any part of a name) as a regular expression its file names are matched by. */
+function globPattern(name) {
+  const escaped = name.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`^${escaped.join('[^/]*')}$`);
+}
+
+/**
+ * The page modules `text` (in the file `from`) loads through `import.meta.glob` (`./uiStates/*.ts`: `ui`'s states),
+ * as paths relative to the repo; a glob reaching outside `page/` (the game's own modules) left out.
+ */
+export function globbedModules(from, text) {
+  const found = [];
+  for (const match of text.matchAll(GLOB_IMPORT)) {
+    const path = posix.normalize(posix.join(posix.dirname(from), match[1]));
+    const folder = posix.dirname(path);
+    if (!folder.startsWith(`${PAGE}/`) && folder !== PAGE) continue;
+    if (!existsSync(join(REPO, folder))) continue;
+    const named = globPattern(posix.basename(path));
+    const files = readdirSync(join(REPO, folder)).filter((file) => named.test(file)).sort();
+    found.push(...files.map((file) => `${folder}/${file}`));
+  }
+  return found;
+}
+
 /** The page modules `entries` (`{ from, text }`: a text as if in the file `from`) import, and theirs in turn. */
 function pageClosure(entries) {
   const seen = new Set();
   const queue = [...entries];
   while (queue.length) {
     const { from, text } = queue.shift();
-    for (const specifier of runtimeImports(text)) {
-      const path = pageModule(from, specifier);
+    const imported = runtimeImports(text).map((specifier) => pageModule(from, specifier));
+    for (const path of [...imported, ...globbedModules(from, text)]) {
       if (!path || seen.has(path)) continue;
       seen.add(path);
       queue.push({ from: path, text: read(path) });

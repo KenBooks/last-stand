@@ -1,7 +1,9 @@
 // The lab's code a command runs on an A/B's other side, which keys its kept result (node/labCode.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labCodeOf, pageCallsIn, partsOf, partsReached, runtimeImports } from '../node/labCode.mjs';
+import {
+  globbedModules, labCodeOf, pageCallsIn, partsOf, partsReached, runtimeImports,
+} from '../node/labCode.mjs';
 
 test('the modules imported at run time, types left out', () => {
   const text = [
@@ -62,6 +64,24 @@ test('a command whose work calls a page function from another module keyed on it
   // (co-op's pages are called from coop.mjs, which coop's module imports as it runs)
   const { files } = labCodeOf('coop');
   assert.ok(files.includes('tools/lab/node/coop.mjs'));
+});
+
+test('the modules a page module globs, those outside page/ left out', () => {
+  const text = [
+    "const STATES = import.meta.glob<{ default: Steps }>('./uiStates/*.ts');",
+    "const log = import.meta.glob<Log>('../../../src/ui/battleLog.ts');",
+  ].join('\n');
+  const found = globbedModules('tools/lab/page/ui.ts', text);
+  assert.ok(found.includes('tools/lab/page/uiStates/lobby.ts'));
+  assert.ok(found.every((path) => path.startsWith('tools/lab/page/uiStates/') && path.endsWith('.ts')), found);
+});
+
+test('ui keyed on its states, a module each, and what they import', () => {
+  const { files } = labCodeOf('ui');
+  const own = ['tools/lab/page/ui.ts', 'tools/lab/page/uiStates/lobby.ts', 'tools/lab/page/uiStates/pause.ts'];
+  for (const file of [...own, 'tools/lab/page/uiKit.ts', 'tools/lab/page/uiPause.ts']) {
+    assert.ok(files.includes(file), file);
+  }
 });
 
 test('a command with no page entry of its own keyed on every page module', () => {

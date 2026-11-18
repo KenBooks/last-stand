@@ -3,6 +3,9 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
+A state is a module of its own, `page/uiStates/<state>.ts` (`page/AGENTS.md`): adding one touches no shared list, its
+`order` line placing it in the run and in `--states`.
+
 Production, every state (#595): no state may reach production's host (`node/production.mjs`: the saves service, the
 co-op relay, the traces service). Each state's report ends with what it asked there, refused by the lab's guard (`asked
 of production: nothing`), and each ask is a problem of that state's; asks made as the page booted are the boot's. The
