@@ -555,6 +555,18 @@ export interface WarmUp {
  *  lit program is made for two, and more in the draw made them all afresh inside it. */
 export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void; alone?: () => () => void }
 
+/** `swap.show` shown in `swap.hide`'s place, returning its undoing: each put back as it was, never forced on. A warm-up
+ *  behind the lobby may draw while a house's room stands in the village's place (the village hidden), and put back
+ *  shown, the village stood under the room, its fountain in Odo's shop. (One the other: shown, as it's drawn.) */
+function swapIn(swap: Swap | undefined): () => void {
+  if (!swap) return () => undefined;
+  const { show, hide } = swap;
+  const was = [show.visible, hide.visible];
+  hide.visible = false;
+  show.visible = true;
+  return () => { hide.visible = was[1]; show.visible = was[0]; };
+}
+
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
 
@@ -718,10 +730,10 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   // once: the shadow pass of a render sees the light setup of the one before, and shadow depth
   // programs are keyed by light counts, but the compile above set the scene's lights up
   const notAlone = swap?.alone?.();
-  if (swap) { swap.show.visible = true; swap.hide.visible = false; }
+  const swappedBack = swapIn(swap);
   const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
   drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
-  if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+  swappedBack();
   notAlone?.();
   how.hide?.();
   const drawMs = performance.now() - at;
@@ -767,11 +779,11 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
     renderer.setRenderTarget(target);
     for (const o of objects) scene.add(o);
     const unlook = swap?.look?.();
-    if (swap) { swap.show.visible = true; swap.hide.visible = false; }
+    const swappedBack = swapIn(swap);
     try {
       drawnAlone(scene, camera, target, drawn, () => without(leaveOut, run));
     } finally {
-      if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+      swappedBack();
       unlook?.();
       for (const o of objects) scene.remove(o);
       renderer.setRenderTarget(prev);
