@@ -48,7 +48,9 @@ const screenStyles = (): Plugin => ({
   name: 'screen-styles',
   enforce: 'pre',
   transform(code, id) {
-    if (!slash(id).endsWith('/src/ui/styles/index.scss')) return;
+    // (the dev server asks for it with a query, `?direct` from index.html's link: without its path alone matched, every
+    // screen's styles were left out of the dev build, as the lab's pages showed)
+    if (!slash(id).split('?')[0].endsWith('/src/ui/styles/index.scss')) return;
     return code.replace(SCREENS_SCSS, screensScss());
   },
 });
