@@ -471,6 +471,8 @@ function linkBend(a: number, b: number, distance: number): number {
 
 /** The warrior's bare fist, solved from the rest joints with the fingertips seated at the palm's crease. */
 function closedFistPose(h: Hand): THREE.Quaternion[][] {
+  // Leave the first phalanges sloping forward so their folded pads stand clear of the heel of the hand.
+  const strike = h.build.fist ? THREE.MathUtils.degToRad(77) : STRIKE_BEND;
   const rotations = h.f.map((digit, i) => {
     const root = digit.j[0].position;
     const [a, b, c] = digit.len;
@@ -480,12 +482,12 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     const { deep, digits } = h.build;
     const z = plainZ * deep - PAD_DEPTH * FINGERS[i].width * (digits - 1);
     // In the finger's plane, start at the end of the proximal phalanx and solve backwards from the tip.
-    const dy = y - root.y + a * Math.cos(STRIKE_BEND);
-    const dz = (z - root.z) / Math.cos(yaw) + a * Math.sin(STRIKE_BEND);
+    const dy = y - root.y + a * Math.cos(strike);
+    const dz = (z - root.z) / Math.cos(yaw) + a * Math.sin(strike);
     const last = Math.min(THREE.MathUtils.degToRad(80), linkBend(b, c, Math.hypot(dy, dz)));
     const angle = Math.atan2(-dz, -dy) + 2 * Math.PI - Math.atan2(c * Math.sin(last), b + c * Math.cos(last));
-    const pip = clamp(angle - STRIKE_BEND, 0, THREE.MathUtils.degToRad(110));
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(STRIKE_BEND, yaw, 0, 'YXZ'));
+    const pip = clamp(angle - strike, 0, THREE.MathUtils.degToRad(110));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(strike, yaw, 0, 'YXZ'));
     const bend = (r: number) => new THREE.Quaternion().setFromEuler(new THREE.Euler(r, 0, 0));
     return [q, bend(pip), bend(last)];
   });

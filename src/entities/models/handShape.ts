@@ -401,7 +401,7 @@ function knuckle(width: number, length: number, scale: number): Shape {
 /** A digit's parts, each in its joint's frame: two halves for each segment, narrower at its middle than at its ends,
  *  a knuckle on the back of each joint, and a pad at its tip. `first` is the index of its root joint among the bones.
  */
-function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thumb: boolean): Part[] {
+function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thumb: boolean, pressed = false): Part[] {
   const w = digit.width * slimOf(thumb);
   const [l0, l1, l2] = digit.len;
   const frames = digit.j.map((joint) => frameIn(joint, space));
@@ -410,7 +410,8 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
     parts.push({ shape, frame: frames[n], blend, bones });
   };
   // (each segment starting at the width the one before it ends: a step between them, joined softly, swelled in a ring)
-  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72] : [1, 0.95, 0.95, 0.86, 0.86, 0.76];
+  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72]
+    : pressed ? [1.07, 1.11, 1.11, 1.04, 1.04, 0.78] : [1, 0.95, 0.95, 0.86, 0.86, 0.76];
   // (the last segment nearly as deep as the middle one, a full rounded tip: at 0.66 and narrowed to 0.66 it thinned
   // to a flat bill that seemed to turn up at its end, beside reference pictures from the little finger's side)
   // (the thumb nearly round, as a thumb is: at 0.86 it was a stick seen from its side)
@@ -871,7 +872,7 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const digits = [...fingers, thumb];
   const parts = [
     ...palmParts(fingers, thumb, toward, build, closed),
-    ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length)),
+    ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length, closed)),
     ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space)) : []),
     ...(closed ? thenarFill(thumb, fingers[0], space) : []),
   ];
