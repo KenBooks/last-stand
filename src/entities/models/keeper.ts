@@ -21,10 +21,14 @@ import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as
 import { buildHumanoid, reachArm, resetPose, walkCycle, type Joints } from './rig';
 import { LegIK, gaitRate, legLength } from './ik';
 import { stripRig } from './shapes';
-import { buildHead, buildNeck, handSkin, HERO_HEADS, type Head } from './head';
+import { buildHead, buildNeck, handSkin, type Head, type HeadSpec } from './head';
 import { buildHand, bare, hold, poseHand, seatHeld, type Hand } from './hands';
 import { cord, oval, rowsSurface, sleeve } from './merchant';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
+
+/** his head: his own face (face.ts `VARIANTS.keeper`), a short crop and a full beard; made by the head workers and
+ *  its face painted by the maps' workers where the village is, asked for before he's seated (main.ts) */
+export const KEEPER_HEAD: HeadSpec = { who: 'keeper', hair: 'short', crop: true };
 
 /** the rag's radius where his fist closes round it bunched (m) */
 const RAG_R = 0.022;
@@ -137,7 +141,7 @@ export function buildKeeper(): Keeper {
   const legs = new LegIK(j), leg = legLength({ joints: j, root: j.root }), hipY = j.hips.position.y;
 
   // --- the head: his own face, short crop and full beard, all the head's own (face.ts, head.ts) ---
-  const head: Head = buildHead(j.head, kit, HERO_HEADS.keeper.who, HERO_HEADS.keeper);
+  const head: Head = buildHead(j.head, kit, KEEPER_HEAD.who, KEEPER_HEAD);
   buildNeck(j.neck, kit, 'keeper', P.neckL, j.head);
 
   // --- the hands: the heroes' own, bare, his forearms in his own skin ---

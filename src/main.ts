@@ -97,10 +97,11 @@ import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, seeThroughLoading, stillLoading } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
-import { preloadTextures } from './core/textures';
+import { preloadTextures, readyFace } from './core/textures';
 import { tickItemGlow } from './core/materials';
 import { preloadHands } from './entities/models/hands';
-import { preloadHeads } from './entities/models/head';
+import { preloadHeads, readyHead } from './entities/models/head';
+import { KEEPER_HEAD } from './entities/models/keeper';
 import { heroDetail } from './entities/models/armor';
 import { preloadEngraving } from './core/engraving';
 import { preloadStump } from './world/stump';
@@ -217,6 +218,8 @@ async function boot() {
   // (every hero's head and the engraved steel made in workers meanwhile, at the detail the heroes are built at: on a
   // phone they froze the loading screen for 4.9 s in the hero's build, "phone has freezes during loading")
   const heads = preloadHeads(heroDetail());
+  // (the tavern's keeper's own head and face, made by the workers as the heroes' are, where the village is)
+  const folkHeads = VILLAGE ? Promise.all([readyHead(KEEPER_HEAD, heroDetail()), readyFace('keeper')]) : Promise.resolve();
   const engraving = textures.ready('steel').then(preloadEngraving);
   // the village shown (or, with no village, the lobby's biome), and its programs compiled while the hero is built
   // (game/warmup.ts)
@@ -237,7 +240,7 @@ async function boot() {
   await hands;
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
-  await Promise.all([heads, engraving]);
+  await Promise.all([heads, engraving, folkHeads]);
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
   if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
