@@ -202,10 +202,17 @@ export function sculptAfresh(h: Hand, closed = false): HandGeometries {
 
 /** A side's hand (`s`) of `build` sculpted on joints of its own, as `buildHand` places them: what a worker sculpts. */
 export function sculptSide(s: number, build: HandBuild = PLAIN, closed = false): HandGeometries {
+  return sculptedSide(s, build, closed).shape;
+}
+
+/** `sculptSide`'s shape with the hand it was sculpted on, posed as it was (the hand reference reads its joints:
+ *  `tools/handref`). */
+export function sculptedSide(s: number, build: HandBuild = PLAIN, closed = false): { shape: HandGeometries; hand: Hand } {
   const vis = new THREE.Group();
   const f = FINGERS.map((spec) => digitOn(vis, s, spec, build));
   const thumb = digitOn(vis, s, THUMB, build);
-  return sculptAfresh({ vis, f, thumb, s, build } as Hand, closed);
+  const hand = { vis, f, thumb, s, build } as Hand;
+  return { shape: sculptAfresh(hand, closed), hand };
 }
 
 /** The side and build a worker named by `handKey` sculpts. */

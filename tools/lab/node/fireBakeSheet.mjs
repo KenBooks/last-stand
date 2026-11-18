@@ -3,10 +3,10 @@
 // isn't the game's light, only the fire's shape and colour against a reference.
 //   npm run fire-bake -- [key=value ...]   (a key of FireTuning or FLAME_LOOK; `name=x` names the picture)
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { deflateSync } from 'node:zlib';
 import {
   BAKE, bakeFlames, BUDGET_KB, decodeFrame, DOMAIN, FIRE, FLAME_LOOK, FRAME_CELLS, keptCell, loopSizesKb, LOOP,
 } from '../../../src/world/fireBake.ts';
+import { png } from './png.mjs';
 
 /** how many picture pixels a cell is, and how many frames are drawn */
 const CELL_PIXELS = 3;
@@ -15,43 +15,6 @@ const DRAWN = 6;
 const EXPOSURE = 1.1;
 /** a life under this counts as no flame, read with how far up the flames stand */
 const LIT_LIFE = 12;
-
-/** A number's 4 bytes, high first. */
-function bigEndian(value) {
-  const bytes = Buffer.alloc(4);
-  bytes.writeUInt32BE(value >>> 0);
-  return bytes;
-}
-
-/** The CRC of `bytes`, a PNG chunk's. */
-function crc32(bytes) {
-  let crc = ~0;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return ~crc;
-}
-
-/** One chunk of a PNG. */
-function chunk(type, data) {
-  const named = Buffer.concat([Buffer.from(type), data]);
-  return Buffer.concat([bigEndian(data.length), named, bigEndian(crc32(named))]);
-}
-
-/** `rgb` (3 bytes a pixel, rows from the top) as a PNG's bytes. */
-function png(rgb, width, height) {
-  const rows = Buffer.alloc((width * 3 + 1) * height);
-  for (let y = 0; y < height; y++) {
-    const start = y * (width * 3 + 1);
-    rows[start] = 0;
-    rgb.copy(rows, start + 1, y * width * 3, (y + 1) * width * 3);
-  }
-  const header = Buffer.concat([bigEndian(width), bigEndian(height), Buffer.from([8, 2, 0, 0, 0])]);
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  const chunks = [chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))];
-  return Buffer.concat([signature, ...chunks]);
-}
 
 /** A gas's colour and radiance at `life` (0 to 1), as the ray-march's `flameColour`. */
 function flameColour(life) {
