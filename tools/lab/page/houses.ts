@@ -414,6 +414,61 @@ function plantProgram(id: RoomId): THREE.Mesh {
 }
 
 /** `lab houses`. */
+/** how far one box may run into another before it's a fixture through a beam (m: a chain's end meets its hook) */
+const TOUCH = 0.01;
+/** how far the canary lifts a chandelier (m: its wheel's candles into the beam over it, as they stood before) */
+const LIFTED = 0.25;
+
+/** A box shrunk by `by` on every side. */
+const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
+  box.clone().expandByVector(new THREE.Vector3(-by, -by, -by));
+
+/**
+ * Every room's chandeliers held clear of its ceiling's beams and planks (from play, of a house's: "Fix light fixture,
+ * it goes through a beam"): each mesh of a chandelier (its wheel, its chains, its candles) against each of the
+ * ceiling's, box against box. A chain's box spans from its foot to its hook, so a chain hung through a beam is found as
+ * a wheel or a candle in one is. With `canary`, the first room's chandelier lifted by `LIFTED` first, which must be
+ * found.
+ */
+function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; caught: boolean } {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  let caught = false;
+  for (const [i, id] of ROOM_IDS.entries()) {
+    const room = G.arena.rooms![id].group;
+    room.updateMatrixWorld(true);
+    const ceiling = room.getObjectByName('ceiling');
+    if (!ceiling) throw new Error(`lab: houses: the ${id} has no ceiling named`);
+    const fixtures = room.children.filter((child) => child.name === 'chandelier');
+    const lifted = canary && i === 0 ? fixtures[0] : undefined;
+    if (lifted) {
+      lifted.position.y += LIFTED;
+      lifted.updateMatrixWorld(true);
+    }
+    const beams: THREE.Box3[] = [];
+    ceiling.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) beams.push(shrunk(new THREE.Box3().setFromObject(o), TOUCH));
+    });
+    let through = 0;
+    for (const fixture of fixtures) {
+      fixture.traverse((o) => {
+        if (!(o as THREE.Mesh).isMesh) return;
+        const part = new THREE.Box3().setFromObject(o);
+        if (beams.some((beam) => beam.intersectsBox(part))) through++;
+      });
+    }
+    if (lifted) {
+      lifted.position.y -= LIFTED;
+      lifted.updateMatrixWorld(true);
+    }
+    const note = lifted ? ' (lifted: the canary)' : '';
+    lines.push(`fixtures: the ${id}'s ${fixtures.length} chandelier(s), ${through} part(s) into the ceiling's beams${note}`);
+    if (lifted) caught = through > 0;
+    else if (through) problems.push(`fixtures: the ${id}'s chandelier runs into the ceiling's beams (${through} parts)`);
+  }
+  return { lines, problems, caught };
+}
+
 export async function houses(lab: Lab, options: HousesOptions): Promise<Report> {
   await toVillage(lab);
   if (!G.arena.rooms) return { text: 'no houses: the lobby is not the village', problems: ['no rooms built'] };
@@ -429,14 +484,16 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
     visits.push(await visit(lab, id, view, options.canary && i === 0, moments, plantTalk));
   }
   moments.push(await yardPicture(lab));
-  const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...visits.flatMap((v) => v.lines)];
-  const problems = visits.flatMap((v) => v.problems);
+  const fixtures = fixturesClear(options.canary);
+  const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...fixtures.lines, ...visits.flatMap((v) => v.lines)];
+  const problems = [...fixtures.problems, ...visits.flatMap((v) => v.problems)];
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');
-  const caught = visits[0].caught === true && talked?.caught === true;
+  const caught = visits[0].caught === true && talked?.caught === true && fixtures.caught;
   lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's `
     + 'walls, the room left drawn going out, a tap through a door made a press, a sheet in the door frame, the zoom '
     + `let go in a room: ${visits[0].caught ? 'found' : 'unseen'}; `
-    + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'})`);
+    + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'}; `
+    + `a chandelier lifted into its beams: ${fixtures.caught ? 'found' : 'unseen'})`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }

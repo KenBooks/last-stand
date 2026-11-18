@@ -181,18 +181,36 @@ export function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: num
   g.add(l);
 }
 
-/** A chandelier hung at (x, high, z): an iron wheel on chains, candles round it, its light (casting). */
-export function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, z: number): THREE.PointLight {
+/** how far under the ceiling the ridge beam's underside is (m: `shell`'s ridge, 0.24 deep from 0.5 down, under the
+ *  cross beams) */
+const RIDGE_UNDER = 0.5;
+/** how far under the ceiling a cross beam's underside is (m: `shell`'s beams across the room, 0.26 deep, one every
+ *  1.6 m from 0.9 in off the west wall) */
+export const CROSS_UNDER = 0.26;
+/** how much lower than the ceiling a chandelier under the ridge beam hangs (m): its candles' flames reach about 0.21
+ *  over its wheel, which hangs 0.65 under the height it's given: 0.2 lower they stop 0.14 under the beam, where at the
+ *  ceiling's height they reached 0.06 into it */
+const CHANDELIER_DROP = 0.2;
+
+/** A chandelier hung at (x, high, z): an iron wheel on chains, candles round it, its light (casting). Its four chains
+ *  meet at `hook` over its middle (the ceiling's, `high`, unless it hangs from a beam's underside). */
+export function chandelier(room: THREE.Object3D, M: Mats, x: number, high: number, z: number, hook = high): THREE.PointLight {
   const y = high - 0.65;
+  // (its parts in a group of their own, named, for `lab houses` to hold them clear of the ceiling's beams)
+  const g = new THREE.Group();
+  g.name = 'chandelier';
+  room.add(g);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
   ring.position.set(x, y, z);
   g.add(ring);
+  const top = new THREE.Vector3(x, hook, z);
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.1, 4), M.iron);
-    const ex = Math.cos(a) * 0.55, ez = Math.sin(a) * 0.55;
-    chain.position.set(x + ex / 2, y + 0.5, z + ez / 2);
-    chain.lookAt(x, high, z);
+    const foot = new THREE.Vector3(x + Math.cos(a) * 0.55, y, z + Math.sin(a) * 0.55);
+    // (each chain from its point on the wheel to the hook, as long as that is)
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, foot.distanceTo(top), 4), M.iron);
+    chain.position.copy(foot).add(top).multiplyScalar(0.5);
+    chain.lookAt(top);
     chain.rotateX(Math.PI / 2);
     g.add(chain);
   }
@@ -203,7 +221,8 @@ export function chandelier(g: THREE.Object3D, M: Mats, x: number, high: number, 
   const l = new THREE.PointLight(CHANDELIER.color, CHANDELIER.intensity, CHANDELIER.reach, 2 + LAMP_SOFT * 0.5);
   l.position.set(x, y + 0.25, z);
   staticShadow(l);
-  g.add(l);
+  // (the light on the room itself, as it was: only the meshes are the group's)
+  room.add(l);
   return l;
 }
 
@@ -293,6 +312,7 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
   if (!door) throw new Error(`room ${id} has no door`);
   // the ceiling: planks over beams across the room, a ridge beam along it
   const ceiling = new THREE.Group();
+  ceiling.name = 'ceiling';
   g.add(ceiling);
   box(ceiling, hx * 2 + 0.6, 0.08, hz * 2 + 0.6, 0, high, 0, M.panel);
   for (let x = -hx + 0.9; x < hx - 0.5; x += 1.6) box(ceiling, 0.22, 0.26, hz * 2, x, high - 0.26, 0, M.timber);
@@ -1100,8 +1120,10 @@ function buildRecords(group: THREE.Group): Room {
   // would hang in the air)
   lantern(west, M, -(hz - 0.7), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.7, 2.3, 0, 0, 1);
-  // (off the middle: over the door's way it hung in the camera's from over the shoulder, over the ledger it hid it from above)
-  chandelier(g, M, 1.6, high, 0.1);
+  // (off the middle: over the door's way it hung in the camera's from over the shoulder, over the ledger it hid it from above;
+  // under the ridge beam, hung from it, its candles' tops clear of it: at the ceiling's height, the beam ran through its
+  // wheel and candles, from play "light fixture, it goes through a beam")
+  chandelier(g, M, 1.6, high - CHANDELIER_DROP, 0.1, high - RIDGE_UNDER);
   // (a chest of old records by the hearth, and stacks of ledgers on the floor by the bookcases)
   box(g, 0.9, 0.5, 0.5, hx - 0.4, 0, -2.85, M.panel).rotation.y = -0.1;
   box(g, 0.94, 0.06, 0.54, hx - 0.4, 0.5, -2.85, M.timber).rotation.y = -0.1;
@@ -1243,7 +1265,8 @@ function buildTavern(group: THREE.Group): Room {
   // (a pair of antlers over the west wall, and sacks of grain)
   lantern(west, M, -(hz - 0.6), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.4, 2.4, 0, 0, 1);
-  chandelier(g, M, -0.4, high, 0.4);
+  // (under the ridge beam and hung from it, as the house of records' is: at 0.4 off it, the beam ran through its wheel)
+  chandelier(g, M, -0.4, high - CHANDELIER_DROP, 0.05, high - RIDGE_UNDER);
   rug(g, M, 0.2, 2.2, 2.0, 1.4, ['#3a2414', '#a07030', '#5a1a14'], 77);
   return finish(id, b);
 }

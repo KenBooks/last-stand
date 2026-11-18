@@ -15,7 +15,7 @@ import { buildScholar, type Scholar } from '../entities/models/scholar';
 import { blockGeometry, bookShape, printGeometry, type BookShape } from '../entities/models/book';
 import { SCHOLAR_DESK } from '../data/houses';
 import {
-  BODY, CANDLE, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
+  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
   parchment, rug, stool, table, writing, type Build, type Mats, type Room,
 } from './rooms';
 
@@ -544,8 +544,10 @@ export function buildLibrary(group: THREE.Group): Room {
     }
   }
   openBook(g, M, -1.0, 0.012, -3.0, 0.6, 0.36, 3);
-  // (over the middle rug, short of the Codex: over it, from above it hid the book)
-  chandelier(g, M, 0, high + 0.25, 1.3);
+  // (over the middle rug, short of the Codex: over it, from above it hid the book; under the cross beam there (x 0.1),
+  // hung from it, its candles 0.18 under it: a hair west of it and 0.4 higher, the beam ran through its candles and
+  // chains, from play "light fixture, it goes through a beam")
+  chandelier(g, M, 0.1, high, 1.3, high - CROSS_UNDER);
   // (dust drifting in the warm light by the front windows)
   shelve(g, shelving);
   let due = 0;
