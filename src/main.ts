@@ -45,7 +45,7 @@ import { queuePortraitsBehind, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
-import { closeTalk } from './ui/screens/talk/talk';
+import { closeTalk, stepTalk } from './ui/screens/talk/talk';
 import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
@@ -1220,6 +1220,8 @@ function update(dt: number): void {
   for (const p of G.players) p.update(dt);
   perfLap('player');
   updateHall(dt);
+  // (a talk's lines shown one by one by the game's clock: ui/talk.ts)
+  if (VILLAGE) stepTalk(dt);
   // (the other heroes, the hall's and a spare of each class built behind the lobby, a piece a frame: game/behind.ts;
   // once the lobby's warm-ups behind it are done, not on top of them)
   if (G.mode === 'menu' && !hallOpen() && !isWarming()) {

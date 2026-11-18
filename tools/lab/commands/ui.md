@@ -21,6 +21,8 @@ label shows through, which must be caught.
 
 `sitHint`: the hint to sit, E Sit (`src/ui/sitHint.ts`; from play: "when pointing at object to sit on, we need to display a hint like E Sit"). The mouse is put on the lobby's seat nearest the hero that shows on the screen: the seat outlined at once, the prompt (the village's objects' own, drawn over the world) shown and within the window; then on the floor beside him, and the prompt gone (`uiSitHint.ts`). `--canary` makes the shown prompt clear, which must be caught.
 
+`talk`, `talkTouch` (`page/uiTalk.ts`): Brother Hollis's talk opened as a hero who's fought opens it, his lines shown by Enter (on touch, a tap on them; the tap that put the page in touch mode walked him to the Party Board, whose co-op dialog then opened over the talk: he's stopped where he stands), six replies offered: the card, his portrait and name and every reply within the window, each reply the element at its middle, on touch each a finger's 32 css px tall at least. `--canary` makes the card twice the window's height, which must be found.
+
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,sitHint,logLobby,perfAsk,pauseLobby,betaNotice,coop,coopRename,bugReport,panelLinks,skillTipsTouch,sheetTouch,litTouch,coopTouch,panelLinksTouch,autoFull,
 run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,pauseBeta,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,

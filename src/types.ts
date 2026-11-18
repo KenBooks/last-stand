@@ -302,6 +302,9 @@ export interface Profile {
   look?: HeroLook;
   /** its class's starter stash has been given to it (`ClassDef.starterStash`) */
   starterGiven?: boolean;
+  /** what the village's folk remember of this hero (ui/talk.ts), by who they are: how many times they've talked, and
+   *  the nodes of their talk he's heard */
+  talk?: Record<string, { visits: number; heard: string[] }>;
 }
 
 // ---------------------------------------------------------------------------

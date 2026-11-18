@@ -414,8 +414,8 @@ function codex(g: THREE.Group, M: Mats, b: Build, x: number, z: number): void {
 }
 
 /** Whether Brother Hollis is talked to now (main.ts sets it as his dialogue opens and closes, ui/talk.ts): he looks up
- *  and holds the hero's eye. */
-export const scholarTalk = { talking: false };
+ *  and holds the hero's eye; and how many of his lines have shown (each a nod as he says it). */
+export const scholarTalk = { talking: false, lines: 0 };
 
 /** Brother Hollis's reading table (data/houses.ts `SCHOLAR_DESK`, turned to face the room): a chair with a high back
  *  where he sits, the table before it, his book open on it facing him, a candle (its light one of the room's ten, the
@@ -593,7 +593,7 @@ export function build(group: THREE.Group): Room {
   b.updaters.push((dt) => {
     if (!scholar) return;
     const me = G.player;
-    scholar.update(dt, me ? hero.copy(me.pos) : null, scholarTalk.talking);
+    scholar.update(dt, me ? hero.copy(me.pos) : null, scholarTalk.talking, scholarTalk.lines);
   });
   const room = finish(id, b, {
     look: libraryLook(),

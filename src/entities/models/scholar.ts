@@ -29,6 +29,9 @@ const BEATS = {
 } as const satisfies Record<string, readonly [number, number]>;
 /** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again */
 const GLANCE = { near: 3.6, hold: 2.6, rest: 13 };
+/** his nod as he says a line while talked to: how long it takes (s), how far down his head goes at its deepest (rad),
+ *  and the neck's share of it */
+const NOD = { time: 0.55, pitch: 0.14, neck: 0.35 };
 
 /** The open book he reads, in his frame (x across him, +z ahead, up from the floor): the spine's foot in the gutter at
  *  its middle, its shape (models/book.ts), and the page he turns's material. */
@@ -48,8 +51,9 @@ export interface ScholarBook {
 export interface Scholar {
   /** his root: stand it on the chair's seat, facing the table (+z) */
   root: THREE.Group;
-  /** his pose for the frame: `hero` where the local hero is (world space) or null, `talking` while he's talked to */
-  update(dt: number, hero: THREE.Vector3 | null, talking: boolean): void;
+  /** his pose for the frame: `hero` where the local hero is (world space) or null, `talking` while he's talked to,
+   *  `said` how many lines he's said (each new one a nod, as he's looking up) */
+  update(dt: number, hero: THREE.Vector3 | null, talking: boolean, said?: number): void;
   /** how far into his loop he is (s), for the lab's pictures at set points of it */
   loopAt: number;
   /** his meshes (the lab reads them: his sleeves against the table, his triangles) */
@@ -291,6 +295,8 @@ export function buildScholar(book: ScholarBook): Scholar {
   // --- his pose, a frame at a time ---
   const eyes = head.eyes;
   let loop = 7, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0, holding = 0;
+  /** the lines he'd said at the last frame, and how far into his nod to the last he is (s; past `NOD.time`: none) */
+  let saidBefore = 0, nodding = Infinity;
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
   const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
   const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
@@ -318,8 +324,12 @@ export function buildScholar(book: ScholarBook): Scholar {
   };
   const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
 
-  function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean): void {
+  function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
     clock += dt;
+    // (a line said, a nod: only as he's looking up, never mid-glance away)
+    if (said !== saidBefore && talking) nodding = 0;
+    saidBefore = said;
+    nodding += dt;
     // (talked to, his reading all but stops: it picks up where it was as he goes back to it)
     loop = (loop + dt * (1 - 0.9 * gaze)) % SCHOLAR_LOOP;
     const t = loop;
@@ -385,8 +395,10 @@ export function buildScholar(book: ScholarBook): Scholar {
       headY = lerp(headY, lookYaw.v * 0.65, gaze);
       j.neck.rotation.y = lookYaw.v * 0.18 * gaze;
     }
-    j.neck.rotation.x = neckX;
-    j.head.rotation.set(headX, headY, -headY * 0.08 + muse * 0.04);
+    // (the nod: down and back up again, once, as a man nods to his own point)
+    const nod = nodding < NOD.time ? NOD.pitch * Math.sin(Math.PI * nodding / NOD.time) * gaze : 0;
+    j.neck.rotation.x = neckX + nod * NOD.neck;
+    j.head.rotation.set(headX + nod * (1 - NOD.neck), headY, -headY * 0.08 + muse * 0.04);
     // the eyes: along the line and down the page; up to the hero
     const eyeY = (across * 0.2 + pageYaw * 0.5) * reading + muse * 0.18 * (1 - gaze);
     const eyeX = (0.3 + down * 0.08) * (1 - gaze) * (1 - muse * 0.8) + 0.04 * gaze;
