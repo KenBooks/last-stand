@@ -124,9 +124,10 @@ A measure is only as good as what it can catch:
 - **Measure, don't choose.** A pose is decided as a person would hold it and looked at in the game's views first
   (`sheet`); a measure checks it (`src/entities/models/AGENTS.md`).
 
-Every measure is kept: from its first use it is a command of its own in `page/` (a module, an entry in
-`page/commands.ts`, one in `node/commands.mjs` and its options in `node/options.mjs`), as the carry's and the touch
-stick's are, or a part of one that already measures the same thing, never a probe left in `.tmp`.
+Every measure is kept: from its first use it is a command of its own (its measure a module in `page/`, the command
+a module in `node/commands/` and its page function one in `page/commands/`: `node/commands/AGENTS.md`), as the
+carry's and the touch stick's are, or a part of one that already measures the same thing, never a probe left in
+`.tmp`.
 
 ## Repeatability
 

@@ -17,7 +17,7 @@
 // Their warned hits never land together (`claimBeat`).
 import * as THREE from 'three';
 import { G } from '../state';
-import { TWINS } from '../data/enemies';
+import { TWINS } from '../data/foes/twins';
 import { DAMAGE_TYPES, hurtPlayer } from '../combat/damage';
 import { spawnProjectile } from '../combat/projectiles';
 import { burst, col, particles, smokePuff } from '../fx/particles';
@@ -25,6 +25,7 @@ import { groundFlash, shockwave } from '../fx/effects';
 import { flash } from '../fx/lights';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
+import { twinSounds } from '../core/sounds/twins';
 import { schedule } from '../core/timers';
 import { claimBeat, partnerOf, telegraphShare, telegraphTime, telegraphed } from './bossKit';
 import { bossHooks } from './bossHooks';
@@ -218,7 +219,7 @@ export function skullsLoosed(id: number, ox: number, oz: number, tx: number, tz:
       },
     });
   }
-  sfx.skullVolley();
+  twinSounds.skulls();
 }
 
 /** The chain snapping tight between (ax, az) and (bx, bz) (`chainSnap` fx): this game's hero hurt if he stands within its
@@ -241,12 +242,12 @@ export function chainSnapped(id: number, ax: number, az: number, bx: number, bz:
   groundFlash({ x: (ax + bx) / 2, z: (az + bz) / 2 }, { color: CHAIN_LIGHT, intensity: 1, radius: len * 0.4, life: 0.4 });
   flash({ color: CHAIN_LIGHT, intensity: 10, distance: len, life: 0.45, pos: { x: (ax + bx) / 2, y: 1.8, z: (az + bz) / 2 } });
   addShake(0.3);
-  sfx.twinChain();
+  twinSounds.chain();
 }
 
 /** Reliquary's mend begun (`twinMend` fx): its murmur over the channel. Its motes are drawn by the frame hook. */
 export function mendBegun(warn: number): void {
-  sfx.twinMend(warn);
+  twinSounds.mend(warn);
 }
 
 /** The mend done (`twinMended` fx): a wash of light over Slab. */
@@ -264,7 +265,7 @@ export function twinFell(id: number): void {
   if (!e || !e.alive) return;
   e.noSpoils = true;
   e.die();
-  sfx.twinFall();
+  twinSounds.fall();
   addShake(0.6);
 }
 
@@ -316,7 +317,7 @@ function hurt(e: Enemy): void {
 }
 
 const cue = (e: Enemy): void => {
-  sfx.twinsRise();
+  twinSounds.rise();
   shockwave(e.pos, { color: slabOf(e) ? EMBER : COLD, intensity: 1.8, from: 1, to: 9, life: 0.9 });
 };
 

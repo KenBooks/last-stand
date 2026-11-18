@@ -302,7 +302,10 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 // Enemies
 
-export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'twins' | 'idle';
+/** every way a foe fights (`EnemyDef.ai`): enemyAI.ts's own, and a foe's own added by its file in entities/foes/
+ *  (`declare module`), so a new foe's way touches no shared list */
+export interface EnemyAIKinds { melee: true; ranged: true; slam: true; boss: true; idle: true }
+export type EnemyAIKind = keyof EnemyAIKinds;
 
 /** What a hero's attack is, as a foe sees it coming (entities/evade.ts): a shot (an arrow, a bolt), a wave along the
  *  ground (a crescent), a charge, a beam, or an area coming down (a rain of arrows, falling stars). */

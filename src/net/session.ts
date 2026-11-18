@@ -24,27 +24,23 @@ import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
 import { changedColour, colourOf, freeColour, ownColour, saveColour, savedColour, setRoomColour, roomColoursOf } from './heroColour';
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
-import { setPingNet, pingHeard, clearPings } from '../game/ping';
+import { setPingNet, clearPings } from '../game/ping';
 import { showBiomeSetting } from '../game/biome';
 import {
-  answerPlace, duelHits, duelQuit, duelSetup, duelWord, readSetup, setDuelNet, setupNow, takeSetup, wantPlace,
+  answerPlace, duelQuit, duelSetup, duelWord, readSetup, setDuelNet, setupNow, takeSetup, wantPlace,
   type AskRefusal, type DuelPart, type DuelSetup,
 } from '../game/duel';
 
-import { setChatNet, chatHeard, chatNote, clearChat } from './chat';
-import { setTradeNet, tradeHeard, tradePeerLeft, endRoomTrades, endTrades, updateTrade } from './trade';
+import { setChatNet, chatNote, clearChat } from './chat';
+import { hearerOf } from './messages';
+import { setTradeNet, tradePeerLeft, endRoomTrades, endTrades, updateTrade } from './trade';
 
 import type { Profile } from '../types';
 import { lookOf as heroLookOf, type HeroLook } from '../data/heroLooks';
 import { buildableLook, readyLook } from '../game/looks';
 
-/** bumped when messages or the playable roster change: incompatible games don't play together (38: the public
- *  rooms' cards, whose `v` keeps a list to the rooms this game can join; 39: a guest's `rdy` says how far
- *  along its readying is; 40: a hero's look and hair colour, `Look.hl`; 41: the Ossuary Twins' fx, a boss's phase,
- *  their chain, charge, skulls and mend) */
-export const PROTOCOL = 41;
-/** the trade's messages (net/trade.ts): an ask and its answer, an offer, an accept, a cancel, the host's rulings */
-const TRADE_MESSAGES = new Set(['tr?', 'try', 'tro', 'tra', 'trx', 'trdone', 'trend']);
+import { PROTOCOL } from './protocol';
+export { PROTOCOL };
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
  *  75 s, `server/relay/rooms.mjs`) */
 const CARD_EVERY = 20_000;
@@ -587,24 +583,10 @@ function onControl(from: string, m: Record<string, unknown>): void {
     return;
   }
   if (m.t === 'bye') { peerLeft(from); return; }
-  if (m.t === 'chat') {
-    const by = session.peers.get(from)?.player;
-    if (by) chatHeard(by, m);
-    return;
-  }
   if (onGround(from, m)) return;
-  if (typeof m.t === 'string' && TRADE_MESSAGES.has(m.t)) { tradeHeard(from, m); return; }
-  // a rival's hits on our hero in a duel, straight from its game (game/duel.ts works them out)
-  if (m.t === 'pvp') {
-    const by = session.peers.get(from)?.player;
-    if (by) duelHits(by, Number(m.n), m.rows);
-    return;
-  }
-  if (m.t === 'ping') {
-    const by = session.peers.get(from)?.player;
-    if (by) pingHeard(by, m);
-    return;
-  }
+  // (a feature's own messages, each registered by its module: chat, pings, trades, a duel's hits; net/messages.ts)
+  const hearer = hearerOf(m.t);
+  if (hearer) { hearer(m, from, session.peers.get(from)?.player ?? undefined); return; }
   if (role.current === 'guest') {
     if (m.t === 'welcome') {
       netLog(`welcomed into slot ${String(m.slot)}`);

@@ -26,6 +26,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # (main's history too: the shared files step diffs from where the branch left main)
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -35,6 +37,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Say which shared files the PR touches
+        run: node scripts/hubs.mjs origin/${{ github.base_ref }}
+
+      - name: Check the marked lists are sorted
+        run: npm run check:sorted
 
       - name: Test the lab's own code
         run: npm run lab:test

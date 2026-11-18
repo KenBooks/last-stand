@@ -727,12 +727,12 @@ export class Side {
   // three.js object drawing a random number for its id) runs, and a command readied before its imports started at
   // another point of the sequence one boot in four.
 
-  /** Calls `fn` from page/commands.ts with the lab and `options`; returns its result. */
+  /** Calls the page function `fn` (page/commands/<fn>.ts) with the lab and `options`; returns its result. */
   command(fn, options) {
     return this.page.evaluate(async ([fn, options, afresh]) => {
-      const commands = await import('/tools/lab/page/commands.ts');
+      const command = await import(`/tools/lab/page/commands/${fn}.ts`);
       window.__lab.begin(afresh);
-      return commands[fn](window.__lab, options);
+      return command[fn](window.__lab, options);
     }, [fn, options, this.afresh]);
   }
 
@@ -752,11 +752,11 @@ export class Side {
     this.forgetModulesUnder(dirname(join(this.root, path)));
     await this.checkCompiles(probeFiles(this.root, path));
     return this.page.evaluate(async ([path, options, fixture]) => {
-      const commands = await import('/tools/lab/page/commands.ts');
+      const { setup } = await import('/tools/lab/page/commands/setup.ts');
       const probe = await import(`/${path}?t=${Date.now()}`);
       if (typeof probe.default !== 'function') throw new Error(`lab: probe: ${path} has no default export to run`);
       window.__lab.begin();
-      if (fixture) await commands.setup(window.__lab, fixture);
+      if (fixture) await setup(window.__lab, fixture);
       return probe.default(window.__lab, options);
     }, [path, options, fixture]);
   }

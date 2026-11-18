@@ -10,6 +10,7 @@
 // A production build keeps them in the browser's storage for its own build (`CACHE`), so a later visit makes none.
 // Opened before they're made, the guide shows a picture as it comes, the ones it shows first (`hurryPortrait`).
 import * as THREE from 'three';
+import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
 import { CLASSES, CLASS_IDS } from '../../data/classes/index';
 import { buildModel, modelSteps } from '../../entities/models/index';
@@ -330,7 +331,13 @@ function makeRenderer(): THREE.WebGLRenderer {
 
 /** Whose model built: a foe's in one piece, or a hero's in his build's own pieces, holding his class's starting gear. */
 function* modelOf(id: Who): Generator<void, Model, undefined> {
-  if (!id.startsWith('hero:')) return buildModel(ENEMIES[id as EnemyId].model);
+  if (!id.startsWith('hero:')) {
+    // (a boss's code is loaded at its wave: loaded here first, its picture a frame or more later)
+    let here = foeLoaded(id as EnemyId);
+    if (!here) void loadFoe(id as EnemyId).then(() => { here = true; });
+    while (!here) yield;
+    return buildModel(ENEMIES[id as EnemyId].model);
+  }
   const cls = CLASSES[id.slice('hero:'.length)];
   const model = yield* modelSteps(cls.model);
   const equipped: Profile['equipped'] = {};

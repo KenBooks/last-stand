@@ -1,10 +1,10 @@
 // The guide's words (ui/guide/): what a figure can't say, how to fight each foe, how to play each hero. No figure is
 // written here: the guide takes every number from the game's data as it renders (life, damage, cooldowns...), so
-// these notes say how and why, never how much. A foe without a note fails the typecheck (`FOE_NOTES`); a skill,
+// these notes say how and why, never how much. A foe without a note fails the typecheck (its file in data/foes/, `FoeEntry`); a skill,
 // class or weapon style without one still shows from its data, and a dev build warns of it (`ui/guide/index.ts`).
 // Any change adding or changing a foe, boss, skill, weapon style, item base or mechanic updates these notes in the
 // same PR (root AGENTS.md); the tips' own words are in ui/guide/tips.ts, written round the figures they show.
-import type { EnemyId } from './enemies';
+import { FOE_ENTRIES, type EnemyId } from './enemies';
 import type { SkillKey } from '../types';
 
 /** How to fight a foe: what it does in a sentence or two, what makes it dangerous, where it's weak, how to beat it,
@@ -20,128 +20,11 @@ export interface FoeNote {
   vs?: Record<string, string>;
 }
 
-/** Every foe a wave can bring (the training dummy is no foe). */
-export const FOE_NOTES: Record<Exclude<EnemyId, 'dummy'>, FoeNote> = {
-  imp: {
-    role: 'Swarmer',
-    does: 'Small, quick void-spawn that rush in, in numbers, and claw at whoever is closest. Alone it is little; a pack of them surrounding you is how most runs end early.',
-    strengths: ['About as quick as a hero on foot: walking away rarely shakes them.', 'Packs flank and surround you instead of queueing in a line.', 'The Hollow Colossus keeps calling more of them.'],
-    weaknesses: ['Very little Health: any area skill clears a pack.', 'Light: knocked back and thrown by every blow.'],
-    beat: ['Let them come to you and answer with an area skill rather than chasing single ones.', 'Back against a wall or a pillar so the pack cannot close the circle.', 'Kill them first in a mixed group: they deal more together than one big foe.'],
-    vs: {
-      warrior: 'Rending Cleave hits the whole pack and refills your Energy for every one it touches.',
-      mage: 'A Cinderburst or a charged Stormcall into the middle of the pack, or Glacial Nova when they reach you.',
-      ranger: 'Briarflight\'s fan at close range, or Strawman to bunch them up for a Hailfletch.',
-    },
-  },
-  husk: {
-    role: 'Bruiser',
-    does: 'A slow, shambling corpse with a long reach and a heavy blow. It walks straight at you and swings once in range.',
-    strengths: ['Hits hard for a common foe and takes a while to bring down.', 'Its reach is longer than it looks.'],
-    weaknesses: ['Slow on its feet: you can kite it forever.', 'Its swing has a clear wind-up you can step out of.'],
-    beat: ['Step back as its arm rises, then punish the recovery.', 'Deal with the fast foes around it first; it will arrive later.', 'Ranged heroes: walk backwards and keep shooting.'],
-    vs: { warrior: 'A raised shield takes its blow easily; Power Strike knocks it far back.' },
-  },
-  witch: {
-    role: 'Caster',
-    does: 'Keeps its distance and hurls dark void orbs at you, backing off when you close in. It sees attacks coming and may blink out of their way.',
-    strengths: ['Hits hard from range, and its orbs are aimed ahead of where you are running.', 'Blinks aside from many attacks it sees coming at it.', 'Backs away and strafes, hiding behind the melee foes.'],
-    weaknesses: ['Little Health for its threat.', 'Its blink only dodges what comes at it from the front: attacks from the side or while it is busy land.', 'It must stop to cast: the wind-up is your warning.'],
-    beat: ['Move sideways when it raises its arms: the orb flies where you were heading.', 'Put a pillar between you to stop its shots, then close in.', 'Use attacks it cannot blink from, or hit it while it is mid-cast.'],
-    vs: {
-      warrior: 'Bull Rush closes the gap; dragged along, it cannot blink away.',
-      mage: 'Veilstep next to it, or catch it in Maelstrom\'s pull.',
-      ranger: 'Quarry Mark it and finish it with a drawn Nockshot from the side.',
-    },
-  },
-  brute: {
-    role: 'Heavy',
-    does: 'A huge molten brute that slams the ground in front of it. Too far away to slam, it lobs chunks of lava at where you stand, which burst and leave a burning pool.',
-    strengths: ['A slam that can take a large share of your Health at once, over a wide area.', 'Lots of Health, and hard to knock back.', 'Punishes standing still at range with lava.'],
-    weaknesses: ['Its slam is marked by a red ring on the ground long before it lands.', 'Slow to turn and to walk.', 'The lava\'s landing is marked too: keep moving and it misses.'],
-    beat: ['Watch for the red ring and step out of it, then hit it while it recovers.', 'Never stand in a burning pool; move as soon as a lava chunk is in the air.', 'Daze, freeze or lure it to stop the slam before it lands.'],
-    vs: {
-      warrior: 'Do not try to block the slam with a lowered shield; raise it or step out.',
-      mage: 'Glacial Nova stops its slam cold; Starfall\'s chill slows it further.',
-      ranger: 'Lancewood Shot through the brute and whatever stands behind it.',
-    },
-  },
-  colossus: {
-    role: 'Boss of the Crypt',
-    does: 'A towering lord of the crypt. Up close it slams the ground all around itself; at range it looses fans of burning magma bolts; and every so often it roars and calls Voidlings to its side.',
-    strengths: ['An enormous amount of Health, growing with the wave and the party.', 'Its slam covers a wide circle round its whole body.', 'Two volleys of bolts in quick succession: the second one aims ahead of you.', 'Cannot be knocked back and shakes off freezes quickly.'],
-    weaknesses: ['Every slam is marked by a ring first.', 'Its volleys need a clear line: a pillar blocks them.', 'Slow, and its summons come at a steady pace you can plan around.'],
-    beat: ['Fight at medium range: close enough that it does not volley often, far enough to leave its ring.', 'When it roars, turn on the Voidlings at once before they surround you.', 'Strafe across its volleys; hide behind pillars when you need a breather.', 'Save your burst (cooldowns, the draught) for after a slam lands.'],
-    vs: {
-      warrior: 'Iron Bellow\'s ward soaks a volley; strike in the gap after each slam.',
-      mage: 'Void Lance through it and its summons in one line.',
-      ranger: 'Quarry Mark it: when it dies marked, your cooldowns come back for the next wave.',
-    },
-  },
-  twinslab: {
-    role: 'Boss of the Crypt, with his twin',
-    does: 'Slab, the broad one of the Ossuary Twins: a hulking skeleton in battered iron, a tombstone for a weapon. He and his brother Reliquary share one life, bound by a glowing chain of bone. He lifts the tombstone and brings it down on whoever is before him, and shoulders his way across the floor at the nearest hero.',
-    strengths: ['One life with his brother: every blow on either wears down both.', 'His grave slam crushes everything in the ring before him.', 'A short shoulder charge reaches a hero who backs off.', 'Drift the twins too far apart and their chain snaps tight, dragging them together and hurting anyone between.', 'At half, whichever twin took more falls and the other grows faster and takes up his brother\'s attack.'],
-    weaknesses: ['The slam is warned: a ring lies before him while the tombstone is raised for a second.', 'The charge\'s line is ringed before he runs.', 'He is slow and stays close to his brother.'],
-    beat: ['Step out of the ring as the tombstone rises.', 'Never stand on the line between the twins.', 'Wear both down evenly, so the one left standing is no stronger than the other.'],
-    vs: {
-      warrior: 'Hold the shield up to the slam and punish the long recovery after it.',
-      mage: 'Keep your distance: he has no reach but his charge.',
-      ranger: 'Kite him in a circle; side-step the charge\'s ringed line.',
-    },
-  },
-  twinreliquary: {
-    role: 'Boss of the Crypt, with his twin',
-    does: 'Reliquary, the thin one of the Ossuary Twins: a hooded skeleton holding a bronze reliquary, five skulls circling it. It shares one life with its brother Slab, looses volleys of skulls that curve in on you, and mends the pair if Slab is left hurt and untouched.',
-    strengths: ['A volley of skulls, each curving in on its own arc to where you stood.', 'Leave Slab hurt and unhit for a few seconds and it mends the pair\'s life.', 'It keeps its distance, backing off from a hero who closes in.', 'Left alone at half, it takes up its brother\'s slam too.'],
-    weaknesses: ['A stun or a freeze breaks its mend.', 'Its skulls fly at where you stood: keep moving and they miss.', 'Its body is thin and frail-looking, and it shares the life you take from Slab.'],
-    beat: ['Keep hitting Slab now and then so the mend never starts.', 'Save a stun for the moment it raises its casket to mend.', 'Move across the volley rather than away from it.'],
-    vs: {
-      warrior: 'Charge in to break its distance, and stun it as it mends.',
-      mage: 'Freeze it mid-mend; your bolts outrange its retreat.',
-      ranger: 'Your shots reach it wherever it backs off to: keep it busy while Slab is held at bay.',
-    },
-  },
-  thornling: {
-    role: 'Swarmer',
-    does: 'Small, darting creatures of thorn and bark that rush in packs and scratch at you from every side.',
-    strengths: ['Quicker than most heroes on foot: hard to outrun.', 'Packs spread out round you.', 'The Elder Thornheart calls more of them.'],
-    weaknesses: ['Fragile: any area attack shreds a pack.', 'Easily knocked back.'],
-    beat: ['Stand your ground and use area skills as they arrive.', 'Do not chase stragglers: let them come.', 'Clear them before the slow heavies reach you.'],
-    vs: { warrior: 'Steel Tempest through the middle of the pack.', mage: 'Glacial Nova as they close, then a Cinderburst.', ranger: 'Briarflight at point blank.' },
-  },
-  mossback: {
-    role: 'Bruiser',
-    does: 'A hulking, moss-grown beast that plods towards you and lands heavy blows at a long reach.',
-    strengths: ['Tough and hard-hitting for a common foe.', 'Resists being knocked back a little.'],
-    weaknesses: ['Slow: easy to kite.', 'Telegraphs its swing.'],
-    beat: ['Step out of its swing and strike back while it recovers.', 'Keep moving: it rarely catches a hero who walks away.', 'Kill the fast and ranged foes first.'],
-  },
-  sporecaller: {
-    role: 'Caster',
-    does: 'A fungal caster that stays back and lobs swirling spore orbs at you, ducking under shots it sees coming.',
-    strengths: ['Strong ranged hits that lead your movement.', 'Ducks under projectiles from the front.', 'Keeps its distance and strafes behind its allies.'],
-    weaknesses: ['Low Health.', 'Its duck only avoids shots: melee blows, areas and beams still land.', 'Must stop to cast.'],
-    beat: ['Sidestep when it winds up a throw.', 'Use areas, beams or melee instead of single shots, or hit it while it is ducking out of something else.', 'Break line of sight with a tree or a stone to stop its throws.'],
-    vs: { ranger: 'Its duck makes arrows unreliable from the front: Hailfletch from above, or wait until it casts.', mage: 'Starfall drops from above; it cannot duck that.' },
-  },
-  barkhulk: {
-    role: 'Heavy',
-    does: 'A walking tree that slams the ground in front of it. Out of reach, it sends a vine creeping along the floor towards you that pins you to the spot if its tip catches you.',
-    strengths: ['A crushing slam over a wide area.', 'Very tough, and hard to knock back.', 'Its vine passes through anything in its way and roots you in place for the rest of the pack.'],
-    weaknesses: ['Its slam is marked by a ring.', 'The vine creeps in a straight line: step aside.', 'Slow on its feet.'],
-    beat: ['Step out of the ring, then punish the recovery.', 'When the vine comes, move across its path, not away along it.', 'Caught? A dash or a blink tears you free.'],
-    vs: { warrior: 'Bull Rush breaks a vine\'s hold.', mage: 'Veilstep breaks a vine\'s hold and crosses the slam.' },
-  },
-  thornheart: {
-    role: 'Boss of the Thornwood',
-    does: 'The ancient heart of the forest. Up close it slams the earth around itself; at range it looses fans of spore bolts; and it roars to call Thornlings from the undergrowth.',
-    strengths: ['A vast amount of Health, growing with the wave and the party.', 'A wide slam round its whole body.', 'Two volleys of bolts, the second aimed ahead of you.', 'Cannot be knocked back; shakes off freezes quickly.'],
-    weaknesses: ['Every slam is marked first.', 'Its volleys need a clear line: break it with a tree or a stone.', 'Slow, with summons on a steady clock.'],
-    beat: ['Keep to medium range and leave the ring when it appears.', 'Turn on the Thornlings the moment it roars.', 'Strafe across volleys rather than running from them.', 'Spend your cooldowns in the gap after a slam.'],
-    vs: { ranger: 'Strawman pulls its Thornlings off you while you keep shooting the boss.' },
-  },
-};
+/** Every foe a wave can bring (the training dummy is no foe): each foe's note is in its file in data/foes/. */
+export const FOE_NOTES = Object.fromEntries(
+  Object.entries(FOE_ENTRIES).filter(([, entry]) => entry.note).map(([id, entry]) => [id, entry.note]),
+) as Record<Exclude<EnemyId, 'dummy'>, FoeNote>;
+
 
 /** What every foe's way of fighting means for you, by its `ai` (each foe's page says it, with its figures). */
 export const AI_NOTES: Record<string, string> = {

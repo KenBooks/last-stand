@@ -11,7 +11,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { launchBrowser } from './browser.mjs';
-import { fixtureFrom } from './commands.mjs';
+import { fixtureFrom } from './commandKit.mjs';
 import { labError } from './errors.mjs';
 import { LiveLog, describeStep, pictureName } from './liveLog.mjs';
 import { OUT, REPO } from './paths.mjs';

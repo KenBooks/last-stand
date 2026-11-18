@@ -4,6 +4,7 @@
 // difference, each part's milliseconds timed by Profile this spot from where the camera is). Its own page pieces,
 // made here, so a production build's page has none of them.
 import * as THREE from 'three';
+import { loadFoe } from '../entities/bosses';
 import { G } from '../state';
 import { input } from '../core/input';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -320,7 +321,7 @@ function spawn(n: number): void {
     const pos = new THREE.Vector3(at.x + Math.sin(a) * r, 0, at.z + Math.cos(a) * r);
     const out = Math.hypot(pos.x, pos.z), most = ARENA.radius * 0.92;
     if (out > most) pos.multiplyScalar(most / out);
-    spawnEnemy(type, pos, { wave: G.run?.wave ?? 1, hero, training });
+    void loadFoe(type).then(() => spawnEnemy(type, pos, { wave: G.run?.wave ?? 1, hero, training }));
   }
 }
 

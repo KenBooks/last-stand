@@ -2,6 +2,7 @@
 // to fill ours from, every item with its tooltip (a tap pins it on touch, a second tap acts), both accepts, Accept and
 // Cancel. Over it, at the top of the screen, the ask (asked to trade: Trade or Decline; asking: Cancel) and the last
 // word of a trade (done, or off and why). Asked for from the room's list in Play together (ui/coop.ts).
+import { dialog } from './dialogs';
 import { G } from '../state';
 import { RUN, TRADE } from '../data/balance';
 import { byValue, rarityOf } from '../loot/items';
@@ -24,6 +25,8 @@ const NOTE_SHOWN = 5;
 
 /** Whether the trade window is up. */
 export const tradeOpen = (): boolean => !$('#trade').classList.contains('hidden');
+// (it takes its own Escape first, main.ts: a trade is cancelled, never put away with the rest)
+dialog({ open: () => tradeOpen() });
 
 export function initTrade(): void {
   onTradeChange(renderTrade);

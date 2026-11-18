@@ -46,15 +46,31 @@ export const wanted = (need: Need): Promise<void> => needs[need].wanted;
 /** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
 export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
+/** what's readied now beside the needs, under the fight's loading bar (`readyingWhile`: a boss at its wave) */
+const tasks: { label: string; share: number }[] = [];
 /** whether something pressed is waiting (the lobby shows the fight's loading bar) */
-export const isReadying = (): boolean => NEEDS.some((need) => needs[need].waiting > 0);
+export const isReadying = (): boolean => NEEDS.some((need) => needs[need].waiting > 0) || tasks.length > 0;
 /** how far the warm-ups waited for have got, 0 to 1: their mean */
 export function readyingShare(): number {
-  const waited = NEEDS.filter((need) => needs[need].waiting > 0);
-  return waited.length ? waited.reduce((sum, need) => sum + needs[need].share, 0) / waited.length : 0;
+  const shares = [...NEEDS.filter((need) => needs[need].waiting > 0).map((need) => needs[need].share),
+    ...tasks.map((task) => task.share)];
+  return shares.length ? shares.reduce((sum, share) => sum + share, 0) / shares.length : 0;
 }
-/** what the latest press still waiting readies (its `whenWarm` label), '' with none */
-export const readyingLabel = (): string => waitingFor[waitingFor.length - 1]?.label ?? '';
+/** what the latest press still waiting readies (its `whenWarm` label), else what's readied beside, '' with none */
+export const readyingLabel = (): string => waitingFor[waitingFor.length - 1]?.label ?? tasks[tasks.length - 1]?.label ?? '';
+
+/** `work` done under the fight's loading bar, which says `label` and how far `work` has told it it is (0 to 1). */
+export async function readyingWhile(label: string, work: (progress: (share: number) => void) => Promise<void>): Promise<void> {
+  const task = { label, share: 0 };
+  tasks.push(task);
+  changed();
+  try {
+    await work((share) => { task.share = share; changed(); });
+  } finally {
+    tasks.splice(tasks.indexOf(task), 1);
+    changed();
+  }
+}
 /** `fn` called as something starts or stops waiting, and as a warm-up waited for gets further */
 export function onReadying(fn: () => void): void { listeners.push(fn); }
 

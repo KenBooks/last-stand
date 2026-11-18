@@ -21,8 +21,9 @@ Vite's message (where it went wrong in which file), and a module that won't link
 export: a page booted between two edits) throws a `SyntaxError` on the page. Waited for the loading screen to go
 alone, each was waited out to the timeout, three minutes: a module that wouldn't compile or link never runs, so its
 loading screen never says it failed, and the command after it waited behind it.
-- `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
-  127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.
+- `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`, every command a module of its own
+  in `node/commands/`), and sends it to the server on 127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a
+  session of its own.
 - `node/`, the Node side:
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in
@@ -30,7 +31,9 @@ loading screen never says it failed, and the command after it waited behind it.
     process and starts it again when the lab's code says something else (`codeStamp.mjs`, the hash every command is
     checked against), and stops it when whatever started the supervisor is gone.
   - `session.mjs`: a command run on each side it asks for, its report, problems and A/B verdict; `commands.mjs`:
-    what each command does on a side and how its results are compared.
+    the commands that run on a side (their modules' `each`, how their results are compared), and the pages a
+    check may keep for them; `commands/`: a module a command, its options and its work (`commandKit.mjs` and
+    `optionKit.mjs` what several share; `commandDocs.mjs` COMMANDS.md's list made from them, `lab docs`).
   - `side.mjs`: a tree of the game served by a Vite dev server of the lab's own (HMR off, so a measure never meets a
     stale copy of a module) and booted in a page; `commits.mjs`: another commit exported for an A/B.
   - `browser.mjs`: Playwright's Chromium in its native headless mode, and the scripts every page runs first (the
@@ -44,9 +47,9 @@ loading screen never says it failed, and the command after it waited behind it.
     `sheetImage.mjs` (the sheet as one image), `probeFiles.mjs`, `errors.mjs`, `paths.mjs`.
 - `page/`: the lab inside the game's page, TypeScript typechecked with the game (`tsconfig.json` includes it, and
   `examples/`), imported as the game imports its modules, so there is one copy of each. `lab.ts` (the clock, input,
-  set-ups, pictures), `commands.ts` (what the session calls: each command's module loaded as it runs, as an A/B copies
-  these modules into the other commit's tree, and one measuring game code that commit hasn't got stopped every command
-  loading there), `sheet.ts`, `carry.ts`, `comfort.ts`, `geometry.ts`,
+  set-ups, pictures), `commands/` (what the session calls by name, a module a function: each loads its measure as it
+  runs, as an A/B copies these modules into the other commit's tree, and one measuring game code that commit hasn't
+  got stopped every command loading there), `sheet.ts`, `carry.ts`, `comfort.ts`, `geometry.ts`,
   `ranger.ts` (the bow's handle, `bow.group.userData.bow`).
 - `test/`: the Node side's tests, `npm run lab:test`.
 - `out/`: everything the lab writes (sheets, exported commits, Vite's cache, the browser's profile), never the user's

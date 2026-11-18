@@ -1,14 +1,26 @@
 // The lab's code a command runs on an A/B's other side (tools/lab), for the key its result is kept under
-// (sideCache.mjs): its page modules (those `page/lab.ts` and its own entry in `page/commands.ts` import, and theirs in
-// turn), its own work in `node/commands.mjs` and the helpers it calls there, how a page boots (`node/side.mjs`) and the
-// scripts every page runs first (`node/browser.mjs`). Keyed on all of `page/` and those files whole, every lab PR
-// (a measure added, a command's options) ran main's side of every job of a check again.
+// (sideCache.mjs): its page modules (`page/lab.ts`, the page functions its work calls, `page/commands/<fn>.ts`, and
+// what they import in turn), its own module (`node/commands/<name>.mjs`), the parts of `node/commandKit.mjs` it
+// reaches and the modules it imports, how a page boots (`node/side.mjs`) and the scripts every page runs first
+// (`node/browser.mjs`). Keyed on all of `page/` and the lab's tables whole, every lab PR (a measure added, a command's
+// options) ran main's side of every job of a check again.
 import { existsSync, readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
+import { labError } from './errors.mjs';
 import { REPO } from './paths.mjs';
 
 const PAGE = 'tools/lab/page';
 const NODE = 'tools/lab/node';
+/** the commands' modules, a file each (node/commands/AGENTS.md) */
+const NODE_COMMANDS = `${NODE}/commands`;
+/** the functions the commands call on the page, a file each (page/commands/AGENTS.md) */
+const PAGE_COMMANDS = `${PAGE}/commands`;
+/** what the commands share of their work: keyed by the parts of it a command reaches, not whole */
+const COMMAND_KIT = `${NODE}/commandKit.mjs`;
+/** the options the commands share: only how the command line reads them, whose values the key holds already */
+const OPTION_KIT = `${NODE}/optionKit.mjs`;
+/** a page function called by name (`side.command('gait', ...)`), and its name */
+const PAGE_CALL = /\.command\(\s*'(\w+)'/g;
 
 /** The code every command's side runs whatever it is: how its page boots (kept whole). */
 const BOOT_FILES = [`${NODE}/side.mjs`];
@@ -77,16 +89,6 @@ export function partsReached(parts, seed) {
   return [...parts.keys()].filter((name) => reached.has(name)).map((name) => parts.get(name));
 }
 
-/** `COMMANDS[command]`'s entry in `node/commands.mjs` (the object every command's work is in), or null. */
-export function commandEntry(text, command) {
-  const start = text.match(new RegExp(`^ {2}${command}: \\{$`, 'm'));
-  if (!start) return null;
-  const rest = text.slice(start.index);
-  const firstLine = rest.indexOf('\n') + 1;
-  const end = rest.slice(firstLine).search(/^(?: {2}\w+: \{|\};)$/m);
-  return end < 0 ? rest : rest.slice(0, firstLine + end);
-}
-
 /** A page module's path from an import of it in `from` (both relative to the repo), or null outside `page/`. */
 function pageModule(from, specifier) {
   const path = posix.normalize(posix.join(posix.dirname(from), specifier));
@@ -111,20 +113,23 @@ function pageClosure(entries) {
   return [...seen];
 }
 
+/** The page functions `texts` call by name (`side.command('gait', ...)`), each once. */
+export function pageCallsIn(texts) {
+  const calls = new Set();
+  for (const text of texts) for (const match of text.matchAll(PAGE_CALL)) calls.add(match[1]);
+  return [...calls];
+}
+
 /**
- * The page code `command` runs: its entry in `commands.ts` and what of that file it calls (as texts), and as files
- * `lab.ts` and every page module those import; all of `page/` for a command with no entry of its own.
+ * The page code a command's work runs, as files: `lab.ts`, the modules of the page functions it calls (`calls`), and
+ * every page module those import; all of `page/` for one that calls none by name (a probe's, a co-op's own pages).
  */
-function pageCodeOf(command) {
-  const from = `${PAGE}/commands.ts`;
-  const parts = partsOf(read(from));
-  const entry = parts.get(command);
-  if (!entry) return { texts: [], files: [PAGE] };
-  const texts = [entry, ...partsReached(parts, entry).filter((text) => text !== entry)];
-  const header = parts.get(null) ?? '';
-  const lab = `${PAGE}/lab.ts`;
-  const entries = [{ from: lab, text: read(lab) }, { from, text: [header, ...texts].join('\n') }];
-  return { texts, files: [lab, ...pageClosure(entries)] };
+function pageCodeOf(calls) {
+  const modules = calls.map((call) => `${PAGE_COMMANDS}/${call}.ts`).filter((path) => existsSync(join(REPO, path)));
+  if (!modules.length) return [PAGE];
+  const roots = [`${PAGE}/lab.ts`, ...modules];
+  const closure = pageClosure(roots.map((from) => ({ from, text: read(from) })));
+  return [...new Set([...roots, ...closure])];
 }
 
 /** The relative modules `text` imports names from, each with those names. */
@@ -156,15 +161,28 @@ function nodeCodeReached(path, seed) {
  * relative to the repo, a folder for everything in it); their contents key its kept result.
  */
 export function labCodeOf(command) {
-  const page = pageCodeOf(command);
-  const commands = read(`${NODE}/commands.mjs`);
-  const entry = commandEntry(commands, command);
-  const work = entry ? nodeCodeReached(`${NODE}/commands.mjs`, entry) : { texts: [commands], modules: [] };
+  const work = workOf(command);
+  const modules = nodeClosure(work.modules).filter((path) => path !== OPTION_KIT);
+  const page = pageCodeOf(pageCallsIn([...work.texts, ...modules.map(read)]));
   const browser = read(`${NODE}/browser.mjs`);
   const scripts = browser.match(/^export const PAGE_SCRIPTS = .*$/m)?.[0] ?? browser;
   const boot = nodeCodeReached(`${NODE}/browser.mjs`, `${scripts}\ngpuArgs`);
-  const files = new Set([...page.files, ...nodeClosure(work.modules), ...BOOT_FILES]);
-  return { texts: [...page.texts, ...work.texts, ...boot.texts], files: [...files].sort() };
+  const files = new Set([...page, ...modules, ...BOOT_FILES]);
+  return { texts: [...work.texts, ...boot.texts], files: [...files].sort() };
+}
+
+/**
+ * A command's work on the Node side: its module's text and the parts of the command kit it reaches (texts), and the
+ * relative modules those import (paths relative to the repo), the option kit aside.
+ */
+function workOf(command) {
+  const path = `${NODE_COMMANDS}/${command}.mjs`;
+  if (!existsSync(join(REPO, path))) throw labError(`no command ${command} (${path})`);
+  const text = read(path);
+  const imported = runtimeImports(text).map((specifier) => posix.join(NODE_COMMANDS, specifier));
+  const kit = imported.includes(COMMAND_KIT) ? nodeCodeReached(COMMAND_KIT, text) : { texts: [text], modules: [] };
+  const others = imported.filter((module) => module !== COMMAND_KIT && module !== OPTION_KIT);
+  return { texts: kit.texts, modules: [...others, ...kit.modules] };
 }
 
 /** The Node modules `modules` are (paths relative to the repo), and every relative module they import in turn. */

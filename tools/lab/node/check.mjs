@@ -208,9 +208,9 @@ export function villageParts(shards = VILLAGE_SHARDS) {
 /**
  * One job: a command for a hero (or one of its parts, `of`: a scenario from each start, a weapon swung through the
  * eyes), its options, its name (where its report goes) and its group's (the command and hero, whose parts' reports
- * make one). A command a check may keep a page for (`keepsPage` in commands.mjs) builds the hero afresh at each of its
- * set-ups (`afresh`), its page kept or not, and its other side is kept under that option too: kept for a key without
- * it, a warm check found 156 of its 162 other sides missing and ran them again.
+ * make one). A command a check may keep a page for (`keepsPage` in its module, node/commands/) builds the hero
+ * afresh at each of its set-ups (`afresh`), its page kept or not, and its other side is kept under that option too:
+ * kept for a key without it, a warm check found 156 of its 162 other sides missing and ran them again.
  */
 function jobOf(command, heroClass, base, of = null) {
   const afresh = HANDLERS[command]?.keepsPage ? { afresh: true } : {};

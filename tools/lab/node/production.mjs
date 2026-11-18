@@ -4,7 +4,7 @@
 // never leaves the browser. The save slots' health is answered by the lab in production's place (no Google sign-in,
 // as a service with no Google client says), and so is a slow-game report (nothing: a lab page's report belongs nowhere,
 // and one sent as a slow stretch is met is no fault of the command's); every other request, and every WebSocket, is refused and kept as an ask,
-// which fails the command that made it (session.mjs, and `ui` state by state: commands.mjs). A command with services
+// which fails the command that made it (session.mjs, and `ui` state by state: commands/ui.mjs). A command with services
 // of its own (`cloud`, `recorder`, `profile`) points the page at them on localhost, which this never touches.
 
 /** production's host, as the game's build names it */

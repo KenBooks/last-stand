@@ -22,6 +22,7 @@ import { resolveWorld } from '../world/collision';
 import { isGuest, readying } from '../net/role';
 import { floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
+import { onMessages } from '../net/messages';
 
 /** A player's part in a duel: on the first side, on the second, or watching. */
 export type DuelPart = 0 | 1 | 'watch';
@@ -476,6 +477,9 @@ const taken = new Map<number, { since: number; share: number }>();
  * a round, from a hero of his own side, or struck where he no longer stands on his own screen (he blinked or dashed
  * away: `PVP.dodged`); each held to what a hit and a second of hits may take (`PVP.hitMost`), whatever its sender says.
  */
+// (a rival's hits on our hero, straight from its game)
+onMessages(['pvp'], (m, _from, by) => { if (by) duelHits(by, Number(m.n), m.rows); });
+
 export function duelHits(by: Player, n: number, rows: unknown): void {
   const d = duelOn(), me = G.player;
   if (!d || d.phase !== 'fight' || n !== d.round || !Array.isArray(rows)) return;

@@ -2,7 +2,8 @@
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
-import { BOSS_AI, ENEMIES, HERO, SCALING, TWINS, type EnemyId } from '../../data/enemies';
+import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
+import { TWINS } from '../../data/foes/twins';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -30,7 +31,10 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
     const foe: Foe = { id, def, note: FOE_NOTES[id], ...met };
     (def.boss ? bosses : common).push(foe);
   }
-  return { common, bosses };
+  // (by where they're met, then the cheaper first: each foe's file in data/foes/ comes in the folder's order)
+  const order = (a: Foe, b: Foe): number => BIOME_IDS.indexOf(a.biome) - BIOME_IDS.indexOf(b.biome) || a.from - b.from
+    || a.def.cost - b.def.cost;
+  return { common: common.sort(order), bosses: bosses.sort(order) };
 }
 
 /** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there. */
@@ -134,7 +138,7 @@ function attacks(foe: Foe): string[] {
   return out;
 }
 
-/** One of the Ossuary Twins' fight, each with its figures (data/enemies.ts `TWINS` and its boss kit): its own attacks,
+/** One of the Ossuary Twins' fight, each with its figures (data/foes/twins.ts `TWINS` and its boss kit): its own attacks,
  *  and what the pair shares (one life, the chain). */
 function twinsAttacks(foe: Foe): string[] {
   const d = foe.def, t = TWINS, kit = d.bossKit!, hit = damage(d, foe.from);

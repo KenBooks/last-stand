@@ -7,8 +7,13 @@ import type { BiomeId } from './biomes';
 import type { RoomId } from './houses';
 
 /** What an object does when the hero uses it (game/village.ts `use`). */
-export type VillageUse = 'portal' | 'stash' | 'heroes' | 'coop' | 'chronicle' | 'help' | 'training' | 'pvp'
-  | 'enter' | 'leave' | 'records' | 'guide' | 'talk' | 'merchant';
+// (each kind's owner registers what it does, game/villageUses.ts; a new kind adds itself here by `declare module`
+// from its own module, so no shared list grows)
+export interface VillageUses {
+  portal: true; stash: true; heroes: true; coop: true; chronicle: true; help: true; training: true; pvp: true;
+  enter: true; leave: true; records: true; guide: true; talk: true; merchant: true;
+}
+export type VillageUse = keyof VillageUses;
 
 /** An object of the village the hero walks to and uses: where it stands (its middle, x and z), how near he must be
  *  to use it (m, from that middle), where he stands to use it (x, z), the height its name hangs at (m), its name and
