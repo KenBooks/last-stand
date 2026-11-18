@@ -264,6 +264,9 @@ async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): P
   await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
   await useByE(lab, him, problems);
   await lab.step(30);
+  // (his lines come one by one: Enter shows the rest, and the replies after them)
+  await lab.step(1, () => ({ keys: ['enter'] }));
+  await lab.step(5);
   const card = document.getElementById('talk')!;
   const box = card.querySelector('.tk-box') as HTMLElement;
   // (its max width lifted too, and kept from shrinking: the modal box's own and its flex row both held a width set
@@ -282,6 +285,8 @@ async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): P
   moments.push(await lab.screen('houses-scholar-talk'));
   // (the third reply: what's strange lately, the door behind the great hall)
   await lab.step(1, () => ({ keys: ['3'] }));
+  await lab.step(5);
+  await lab.step(1, () => ({ keys: ['enter'] }));
   await lab.step(5);
   const says = card.querySelector('.tk-says')?.textContent ?? '';
   if (!/behind the great hall/.test(says)) problems.push(`the scholar's third reply said no door behind the hall: "${says.slice(0, 80)}"`);

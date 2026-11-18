@@ -48,10 +48,10 @@ const SNAP = 5;
 /** how far his head must turn and his hand go over the loop (deg, m), or he's a statue */
 const MOVES = { head: 8, hand: 0.15 };
 /** how far off the hero his face may point while he's looked at (deg) and how far off it must point once he's not */
-const LOOKED = { at: 25, away: 35 };
+export const LOOKED = { at: 25, away: 35 };
 /** where the hero stands to talk to him as the player is pictured doing it (the room's frame): beside his table on its
  *  right, a step back, so the camera behind him sees the scholar's face ahead and to the left, within his reach */
-const SEEN_FROM: [number, number] = [-1.6, 2.4];
+export const SEEN_FROM: [number, number] = [-1.6, 2.4];
 /** how far his sleeves' cloth may come below the table's top inside its edges (m), and how far below the top a point
  *  is still read as through it (further down, it's cloth hanging past the table's edge, under it) */
 const THROUGH = { most: 0.004, depth: 0.2 };
@@ -537,7 +537,7 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
 }
 
 /** How far off the hero his face points (deg). */
-function offHero(s: Scholar): number {
+export function offHero(s: Scholar): number {
   const head = s.root.getObjectByName('scholar cap')!.parent!;
   s.root.updateMatrixWorld(true);
   const from = head.getWorldPosition(new THREE.Vector3()), facing = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
