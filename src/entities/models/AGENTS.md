@@ -1,5 +1,12 @@
 # `src/entities/models`
 
+- For the bare warrior's guard, check the stack of fingers and the thumbnail through his own eyes with
+  `lab sheet --class warrior --gear bare --view first --views eyes`. The straight wrist and thumb contact can both
+  pass with the back of the fist filling the picture. The guard's elbow and knuckle line set which side he sees.
+  Use `lab hands --class warrior --poses clenched --wrap=false` for the skin alone. With the wrap, the little-side
+  view can see daylight under the edge at the wrist. The studio's two lamps both sit above the hand, so the downward
+  striking face stays in shade. Judge the depth of its seams alongside the palm and three-quarter views.
+
 - Head-worker preparation is memoized per geometry detail, including an in-flight request. Auto can change detail after boot: background builds must wait for their own detail's workers, and `atHeroDetail` in `detail.ts` restores the live preset between every queued piece. Using today's global detail halfway through an older build caused head-grid/hair sculpting on the input thread after Change hero then Back. The hall/spare cache keys record the queued detail, not the level at completion. `lab behind` covers Back without a choice after a detail change and a repeated opening; its missing-worker canary must sculpt head pieces on the page.
 
 - The first lobby hero is built with `Player.inSteps` through `builtInSlices` (`steps.ts`) under the loading screen, yielding between existing generator boundaries once 12 ms is spent. Do not replace it with a synchronous constructor: even after restoring geometry workers, an initial full-body build held one task about 0.9 s. The slices reduced that task to about 0.3 s in a local cold trace; single pieces such as engraved maps can still exceed the slice. Never add a yield inside a live `Sculpt` transaction to meet a timing target.

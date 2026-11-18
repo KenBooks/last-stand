@@ -39,18 +39,18 @@ const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.0
 /** through the eyes, the guard's places on the screen (`fromScreen`: across and up from the middle to the frame's
  *  edges, and metres ahead): as a fighter sees his own guard (Codex's reference photographs, `.tmp/refs/fpguard`, the
  *  close-up and the side view an adversarial review passed), each fist big, low either side of the middle with the
- *  view clear between them, 0.36 to 0.38 m ahead, so the forearms rise forward at about 50 degrees from elbows down
+ *  view clear between them, 0.40 to 0.42 m ahead, with the forearms rising forward from elbows down
  *  by the ribs, the lead (left) a little higher and further in, reached from his own shoulders as the ranger's hands
  *  are (`fistsLens`); a little lower out of a fight. At 0.3 m the forearms stood upright under the fists, the
  *  knuckles to the sky ("nobody can strike from how you drew it"); 0.46 to 0.52 m ahead out towards the corners,
  *  they were small fists far off (from play: "1st person looked terrible"); in the corners from shoulders under the
  *  eyes, they were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
-  lead: [-0.36, -0.68, 0.38], rear: [0.44, -0.8, 0.36],
+  lead: [-0.36, -0.62, 0.42], rear: [0.42, -0.7, 0.40],
   /** Index end up, the palm turned towards the opposite cheek so the folded fingers show inside the thumb. */
-  line: [-0.62, 0.86, 0],
-  /** The elbows slightly outside the wrists, leaving space between the raised hands. */
-  pole: 1.1,
+  line: [-1, 0.25, 0],
+  /** The elbows down by the ribs so the palm can turn inward without winding the forearms past their range. */
+  pole: 0.4,
   /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
   punch: [0.12, -0.28],
 }), EASY_EYES = -0.22;
