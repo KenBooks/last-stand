@@ -133,12 +133,14 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   const positions: number[] = [], uvs: number[] = [], weights: number[] = [], indices: number[] = [];
   const smooth = THREE.MathUtils.smoothstep;
   const flatOval = (x: number) => Math.sign(x) * Math.pow(Math.abs(x), 0.72);
+  // (over the forearm a wrist's 5.8 by 4.2 cm, widening up the arm to 7.6 by 5.6 under the cuff: growing from the
+  // hand's 7 cm at once, it was a straight tube wider than the wrist, as wide as the cuff it tucks under, "rigid")
   const radii = (y: number, angle: number, z: number): [number, number] => {
-    const hand = smooth(-y, 0, 0.075), arm = smooth(y, 0, 0.085);
+    const hand = smooth(-y, 0, 0.075), wrist = smooth(y, -0.01, 0.015), arm = smooth(y, 0.02, 0.12);
     const thumb = Math.max(0, Math.sin(angle));
-    const rx = 0.035 + 0.014 * hand + 0.012 * arm + 0.005 * thumb * hand;
+    const rx = 0.035 + 0.014 * hand - 0.006 * wrist + 0.009 * arm + 0.005 * thumb * hand;
     // The thenar mound is deeper than the centre of the palm. A symmetric oval cut through it in teeth.
-    const rz = 0.025 + 0.011 * arm + (z > 0 ? -0.005 : 0.004 + 0.017 * thumb) * hand;
+    const rz = 0.025 - 0.004 * wrist + 0.007 * arm + (z > 0 ? -0.005 : 0.004 + 0.017 * thumb) * hand;
     return [rx, rz];
   };
   // (each row's share of its oval the skin lies at, its middle's, with the rows above the hand eased back to 1)

@@ -45,10 +45,12 @@ const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.0
  *  were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
   lead: [-0.38, -0.66, 0.32], rear: [0.48, -0.8, 0.3],
-  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored): across the view, so the
-   *  backs of the hands face the eye with the knuckles on top (turned ahead and across as in third person, 0.7, 0,
-   *  0.7, the eye looked down into the curled fingers, a fist punching at it) */
-  line: [1, 0, 0],
+  /** each fist's knuckle line in the guard through the eyes (the right's; the left's mirrored): across the view and
+   *  rising 37 degrees towards the middle, so the backs of the hands face the eye, turned in with the thumbs up, the
+   *  knuckles towards the foe (level across, the fists sat flat with the knuckles to the sky, from play: "wrists in 1st
+   *  person need to be slightly rotated ... nobody can strike from how you drew it"; turned ahead and across as in
+   *  third person, 0.7, 0, 0.7, the eye looked down into the curled fingers, a fist punching at it) */
+  line: [0.8, 0.6, 0],
   /** how far out the elbows' way is through the eyes */
   pole: 0.7,
   /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
