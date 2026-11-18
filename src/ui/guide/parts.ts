@@ -34,6 +34,11 @@ export function points(title: string, items: string[], kind: 'good' | 'bad' | 'p
 /** A paragraph. */
 export const para = (html: string): string => `<p class="gd-p">${html}</p>`;
 
+/** A place for `id`'s picture (a foe's id, or `hero:` and a class's), of the class `cls`: its canvas filled once the
+ *  picture is made (`fillPortraits` in index.ts), a spinner in it till then. */
+export const pic = (id: string, cls: string): string =>
+  `<span class="gd-pic ${cls} waiting" data-foe="${esc(id)}" role="img" aria-label="${id.startsWith('hero:') ? 'The hero' : 'The foe'}"><canvas width="320" height="320"></canvas></span>`;
+
 /** A key as the keyboard and mouse name it. */
 export function keyName(k: SkillKey): string {
   return k === 'mouse0' ? 'Left click' : k === 'mouse2' ? 'Right click' : k.toUpperCase();

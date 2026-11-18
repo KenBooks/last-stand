@@ -12,7 +12,7 @@ import { skillTooltip } from '../tooltip';
 import { skillIconHTML } from '../skillArt';
 import { itemIconSVG } from '../itemIcons';
 import type { ClassDef, Item, Profile, SkillDef, SkillKey } from '../../types';
-import { esc, head, keyCap, keyName, num, para, points, secs, whole } from './parts';
+import { esc, head, pic, keyCap, keyName, num, para, points, secs, whole } from './parts';
 import { bars, keySequence } from './diagrams';
 import { skillHits } from '../skillDamage';
 import { CLASSES } from '../../data/classes/index';
@@ -218,7 +218,7 @@ function combos(cls: ClassDef, note: ClassNote): string {
 /** A class's page. */
 export function heroPage(cls: ClassDef): string {
   const note = classNote(cls);
-  let html = `<div class="gd-top"><img class="gd-portrait" data-foe="hero:${cls.id}" alt="" width="160" height="160">`
+  let html = `<div class="gd-top">${pic(`hero:${cls.id}`, 'gd-portrait')}`
     + `<div class="gd-title"><h2 style="color:${cls.accent}">${cls.name}</h2>`
     + `<div class="gd-sub">${cls.hall?.role ?? ''}</div><p class="gd-p"><i>${cls.tagline}</i></p></div></div>`;
   html += baseFigures(cls);

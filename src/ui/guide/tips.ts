@@ -9,7 +9,6 @@ import { CLASSES } from '../../data/classes/index';
 import { formatStat } from '../../loot/items';
 import type { SkillDef, StatKey } from '../../types';
 import { head, num, para, pct, points, secs, whole } from './parts';
-import { runLoop } from './diagrams';
 import { HOLLIS } from '../../data/talk';
 import { HOUSES } from '../../data/houses';
 import { CUT, RESTOCK_RUNS, STOCKED_FROM, TRADED } from '../../data/merchant';
@@ -39,7 +38,7 @@ function chances(w: number): number[] {
 export const TIPS_PAGES: Tip[] = [
   {
     id: 'bank', title: 'Bank or continue',
-    html: () => runLoop() + para('Every run is a gamble. After <b>every</b> wave you choose:')
+    html: () => para('Every run is a gamble. After <b>every</b> wave you choose:')
       + points('', [
         `<b class="gold">Bank</b> (B): leave the arena and keep everything you found. Future runs in that battleground can start from the wave you banked.`,
         `<b class="gold">Continue</b> (C): a harder wave with better loot. You get back ${pct(RUN.healOnContinue)} of your Health and ${pct(RUN.energyOnContinue)} of your Energy first.`,

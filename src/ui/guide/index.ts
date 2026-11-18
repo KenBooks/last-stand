@@ -9,7 +9,8 @@ import { sfx } from '../../core/audio';
 import { foePage, foes, type Foe } from './foes';
 import { heroPage, missingNotes } from './heroes';
 import { TIPS_PAGES } from './tips';
-import { hurryPortrait, portrait, portraitMade, queuePortraitsBehind, type Who } from './portraits';
+import { drawPortrait, hurryPortrait, hurryPortraits, portrait, portraitMade, queuePortraitsBehind, type Who } from './portraits';
+import { pic } from './parts';
 
 export type GuideSection = 'foes' | 'bosses' | 'heroes' | 'tips';
 const SECTIONS: { id: GuideSection; label: string }[] = [
@@ -50,10 +51,7 @@ function entries(of: GuideSection): Entry[] {
 
 /** The list's picture of an entry: a foe's portrait, else its glyph. */
 function badge(e: Entry): string {
-  if (e.foe) {
-    const url = portraitMade(e.foe);
-    return `<img class="gd-mini" data-foe="${e.foe}" alt="" ${url ? `src="${url}"` : ''}>`;
-  }
+  if (e.foe) return pic(e.foe, 'gd-mini');
   return `<span class="gd-glyph" style="${e.colour ? `color:${e.colour}` : ''}">${e.glyph ?? ''}</span>`;
 }
 
@@ -68,15 +66,20 @@ function renderNav(list: Entry[]): void {
   $('#guide .gd-entries').innerHTML = html;
 }
 
-/** Every foe picture laid in the guide filled in as it's made. */
+/** Every picture laid in the guide filled in: at once if it's made, else as it's made, its place showing it's on its
+ *  way till then (`.waiting`). */
 function fillPortraits(): void {
-  document.querySelectorAll<HTMLImageElement>('#guide img[data-foe]').forEach((img) => {
-    if (img.getAttribute('src')) return;
-    const id = img.dataset.foe as Who;
-    void portrait(id).then((url) => {
-      if (url) img.src = url;
-      else img.classList.add('none');
-    });
+  document.querySelectorAll<HTMLElement>('#guide .gd-pic.waiting').forEach((place) => {
+    const id = place.dataset.foe as Who;
+    const fill = (made: HTMLCanvasElement | null): void => {
+      place.classList.remove('waiting');
+      if (made) drawPortrait(place.querySelector('canvas')!, made);
+      else place.classList.add('none');
+    };
+    // (one made already drawn now, before the page is painted: no spinner shown for it)
+    const made = portraitMade(id);
+    if (made) fill(made);
+    else void portrait(id).then(fill);
   });
 }
 
@@ -88,6 +91,8 @@ function render(): void {
   const page = $('#guide .gd-page');
   page.innerHTML = e ? e.page() : '';
   page.scrollTop = 0;
+  // (the list's pictures first, the page's own before them)
+  hurryPortraits(list.flatMap((x) => (x.foe ? [x.foe] : [])));
   if (e?.foe) hurryPortrait(e.foe);
   fillPortraits();
   try { localStorage.setItem(KEPT, JSON.stringify({ section, entry })); } catch { /* storage off: not kept */ }

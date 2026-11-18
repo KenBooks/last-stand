@@ -9,7 +9,7 @@ import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
 import { CLASSES } from '../../data/classes/index';
 import { G } from '../../state';
 import type { EnemyDef } from '../../types';
-import { css, head, metres, num, para, pct, points, secs, tile, tiles, whole } from './parts';
+import { css, head, pic, metres, num, para, pct, points, secs, tile, tiles, whole } from './parts';
 import { bars, partyBars, summonTimeline } from './diagrams';
 
 /** the wave a foe's figures are shown at besides the first, to show how it grows */
@@ -176,7 +176,7 @@ export function foePage(foe: Foe): string {
   const d = foe.def, note = foe.note;
   const hit = damage(d, foe.from);
   const you = againstHero(d, hit);
-  let html = `<div class="gd-top"><img class="gd-portrait" data-foe="${foe.id}" alt="" width="160" height="160">`
+  let html = `<div class="gd-top">${pic(foe.id, 'gd-portrait')}`
     + `<div class="gd-title"><h2 style="${d.accent ? `color:${css(d.accent)}` : ''}">${d.name}</h2>`
     + `<div class="gd-sub">${note.role} · ${BIOMES[foe.biome].title}</div>`
     + `<p class="gd-p">${note.does}</p>`

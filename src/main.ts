@@ -38,7 +38,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
 import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
-import { queuePortraitsBehind } from './ui/guide/portraits';
+import { queuePortraitsBehind, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
@@ -1311,10 +1311,9 @@ function frame(timestamp: number): void {
     G.dt = simDt;
     G.time += simDt;
     update(simDt);
-  } else if (G.paused && guideOpen()) {
-    // (the guide opened over the pause menu: its pictures still made behind it, a piece a frame, ui/guide/portraits.ts)
-    buildBehind();
   }
+  // (the guide open: its pictures made first, whatever else is building or warming, ui/guide/portraits.ts)
+  if (guideOpen()) stepPortraits();
   // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
   if (dev && revealed) dev.frame(Math.min(rawDt, 0.1));
   // (worn items' glow: its wisps' drift and breath, wherever a hero is drawn)

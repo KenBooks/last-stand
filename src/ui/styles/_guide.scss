@@ -22,9 +22,8 @@
   border: 1px solid transparent; color: var(--ink); font: 15px var(--font-body); cursor: $cursor-hand; }
 .gd-entry:hover, .gd-entry.alt-hover { border-color: rgba($frame, .35); }
 .gd-entry.active { background: $well-lit; border-color: rgba($frame, .7); color: var(--highlight); }
-.gd-mini { width: 38px; height: 38px; flex: none; object-fit: contain; border-radius: 50%;
+.gd-mini { width: 38px; height: 38px; flex: none; border-radius: 50%; overflow: hidden;
   background: radial-gradient(circle at 50% 40%, rgba($frame, .3), rgba(0, 0, 0, .5) 70%); }
-.gd-mini:not([src]) { visibility: hidden; }
 .gd-glyph { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 50%;
   font: 900 18px var(--font-display); color: var(--accent); background: $gem-face; border: 1px solid rgba($frame, .5); }
 
@@ -33,9 +32,20 @@
 .gd-page b.gold { color: var(--highlight); }
 .gd-page b.red { color: var(--danger); }
 .gd-top { display: flex; gap: 18px; align-items: flex-start; }
-.gd-portrait { width: 160px; height: 160px; flex: none; object-fit: contain; border: 1px solid rgba($frame, .5);
+.gd-portrait { width: 160px; height: 160px; flex: none; border: 1px solid rgba($frame, .5);
   background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba($frame, .28), transparent 72%), $well; }
-.gd-portrait:not([src]) { color: transparent; }
+
+// a foe's or hero's picture: its canvas, and a gilt spinner turning in its place till it's drawn (a turn a second,
+// the spinner's transform alone, on a layer of its own; still with reduced motion)
+.gd-pic { position: relative; display: block; box-sizing: border-box; }
+.gd-pic canvas { display: block; width: 100%; height: 100%; transition: opacity .2s; }
+.gd-pic.waiting canvas, .gd-pic.none canvas { opacity: 0; }
+.gd-pic.waiting::after { content: ''; position: absolute; left: 50%; top: 50%; width: var(--spin, 40%); aspect-ratio: 1;
+  box-sizing: border-box; border-radius: 50%; border: 2px solid rgba($frame, .25); border-top-color: var(--highlight);
+  translate: -50% -50%; animation: gd-spin 1s linear infinite; will-change: transform; }
+.gd-portrait.waiting::after { --spin: 28%; border-width: 3px; }
+@keyframes gd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .gd-pic.waiting::after { animation: none; } }
 .gd-title { min-width: 0; flex: 1; }
 .gd-title h2 { margin: 0; font: 900 28px var(--font-display); color: var(--accent); }
 .gd-sub { color: var(--ink-dim); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
@@ -187,25 +197,12 @@ body.touch .pbg-key { display: none; }
 // the drawings
 .gd-fig { margin: 0; }
 .gd-fig figcaption { margin-top: 6px; color: var(--ink-dim); font-size: 12px; line-height: 1.4; }
-.gd-timeline svg, .gd-flow svg { display: block; width: 100%; height: auto; }
+.gd-timeline svg { display: block; width: 100%; height: auto; }
 .gd-timeline svg { max-width: 640px; }
 .gd-timeline text { fill: var(--ink-dim); font: 11px var(--font-body); }
 .gd-tl-axis, .gd-tl-tick { stroke: rgba($frame, .7); stroke-width: 1.5px; }
 .gd-tl-call circle { fill: rgba(176, 112, 255, .35); stroke: #c79bff; stroke-width: 1.5px; }
 .gd-tl-call text { fill: var(--ink); font: 700 11px var(--font-display); }
-.gd-flow svg { max-width: 680px; margin: 4px auto 0; }
-.gd-fl rect, .gd-fl path { fill: #1d1814; stroke: var(--frame); stroke-width: 1.5px; }
-.gd-fl text { fill: var(--ink); font: 700 14px var(--font-display); }
-.gd-fl text.sub { fill: var(--ink-dim); font: 12px var(--font-body); }
-.gd-fl.bank rect { stroke: $heal; }
-.gd-fl.cont rect { stroke: var(--highlight); }
-.gd-fl.die rect { stroke: var(--danger); }
-.gd-fl.choice path { fill: #2a2218; stroke: var(--accent); }
-.gd-fl-arrow { fill: none; stroke: var(--frame); stroke-width: 2px; }
-.gd-fl-arrow.good { stroke: $heal; }
-.gd-fl-arrow.bad { stroke: var(--danger); }
-.gd-fl-arrow.loop { stroke: var(--highlight); stroke-dasharray: 6 4; }
-#gd-arrowhead path { fill: var(--frame); }
 
 // a combo: the game's key caps in order, an arrow between
 .gd-seq { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 8px 0; }

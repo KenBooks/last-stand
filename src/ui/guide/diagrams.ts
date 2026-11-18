@@ -1,10 +1,9 @@
 // The guide's diagrams, drawn from the game's data as a page opens, never pictures: bars of a figure against the
-// largest of its kind, a boss's calls for help along a fight's first minute, a combo as the game's key caps with arrows,
-// and a run's loop (a wave, then Bank or Continue). Their colours are the theme's custom properties, so they follow it.
+// largest of its kind, a boss's calls for help along a fight's first minute, and a combo as the game's key caps with
+// arrows (a run's loop as a flowchart and a boss's moves seen from above were taken out from play). Their colours are
+// the theme's custom properties, so they follow it.
 import { BOSS_AI } from '../../data/enemies';
-import { WAVES } from '../../data/waves';
-import { RUN } from '../../data/balance';
-import { esc, pct, secs } from './parts';
+import { esc, secs } from './parts';
 
 /** One bar: what it is, its value as a share of the largest of its kind, the figure written beside it, and a mark
  *  along it (the hero's own speed on a foe's). */
@@ -36,27 +35,6 @@ export function summonTimeline(summonName: string, span = 60): string {
 export function partyBars(lives: number[]): string {
   const most = Math.max(...lives);
   return bars(lives.map((v, i) => ({ label: `${i + 1} hero${i ? 'es' : ''}`, share: v / most, text: String(Math.round(v)), colour: 'var(--life-bar)' })));
-}
-
-// --- a run's loop ---------------------------------------------------------------------------------------------------
-
-/** A run's loop: a wave fought, then Bank (keep the loot, leave) or Continue (a harder wave), and death's cost. */
-export function runLoop(): string {
-  const box = (x: number, y: number, w: number, h: number, cls: string, lines: string[]): string =>
-    `<g class="gd-fl ${cls}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/>`
-    + lines.map((l, i) => `<text x="${x + w / 2}" y="${y + h / 2 + (i - (lines.length - 1) / 2) * 17 + 5}" text-anchor="middle"${i ? ' class="sub"' : ''}>${esc(l)}</text>`).join('') + '</g>';
-  const arrow = (d: string, cls = ''): string => `<path class="gd-fl-arrow ${cls}" d="${d}" marker-end="url(#gd-arrowhead)"/>`;
-  return `<figure class="gd-fig gd-flow"><svg viewBox="0 0 640 250" role="img" aria-label="A run's loop">`
-    + `<defs><marker id="gd-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`
-    + box(20, 95, 140, 60, 'wave', ['Fight a wave', `a boss every ${WAVES.bossEvery}th`])
-    + `<g class="gd-fl choice"><path d="M250 75L310 125L250 175L190 125Z"/><text x="250" y="122" text-anchor="middle">Cleared:</text><text x="250" y="140" text-anchor="middle" class="sub">choose</text></g>`
-    + box(400, 20, 220, 62, 'bank', ['Bank (B)', 'keep every item, back to the village'])
-    + box(400, 168, 220, 62, 'cont', ['Continue (C)', `+${pct(RUN.healOnContinue)} Health, harder wave, better loot`])
-    + box(20, 10, 140, 50, 'die', ['Fall', 'unbanked loot is lost'])
-    + arrow('M160 125H186') + arrow('M290 108L396 56', 'good') + arrow('M290 142L396 196')
-    + arrow('M400 222C300 250 120 250 92 158', 'loop')
-    + arrow('M90 95V64', 'bad')
-    + '</svg><figcaption>Every wave ends in the same choice. Loot stays sealed in your bag until you bank.</figcaption></figure>';
 }
 
 // --- combos ---------------------------------------------------------------------------------------------------------
