@@ -4,7 +4,7 @@
 // sets, so a preview's page can never write production's heroes. A save is parts (a hero each, what they share),
 // each gzipped JSON with a version: a write names the version it builds on, and a stale one is refused (409) with
 // the version kept, so the game can ask its player which copy to keep (#382).
-//   GET    /saves/health               { ok, passkeys, google, cleanup, backups }: what is on
+//   GET    /saves/health               { ok, passkeys, friends, google, cleanup, backups }: what is on
 //   POST   /saves/passkey/options      { purpose: 'register' | 'login' } -> the options for navigator.credentials
 //   POST   /saves/passkey/verify       { purpose, response } -> { token, account } (a new passkey or a sign-in)
 //   GET    /saves/account              the account: its passkeys, its sites' saves (sizes, times)
@@ -743,7 +743,7 @@ async function handle(req, res) {
   }
   if (path === '/saves/health') {
     return answer(res, 200, {
-      ok: true, passkeys: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
+      ok: true, passkeys: true, friends: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
       backups: backupHealth(),
     }, headers);
   }
