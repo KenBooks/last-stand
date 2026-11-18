@@ -836,8 +836,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     yield;
   }
   const handL = buildHand(j.handL, 1, leather, bareSkin, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, bareSkin, HAND_K, bareSkin);
-  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s);
-  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s);
+  const skinOf = (h: Hand) => [h.bareSkin ?? h.skin];
+  const wrapL = fighterWrap(B, leather, j.elbowL, handL.vis, -handL.s, skinOf(handL));
+  const wrapR = fighterWrap(B, leather, j.elbowR, handR.vis, -handR.s, skinOf(handR));
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
   body.legCapsules = true;
