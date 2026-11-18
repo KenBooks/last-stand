@@ -341,6 +341,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   }
   walkParts.push(ringWalk(17.4, 19.6, 0.25));
   const walks = new THREE.Mesh(mergeGeometries(walkParts), walkMat);
+  walks.name = 'crypt walks';
   walks.receiveShadow = true;
   scene.add(walks);
 

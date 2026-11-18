@@ -39,7 +39,7 @@ import type { Player } from '../entities/player';
 import type { EnemyDef, Item } from '../types';
 import type { Portal } from '../world/props';
 
-interface SpawnUnit { type: EnemyId; hero: boolean; guard?: boolean }
+interface SpawnUnit { type: EnemyId; hero: boolean; guard?: boolean; at?: [number, number] }
 const pendingUnits = new Set<SpawnUnit>();
 
 /** Retarget enemies still queued or waiting between a gate pulse and their rise. */
@@ -251,7 +251,7 @@ function buildWave(w: number): SpawnUnit[][] {
 function bossOf(w: number): SpawnUnit[] | null {
   const rung = bossOfWave(G.arena.biome, w);
   if (!rung) return null;
-  const guards = Array.from({ length: rung.guards?.count ?? 0 }, () => ({ type: rung.guards!.id, hero: false, guard: true }));
+  const guards = Array.from({ length: rung.guards?.count ?? 0 }, (_, i) => ({ type: rung.guards!.id, hero: false, guard: true, at: rung.guards!.at?.[i] }));
   return [{ type: rung.id, hero: false }, ...guards];
 }
 
@@ -333,7 +333,8 @@ function gatesFor(r: RunState, count: number): number[] {
  * A group comes by a gate whole, or split over two, three or four, at random, in packs of random sizes, each pack
  * rising at its gate as the others do; the gates the wave has used least first, so none stands idle for a wave
  * (picked at random, two a group, often one twice, two or three were; dealt round all four one foe a gate, every group
- * came alike). The boss comes by any gate, an encounter's bosses each by a gate of its own.
+ * came alike). The boss comes by any gate, an encounter's bosses each by a gate of its own, a guard with a spot of its
+ * own (`BossRung.guards.at`) rising there.
  */
 function spawnGroup(group: SpawnUnit[]): void {
   const portals = G.arena.portals;
@@ -354,7 +355,8 @@ function spawnGroup(group: SpawnUnit[]): void {
       const u = group[next++];
       const def = ENEMIES[u.type];
       portal.pulse();
-      const pos = riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      // (an encounter's guard rises at its rung's spot for it, where it has one: rising at a gate, it came anywhere)
+      const pos = u.at ? new THREE.Vector3(u.at[0], 0, u.at[1]) : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
       pendingUnits.add(u);
       schedule(j * SPAWN_GAP, () => {

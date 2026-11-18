@@ -15,8 +15,19 @@ export interface BossRung {
   id: EnemyId;
   short: string;
   banner: string;
-  guards?: { id: EnemyId; count: number };
+  /** an encounter's guards: who and how many, and where each rises (x, z in m), the same every time where given */
+  guards?: { id: EnemyId; count: number; at?: [number, number][] };
 }
+
+/** Where the Ossuary Cantor's two guards rise: on the crypt's ring walk (18.5 m out, world/crypt.ts `ringWalk`), across
+ *  the arena from each other, 36 degrees off the nearest gates, where its props leave the most room round them (the
+ *  diagonals hold its spirit beacons, a guard there 0.6 m off one), the same every time (from play: "the bells should
+ *  spawn in the same spots, across from each other on the map, symmetrically, on a path"). */
+const GUARD_RING = 18.5, GUARD_ANGLE = 0.8 * Math.PI;
+const CANTOR_GUARDS: [number, number][] = [
+  [GUARD_RING * Math.cos(GUARD_ANGLE), GUARD_RING * Math.sin(GUARD_ANGLE)],
+  [-GUARD_RING * Math.cos(GUARD_ANGLE), -GUARD_RING * Math.sin(GUARD_ANGLE)],
+];
 
 export interface BiomeDef {
   /** short label for the lobby picker */
@@ -49,7 +60,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     bosses: [
       { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
       // (the second rung is an encounter: the Ossuary Cantor and two Bell-Wardens, its choir and its guards)
-      { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2 } },
+      { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2, at: CANTOR_GUARDS } },
     ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },

@@ -17,7 +17,8 @@
 // - `encounter`: the Crypt's second rung as it comes, the Ossuary Cantor and its two Bell-Warden guards fighting the
 //   hero: warded (a quarter of the damage) while a guard stands and not after; each of its casts ringed on the floor
 //   before its hands burst; no two bosses' warned hits closer than its beat; its heart bared after a cast once the
-//   guards are down; the guards a lesser bell's size, standing where they rose.
+//   guards are down; the guards a lesser bell's size, rising at their two spots (bossGuardSpots.ts) and standing
+//   where they rose.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
 //   takes at the wave it comes on (the Colossus at 5, the Bell-Warden alone and the Cantor's encounter at 10), with
 //   and without its weak windows.
@@ -27,10 +28,11 @@
 //
 // `--canary` plants a fault each part must catch: a ladder turned round, a phase's share moved, a toll that stuns no
 // one near it, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts
-// that seize no one, a ward that wards nothing, guards that walk, a program compiled in the fight, and an attack that deals nothing.
+// that seize no one, a ward that wards nothing, guards that walk or rise at the gates, a program compiled in the fight, and an attack that deals nothing.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { cantorLook } from './bossCantor';
+import { guardSpots } from './bossGuardSpots';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -468,11 +470,9 @@ const WARNED_HITS: FxName[] = ['toll', 'graveHands', 'dirge'];
 async function encounterAt(lab: Lab): Promise<{ cantor: Enemy; guards: Enemy[] }> {
   const wave = WAVES.bossEvery * 2;
   const cantor = lab.spawnFoe('cantor', clearSpot(12, ENEMIES.cantor.radius), { wave });
-  const guards = [-1, 1].map((side) => {
-    const way = inward().applyAxisAngle(new THREE.Vector3(0, 1, 0), side * 1.2);
-    const at = G.player.pos.clone().addScaledVector(way, 11).setY(0);
-    return lab.spawnFoe('bellwarden', inObstacle(at, 3) ? clearSpot(14, 3) : at, { wave, guard: true });
-  });
+  // (at their rung's spots, as the run sends them: bossGuardSpots.ts holds the run to them)
+  const spots = BIOMES.crypt.bosses.find((boss) => boss.id === 'cantor')?.guards?.at ?? [];
+  const guards = spots.map(([x, z]) => lab.spawnFoe('bellwarden', new THREE.Vector3(x, 0, z), { wave, guard: true }));
   const all = [cantor, ...guards];
   await lab.until(() => all.every((boss) => boss.spawning <= 0), RISE_FRAMES, 'the encounter never rose');
   return { cantor, guards };
@@ -518,7 +518,9 @@ function closestHits(landed: Landed[]): { gap: number; pair: string } {
  * two bosses' warned hits within its beat; its heart bared after a cast once the guards are down.
  */
 async function encounter(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
-  await standIn(lab, options.fixture, 'crypt');
+  const stand = (): Promise<void> => standIn(lab, options.fixture, 'crypt');
+  await guardSpots({ lab, stand, canary: options.canary, lines, problems });
+  await stand();
   const ward = ENEMIES.cantor.bossKit!.ward!;
   const asGuard = ENEMIES.bellwarden.asGuard!;
   const lesser = { ...BELL_WARDEN.guard };
@@ -897,6 +899,9 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   cantor.cd = 99;
   await lab.step(90, keepWhole);
   await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
+  // (the arena from straight above: both guards on the ring walk, across from each other)
+  const middle = new THREE.Vector3(0, 0, 0);
+  moments.push(lab.picture('0 from above', ['plan'], ['the crypt from above: the two guards on the ring walk, across the arena from each other'], { at: middle, distance: ABOVE }));
   close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
   // 1a. a guard beside the hero, for its size against his
   await pictureBeside(lab, moments, guards[1], hero, cantor);
@@ -942,6 +947,9 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   lines.push(`encounterPictures: ${moments.length} moments`);
   return moments;
 }
+
+/** How high over the arena's middle its picture from straight above is taken (m): the whole ring in it. */
+const ABOVE = 95;
 
 /** How far from a guard the hero is stood for their picture together (m). */
 const BESIDE = 2.4;

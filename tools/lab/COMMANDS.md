@@ -781,12 +781,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   risen round the hero at wave 10's strength, each guard at most half the Cantor's height (from play, whole ones were "almost
   like main boss"), and left to fight him (kept whole) for 28 s: no stun from a guard's toll further than its `BELL_WARDEN.guard.stunsTo`
   (the hero's body and 0.5 m over), no frame seized by a guard's ghost, a guard at 15% of its life still in its first phase, and neither guard moved
-  over 1 mm from where it rose (from play: "They stay stationary"); the Cantor warded every
+  over 1 mm from where it rose. First the run's own wave 10 is set off twice (`page/bossGuardSpots.ts`): its guards
+  must rise at the same two spots both times, each within 5 cm of the other's mirror through the middle, on the
+  crypt's walks (a ray down meets them), 1.2 m of room past their bodies to any prop and 30 degrees off any gate; the
+  fight's guards then stand at those spots (from play: "They stay stationary"); the Cantor warded every
   frame (2 frames' slack) and taking the ward's `taken` of the damage; then the guards killed and 24 s more: never
   warded, at least one cast landed, its heart bared after one (`weak`); every one of the Cantor's hits landed 0.9 to
   3 s after a ring of its own; the guards tolled, and no two bosses' warned hits (tolls, grave hands, dirges) landed
-  closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards that walk, their tolls a
-  whole bell's. `compiles`: its tolls, a shard, the
+  closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards that walk, rising at the
+  gates, their tolls a whole bell's. `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, the Cantor's grave hands, a dirge, a ring, its ward and its heart bared,
   drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
