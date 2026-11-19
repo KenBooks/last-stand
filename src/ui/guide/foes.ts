@@ -6,6 +6,7 @@ import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemie
 import { BELL_WARDEN } from '../../data/foes/bellwarden';
 import { TWINS } from '../../data/foes/twins';
 import { ROOTMOTHER } from '../../data/foes/rootmother';
+import { STAG } from '../../data/foes/stag';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -137,6 +138,7 @@ function attacks(foe: Foe): string[] {
   if (d.ai === 'twins') out.push(...twinsAttacks(foe));
   if (d.ai === 'bellWarden') out.push(...bellWardenAttacks(foe));
   if (d.ai === 'rootmother') out.push(...rootmotherAttacks(foe));
+  if (d.ai === 'stag') out.push(...stagAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -208,6 +210,20 @@ function rootmotherAttacks(foe: Foe): string[] {
     `<b>Thorns:</b> while you stand within ${metres(r.thorns.near)} of her, her arms rise for ${secs(warn('thorns'))} and thorns burst from the earth out to ${metres(r.thorns.radius)} for ${secs(r.thorns.last)}, dealing ${whole(hit * r.thorns.hurt)} ${typed(d)} damage every ${secs(r.thorns.tick)} to whoever stands in them.`,
     `<b>Her heart:</b> ${secs(r.heart.first)} after she rises and every ${secs(r.heart.every)} after, it opens in her trunk for ${secs(r.heart.open)}. Shots that strike it deal ${num(spot)}× damage; she attacks nothing meanwhile, flinging ${r.heart.pods} pods round the arena instead.`,
     late ? `<b>Under ${pct(late.below)}:</b> the canopy closes. Spore clouds ${metres(r.spores.radius)} wide drift over the floor, dealing ${whole(hit * r.spores.hurt)} damage every ${secs(r.spores.tick)} to whoever stands in one, and the earth cracks under a hero for ${secs(warn('erupt'))} before spikes burst from it, ${metres(r.erupt.radius)} round, for ${whole(hit * r.erupt.hurt)} damage.` : '',
+  ].filter(Boolean);
+}
+
+/** The Stag of Ash's fight, each with its figures (data/enemies.ts `STAG` and its boss kit). */
+function stagAttacks(foe: Foe): string[] {
+  const d = foe.def, s = STAG, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const [, late] = kit.phases;
+  const taken = kit.weak?.taken ?? 2;
+  return [
+    `<b>Charge:</b> at a hero ${metres(s.charge.near)} off or more, it paws the ground for ${secs(warn('charge'))} as a lane burns onto the floor towards you, fixed once it starts. Then it runs down it at ${num(s.charge.speed)} m/s, to ${metres(s.charge.over)} past where you stood, goring whoever is still in it for ${whole(hit * s.charge.hurt)} ${typed(d)} damage. The lane it ran burns for ${secs(s.fire.life)}, dealing ${whole(hit * s.fire.hurt)} damage every ${secs(s.fire.tick)} to whoever stands in it.`,
+    `<b>The crash:</b> a charge that runs into a rock, a tree, the wall or a raised shield stops dead: it is stunned for ${secs(s.charge.stun)} and takes ${num(taken)}× damage.`,
+    `<b>Up close:</b> it never stops attacking, a moment between each. Every other attack, if you stand before its head, it drops its antlers to the earth for ${secs(warn('toss'))}, then scoops you up and throws you ${metres(s.toss.far)} across the arena for ${whole(hit * s.toss.hurt)} damage as you land; a step aside, a dash or a raised shield saves you. Otherwise it sweeps its antlers round before it for ${whole(hit * s.sweep.hurt)} damage, after ${secs(warn('sweep'))}.`,
+    late ? `<b>Under ${pct(late.below)}:</b> a charge that misses turns straight round into another, its fire burns ${secs(s.fire.late)}, and every ${secs(s.embers.every)} ${s.embers.count} embers fall round the heroes, each marked by a ring ${secs(s.embers.fall)} before it lands, for ${whole(hit * s.embers.hurt)} damage.` : '',
   ].filter(Boolean);
 }
 

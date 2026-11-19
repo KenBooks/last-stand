@@ -47,6 +47,8 @@ export const FOES: FoeFile = {
         ranger: 'An arrow cuts a vine whole and frees whoever it holds; shoot her heart when it opens.',
       },
     },
+    // (the Rootmother's crest: old bark and her heart's amber)
+    trophy: { name: "The Rootmother's Crest", look: 'crest', colour: 0x6e5a44, trim: 0xff9a38 },
   },
   // (a pod she flings: brought into her fight, no foe of any roster, `broughtBy`)
   seedpod: {

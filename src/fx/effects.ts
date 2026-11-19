@@ -2,6 +2,7 @@
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
 import { initRubble, updateRubble, clearRubble } from './rubble';
+import { burst, smokePuff } from './particles';
 import { G } from '../state';
 import { additive, nearGlow } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
@@ -208,6 +209,117 @@ export function lavaPool(pos: Pos, radius: number, life: number, color: THREE.Co
       glowMat.opacity = cool * (0.85 + 0.15 * Math.sin(t * 3.1));
       coreMat.opacity = cool * cool * 0.8;
       return t < life;
+    }, dispose,
+  });
+}
+
+/** how long each tile of a lane on the floor is (m): laid at its own middle's floor, so a lane over the dais's step
+ *  climbs it tile by tile rather than running under it */
+const LANE_TILE = 1.4;
+
+/**
+ * A lane burning onto the floor (the Stag of Ash's charge, entities/stag.ts): from (ox, oz) along `angle` for `length`
+ * m, `width` m wide, its fill running out along it over `duration` s and its two edges glowing all the while, a slow
+ * pulse (well under the flash rule). The telegraph's materials, one fill and one edge for the whole lane. Call
+ * `cancel()` to take it away early.
+ */
+export function laneMark(ox: number, oz: number, angle: number, length: number, width: number, duration: number,
+  color: THREE.ColorRepresentation = 0xff6a20): Effect & { cancel(): void } {
+  const fillMat = additive(color, 0.8, 0.35), edgeMat = additive(color, 1.6, 0.9);
+  const g = new THREE.Group(), dx = Math.sin(angle), dz = Math.cos(angle);
+  const n = Math.max(1, Math.ceil(length / LANE_TILE)), tile = length / n;
+  const fills: THREE.Mesh[] = [];
+  for (let i = 0; i < n; i++) {
+    const along = (i + 0.5) * tile, x = ox + dx * along, z = oz + dz * along, y = floor({ x, z }) + 0.07;
+    const fill = new THREE.Mesh(GEO.plane, fillMat);
+    fill.position.set(x, y, z);
+    fill.rotation.y = angle;
+    fill.scale.set(width / 2, 1, tile / 2);
+    fill.visible = false;
+    fills.push(fill);
+    for (const side of [-1, 1]) {
+      const edge = new THREE.Mesh(GEO.plane, edgeMat);
+      edge.position.set(x + dz * side * width / 2, y + 0.005, z - dx * side * width / 2);
+      edge.rotation.y = angle;
+      edge.scale.set(0.07, 1, tile / 2);
+      g.add(edge);
+    }
+    g.add(fill);
+  }
+  const dispose = tracked(g, [fillMat, edgeMat]);
+  let t = 0, dead = false;
+  return addEffect<Effect & { cancel(): void }>({
+    cancel() { dead = true; },
+    update(dt: number) {
+      t += dt;
+      const k = Math.min(1, t / duration);
+      fills.forEach((f, i) => { f.visible = i < Math.ceil(k * n); });
+      // (a slow pulse: a large mark flashing 3+ times a second is a photosensitivity hazard)
+      edgeMat.opacity = 0.75 + 0.25 * Math.sin(t * 8);
+      return !dead && k < 1;
+    }, dispose,
+  });
+}
+
+/** how far apart the fire's flames sit along a line it burns (m) */
+const FIRE_STEP = 0.85;
+
+/**
+ * Fire left burning along the floor from (x0, z0) to (x1, z1) for `life` s (the Stag of Ash's charge): soft glowing
+ * pools of it along the line over a scorch, each churning slowly at its own pace (well under a beat a second), flames
+ * and embers rising over it and smoke above, dying down over its last two seconds. The lava pool's materials, one of
+ * each for the whole line, and the particle pools: nothing to compile.
+ */
+export function fireLine(x0: number, z0: number, x1: number, z1: number, reach: number, life: number): Effect {
+  const glowMat = additive(0xff5a14, 1.5);
+  glowMat.map = TEX.soft;
+  const coreMat = additive(0xffb050, 1.0);
+  coreMat.map = TEX.soft;
+  const scorchMat = new THREE.MeshBasicMaterial({ map: TEX.scorch, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  const g = new THREE.Group(), length = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(1, Math.round(length / FIRE_STEP)), pools: { glow: THREE.Mesh; core: THREE.Mesh; phase: number; x: number; z: number; y: number }[] = [];
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, x = x0 + (x1 - x0) * k, z = z0 + (z1 - z0) * k, y = floor({ x, z });
+    const scorch = new THREE.Mesh(GEO.plane, scorchMat);
+    scorch.position.set(x, y + 0.03, z);
+    scorch.rotation.y = Math.random() * Math.PI * 2;
+    scorch.scale.setScalar(reach * 1.5);
+    scorch.renderOrder = 1;
+    const glow = new THREE.Mesh(GEO.plane, glowMat), core = new THREE.Mesh(GEO.plane, coreMat);
+    glow.position.set(x, y + 0.05, z);
+    core.position.set(x, y + 0.06, z);
+    g.add(scorch, glow, core);
+    pools.push({ glow, core, phase: Math.random() * 6.3, x, z, y });
+  }
+  const dispose = tracked(g, [glowMat, coreMat, scorchMat]);
+  const at = new THREE.Vector3();
+  let t = 0, flame = 0, smoke = 0;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      const swell = Math.min(1, t / 0.3), dying = Math.min(1, Math.max(0, (life - t) / 2));
+      for (const p of pools) {
+        p.glow.scale.setScalar(reach * (0.7 + 0.3 * swell) * (0.92 + 0.08 * Math.sin(t * 2.3 + p.phase)));
+        p.core.scale.setScalar(reach * 0.55 * swell * (0.85 + 0.15 * Math.sin(t * 3.1 + p.phase)));
+      }
+      glowMat.opacity = dying * 0.9;
+      coreMat.opacity = dying * dying * 0.85;
+      scorchMat.opacity = Math.min(1, (life + 3 - t) / 3);
+      flame += dt;
+      smoke += dt;
+      if (dying > 0.15 && flame > 0.05) {
+        flame = 0;
+        const p = pools[Math.floor(Math.random() * pools.length)];
+        at.set(p.x + (Math.random() - 0.5) * reach, p.y + 0.15, p.z + (Math.random() - 0.5) * reach);
+        burst(at, { count: 2, color: 0xffa040, colorEnd: 0xff3010, intensity: 2.2 * dying, speed: 0.4, up: 2.2, life: 0.7, size: 0.32, sizeEnd: 0.05, gravity: -1.5, drag: 1.5 });
+      }
+      if (dying > 0.3 && smoke > 0.35) {
+        smoke = 0;
+        const p = pools[Math.floor(Math.random() * pools.length)];
+        at.set(p.x, p.y + 0.8, p.z);
+        smokePuff(at, { count: 1, color: 0x1a1410, alpha: 0.3, size: 0.9, sizeEnd: 2.4, speed: 0.3, rise: 1.2, life: 2 });
+      }
+      return t < life + 3;
     }, dispose,
   });
 }

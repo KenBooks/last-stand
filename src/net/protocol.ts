@@ -12,6 +12,7 @@ const PARTS = [
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
   'rootmother-1: the Rootmother vines, drag, heart, pods, thorns, cracks, eruptions and spores, enemy fx (entities/bosses/rootmother.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
+  'stag-1: the Stag of Ash lane, run, fire, gore, crash, sweep, toss and embers, enemy fx (entities/bosses/stag.ts)',
 ];
 
 /** FNV-1a of the parts, as a number the relay keeps on a room's card (it reads `v` as a count under a million) */

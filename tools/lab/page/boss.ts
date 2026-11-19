@@ -43,15 +43,20 @@ import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 import { heart, pods, rootCompiles, rootLook, rootPhases, rootPictures, rootTtkLines, vines } from './bossRootmother';
+import {
+  stagCharge, stagClose, stagCompiles, stagCrash, stagMoves, stagPhase2, stagPictures, stagToss, stagTtkLines,
+} from './bossStag';
 
 /** The parts the command runs, in order. */
 export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'swing' | 'rootPhases' | 'vines'
-  | 'pods' | 'heart' | 'compiles' | 'ttk' | 'pictures' | 'rootPictures' | 'rootLook';
+  | 'pods' | 'heart' | 'stagCharge' | 'stagCrash' | 'stagPhase2' | 'stagToss' | 'stagClose' | 'compiles' | 'ttk'
+  | 'pictures' | 'rootPictures' | 'rootLook' | 'stagPictures' | 'stagMoves';
 export const BOSS_PARTS: BossPart[] = [
-  'ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'rootPhases', 'vines', 'pods', 'heart', 'compiles', 'ttk',
+  'ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'rootPhases', 'vines', 'pods', 'heart', 'stagCharge',
+  'stagCrash', 'stagPhase2', 'stagToss', 'stagClose', 'compiles', 'ttk',
 ];
 /** the parts that picture moments for the eye alone, asked for by name */
-const PICTURE_PARTS: BossPart[] = ['pictures', 'rootPictures', 'rootLook'];
+const PICTURE_PARTS: BossPart[] = ['pictures', 'rootPictures', 'rootLook', 'stagPictures', 'stagMoves'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -492,6 +497,9 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
   lines.push(`compiles: ${rooted} programs compiled drawing the Rootmother's vine, pods, thorns, cracks, eruption, `
     + 'spores, heart and canopy');
   if (rooted > 0) problems.push(`compiles: ${rooted} programs compiled in the Rootmother's fight`);
+  const ash = await stagCompiles(lab, options);
+  lines.push(`compiles: ${ash} programs compiled drawing the Stag of Ash's lane, gallop, fire, gore, crash, sweep, toss, embers and phase`);
+  if (ash > 0) problems.push(`compiles: ${ash} programs compiled in the Stag of Ash's fight`);
 }
 
 // --- time to kill ------------------------------------------------------------------------------------------
@@ -559,6 +567,7 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   lines.push(`ttk: the Bell-Warden at wave 10 (${fixed(bell, 0)} life): ${fixed(plain, 0)} s, ${fixed(dropped, 0)} s dropping the bell `
     + `each time its chains break (${fixed(dropped / first, 2)}x the Colossus's)`);
   lines.push(...rootTtkLines(dps));
+  lines.push(...stagTtkLines(dps));
 }
 
 // --- pictures ----------------------------------------------------------------------------------------------
@@ -696,8 +705,10 @@ async function swing(lab: Lab, options: BossOptions, lines: string[], problems: 
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures' | 'swing' | 'rootPictures' | 'rootLook'>, typeof ladder> = {
-    ladder, phases, toll, chains, stand, grab, rootPhases, vines, pods, heart, compiles, ttk,
+  type Verdicts = Exclude<BossPart, 'pictures' | 'swing' | 'rootPictures' | 'rootLook' | 'stagPictures' | 'stagMoves'>;
+  const run: Record<Verdicts, typeof ladder> = {
+    ladder, phases, toll, chains, stand, grab, rootPhases, vines, pods, heart, stagCharge, stagCrash, stagPhase2,
+    stagToss, stagClose, compiles, ttk,
   };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
@@ -707,6 +718,8 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       else if (part === 'swing') moments.push(...await swing(lab, options, lines, problems));
       else if (part === 'rootPictures') moments.push(...await rootPictures(lab, options, lines));
       else if (part === 'rootLook') moments.push(...await rootLook(lab, options, lines, problems));
+      else if (part === 'stagPictures') moments.push(...await stagPictures(lab, options, lines, problems));
+      else if (part === 'stagMoves') moments.push(...await stagMoves(lab, options));
       else await run[part](lab, options, lines, problems);
     }
   } finally {

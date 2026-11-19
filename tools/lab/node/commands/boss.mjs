@@ -19,19 +19,24 @@ export default {
       usage: 'a,b',
       choices: [
         'ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'rootPhases', 'vines', 'pods', 'heart',
-        'compiles', 'ttk', 'pictures', 'rootPictures', 'rootLook',
+        'stagCharge', 'stagCrash', 'stagPhase2', 'stagToss', 'stagClose', 'compiles', 'ttk', 'pictures',
+        'rootPictures', 'rootLook', 'stagPictures', 'stagMoves',
       ],
       help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, swing (the '
         + 'Bell-Warden), rootPhases, vines, pods, heart (the Rootmother), compiles, ttk, pictures (the '
         + 'Bell-Warden in each of its moments, a sheet for the eye), rootPictures (the Rootmother\'s), rootLook '
-        + '(her look: from above, over the shoulder, close up, her triangles held to a budget)',
+        + '(her look: from above, over the shoulder, close up, her triangles held to a budget), stagCharge, '
+        + 'stagCrash, stagPhase2, stagToss, stagClose (the Stag of Ash: its toss, and never standing up '
+        + 'close), stagPictures (the stag and each stage of its fight, its triangles held to a budget), '
+        + 'stagMoves (its gallop through a stride from the side, and its toss step by step)',
     },
     canary: {
       kind: 'switch',
       help: 'plant a fault each part must catch: the ladders turned round, a phase\'s share moved, a toll '
         + 'that stuns no one near, a shield that stops nothing, chains that take no harm, the Rootmother\'s '
         + 'second phase moved, a vine that reaches no one, pods that never hatch, a heart that never opens, a '
-        + 'program compiled, an attack that deals nothing',
+        + 'program compiled, an attack that deals nothing, the stag\'s fire burning no one, its crash stunning '
+        + 'nothing, its second phase moved, its toss carrying no one, a long stand between its attacks up close',
     },
     ...SETUP_OPTIONS,
     ...COMMON_OPTIONS,

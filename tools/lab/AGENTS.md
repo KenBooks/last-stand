@@ -51,7 +51,7 @@ the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command's line there is its module's `summary`, and its entry in full goes in
 `commands/<name>.md`. The largest entries are
-notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`,
+notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `boss`,
 `traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`), a line in `COMMANDS.md` pointing to each, as
 `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.

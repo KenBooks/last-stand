@@ -31,6 +31,7 @@ import { MODELS } from '../../../src/entities/models/index';
 import { fixed, secondsOf, standIn, type BossOptions } from './boss';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
+import { frameLine, timeFrames } from './bossFrames';
 
 /** frames a second on the lab's clock (boss.ts imports this module: its own constant isn't made yet as this loads) */
 const FPS = 60;
@@ -632,7 +633,7 @@ export function rootTtkLines(dps: number): string[] {
 const ROOT_TRIANGLES = 45_000;
 
 /** The triangles a model draws, by its meshes' geometries (each drawn once). */
-function trianglesOf(root: THREE.Object3D): number {
+export function trianglesOf(root: THREE.Object3D): number {
   const seen = new Set<THREE.BufferGeometry>();
   let count = 0;
   root.traverse((object) => {
@@ -646,7 +647,7 @@ function trianglesOf(root: THREE.Object3D): number {
 }
 
 /** A model's triangles, built alone and let go. */
-function modelTriangles(kind: 'thornheart' | 'bellwarden' | 'rootmother'): number {
+export function modelTriangles(kind: 'thornheart' | 'bellwarden' | 'rootmother' | 'stag'): number {
   const model = MODELS[kind]();
   const count = trianglesOf(model.root);
   model.dispose();
@@ -710,6 +711,7 @@ export async function rootPictures(lab: Lab, options: BossOptions, lines: string
   await standIn(lab, options.fixture, 'forest');
   // (nearer her than the measures' spot, off the diagonal the dais's standing stones stand on: her in the frame)
   await lab.setup({ ...options.fixture, at: PICTURE_SPOT, facing: Math.atan2(-PICTURE_SPOT[0], -PICTURE_SPOT[1]) });
+  const without = await timeFrames(lab);
   const boss = await rootmother(lab);
   const moments: Pictured[] = [];
   const close = (label: string, note: string, views: ViewName[] = ['back'], at = boss.pos.clone().setY(PICTURE_Y),
@@ -723,6 +725,8 @@ export async function rootPictures(lab: Lab, options: BossOptions, lines: string
   const quiet = (): void => { boss.brain.sporeT = 1e9; };
   await lab.step(60, () => ({}), quiet);
   await seen('1 the Rootmother', 'grown out of a hollow tree in the middle of the Thornwood, as the player sees her');
+  // (her fight's cost to the frame, against the Thornwood without her)
+  lines.push(frameLine('rootPictures', 'the Rootmother', without, await timeFrames(lab)));
   close('1 the Rootmother (close)',
     'her lower half all roots, mossy hair with seed pods in it, her heart behind bark doors in the trunk',
     ['back', 'left']);
