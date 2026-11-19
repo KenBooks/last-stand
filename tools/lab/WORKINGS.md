@@ -6,7 +6,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 With `lab:serve` up, the next command's page is booted as soon as a command finishes, and again once the source has
 been left alone for a moment after a change, so a command finds it ready: the sheet takes about 2 s, the carry 5.
-Without it, a command boots a session of its own (about 15 s) and closes it. The server runs under a supervisor of
+Without it, a command boots a session of its own (24 to 34 s on the owner's PC, its kept profile filled; the boot's line says each step's time) and closes it. The server runs under a supervisor of
 the lab's own, which starts it again when what the lab's Node code says changes (not on every change Windows
 reports: a file read now and then counts as one, and a server started again under a command closed its browser),
 launches its browser again if it has closed (it crashed: every command after it failed until the server restarted),

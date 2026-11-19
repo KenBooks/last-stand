@@ -18,7 +18,7 @@ npm run lab -- gait --ab          # the hero's walk, judged against main's
 ```
 
 With `lab:serve` running, the next command's page is booted before you ask for it, so most commands answer in
-seconds. Without it, each command boots a page of its own first, which takes about 15 s. `npm run lab -- stop` stops
+seconds. Without it, each command boots a page of its own first, which takes about 25 to 35 s. `npm run lab -- stop` stops
 the server.
 
 ## Commands
