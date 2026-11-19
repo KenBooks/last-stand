@@ -470,7 +470,7 @@ const FIST_SHAPE = tunable('fistShape', {
   strike: 86,
   crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
   fan: [6, 1.5, -2, -10],
-  shift: [0, 0],
+  shift: [0, 0.004],
   // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
   // how far towards its fist the thumb is held as the hand is sculpted (0 wide open, 1 shut)
   restThumb: 0.3,
@@ -532,7 +532,7 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
 /** where a fist's thumb lies on its fingers (`thumbLaid`): how far along the index's and the middle finger's middle
  *  segments from their middle joints (a share), how hard it presses on them (a share of their radii summed), and its
  *  two joints' ranges (rad) */
-const THUMB_LAID = { along: 0.4, press: 0.9, knuckle: [0, 0.96], last: [-0.1, 1.4] };
+const THUMB_LAID = { along: 0.8, press: 0.9, knuckle: [0, 0.96], last: [-0.1, 1.4] };
 /** the solve's first steps (rad), halved `THUMB_LAID_ROUNDS` times */
 const THUMB_LAID_STEP = 0.35;
 const THUMB_LAID_ROUNDS = 9;

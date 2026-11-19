@@ -378,7 +378,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     } else {
       // (a fighter's one hand's stand prouder, the middle finger's highest: bent into its fist they are its knuckles'
       // row, and at the open hand's size the back ran into one soft bulge with a scalloped hem, an adversarial review)
-      const proud = build.fist && SHUT_SHAPE.universal > 0 ? 1.22 * SHUT_SHAPE.heads[i] : 1;
+      const proud = build.fist && SHUT_SHAPE.universal > 0 ? 1.45 * SHUT_SHAPE.heads[i] : 1;
       palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep * proud, head * 0.62 * proud, head * 0.62 * proud,
         head * 0.42 * proud), 0.004);
     }
@@ -494,12 +494,12 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   };
   // (each segment starting at the width the one before it ends: a step between them, joined softly, swelled in a ring)
   // (a thumb's breadth by its build, `stout`, its depth kept)
-  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72].map((radius) => radius * stout)
+  const radii = thumb ? [0.98, 0.92, 0.92, 0.86, 0.86, 0.8].map((radius) => radius * stout)
     : pressed ? PRESSED_RADII.map((radius, i) => OPEN_RADII[i] + (radius - OPEN_RADII[i]) * SHUT_SHAPE.fat) : OPEN_RADII;
   // (the last segment nearly as deep as the middle one, a full rounded tip: at 0.66 and narrowed to 0.66 it thinned
   // to a flat bill that seemed to turn up at its end, beside reference pictures from the little finger's side)
   // (the thumb nearly round, as a thumb is: at 0.86 it was a stick seen from its side)
-  const depths = thumb ? [0.92, 0.9, 0.82].map((depth) => depth / stout) : [0.84, 0.8, 0.76];
+  const depths = thumb ? [0.92, 0.9, 0.74].map((depth) => depth / stout) : [0.84, 0.8, 0.76];
   // (the thumb's root segment is its bone in the palm, rising out of its mound)
   const rootFrom = thumb ? 0.006 : 0.002;
   // (each segment shapes alone: its say is its bone's, cut at its joints, `boneSay`)
@@ -604,7 +604,7 @@ function sweptTube(line: THREE.Vector4[], across: THREE.Vector3, wide: number): 
  *  knuckle its root lies inside the palm (m) */
 // (`pad` how much deeper it is on its palm's side, m: a finger's pads fill its curl, and with none a fist's fingers
 // curled round a hole seen from its side, an adversarial review)
-const OPEN_SWEPT = { wide: 1.04, deep: 0.88, rootUnder: 0.002, pad: 0.0014 };
+const OPEN_SWEPT = { wide: 1.04, deep: 0.84, rootUnder: 0.002, pad: 0.0006 };
 
 /**
  * A fist's finger as one piece: an oval tube swept along its curled bones from inside the palm behind its knuckle to
@@ -642,7 +642,7 @@ function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, r
     point(between(middle, last), 0.86), point(last, 0.88), point(between(last, tip), 0.8), point(tip, 0.76),
   ];
   // (shut, pressed broad against its neighbours; open, just clear of them)
-  const broad = closed ? Math.max(w * 1.05, reach * SHUT_SHAPE.sweptWide) : Math.min(w * OPEN_SWEPT.wide, reach * 0.97);
+  const broad = closed ? Math.max(w * 1.05, reach * SHUT_SHAPE.sweptWide) : Math.min(w * OPEN_SWEPT.wide, reach * 1.0);
   const wide = broad / deep;
   return {
     // (shut, hard against its neighbours; open, joined softly into the palm and its neighbours' roots, one skin)
