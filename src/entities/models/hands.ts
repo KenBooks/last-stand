@@ -96,7 +96,7 @@ function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec, build: HandBui
   j.push(at);
   // (the thumb as long as the palm is broad: a plain thumb on the heavy hand's broad, deep fist couldn't reach round
   // onto the fingers' backs, and its end stopped 20 mm short of the middle finger)
-  const len = spec.len.map((l) => (spec === THUMB ? l * build.wide : l));
+  const len = spec.len.map((l) => (spec === THUMB ? l * build.wide * build.reach : l));
   len.forEach((l, n) => {
     if (n < 2) {
       at = joint(at, 0, -l, 0);
@@ -551,7 +551,9 @@ function thumbLaid(h: Hand, fingers: THREE.Quaternion[][], from: THREE.Quaternio
   const laidOn = (chain: Chain, finger: Digit) => chain.points[1].clone().lerp(chain.points[2], THUMB_LAID.along)
     .addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(chain.frames[1]), (finger.r + h.thumb.r) * THUMB_LAID.press);
   const jointAt = laidOn(index, h.f[0]);
-  const tipAt = laidOn(middle, h.f[1]);
+  // (its tip on past the middle finger's middle, towards the ring finger's: a fist's thumb's nail sits near the fist's
+  // middle, and aimed at the middle finger's own middle it stopped over the index, an adversarial review)
+  const tipAt = laidOn(middle, h.f[1]).lerp(laidOn(chainOf(h.f[2].j[0].position, h.f[2].len, fingers[2]), h.f[2]), 0.3);
   const axes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
   const bend = (angle: number) => new THREE.Quaternion().setFromAxisAngle(axes[0], angle);
   // (its root's turn from `from`'s about each of its own axes, then its two joints' bends)

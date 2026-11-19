@@ -24,6 +24,9 @@ export interface HandBuild {
   /** the thumb's breadth over the fingers' (its depth kept): a man's thumb is his stoutest digit, 26% of his hand's
    *  breadth at its joint to a finger's 24% */
   thumb: number;
+  /** the thumb's length over the palm's breadth's: a man's is 73 mm from its knuckle to its tip at this hero's
+   *  height, and a fist's must reach across the index finger onto the middle one */
+  reach: number;
   /** sculpted closed in its fist too (`closeFist`), shown bare while the fist is shut (`hands.ts`' `shut`): a fighter's
    *  hand. Sculpted open and bent shut, a fist's fingers were tubes apart, grooves between them, and its thumb a stick
    *  off the palm with the web open under it (from play: "this is not a natural fist shape"); sculpted shut, the flesh
@@ -33,7 +36,7 @@ export interface HandBuild {
 
 /** a hand as it was sculpted before builds: the mage's, the ranger's, the villagers' */
 export const PLAIN: HandBuild = {
-  name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1, thumb: 1, fist: false,
+  name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1, thumb: 1, reach: 1, fist: false,
 };
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
@@ -44,7 +47,7 @@ export const PLAIN: HandBuild = {
  *  palm a paddle on it, and the thumb at the fingers' width was thinner than the index (an adversarial review of its
  *  proportions) */
 export const HEAVY: HandBuild = {
-  name: 'heavy', digits: 1.07, wide: 1, deep: 0.95, wrist: 1.14, knuckles: 1.15, thumb: 1.1, fist: true,
+  name: 'heavy', digits: 1.07, wide: 1, deep: 0.95, wrist: 1.14, knuckles: 1.15, thumb: 1.1, reach: 1.1, fist: true,
 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
