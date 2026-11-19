@@ -1,4 +1,5 @@
-// Skill behavior registry. Class data files reference these by `impl` name.
+// Skill behavior registry. Class data files reference these by `impl` name (`quarryMark` stays registered, off every
+// class's bar, kept for its future: #401, #564).
 //
 // Instant skill:  { anim, cast(player, def, target) }
 // Channel skill:  { anim, start(player, def, state), tick(player, def, dt, state), stop(player, def, state) }
@@ -31,6 +32,7 @@ import { bowShot, piercingShot } from './ranger';
 import arrowRain from './arrowRain';
 import quarryMark from './quarryMark';
 import strawman from './strawman';
+import hedgeward from './hedgeward';
 
 import type { SkillImpl } from './types';
 
@@ -38,5 +40,5 @@ export const SKILL_IMPLS: Record<string, SkillImpl> = {
   splinterBolt, cinderburst, stormcall, lifethread, starfall, voidLance, glacialNova, maelstrom, blink, potion,
   cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow, twinFangs,
   savageFists, pounce, rampage, bloodrush, wrath, unchained,
-  nockShot: bowShot, fanShot: bowShot, piercingShot, arrowRain, quarryMark, strawman,
+  nockShot: bowShot, fanShot: bowShot, piercingShot, arrowRain, quarryMark, strawman, hedgeward,
 };

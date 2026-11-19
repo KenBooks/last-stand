@@ -89,6 +89,7 @@ NOTES = {
     'piercingShot': 'An arrow through every foe in line',
     'arrowRain': 'Showers of arrows over an area',
     'quarryMark': 'Marked foe takes 25% more damage',
+    'hedgeward': 'A thorny wall that blocks foes',
     'strawman': 'A decoy that draws foes off you',
 }
 

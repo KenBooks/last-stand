@@ -129,6 +129,10 @@ export interface SkillDef {
   least?: number;
   /** a mark: the extra share of damage its target takes from every player's hits */
   amp?: number;
+  /** a wall raised across the aim (the ranger's Hedgeward, `world/wards.ts`): how wide and tall it stands (m) and its
+   *  life as a breakable prop's (`hp`, in the props' own hits: `PROP_DAMAGE`). With a `duration` it comes apart after
+   *  that long; without, it stands until broken or its wave is cleared */
+  wall?: { width: number; height: number; life: number };
   /** a shot through foes: its damage on each foe it passes through in turn, as a share (the last for every one after) */
   falloff?: number[];
   /** a charge that rams a crowd is stunned at its stop (Bull Rush, #560): by the weight of the foes it met */

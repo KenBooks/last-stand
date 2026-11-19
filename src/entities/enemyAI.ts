@@ -15,8 +15,10 @@ import { flash } from '../fx/lights';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
-import { navTarget, lineClear, steerClear, MARGIN } from '../world/navigation';
+import { navTarget, lineClear, propAcross, steerClear, MARGIN } from '../world/navigation';
 import { lures, lureAt, type Lure } from '../combat/lures';
+import { hurtProp, hurtPropsNear, PROP_DAMAGE, setPropLife, TRAMPLES_FROM } from '../world/destructible';
+import { wardAt } from '../world/wards';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
@@ -38,13 +40,35 @@ export function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 
   e.desired.set(_way.x * e.speed * speedMul, 0, _way.z * e.speed * speedMul);
 }
 
-/** Head for the target, around whatever stands between. */
+/** Head for the target, around whatever stands between; with no way round left, through the breakable prop in the
+ *  way (from the owner: "small mobs supposed to always go around unless they can't (all blocked)"). */
 function chase(e: Enemy, speedMul = 1): void {
   const p = e.target!;
-  navTarget(e.pos.x, e.pos.z, e.radius, p.pos.x, p.pos.z, p.slot, _way);
+  if (!navTarget(e.pos.x, e.pos.z, e.radius, p.pos.x, p.pos.z, p.slot, _way) && breakThrough(e)) return;
   // the line to the waypoint is already clear: look no further than it
   const dx = _way.x - e.pos.x, dz = _way.z - e.pos.z, d = Math.hypot(dx, dz);
   seek(e, dx, dz, d, speedMul, Math.min(d, e.speed * speedMul));
+}
+
+/** how far into its blow's reach a foe breaking its way through comes up to the prop (m) */
+const BREAK_IN = 0.2;
+
+/** A foe with no way round to its target walking up to the breakable prop across its line and striking it with its
+ *  own blow, a prop's swing (dealt where the fight is simulated alone, `hurtProp`). False if none is in its way. */
+function breakThrough(e: Enemy): boolean {
+  const p = e.target!.pos, o = propAcross(e.pos.x, e.pos.z, p.x, p.z, e.radius);
+  if (!o) return false;
+  const dx = o.x - e.pos.x, dz = o.z - e.pos.z, d = Math.hypot(dx, dz);
+  e.faceTo(o.x, o.z);
+  if (d > o.r + e.radius + Math.min(e.def.range, 1.2) - BREAK_IN) {
+    seek(e, dx, dz, d, 1, Math.min(d, e.speed));
+    return true;
+  }
+  if (e.action || e.cd > 0) return true;
+  e.cd = e.def.cooldown;
+  const d2 = e.def, hit = d2.windup / (d2.windup + d2.recover);
+  e.startAction('attack', d2.windup + d2.recover, [[hit, () => { if (o.prop && !o.prop.broken) hurtProp(o, PROP_DAMAGE.swing); }]]);
+  return true;
 }
 
 /** Height a hostile bolt flies at. */
@@ -83,6 +107,8 @@ const CORE_FX = {
   },
   /** enemy `id`'s slam; whoever stands in it is hit (`damage` of DAMAGE_TYPES[`type`]) */
   slam(x: number, z: number, radius: number, color: number, boss: number, damage = 0, type = 4, id = -1) {
+    // (it wears the breakable props it lands on, as a hero's blow does: dealt where the fight is simulated alone)
+    if (damage > 0) hurtPropsNear(x, z, radius, PROP_DAMAGE.swing);
     const pos = new THREE.Vector3(x, 0, z);
     const p = G.player;
     if (damage > 0 && p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) {
@@ -147,6 +173,12 @@ const CORE_FX = {
     const e = G.enemies.find((foe) => foe.id === id);
     e?.onDeath.push(() => tg.cancel());
     e?.onDazed.push(() => tg.cancel());
+  },
+  /** a hero's wall's health as the fight's owner deals it (a prop raised in the fight, world/wards.ts: found by where
+   *  it stands, as its index in the biome's list differs from game to game) */
+  ward(x: number, z: number, life: number) {
+    const ward = wardAt(x, z);
+    if (ward) setPropLife(ward.prop, life);
   },
   /** a blow landing on a lure (combat/lures.ts) */
   lureHit(x: number, z: number) {
@@ -251,15 +283,18 @@ const CORE_AI: Record<string, (e: Enemy, dt: number) => void> = {
     e.faceTo(p.x, p.z);
     if (e.action) return;
     const d = e.def;
-    if (dist < d.range + e.target!.radius && e.cd <= 0) {
+    // (a blow lands only where nothing stands between: over a prop it goes round first, a big foe through a breakable one)
+    const reaches = lineClear(e.pos.x, e.pos.z, p.x, p.z, 0.05, -Infinity, e.radius >= TRAMPLES_FROM);
+    if (dist < d.range + e.target!.radius && e.cd <= 0 && reaches) {
       e.cd = d.cooldown;
       e.startAction('attack', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => meleeStrike(e)]]);
       return;
     }
+    if (!reaches && dist < d.range + e.target!.radius + 1) { chase(e); return; }
     // slight flanking so packs surround the player instead of forming a line (on open ground)
     const b = e.brain;
     b.flank ??= rand(-0.6, 0.6);
-    if (!lineClear(e.pos.x, e.pos.z, p.x, p.z, e.radius + MARGIN)) { chase(e); return; }
+    if (!lineClear(e.pos.x, e.pos.z, p.x, p.z, e.radius + MARGIN, -Infinity, e.radius >= TRAMPLES_FROM)) { chase(e); return; }
     const ang = Math.atan2(dx, dz) + (dist > 3 ? b.flank : 0);
     seek(e, Math.sin(ang), Math.cos(ang), 1);
   },

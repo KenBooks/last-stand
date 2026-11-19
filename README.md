@@ -128,7 +128,7 @@ Plate armour; tougher, and fights up close: with a one-handed weapon and a shiel
 
 A bow hunter in a trailcoat with a quiver; lighter armour, speed and physical damage from range. Shots are drawn by holding and loosed by letting go: the further drawn, the harder they hit.
 
-![The ranger's keys: left click Nockshot, right click Briarflight, 1 Lancewood Shot, 2 Hailfletch, 3 Quarry Mark, 4 Strawman, Q Healing Draught](docs/screenshots/keys-ranger.png)
+![The ranger's keys: left click Nockshot, right click Briarflight, 1 Lancewood Shot, 2 Hailfletch, 3 Hedgeward, 4 Strawman, Q Healing Draught](docs/screenshots/keys-ranger.png)
 
 ## Tech
 

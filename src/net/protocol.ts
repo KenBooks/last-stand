@@ -13,6 +13,7 @@ const PARTS = [
   'lobby-1: a room has no lobby of its own (the village is every game\'s): none in hello, refuse or a room\'s card',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
+  'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
 ];
 
 /** FNV-1a of the parts, as a number the relay keeps on a room's card (it reads `v` as a count under a million) */

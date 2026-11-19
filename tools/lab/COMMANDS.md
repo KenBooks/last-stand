@@ -54,6 +54,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `headshots`: the bow's and the fists' headshots (#750: every kind of foe, bosses and the dummy too, stood before the ranger and shot with each aimed shot at the middle of its head and at its chest, his own crit chance put to nothing: over the shoulder every head shot must strike and crit, every chest shot strike and not; top-down none crits; `--class warrior` punches them with Savage Fists: through the eyes the head punches crit, from outside none) (in full: [`commands/headshots.md`](commands/headshots.md))
 - `health`: the low-Health look (the hero's Health held at shares of his most in each biome, view and facing: the colour drained, the blood's cover and how far in it reaches, nothing in the view's middle, more of both as the Health falls, none above where it starts)
 - `heard <skills>`: the sounds each skill plays as its key is held as a player holds it, at foes stood where it strikes (every sound the game asks for, when from the press, a held sound's start and stop; a skill playing nothing, a held sound never stopped, a sound it's known to play missing; `--hold`, `--biome`, `--awake` for the blows foes strike at a lure, `--canary`)
+- `hedgeward`: the ranger's wall (`--class ranger`), an ordinary breakable prop: placed where aimed, square across his line to it; a boss's bolts flying over it or wearing it; a melee foe going round it with a way open, and breaking through only when walled in; his arrows breaking it, a slam wearing it, a Brute walking through it; standing 30 s on, gone at none of its life, four standing at once; his own arrow over it at a foe beyond (`--canary`, `--pictures`)
 - `held`: every held skill's preview as the player holds it (ready, then through its cooldown and short of energy: its own look, red and counting down until a release would cast; Quarry Mark's outline round its foe in every view, its pixels near the foe and none away; Starfall's ring against its strikes, every foe inside it struck on every cast; every mark on the floor held across the dais's step, on each level and down its faces, none of it under the floor or standing off it; no shader compiled meanwhile) (in full: [`commands/held.md`](commands/held.md))
 - `herolooks`: each class's looks (`data/heroLooks.ts`) made by the workers and a hero built in each (his head sculpted nowhere on the page, its face, hair and beard there, no program compiled as the game draws him), pictured in the studio, the hair colours on one hero of each, two colours compared on the hair's cards, the brows and the beard and not the cheeks, and a look picked kept (`--classes`, `--canary`)
 - `heropick`: a first visit's hero picked on the hero selection screen, by a finger's tap and by the mouse (each landing in the lobby, no run started or waiting for the warm-up, the click after the press reaching nothing past the screen; `--screen 640x360@3` puts Enter the Arena under the hero, `--canary` lets the tap's click through; `--quick` the mage picked at once on a slowed CPU, the others still warming, the view changed meanwhile: every hero drawn where he stands, none on the fountain)
@@ -573,12 +574,14 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `--canary` lays a clear sheet over the move area's lower left, and pins the overlays to their corner for the drag,
   which must both be caught.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
-  `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
+  `ranger` Hedgeward and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.
   Tapped standing, tapped down and up between two frames (a slow phone's quick tap: the release takes the aim as the
   press would have) and tapped while he walks away from the dummy across the way he faces: a movement skill
   (Veilstep) must go within 3° of the stick's way, or of his facing standing, and any other be cast at the dummy where
-  it stood as the finger lifted. Each cast is read as the skill is given it (its `cast` wrapped for the round). No
+  it stood as the finger lifted (a skill that settles where it's cast, the Hedgeward's wall within its reach and
+  clear of the props, aimed at the dummy and cast where its `settle` placed that aim). Each cast is read as the skill
+  is given it (its `cast` wrapped for the round). No
   tooltip may open after a tap. Then dragged from the button through three stops, the stick slid to a new way at
   each: the skill's own preview must show within 3° of the drag's way from the hero (Quarry Mark's outline round the
   dummy standing along it), no plain ring beside it, and let go it must be cast where the preview last showed, the
@@ -805,7 +808,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   figure stated per hit (a crit's raised by the crit's share; down to its least share, and one hit at its full
   figure), and a hit dealt over time must come as often as it says (on the foe struck most, past its first three
   hits: a spin comes up to speed). Stating no damage, landing no hit, and a crit's chance not the hero's are
-  problems. Last, each skill whose tooltip states what it gives the hero (the draught's Health, Iron Bellow's ward)
+  problems. Last, each skill whose tooltip states what it gives the hero (the draught's Health, Iron Bellow's ward, the
+  Hedgeward's wall's life, `tt-wall`, read off the wall raised through `page/hedgeward.ts`)
   is cast: what it gave must be the figure (the amounts asked of `Player.heal`, before his most Health caps them; the
   ward's). `--canary` raises all damage and his most Health by 50% once each tooltip is read, as a tooltip behind a
   change would be: its hits must be found above what it states, and what was given off it. On `--ab` against a
@@ -942,6 +946,37 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   Held, an arrow of his (`--class ranger`: Nockshot, drawn as the vine is sent and aimed at the floor 2.5 m along it
   towards the Hulk) must cut it: let go within 15 frames of the loose, its vine gone (from play: "arrows should kill
   the Hulk's rooting vine in one hit"; main held him 47 frames after it). `--canary` makes arrows cut nothing too.
+- `hedgeward`: the ranger's Hedgeward (`page/hedgeward.ts`; `src/combat/skills/hedgeward.ts`, `src/world/wards.ts`,
+  `src/world/destructible.ts`), `--class ranger`, its key held 12 frames over a point and let go, each case on a way
+  round the hero with room for the wall and a line out past it to 14 m (the first of 16 ways from the camera's ahead).
+  It's an ordinary breakable prop, and each case reads it as one. Placed: aimed 3 m out (its reach), its line within 0.12 m of the
+  aim (its line stands 0.08 m out from its foot), within 0.02 of square across his line to the aim, its front (+z of
+  its look) away from him, its body in the arena's obstacles. Bolts: the biome's boss risen 12 m out past it, pinned
+  and its cooldown held out, fires the game's own bolt (enemyAI's `fx('bolt')`) at him over it, three, one at a time:
+  each flies over it or meets it, said, and one that meets it must wear it (a foe's bolt on a prop). Round: the wall
+  aimed 2.5 m out, the hero stood still 0.75 m behind its line and a Husk risen pressed against its far side, a way
+  round open: it must go round one of its ends and reach him, never strike him over it, and never be pushed more than
+  0.08 m into its body. Walled: four walls raised round him 2.2 m out (no limit), their ends meeting, him held still,
+  and a Husk risen 5.5 m out: within 900 frames it must break one with its blows (no way round left), and never strike
+  him over a wall still standing.
+  Arrows: the wall aimed 3 m out and Nockshot loosed into its middle 0.45 m up, again and again: it must break within
+  three times its life in arrows (some go through the gaps between its stakes, as an arrow finds where it goes in by
+  what's drawn). Slammed: a slam of 80 (`fx('slam')`) on its middle must wear it. Trampled: a Brute (the forest's Bark
+  Hulk) risen 5 m beyond it, its throws held out, must break it walking at him within 600 frames. Stays: still standing
+  30 s after it rose (it has no time of its own); struck down to none it goes at once, its circles with it; four
+  raised round him, a way each, must all stand (no limit); then the wave cleared (`waveCleared`), none may stand and their looks go within 90 frames. Reach: aimed
+  6 m past its range it must rise within it (3 m); aimed onto a training dummy it must rise before it, clear of its body;
+  with a 3 m prop planted 1.2 m before him (nowhere clear) it must not rise, its outline red, no energy spent. Arrow:
+  the wall aimed 3 m out and a training dummy 5 m past it, Nockshot drawn 70 frames at the dummy's chest and let go:
+  the arrow must fly at least 0.75 m past the wall's line. `--canary` makes its body a tall prop's for the arrow (a
+  shot strikes it), takes its circles out of the obstacles for the round (the husk pushed into it), and makes its body
+  no breakable prop's for the arrows, the trample and the walled in (nothing wears it), each a problem unless caught.
+  `--pictures` writes `out/hedgeward`: a husk going round its end, him boxed in and a husk broken through, the wall
+  standing, worn half way with arrows standing in it and broken by them, a Brute coming
+  up to it and walked through it; the wall alone from its front (the foes' side), three-quarter, side, back, above and
+  in plan, him hidden; and in the forest and the crypt from the top-down and over-the-shoulder views its preview held,
+  it standing, and a blow just struck on it with its gauge (`lab.screen`, the page's UI over it). The cases aim with
+  the mouse from above: run it in the default view, as `--view third` aims elsewhere.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,
