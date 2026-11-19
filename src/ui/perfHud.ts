@@ -10,7 +10,7 @@ import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
-import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
+import { noteGpuFrame, qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { loadingLeft, loadingSteps } from './loading';
@@ -295,6 +295,7 @@ function takeWebGpuTime(): void {
       const ms = (render ?? 0) + (compute ?? 0);
       if (ms <= 0) return;
       recorder.gpu(at, ms, null);
+      noteGpuFrame(ms);
       if (enabled || observed) gpuTimes.push({ t: frameNow, ms });
       if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
     })
@@ -319,6 +320,8 @@ function pollQueries(now: number): void {
     if (disjoint) continue;
     // (a frame timed in parts is slowed by its queries: its parts go to the recorder, its time none)
     recorder.gpu(f.ring, f.split ? -1 : ms, f.split ? parts : null);
+    // (Auto reads the GPU's own time: a slow frame with the GPU idle isn't a level's to fix)
+    if (!f.split) noteGpuFrame(ms);
     if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
     if (!enabled && !observed) continue;
     if (!f.split) gpuTimes.push({ t: now, ms });

@@ -118,5 +118,13 @@ export const QUALITY = Object.fromEntries(QUALITY_ORDER.map((level) => [level, {
  * from High) drew a few frames a second for half a minute ("insane slowdown when choosing a hero upon first entry
  * into the game, on phone"), and a laptop's integrated GPU switched to Auto ran at 5 frames a second "for the first
  * minute or two" (`npm run lab -- auto`: to Low in 3.4 s, where it holds 7.8 frames a second at its full 4.4 Mpx).
+ * Where the GPU's own time a frame is known (a timer query), a window under the target whose GPU frames' middle is
+ * within `gpuShare` of the target's frame steps nothing: the frames were slow on the CPU or the loading's side, which a
+ * lower level doesn't help (from play, a 4070 Ti's trial of High left at 20 s with its GPU at 6 to 12 ms a frame,
+ * trace P307-C0HE: "it sometimes settles on low/med on a powerful machine"). `gpuFrames` is the fewest of them that
+ * judge. The level a step down left is tried again once after `retry` s of play: a hitch's drop comes back that visit.
  */
-export const AUTO_QUALITY = { minFps: 50, window: 4, quickWindow: 1, farBelow: 0.5, settle: 2, longestFrame: 1 };
+export const AUTO_QUALITY = {
+  minFps: 50, window: 4, quickWindow: 1, farBelow: 0.5, settle: 2, longestFrame: 1, gpuShare: 0.8, gpuFrames: 8,
+  retry: 30,
+};

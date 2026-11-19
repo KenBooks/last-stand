@@ -55,7 +55,7 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   when it came, and the time until the device holds 50 frames a second, or reaches Low where at the screen's own
   pixels it can't (Auto keeps them at every level), must be at most 8 s (to Low in 3.4 s there, where it holds 7.8
   frames a second; 12.5 at the old pace, a level a 4 s window). A fast device's frames with an 800 ms hitch every
-  2 s must never step it down (Auto never steps back up within a session). Then Auto as a boot starts it, at a level
+  2 s must never step it down. Then Auto as a boot starts it, at a level
   it settled on before (`bootAuto`, its cookie set as a boot finds it): once its frames are the device's it tries the
   level above, which a fast device settled on Medium or Low must keep (and save), and a device that holds only the
   settled level must leave for it at once, never past it, the cookie as it was, each within 10 s (from play, a
@@ -65,3 +65,16 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   and 11 alone (each miss skips twice the boots the last did, up to 8). `--canary` runs the old pace too, which must
   be too slow and keep the phone's trial too long, a boot at the settled level as Auto used to, whose fast device
   must be found never stepped back up, and the phone's boots with the trial's cookie lost, found trying every boot.
+  Then the GPU's own time a frame (`noteGpuFrame`, from the timer queries the perf overlay reads): a strong GPU held to
+  40 fps by its CPU, its GPU at 8 ms, must stay on High; a device held to 33 fps by its GPU, its times known, must step
+  down; and a fast device with no GPU times, slowed 6 s once, must step down and come back to High within its try
+  again's wait (`retry`, 30 s of play), a settle and a window a level (the canary: as main judged, it stays down).
+  Last, the kept traces of strong GPUs (`node/autoTraces/`, a trace's frames cut to what Auto reads: their intervals,
+  GPU times, states and programs) played through Auto frame by frame as the game feeds it, from the level the trace
+  had settled on and from a first visit's Low: each must end on High and keep it. P307-C0HE is the owner's 4070 Ti
+  booting and walking the village lobby, its GPU 6 to 12 ms a frame and its frames held to 50 to 70 a second by the
+  CPU and the fight's loading bar; TR57-D3XR the same PC's lobby recorded by hand, its CPU at 25 ms a frame under
+  other agents' load. As main judged them (`--canary`: every frame but a warm-up's judged, the GPU's time unread),
+  P307's trial of High was left at 20.1 s for Medium, as the real boot left it at 20.2, and a first visit settled on
+  Low; TR57's High stepped to Medium at 6.5 s (5.5 in the recording). `--trace <code>` plays a trace fetched before
+  (`lab trace <code>`) with them, `--keep` keeps it there.
