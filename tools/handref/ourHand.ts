@@ -46,8 +46,29 @@ const joints = {
   middle: placeOf(hand.f[1].j[0]),
   little: placeOf(hand.f[3].j[0]),
 };
+/** A digit's joints' places, root first, then its tip. */
+function digitOf(digit: { j: THREE.Object3D[]; len: number[] }): number[][] {
+  const tip = new THREE.Vector3(0, -digit.len[2], 0);
+  return [...digit.j.map(placeOf), digit.j[2].localToWorld(tip).toArray()];
+}
+
+/** The bone that moves each vertex of the skin most (the hand's own 0, then three a finger, the thumb's last). */
+function bonesOf(geometry: THREE.BufferGeometry): number[] {
+  const bone = geometry.attributes.skinIndex;
+  const weight = geometry.attributes.skinWeight;
+  const most: number[] = [];
+  for (let v = 0; v < bone.count; v++) {
+    let best = 0;
+    for (let n = 1; n < 4; n++) if (weight.getComponent(v, n) > weight.getComponent(v, best)) best = n;
+    most.push(Math.round(bone.getComponent(v, best)));
+  }
+  return most;
+}
+
+const digits = { fingers: hand.f.map(digitOf), thumb: digitOf(hand.thumb) };
 mkdirSync(outDir, { recursive: true });
 const tag = option('tag', '');
 const file = `${outDir}/ours-${buildName.toLowerCase()}-${closed ? 'shut' : 'open'}${tag ? `-${tag}` : ''}.json`;
-writeFileSync(file, JSON.stringify({ positions: Array.from(skin.attributes.position.array), index, joints }));
+const positions = Array.from(skin.attributes.position.array);
+writeFileSync(file, JSON.stringify({ positions, index, joints, digits, bones: bonesOf(skin) }));
 console.log(`${file}: ${index.length / 3} triangles`);

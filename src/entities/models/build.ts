@@ -34,9 +34,12 @@ export const PLAIN: HandBuild = {
 };
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
- *  some 12% wider at their joints than an office worker's, the palm deeper; from play, "need bigger fists tho") */
+ *  and the palm a tenth broader than the median man's, the largest men's; from play, "need bigger fists tho"). Its
+ *  wrist a man's for that hand: at the plain hand's, it was 0.63 of the hand's breadth to a man's 0.67. Sizes checked
+ *  by `node tools/handref/sizes.mjs`: at digits 1.12 and deep 1.14 the last joints were a fifth broader than a man's
+ *  and the palm over a quarter thicker */
 export const HEAVY: HandBuild = {
-  name: 'heavy', digits: 1.12, wide: 1.12, deep: 1.14, wrist: 1, knuckles: 1.15, fist: true,
+  name: 'heavy', digits: 1.07, wide: 1.12, deep: 1.04, wrist: 1.08, knuckles: 1.15, fist: true,
 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */

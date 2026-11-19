@@ -303,7 +303,7 @@ const THUMB_ROOT = 13;
  *  extra width they take (0 the open hand's), `head` the size of the knuckles' heads standing on the back and `headOut`
  *  how far out of the back they stand (m) */
 const SHUT_SHAPE = tunable('shutShape', {
-  square: 0.5, fat: 1.5, head: 1.25, headOut: 0.008,
+  square: 0.5, fat: 1, head: 1.1, headOut: 0.008,
   // the skin between each two knuckles of a fist, `web` its thickness (a share of the fingers' half-width, 0 none),
   // `webOut` how far out of the back it lies (m) and `webDown` how far down the fingers from the knuckles (m)
   web: 0.55, webOut: 0.005, webDown: -0.002,

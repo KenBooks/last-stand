@@ -208,11 +208,14 @@ const EYES = tunable('warriorEyes', {
   spinOn: [0.75, -3.2, 0.42], spinDir: [0.9, -0.35, -0.3], spinFlat: [-0.35, 0.9, 0],
   oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.14, held: [8, 0, 1, 0, 0],
 });
-/** the hands' scale (`buildHand`'s `k`): a fighter's heavy hands, 14% of his height to a man's 11% (at 1.08 a man's,
- *  from play: "need bigger fists tho, he's a warrior right?", "these are fists of a software engineer"). Broader
- *  across the knuckles alone by the hand's own scale, its skinned fingers were torn into strands: a skeleton's bones
- *  under a scale not the same every way shear as they turn */
-const HAND_K = 1.28;
+/** the hands' scale (`buildHand`'s `k`): a man's hand at his height, 11% of it long, and a fighter's by its build
+ *  (`HEAVY`: a tenth broader and thicker in the fingers than the median man's). Every part is held to a man's by
+ *  `node tools/handref/sizes.mjs`. At 1.28, 14% of his height (after "need bigger fists tho, he's a warrior right?",
+ *  "these are fists of a software engineer" at 1.08), every part was 27 to 63% larger than any man's, the knuckles
+ *  146 mm across to a man's 103: from play, "makes this whole thing a cartoon", "all anatomy parts need to be of
+ *  correct size first". Broader across the knuckles alone by the hand's own scale, its skinned fingers were torn into
+ *  strands: a skeleton's bones under a scale not the same every way shear as they turn */
+const HAND_K = 1;
 /** his arms' build (`build.ts`): heavy hands at `HAND_K`, a fighter's forearms, which the wrap and the sleeve are
  *  sized on (from play: "and wrist/arm thickness, its a warrior dude", "we need parametric wrists") */
 const ARM: ArmBuild = { hand: HEAVY, k: HAND_K, forearm: FIGHTER_FOREARM };
