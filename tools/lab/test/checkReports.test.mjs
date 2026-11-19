@@ -10,6 +10,7 @@ test('a boot, a side read back from the cache and the command\'s time aside; eve
   const text = [
     'eb13911: booted the warrior (20.0 s)',
     'this tree: booted the mage at low@518400 (14.1 s)',
+    'this tree: booted the ranger (43.2 s: the server 0.0, the page loaded 3.1, the loading screen 20.0)',
     'eb13911: as it ran 2026-10-28T22:13:04.000Z (kept in tools/lab/out/ab-cache; --fresh runs it again)',
     'this tree: joints past their ranges: anatomy: hipL.flexion -37 deg',
     '  3.53 steps a second (12.0 s of it moving)',

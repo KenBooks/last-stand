@@ -81,7 +81,7 @@ Some of what that takes:
   matrix made once a frame (three's own way made it again for every vertex, 30 ms a frame), and only the meshes that
   may reach the lines measured, by a bound that holds for any pose (each bone's sphere round its own vertices); every
   baked vertex is checked against it.
-- A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; bootOutcome still waits for the game’s loading screen and warmups.
+- A blocked boot reports the loading-screen stage and recent page errors. `LAB_BOOT_TIMEOUT_MS` can shorten the usual 180000 ms wait on a shared PC. Navigation waits for DOM content, not every background asset; `loadingOutcome` waits for the game’s loading screen, then `warmAll` runs the warm-ups' frames in the page itself.
 
 ## Testing the lab
 

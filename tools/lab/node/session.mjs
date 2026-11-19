@@ -49,14 +49,17 @@ function withInsets(screen, insets) {
 }
 
 /**
- * How a session's browser is launched: a check's (`worker` 1 and on) on a profile kept for its place from check to
- * check (tools/lab/out/profiles), so its pages find this tree's maps made and the GPU's programs cached on disk; on a
- * fresh one, every first boot of eight sessions made them all again, 45 to 55 s each. The server's and a command's
- * own (`worker` 0) start fresh: two commands run at once from one tree would want the same profile.
+ * How a session's browser is launched: on a profile kept for its place from run to run (tools/lab/out/profiles), so
+ * its pages find this tree's maps made and the GPU's programs cached on disk. A check's sessions (`worker` 1 and on)
+ * each have one; on a fresh one, every first boot of eight sessions made them all again, 45 to 55 s each. The
+ * server's and a command's own (`worker` 0) share one: a second command run at once from the tree finds it open
+ * and starts on a fresh profile (`launchBrowser`). Fresh, each command's own boot took 41 to 52 s on the owner's PC,
+ * the fight's, the heroes', the rooms' and the bosses' programs compiled cold every time and every map made; on its
+ * kept one, 24 to 34 s, the results the same line for line (`programs`, `compiles --biomes crypt`).
  */
 function browserOptions(worker) {
-  if (worker < 1) return {};
-  return { profile: join(OUT, 'profiles', `check-${worker}`), contextOptions: CONTEXT_OPTIONS };
+  const place = worker < 1 ? 'command' : `check-${worker}`;
+  return { profile: join(OUT, 'profiles', place), contextOptions: CONTEXT_OPTIONS };
 }
 
 export class LabSession {
@@ -154,7 +157,9 @@ export class LabSession {
       const keeps = this.keepPages && kind !== null && side.pageKind === kind;
       const keeping = { used: keeps, clean: Boolean(handler.countsCompiles) };
       if (await side.ready(heroClass, turnBoot, keeping)) {
-        notes.push(`${turn.name}: booted the ${heroClass}${bootText(turnBoot)} (${seconds(bootStarted)})`);
+        const steps = side.bootSteps?.text();
+        const took = steps ? `${seconds(bootStarted)}: ${steps}` : seconds(bootStarted);
+        notes.push(`${turn.name}: booted the ${heroClass}${bootText(turnBoot)} (${took})`);
         booting += (Date.now() - bootStarted) / 1000;
       }
       side.used = true;
