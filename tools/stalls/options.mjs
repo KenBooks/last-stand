@@ -265,7 +265,8 @@ export function readOptions(argv) {
     const levels = QUALITIES.join(', ');
     throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
   }
-  const stranger = options.stops?.find((stop) => !STOPS.includes(stop));
+  // (a house by its name on the map: `house:The Library`)
+  const stranger = options.stops?.find((stop) => !STOPS.includes(stop) && !/^house:./.test(stop));
   if (stranger !== undefined) {
     throw new Error(`stalls: no place ${stranger} to walk to (${[...new Set(STOPS)].join(', ')})`);
   }

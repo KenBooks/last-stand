@@ -95,7 +95,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     unless `--url` says otherwise (`WALK_PACE` in `src/entities/player.ts`: he walks of himself three times as
     fast), so its walks take 45 s where they took a minute and a half. A slow game's prompt (`#perf-ask`) that lies
     over the map's names is answered Not now, before a click or when it came up over one. `--stops a,b` walks to
-    those places in that order (the map's names: `stash,chronicle,heroes,coop`), so a stall's place is told from
+    those places in that order (the map's names: `stash,chronicle,heroes,coop`; a house by its name on the map,
+    `house:The Library`: walked into by its door, 20 s given, then followed 15 s inside, each a phase of its own,
+    `to <name>` and `in <name>`; the village needs `--url "this?village=1&walkPace=3"`), so a stall's place is told from
     what came before it: the map's freeze came with the first folding away outside the yard, not after the hall. A
     freeze may come in one walk and not the next: judge a change over two walks or more. Its first runs
     found the map's first opening held Chrome's GPU process

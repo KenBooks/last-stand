@@ -12,6 +12,12 @@ export const WALKS_QUERY = '?walkPace=3';
 const ARRIVE_MS = 30_000;
 /** how long the yard, which opens nothing, is walked towards (ms: across it at three times his pace) */
 const YARD_MS = 3500;
+/** a house walked into by its name on the map (`house:<name>`, the name as the map says it: `house:The Library`): how
+ *  long he's given to walk there and through its door (ms), and how long he's then followed inside (ms). Nothing on a
+ *  production page says he's in, so it's timed: from play on #702's preview, "When I enter the library, it lags out
+ *  and game freezes" */
+const HOUSE_WALK_MS = 20_000;
+const HOUSE_INSIDE_MS = 15_000;
 /** how long each place is stood at before its card is put away, and how long the map may take to lie flat (ms) */
 const STAY_MS = 500;
 const MAP_MS = 3000;
@@ -42,6 +48,7 @@ async function skipTraining(page) {
 
 /** Walks to `stop` (a map name's `data-use`, `portal:<biome>` for a portal) and back out of what it opens. */
 async function walkTo(page, stop) {
+  if (stop.startsWith('house:')) return intoHouse(page, stop.slice('house:'.length));
   const [use, biome] = stop.split(':');
   let asked = await declineReport(page);
   const why = await openMap(page);
@@ -67,6 +74,20 @@ async function walkTo(page, stop) {
   if (left) return `reached ${stop} in ${(took / 1000).toFixed(1)} s, then ${left}`;
   const note = `reached ${stop} in ${(took / 1000).toFixed(1)} s`;
   return asked ? `${note} (a slow game's report asked for first: Not now)` : note;
+}
+
+/** House `name` walked into by its name on the map (its door held of himself as he arrives), then stood in: each a
+ *  phase of its own (`to <name>`, `in <name>`). */
+async function intoHouse(page, name) {
+  await declineReport(page);
+  const why = await openMap(page);
+  if (why) return `never walked to ${name}: ${why}`;
+  await page.evaluate(markPhase, `to ${name}`);
+  await clickPastReport(page, `.vm-name[aria-label="${name}: go in"]`);
+  await page.waitForTimeout(HOUSE_WALK_MS);
+  await page.evaluate(markPhase, `in ${name}`);
+  await page.waitForTimeout(HOUSE_INSIDE_MS);
+  return `walked to ${name} and in (${HOUSE_WALK_MS / 1000} s), stood in it ${HOUSE_INSIDE_MS / 1000} s`;
 }
 
 /** how long a click waits for its element before the report's prompt is looked for over it (ms) */
