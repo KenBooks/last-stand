@@ -315,7 +315,7 @@ const SHUT_SHAPE = tunable('shutShape', {
   pad: 1.5,
   // the heel of a fist on the little finger's side, the palm's edge thickened towards the palm (m, 0 the open hand's):
   // a fist's palm is as thick there as its wrist, where the open hand's slab left the wrist a bar over a thin blade
-  heel: 0.006,
+  heel: 0.002,
   // how softly the knuckles' heads join the back (m)
   headBlend: 0.011,
 });
@@ -376,7 +376,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   palm(ellipsoid(...at(-0.0275 * wide, -0.05, -0.0055 * deep), 0.0105 * wide, 0.03, 0.0085 * deep), 0.009);
   if (closed && SHUT_SHAPE.heel > 0) {
     const thick = SHUT_SHAPE.heel;
-    palm(ellipsoid(...at(-0.022 * wide, -0.052, -0.006 * deep - thick * 0.6), 0.016 * wide, 0.04, thick), 0.012);
+    palm(ellipsoid(...at(-0.019 * wide, -0.052, -0.006 * deep - thick * 0.6), 0.012 * wide, 0.04, thick), 0.012);
   }
   // the thumb's mound, between the palm and its root, moving half with the thumb
   const root = thumb.j[0].position;
@@ -459,7 +459,8 @@ const PRESSED_RADII = [1.07, 1.11, 1.11, 1.04, 1.04, 0.78];
 /** A digit's parts, each in its joint's frame: two halves for each segment, narrower at its middle than at its ends,
  *  a knuckle on the back of each joint, and a pad at its tip. `first` is the index of its root joint among the bones.
  */
-function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thumb: boolean, pressed = false): Part[] {
+function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thumb: boolean, pressed = false,
+  stout = 1): Part[] {
   const w = digit.width * slimOf(thumb);
   const [l0, l1, l2] = digit.len;
   const frames = digit.j.map((joint) => frameIn(joint, space));
@@ -468,12 +469,13 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
     parts.push({ shape, frame: frames[n], blend, bones });
   };
   // (each segment starting at the width the one before it ends: a step between them, joined softly, swelled in a ring)
-  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72]
+  // (a thumb's breadth by its build, `stout`, its depth kept)
+  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72].map((radius) => radius * stout)
     : pressed ? PRESSED_RADII.map((radius, i) => OPEN_RADII[i] + (radius - OPEN_RADII[i]) * SHUT_SHAPE.fat) : OPEN_RADII;
   // (the last segment nearly as deep as the middle one, a full rounded tip: at 0.66 and narrowed to 0.66 it thinned
   // to a flat bill that seemed to turn up at its end, beside reference pictures from the little finger's side)
   // (the thumb nearly round, as a thumb is: at 0.86 it was a stick seen from its side)
-  const depths = thumb ? [0.92, 0.9, 0.82] : [0.84, 0.8, 0.76];
+  const depths = thumb ? [0.92, 0.9, 0.82].map((depth) => depth / stout) : [0.84, 0.8, 0.76];
   // (the thumb's root segment is its bone in the palm, rising out of its mound)
   const rootFrom = thumb ? 0.006 : 0.002;
   // (each segment shapes alone: its say is its bone's, cut at its joints, `boneSay`)
@@ -519,7 +521,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
 
 /** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
  *  share of the finger's width; `mound`, `web` the thumb's mound and its web (`thenarFill`) */
-const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 1, web: 0.85 });
+const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 0.78, web: 0.75 });
 
 /**
  * The flesh inside a closed finger's curl, between its bones and the palm: capsules across the curl from its knuckle
@@ -955,7 +957,8 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const digits = [...fingers, thumb];
   const parts = [
     ...palmParts(fingers, thumb, toward, build, closed),
-    ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length, closed)),
+    ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length, closed,
+      build.thumb)),
     ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
       i === fingers.length - 1 ? -toward : 0)) : []),
     ...(closed ? thenarFill(thumb, fingers[0], space) : []),

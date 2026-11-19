@@ -21,6 +21,9 @@ export interface HandBuild {
   deep: number;
   /** the knuckles' heads across the back of the hand, their size over the fingers' widths */
   knuckles: number;
+  /** the thumb's breadth over the fingers' (its depth kept): a man's thumb is his stoutest digit, 26% of his hand's
+   *  breadth at its joint to a finger's 24% */
+  thumb: number;
   /** sculpted closed in its fist too (`closeFist`), shown bare while the fist is shut (`hands.ts`' `shut`): a fighter's
    *  hand. Sculpted open and bent shut, a fist's fingers were tubes apart, grooves between them, and its thumb a stick
    *  off the palm with the web open under it (from play: "this is not a natural fist shape"); sculpted shut, the flesh
@@ -30,16 +33,18 @@ export interface HandBuild {
 
 /** a hand as it was sculpted before builds: the mage's, the ranger's, the villagers' */
 export const PLAIN: HandBuild = {
-  name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1, fist: false,
+  name: 'plain', digits: 1, wide: 1, deep: 1, wrist: 1, knuckles: 1, thumb: 1, fist: false,
 };
 
 /** a fighter's hand: thick digits and broad knuckles on a deep palm (a man's hand who has worked with it: the fingers
  *  and the palm a tenth broader than the median man's, the largest men's; from play, "need bigger fists tho"). Its
  *  wrist a man's for that hand: at the plain hand's, it was 0.63 of the hand's breadth to a man's 0.67. Sizes checked
  *  by `node tools/handref/sizes.mjs`: at digits 1.12 and deep 1.14 the last joints were a fifth broader than a man's
- *  and the palm over a quarter thicker */
+ *  and the palm over a quarter thicker; at wide 1.12 on a wrist of 1.08 the wrist was 0.57 of the palm's breadth, the
+ *  palm a paddle on it, and the thumb at the fingers' width was thinner than the index (an adversarial review of its
+ *  proportions) */
 export const HEAVY: HandBuild = {
-  name: 'heavy', digits: 1.07, wide: 1.12, deep: 1.04, wrist: 1.08, knuckles: 1.15, fist: true,
+  name: 'heavy', digits: 1.07, wide: 1.06, deep: 1.04, wrist: 1.2, knuckles: 1.15, thumb: 1.15, fist: true,
 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
@@ -68,7 +73,9 @@ export interface ForearmBuild {
 
 /** a fighter's forearm, the wrap over it 9.2 cm across under the sleeve's cuff, as it looked right in play before
  *  builds (at 11.5, its belly 10.6 cm across the skin, the wrap was a cardboard tube and the fists small under it) */
-export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.0415, 0.0295], bellyAt: 0.5 };
+// (and 10 cm across on a hand a man's size: a man's forearm is 1.6 times his wrist across at its widest, and at 8.3
+// under a fist its right size the wrap was a stick the fist sat on as a ball, a review of its proportions)
+export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.05, 0.038], bellyAt: 0.5 };
 
 /** The forearm's section `y` up from the wrist (m) on a forearm `length` long, its wrist `wrist`: eased from the wrist
  *  out to the belly and held there to the elbow. */

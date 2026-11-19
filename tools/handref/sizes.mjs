@@ -92,8 +92,9 @@ function sizesOf(hand) {
     breadth: reach(band(knuckleY, 0.004, notThumb), [1, 0, 0]),
     thickness: reach(band(knuckleY * 0.6, 0.004, (point) => palmOnly(point) && Math.abs(point.at[0] - middle[0][0]) < 0.01),
       [0, 0, 1]),
-    wristBreadth: reach(band(-0.002, 0.004, palmOnly), [1, 0, 0]),
-    wristThickness: reach(band(-0.002, 0.004, palmOnly), [0, 0, 1]),
+    // (the wrist itself, over the palm: at the palm's top the thumb's mound has begun, and it read a sixth broader)
+    wristBreadth: reach(band(0.004, 0.003, palmOnly), [1, 0, 0]),
+    wristThickness: reach(band(0.004, 0.003, palmOnly), [0, 0, 1]),
     middleLength: Math.hypot(...sub(middle[3], middle[0])),
     thumbLength: Math.hypot(...sub(thumb[3], thumb[1])),
     middleJoint: [],
