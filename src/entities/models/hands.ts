@@ -184,7 +184,12 @@ function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material
 /** The hand's joints turned as it's sculpted and bound: open, its fingers a little spread, or `closed` in its fist. */
 function poseToSculpt(h: Hand, closed: boolean): void {
   if (!closed) {
+    // (a fighter's one hand is sculpted with its thumb part of the way to its fist, `REST_THUMB`: sculpted held wide
+    // open and carried all the way across for the fist, the skin from it to the palm was drawn out into a flat sheet,
+    // from the hand demo: "it didn't make it better", the thumb a webbed slab)
+    const fist = h.build.fist ? closedFistPose(h)[h.f.length] : null;
     poseHand(h, 0, SCULPT_SPREAD);
+    if (fist) h.thumb.j.forEach((j, n) => j.quaternion.slerp(fist[n], FIST_SHAPE.restThumb));
     return;
   }
   const turns = closedFistPose(h);
@@ -468,6 +473,8 @@ const FIST_SHAPE = tunable('fistShape', {
   shift: [0, 0],
   // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
   thumbIn: 30, thumbLast: 28,
+  // how far towards its fist the thumb is held as the hand is sculpted (0 wide open, 1 shut)
+  restThumb: 0.3,
 });
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
