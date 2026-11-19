@@ -80,7 +80,10 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['barkhulk', 0.6 + w * 0.12]);
       return p;
     },
-    bosses: [{ id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' }],
+    bosses: [
+      { id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' },
+      { id: 'rootmother', short: 'Rootmother', banner: 'Something stirs beneath the roots…' },
+    ],
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth' },
     music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },

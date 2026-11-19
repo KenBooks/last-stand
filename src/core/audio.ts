@@ -1949,6 +1949,19 @@ export const sfx = {
   shardBreak: guard(() => { if (throttle('shardBreak', 90)) return; shardBreak(); }),
   /** a Bell-Warden's ghost seizing the hero */
   ghostGrab: guard(() => { if (throttle('ghostGrab', 300)) return; ghostGrab(); }),
+  // the Rootmother's (entities/rootmother.ts): wood, earth and sap, no notes
+  /** her roots drawn back and driven down: old wood groaning under strain for `dur` s */
+  rootGroan: guard((dur: number = 0.9) => { if (throttle('rootGroan', 300)) return; noise({ dur, freq: 240, sweep: 160, q: 9, gain: 0.3, attack: dur * 0.3 }); noise({ dur: dur * 0.8, freq: 900, sweep: 520, q: 12, gain: 0.08, attack: 0.12 }); noise({ dur: 0.25, freq: 140, type: 'lowpass', gain: 0.25, attack: 0.02 }); }),
+  /** a seed pod popped or bursting: a wet husk splitting */
+  podPop: guard(() => { if (throttle('podPop', 60)) return; noise({ dur: 0.1, freq: 1100, sweep: 300, q: 3, gain: 0.32 }); noise({ dur: 0.35, freq: 380, type: 'lowpass', gain: 0.24, attack: 0.01 }); }),
+  /** thorns tearing up out of the earth round her trunk */
+  thornsRise: guard(() => { if (throttle('thornsRise', 200)) return; noise({ dur: 0.55, freq: 3000, sweep: 1100, q: 1.4, gain: 0.16 }); noise({ dur: 0.5, freq: 260, type: 'lowpass', gain: 0.42 }); }),
+  /** the earth cracking under a hero for `dur` s before roots burst from it */
+  earthCrack: guard((dur: number = 1) => { if (throttle('earthCrack', 200)) return; noise({ dur, freq: 150, type: 'lowpass', gain: 0.32, attack: dur * 0.7 }); noise({ dur, freq: 1900, q: 5, gain: 0.05, attack: dur * 0.4 }); }),
+  /** her heart laid bare: a deep double thump */
+  heartBeat: guard(() => { if (throttle('heartBeat', 500)) return; noise({ dur: 0.16, freq: 90, type: 'lowpass', gain: 0.5 }); noise({ dur: 0.2, freq: 75, type: 'lowpass', gain: 0.4, attack: 0.02 }); }),
+  /** the canopy closing overhead: leaves and wind rushing, slow */
+  canopyClose: guard(() => { noise({ dur: 2.6, freq: 1400, sweep: 500, q: 0.7, gain: 0.18, attack: 0.7 }); noise({ dur: 2.6, freq: 110, type: 'lowpass', gain: 0.3, attack: 0.9 }); }),
   slam: guard(() => { noise({ dur: 0.8, freq: 120, type: 'lowpass', gain: 0.7 }); tone({ freq: 60, to: 28, dur: 0.6, gain: 0.5 }); }),
   /** a prop breaking: rock and timber giving way */
   crumble: guard(() => { noise({ dur: 0.55, freq: 700, sweep: 140, type: 'lowpass', q: 1.2, gain: 0.5 }); noise({ dur: 0.2, freq: 2400, q: 2, gain: 0.12 }); tone({ freq: 90, to: 40, dur: 0.4, gain: 0.3 }); }),

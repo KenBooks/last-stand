@@ -116,6 +116,18 @@ export function openWeak(e: Enemy, seconds: number): void {
 /** How many times its damage a foe takes from a hero's hit now: its weak-spot window's, else 1. */
 export const damageTaken = (e: Enemy): number => (e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1);
 
+/** How many times its damage a hit struck at `at` (an arrow's or a bolt's point, none for a blow) takes from its weak
+ *  spot (`WeakSpotDef`): its `taken` through its window where it struck the spot on the boss's front, else 1. */
+export function spotTaken(e: Enemy, at?: { x: number; y: number; z: number }): number {
+  const spot = e.def.bossKit?.weak?.spot;
+  if (!spot || !at || e.weak <= 0) return 1;
+  const dx = at.x - e.pos.x, dz = at.z - e.pos.z;
+  // (in the boss's own frame: ahead along its facing, across it, and its height over its feet)
+  const ahead = dx * Math.sin(e.facing) + dz * Math.cos(e.facing), across = dx * Math.cos(e.facing) - dz * Math.sin(e.facing);
+  const up = at.y - e.obj.position.y;
+  return ahead > 0 && Math.abs(across) <= spot.wide && Math.abs(up - spot.y) <= spot.high ? spot.taken : 1;
+}
+
 /** A boss's aura through its weak-spot window: the window's colour, swelling once a second; its own colour after. */
 export function weakLooks(e: Enemy): void {
   const kit = e.def.bossKit?.weak;

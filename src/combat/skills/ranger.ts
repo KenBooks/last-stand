@@ -381,7 +381,7 @@ export const bowShot: InstantSkill = {
         pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player, judged,
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
-          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock,
+          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock, at: proj.pos,
             from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, 0.9) });
           burst(proj.pos, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
           sfx.arrowHit(0.6 + 0.4 * pull);
@@ -427,7 +427,7 @@ export const piercingShot: InstantSkill = {
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];
         hitEnemy(enemy as Enemy, damage * share, { by: player, skill: def, tags: def.tags, type: 'physical', knock: knock * share,
-          from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
+          at: proj.pos, from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
         burst(proj.pos, { count: 8, color: 0xd3bf8d, speed: 2.4, life: 0.22, size: 0.07 });
         debris(proj.pos, { count: 3, color: 0x6a4a2a, speed: 2, size: 0.05, life: 0.5 });
         sfx.arrowHit(full ? 1.3 : 0.7 + 0.4 * pull, true);

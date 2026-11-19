@@ -1,5 +1,5 @@
 // Damage rolls and application for both sides.
-import { damageTaken } from '../entities/bossKit';
+import { damageTaken, spotTaken } from '../entities/bossKit';
 import type * as THREE from 'three';
 import { G } from '../state';
 import { NUMBER_COLORS } from '../data/balance';
@@ -63,6 +63,9 @@ export interface HitOpts {
   unnumbered?: boolean;
   /** how the blow drives what it kills (combat/fling.ts): away from `from` (or the player) when not given */
   blow?: Blow;
+  /** where a shot struck the body (an arrow's, a bolt's point): what a boss's weak spot reads (entities/bossKit.ts
+   *  `spotTaken`); a blow has none */
+  at?: { x: number; y: number; z: number };
 }
 
 /** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
@@ -113,8 +116,10 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const by = opts.by;
   const { amount: rolled, crit } = rollPlayerDamage(by, base, tags);
   // (a marked foe takes more from everyone: the largest of the marks on it)
-  // (and a boss in its weak-spot window, `taken` times as much: entities/bossKit.ts)
-  const amount = (enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled) * damageTaken(enemy);
+  // (and a boss in its weak-spot window, `taken` times as much, more where a shot struck its weak spot:
+  // entities/bossKit.ts)
+  const amount = (enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled) * damageTaken(enemy)
+    * spotTaken(enemy, opts.at);
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
   // (a duel's rival is no foe of the host's: its hits go to the hero it stands for, entities/rival.ts)

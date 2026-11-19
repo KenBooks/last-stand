@@ -10,6 +10,7 @@ const PARTS = [
   'bellwarden-1: the Bell-Warden toll, swing, shards and dropped bell, enemy fx (entities/bosses/bellwarden.ts)',
   'bosses-1: weak-spot windows and broken parts of a boss, enemy fx bossWeak and bossPart (entities/bossKit.ts)',
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
+  'rootmother-1: the Rootmother vines, drag, heart, pods, thorns, cracks, eruptions and spores, enemy fx (entities/bosses/rootmother.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
 ];
 

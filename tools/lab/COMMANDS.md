@@ -14,7 +14,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `beta`: the village beta opted into and out of on a page of its own, by the browser's own clicks and loads (the pause menu's Beta tab saying what the page runs and offering Reload once switched, Reload loading the page with `?village=1`, the choice kept in its cookie, the notice shown as the game opens there, kept through the village's own frames and put away by a screen opened over it, the next visit without a parameter in the village too, its notice left alone gone by itself, the notice's Back to the old lobby and the visit after it; then a co-op room hosted by the command's page asked from the other lobby: refused, told which lobby the room is in, the switch offered in the dialog, clicked, the page loaded in the room's lobby as an invite to it and the room joined; `--panels` hosts the room in the lobby without the village; `--canary` keeps the notice by the pointer past its time, puts it away before it's read, loses the cookie before the next visit and forgets the lobby the room refused the game for)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
-- `boss`: the bosses' fights (`--parts`): each battleground's boss waves against its ladder and its exceptions, the Bell-Warden's phases, its toll near, far and at a raised shield, its chains dropping the bell, it standing its ground, its ghosts seizing a hero, no program compiled in its fight, and the time each boss takes (`--canary`)
+- `boss`: the bosses' fights (`--parts`): each battleground's boss waves against its ladder and its exceptions, the Rootmother's phases, vines, pods and heart, the Bell-Warden's phases, its toll near, far and at a raised shield, its chains dropping the bell, it standing its ground, its ghosts seizing a hero, no program compiled in its fight, and the time each boss takes (`--canary`)
 - `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5, 10 and 15 shows the bar readying the Colossus, the Bell-Warden and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
 - `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (each biome, each kind of prop, 0.25 and 0.5 m off it: the nocked arrow, the bow's tip and the hero must not turn back frame after frame; the point the pose aims from within 5 cm of the arrow drawn level; the aim preview stopped by the prop, never through it; `--canary` aims the pose from the arrow as posed, #317)
 - `carry`: measures the carried bow
@@ -934,9 +934,28 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
   its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
   gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
-  plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
+  plants a fault each part must catch (the ladders turned round, the second phase's share moved, a toll that
   stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled, an attack that deals
   nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
+  The Rootmother's parts (`page/bossRootmother.ts`; `src/entities/rootmother.ts`), the hero 14 m from the
+  Thornwood's middle where nothing stands between him and her (on the diagonal a stump took the arrows): `rootPhases`:
+  her life a hundredth over and under her second phase's share, its banner, the canopy closed 4 s into it (`shade`
+  over 0.95) and open 4 s after her death. `vines`: one vine sent at him standing still must hold him its `hold`
+  within 4 frames, and she must drag herself towards him meanwhile (at least 0.6 of what her speed covers in
+  the hold) and stand still once he's free (0.15 m, her slowing); with a bow (`--class ranger`) a shot at the floor 2.5 m back along it towards her must cut it and
+  let him go within 15 frames of the loose. `pods`: her pods flung (as many as she flings, each `near` to `far` from
+  her), one left alone bursting into its brood `hatch` s after it rose (within 0.15 s), one struck by his basic
+  attack held on it popped within 3 s, nothing hatching from it. `heart`: her heart brought to open (1 s in, as its own
+  45 s are too long to wait): open its `open` s (within 0.1), its banner, nothing attacked through it, `pods` pods
+  flung; the spot read at points on her (in her heart its `taken`, her flank and back 1, shut 1); with a bow, in a
+  second opening with her pods held back (flung between him and her, they took the arrows), two shots at her flank
+  and the rest in her heart, his crits held off: those in it `taken` times the others within 0.2; and in her second
+  phase an eruption at him hurting him no sooner than its warning and opening nothing. `compiles` draws her fight's every effect too, and `ttk` adds the
+  Thornheart at wave 5 and the Rootmother at 10, on her body alone and with every hit through her heart's windows
+  in it. `rootPictures` (asked for alone) pictures her fight's moments, and `rootLook` (alone too) her model: from
+  above and over the shoulder as the player meets her, then close (whole from four sides, her face, body, roots,
+  her heart shut and open), and her triangles against the Thornheart's and the Bell-Warden's, at most 45,000. Her canary's faults: her second phase's
+  share moved, a vine that reaches no one, pods that never hatch, a heart that never opens (its window of none). About 15 s a hero.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

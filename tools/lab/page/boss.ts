@@ -42,10 +42,16 @@ import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
+import { heart, pods, rootCompiles, rootLook, rootPhases, rootPictures, rootTtkLines, vines } from './bossRootmother';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'swing' | 'compiles' | 'ttk' | 'pictures';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'compiles', 'ttk'];
+export type BossPart = 'ladder' | 'phases' | 'toll' | 'chains' | 'stand' | 'grab' | 'swing' | 'rootPhases' | 'vines'
+  | 'pods' | 'heart' | 'compiles' | 'ttk' | 'pictures' | 'rootPictures' | 'rootLook';
+export const BOSS_PARTS: BossPart[] = [
+  'ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'rootPhases', 'vines', 'pods', 'heart', 'compiles', 'ttk',
+];
+/** the parts that picture moments for the eye alone, asked for by name */
+const PICTURE_PARTS: BossPart[] = ['pictures', 'rootPictures', 'rootLook'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -70,10 +76,12 @@ const STUN_SLACK = 0.1;
 /** how long the hero's attack is held on a boss for its damage a second (s) */
 const TTK_HOLD = 8;
 /** frames a second on the lab's clock */
-const FPS = 60;
+export const FPS = 60;
 
-const secondsOf = (frames: number): number => frames / FPS;
-const fixed = (value: number, digits = 2): string => value.toFixed(digits);
+/** frames on the lab's clock in seconds */
+export const secondsOf = (frames: number): number => frames / FPS;
+/** a number with `digits` decimals */
+export const fixed = (value: number, digits = 2): string => value.toFixed(digits);
 
 /** The way from the hero towards the arena's middle, on the floor: a boss placed along it stands inside the wall. */
 function inward(): THREE.Vector3 {
@@ -103,7 +111,7 @@ function clearSpot(away: number, radius: number): THREE.Vector3 {
 }
 
 /** The hero set up in `biome`, at the spot, facing the arena's middle. */
-async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
+export async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
   const facing = Math.atan2(-SPOT[0], -SPOT[1]);
   await lab.setup({ at: SPOT, facing, ...fixture });
@@ -133,10 +141,10 @@ function exceptionOn(biome: BiomeId, wave: number): BossWave | undefined {
  * at the waves it holds.
  */
 async function ladder(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
-  const crypt = BIOMES.crypt.bosses;
-  // (the ladders as they ship, before the canary turns the Crypt's round)
+  // (the ladders as they ship, before the canary turns every one round: the Crypt's and the Thornwood's)
+  const ladders = BIOME_IDS.map((biome) => BIOMES[biome].bosses);
   const shipped = Object.fromEntries(BIOME_IDS.map((biome) => [biome, [...BIOMES[biome].bosses]])) as Record<BiomeId, BossRung[]>;
-  if (options.canary) crypt.reverse();
+  if (options.canary) for (const each of ladders) each.reverse();
   try {
     for (const biome of BIOME_IDS) {
       await standIn(lab, options.fixture, biome);
@@ -158,7 +166,7 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
       lines.push(`ladder: ${biome}: ${met.join(', ')}`);
     }
   } finally {
-    if (options.canary) crypt.reverse();
+    if (options.canary) for (const each of ladders) each.reverse();
   }
 }
 
@@ -480,6 +488,10 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
   } finally {
     lab.drawing = drawing;
   }
+  const rooted = await rootCompiles(lab, options);
+  lines.push(`compiles: ${rooted} programs compiled drawing the Rootmother's vine, pods, thorns, cracks, eruption, `
+    + 'spores, heart and canopy');
+  if (rooted > 0) problems.push(`compiles: ${rooted} programs compiled in the Rootmother's fight`);
 }
 
 // --- time to kill ------------------------------------------------------------------------------------------
@@ -546,6 +558,7 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   lines.push(`ttk: the Colossus at wave 5 (${fixed(colossus, 0)} life): ${fixed(first, 0)} s`);
   lines.push(`ttk: the Bell-Warden at wave 10 (${fixed(bell, 0)} life): ${fixed(plain, 0)} s, ${fixed(dropped, 0)} s dropping the bell `
     + `each time its chains break (${fixed(dropped / first, 2)}x the Colossus's)`);
+  lines.push(...rootTtkLines(dps));
 }
 
 // --- pictures ----------------------------------------------------------------------------------------------
@@ -683,13 +696,17 @@ async function swing(lab: Lab, options: BossOptions, lines: string[], problems: 
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<Exclude<BossPart, 'pictures' | 'swing'>, typeof ladder> = { ladder, phases, toll, chains, stand, grab, compiles, ttk };
+  const run: Record<Exclude<BossPart, 'pictures' | 'swing' | 'rootPictures' | 'rootLook'>, typeof ladder> = {
+    ladder, phases, toll, chains, stand, grab, rootPhases, vines, pods, heart, compiles, ttk,
+  };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {
     for (const part of options.parts ?? BOSS_PARTS) {
       if (part === 'pictures') moments.push(...await pictures(lab, options, lines));
       else if (part === 'swing') moments.push(...await swing(lab, options, lines, problems));
+      else if (part === 'rootPictures') moments.push(...await rootPictures(lab, options, lines));
+      else if (part === 'rootLook') moments.push(...await rootLook(lab, options, lines, problems));
       else await run[part](lab, options, lines, problems);
     }
   } finally {
@@ -698,7 +715,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   if (options.canary) {
     const caught = problems.length;
     lines.push(`canary: ${caught} faults caught`);
-    const judged = (options.parts ?? BOSS_PARTS).filter((part) => part !== 'pictures');
+    const judged = (options.parts ?? BOSS_PARTS).filter((part) => !PICTURE_PARTS.includes(part));
     return { text: lines.join('\n'), problems: canaryMissed(judged, problems), moments };
   }
   return { text: lines.join('\n'), problems, moments };

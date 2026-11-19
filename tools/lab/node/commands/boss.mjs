@@ -5,7 +5,7 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 /** `lab boss`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
   summary: 'the bosses\' fights (`--parts`): each battleground\'s boss waves against its ladder and its exceptions, the '
-    + 'Bell-Warden\'s phases, its toll near, far and at a raised shield, its chains dropping the bell, it standing its '
+    + 'Rootmother\'s phases, vines, pods and heart, the Bell-Warden\'s phases, its toll near, far and at a raised shield, its chains dropping the bell, it standing its '
     + 'ground, its ghosts seizing a hero, no program compiled in its fight, and the time each boss takes (`--canary`)',
   help: 'the bosses\' fights: each battleground\'s boss waves set off, the boss the run sends against its ladder\'s '
     + 'rung and the banner\'s line (ladder); the Bell-Warden\'s life taken over and under each phase\'s share '
@@ -17,15 +17,21 @@ export default {
     parts: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'compiles', 'ttk', 'pictures'],
-      help: 'the parts (all but pictures by default): ladder, phases, toll, chains, stand, grab, compiles, ttk, pictures (the '
-        + 'Bell-Warden in each of its moments, a sheet for the eye)',
+      choices: [
+        'ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'rootPhases', 'vines', 'pods', 'heart',
+        'compiles', 'ttk', 'pictures', 'rootPictures', 'rootLook',
+      ],
+      help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, swing (the '
+        + 'Bell-Warden), rootPhases, vines, pods, heart (the Rootmother), compiles, ttk, pictures (the '
+        + 'Bell-Warden in each of its moments, a sheet for the eye), rootPictures (the Rootmother\'s), rootLook '
+        + '(her look: from above, over the shoulder, close up, her triangles held to a budget)',
     },
     canary: {
       kind: 'switch',
-      help: 'plant a fault each part must catch: the Crypt\'s ladder turned round, a phase\'s share moved, a toll '
-        + 'that stuns no one near, a shield that stops nothing, chains that take no harm, a program compiled, an '
-        + 'attack that deals nothing',
+      help: 'plant a fault each part must catch: the ladders turned round, a phase\'s share moved, a toll '
+        + 'that stuns no one near, a shield that stops nothing, chains that take no harm, the Rootmother\'s '
+        + 'second phase moved, a vine that reaches no one, pods that never hatch, a heart that never opens, a '
+        + 'program compiled, an attack that deals nothing',
     },
     ...SETUP_OPTIONS,
     ...COMMON_OPTIONS,
