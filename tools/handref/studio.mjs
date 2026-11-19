@@ -1,6 +1,7 @@
 // The hand reference's studio: hands drawn from the same six cameras without a browser, in well under a second, and
 // how far each is from the reference by its outline in each view.
 //   node tools/handref/studio.mjs <reference.json> <hand.json>... [--out sheet.png] [--size 240] [--as-marked]
+//     [--views back,knuckles]
 // Each hand is a file as `ourHand.ts` writes one (`handref.py --json` writes the reference's). Every hand is drawn in
 // its own frame (across from the index knuckle to the little finger's, up from the wrist to the middle knuckle, out of
 // its back), centred on its knuckles and sized by their breadth, and cut a breadth below them, so its forearm and the
@@ -304,7 +305,7 @@ function main() {
   const size = Number(option(args, 'size', '240'));
   const out = option(args, 'out', 'tools/handref/out/studio.png');
   const [reference, ...hands] = filesOf(args).map(readHand);
-  const views = Object.keys(VIEWS);
+  const views = option(args, 'views', Object.keys(VIEWS).join(',')).split(',');
   const referenceDrawn = views.map((view) => draw(reference, view, size));
   const rows = [referenceDrawn.map(shaded)];
   const small = drawnSmall(reference);

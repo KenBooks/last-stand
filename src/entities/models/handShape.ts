@@ -298,6 +298,28 @@ function gloveSeams(digits: DigitShape[], frames: Float64Array[][]): Lift {
 /** the thumb's root joint among the bones (the hand's own, then each finger's three) */
 const THUMB_ROOT = 13;
 
+/** a hand sculpted closed's own shape (`tools/handref` fits it to a real fist): `square` how flat a finger's first
+ *  segment is pressed against its neighbours (0 round, 1 a square's sides), `fat` how much of the pressed fingers'
+ *  extra width they take (0 the open hand's), `head` the size of the knuckles' heads standing on the back and `headOut`
+ *  how far out of the back they stand (m) */
+const SHUT_SHAPE = tunable('shutShape', {
+  square: 0.5, fat: 1.5, head: 1.25, headOut: 0.008,
+  // the skin between each two knuckles of a fist, `web` its thickness (a share of the fingers' half-width, 0 none),
+  // `webOut` how far out of the back it lies (m) and `webDown` how far down the fingers from the knuckles (m)
+  web: 0.55, webOut: 0.005, webDown: -0.002,
+  // each finger's knuckle's size against `head`, index first: the middle finger's stands highest and the row falls
+  // away to the little finger's
+  heads: [1, 1.1, 0.94, 0.8],
+  // the pad down the little finger's side of a fist, from the palm's edge onto its curled finger: how thick, a share
+  // of the finger's half-width (0 none)
+  pad: 1.5,
+  // the heel of a fist on the little finger's side, the palm's edge thickened towards the palm (m, 0 the open hand's):
+  // a fist's palm is as thick there as its wrist, where the open hand's slab left the wrist a bar over a thin blade
+  heel: 0.016,
+  // how softly the knuckles' heads join the back (m)
+  headBlend: 0.011,
+});
+
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
 function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild,
   closed: boolean): Part[] {
@@ -316,7 +338,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   palm(slab(-0.004, -0.097, 0.0285 * wide, 0.044 * wide, 0.0135 * deep, 0.0102 * deep, 0.42, 0.008), 0.006);
   // the wrist, into the cuff
   palm(tube(0.0275 * wrist, 0.029 * wrist, -0.006, 0.014, 0.66), 0.012);
-  for (const finger of fingers) {
+  for (const [i, finger] of fingers.entries()) {
     const k = finger.j[0].position;
     const w = finger.width;
     // its knuckle, the head of its bone in the palm, low and broad; and its pad on the palm's side, broad and flat,
@@ -330,14 +352,32 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     const head = w * knuckles;
     // The knuckles stand proud as the skin pulls taut over the heads of the metacarpals.
     if (closed) {
-      palm(ellipsoid(k.x, k.y + 0.004, k.z + 0.009 * deep, head * 0.74, head * 0.96, head * 0.54), 0.005);
+      const size = head * SHUT_SHAPE.head * SHUT_SHAPE.heads[i];
+      palm(ellipsoid(k.x, k.y + 0.004, k.z + SHUT_SHAPE.headOut * deep, size * 0.74, size * 0.96, size * 0.54),
+        SHUT_SHAPE.headBlend);
     } else {
       palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
     }
     palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
+  // (a fist's skin drawn taut from knuckle to knuckle: with none, each knuckle stood alone, a ball on the end of its
+  // finger with a valley to the back's edge between each two, where a real fist's back runs on to a low row of heads)
+  if (closed && SHUT_SHAPE.web > 0) {
+    for (let i = 0; i + 1 < fingers.length; i++) {
+      const [a, b] = [fingers[i], fingers[i + 1]].map((finger) => {
+        const k = finger.j[0].position;
+        return new THREE.Vector3(k.x, k.y - SHUT_SHAPE.webDown, k.z + SHUT_SHAPE.webOut * deep);
+      });
+      const r = (fingers[i].width + fingers[i + 1].width) / 2 * SHUT_SHAPE.web;
+      palm(capsule(a, b, r), 0.006);
+    }
+  }
   // the little finger's mound along the palm's edge
   palm(ellipsoid(...at(-0.0275 * wide, -0.05, -0.0055 * deep), 0.0105 * wide, 0.03, 0.0085 * deep), 0.009);
+  if (closed && SHUT_SHAPE.heel > 0) {
+    const thick = SHUT_SHAPE.heel;
+    palm(ellipsoid(...at(-0.022 * wide, -0.052, -0.006 * deep - thick * 0.6), 0.016 * wide, 0.04, thick), 0.012);
+  }
   // the thumb's mound, between the palm and its root, moving half with the thumb
   const root = thumb.j[0].position;
   palm(ellipsoid(root.x * 0.62, -0.045, root.z - 0.0035 * deep, 0.021 * wide, 0.03, 0.015 * deep), 0.011,
@@ -372,7 +412,9 @@ function waisted(r0: number, r1: number, from: number, to: number, depth: number
       // Side by side, the pads flatten where they touch, leaving a shallow seam across the striking face.
       if (pressed) {
         const side = x * x, corner = zs * zs + along * along;
-        return (Math.sqrt(Math.sqrt(side * side + corner * corner)) - radius) * depth;
+        const squared = Math.sqrt(Math.sqrt(side * side + corner * corner));
+        const round = Math.sqrt(side + corner);
+        return (round + (squared - round) * SHUT_SHAPE.square - radius) * depth;
       }
       return (Math.sqrt(x * x + zs * zs + along * along) - radius) * depth;
     },
@@ -409,6 +451,11 @@ function knuckle(width: number, length: number, scale: number): Shape {
     k.across * width * scale, k.along * width * scale, k.high * width * scale);
 }
 
+/** a finger's segments' half-widths at each one's two ends, shares of its width: the open hand's, and a hand sculpted
+ *  closed's, its fingers pressed broader against each other */
+const OPEN_RADII = [1, 0.95, 0.95, 0.86, 0.86, 0.76];
+const PRESSED_RADII = [1.07, 1.11, 1.11, 1.04, 1.04, 0.78];
+
 /** A digit's parts, each in its joint's frame: two halves for each segment, narrower at its middle than at its ends,
  *  a knuckle on the back of each joint, and a pad at its tip. `first` is the index of its root joint among the bones.
  */
@@ -422,7 +469,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   };
   // (each segment starting at the width the one before it ends: a step between them, joined softly, swelled in a ring)
   const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.72]
-    : pressed ? [1.07, 1.11, 1.11, 1.04, 1.04, 0.78] : [1, 0.95, 0.95, 0.86, 0.86, 0.76];
+    : pressed ? PRESSED_RADII.map((radius, i) => OPEN_RADII[i] + (radius - OPEN_RADII[i]) * SHUT_SHAPE.fat) : OPEN_RADII;
   // (the last segment nearly as deep as the middle one, a full rounded tip: at 0.66 and narrowed to 0.66 it thinned
   // to a flat bill that seemed to turn up at its end, beside reference pictures from the little finger's side)
   // (the thumb nearly round, as a thumb is: at 0.86 it was a stick seen from its side)
@@ -472,7 +519,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
 
 /** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
  *  share of the finger's width; `mound`, `web` the thumb's mound and its web (`thenarFill`) */
-const SHUT_FILL = tunable('shutFill', { curl: 0.85, mound: 1.25, web: 0.85 });
+const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 1.25, web: 0.85 });
 
 /**
  * The flesh inside a closed finger's curl, between its bones and the palm: capsules across the curl from its knuckle
@@ -480,20 +527,30 @@ const SHUT_FILL = tunable('shutFill', { curl: 0.85, mound: 1.25, web: 0.85 });
  * pocket inside its curl, seen from the side as a triangle open between them (from play: "this is not a natural fist
  * shape").
  */
-function curlFill(finger: DigitShape, first: number, space: THREE.Object3D): Part[] {
+function curlFill(finger: DigitShape, first: number, space: THREE.Object3D, outer = 0): Part[] {
   const toSculpt = (n: number, y = 0) => new THREE.Vector3(0, y, 0)
     .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert());
   const [knuckle, middle, last] = [0, 1, 2].map((n) => toSculpt(n));
   const tip = toSculpt(2, -finger.len[2]);
   const r = finger.width * SHUT_FILL.curl;
   const bones: [number, number][] = [[first, 0.5], [first + 1, 0.5]];
-  return [[knuckle, last], [knuckle, tip], [middle, tip]].map(([a, b]) => (
+  const fills = [[knuckle, last], [knuckle, tip], [middle, tip]].map(([a, b]): Part => (
     { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.004, bones, shapeOnly: true }
   ));
+  // (the little finger's side of a fist is one soft pad, the palm's edge running on over its folded finger: with none,
+  // its three bones lay as shelves one on another under the bar of the palm's edge, an adversarial review's "pancakes")
+  if (outer !== 0 && SHUT_SHAPE.pad > 0) {
+    const out = new THREE.Vector3(outer * finger.width * 0.35, 0, 0);
+    const middleOfCurl = knuckle.clone().add(middle).add(last).add(tip).multiplyScalar(0.25).add(out);
+    const edge = new THREE.Vector3(knuckle.x + out.x, knuckle.y + 0.03, knuckle.z - finger.width * 0.6);
+    const pad: Part = {
+      shape: capsule(edge, middleOfCurl, finger.width * SHUT_SHAPE.pad), frame: IDENTITY, blend: 0.008,
+      bones: [[0, 0.6], [first, 0.4]], shapeOnly: true,
+    };
+    fills.push(pad);
+  }
+  return fills;
 }
-
-/** how thick the thumb's mound is round its bone in the palm in a hand sculpted closed, and the web from its
- *  knuckle to the index's, shares of the thumb's width */
 
 /**
  * The thumb's mound and its web in a hand sculpted closed: thick round the thumb's bone in the palm, and a sheet from
@@ -899,7 +956,8 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const parts = [
     ...palmParts(fingers, thumb, toward, build, closed),
     ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length, closed)),
-    ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space)) : []),
+    ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
+      i === fingers.length - 1 ? -toward : 0)) : []),
     ...(closed ? thenarFill(thumb, fingers[0], space) : []),
   ];
   const hand = lifted(fieldOf(parts), tendons(fingers));

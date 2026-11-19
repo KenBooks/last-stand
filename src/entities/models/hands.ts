@@ -453,10 +453,12 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
  *  bend (degrees); `crease` each finger's tip centre at the palm's middle crease (y, z in metres, index first, with
  *  room for the pads: the little finger has less reach); `fan` each shaft's turn inward (degrees: the index seats
  *  inside the thenar mound and the little finger closes the outer slit). */
+// (`shift` moves every finger's `crease` together, y and z)
 const FIST_SHAPE = tunable('fistShape', {
-  strike: 77,
+  strike: 80,
   crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
   fan: [6, 1.5, -2, -10],
+  shift: [0, 0],
 });
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
@@ -491,7 +493,8 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     const [a, b, c] = digit.len;
     const yaw = THREE.MathUtils.degToRad(-h.s * FIST_SHAPE.fan[i]);
     // (the crease on a deeper palm deeper, and the tip off it by its pad: the plain hand's numbers for its build)
-    const [y, plainZ] = FIST_SHAPE.crease.slice(i * 2, i * 2 + 2);
+    const [creaseY, creaseZ] = FIST_SHAPE.crease.slice(i * 2, i * 2 + 2);
+    const [y, plainZ] = [creaseY + FIST_SHAPE.shift[0], creaseZ + FIST_SHAPE.shift[1]];
     const { deep, digits } = h.build;
     const z = plainZ * deep - PAD_DEPTH * FINGERS[i].width * (digits - 1);
     // In the finger's plane, start at the end of the proximal phalanx and solve backwards from the tip.
