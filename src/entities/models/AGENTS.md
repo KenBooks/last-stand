@@ -63,3 +63,4 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `drawAsOne.ts`: ported to WebGL and dropped (#589): a hero's parts merged by material, their vertices placed from a joints' texture as a crowd's are, stand-ins following their base's values each view. The village's draws fell 45 to 90, and its render on the CPU rose in every phase (`lab perf --village --ab` against the same tree without it, the opaque draws sorted by program: standing 6.9 to 8.9 ms, walking 6.5 to 8.2, in the hall 9.4 to 10.6), and real Chrome uncapped read no gain (`stalls`, `&drawAsOne=0`). Three's per-draw cost on WebGL is small next to the stand-ins' upkeep and the joints' upload; WebGPU keeps it.

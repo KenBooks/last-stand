@@ -4,12 +4,14 @@
 // each is picked at random as the boot builds the village, and the one of the hour shown. Both are drawn until the
 // lobby's warm-up has compiled them (`ghostsWarmed`: a hidden mesh compiles nothing, and the other would compile as
 // the hour turned). Talked to (main.ts `useObject`), it opens the training grounds' card on its battleground. It's no
-// foe: not in `G.enemies`, so nothing aims at it, strikes it or counts it.
+// foe: not in `G.enemies`, so nothing aims at it, strikes it or counts it. It's drawn in its kind's crowd while it's
+// shown (`models/crowd.ts`): drawn on its own, a thornling was 46 of the village's draws.
 import * as THREE from 'three';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { GHOST, biomeOfHour } from '../data/village';
 import { buildModel } from '../entities/models/index';
+import { inCrowd, joinCrowd, leaveCrowd, type CrowdBody } from '../entities/models/crowd';
 import { groundHeight } from '../world/ground';
 import { hourNow } from './clock';
 import type { Model } from '../types';
@@ -20,7 +22,7 @@ const PROJECTION = { dissolve: 0.28, edge: 0x67edff, edgeShare: 0.18, frost: 0.3
 const HOVER = { high: 0.06, period: 3.2 };
 
 /** A ghost: its battleground, its kind, its model and the group it stands in. */
-export interface Ghost { biome: BiomeId; kind: EnemyId; model: Model; root: THREE.Group }
+export interface Ghost { biome: BiomeId; kind: EnemyId; model: Model; root: THREE.Group; body: CrowdBody }
 
 const ghosts = new Map<BiomeId, Ghost>();
 /** whether the lobby's warm-up has compiled both (till then both are drawn) */
@@ -44,7 +46,7 @@ function makeGhost(biome: BiomeId): Ghost {
   root.add(model.root);
   root.position.set(GHOST.x, groundHeight(GHOST.x, GHOST.z), GHOST.z);
   model.root.rotation.y = GHOST.facing;
-  return { biome, kind, model, root };
+  return { biome, kind, model, root, body: { model, castsShadow: false } };
 }
 
 /** The ghosts built and stood by the yard's gate in `village` (once: the lobby's warm-up compiles them with it). */
@@ -72,6 +74,7 @@ export function updateGhost(t: number, dt: number): void {
   const biome = ghostBiome();
   for (const ghost of ghosts.values()) {
     ghost.root.visible = !warmed || ghost.biome === biome;
+    drawnInCrowd(ghost);
     if (!ghost.root.visible || !ghost.root.parent?.visible) continue;
     ghost.model.animate({ t, dt, phase: 0, move: 0, action: null, hit: 0, dead: -1 });
     ghost.model.root.position.y = HOVER.high * (1 + Math.sin((t / HOVER.period) * Math.PI * 2));
@@ -80,3 +83,19 @@ export function updateGhost(t: number, dt: number): void {
 
 /** For a harness (tools/lab): the hour's ghost, or the one of `biome`. */
 export const ghostShown = (biome: BiomeId = ghostBiome()): Ghost | null => ghosts.get(biome) ?? null;
+
+/** Whether `object` and everything it stands in are shown, up to the scene. */
+function shownInScene(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+    if (!at.visible) return false;
+  }
+  return true;
+}
+
+/** `ghost` in its kind's crowd while it's shown and out of it while not: a crowd draws a body whatever its meshes'
+ *  visibility, so hidden (the other hour's, the village left for a run, a room or the hall) it would stand there. */
+function drawnInCrowd(ghost: Ghost): void {
+  const shown = shownInScene(ghost.root);
+  if (shown && !inCrowd(ghost.body)) joinCrowd(ghost.body);
+  else if (!shown && inCrowd(ghost.body)) leaveCrowd(ghost.body);
+}

@@ -21,6 +21,7 @@ import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
 import { CAMERA } from '../data/balance';
 import { countGhostLayers } from './ghostLayers';
+import { opaqueByProgram } from './programSort';
 import { clamp, damp } from '../util';
 import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
 import { builtOpening, fenceOpened, holeOpening, propsHideHim, propsOpening } from './heroHidden';
@@ -851,6 +852,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   // programs)
   renderer.capabilities.getMaxAnisotropy();
   if (!WEBGPU) unpackStateKnown(renderer as THREE.WebGLRenderer);
+  if (!WEBGPU && !/[?&]programSort=0/.test(location.search)) opaqueByProgram(renderer as THREE.WebGLRenderer);
   if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
   if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
@@ -1512,13 +1514,30 @@ function shotTaken(): void {
   take(gl.domElement);
 }
 
-/** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
- *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
- *  (`npm run lab -- perf --village --profile=render`). A part shown again is made again in that frame's render. */
-function matricesOfShownOnly(scene: THREE.Scene): void {
+/** the scene's parts shown in the last frame: one shown again has every matrix under it made again */
+const partsShown = new WeakSet<THREE.Object3D>();
+
+/**
+ * The world matrices of the scene's parts shown made for the frame, the hidden ones left out: three walks every object
+ * as it renders, shown or not, recursing into a hidden part whatever its flags (r187's `updateMatrixWorld`), and the
+ * houses' rooms, the other biomes and the hall's room were 2,700 of the village's 3,800 objects, a walk of about 1 ms
+ * a frame (`npm run lab -- perf --village --profile`). Within a part shown, three's own walk. A part shown again is
+ * made whole in that frame, as what's under it may have been placed while it was hidden. Returns true: the caller's
+ * render needn't walk the scene again.
+ */
+function matricesOfShownOnly(scene: THREE.Scene): boolean {
   // (the scene itself never moves: its matrix made again each frame marked every object under it changed)
   scene.matrixAutoUpdate = false;
-  for (const part of scene.children) part.matrixWorldAutoUpdate = part.visible;
+  scene.matrixWorldAutoUpdate = true;
+  for (const part of scene.children) {
+    if (!part.visible) {
+      partsShown.delete(part);
+      continue;
+    }
+    part.updateMatrixWorld(!partsShown.has(part));
+    partsShown.add(part);
+  }
+  return true;
 }
 
 export function render(): void {
@@ -1556,12 +1575,21 @@ export function render(): void {
   // (the ghosts over each pixel, for each to keep less where they lie one over another: what blends thins in the
   // village alone)
   const ghosts = G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room && rig.view !== 'first';
+  // (the frame's matrices made once, before the ghosts' count and the scene: three made them all again for each
+  // render, a walk of every object, a sixth of the village's render on the CPU, `lab perf --village`)
+  const walked = VILLAGE && matricesOfShownOnly(G.scene);
   if (ghosts) gpuMarks.mark('ghosts');
-  countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
-  gl.setRenderTarget(sceneRT);
-  gpuMarks.mark('scene');
-  if (VILLAGE) matricesOfShownOnly(G.scene);
-  gl.render(G.scene, G.camera);
+  G.scene.matrixWorldAutoUpdate = !walked;
+  try {
+    const counted = countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
+    gl.setRenderTarget(sceneRT);
+    gpuMarks.mark('scene');
+    // (with no village, the ghosts' count never draws: three's own walk as the scene renders)
+    if (counted) G.scene.matrixWorldAutoUpdate = false;
+    gl.render(G.scene, G.camera);
+  } finally {
+    G.scene.matrixWorldAutoUpdate = true;
+  }
   if (armsFov !== null) {
     gpuMarks.mark('arms');
     areaPass.readBefore(gl, sceneRT);
