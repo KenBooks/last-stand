@@ -7,7 +7,7 @@
 // sorted
 const PARTS = [
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
-  'frenzy-1: the warrior's Frenzy stacks, StateMsg fz (combat/frenzy.ts)',
+  'frenzy-1: the Frenzy stacks of a warrior, StateMsg fz (combat/frenzy.ts)',
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
