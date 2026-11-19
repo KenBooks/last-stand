@@ -24,6 +24,7 @@ import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
 import { LOOKED, offHero, SEEN_FROM } from './scholar';
 import { portraitWaited } from './uiTalk';
+import { forgetPortrait, portraitPlant, portraitState } from '../../../src/ui/guide/portraits';
 
 export interface TalkOptions { canary: boolean }
 
@@ -33,6 +34,9 @@ const REVEAL_MOST = 600;
 const EARLY_FRAMES = 2;
 /** the frames timed for the frame's cost, with the card up and without it */
 const COST_FRAMES = 120;
+/** the longest his portrait may take to come after a failed try (ms, the browser's: a retry 1.5 s of the game's on,
+ *  then his build and the browser's compile of it, which the lab's clock doesn't hurry) */
+const PORTRAIT_MS = 30000;
 /** the game's reading times as it has them, taken before a canary plants others: a line is judged by these */
 const HONEST = { ...READ };
 /** The frames line `text` is due to be given, by the game's own reading times (`readTime` with `HONEST`). */
@@ -287,6 +291,33 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     await lab.step(5);
     if (talkOpen()) problems.push('talk: Esc left the talk open');
     if (G.menuOpen) problems.push('talk: the Esc that ended the talk opened the pause menu');
+
+    // --- talked to before his portrait is made, its first try failing: a spinner in the oval, then his face, and
+    // never a drawing (from play: the card showed a cartoon of him where his picture came back empty) ---
+    forgetPortrait('scholar');
+    portraitPlant.failNext = 'scholar';
+    await useByE(lab, him, problems);
+    const oval = document.querySelector('#talk .tk-portrait')!;
+    const spun = oval.classList.contains('waiting') && getComputedStyle(oval.querySelector('.tk-wait')!).display !== 'none';
+    let came = 0, drawing = false;
+    const giveUp = window.__labClock.realNow() + PORTRAIT_MS;
+    for (; window.__labClock.realNow() < giveUp && !oval.classList.contains('pictured'); came++) {
+      await lab.step(1);
+      // (the browser's compile given its time, as `portraitWaited` gives it)
+      await realWait(5);
+      drawing ||= oval.classList.contains('drawn') || Boolean(oval.querySelector('svg'));
+    }
+    const failedOnce = portraitPlant.failNext === null;
+    portraitPlant.failNext = null;
+    const faced = oval.classList.contains('pictured');
+    lines.push(`talked to before his portrait was made, its first try failing: ${spun ? 'a spinner' : 'no spinner'} in the oval, `
+      + `${faced ? `his face after ${came} frames` : `no face in ${PORTRAIT_MS / 1000} s`}${drawing ? ', a drawing shown meanwhile' : ''}`);
+    if (!failedOnce) problems.push('talk: the planted failure of his portrait was never tried');
+    if (!spun) problems.push('talk: no spinner in the oval while his portrait was made');
+    if (drawing) problems.push('talk: a drawing shown in the oval in place of his portrait');
+    if (!faced) problems.push(`talk: his portrait never came after a failed try (${PORTRAIT_MS / 1000} s; ${portraitState()})`);
+    await lab.step(1, () => ({ keys: ['escape'] }));
+    await lab.step(5);
 
     const compiled = G.renderer.info.programs!.length - programs;
     lines.push(`the game's renderer compiled ${compiled} programs over the talk`);

@@ -14,18 +14,23 @@
 
 // --- his portrait and name plate ---
 .tk-side { flex: 0 0 136px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-// (the picture of his model in an oval of the theme's frame; the dim library's colour behind while it comes; the
-// drawing, framed in itself, only where no picture can be made)
+// (the picture of his model in an oval of the theme's frame; the dim library's colour behind and a spinner while it
+// comes)
 .tk-portrait { position: relative; width: 136px; height: 159px; border-radius: 50%; overflow: hidden;
   background: radial-gradient(circle at 35% 30%, #4a2e16, #0c0806 75%);
   box-shadow: 0 0 0 3px $frame, 0 0 0 4.5px $frame-dark, 0 6px 16px rgba(0, 0, 0, .7); }
 .tk-portrait .tk-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0;
   transition: opacity .3s; }
 .tk-portrait.pictured .tk-photo { opacity: 1; }
-.tk-portrait .tk-drawn { display: none; width: 100%; height: 100%; }
-.tk-portrait.drawn { border-radius: 0; overflow: visible; background: none; box-shadow: none; }
-.tk-portrait.drawn .tk-drawn { display: block; }
-@media (prefers-reduced-motion: reduce) { .tk-portrait .tk-photo { transition: none; } }
+.tk-portrait .tk-wait { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  border-radius: 50%; border: 3px solid rgba($frame, .25); border-top-color: $frame; opacity: 0; transition: opacity .2s;
+  will-change: transform; animation: tk-spin 1s linear infinite; }
+.tk-portrait.waiting .tk-wait { opacity: 1; }
+@keyframes tk-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .tk-portrait .tk-photo { transition: none; }
+  .tk-portrait .tk-wait { animation-duration: 3s; }
+}
 .tk-plate { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 6px 6px;
   background: $well; border: 1px solid rgba($frame, .7); border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6); }
 .tk-name { font: 900 15px/1.15 $font-display; color: var(--accent); text-align: center; letter-spacing: .02em; }
