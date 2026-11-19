@@ -20,7 +20,7 @@ import { compilePasses, sceneTarget } from '../core/renderer';
 import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
-import { BIOME_IDS } from '../data/biomes';
+import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
@@ -118,8 +118,10 @@ function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, M
   return m;
 }
 
-/** the biomes the lobby doesn't show: all of them where it stands in the village, else all but its own */
-const otherBiomes = () => (VILLAGE ? BIOME_IDS : BIOME_IDS.filter((id) => id !== G.arena.biome));
+/** the biomes the lobby doesn't show that are built: all of them where it stands in the village (none at boot: each
+ *  is built and warmed as a run first needs it, `warmBiome`), else all but its own */
+const otherBiomes = (): BiomeId[] => (VILLAGE ? BIOME_IDS : BIOME_IDS.filter((id) => id !== G.arena.biome))
+  .filter((id) => G.arena.biomeBuilt(id));
 
 /** what the lobby shows, which a warm-up hides to show another place: the village, or its biome */
 const lobbyGroup = (): THREE.Group => G.arena.groupOf(VILLAGE ? 'village' : G.arena.biome);
@@ -273,14 +275,34 @@ function fightParts(): Part[] {
       return { compile: samples, objects: samples, drawn: [], outlined: [], done: () => undefined };
     },
   };
-  const biomes = otherBiomes().map((id): Part => ({
+  return [...foes, shots, ...otherBiomes().map(biomePart)];
+}
+
+/** A biome's part: its place shown in the lobby's stead for the draw. */
+function biomePart(id: BiomeId): Part {
+  return {
     name: id,
     build() {
       const swap: Swap = { show: G.arena.groupOf(id), hide: lobbyGroup(), alone: VILLAGE ? lampsLetGo : undefined };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
-  }));
-  return [...foes, shots, ...biomes];
+  };
+}
+
+/** the biomes built and warmed as a run first needed them (`warmBiome`) */
+const biomesWarmed = new Set<BiomeId>();
+/** Whether biome `id`'s programs are warm: with the fight's need where the boot built it, else once `warmBiome` has. */
+export const biomeWarm = (id: BiomeId): boolean => (VILLAGE ? biomesWarmed.has(id) : isWarm('fight'));
+
+/**
+ * Biome `id`, built as a run first needs it (world/arena.ts `buildBiome`), warmed in its turn after the warm-ups
+ * before it, as the fight's are under its bar, `progress` told how far along (0 to 1), its seats' outlines with it.
+ */
+export async function warmBiome(id: BiomeId, progress: (share: number) => void): Promise<void> {
+  if (biomesWarmed.has(id)) return;
+  await inTurn(() => warmInTasks('fight', [biomePart(id)], progress, PARTS_AT_ONCE));
+  compileOutline(G.arena.seatsOf(id).flatMap((seat) => seat.outline));
+  biomesWarmed.add(id);
 }
 
 /** A foe kind's part: a plain one and a hero one of its kind, built away from the arena and kept out of the scene. */

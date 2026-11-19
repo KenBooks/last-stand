@@ -1753,14 +1753,15 @@ function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
  */
 export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): void {
   if (!WEBGPU) return;
-  const lightsOf = new Map(groups.map((group) => [group, pointLightsIn(group)]));
+  const lightsOf = rigPlaces.lightsOf;
+  for (const group of groups) rigMorePointLights(group);
+  groups = rigPlaces.groups;
   const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
   const rig = Array.from({ length: most }, () => new THREE.PointLight(0xffffff, 0));
   [...lightsOf.values()][0].forEach((light, i) => {
     rig[i].castShadow = light.castShadow;
     rig[i].shadow.autoUpdate = light.shadow.autoUpdate;
   });
-  for (const lights of lightsOf.values()) for (const light of lights) light.visible = false;
   scene.add(...rig);
   rig.forEach((rigged, i) => {
     rigSources.set(rigged, () => {
@@ -1778,6 +1779,19 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
     });
     before.apply(scene, args);
   };
+}
+
+/** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
+const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Object3D, THREE.PointLight[]>() };
+
+/** A place built after the rig was made (a fight's biome, built at the run's start: world/arena.ts) copied by it too:
+ *  it has as many lights as every place, so the rig's lit pipelines take it as they are. */
+export function rigMorePointLights(group: THREE.Object3D): void {
+  if (!WEBGPU) return;
+  const lights = pointLightsIn(group);
+  rigPlaces.lightsOf.set(group, lights);
+  rigPlaces.groups.push(group);
+  for (const light of lights) light.visible = false;
 }
 
 /** each rig light's source now: the shown biome's point light it's copied from before each render (`mirror`) */

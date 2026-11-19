@@ -8,6 +8,7 @@
 // then on its copies and reports to the host, which deals it on its foes (the guest's kill).
 import * as THREE from 'three';
 import { readyNextBoss } from '../game/bossReady';
+import { biomeReady, readyBiome } from '../game/biomeReady';
 import { foeWarm } from '../game/warmup';
 import { G } from '../state';
 import { setSpawnSink, spawnEnemy } from '../entities/spawner';
@@ -292,6 +293,8 @@ export function playWorld(at: number, dt: number): void {
 function apply(ev: WorldEvent): void {
   switch (ev.k) {
     case 'biome':
+      // (one not built here yet: built and warmed first, game/biomeReady.ts)
+      if (!biomeReady(ev.b)) { void readyBiome(ev.b).then(() => apply(ev)); return; }
       for (const player of G.players) player.stopChannel();
       clearProjectiles(); clearEffects(); clearEnemies();
       G.arena.setBiome(ev.b);

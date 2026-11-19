@@ -1,5 +1,8 @@
-// The arena: every place is built once at boot into its own group, and switching shows one and hides the others
-// (instant, and no shader compiles): the village the lobby stands in (`village.ts`), and each biome a run is fought in.
+// The arena: every place is built once into its own group, and switching shows one and hides the others (instant,
+// and no shader compiles): the village the lobby stands in (`village.ts`), and each biome a run is fought in. Each is
+// built at boot, but for a fight's biome where the lobby is the village: that one is built as a run first needs it,
+// under the fight's loading bar (`buildBiome`, game/biomeReady.ts: on a phone the two fight biomes' builds and seals
+// were tasks of 2 to 5 s each before the lobby showed, traces S307-J274, HHKG-FKD9).
 // The hall of heroes' room (`heroHall.ts`) is built beside them and shown in the village's place while the hero
 // selection screen is up (the hall on the village's terrace is its door).
 // The hemisphere light and the shadow-casting moon are shared; the place shown sets their look, the village's by the
@@ -9,7 +12,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
+import { oneEnvironment, rigMorePointLights, rigPointLights, stillForMeshlets } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, sunShadowStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
@@ -88,10 +91,20 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   }
   const fog = scene.fog = new THREE.Fog(0);
 
-  const places = {} as Record<PlaceId, { group: THREE.Group; b: Biome; breakables?: BreakableShadows }>;
-  // (what a worker sculpts for a biome meanwhile: the forest's stump)
-  await stumpPreloaded();
-  for (const id of BIOME_IDS) {
+  /** the places built (a fight's biome, where the lobby is the village, once a run first needs it: `buildBiome`) */
+  const places = {} as Partial<Record<PlaceId, { group: THREE.Group; b: Biome; breakables?: BreakableShadows }>>;
+  /** place `id`, which must be built */
+  const placeOf = (id: PlaceId) => {
+    const place = places[id];
+    if (!place) throw new Error(`arena: ${id} wanted before it was built (game/biomeReady.ts readies it)`);
+    return place;
+  };
+  /** the fight's biomes built so far */
+  const builtBiomes = (): BiomeId[] => BIOME_IDS.filter((id) => places[id]);
+  /** Biome `id` built into its group and put in the scene, hidden. */
+  async function buildPlace(id: BiomeId): Promise<void> {
+    // (what a worker sculpts for a biome meanwhile: the forest's stump)
+    await stumpPreloaded();
     // one place at a time, letting the page paint between them (a window moved to another monitor stays black until
     // the main thread is free), and between its build and its wall's seal (on a phone the arena's build froze the
     // loading screen 1 s at a time: on a CPU slowed six times the crypt's build was 3 s, the walls' seals 3.7)
@@ -107,9 +120,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
     group.matrixAutoUpdate = false;
+    b.setCalm(calm);
     scene.add(group);
     places[id] = { group, b, breakables };
   }
+  /** how calm the biomes are (`setCalm`): one built later takes it */
+  let calm = 1;
+  // (where the lobby is the village, a fight's biome is built as a run first needs it, `buildBiome`)
+  if (!VILLAGE) for (const id of BIOME_IDS) await buildPlace(id);
   // (the village, where it's the lobby: the beta's flag, core/beta.ts. Off, none of it is built, and the lobby
   // stands in the run's biome)
   let village: Village | null = null;
@@ -158,8 +176,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   const groups = [...Object.values(places).map((place) => place.group), hallGroup, ...roomGroups];
   rigPointLights(scene, groups);
   stillForMeshlets(...groups);
-  if (import.meta.env.DEV) {
-    const groups = [...Object.values(places).map((p) => p.group), hallGroup, ...roomGroups];
+  /** Whether `groups` have as many point lights each, and as many casting (dev builds: a mismatch says so). */
+  function checkLights(groups: THREE.Group[]): void {
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Places must have the same number of point lights (switching recompiles every shader): ${lights}`);
     // (and as many casting: each is written out in every lit program, `loopPointLights`)
@@ -170,11 +188,30 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     });
     if (new Set(casting).size > 1) console.error(`Places must have as many point lights casting shadows: ${casting}`);
   }
+  if (import.meta.env.DEV) checkLights(groups);
+
+  /** the biomes being built, each its build (`buildBiome`) */
+  const building = new Map<BiomeId, Promise<void>>();
+  /** Biome `id` built, as a run first needs it (game/biomeReady.ts), its place rigged and checked as the boot's are. */
+  function buildBiome(id: BiomeId): Promise<void> {
+    if (places[id]) return Promise.resolve();
+    let build = building.get(id);
+    if (!build) {
+      build = buildPlace(id).then(() => {
+        const group = placeOf(id).group;
+        rigMorePointLights(group);
+        stillForMeshlets(group);
+        if (import.meta.env.DEV) checkLights([placeOf('village').group, group]);
+      }).finally(() => building.delete(id));
+      building.set(id, build);
+    }
+    return build;
+  }
 
   /** the run's biome (the one a portal or a co-op host chose), and the place shown */
   let biome: BiomeId = BIOME_IDS[0];
   let shown: PlaceId = VILLAGE ? 'village' : biome;
-  let active = places[shown].b;
+  let active = placeOf(shown).b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
   const stillDrawn = { place: null as PlaceId | 'hall' | RoomId | null, rev: -1, lamps: 0, sun: '' };
   /** with no village, the props' revision each biome's (and the hall's) still shadows were last drawn at: each keeps
@@ -191,7 +228,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   /** the house's room standing in the village's stead, if one does (`showRoom`) */
   let room: RoomId | null = null;
   /** what's drawn now in the place's stead, or the place */
-  const shownGroup = (): THREE.Group => (room ? rooms![room].group : hallShown ? hallGroup : places[shown].group);
+  const shownGroup = (): THREE.Group => (room ? rooms![room].group : hallShown ? hallGroup : placeOf(shown).group);
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
   const villageLook: BiomeLook | null = village ? { ...village.look } : null;
   let hour = FIRST_HOUR;
@@ -205,11 +242,11 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   }
   function show(place: PlaceId): void {
     shown = place;
-    active = places[place].b;
+    active = placeOf(place).b;
     // (chosen while the hall is up, a co-op host's pick: shown as it's taken down)
     if (hallShown || room) return;
     setRelief(active.relief ?? null);
-    for (const k of Object.keys(places) as PlaceId[]) places[k].group.visible = k === place;
+    for (const k of Object.keys(places) as PlaceId[]) placeOf(k).group.visible = k === place;
     hallGroup.visible = false;
     if (place === 'village') village!.daylight(hour, villageLook!);
     setLook(place === 'village' ? villageLook! : active.look);
@@ -240,11 +277,11 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     const sunStale = sunShadowStill() && sunDrawn !== `${now} ${propState.rev}`;
     if (stillDrawnAt.get(now) === propState.rev && !sunStale) return;
     if (!hallShown && breakablesAt.get(shown) !== propState.rev) {
-      places[shown].breakables?.refresh();
+      placeOf(shown).breakables?.refresh();
       breakablesAt.set(shown, propState.rev);
       if (inFrames) return;
     }
-    drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow);
+    drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : placeOf(shown).group, moon.shadow);
     stillDrawnAt.set(now, propState.rev);
     sunDrawn = `${now} ${propState.rev}`;
   }
@@ -263,19 +300,19 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       return [...inPlaces, ...Object.values(rooms ?? {}).flatMap((r) => r.seats)];
     },
     /** what an idle hero sits on in place `id`, shown or not */
-    seatsOf(id: PlaceId): readonly Seat[] { return places[id].b.seats ?? []; },
+    seatsOf(id: PlaceId): readonly Seat[] { return places[id]?.b.seats ?? []; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */
-    restoreProps() { for (const id of BIOME_IDS) restoreProps(places[id].b.props); },
+    restoreProps() { for (const id of builtBiomes()) restoreProps(placeOf(id).b.props); },
     /** One more piece of every biome's run-shaped props for `seed` built ahead (`Biome.rollAhead`): true once all
      *  are. */
     rollAhead(seed: number): boolean {
-      return BIOME_IDS.every((id) => places[id].b.rollAhead?.(seed) ?? true);
+      return builtBiomes().every((id) => placeOf(id).b.rollAhead?.(seed) ?? true);
     },
     /** every biome's run-shaped props built again from a run's seed (`Biome.roll`) */
     rollProps(seed: number) {
-      for (const id of BIOME_IDS) places[id].b.roll?.(seed);
+      for (const id of builtBiomes()) placeOf(id).b.roll?.(seed);
       // (their circles' heights and girths: the navigation's grid made again)
       propState.rev++;
     },
@@ -305,7 +342,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     showHall(on: boolean) {
       hallShown = on;
       if (!on) { show(shown); return; }
-      for (const k of Object.keys(places) as PlaceId[]) places[k].group.visible = false;
+      for (const k of Object.keys(places) as PlaceId[]) placeOf(k).group.visible = false;
       hallGroup.visible = true;
       setRelief(hall.relief);
       setLook(hall.look);
@@ -322,7 +359,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       if (room) rooms[room].group.visible = false;
       room = id;
       if (!id) { show(shown); emit('roomShown', null); return; }
-      for (const k of Object.keys(places) as PlaceId[]) places[k].group.visible = false;
+      for (const k of Object.keys(places) as PlaceId[]) placeOf(k).group.visible = false;
       hallGroup.visible = false;
       rooms[id].group.visible = true;
       setRelief(rooms[id].relief);
@@ -337,8 +374,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** The hour the village is lit for (0-24: the player's clock, or a co-op host's). */
     setHour(h: number) { hour = h; },
     /** a place's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
-    groupOf(id: PlaceId): THREE.Group { return places[id].group; },
-    setCalm(v: number) { for (const id of BIOME_IDS) places[id].b.setCalm(v); },
+    groupOf(id: PlaceId): THREE.Group { return placeOf(id).group; },
+    /** whether biome `id` is built (where the lobby is the village, a run's biome is built as a run first needs it) */
+    biomeBuilt(id: BiomeId): boolean { return Boolean(places[id]); },
+    buildBiome,
+    setCalm(v: number) {
+      calm = v;
+      for (const id of builtBiomes()) placeOf(id).b.setCalm(v);
+    },
     update(dt: number, t: number) {
       if (room) rooms![room].update(dt, t);
       else if (hallShown) hall.update(dt, t); else active.update(dt, t);
@@ -365,7 +408,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       if (all || lampsMoved || sunMoved) {
         // (and its breakables' shadows cast as one, each standing prop's, a frame before: `world/breakableShadows.ts`)
         if (!hallShown && !room && breakablesAt.get(shown) !== propState.rev) {
-          places[shown].breakables?.refresh();
+          placeOf(shown).breakables?.refresh();
           breakablesAt.set(shown, propState.rev);
           return;
         }

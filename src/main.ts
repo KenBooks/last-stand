@@ -1,5 +1,6 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
 import * as THREE from 'three';
+import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
@@ -369,7 +370,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm(), hurry: labHurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
@@ -659,6 +660,8 @@ function start() {
   // (the panels' lobby's battleground, Random rolled now among those the starting wave is unlocked in; the village's
   // is the portal's)
   if (!VILLAGE) rollBiome(startBests(), selectedWave());
+  // (its battleground built and warmed first, under the fight's bar, before the guests are told: game/biomeReady.ts)
+  if (!biomeReady(G.arena.biome)) { void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') start(); }); return; }
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);
@@ -670,6 +673,7 @@ function start() {
 function startDuel() {
   if (!isHost() || G.mode !== 'menu' || partnerInRun()) return;
   const setup = setupNow();
+  if (!biomeReady(setup.ground)) { void readyBiome(setup.ground).then(startDuel); return; }
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);
   G.arena.setBiome(setup.ground);
@@ -679,6 +683,7 @@ function startDuel() {
 
 /** A guest: the host began a duel. */
 function guestDuel(setup: DuelSetup, seed: number) {
+  if (!biomeReady(setup.ground)) { void readyBiome(setup.ground).then(() => guestDuel(setup, seed)); return; }
   G.arena.setBiome(setup.ground);
   beginRun(1, seed, false, setup);
   sendInRun();
@@ -705,7 +710,8 @@ function guestStarted(biome: BiomeId, wave: number, seed: number, training: bool
   setVillageMap(false);
   openCoop(false);
   hideHelp();
-  joinWhenWarm(biome, wave, seed, training);
+  // (the host's battleground built and warmed here first, if it isn't: game/biomeReady.ts)
+  afterBiome(biome, () => joinWhenWarm(biome, wave, seed, training));
 }
 const joinWhenWarm = whenWarm(['fight'], (biome: BiomeId, wave: number, seed: number, training: boolean) => {
   joinAsked = { biome, wave, seed, training, frames: JOIN_SHOWN_FRAMES };
@@ -732,6 +738,11 @@ function guestStart(biome: BiomeId, wave: number, seed: number, training: boolea
 }
 
 function beginRun(wave: number, seed: number, training = false, duel: DuelSetup | null = null) {
+  // (a way in that didn't ready its battleground, a dev build's wave picked: readied first, game/biomeReady.ts)
+  if (!biomeReady(G.arena.biome)) {
+    void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') beginRun(wave, seed, training, duel); });
+    return;
+  }
   hideBetaNotice();
   endTrades('a run started');   // a trade in the lobby is off, nothing moved (net/trade.ts)
   clearGround();   // what's left on the lobby floor is lost
@@ -829,6 +840,7 @@ function chooseContinue() {
 function labHurry(): void {
   hurry();
   void readyEveryBoss();
+  void readyEveryBiome();
 }
 
 /** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */

@@ -27,7 +27,7 @@ const BOOT_SECONDS = 3;
 const STASH_MOST = 60;
 /** the quality levels (data/quality.ts `QUALITY_ORDER`), and Auto's as its cookie keeps it (`core/quality.ts`:
  *  `low@518400`) */
-const QUALITIES = ['high', 'medium', 'low'];
+const QUALITIES = ['high', 'medium', 'low', 'verylow'];
 const AUTO = new RegExp(`^(${QUALITIES.join('|')})@\\d+$`);
 /** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
 const TAP_LEAST = 90;
