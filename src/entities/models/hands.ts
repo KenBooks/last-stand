@@ -472,7 +472,6 @@ const FIST_SHAPE = tunable('fistShape', {
   fan: [6, 1.5, -2, -10],
   shift: [0, 0],
   // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
-  thumbIn: 30, thumbLast: 40, thumbLift: -20, thumbKnuckle: 16,
   // how far towards its fist the thumb is held as the hand is sculpted (0 wide open, 1 shut)
   restThumb: 0.3,
 });
@@ -524,20 +523,71 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     return [q, bend(pip), bend(last)];
   });
 
-  const thumb = thumbOver(h, rotations);
-  // (and in over the fingers from there, its last joint bent onto them: solved against the fist's own sculpt, on the
-  // hand's one skin its root stood out beside the index's knuckle, a bulge from the back and a swollen mound from the
-  // palm, from the hand demo: "this bulge doesn't look right")
-  const turn = (axis: THREE.Vector3, degrees: number) => new THREE.Quaternion()
-    .setFromAxisAngle(axis, THREE.MathUtils.degToRad(degrees));
-  thumb[0].multiply(turn(new THREE.Vector3(0, 0, 1), -h.s * FIST_SHAPE.thumbIn));
-  // (lifted to run across the top of the curled fingers, its two joints bent round onto them: left as solved it
-  // crossed the palm on a steep diagonal and dropped into the row of finger ends, an adversarial review)
-  thumb[0].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbLift));
-  thumb[1].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbKnuckle));
-  thumb[2].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbLast));
+  // (on the hand's one skin the thumb is laid across the fingers by its own solve, `thumbLaid`)
+  const thumb = FIST_SCULPT ? thumbOver(h, rotations) : thumbLaid(h, rotations, thumbOver(h, rotations));
   rotations.push(thumb);
   return rotations;
+}
+
+/** where a fist's thumb lies on its fingers (`thumbLaid`): how far along the index's and the middle finger's middle
+ *  segments from their middle joints (a share), how hard it presses on them (a share of their radii summed), and its
+ *  two joints' ranges (rad) */
+const THUMB_LAID = { along: 0.4, press: 0.9, knuckle: [0, 0.96], last: [-0.1, 1.4] };
+/** the solve's first steps (rad), halved `THUMB_LAID_ROUNDS` times */
+const THUMB_LAID_STEP = 0.35;
+const THUMB_LAID_ROUNDS = 9;
+
+/**
+ * A fist's thumb laid across its fingers: its last joint on the index's middle segment and its tip on the middle
+ * finger's, each off the finger's bone by their radii, its knuckle kept out of the index finger. Its root turned any
+ * way and its two joints bent within their ranges, each in turn stepped while the thumb comes nearer, from `from` (the
+ * thumb as it was solved for the fist's own sculpt). Posed by eye instead, it lay across the palm in the picture and
+ * stood off the fingers in a loop from the side.
+ */
+function thumbLaid(h: Hand, fingers: THREE.Quaternion[][], from: THREE.Quaternion[]): THREE.Quaternion[] {
+  const index = chainOf(h.f[0].j[0].position, h.f[0].len, fingers[0]);
+  const middle = chainOf(h.f[1].j[0].position, h.f[1].len, fingers[1]);
+  // (on a finger's middle segment, off its front: its nail's side, out of the fist)
+  const laidOn = (chain: Chain, finger: Digit) => chain.points[1].clone().lerp(chain.points[2], THUMB_LAID.along)
+    .addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(chain.frames[1]), (finger.r + h.thumb.r) * THUMB_LAID.press);
+  const jointAt = laidOn(index, h.f[0]);
+  const tipAt = laidOn(middle, h.f[1]);
+  const axes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+  const bend = (angle: number) => new THREE.Quaternion().setFromAxisAngle(axes[0], angle);
+  // (its root's turn from `from`'s about each of its own axes, then its two joints' bends)
+  const posed = (at: number[]): THREE.Quaternion[] => {
+    const root = from[0].clone();
+    axes.forEach((axis, n) => root.multiply(new THREE.Quaternion().setFromAxisAngle(axis, at[n])));
+    return [root, bend(at[3]), bend(at[4])];
+  };
+  const clear = (h.f[0].r + h.thumb.r) * 0.8;
+  const miss = (at: number[]): number => {
+    const chain = chainOf(h.thumb.j[0].position, h.thumb.len, posed(at));
+    // (its knuckle inside the index finger counts against it, as do its joints past their ranges)
+    const inIndex = Math.max(0, clear - chain.points[1].distanceTo(index.points[1]));
+    const past = (angle: number, [low, high]: number[]) => Math.max(0, low - angle, angle - high);
+    return chain.points[2].distanceTo(jointAt) + chain.points[3].distanceTo(tipAt) + inIndex * 2
+      + (past(at[3], THUMB_LAID.knuckle) + past(at[4], THUMB_LAID.last)) * 0.05;
+  };
+  const at = [0, 0, 0, 0.3, 0.5];
+  let best = miss(at);
+  let step = THUMB_LAID_STEP;
+  for (let round = 0; round < THUMB_LAID_ROUNDS; round++) {
+    for (let n = 0; n < at.length; n++) {
+      for (const way of [1, -1]) {
+        for (;;) {
+          const tried = at.slice();
+          tried[n] += way * step;
+          const missed = miss(tried);
+          if (missed >= best) break;
+          best = missed;
+          at[n] = tried[n];
+        }
+      }
+    }
+    step /= 2;
+  }
+  return posed(at);
 }
 
 /** A digit's joints in the hand's frame, its tip last, and each segment's turn there. */
