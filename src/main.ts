@@ -47,7 +47,7 @@ import { stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
-import { closeTalk, stepTalk } from './ui/screens/talk/talk';
+import { closeTalk, stepTalk, talkWaitsForPortrait } from './ui/screens/talk/talk';
 import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
@@ -1382,7 +1382,9 @@ function frame(timestamp: number): void {
   }
   framePart('update');
   // (the guide open: its pictures made first, whatever else is building or warming, ui/guide/portraits.ts)
+  // (and the talk card's while it waits for it, whatever holds the build behind the lobby: a room's warm-up)
   if (guideOpen()) stepPortraits();
+  else if (talkWaitsForPortrait()) stepPortraits(false);
   // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
   if (dev && revealed) dev.frame(Math.min(rawDt, 0.1));
   // (photo mode's camera, flown by the browser's clock too: solo the game stands frozen meanwhile)

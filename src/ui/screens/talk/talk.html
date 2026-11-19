@@ -1,47 +1,7 @@
   <div id="talk" class="modal hidden"><div class="modal-box tk-box" role="dialog" aria-labelledby="tk-name">
     <div class="tk-side">
-      <!-- his portrait: a picture of his own model (ui/guide/portraits.ts), the drawing only where none can be made -->
-      <div class="tk-portrait" aria-hidden="true"><canvas class="tk-photo"></canvas><svg class="tk-drawn" viewBox="0 0 120 140">
-        <defs>
-          <radialGradient id="tk-glow" cx="78%" cy="30%" r="80%"><stop offset="0" stop-color="#7a4a1c"/><stop offset=".55" stop-color="#2a1a0e"/><stop offset="1" stop-color="#0e0a08"/></radialGradient>
-          <linearGradient id="tk-habit" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6a4c36"/><stop offset="1" stop-color="#2e2016"/></linearGradient>
-          <linearGradient id="tk-beard" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4efe6"/><stop offset="1" stop-color="#b8b0a2"/></linearGradient>
-          <radialGradient id="tk-skin" cx="60%" cy="35%" r="70%"><stop offset="0" stop-color="#f0c8a0"/><stop offset="1" stop-color="#b07c5a"/></radialGradient>
-          <clipPath id="tk-oval"><ellipse cx="60" cy="70" rx="56" ry="66"/></clipPath>
-        </defs>
-        <g clip-path="url(#tk-oval)">
-          <rect width="120" height="140" fill="url(#tk-glow)"/>
-          <!-- shelves behind him -->
-          <path d="M0 34h120M0 62h120" stroke="#3a2614" stroke-width="3"/>
-          <path d="M6 14v20M12 18v16M17 12v22M98 40v22M104 44v18M109 38v24M114 42v20" stroke="#5a3820" stroke-width="4"/>
-          <!-- the candle's flame, up to his left -->
-          <path d="M98 10 C102 16 102 21 98 24 C94 21 94 16 98 10Z" fill="#ffd27a"/><rect x="96" y="24" width="4" height="9" fill="#efe2c4"/>
-          <!-- habit, cowl and tabard -->
-          <path d="M8 140 C10 112 26 100 42 96 L78 96 C94 100 110 112 112 140Z" fill="url(#tk-habit)"/>
-          <path d="M30 100 C40 112 80 112 90 100 C86 94 34 94 30 100Z" fill="#4e3626"/>
-          <path d="M48 106 L72 106 L68 140 L52 140Z" fill="#7a3a2a"/><path d="M48 106 L72 106" stroke="#c89a4a" stroke-width="2"/>
-          <!-- neck and face -->
-          <path d="M50 84 L70 84 L70 98 L50 98Z" fill="#a8765a"/>
-          <ellipse cx="60" cy="62" rx="21" ry="25" fill="url(#tk-skin)"/>
-          <ellipse cx="39" cy="64" rx="3.5" ry="6" fill="#b88262"/><ellipse cx="81" cy="64" rx="3.5" ry="6" fill="#c89070"/>
-          <!-- white hair at the temples, the felt skullcap -->
-          <path d="M39 56 C38 46 42 42 46 41 L44 60Z M81 56 C82 46 78 42 74 41 L76 60Z" fill="#e8e2d8"/>
-          <path d="M40 46 C42 32 78 32 80 46 C72 41 48 41 40 46Z" fill="#5a1c16"/><path d="M41 45 C50 40 70 40 79 45" stroke="#7a2a20" stroke-width="1.5" fill="none"/>
-          <!-- beard and moustache -->
-          <path d="M41 66 C40 80 46 100 60 112 C74 100 80 80 79 66 C74 74 68 76 60 76 C52 76 46 74 41 66Z" fill="url(#tk-beard)"/>
-          <path d="M60 104 L60 112 M54 96 C55 102 57 106 58 109 M66 96 C65 102 63 106 62 109" stroke="#a8a090" stroke-width="1" fill="none"/>
-          <path d="M48 72 C52 68 57 69 60 71 C63 69 68 68 72 72 C68 75 64 74 60 73 C56 74 52 75 48 72Z" fill="#f4efe6"/>
-          <!-- nose, brows, eyes and round brass spectacles -->
-          <path d="M60 58 C58 64 57 67 59 68 C61 68.5 63 67.5 62 66" stroke="#8a5a40" stroke-width="1.5" fill="none"/>
-          <path d="M45 53 C49 49 55 50 57 53 M63 53 C65 50 71 49 75 53" stroke="#f0ebe2" stroke-width="3.2" stroke-linecap="round" fill="none"/>
-          <ellipse cx="51" cy="59" rx="2" ry="1.4" fill="#2a1a12"/><ellipse cx="69" cy="59" rx="2" ry="1.4" fill="#2a1a12"/>
-          <circle cx="51" cy="59" r="6" fill="rgba(255,240,210,.12)" stroke="#c8a050" stroke-width="1.6"/>
-          <circle cx="69" cy="59" r="6" fill="rgba(255,240,210,.12)" stroke="#c8a050" stroke-width="1.6"/>
-          <path d="M57 59 C59 57.5 61 57.5 63 59 M45 58 L40 56 M75 58 L80 56" stroke="#c8a050" stroke-width="1.4" fill="none"/>
-        </g>
-        <ellipse cx="60" cy="70" rx="56" ry="66" fill="none" stroke="#a07c46" stroke-width="3"/>
-        <ellipse cx="60" cy="70" rx="52.5" ry="62.5" fill="none" stroke="#4a3620" stroke-width="1.5"/>
-      </svg></div>
+      <!-- his portrait: a picture of his own model (ui/guide/portraits.ts), a spinner while it comes -->
+      <div class="tk-portrait" aria-hidden="true"><canvas class="tk-photo"></canvas><div class="tk-wait"></div></div>
       <div class="tk-plate"><span class="tk-name" id="tk-name"></span><span class="tk-title"></span></div>
     </div>
     <div class="tk-body">

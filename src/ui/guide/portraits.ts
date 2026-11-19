@@ -42,8 +42,9 @@ const CACHE = { db: 'last-stand-guide', store: 'portraits', on: !import.meta.env
 export const WHILE_OPEN = { ms: 8, most: 40 };
 
 /** a harness's planted faults: each picture drawn and encoded at once, as they were (`remakeAllNow`); the pictures not
- *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`) */
-export const portraitPlant = { allAtOnce: false, notWhileOpen: false };
+ *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`); the next try at
+ *  `failNext`'s picture failing, as one came back empty in play and the talk card showed a drawing (`lab talk`) */
+export const portraitPlant = { allAtOnce: false, notWhileOpen: false, failNext: null as Who | null };
 
 /** Whose picture: a foe's id, `hero:` and a class's id, or the library's scholar. */
 export type Who = EnemyId | `hero:${string}` | 'scholar';
@@ -145,11 +146,30 @@ export function hurryPortrait(id: Who): void {
  *  their compiles, `lab guide`) */
 let own: Who | null = null;
 
+/** `id`'s picture tried again, first, after a try came back empty (a talk's card waits on with a spinner). */
+export function retryPortrait(id: Who): void {
+  if (made.has(id)) return;
+  failed = false;
+  if (!pending.includes(id)) pending.unshift(id);
+  requeue();
+  hurryPortrait(id);
+}
+
+/** A harness's: `id`'s picture forgotten, to be made again as if it never had been (`lab talk`). */
+export function forgetPortrait(id: Who): void {
+  made.delete(id);
+  portraitTimes.delete(id);
+  if (!pending.includes(id)) pending.unshift(id);
+  requeue();
+}
+
 /** The pictures made while the guide is open, ahead of everything built behind the lobby and whatever holds it
- *  (called each frame it's open, from main.ts): the player is looking at them. */
-export function stepPortraits(): void {
+ *  (called each frame it's open, from main.ts): the player is looking at them. `all` false: the talk's card's alone,
+ *  while it waits for it. */
+export function stepPortraits(all = true): void {
   if (portraitPlant.notWhileOpen) return;
-  startPortraits();
+  // (all of them once the guide is opened; while the talk's card waits for his picture, his alone, already queued)
+  if (all) startPortraits();
   buildOnly(JOB, WHILE_OPEN);
 }
 
@@ -163,11 +183,10 @@ export function hurryPortraits(ids: Who[]): void {
 
 /** A harness's: every picture forgotten, to be made again as on a first visit (`lab guide`). */
 export function forgetPortraits(): void {
-  // (the guide's alone: the scholar's, first in the queue, made long before any guide is opened in play, was made
-  // again ahead of the guide's and held its pictures back, a page's own 284 ms after its opening)
+  // (the guide's alone: the scholar's is his talk's card's, made as it asks for it)
   for (const id of guides()) made.delete(id);
   portraitTimes.clear();
-  pending = [...(made.has('scholar') ? [] : ['scholar' as Who]), ...guides()];
+  pending = guides();
   started = true;
   requeue();
 }
@@ -304,6 +323,7 @@ function* steps(): Generator<void, void, undefined> {
     const ownMaking = making.some((m) => m.id === own);
     if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits && !ownMaking))) {
       try {
+        if (portraitPlant.failNext === next) { portraitPlant.failNext = null; throw new Error('a planted failure'); }
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
         let root: THREE.Object3D, scene: THREE.Scene, camera: THREE.PerspectiveCamera;
         if (next === 'scholar') {
