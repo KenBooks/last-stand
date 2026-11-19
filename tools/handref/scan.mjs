@@ -3,6 +3,7 @@
 //   node tools/handref/scan.mjs <scan.glb> --marks tools/handref/scans/<name>.json   the reference's hand file
 //   node tools/handref/scan.mjs <scan.glb> [--view back] [--size 800]                the scan in its own axes, gridded
 //   node tools/handref/scan.mjs <scan.glb> --view back --pick 412,230 [--pick ...]   the surface's point at a pixel
+//   node tools/handref/scan.mjs <scan.glb> --stand 0.5,0.2,-1                        from a camera of your own
 // Marking a scan: picture it in its own axes, read each landmark's pixel off the grid (a line every tenth of the
 // picture), `--pick` it, and write the points into its marks file. The marks are on the skin; a joint's middle is
 // under it, so each is moved `inward` (m in the scan's units) against the surface's own way out there.
@@ -136,7 +137,13 @@ function gridded(rgb, size) {
 function picture(mesh, name, args) {
   const size = Number(optionsNamed(args, 'size')[0] ?? 800);
   const hand = inOwnAxes(mesh);
-  const [view] = optionsNamed(args, 'view');
+  const [stand] = optionsNamed(args, 'stand');
+  // (a camera of the marker's own: `--stand x,y,z[,upx,upy,upz]`, where the scan lies askew in its axes)
+  if (stand) {
+    const numbers = stand.split(',').map(Number);
+    VIEWS.own = { stand: numbers.slice(0, 3), up: numbers.length > 3 ? numbers.slice(3) : [0, 1, 0], down: 0.5 };
+  }
+  const [view] = stand ? ['own'] : optionsNamed(args, 'view');
   const views = view ? [view] : Object.keys(VIEWS);
   const drawn = views.map((each) => draw(hand, each, view ? size : Math.round(size / 2)));
   for (const pick of optionsNamed(args, 'pick')) {

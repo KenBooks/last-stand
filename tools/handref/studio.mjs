@@ -164,8 +164,28 @@ export function relief(one, other) {
   if (!gaps.length) return 1;
   const sorted = gaps.slice().sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
-  const meanSquare = gaps.reduce((sum, gap) => sum + (gap - median) ** 2, 0) / gaps.length;
+  // (a gap counted to `RELIEF_MOST` at most: where one hand's thumb lies over the other's palm the gap is a jump, and
+  // a few such pixels would outweigh the rest)
+  const most = RELIEF_MOST * one.size / FIELD;
+  const meanSquare = gaps.reduce((sum, gap) => sum + Math.min(most, Math.abs(gap - median)) ** 2, 0) / gaps.length;
   return Math.sqrt(meanSquare) * FIELD / one.size;
+}
+
+/** the most a pixel's gap counts for in `relief` (breadths) */
+const RELIEF_MOST = 0.3;
+
+/**
+ * How like the reference a hand is, 1 the same: its outlines' overlap less its surfaces' gap, over every view.
+ * `reference` and `hand` are each one's drawings, a view each, in `VIEWS`' order.
+ */
+export function likeness(reference, hand) {
+  const scores = hand.map((drawing, v) => overlap(reference[v], drawing) - relief(reference[v], drawing));
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+/** A hand drawn from every view at a fit's size. */
+export function drawnSmall(hand) {
+  return Object.keys(VIEWS).map((view) => draw(hand, view, FIT_SIZE));
 }
 
 /** the size a fit's pictures are drawn at (px): small, as a fit draws the hand some hundreds of times */
@@ -192,30 +212,27 @@ function placed(hand, [size, across, up, back, pitch, yaw, roll]) {
   return { ...hand, axes, knuckles: sub(hand.knuckles, scale(moved, hand.breadth)), breadth: hand.breadth / size };
 }
 
-/** The mean of a hand's outline overlaps with the reference's, over every view. */
-function meanOverlap(reference, hand, size) {
-  const scores = Object.keys(VIEWS).map((view, v) => overlap(reference[v], draw(hand, view, size)));
-  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
-}
-
 /**
- * `hand` sized, moved and turned to where its outlines lie best over the reference's in every view at once, so the
+ * `hand` sized, moved and turned to where it is most like the reference (`likeness`) in every view at once, so the
  * score says how the two shapes differ and not how each one's joints were marked (a scan's are marked by eye on its
  * skin, the game's are its rig's own: sized by those alone, the game's fist drew 15% smaller than a cast's). Each
- * number in turn is stepped while the overlap gains, the steps halved each round.
+ * number in turn is stepped while the likeness gains, the steps halved each round. `small` is the reference drawn
+ * by `drawnSmall`; `from` a fit to start from (a hand a little changed from one already fitted), over fewer `rounds`
+ * of finer steps.
  */
-export function fitted(reference, hand) {
-  const small = Object.keys(VIEWS).map((view) => draw(reference, view, FIT_SIZE));
-  const at = [1, 0, 0, 0, 0, 0, 0];
-  const steps = [FIT_STEPS.size, ...Array(3).fill(FIT_STEPS.place), ...Array(3).fill(FIT_STEPS.turn)];
-  let best = meanOverlap(small, placed(hand, at), FIT_SIZE);
-  for (let round = 0; round < FIT_ROUNDS; round++) {
+export function fitted(small, hand, from = null, rounds = FIT_ROUNDS) {
+  const at = from ? from.slice() : [1, 0, 0, 0, 0, 0, 0];
+  const finer = 2 ** (FIT_ROUNDS - rounds);
+  const steps = [FIT_STEPS.size, ...Array(3).fill(FIT_STEPS.place), ...Array(3).fill(FIT_STEPS.turn)]
+    .map((step) => step / finer);
+  let best = likeness(small, drawnSmall(placed(hand, at)));
+  for (let round = 0; round < rounds; round++) {
     for (let n = 0; n < at.length; n++) {
       for (const way of [1, -1]) {
         for (;;) {
           const tried = at.slice();
           tried[n] += way * steps[n];
-          const score = meanOverlap(small, placed(hand, tried), FIT_SIZE);
+          const score = likeness(small, drawnSmall(placed(hand, tried)));
           if (score <= best) break;
           best = score;
           at[n] = tried[n];
@@ -224,7 +241,7 @@ export function fitted(reference, hand) {
     }
     steps.forEach((step, n) => { steps[n] = step / 2; });
   }
-  return { hand: placed(hand, at), at };
+  return { hand: placed(hand, at), at, likeness: best };
 }
 
 /** A drawing's pixels as RGB bytes: the hand lit, on grey. */
@@ -290,9 +307,10 @@ function main() {
   const views = Object.keys(VIEWS);
   const referenceDrawn = views.map((view) => draw(reference, view, size));
   const rows = [referenceDrawn.map(shaded)];
+  const small = drawnSmall(reference);
   console.log(`views: ${views.join(', ')}`);
   for (const read of hands) {
-    const fit = args.includes('--as-marked') ? { hand: read, at: null } : fitted(reference, read);
+    const fit = args.includes('--as-marked') ? { hand: read, at: null } : fitted(small, read);
     const hand = fit.hand;
     if (fit.at) console.log(`${hand.name}: laid over the reference at ${fit.at.map((n) => n.toFixed(3)).join(' ')}`);
     const drawn = views.map((view) => draw(hand, view, size));
@@ -303,6 +321,7 @@ function main() {
     const meanRelief = reliefs.reduce((sum, each) => sum + each, 0) / reliefs.length;
     const shares = reliefs.map((each) => (each * 100).toFixed(1)).join(' ');
     console.log(`${hand.name}: surfaces apart, % of breadth ${shares}  mean ${(meanRelief * 100).toFixed(2)}`);
+    console.log(`${hand.name}: likeness ${likeness(referenceDrawn, drawn).toFixed(3)}`);
     rows.push(drawn.map(shaded));
     rows.push(drawn.map((drawing, v) => outlines(referenceDrawn[v], drawing)));
   }

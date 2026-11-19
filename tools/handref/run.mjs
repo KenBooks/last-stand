@@ -29,7 +29,7 @@ async function bundle() {
     input: 'tools/handref/ourHand.ts',
     platform: 'node',
     logLevel: 'silent',
-    transform: { define: { 'import.meta.env.DEV': 'false', 'import.meta.env.PROD': 'true', 'import.meta.env': '{}' } },
+    transform: { define: { 'import.meta.env.DEV': 'true', 'import.meta.env.PROD': 'false', 'import.meta.env': '{}' } },
     output: { file: BUNDLE, format: 'esm', banner: PAGE_STAND_INS },
   });
 }

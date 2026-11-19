@@ -6,7 +6,9 @@ import * as THREE from 'three';
 import { sculptedSide } from '../../src/entities/models/hands';
 import { HAND_BUILDS } from '../../src/entities/models/build';
 
-/** The command line: `--build heavy|plain`, `--open` for the open sculpt (the shut one by default), `--out <dir>`. */
+/** The command line: `--build heavy|plain`, `--open` for the open sculpt (the shut one by default), `--out <dir>`,
+ *  `--tune name.field=v,...;...` the game's tunables set first (`src/core/tuning.ts`), `--tag <name>` in its file's
+ *  name. */
 function option(name: string, fallback: string): string {
   const at = process.argv.indexOf(`--${name}`);
   return at >= 0 ? process.argv[at + 1] : fallback;
@@ -17,7 +19,18 @@ function placeOf(joint: THREE.Object3D): number[] {
   return joint.getWorldPosition(new THREE.Vector3()).toArray();
 }
 
+/** The game's tunables set as `--tune` says: `fistShape.strike=88;shutFill.curl=0.9`. */
+function tuneAs(tunes: string): void {
+  const set = (globalThis as { __tune?: (path: string, value: number[]) => void }).__tune;
+  if (!set) throw new Error('the game registered no tunables: the bundle is not a dev one');
+  for (const each of tunes.split(';').filter(Boolean)) {
+    const [path, value] = each.split('=');
+    set(path, value.split(',').map(Number));
+  }
+}
+
 const buildName = option('build', 'heavy');
+tuneAs(option('tune', ''));
 const closed = !process.argv.includes('--open');
 const outDir = option('out', 'tools/handref/out');
 const build = HAND_BUILDS[buildName];
@@ -34,6 +47,7 @@ const joints = {
   little: placeOf(hand.f[3].j[0]),
 };
 mkdirSync(outDir, { recursive: true });
-const file = `${outDir}/ours-${buildName.toLowerCase()}-${closed ? 'shut' : 'open'}.json`;
+const tag = option('tag', '');
+const file = `${outDir}/ours-${buildName.toLowerCase()}-${closed ? 'shut' : 'open'}${tag ? `-${tag}` : ''}.json`;
 writeFileSync(file, JSON.stringify({ positions: Array.from(skin.attributes.position.array), index, joints }));
 console.log(`${file}: ${index.length / 3} triangles`);
