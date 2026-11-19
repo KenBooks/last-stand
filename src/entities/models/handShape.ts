@@ -8,6 +8,7 @@
 // were strings of beads.) The glove is the same surface a little further out, cut off over each finger's first
 // segment and round the thumb's, and the nails are plates laid on the backs of the fingertips.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { surfaceNets, type Field, type Net } from './surfaceNets';
 import { above, beyond, capsule, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
 import type { Part, Shape } from './sdf';
@@ -303,7 +304,7 @@ const THUMB_ROOT = 13;
  *  extra width they take (0 the open hand's), `head` the size of the knuckles' heads standing on the back and `headOut`
  *  how far out of the back they stand (m) */
 const SHUT_SHAPE = tunable('shutShape', {
-  square: 0.5, fat: 1, head: 0.8, headOut: 0,
+  square: 0.5, fat: 1, head: 1.05, headOut: 0.004,
   // the skin between each two knuckles of a fist, `web` its thickness (a share of the fingers' half-width, 0 none),
   // `webOut` how far out of the back it lies (m) and `webDown` how far down the fingers from the knuckles (m)
   web: 0.55, webOut: 0.001, webDown: -0.002,
@@ -322,7 +323,16 @@ const SHUT_SHAPE = tunable('shutShape', {
   // `sweptWide` how far past half the way to its neighbour each reaches across (they overlap, and meet in a cleft),
   // `sweptDeep` its depth back to front as a share of its width at its root, `cleft` how hard they join each other (m)
   swept: 1, sweptWide: 1.14, sweptDeep: 0.9, cleft: 0.0005,
+  // how far under its knuckle a swept finger's root lies inside the palm (m)
+  rootUnder: 0.004,
 });
+
+/** A fist's knuckle's head, standing proud on the back as the skin pulls taut over the bone's end (the hand's frame). */
+function knuckleHead(finger: DigitShape, i: number, build: HandBuild): Shape {
+  const k = finger.j[0].position;
+  const size = finger.width * build.knuckles * SHUT_SHAPE.head * SHUT_SHAPE.heads[i];
+  return ellipsoid(k.x, k.y + 0.004, k.z + SHUT_SHAPE.headOut * build.deep, size * 0.74, size * 0.96, size * 0.54);
+}
 
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
 function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, build: HandBuild,
@@ -342,7 +352,11 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   palm(slab(-0.004, -0.097, 0.0285 * wide, 0.044 * wide, 0.0135 * deep, 0.0102 * deep, 0.42, 0.008), 0.006);
   // the wrist, into the cuff
   palm(tube(0.0275 * wrist, 0.029 * wrist, -0.006, 0.014, 0.66), 0.012);
-  for (const [i, finger] of fingers.entries()) {
+  // (a fist's swept fingers are skins of their own from inside the palm on: the palm ends at its knuckles' line, and
+  // nothing of it lies over a finger. Its pads and heads on them, the two skins lay within a millimetre of each other
+  // and crossed in a ragged line along the knuckles)
+  const sweeps = closed && SHUT_SHAPE.swept > 0;
+  for (const [i, finger] of sweeps ? [] : fingers.entries()) {
     const k = finger.j[0].position;
     const w = finger.width;
     // its knuckle, the head of its bone in the palm, low and broad; and its pad on the palm's side, broad and flat,
@@ -356,9 +370,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     const head = w * knuckles;
     // The knuckles stand proud as the skin pulls taut over the heads of the metacarpals.
     if (closed) {
-      const size = head * SHUT_SHAPE.head * SHUT_SHAPE.heads[i];
-      palm(ellipsoid(k.x, k.y + 0.004, k.z + SHUT_SHAPE.headOut * deep, size * 0.74, size * 0.96, size * 0.54),
-        SHUT_SHAPE.headBlend);
+      palm(knuckleHead(finger, i, build), SHUT_SHAPE.headBlend);
     } else {
       palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
     }
@@ -366,7 +378,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   }
   // (a fist's skin drawn taut from knuckle to knuckle: with none, each knuckle stood alone, a ball on the end of its
   // finger with a valley to the back's edge between each two, where a real fist's back runs on to a low row of heads)
-  if (closed && SHUT_SHAPE.web > 0) {
+  if (closed && !sweeps && SHUT_SHAPE.web > 0) {
     for (let i = 0; i + 1 < fingers.length; i++) {
       const [a, b] = [fingers[i], fingers[i + 1]].map((finger) => {
         const k = finger.j[0].position;
@@ -596,9 +608,10 @@ function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, r
   const [knuckle, middle, last] = [0, 1, 2].map((n) => at(n));
   const tipDeep = deep * 0.84;
   const tip = at(2, -(finger.len[2] - tipDeep));
-  const inPalm = knuckle.clone().add(new THREE.Vector3(0, 0.016, 0));
+  // (its root well under the palm's back, so it comes out from under it at its knuckle and not along it)
+  const inPalm = knuckle.clone().add(new THREE.Vector3(0, 0.018, -SHUT_SHAPE.rootUnder));
   const line = rounded([
-    new THREE.Vector4(inPalm.x, inPalm.y, inPalm.z, deep * 0.9),
+    new THREE.Vector4(inPalm.x, inPalm.y, inPalm.z, deep * 0.8),
     new THREE.Vector4(knuckle.x, knuckle.y, knuckle.z, deep),
     new THREE.Vector4(middle.x, middle.y, middle.z, deep),
     new THREE.Vector4(last.x, last.y, last.z, deep * 0.92),
@@ -611,15 +624,36 @@ function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, r
   };
 }
 
-/** Each finger of a fist as one swept piece (`sweptFinger`), each reaching half the way to its nearer neighbour. */
-function sweptFingers(fingers: DigitShape[], space: THREE.Object3D): Part[] {
+/**
+ * Each finger of a fist as a skin of its own: its swept piece (`sweptFinger`), reaching half the way to its nearer
+ * neighbour, with its knuckle's head on it. Sculpted into one skin with the palm and each other, the fingers were
+ * fused: one bent open on its own dragged its neighbours' skin and the palm's with it as a web (from the hand demo:
+ * "shut fist is fused, why ?"). Apart, they touch, and the clefts between them are real.
+ */
+function sweptFingers(fingers: DigitShape[], space: THREE.Object3D, build: HandBuild): Part[][] {
   const knuckles = fingers.map((finger) => new THREE.Vector3()
     .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[0], space)).invert()));
   return fingers.map((finger, i) => {
     const gaps = [i - 1, i + 1].filter((n) => n >= 0 && n < fingers.length)
       .map((n) => knuckles[i].distanceTo(knuckles[n]));
-    return sweptFinger(finger, 1 + i * 3, space, Math.min(...gaps) / 2);
+    const head: Part = {
+      shape: knuckleHead(finger, i, build), frame: IDENTITY, blend: SHUT_SHAPE.headBlend, bones: [[0, 1]],
+      shapeOnly: true,
+    };
+    return [sweptFinger(finger, 1 + i * 3, space, Math.min(...gaps) / 2), head];
   });
+}
+
+/** A box round a piece's parts, with room for their blends. */
+function boxAround(parts: Part[]): THREE.Box3 {
+  const box = new THREE.Box3();
+  for (const part of parts) {
+    const reach = part.shape.radius + part.blend + 0.004;
+    const centre = new THREE.Vector3(...part.shape.centre);
+    box.expandByPoint(centre.clone().addScalar(reach));
+    box.expandByPoint(centre.clone().addScalar(-reach));
+  }
+  return box;
 }
 
 /** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
@@ -1051,6 +1085,23 @@ function pointOn(digit: DigitShape, n: number, along: number, space: THREE.Objec
 }
 
 /**
+ * A fist's skin in pieces, one geometry: the palm with its thumb, and each finger's own (`pieces`, a finger each).
+ * Each finger's skin follows its own bones and the palm's alone, never a neighbour's.
+ */
+function skinInPieces(parts: Part[], pieces: Part[][], fingers: DigitShape[], box: THREE.Box3): THREE.BufferGeometry {
+  const own = new Set(pieces.flat());
+  const rest = parts.filter((part) => !own.has(part));
+  const palmSays = rest.filter((part) => part.bones.length > 0 && part.bones.every(([bone]) => bone === 0));
+  const skins = [skinnedNet(lifted(fieldOf(rest), tendons(fingers)), box, rest, COARSE_SHARE.skin)];
+  pieces.forEach((piece, i) => {
+    const first = 1 + i * 3;
+    const says = rest.filter((part) => part.sayOnly && part.bones.some(([bone]) => bone >= first && bone < first + 3));
+    skins.push(skinnedNet(fieldOf(piece), boxAround(piece), [...palmSays, ...says], COARSE_SHARE.skin));
+  });
+  return mergeGeometries(skins);
+}
+
+/**
  * The hand's skin, its glove and its nails, sculpted on its joints as they stand now (in the frame of `space`, the
  * hand's own): `fingers` index to little, then `thumb`; their joints are bones 1 on, in that order (0 is the hand's).
  * `toward` is the way across the hand to its thumb (+1 or -1 along x).
@@ -1061,15 +1112,17 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   // (a fist's fingers swept whole, first, so they meet each other hard and the palm joins them softly; of the open
   // hand's parts they keep only each bone's say in the skin)
   const sweeps = closed && SHUT_SHAPE.swept > 0;
+  const pieces = sweeps ? sweptFingers(fingers, space, build) : [];
   const parts = [
-    ...(sweeps ? sweptFingers(fingers, space) : []),
+    ...pieces.flat(),
     ...palmParts(fingers, thumb, toward, build, closed),
     ...digits.flatMap((digit, i) => {
       const thumbs = i === fingers.length;
       const made = digitParts(digit, 1 + i * 3, space, thumbs, closed, build.thumb);
       return sweeps && !thumbs ? made.filter((part) => part.sayOnly) : made;
     }),
-    ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
+    // (a swept finger is whole: the fill inside its curl would join it to the palm's skin again)
+    ...(closed && !sweeps ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
       i === fingers.length - 1 ? -toward : 0)) : []),
     ...(closed ? thenarFill(thumb, fingers[0], space) : []),
   ];
@@ -1087,7 +1140,7 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
       .filter((part) => !part.sayOnly && part.bones.every(([bone]) => bone === tipBone)));
     nail(hand, own, digit, tipBone, space, nails, thumb, closed && thumb);
   });
-  const skin = skinnedNet(hand, box, parts, COARSE_SHARE.skin);
+  const skin = sweeps ? skinInPieces(parts, pieces, fingers, box) : skinnedNet(hand, box, parts, COARSE_SHARE.skin);
   shadeSkin(skin, hand, digits, frames, closed);
   return {
     skin,
