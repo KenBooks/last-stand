@@ -472,7 +472,7 @@ const FIST_SHAPE = tunable('fistShape', {
   fan: [6, 1.5, -2, -10],
   shift: [0, 0],
   // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
-  thumbIn: 30, thumbLast: 28,
+  thumbIn: 30, thumbLast: 40, thumbLift: -20, thumbKnuckle: 16,
   // how far towards its fist the thumb is held as the hand is sculpted (0 wide open, 1 shut)
   restThumb: 0.3,
 });
@@ -531,6 +531,10 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
   const turn = (axis: THREE.Vector3, degrees: number) => new THREE.Quaternion()
     .setFromAxisAngle(axis, THREE.MathUtils.degToRad(degrees));
   thumb[0].multiply(turn(new THREE.Vector3(0, 0, 1), -h.s * FIST_SHAPE.thumbIn));
+  // (lifted to run across the top of the curled fingers, its two joints bent round onto them: left as solved it
+  // crossed the palm on a steep diagonal and dropped into the row of finger ends, an adversarial review)
+  thumb[0].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbLift));
+  thumb[1].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbKnuckle));
   thumb[2].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbLast));
   rotations.push(thumb);
   return rotations;

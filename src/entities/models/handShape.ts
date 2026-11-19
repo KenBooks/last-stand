@@ -376,7 +376,11 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     if (closed) {
       palm(knuckleHead(finger, i, build), SHUT_SHAPE.headBlend);
     } else {
-      palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep, head * 0.62, head * 0.62, head * 0.42), 0.004);
+      // (a fighter's one hand's stand prouder, the middle finger's highest: bent into its fist they are its knuckles'
+      // row, and at the open hand's size the back ran into one soft bulge with a scalloped hem, an adversarial review)
+      const proud = build.fist && SHUT_SHAPE.universal > 0 ? 1.22 * SHUT_SHAPE.heads[i] : 1;
+      palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep * proud, head * 0.62 * proud, head * 0.62 * proud,
+        head * 0.42 * proud), 0.004);
     }
     palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
@@ -598,7 +602,9 @@ function sweptTube(line: THREE.Vector4[], across: THREE.Vector3, wide: number): 
 
 /** an open hand's swept finger: its breadth and depth, shares of its width at its root, and how far under its
  *  knuckle its root lies inside the palm (m) */
-const OPEN_SWEPT = { wide: 1.02, deep: 0.88, rootUnder: 0.002 };
+// (`pad` how much deeper it is on its palm's side, m: a finger's pads fill its curl, and with none a fist's fingers
+// curled round a hole seen from its side, an adversarial review)
+const OPEN_SWEPT = { wide: 1.04, deep: 0.88, rootUnder: 0.002, pad: 0.0014 };
 
 /**
  * A fist's finger as one piece: an oval tube swept along its curled bones from inside the palm behind its knuckle to
@@ -607,12 +613,19 @@ const OPEN_SWEPT = { wide: 1.02, deep: 0.88, rootUnder: 0.002 };
  * each joint, a pad) showed each segment's ends and each knuckle as a bead, and joined softly melted into the next
  * finger's: from play, "this looks terrible", the fists a quarter of the view each.
  */
+/** the pad of the finger being swept (m), read by its points as they're placed */
+const OPEN_PAD = { now: 0 };
+
 function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, reach: number, closed: boolean): Part {
+  OPEN_PAD.now = closed ? 0 : OPEN_SWEPT.pad;
   const toSculpt = (n: number) => new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert();
-  const at = (n: number, y = 0) => new THREE.Vector3(0, y, 0).applyMatrix4(toSculpt(n));
+  // (its middle moved towards the palm by its pad, so its back stays where it was)
+  const at = (n: number, y = 0) => new THREE.Vector3(0, y, n === 0 && y === 0 ? 0 : -OPEN_PAD.now)
+    .applyMatrix4(toSculpt(n));
   const across = new THREE.Vector3(1, 0, 0).transformDirection(toSculpt(0));
   const w = finger.width;
-  const deep = w * (closed ? SHUT_SHAPE.sweptDeep : OPEN_SWEPT.deep);
+  const pad = closed ? 0 : OPEN_SWEPT.pad;
+  const deep = w * (closed ? SHUT_SHAPE.sweptDeep : OPEN_SWEPT.deep) + pad;
   const [knuckle, middle, last] = [0, 1, 2].map((n) => at(n));
   const tip = at(2, -(finger.len[2] - deep * (closed ? 0.84 : 0.76)));
   // (its root well under the palm's back, so it comes out from under it at its knuckle and not along it)
