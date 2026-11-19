@@ -316,12 +316,19 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   const nail = h.nails.material as THREE.MeshStandardMaterial;
   nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
   nail.roughness = NAIL_ROUGH;
-  if (build.fist && bareSkin) shutOf(h, bones, bareSkin, skin);
+  if (build.fist && bareSkin && FIST_SCULPT) shutOf(h, bones, bareSkin, skin);
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)
   for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
   return h;
 }
+
+/** whether a fighter's fist is a sculpt of its own, shown in place of his hand's while it's shut (`shutOf`). Off: his
+ *  one hand, its fingers swept and its skin whole (`handShape.ts`' `universal`), is bent into its fist as into any
+ *  pose. The two never matched: the sculpt's fingers, skins of their own, came out from under the back of the hand as
+ *  balls with a hard edge where the hand's own skin runs over its knuckles (from the hand demo: "I'm concerned why
+ *  this is different on the knuckles"). Its code is kept. */
+const FIST_SCULPT = false;
 
 /** `h`'s bare skin and nails sculpted shut, bound to its joints closed in its fist (a skeleton of their own: the
  *  open meshes' is bound open), hidden until it's shut. */
