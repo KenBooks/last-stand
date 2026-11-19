@@ -17,8 +17,8 @@ const FINGER_RANGES = [
   { name: 'last', from: 0, to: 80, joint: 2, axis: 'x' },
   { name: 'spread', from: -15, to: 15, joint: 0, axis: 'z' },
 ] as const;
-/** the thumb's root from where a pose put it (degrees): across the palm and back, out from the palm and in */
-const THUMB_ROOT = { across: [-20, 45], out: [-25, 30] } as const;
+/** the thumb's root from where a pose put it (degrees): bent to the palm and back, in over the fingers and out */
+const THUMB_ROOT = { across: [-20, 45], out: [-30, 30] } as const;
 /** the thumb's two joints' ranges, degrees */
 const THUMB_RANGES = [
   { name: 'knuckle', from: -5, to: 55, joint: 1 },
@@ -211,11 +211,11 @@ function controlsFor(heavy: boolean): void {
     }
   });
   panel.append(heading('Thumb'));
-  panel.append(slider('across', ...THUMB_ROOT.across, () => thumbRoot.across, (degrees) => {
+  panel.append(slider('root bend', ...THUMB_ROOT.across, () => thumbRoot.across, (degrees) => {
     thumbRoot.across = degrees;
     turnThumbRoot();
   }));
-  panel.append(slider('out', ...THUMB_ROOT.out, () => thumbRoot.out, (degrees) => {
+  panel.append(slider('root in', ...THUMB_ROOT.out, () => thumbRoot.out, (degrees) => {
     thumbRoot.out = degrees;
     turnThumbRoot();
   }));

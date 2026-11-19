@@ -466,6 +466,8 @@ const FIST_SHAPE = tunable('fistShape', {
   crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
   fan: [6, 1.5, -2, -10],
   shift: [0, 0],
+  // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
+  thumbIn: 30, thumbLast: 28,
 });
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
@@ -515,7 +517,15 @@ function closedFistPose(h: Hand): THREE.Quaternion[][] {
     return [q, bend(pip), bend(last)];
   });
 
-  rotations.push(thumbOver(h, rotations));
+  const thumb = thumbOver(h, rotations);
+  // (and in over the fingers from there, its last joint bent onto them: solved against the fist's own sculpt, on the
+  // hand's one skin its root stood out beside the index's knuckle, a bulge from the back and a swollen mound from the
+  // palm, from the hand demo: "this bulge doesn't look right")
+  const turn = (axis: THREE.Vector3, degrees: number) => new THREE.Quaternion()
+    .setFromAxisAngle(axis, THREE.MathUtils.degToRad(degrees));
+  thumb[0].multiply(turn(new THREE.Vector3(0, 0, 1), -h.s * FIST_SHAPE.thumbIn));
+  thumb[2].multiply(turn(new THREE.Vector3(1, 0, 0), FIST_SHAPE.thumbLast));
+  rotations.push(thumb);
   return rotations;
 }
 
