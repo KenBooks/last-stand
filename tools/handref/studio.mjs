@@ -1,6 +1,6 @@
 // The hand reference's studio: hands drawn from the same six cameras without a browser, in well under a second, and
 // how far each is from the reference by its outline in each view.
-//   node tools/handref/studio.mjs <reference.json> <hand.json>... [--out sheet.png] [--size 240]
+//   node tools/handref/studio.mjs <reference.json> <hand.json>... [--out sheet.png] [--size 240] [--as-marked]
 // Each hand is a file as `ourHand.ts` writes one (`handref.py --json` writes the reference's). Every hand is drawn in
 // its own frame (across from the index knuckle to the little finger's, up from the wrist to the middle knuckle, out of
 // its back), centred on its knuckles and sized by their breadth, and cut a breadth below them, so its forearm and the
@@ -8,6 +8,7 @@
 // alone, blue its own alone.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { png } from '../lab/node/png.mjs';
 
 /** where each camera stands from the hand, in its frame (across, up, back), and the camera's up: the forearm at the
@@ -53,7 +54,7 @@ export function readHand(path) {
 }
 
 /** The camera's axes (right, up, towards it) for a view, in the hand's space. */
-function cameraOf(hand, view) {
+export function cameraOf(hand, view) {
   const inHand = (v) => add(add(scale(hand.axes[0], v[0]), scale(hand.axes[1], v[1])), scale(hand.axes[2], v[2]));
   const toward = unit(inHand(VIEWS[view].stand));
   const right = unit(cross(inHand(VIEWS[view].up), toward));
@@ -122,6 +123,21 @@ function fillTriangle(screen, height, corners, size, near, light) {
   }
 }
 
+/**
+ * The place on the hand's surface drawn at a pixel of its drawing from `view` (the hand's own space), or null where
+ * the picture is empty there: how a landmark seen in a picture is marked on a scan.
+ */
+export function pointAt(hand, view, drawing, x, y) {
+  const near = drawing.near[Math.floor(y) * drawing.size + Math.floor(x)];
+  if (!(near > -Infinity)) return null;
+  const camera = cameraOf(hand, view);
+  const pixels = drawing.size / (FIELD * hand.breadth);
+  const across = (x - drawing.size / 2) / pixels;
+  const up = (drawing.size * (VIEWS[view].down ?? KNUCKLES_DOWN) - y) / pixels;
+  const offset = add(add(scale(camera[0], across), scale(camera[1], up)), scale(camera[2], near / pixels));
+  return add(hand.knuckles, offset);
+}
+
 /** How much two drawings' outlines agree: their shared pixels over the pixels of either (1 the same outline). */
 export function overlap(one, other) {
   let both = 0;
@@ -135,8 +151,84 @@ export function overlap(one, other) {
   return either ? both / either : 1;
 }
 
+/**
+ * How far apart two drawings' surfaces are where both are drawn, as a share of the knuckles' breadth (root mean
+ * square, the two set level by their median gap first): what the outlines can't say, as a block and a fist of one
+ * outline differ by it (fingers standing proud of the knuckles, a thumb laid somewhere else).
+ */
+export function relief(one, other) {
+  const gaps = [];
+  for (let at = 0; at < one.near.length; at++) {
+    if (one.near[at] > -Infinity && other.near[at] > -Infinity) gaps.push(one.near[at] - other.near[at]);
+  }
+  if (!gaps.length) return 1;
+  const sorted = gaps.slice().sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const meanSquare = gaps.reduce((sum, gap) => sum + (gap - median) ** 2, 0) / gaps.length;
+  return Math.sqrt(meanSquare) * FIELD / one.size;
+}
+
+/** the size a fit's pictures are drawn at (px): small, as a fit draws the hand some hundreds of times */
+const FIT_SIZE = 96;
+/** a fit's first steps, halved `FIT_ROUNDS` times: the hand's size (a share), its place (breadths), its turn (rad) */
+const FIT_STEPS = { size: 0.08, place: 0.08, turn: 0.1 };
+const FIT_ROUNDS = 5;
+
+/** `v` turned about `axis` (a unit) by `angle`. */
+function turned(v, axis, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return add(add(scale(v, cos), scale(cross(axis, v), sin)), scale(axis, dot(axis, v) * (1 - cos)));
+}
+
+/** `hand` as a fit's seven numbers place it: sized, moved along its own axes and turned about each of them. */
+function placed(hand, [size, across, up, back, pitch, yaw, roll]) {
+  let axes = hand.axes;
+  [pitch, yaw, roll].forEach((angle, i) => {
+    const about = axes[i];
+    axes = axes.map((axis) => turned(axis, about, angle));
+  });
+  const moved = add(add(scale(hand.axes[0], across), scale(hand.axes[1], up)), scale(hand.axes[2], back));
+  return { ...hand, axes, knuckles: sub(hand.knuckles, scale(moved, hand.breadth)), breadth: hand.breadth / size };
+}
+
+/** The mean of a hand's outline overlaps with the reference's, over every view. */
+function meanOverlap(reference, hand, size) {
+  const scores = Object.keys(VIEWS).map((view, v) => overlap(reference[v], draw(hand, view, size)));
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+/**
+ * `hand` sized, moved and turned to where its outlines lie best over the reference's in every view at once, so the
+ * score says how the two shapes differ and not how each one's joints were marked (a scan's are marked by eye on its
+ * skin, the game's are its rig's own: sized by those alone, the game's fist drew 15% smaller than a cast's). Each
+ * number in turn is stepped while the overlap gains, the steps halved each round.
+ */
+export function fitted(reference, hand) {
+  const small = Object.keys(VIEWS).map((view) => draw(reference, view, FIT_SIZE));
+  const at = [1, 0, 0, 0, 0, 0, 0];
+  const steps = [FIT_STEPS.size, ...Array(3).fill(FIT_STEPS.place), ...Array(3).fill(FIT_STEPS.turn)];
+  let best = meanOverlap(small, placed(hand, at), FIT_SIZE);
+  for (let round = 0; round < FIT_ROUNDS; round++) {
+    for (let n = 0; n < at.length; n++) {
+      for (const way of [1, -1]) {
+        for (;;) {
+          const tried = at.slice();
+          tried[n] += way * steps[n];
+          const score = meanOverlap(small, placed(hand, tried), FIT_SIZE);
+          if (score <= best) break;
+          best = score;
+          at[n] = tried[n];
+        }
+      }
+    }
+    steps.forEach((step, n) => { steps[n] = step / 2; });
+  }
+  return { hand: placed(hand, at), at };
+}
+
 /** A drawing's pixels as RGB bytes: the hand lit, on grey. */
-function shaded(drawing) {
+export function shaded(drawing) {
   const rgb = Buffer.alloc(drawing.size * drawing.size * 3);
   for (let at = 0; at < drawing.near.length; at++) {
     const lit = drawing.near[at] > -Infinity;
@@ -162,7 +254,7 @@ function outlines(reference, drawing) {
 }
 
 /** Tiles (RGB bytes, `size` square) laid out in rows into one picture's bytes. */
-function tiled(rows, size) {
+export function tiled(rows, size) {
   const columns = Math.max(...rows.map((row) => row.length));
   const width = columns * size;
   const height = rows.length * (size + LABEL_HEIGHT);
@@ -199,11 +291,18 @@ function main() {
   const referenceDrawn = views.map((view) => draw(reference, view, size));
   const rows = [referenceDrawn.map(shaded)];
   console.log(`views: ${views.join(', ')}`);
-  for (const hand of hands) {
+  for (const read of hands) {
+    const fit = args.includes('--as-marked') ? { hand: read, at: null } : fitted(reference, read);
+    const hand = fit.hand;
+    if (fit.at) console.log(`${hand.name}: laid over the reference at ${fit.at.map((n) => n.toFixed(3)).join(' ')}`);
     const drawn = views.map((view) => draw(hand, view, size));
     const scores = drawn.map((drawing, v) => overlap(referenceDrawn[v], drawing));
     const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
     console.log(`${hand.name}: outline overlap ${scores.map((s) => s.toFixed(2)).join(' ')}  mean ${mean.toFixed(3)}`);
+    const reliefs = drawn.map((drawing, v) => relief(referenceDrawn[v], drawing));
+    const meanRelief = reliefs.reduce((sum, each) => sum + each, 0) / reliefs.length;
+    const shares = reliefs.map((each) => (each * 100).toFixed(1)).join(' ');
+    console.log(`${hand.name}: surfaces apart, % of breadth ${shares}  mean ${(meanRelief * 100).toFixed(2)}`);
     rows.push(drawn.map(shaded));
     rows.push(drawn.map((drawing, v) => outlines(referenceDrawn[v], drawing)));
   }
@@ -213,4 +312,4 @@ function main() {
   console.log(out);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
