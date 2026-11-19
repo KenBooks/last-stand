@@ -53,7 +53,9 @@ function sizeBloom(): void {
 
 /** Bloom drawn at `share` of its pixels each way, as WebGL's is (`setBloomShare` in core/renderer.ts: Low's half). */
 export function setBloomShareOnWebGPU(share: number): void {
-  // (none: its glow added at no strength, its passes at the size they had; WebGL leaves its pass out)
+  // (none: its glow added at no strength and its passes not drawn, but for one frame that draws its glow out to
+  // nothing; WebGL leaves its pass out)
+  if (share <= 0 && !bloomOff) bloomDrawnOff = false;
   bloomOff = share <= 0;
   if (bloomStrength) bloomStrength.value = bloomOff ? 0 : bloomStrengthWanted;
   if (share <= 0) return;
@@ -71,6 +73,24 @@ let bloomStrength: { value: number } | null = null;
 /** the strength asked for (`setBloomStrengthOnWebGPU`), and whether the quality draws none */
 let bloomStrengthWanted = BLOOM_STRENGTH;
 let bloomOff = false;
+/** whether bloom, off, has drawn its one frame at no strength since (`skipBloomWhileOff`) */
+let bloomDrawnOff = false;
+
+/**
+ * Bloom's passes left out while the quality draws none (Very low): at no strength they still drew every frame, its
+ * bright pass and blurs at the size the boot gave them, half the scene's pixels each way on a level booted at Very
+ * low (a phone's frame: post 1.9 ms with bloom at an eighth of its pixels each way, 6.5 with it at half and adding
+ * nothing, trace FJJ1-Z9XM). One frame is still drawn once it's off, its glow drawn out to nothing, so the frame
+ * adds no glow left from before.
+ */
+function skipBloomWhileOff(glow: { updateBefore(frame: unknown): unknown }): void {
+  const draw = glow.updateBefore.bind(glow);
+  glow.updateBefore = (frame: unknown) => {
+    if (bloomOff && bloomDrawnOff) return undefined;
+    if (bloomOff) bloomDrawnOff = true;
+    return draw(frame);
+  };
+}
 /** the scene's samples, chosen once (`setSceneSamples`); null until they are */
 let samplesChosen: number | null = null;
 /** the scene's pass as far as its samples go */
@@ -1632,6 +1652,9 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const glow = bloom(color, BLOOM_STRENGTH, 0, 0.9);
   bloomNode = glow as unknown as Scaled;
   bloomStrength = glow.strength as unknown as { value: number };
+  // (the quality may have turned it off before the node was made)
+  bloomStrength.value = bloomOff ? 0 : bloomStrengthWanted;
+  skipBloomWhileOff(glow as unknown as { updateBefore(frame: unknown): unknown });
   sizeBloom();
   looks.bloom.forEach((weight, i) => glow.bloomTintColors[i].setScalar(weight / THREE_BLOOM_LEVELS[i]));
   // (untyped in three's types: its output as a texture node)
