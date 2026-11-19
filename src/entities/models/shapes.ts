@@ -136,7 +136,9 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     [1.10, -0.077, 0.033], [1.56, -0.077, 0.022], [1.95, -0.063, 0.031], [2.40, -0.049, 0.041],
     [2.88, -0.035, 0.044], [3.40, -0.028, 0.044], [3.92, -0.025, 0.044], [4.45, -0.025, 0.044],
     [4.90, -0.026, 0.044], [tau - 1, -0.027, 0.044],
-  ];
+    // (laid out on a hand drawn 1.28 times its size: on another, as far down it and as wide by its own size. Kept as
+    // it was on a hand a man's size, the strip reached the knuckles and stood as wide as the fist)
+  ].map(([angle, y, wide]) => [angle, y * arm.k / 1.28, wide * arm.k / 1.28]);
   // A 30 mm rise per turn gives the overlap and slant on a flattened wrist. The outer end tucks under the cuff.
   const turns = 4, segments = 16, rise = 0.030;
   const [azimuth, start, width] = handTurn[handTurn.length - 1];

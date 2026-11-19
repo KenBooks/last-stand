@@ -5,8 +5,8 @@
 // The hand is laid over the reference first (`fitted`), so both are cut at the same levels.
 import { drawnSmall, fitted, readHand } from './studio.mjs';
 
-/** the levels read, in knuckle breadths up from the knuckles (the wrist's side) and down (the fingers' row) */
-const LEVELS = [0.9, 0.7, 0.5, 0.3, 0.15, 0, -0.15, -0.3, -0.45];
+/** the levels read, in knuckle breadths from the knuckles: on towards the fingers' row (+) and back to the wrist (-) */
+const LEVELS = [0.35, 0.25, 0.15, 0, -0.15, -0.3, -0.45, -0.6, -0.75];
 /** half the height of the slab a level is read over (breadths) */
 const SLAB = 0.04;
 /** how far apart a share may be from the reference's and count as its (a share of the reference's) */

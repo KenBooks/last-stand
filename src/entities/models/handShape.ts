@@ -303,10 +303,10 @@ const THUMB_ROOT = 13;
  *  extra width they take (0 the open hand's), `head` the size of the knuckles' heads standing on the back and `headOut`
  *  how far out of the back they stand (m) */
 const SHUT_SHAPE = tunable('shutShape', {
-  square: 0.5, fat: 1, head: 1.1, headOut: 0.008,
+  square: 0.5, fat: 1, head: 0.8, headOut: 0,
   // the skin between each two knuckles of a fist, `web` its thickness (a share of the fingers' half-width, 0 none),
   // `webOut` how far out of the back it lies (m) and `webDown` how far down the fingers from the knuckles (m)
-  web: 0.55, webOut: 0.005, webDown: -0.002,
+  web: 0.55, webOut: 0.001, webDown: -0.002,
   // each finger's knuckle's size against `head`, index first: the middle finger's stands highest and the row falls
   // away to the little finger's
   heads: [1, 1.1, 0.94, 0.8],
@@ -315,7 +315,7 @@ const SHUT_SHAPE = tunable('shutShape', {
   pad: 1.5,
   // the heel of a fist on the little finger's side, the palm's edge thickened towards the palm (m, 0 the open hand's):
   // a fist's palm is as thick there as its wrist, where the open hand's slab left the wrist a bar over a thin blade
-  heel: 0.016,
+  heel: 0.006,
   // how softly the knuckles' heads join the back (m)
   headBlend: 0.011,
 });
@@ -519,7 +519,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
 
 /** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
  *  share of the finger's width; `mound`, `web` the thumb's mound and its web (`thenarFill`) */
-const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 1.25, web: 0.85 });
+const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 1, web: 0.85 });
 
 /**
  * The flesh inside a closed finger's curl, between its bones and the palm: capsules across the curl from its knuckle

@@ -30,16 +30,16 @@ const FITTED = {
 };
 /** each fitted number as the game has it */
 const START = {
-  'fistShape.strike': 80,
+  'fistShape.strike': 86,
   'fistShape.shift[0]': 0,
   'fistShape.shift[1]': 0,
   'shutShape.square': 0.5,
   'shutShape.fat': 1,
-  'shutShape.head': 1.1,
-  'shutShape.headOut': 0.008,
+  'shutShape.head': 0.8,
+  'shutShape.headOut': 0,
   'shutFill.curl': 0.8,
   'shutShape.web': 0.55,
-  'shutShape.webOut': 0.005,
+  'shutShape.webOut': 0.001,
   'shutShape.webDown': -0.002,
 };
 

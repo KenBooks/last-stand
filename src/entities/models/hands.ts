@@ -455,7 +455,7 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
  *  inside the thenar mound and the little finger closes the outer slit). */
 // (`shift` moves every finger's `crease` together, y and z)
 const FIST_SHAPE = tunable('fistShape', {
-  strike: 80,
+  strike: 86,
   crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
   fan: [6, 1.5, -2, -10],
   shift: [0, 0],
