@@ -197,6 +197,46 @@ function showPlace(player: Player, def: Def, target: THREE.Vector3 | null, dt: n
   });
 }
 
+// --- what a shot meets ------------------------------------------------------------------
+/** how deep the wall's solid is, across its line (m, in its own space): its stakes and the weave between them */
+const SOLID_DEPTH = 0.3;
+/** the solid's look: never drawn, only met (`raycastWall`) */
+const SOLID_LOOK = new THREE.MeshBasicMaterial({ visible: false });
+/** whether a shot meets the wall as drawn alone, through the gaps in its weave (the lab's canary, `holdWallSolid`) */
+let drawnOnly = false;
+
+/** The lab's canary: shots meet the wall as drawn alone, as before its solid (`lab hedgeward --canary`). */
+export function holdWallSolid(off: boolean): void {
+  drawnOnly = off;
+}
+
+/**
+ * A box filling the wall's outline in its own space, never drawn, standing `lifted` higher where it's laid over a
+ * step: what a shot meets where it finds a gap. An arrow meets a prop where a ray along it meets what's drawn
+ * (`propSurface`), and between the wall's stakes and the courses of its weave it met nothing and flew on as past it,
+ * dealing nothing (from Victor's review of #647: "Sometimes arrow can fly through without dealing damage, I get it
+ * more than half the time").
+ */
+function solidOf(root: THREE.Object3D, lifted: number): THREE.Mesh {
+  const tall = HEDGE_HEIGHT + lifted;
+  const box = new THREE.BoxGeometry(HEDGE_WIDTH, tall, SOLID_DEPTH).translate(0, tall / 2, 0);
+  const solid = new THREE.Mesh(box, SOLID_LOOK);
+  solid.name = 'hedgeward-solid';
+  solid.visible = false;
+  root.add(solid);
+  return solid;
+}
+
+/** What a ray meets of the wall: what's drawn, else its solid, where the ray found a gap in the weave. */
+function raycastWall(root: THREE.Object3D, solid: THREE.Mesh, ray: THREE.Raycaster, hits: THREE.Intersection[]): void {
+  const found = hits.length;
+  root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) (o as THREE.Mesh).raycast(ray, hits); });
+  if (hits.length > found || drawnOnly) return;
+  // (its matrix as it stands: a place's hidden parts aren't made each frame, `matricesOfShownOnly`)
+  solid.updateWorldMatrix(true, false);
+  solid.raycast(ray, hits);
+}
+
 // --- the wall standing ------------------------------------------------------------------
 /** every wall standing, whoever's: how each is taken down as its wave is cleared */
 const everyWall = new Set<() => void>();
@@ -216,13 +256,14 @@ function raise(player: Player, def: Def, at: Placement): void {
   let t = 0, endedAt = -1, broke = false, flash = 0, life = def.wall.life;
   // (the prop it is: broken as any prop is, its rubble thrown by `breakProp`, its look then coming apart here; a hit
   // flashes it, as a hit chips a prop)
+  const solid = solidOf(wall.root, Math.max(lift(-HEDGE_WIDTH / 2), lift(0), lift(HEDGE_WIDTH / 2)));
   const prop = raiseProp(circlesAlong(at.ax, at.az, at.bx, at.bz, HALF, top), def.wall.life, WOOD, {
     hide: () => end(true),
     show: () => undefined,
-    raycast: (ray, hits) => wall.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).raycast(ray, hits); }),
+    raycast: (ray, hits) => raycastWall(wall.root, solid, ray, hits),
     surfaces: (visit) => {
       wall.root.updateWorldMatrix(true, true);
-      wall.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) visit(o as THREE.Mesh); });
+      wall.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) visit(o as THREE.Mesh); });
     },
   }, 'wood', (left) => fx('ward', middle.x, middle.z, left));
   const ward: Ward = { ax: at.ax, az: at.az, bx: at.bx, bz: at.bz, prop };

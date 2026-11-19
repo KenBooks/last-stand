@@ -7,8 +7,11 @@
 //   body (from the owner: "small mobs supposed to always go around unless they can't (all blocked)");
 // - walled: him boxed in by four walls, a melee foe outside breaks its way through one, never striking him over a
 //   wall still standing;
-// - arrows: his own arrows loosed into it wear it as they wear any prop, and as many as its life break it (from the
-//   owner: "if you can destroy a marble pillar with arrows, you for sure should be able to destroy a wooden wall");
+// - arrows: his own arrows loosed into it, at points across its width and up its height, each wear it as they wear
+//   any prop, and as many as its life break it (from the owner: "if you can destroy a marble pillar with arrows, you
+//   for sure should be able to destroy a wooden wall"); one through a gap in its weave dealing nothing is a problem
+//   (from Victor's review: "Sometimes arrow can fly through without dealing damage, I get it more than half the
+//   time": met as drawn, an arrow found the gaps between its stakes and courses);
 // - slammed: a foe's slam landing on it wears it;
 // - trampled: a big foe walking at him straight through it breaks it ("Big enemies should break it by simply walking
 //   over it");
@@ -18,8 +21,8 @@
 // - reach: aimed past its range it rises at its range; aimed onto a foe it rises before the foe, never on it; with a
 //   prop right before him (nowhere clear) it isn't raised, its outline red, and the press costs nothing.
 // `--canary` plants a fault for the arrow (its body made a tall prop's, which stops a shot), the round (its body taken
-// out of the foes' way) and the arrows, the trample and the walled in (its body no breakable prop's), each a problem
-// unless caught. `--pictures` takes the wall
+// out of the foes' way), the arrows (the wall met as drawn alone, through its gaps), the trample and the walled in
+// (its body no breakable prop's), each a problem unless caught. `--pictures` takes the wall
 // from round it alone (front, three-quarter, side, above), and in the forest and the crypt from the game's views:
 // standing, its preview held, and a blow on it with its bar.
 import * as THREE from 'three';
@@ -75,9 +78,10 @@ const ROUND_FRAMES = 360;
 const BOX_OUT = 2.2;
 const BOX_FOE_OUT = 5.5;
 const BOX_FRAMES = 900;
-/** the arrows: how many it may take, as a share of its life, before it must have broken (some fly through the gaps
- *  between its stakes, as an arrow finds where it goes in by what's drawn), and the draw's frames each */
-const ARROWS_SHARE = 3;
+/** the arrows: where each is aimed on the wall, across its width from its middle and up from its foot (m: the wall
+ *  stands 1 m, and over that an arrow flies on as over any low prop), and the draw's frames each */
+const ARROWS_ACROSS = [-1.4, -0.7, 0, 0.7, 1.4, -1.05, -0.35, 0.35, 1.05];
+const ARROWS_UP = [0.35, 0.6, 0.85];
 const ARROW_DRAW = 40;
 /** the trample: the big foe risen this far beyond the wall (m), and the frames it's given to walk through */
 const BIG_BEYOND = 5;
@@ -402,24 +406,64 @@ function unbreakable(ward: Ward): () => void {
   return () => { for (const circle of ward.prop.parts) circle.prop = ward.prop; };
 }
 
-/** arrows: his arrows loosed into it, one after another, wear it as a prop and break it at its life. */
+/** the most frames an arrow is waited for to leave the bow, and to end its flight; the bow's reload after (frames) */
+const LOOSE_WAIT = 90;
+const FLIGHT_WAIT = 120;
+const RELOAD = 60;
+
+/**
+ * One arrow drawn at `aim` and let go, followed until its flight ends, and the bow given its reload: the arrow, as it
+ * ended. Pressed again within the reload, a shot looses nothing, and counted as one it read as an arrow through the
+ * wall dealing nothing.
+ */
+async function loose(lab: Lab, shot: BoundSkill, aim: THREE.Vector3): Promise<Projectile> {
+  const before = new Set(G.projectiles);
+  const ownNew = (): Projectile | undefined => G.projectiles.find((p) => !before.has(p) && p.by === lab.player);
+  await lab.step(ARROW_DRAW, () => pressing(shot.key, aim, true));
+  await lab.until(() => Boolean(ownNew()), LOOSE_WAIT, 'the arrow was never loosed', () => ({ aim }));
+  const arrow = ownNew()!;
+  await lab.until(() => !arrow.alive, FLIGHT_WAIT, 'the arrow never ended its flight', () => ({ aim }));
+  await lab.step(RELOAD, () => ({ aim }));
+  return arrow;
+}
+
+/** The points the arrows are aimed at on `ward`, in turn: across its width, up its height. */
+function arrowAims(ward: Ward): THREE.Vector3[] {
+  const { middle, along } = lineOf(ward);
+  const aims: THREE.Vector3[] = [];
+  for (const across of ARROWS_ACROSS) {
+    for (const up of ARROWS_UP) aims.push(middle.clone().addScaledVector(along, across).setY(up));
+  }
+  return aims;
+}
+
+/**
+ * arrows: his arrows loosed into it at points across its width and up its height, one after another, each wearing it
+ * as it wears a prop, and breaking it at its life. An arrow that wore nothing went through a gap: a problem.
+ */
 async function arrows(lab: Lab, options: HedgewardOptions, canary: boolean): Promise<Outcome> {
   const { way, skill } = await setUp(lab, options.fixture);
   const hero = G.player;
   const ward = await raiseAt(lab, skill, hero.pos.clone().addScaledVector(way, ARROW_OUT));
-  const undo = canary ? unbreakable(ward) : () => undefined;
-  // (aimed low into its middle: over its top, a shot flies on as over any low prop)
-  const aim = lineOf(ward).middle.clone().setY(0.45);
-  const shot = skillNamed('mouse0'), most = ward.prop.max * ARROWS_SHARE, moments: Pictured[] = [];
+  // (the canary: the wall met as drawn alone, as before its solid, whose gaps an arrow went through)
+  const { holdWallSolid } = await import('../../../src/combat/skills/hedgeward');
+  holdWallSolid(canary);
+  const shot = skillNamed('mouse0'), moments: Pictured[] = [];
+  const through: string[] = [];
   let loosed = 0;
   // (pictured standing, half worn and as it breaks, over the shoulder)
   if (options.pictures) moments.push(await lab.screen('arrows: the wall standing', [`life ${ward.prop.life} of ${ward.prop.max}`]));
   let halfShown = false;
   try {
-    while (!ward.prop.broken && loosed < most) {
-      await lab.step(ARROW_DRAW, () => pressing(shot.key, aim, true));
-      await lab.step(20, () => ({ aim }));
+    for (const aim of arrowAims(ward)) {
+      if (ward.prop.broken) break;
+      const before = ward.prop.life;
+      const arrow = await loose(lab, shot, aim);
       loosed++;
+      if (ward.prop.life >= before && !ward.prop.broken) {
+        const along = lineOf(ward).along.dot(arrow.pos.clone().sub(lineOf(ward).middle));
+        through.push(`${aim.y.toFixed(2)} m up, landed ${along.toFixed(1)} m along`);
+      }
       if (options.pictures && !halfShown && ward.prop.life <= ward.prop.max / 2 && !ward.prop.broken) {
         halfShown = true;
         moments.push(await lab.screen('arrows: worn half way, arrows standing in it', [`life ${ward.prop.life} of ${ward.prop.max}`]));
@@ -430,10 +474,15 @@ async function arrows(lab: Lab, options: HedgewardOptions, canary: boolean): Pro
       moments.push(await lab.screen('arrows: broken by the arrows', [`${loosed} loosed`]));
     }
   } finally {
-    undo();
+    holdWallSolid(false);
   }
-  const lines = [`arrows: ${loosed} loosed into it, ${ward.prop.broken ? 'broken' : `standing at ${ward.prop.life} of ${ward.prop.max}`}`];
-  const problems = ward.prop.broken ? [] : [`arrows: never broke it (${loosed} loosed, its life ${ward.prop.max})`];
+  const state = ward.prop.broken ? 'broken' : `standing at ${ward.prop.life} of ${ward.prop.max}`;
+  const lines = [`arrows: ${loosed} loosed across it and up it, ${state}; ${through.length} dealt nothing`];
+  const problems: string[] = [];
+  if (through.length) {
+    problems.push(`arrows: through it dealing nothing: ${through.length} of ${loosed} (${through.join(', ')})`);
+  }
+  if (!ward.prop.broken) problems.push(`arrows: never broke it (${loosed} loosed, its life ${ward.prop.max})`);
   return { lines, problems, moments };
 }
 
@@ -727,7 +776,8 @@ export const lastWallLife = (): number => wards.at(-1)?.prop.max ?? 0;
 const CANARY_CAUGHT = {
   round: 'round: went',
   arrow: 'arrow: stopped by his own wall',
-  arrows: 'arrows: never broke it',
+  // (an arrow through a gap: the wall met as drawn alone)
+  arrows: 'arrows: through it dealing nothing',
   trampled: 'trampled: never broke it',
   walled: 'walled: never broke its way in',
 };
