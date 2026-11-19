@@ -44,7 +44,7 @@ export const PLAIN: HandBuild = {
  *  palm a paddle on it, and the thumb at the fingers' width was thinner than the index (an adversarial review of its
  *  proportions) */
 export const HEAVY: HandBuild = {
-  name: 'heavy', digits: 1.07, wide: 1.06, deep: 1.04, wrist: 1.2, knuckles: 1.15, thumb: 1.15, fist: true,
+  name: 'heavy', digits: 1.07, wide: 1.06, deep: 0.95, wrist: 1.2, knuckles: 1.15, thumb: 1.1, fist: true,
 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */
@@ -75,7 +75,9 @@ export interface ForearmBuild {
  *  builds (at 11.5, its belly 10.6 cm across the skin, the wrap was a cardboard tube and the fists small under it) */
 // (and 10 cm across on a hand a man's size: a man's forearm is 1.6 times his wrist across at its widest, and at 8.3
 // under a fist its right size the wrap was a stick the fist sat on as a ball, a review of its proportions)
-export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.05, 0.038], bellyAt: 0.5 };
+// (its widest two thirds of the way up to the elbow, as a forearm's is: halfway, the wrap's top was already as wide as
+// the fist, a cuff the fist looked small under)
+export const FIGHTER_FOREARM: ForearmBuild = { belly: [0.05, 0.038], bellyAt: 0.72 };
 
 /** The forearm's section `y` up from the wrist (m) on a forearm `length` long, its wrist `wrist`: eased from the wrist
  *  out to the belly and held there to the elbow. */

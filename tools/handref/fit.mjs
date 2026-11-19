@@ -144,7 +144,9 @@ async function main() {
     console.log(`round ${round + 1}: likeness ${best.score.toFixed(4)}  ${tuneOf(values)}`);
   }
   await sculpted(values, 'fitted');
-  console.log(`fitted: likeness ${best.score.toFixed(4)}\n--tune "${tuneOf(values)}"\n${OUT}/ours-heavy-shut-fitted.json`);
+  console.log(`fitted: likeness ${best.score.toFixed(4)}`);
+  console.log(`--tune "${tuneOf(values)}"`);
+  console.log(`${OUT}/ours-heavy-shut-fitted.json`);
 }
 
 await main();

@@ -78,6 +78,9 @@ const SKIN_FROM = 0, SKIN_TO = 0.04;
 const SKIN_CAST = 0.1;
 /** how far over the resting skin a wrap lies (m): laid on it, the closed fist's skin came through it in patches */
 const WRAP_GAP = 0.0045;
+/** how far over the forearm's own section a wrap lies (m): the wrap is the arm there, with no skin under it to come
+ *  through, and at the hand's gap it stood 15 mm broader than the wrist, 0.85 of the fist across to a wrist's 0.67 */
+const FOREARM_GAP = 0.0015;
 /** how far over the resting skin a strip's edges lie (m): a wrap pulled tight is drawn into the skin at its edges, and
  *  at the middle's gap the backdrop was seen through the slit under an edge (`lab hands`' seen through) */
 const EDGE_GAP = 0.003;
@@ -162,9 +165,10 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     const [ax, az] = forearmAt(arm.forearm, wristSection, length, Math.max(0, y));
     // (over the hand by the hand's own breadth, `k`: the wrist's breadth set it once, and a broad wrist flared it)
     const across = 0.035 * arm.k / 1.28;
-    const rx = ax + WRAP_GAP + (0.4 + 0.14 * thumb) * across * hand;
+    const gap = FOREARM_GAP + (WRAP_GAP - FOREARM_GAP) * hand;
+    const rx = ax + gap + (0.4 + 0.14 * thumb) * across * hand;
     // The thenar mound is deeper than the centre of the palm. A symmetric oval cut through it in teeth.
-    const rz = az + WRAP_GAP + (z > 0 ? -0.14 : 0.11 + 0.49 * thumb) * across * hand;
+    const rz = az + gap + (z > 0 ? -0.14 : 0.11 + 0.49 * thumb) * across * hand;
     return [rx, rz];
   };
   // (each row's share of its oval the skin lies at, its middle's, with the rows above the hand eased back to 1)

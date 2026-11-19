@@ -26,7 +26,8 @@ const MAN = {
   // a digit's depth (back to pad) against its breadth, at a joint
   depth: 0.88,
 };
-/** how far from a man's a size may be and count as his (a share): about what the 5th and 95th men are from the median */
+/** how far from a man's a size may be and count as his (a share): about what the 5th and 95th men are from the
+ *  median */
 const ABOUT = 0.1;
 /** half the length of digit a section is read over, either side of its joint (m) */
 const SLICE = 0.003;
@@ -87,11 +88,11 @@ function sizesOf(hand) {
   const palmOnly = (point) => point.bone === 0;
   const tipY = Math.min(...points.filter(notThumb).map((point) => point.at[1]));
   const middle = fingers[1];
+  const underMiddle = (point) => palmOnly(point) && Math.abs(point.at[0] - middle[0][0]) < 0.01;
   const sizes = {
     length: -tipY,
     breadth: reach(band(knuckleY, 0.004, notThumb), [1, 0, 0]),
-    thickness: reach(band(knuckleY * 0.6, 0.004, (point) => palmOnly(point) && Math.abs(point.at[0] - middle[0][0]) < 0.01),
-      [0, 0, 1]),
+    thickness: reach(band(knuckleY * 0.6, 0.004, underMiddle), [0, 0, 1]),
     // (the wrist itself, over the palm: at the palm's top the thumb's mound has begun, and it read a sixth broader)
     wristBreadth: reach(band(0.004, 0.003, palmOnly), [1, 0, 0]),
     wristThickness: reach(band(0.004, 0.003, palmOnly), [0, 0, 1]),
@@ -114,7 +115,8 @@ function row(name, ours, mans) {
   const off = ours / mans - 1;
   const verdict = Math.abs(off) <= ABOUT ? 'ok' : off > 0 ? 'TOO BIG' : 'TOO SMALL';
   const percent = `${off >= 0 ? '+' : ''}${(off * 100).toFixed(0)}%`;
-  return `${name.padEnd(34)}${ours.toFixed(0).padStart(5)} mm   a man's ${mans.toFixed(0).padStart(4)} mm  ${percent.padStart(5)}  ${verdict}`;
+  const sizes = `${ours.toFixed(0).padStart(5)} mm   a man's ${mans.toFixed(0).padStart(4)} mm`;
+  return `${name.padEnd(34)}${sizes}  ${percent.padStart(5)}  ${verdict}`;
 }
 
 function main() {
