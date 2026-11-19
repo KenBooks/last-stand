@@ -9,7 +9,7 @@ import { sfx } from '../../core/audio';
 import { foePage, foes, type Foe } from './foes';
 import { heroPage, missingNotes } from './heroes';
 import { TIPS_PAGES } from './tips';
-import { drawPortrait, hurryPortrait, hurryPortraits, portrait, portraitMade, queuePortraitsBehind, type Who } from './portraits';
+import { drawPortrait, hurryPortrait, hurryPortraits, portrait, portraitMade, startPortraits, type Who } from './portraits';
 import { pic } from './parts';
 
 export type GuideSection = 'foes' | 'bosses' | 'heroes' | 'tips';
@@ -133,8 +133,8 @@ export function openGuide(at?: { section: GuideSection; entry?: string }, closed
   onClose = closed ?? null;
   $('#guide').classList.remove('hidden');
   render();
-  // (its pictures made behind the lobby if they aren't yet: ui/guide/portraits.ts; nothing is made here)
-  queuePortraitsBehind();
+  // (its pictures queued if they aren't yet, whatever the level: ui/guide/portraits.ts; nothing is made here)
+  startPortraits();
   if (import.meta.env.DEV) warnMissing();
 }
 
