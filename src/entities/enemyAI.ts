@@ -20,7 +20,7 @@ import { lures, lureAt, type Lure } from '../combat/lures';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
-import { phaseBegun } from './bossKit';
+import { partChanged, phaseBegun } from './bossKit';
 import { AI_TABLE, FX_TABLE, type FoeFx } from './foeKit';
 import './allFoes';
 import type { Enemy } from './enemy';
@@ -39,7 +39,7 @@ export function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 
 }
 
 /** Head for the target, around whatever stands between. */
-function chase(e: Enemy, speedMul = 1): void {
+export function chase(e: Enemy, speedMul = 1): void {
   const p = e.target!;
   navTarget(e.pos.x, e.pos.z, e.radius, p.pos.x, p.pos.z, p.slot, _way);
   // the line to the waypoint is already clear: look no further than it
@@ -177,6 +177,16 @@ const CORE_FX = {
   bossPhase(id: number, phase: number) {
     const e = G.enemies.find((x) => x.id === id);
     if (e) phaseBegun(e, phase);
+  },
+  /** boss `id`'s weak-spot window opened for `seconds` */
+  bossWeak(id: number, seconds: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.weak = seconds;
+  },
+  /** boss `id`'s breakable part `part` broken (`on` 1) or whole again (0) */
+  bossPart(id: number, part: number, on: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) partChanged(e, part, on);
   },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {

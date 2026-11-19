@@ -20,7 +20,7 @@ import { compilePasses, sceneTarget } from '../core/renderer';
 import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
-import { BIOME_IDS } from '../data/biomes';
+import { BIOME_IDS, bossesOf, type BiomeId } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';

@@ -27,6 +27,7 @@ export interface BossWaveOptions {
 /** Each boss wave met: the wave before it, the wave, its bosses and what the bar says. */
 const WAVES: { before: number; wave: number; bosses: EnemyId[]; label: string }[] = [
   { before: 4, wave: 5, bosses: ['colossus'], label: 'Readying Colossus' },
+  { before: 9, wave: 10, bosses: ['bellwarden'], label: 'Readying Bell-Warden' },
   { before: 14, wave: 15, bosses: ['twinslab', 'twinreliquary'], label: 'Readying Ossuary Twins' },
 ];
 

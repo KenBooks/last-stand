@@ -417,13 +417,15 @@ export interface EnemyDef {
   evade?: EvadeDef;
   /** what it throws at a hero too far off for its slam */
   throws?: ThrowDef;
-  /** a boss's fight in phases and its telegraphed attacks (entities/bossKit.ts) */
+  /** a boss's fight in phases, its telegraphed attacks and its weak-spot window (entities/bossKit.ts) */
   bossKit?: BossKitDef;
   /** a boss that shares its life with another rising with it (data/biomes.ts `BossWave.twin`): a hit on either takes
    *  it from both (entities/twins.ts) */
   shares?: EnemyId;
   /** the pair's name, on the target frame while both stand */
   pair?: string;
+  /** the most it turns a second to face its way (rad/s), where it turns slower than a small foe's quick turn */
+  turn?: number;
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
@@ -440,16 +442,27 @@ export interface TelegraphDef {
   recover: number;
 }
 
-/** The boss toolkit's data (entities/bossKit.ts): the phases by life share, entered in order where the fight is
- *  simulated and told to every game (a banner, a cue, `BossHooks.enter`), and its telegraphed attacks by action name. */
+/**
+ * The shared boss toolkit's data (entities/bossKit.ts): the phases by life share, entered in order where the fight is
+ * simulated and told to every game (a banner, a cue, `BossHooks.enter`); its telegraphed attacks by action name; and
+ * its weak-spot window, a time it takes `taken` times the damage, its body edged in `edge` meanwhile.
+ */
 export interface BossKitDef {
   phases: BossPhaseDef[];
   attacks?: Record<string, TelegraphDef>;
+  weak?: { taken: number; edge: number };
+  /** parts of it a hero breaks apart from its life (the Bell-Warden's chains): each at `angles` round it from its
+   *  facing (rad, to its left), struck by a hero's hit from that side (the part nearest the way the hit came from),
+   *  taking `share` of the hit's damage, each with `life` of its own (a share of its most life) */
+  parts?: { angles: number[]; life: number; share: number };
 }
 
-/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase. */
+/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window
+ *  is left (s), and its parts' state (a bit each, set: broken; the Bell-Warden's chains). */
 export interface BossLook {
   phase: number;
+  weak: number;
+  broken: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ export const AI_NOTES: Record<string, string> = {
   ranged: 'Keeps its distance and throws from afar, backing off when you close in.',
   slam: 'Slams the ground in front of it once in reach, a ring on the floor marking where first.',
   boss: 'Slams all round itself up close, looses volleys at range, and calls help.',
+  bellWarden: 'Shuffles after you and tolls, a ring of sound rolling out that stuns; its ghosts snatch whoever comes too close.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

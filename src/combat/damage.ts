@@ -1,4 +1,5 @@
 // Damage rolls and application for both sides.
+import { damageTaken } from '../entities/bossKit';
 import type * as THREE from 'three';
 import { G } from '../state';
 import { NUMBER_COLORS } from '../data/balance';
@@ -112,7 +113,8 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const by = opts.by;
   const { amount: rolled, crit } = rollPlayerDamage(by, base, tags);
   // (a marked foe takes more from everyone: the largest of the marks on it)
-  const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
+  // (and a boss in its weak-spot window, `taken` times as much: entities/bossKit.ts)
+  const amount = (enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled) * damageTaken(enemy);
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
   // (a duel's rival is no foe of the host's: its hits go to the hero it stands for, entities/rival.ts)

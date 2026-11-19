@@ -15,7 +15,7 @@ import { perfHudStats, perfHudSize } from '../../../src/ui/perfHud';
 import { input, pointerLocked } from '../../../src/core/input';
 import { role } from '../../../src/net/role';
 import { foesAsked, foesTold } from '../../../src/net/sync';
-import { BIOMES, BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
+import { BIOMES, BIOME_IDS, bossesOf, type BiomeId } from '../../../src/data/biomes';
 import { updateRun } from '../../../src/game/run';
 import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab';
 
@@ -343,7 +343,7 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   time.frozen = true;
   const to = BIOME_IDS.find((id) => id !== G.arena.biome)!;
   await chooseBiome(to);
-  const roster = new Set([...BIOMES[to].pool(Infinity).map(([id]) => id), BIOMES[to].boss]);
+  const roster = new Set([...BIOMES[to].pool(Infinity).map(([id]) => id), ...bossesOf(to)]);
   check(G.run === run && run.score === beforeScore && run.bag === beforeBag && run.wave === 1, 'mid-run biome change reset progress');
   check(standing.every((old) => {
     const foe = G.enemies.find((each) => each.id === old.id);
