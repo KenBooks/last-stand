@@ -10,6 +10,7 @@
 import type { Lab, Pictured, Report, Screen } from './lab';
 import { realWait } from './lab';
 import * as logoWind from '../../../src/ui/logoWind';
+import { updateCrestBlow } from '../../../src/ui/crestBlow';
 import { APART, apartOf, differenceOf, laidOver, moveOf, patchOf, pngOf } from './windCompare';
 import type { Apart, Move, Patch } from './windCompare';
 
@@ -54,6 +55,9 @@ interface Area {
 /** `lab wind`: the exit run into the lobby logo, its particles at rest against the logo after (the file's header). */
 export async function windHandoff(lab: Lab, options: WindOptions): Promise<Report> {
   const first = screenNow();
+  // (the village's crest put back up, its 8 s counted from this exit as a player's are from the reveal: counted from
+  // the lab's boot, it blew away under the exit, and the logo pictured after it was the empty village, 83% apart)
+  updateCrestBlow(0, false);
   const loading = await loadingBack();
   const target = document.querySelector<HTMLElement>('#menu .logo-art');
   if (!target || (lettersOf(target)?.width ?? 0) < 10) throw new Error('lab: wind: the lobby logo isn\'t laid out');

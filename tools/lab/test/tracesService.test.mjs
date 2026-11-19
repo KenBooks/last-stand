@@ -55,6 +55,20 @@ test('a report that came back without its picture is a problem, and the canary\'
   assert.equal(missed.problems.length, 1);
 });
 
+test('two commands beside each other share one service, each reading back with its token', async () => {
+  const beside = await startTracesService('http://localhost:5299');
+  try {
+    assert.equal(beside.url, service.url);
+    const result = await sent(true);
+    const checked = await checkReportSent(result, beside, false);
+    assert.deepEqual(checked.problems, []);
+  } finally {
+    await beside.close();
+  }
+  const after = await checkReportSent(await sent(true), service, false);
+  assert.deepEqual(after.problems, [], 'the first holder\'s service closed with the second');
+});
+
 test('a report never sent is a problem', async () => {
   const checked = await checkReportSent({ text: '  sent to the reports service: nothing', problems: [] }, service, false);
   assert.deepEqual(checked.problems, ['the bug report was never sent to the reports service']);

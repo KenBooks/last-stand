@@ -30,8 +30,9 @@ export interface TapOptions {
   canary: boolean;
 }
 
-/** where the hero stands (the lab's own spot: off the dais, clear of props), facing the arena's middle */
-const SPOT: [number, number] = [12, 22];
+/** where the hero stands, facing the arena's middle: off the dais, 15 m out, room on every side of him for a drag's
+ *  aim (on the lab's own spot, 25 m out, a drag across the screen ran along the wall and its preview was held to it) */
+const SPOT: [number, number] = [7, 13];
 /** the fingers: a thumb on the move stick, the other on a skill's button */
 const MOVE_FINGER = 0;
 const SKILL_FINGER = 1;
@@ -128,8 +129,9 @@ interface Stop {
   foeMiss: number | null;
   /** the plain aim ring shown too */
   ring: boolean;
-  /** the hero's speed (m/s) */
+  /** the hero's speed (m/s), and where he stood */
   speed: number;
+  hero: THREE.Vector3;
 }
 
 /** What a drag gave: its stops, the cast as the finger lifted, and the stick and the hero after it. */
@@ -147,11 +149,18 @@ function flat(point: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(point.x, 0, point.z);
 }
 
-/** Where the preview mesh named `name` lies on the floor, or null while it isn't shown. */
+/**
+ * Where the preview mesh named `name` lies on the floor, or null while it isn't shown: the one drawn, every group
+ * over it shown too. (The first of its name, shown itself, was another's in a hidden group once the village's rooms
+ * came: Strawman's preview read 35 to 76° off the drag's way, and its cast 11.9 m from it, the game's as it was.)
+ */
 function meshSpot(name: string): () => THREE.Vector3 | null {
   return () => {
-    const mesh = G.scene.getObjectByName(name);
-    return mesh?.visible ? flat(mesh.position) : null;
+    let shown: THREE.Object3D | null = null;
+    G.scene.traverseVisible((object) => {
+      if (!shown && object.name === name) shown = object;
+    });
+    return shown ? flat((shown as THREE.Object3D).getWorldPosition(new THREE.Vector3())) : null;
   };
 }
 
@@ -255,7 +264,11 @@ function ready(): void {
 async function setUp(lab: Lab, fixture: Fixture): Promise<void> {
   const at = fixture.at ?? SPOT;
   const facing = fixture.facing ?? Math.atan2(-at[0], -at[1]);
-  await lab.setup({ ...fixture, at, facing });
+  // (the top-down camera looking the way he faces, the arena's middle up the screen: turned as the boot left it, the
+  // village's houses turned it, and the drags up the screen pointed out at the wall 2 m behind him, Strawman's preview
+  // pushed along it 35 to 76° off their way; the camera looks along its yaw and a half turn)
+  const yaw = fixture.yaw ?? facing - Math.PI;
+  await lab.setup({ ...fixture, at, facing, yaw });
   await showTouchControls(lab);
   // (a tooltip a tap before opened, closed as the next tap anywhere closes it: left, it lay over the buttons)
   hideTooltip();
@@ -492,6 +505,7 @@ function readStop(skill: Aimed, way: THREE.Vector3, foe: Enemy | undefined): Sto
     foeMiss: spot && foe ? spot.distanceTo(flat(foe.pos)) : null,
     ring: G.scene.getObjectByName(PLAIN_RING)?.visible ?? false,
     speed: heroSpeed(),
+    hero: flat(G.player.pos),
   };
 }
 
@@ -575,7 +589,10 @@ function stopLine(index: number, stop: Stop): string {
   const where = `  dragged to ${drag.x},${drag.y} px`;
   const walking = `walking ${stop.speed.toFixed(2)} m/s`;
   if (!stop.spot) return `${where}: no preview, ${walking}`;
-  const off = stop.off === null ? 'at his feet' : `${degrees(stop.off)} off the drag's way`;
+  const at = (point: THREE.Vector3): string => `${point.x.toFixed(2)},${point.z.toFixed(2)}`;
+  // (off its way, where it and he stood: a prop it was pushed out of is read off the arena's)
+  const where2 = stop.off !== null && stop.off > WAY_SLACK ? ` (at ${at(stop.spot)}, he at ${at(stop.hero)})` : '';
+  const off = stop.off === null ? 'at his feet' : `${degrees(stop.off)} off the drag's way${where2}`;
   const foe = stop.foeMiss === null ? '' : `, ${metres(stop.foeMiss)} from the foe there`;
   const ring = stop.ring ? ', the plain ring shown too' : '';
   return `${where}: previewed ${off}${foe}${ring}, ${walking}`;

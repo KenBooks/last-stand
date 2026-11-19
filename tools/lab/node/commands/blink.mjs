@@ -15,6 +15,8 @@ export default {
     + 'landed while he crossed, a preview green or off its countdown while a release would cast nothing, a near foe '
     + 'moving while dazed or never coming on again and a far one dazed or stopping are problems: tools/lab/out/blink '
     + '(--class mage)',
+  // (`check --every`'s command line: the mage's blink)
+  audit: ['--class', 'mage'],
   options: {
     pictures: { kind: 'switch', help: 'picture a blink\'s moments and the dazed foes (=false: the numbers alone)' },
     canary: {

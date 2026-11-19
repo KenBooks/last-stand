@@ -2,6 +2,7 @@
 // the real OAuth/session boundaries and persistence are checked by server/saves/test/google.test.mjs.
 import { CLOUD, cloudIdentityHTML } from '../../../src/ui/cloudSaves';
 import { openSaves } from '../../../src/ui/saves';
+import { forgetServiceHealth } from '../../../src/loot/cloudApi';
 
 const EMAIL = 'a.long.google.account.address.for.testing.wrapping@a.long.example.test';
 export const CLOUD_IDENTITY_CANARY = { name: 'email missing', what: 'the Google email removed from the slot' };
@@ -15,6 +16,9 @@ export function openCloudIdentity(): void {
     if (path.startsWith('/saves/')) throw new Error('lab: identity snapshots must not contact a live account');
     return realFetch(input, init);
   };
+  // (asked again of the stub: a state before this one asked the lab's server, which has no saves service, and the
+  // health is asked once a visit, so Google's button stayed hidden in a run of every state)
+  forgetServiceHealth();
   openSaves(true);
   const header = document.querySelector('#saves .sv-pane .sv-head')!;
   header.insertAdjacentHTML('beforeend', `<div class="sv-cloud-info"><span class="sv-cloud-mark">${CLOUD}<span>Cloud</span></span><div class="sv-account">${cloudIdentityHTML({
@@ -26,6 +30,7 @@ export function closeCloudIdentity(): void {
   document.querySelector('#saves .sv-cloud-info')?.remove();
   openSaves(false);
   window.fetch = realFetch;
+  forgetServiceHealth();
 }
 
 /** Current authentication, linked methods, safe text, and the real slot's wrapping/layout are checked separately. */
@@ -52,7 +57,10 @@ export function cloudIdentityChecked(canary: boolean): { lines: string[]; proble
   if (button) {
     const box = button.getBoundingClientRect();
     if (!button.checkVisibility() || box.left < 0 || box.right > innerWidth || box.bottom > innerHeight) {
-      problems.push('cloudIdentity: Google sign-in button is not visible within the window');
+      const seen = button.checkVisibility() ? 'shown' : 'hidden';
+      const at = `${box.left.toFixed(0)} to ${box.right.toFixed(0)} across, ${box.top.toFixed(0)} to ${box.bottom.toFixed(0)} down`;
+      const where = `${seen}, at ${at} of ${innerWidth}x${innerHeight}`;
+      problems.push(`cloudIdentity: Google sign-in button is not visible within the window (${where})`);
     }
   }
   const unknown = cloudIdentityHTML({ google: true });

@@ -1,5 +1,5 @@
 // `npm run lab -- seams`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
-import { asText, problemsIn } from '../commandKit.mjs';
+import { asText, fixtureFrom, problemsIn } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab seams`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -17,7 +17,8 @@ export default {
     ...COMMON_OPTIONS,
   },
   each(side, options) {
-    return side.command('seams', { each: Boolean(options.each), canary: Boolean(options.canary) });
+    const command = { fixture: fixtureFrom(options), each: Boolean(options.each), canary: Boolean(options.canary) };
+    return side.command('seams', command);
   },
   textOf: asText,
   problemsOf: problemsIn,

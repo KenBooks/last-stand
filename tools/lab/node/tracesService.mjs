@@ -16,38 +16,67 @@ const DATA = join(OUT, 'traces-service');
 /** a code in the page's report, as the service makes them */
 const CODE_LINE = /sent to the traces service: ([0-9A-Z]{4}-[0-9A-Z]{4})/;
 
-/**
- * Starts the service for `origin`; resolves to its address (`url`), a way to read a trace back (`readBack`) and to
- * close it.
- */
-export async function startTracesService(origin) {
+/** the one service this process runs, shared by its commands, and how many of them hold it */
+let shared = null;
+let holders = 0;
+
+/** The pages a service takes from: `origin`'s host on any port, and the lab's own hosts (each session's page is on a
+ *  port of its own). */
+function originsFor(origin) {
+  const { protocol, hostname } = new URL(origin);
+  const hosts = new Set([hostname, 'localhost', '127.0.0.1']);
+  return [...hosts].map((host) => `${protocol}//${host}:*`).join(',');
+}
+
+/** The service started: one a process (server/traces keeps its settings, its token among them, and what it holds in
+ *  its module: started again for a second command beside the first, as `lab check` runs them, it took the second's
+ *  token, and the first's read back answered 401). */
+async function startShared(origin) {
   const { start } = await import('../../../server/traces/traces.mjs');
   rmSync(DATA, { recursive: true, force: true });
   const token = randomBytes(16).toString('hex');
   const server = await start(0, {
-    DATA, ORIGINS: origin, TRACES_TOKEN: token, PER_DAY: '100', REPORT_PER_HOUR: '100', REPORT_PER_DAY: '100',
+    DATA, ORIGINS: originsFor(origin), TRACES_TOKEN: token, PER_DAY: '100', REPORT_PER_HOUR: '100',
+    REPORT_PER_DAY: '100',
   });
-  const url = `http://127.0.0.1:${server.address().port}`;
+  return { server, token, url: `http://127.0.0.1:${server.address().port}` };
+}
+
+/**
+ * The service for `origin`, started for this process's first command and shared by any beside it; resolves to its
+ * address (`url`), a way to read a trace back (`readBack`) and to let it go (`close`: closed once every holder has).
+ */
+export async function startTracesService(origin) {
+  holders++;
+  shared ??= startShared(origin);
+  const { server, token, url } = await shared;
+  const headers = { authorization: `Bearer ${token}` };
+  let held = true;
   return {
     url,
     /** The trace the service kept under `code`, read back as `lab trace` reads one. */
     async readBack(code) {
-      const response = await fetch(`${url}/traces/${code}`, { headers: { authorization: `Bearer ${token}` } });
+      const response = await fetch(`${url}/traces/${code}`, { headers });
       if (!response.ok) throw new Error(`the local traces service answered ${response.status} for ${code}`);
       const raw = gunzipSync(Buffer.from(await response.arrayBuffer()));
       return decodeTrace(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
     },
     /** The bug report the service kept under `code` (its JSON), and its picture's bytes (null if it has none). */
     async readReport(code) {
-      const headers = { authorization: `Bearer ${token}` };
       const response = await fetch(`${url}/traces/reports/${code}`, { headers });
       if (!response.ok) throw new Error(`the local traces service answered ${response.status} for report ${code}`);
       const report = await response.json();
       const picture = await fetch(`${url}/traces/reports/${code}.jpg`, { headers });
       return { report, picture: picture.ok ? Buffer.from(await picture.arrayBuffer()) : null };
     },
-    close() {
-      return new Promise((resolve) => server.close(resolve));
+    /** This holder let go; the service closed once none holds it. */
+    async close() {
+      if (!held) return;
+      held = false;
+      holders--;
+      if (holders > 0) return;
+      shared = null;
+      await new Promise((resolve) => server.close(resolve));
     },
   };
 }

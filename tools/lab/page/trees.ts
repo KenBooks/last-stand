@@ -218,5 +218,7 @@ export async function trees(lab: Lab, options: TreesOptions): Promise<Report> {
     + `an arrow kept through the switch ${caught[1] ? 'found' : 'unseen'}, `
     + `an arrow kept through a won wave's dissolve ${caught[2] ? 'found' : 'unseen'}`);
   const missed = caught.includes(false) ? ['canary: a planted fault went unseen'] : [];
-  return { text: lines.join('\n'), problems: [...problems, ...missed] };
+  // (the planted faults caught are no problems: a canary's run fails on what it missed, and on anything else)
+  const others = problems.filter((p) => !faults.some((fault) => p.includes(fault)));
+  return { text: lines.join('\n'), problems: [...others, ...missed] };
 }

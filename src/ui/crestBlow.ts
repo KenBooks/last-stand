@@ -73,6 +73,8 @@ function gone(): void {
 function showLetters(): void {
   art.querySelectorAll('canvas').forEach((c) => c.remove());
   art.querySelectorAll<SVGSVGElement>('svg').forEach((s) => { s.style.visibility = ''; });
+  // (the picture had the art's shadow in it, and the art none of its own meanwhile: logoWind.ts `withArtsShadow`)
+  art.style.filter = '';
 }
 
 /** The crest whole again, nothing of the wind's left on it. */

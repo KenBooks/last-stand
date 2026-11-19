@@ -712,8 +712,10 @@ export class Side {
       if (outcome !== BOOTED) throw labError(`${prefix}the game failed to boot: ${outcome}`);
     } catch (error) {
       const stage = await page.evaluate(() => {
+        // (its text as shown: the loading screen holds a script of its own, whose source `textContent` read out as
+        // the stage, so every boot that timed out said "the smoke drawn once..." and nothing of where it was)
         const loading = document.getElementById('loading');
-        return loading?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 600) ?? 'loading screen gone';
+        return loading?.innerText?.trim().replace(/\s+/g, ' ').slice(0, 600) ?? 'loading screen gone';
       }).catch(() => 'page not responding');
       const errors = this.errors.slice(-4).join(' | ');
       await page.close().catch(() => undefined);

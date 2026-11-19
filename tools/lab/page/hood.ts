@@ -93,11 +93,11 @@ const FULL_SLACK = 0.1;
 const WAIST = { top: 0, bottom: -2.2 };
 const WAIST_SLACK = 0.1;
 /** the heights the hood's reach ahead of his body is read over from his left (`E` over the eyes: from under the chin
- *  down past the capelet's hem), and the most it may reach ahead of him there (`E`, 1.2 cm: its front edge's own
- *  thickness, rolled and piped, as the reference's is, lying on his chest). (What puffed out over the fronts of his
+ *  down past the capelet's hem), and the most it may reach ahead of him there (`E`: 0.1, 1.2 cm, its front edge's own
+ *  thickness, rolled and piped, as the reference's is, lying on his chest; 0.2 the shape the owner kept, 0.15, #711). (What puffed out over the fronts of his
  *  shoulders, "reference does not overhang over shoulder, ours does", lay inside his outline from the side: the
  *  capelet's lie over them, `hoodLie.ts`, reads it) */
-const OVERHANG = { top: -1.4, bottom: -2.6, most: 0.1 };
+const OVERHANG = { top: -1.4, bottom: -2.6, most: 0.2 };
 /** what the camera frames round the head's joint (m): across, below it (the capelet, the shoulders), above it, and its
  *  lens (degrees): at the studio's 20°, from 2.2 m, the hood's back, 20 cm nearer the camera than the eyes the scale
  *  is set at, read 10% wider than it is (from 7 m, 3%) */
@@ -107,16 +107,21 @@ const LENS = 6;
 const BACKDROP_SLACK = 24;
 /** a reference's backdrop is read from its rows down to here (a share of it): below, the figure reaches its sides */
 const BACKDROP_ROWS = 0.55;
-/** the sizes the first reference was made to (cm, its modelling notes), the least and the most, where a reference's
- *  marks give none of their own (`sizes`); round the cheeks, as its pictures draw them, where the notes disagree with
- *  them (4-6 cm ahead of the cheeks and out from them): from the front its opening is 10 cm out from the cheekbones at
- *  their height, and from the side the whole profile shows, its near rim behind the ear (and its far one ahead of the
- *  face, as the three-quarter view has it too: laid between them, the rim runs a little behind the cheekbones) */
+/**
+ * The hood's sizes on the head (cm), the least and the most, where a reference's marks give none of their own
+ * (`sizes`): the hood as the owner kept it (2026-11-19, #711), each within a centimetre or two of its own, so a change
+ * to its cut is caught. The first reference's modelling notes asked for a rim 6 to 8 cm ahead of the brow, -4 to 0
+ * ahead of the cheeks and 7 to 11 out from them, and a point 5 to 7 above the scalp; the rim was laid back from the
+ * reference's place on the owner's word (it stood out over his flatter brow, a visor: "do you see hood overhang in
+ * our case?"), and asked whether the shape or these should move, the owner kept the shape. They are the sizes the
+ * owner's reference's marks give (`.tmp/references/hood/chatgpt/hood.marks.json`, `--ref`): the audit ran without
+ * them, against the first reference's. The capelet below the nape is still the reference's.
+ */
 const SIZES = {
-  brim: { least: 6, most: 8, what: 'the rim ahead of the brow' },
-  cheeks: { least: -4, most: 0, what: 'the rim ahead of the cheeks' },
-  clear: { least: 7, most: 11, what: 'the rim out from the cheeks' },
-  rise: { least: 5, most: 7, what: 'the point above the scalp' },
+  brim: { least: 1.5, most: 3.5, what: 'the rim ahead of the brow' },
+  cheeks: { least: -6.5, most: -4.5, what: 'the rim ahead of the cheeks' },
+  clear: { least: 3.5, most: 5.5, what: 'the rim out from the cheeks' },
+  rise: { least: 3, most: 4.5, what: 'the point above the scalp' },
   fall: { least: 16, most: 18, what: 'the capelet below the nape' },
 };
 type Size = keyof typeof SIZES;
@@ -425,11 +430,11 @@ function sizeLines(sizes: Record<Size, number>, given: HoodOptions['sizes'], pro
     const [least, most] = given?.[size] ?? [SIZES[size].least, SIZES[size].most];
     const read = sizes[size];
     if (read < least || read > most) {
-      problems.push(`hood: ${what} ${read.toFixed(1)} cm, the reference's ${least} to ${most}`);
+      problems.push(`hood: ${what} ${read.toFixed(1)} cm, the kept shape's ${least} to ${most}`);
     }
     return `${what} ${read.toFixed(1)} (${least}-${most})`;
   });
-  return `on the head, cm (the reference's): ${parts.join('; ')}`;
+  return `on the head, cm (the kept shape's): ${parts.join('; ')}`;
 }
 
 /** Where the face is in a studio picture of ours (px of the tile `shoot` reads, down from its top). */

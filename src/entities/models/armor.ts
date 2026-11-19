@@ -421,6 +421,13 @@ export class Skirt {
   readonly cols: number;
   /** as it was last laid: the thighs' swings, each limb's ends (x, y, z a point), and the time waited since (s) */
   private laid = { fL: NaN, fR: NaN, ends: new Float32Array(0), waited: 0 };
+  /** whether this frame's lay is one the rest's time came round for, the body under it still (`rests`) */
+  private timed = false;
+  /** A lay at rest glided to from where the cloth was shown, over the time to the next lay (`CLOTH_REST.every`): shown
+   *  at once, its move came in one frame after the frames it rested, and by the ranger's right hand at 144 Hz his hem
+   *  jumped 1.3 cm (4 frames still, then the lay's 1/30 s at once: `lab coat`, #388). */
+  private glide?: { from: Float32Array; to: Float32Array; normalsFrom: Float32Array; normalsTo: Float32Array; done: number;
+    on: boolean };
 
   constructor(private o: SkirtOpts) {
     const radial = o.radial ?? 40, body = o.rows ?? 10, depth = o.depth ?? 0.85, trim = o.trim ?? 0;
@@ -470,7 +477,20 @@ export class Skirt {
     tuck = 0): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
-    if (this.rests(fL, fR, move, dt, legs, hands)) return;
+    if (this.rests(fL, fR, move, dt, legs, hands)) {
+      this.glideOn(dt);
+      return;
+    }
+    const n = this.geo.attributes.normal as THREE.BufferAttribute;
+    // (where it's shown now, glided from if this lay is the rest's: copied before it's laid afresh)
+    const glides = this.timed && settle === 0;
+    // (its buffers made once and kept: four arrays made a lay were 30 a second to collect)
+    const glide = glides ? this.glide ??= {
+      from: new Float32Array(p.array.length), to: new Float32Array(p.array.length),
+      normalsFrom: new Float32Array(n.array.length), normalsTo: new Float32Array(n.array.length), done: 1, on: false,
+    } : null;
+    glide?.from.set(p.array as Float32Array);
+    glide?.normalsFrom.set(n.array as Float32Array);
     const h = Math.min(this.laid.waited, 0.05);
     this.laid.waited = 0;
     for (let i = 0; i < this.cols; i++) {
@@ -504,6 +524,30 @@ export class Skirt {
     this.ease(settle, h);
     p.needsUpdate = true;
     vertexNormals(this.geo);
+    if (glide) {
+      glide.to.set(p.array as Float32Array);
+      glide.normalsTo.set(n.array as Float32Array);
+      glide.done = 0;
+      glide.on = true;
+      this.glideOn(dt);
+    } else if (this.glide) this.glide.on = false;
+  }
+
+  /** The cloth moved on along its glide by `dt` s, to where it was last laid once the rest's time is up. */
+  private glideOn(dt: number): void {
+    const glide = this.glide;
+    if (!glide?.on) return;
+    glide.done = Math.min(1, glide.done + dt / CLOTH_REST.every);
+    const p = this.geo.attributes.position as THREE.BufferAttribute;
+    const n = this.geo.attributes.normal as THREE.BufferAttribute;
+    const P = p.array as Float32Array, N = n.array as Float32Array, k = glide.done;
+    for (let i = 0; i < P.length; i++) {
+      P[i] = glide.from[i] + (glide.to[i] - glide.from[i]) * k;
+      N[i] = glide.normalsFrom[i] + (glide.normalsTo[i] - glide.normalsFrom[i]) * k;
+    }
+    p.needsUpdate = true;
+    n.needsUpdate = true;
+    if (glide.done >= 1) glide.on = false;
   }
 
   /** Whether the cloth is left as it was last laid this frame (`CLOTH_REST`): nothing has moved the body under it
@@ -511,7 +555,7 @@ export class Skirt {
   private rests(fL: number, fR: number, move: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): boolean {
     const laid = this.laid, count = ((legs?.length ?? 0) + (hands?.length ?? 0)) * 6;
     laid.waited += dt;
-    let still = CLOTH_REST.on && dt > 0 && move < CLOTH_REST.walk && laid.waited < CLOTH_REST.every && laid.ends.length === count
+    let still = CLOTH_REST.on && dt > 0 && move < CLOTH_REST.walk && laid.ends.length === count
       && Math.abs(fL - laid.fL) < CLOTH_REST.swing && Math.abs(fR - laid.fR) < CLOTH_REST.swing;
     if (laid.ends.length !== count) laid.ends = new Float32Array(count);
     const ends = laid.ends, most = CLOTH_REST.moved;
@@ -522,7 +566,9 @@ export class Skirt {
       const body = q < nl ? legs![q] : hands![q - nl];
       if (far(body.a, q * 6) || far(body.b, q * 6 + 3)) still = false;
     }
-    if (still) {
+    // (still, it rests until its time comes round, and that lay is glided to: `glide`)
+    this.timed = still;
+    if (still && laid.waited < CLOTH_REST.every) {
       CLOTH_REST.rested++;
       return true;
     }

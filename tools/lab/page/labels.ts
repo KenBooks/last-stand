@@ -32,15 +32,30 @@ function tagLabel(name: string): Label {
   return label;
 }
 
-/** Lays in fillers until a label laid after them finds no slot; returns them, and whether the atlas filled. */
+/** the error a dev build logs as the atlas fills (src/ui/overlay/atlas.ts), which this measure fills on purpose */
+const ATLAS_FULL = 'overlay: the label atlas is full';
+
+/**
+ * Lays in fillers until a label laid after them finds no slot; returns them, and whether the atlas filled. The
+ * atlas's own error is held back meanwhile, as the fill is the measure's (said as the page's error, it failed every
+ * check's run of `labels`), any other passed on.
+ */
 async function fillAtlas(lab: Lab): Promise<{ fillers: Label[]; full: boolean }> {
   const fillers: Label[] = [];
-  while (fillers.length < MOST_FILLERS) {
-    for (let i = 0; i < FILLERS_A_FRAME; i++) fillers.push(tagLabel(`Filler ${fillers.length}`));
-    await lab.step(1);
-    if (fillers.some((label) => !label.slot)) return { fillers, full: true };
+  const logError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (args[0] !== ATLAS_FULL) logError(...args);
+  };
+  try {
+    while (fillers.length < MOST_FILLERS) {
+      for (let i = 0; i < FILLERS_A_FRAME; i++) fillers.push(tagLabel(`Filler ${fillers.length}`));
+      await lab.step(1);
+      if (fillers.some((label) => !label.slot)) return { fillers, full: true };
+    }
+    return { fillers, full: false };
+  } finally {
+    console.error = logError;
   }
-  return { fillers, full: false };
 }
 
 export async function labels(lab: Lab, options: LabelsOptions): Promise<Report> {

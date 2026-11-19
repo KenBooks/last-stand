@@ -20,6 +20,8 @@ export default {
     + '--quality low@518400 --throttle 4; --class mage)',
   argument: 'skills',
   mayOmit: true,
+  // (`check --every`'s command line: a walk round the village: its skills are the caller's)
+  audit: ['--village'],
   options: {
     biome: {
       kind: 'choice',

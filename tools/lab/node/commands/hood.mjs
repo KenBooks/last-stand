@@ -51,6 +51,8 @@ export default {
     + 'reference\'s in the face\'s unit (the eyes to the chin), how much they share and how wide and high each is; its '
     + 'rim, point and capelet against the sizes the reference was made to; how much it sways as he walks: '
     + 'tools/lab/out/hood/sheet.png',
+  // (`check --every`'s command line: the mage's hood, worn)
+  audit: ['--class', 'mage', '--wear', 'helm'],
   options: {
     ref: {
       kind: 'text',

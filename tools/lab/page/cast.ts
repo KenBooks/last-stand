@@ -135,10 +135,14 @@ export function holdingAll(keys: SkillKey[], aim: THREE.Vector3): Frame {
   };
 }
 
-/** How long the key is held: a channel through, a drawn shot to full and a held skill a moment; else a frame (s). */
+/**
+ * How long the key is held: a channel through, a drawn shot to full and a held skill a moment; else a frame (s). A bow
+ * draws once its arrow is taken from the quiver (`Player.nockTime`): held for the draw alone, a ranger's shot was
+ * loosed a little short of full, and `tooltips` found Nockshot's one hit 427 under its stated 428.
+ */
 export function holdFor(def: SkillDef): number {
   if (def.channel) return CHANNEL_HOLD;
-  if (def.draw) return def.draw + AIM_HOLD;
+  if (def.draw) return (G.player.cls.quiver?.fetch ?? 0) + def.draw + AIM_HOLD;
   if (def.aimed) return AIM_HOLD;
   return 0;
 }

@@ -21,6 +21,9 @@ import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cas
 
 export interface DeathOptions {
   fixture: Fixture;
+  /** picture each skill's body that lay deepest under the floor close up, framed on that part, at that frame: its pass
+   *  cast again, as it was, with the picture taken then (a change to how a body lies, before and after) */
+  close?: boolean;
   /** the skills: their keys, behaviours or names (every one of the hero's that deals damage by default) */
   skills: string[];
   pictures: boolean;
@@ -334,7 +337,20 @@ interface PassPlan {
   pictures: boolean;
   trace: boolean;
   label: string;
+  /** a body (by the order the bodies fell in) pictured close up, framed on its part, that many frames after its fall */
+  close?: CloseUp;
 }
+
+/** A body's moment pictured close up (`--close`). */
+interface CloseUp {
+  body: number;
+  frames: number;
+  part: (typeof RAGDOLL_POINTS)[number];
+  depth: number;
+}
+
+/** how far off a close-up's camera stands from the part it's framed on (m) */
+const CLOSE_DISTANCE = 1.4;
 
 /** a trace's heading */
 const TRACE_HEAD = '  each body thrown hard by its number, a frame a line: each point\'s clearance drawn, '
@@ -411,6 +427,8 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
       measureBody(body, since);
       if (plan.trace) trace.push(`${[...bodies.values()].indexOf(body) + 1} ${traceLine(body, since)}`);
     }
+    const close = plan.close && [...bodies.values()][plan.close.body];
+    if (plan.close && close && frame - close.fellAt === plan.close.frames) moments.push(pictureClose(lab, close, plan));
     if (plan.pictures && bodies.size && pictureDue(bodies, firstFall, frame, pictured, pictureFrames)) {
       const after = `${seconds(PICTURE_AT[pictured] ?? 0)} after the first fall`;
       const when = pictured < PICTURE_AT.length ? after : 'lying still';
@@ -491,6 +509,29 @@ async function pictureBodies(lab: Lab, bodies: Fallen[], label: string): Promise
   return { label, tiles: [...seen.tiles, ...close], notes: [] };
 }
 
+/** A body pictured close up as `plan.close` says, from its left, its right and behind the hero, framed on its part. */
+function pictureClose(lab: Lab, body: Fallen, plan: PassPlan): Pictured {
+  const { part, depth, frames } = plan.close!;
+  const at = drawnPoint(body.foe.model.joints!, part, new THREE.Vector3());
+  const tiles = lab.capture(['left', 'right', 'back'], { at, distance: CLOSE_DISTANCE });
+  const when = seconds(frames * frameTime());
+  const deepest = `its ${part} at its deepest, ${centimetres(depth)} under the floor`;
+  const label = `${plan.label}, ${deepest}, ${when} after its fall`;
+  return { label, tiles, notes: [] };
+}
+
+/** The body of `cast` that lay deepest under the floor, as a close-up of it (none where none went under). */
+function deepestOf(cast: Cast): CloseUp | null {
+  let best: CloseUp | null = null;
+  cast.bodies.forEach((body, i) => {
+    const depth = body.under.amount + UNDER_MOST / 2;
+    if (depth <= 0 || (best && depth <= best.depth)) return;
+    const part = body.under.part as CloseUp['part'];
+    best = { body: i, frames: Math.round(body.under.at / frameTime()), part, depth };
+  });
+  return best;
+}
+
 /** The skill's casts, both passes. */
 interface SkillRun {
   skill: BoundSkill;
@@ -523,7 +564,9 @@ function swingSeen(): number {
 }
 
 /** The skill cast at foes holding `lives` (1 where it says none), on a fresh set-up. */
-async function onePass(lab: Lab, options: DeathOptions, wanted: string, lives: number[], hard: boolean): Promise<Pass> {
+async function onePass(
+  lab: Lab, options: DeathOptions, wanted: string, lives: number[], hard: boolean, close?: CloseUp,
+): Promise<Pass> {
   G.arena.restoreProps();
   await lab.setup(fixtureOf(options));
   const hero = G.player;
@@ -532,6 +575,9 @@ async function onePass(lab: Lab, options: DeathOptions, wanted: string, lives: n
   const stand = STANDS[skill.def.impl] ?? { count: 3, ahead: 5, across: 1 };
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
+  // (no crits: the second pass's foes hold 0.8 of what the first dealt each, and a first hit's crit left them more
+  // life than a plain hit takes, "0 fell" by the draws of skills measured before; a fall is a hit's, crit or not)
+  hero.stats.crit = 0;
   const { spots, aim } = placesFor(stand, hero.pos, hero.facing);
   const foes = await foesAt(lab, spots, spots.map((_, i) => lives[i] ?? 1));
   const label = `${skill.def.name}, ${hard ? 'a hair from death' : 'with little to spare'}`;
@@ -540,6 +586,7 @@ async function onePass(lab: Lab, options: DeathOptions, wanted: string, lives: n
     pictures: options.pictures && hard,
     trace: Boolean(options.trace) && hard,
     label,
+    close,
   };
   const cast = await castAt(lab, skill, foes, aim, plan);
   return { skill, cast };
@@ -577,6 +624,7 @@ export async function death(lab: Lab, options: DeathOptions): Promise<Report> {
     if (hard.cast.trace.length) lines.push(TRACE_HEAD, ...hard.cast.trace);
     problems.push(...judged.problems);
     moments.push(...hard.cast.moments);
+    if (options.close) moments.push(...await closeUp(lab, options, name, hard.cast, bare.cast, lives));
     if (options.canary) canaries = mergeCanary(canaries, hard.cast, judged);
   }
   const compiled = programsCompiledInGame() - compiledBefore;
@@ -585,6 +633,20 @@ export async function death(lab: Lab, options: DeathOptions): Promise<Report> {
   if (compiled > 0) problems.push(`${compiled} shaders compiled as the bodies fell`);
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   return canaryReport(lines, canaries, moments);
+}
+
+/** The deepest body under the floor of a skill's two passes pictured close up, its pass cast again as it was. */
+async function closeUp(
+  lab: Lab, options: DeathOptions, name: string, hard: Cast, bare: Cast, lives: number[],
+): Promise<Pictured[]> {
+  const inHard = deepestOf(hard);
+  const inBare = deepestOf(bare);
+  const deeper = !inBare || (inHard && inHard.depth >= inBare.depth) ? inHard : inBare;
+  if (!deeper) return [];
+  const again = deeper === inHard
+    ? await onePass(lab, { ...options, pictures: false, canary: false }, name, [], true, deeper)
+    : await onePass(lab, { ...options, pictures: false, canary: false }, name, lives, false, deeper);
+  return again.cast.moments;
 }
 
 /** What the canary's plants came to, over the skills so far. */

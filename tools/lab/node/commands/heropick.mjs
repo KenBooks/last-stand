@@ -12,6 +12,8 @@ export default {
   help: 'a first visit\'s hero picked on the hero selection screen (booted as --first, the mage in focus): a '
     + 'finger\'s tap on him, then the screen opened again as a first visit\'s and the mouse\'s click; each must '
     + 'land in the lobby with no run started, the browser\'s click after the press reaching nothing of the lobby',
+  // (`check --every`'s command line: a first visit's hero, the mage)
+  audit: ['--class', 'mage'],
   options: {
     canary: {
       kind: 'switch',

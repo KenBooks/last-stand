@@ -83,12 +83,14 @@ export async function portraits(lab: Lab, options: PortraitOptions): Promise<Rep
   const previousRole = role.current;
   const life = G.player.life;
   const hudHidden = element('#hud').classList.contains('hidden');
+  // (the lobby's HUD, the village's practice bar, hides the party frames: they're a run's, shown as in one)
+  const hudLobby = element('#hud').classList.contains('lobby');
   const menuHidden = element('#menu').classList.contains('hidden');
   const screen = { width: innerWidth, height: innerHeight, ratio: devicePixelRatio };
   try {
     element('#coop').classList.add('hidden');
     element('#menu').classList.add('hidden');
-    element('#hud').classList.remove('hidden');
+    element('#hud').classList.remove('hidden', 'lobby');
     role.current = 'host';
     savePortrait(classId, first);
     updateCoopHud();
@@ -134,6 +136,7 @@ export async function portraits(lab: Lab, options: PortraitOptions): Promise<Rep
     G.player.life = life;
     await lab.showOn(screen);
     element('#hud').classList.toggle('hidden', hudHidden);
+    element('#hud').classList.toggle('lobby', hudLobby);
     element('#menu').classList.toggle('hidden', menuHidden);
     role.current = previousRole;
     updateCoopHud();

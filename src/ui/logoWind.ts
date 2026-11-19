@@ -229,11 +229,35 @@ async function homeOf(tMetal: SVGSVGElement, dst: DOMRect, dpr: number): Promise
   const hx = Math.floor((dst.left - dst.width * PAD_X) * dpr), hy = Math.floor((dst.top - dst.height * PAD_Y) * dpr);
   const hw = Math.ceil((dst.right + dst.width * PAD_X) * dpr) - hx, hh = Math.ceil((dst.bottom + dst.height * PAD_Y) * dpr) - hy;
   const tk = dst.width / vb.width;
-  const data = await snapshot(tMetal, [vb.x + (hx / dpr - dst.left) / tk, vb.y + (hy / dpr - dst.top) / tk, hw / dpr / tk, hh / dpr / tk], hw, hh);
+  const drawn = await snapshot(tMetal, [vb.x + (hx / dpr - dst.left) / tk, vb.y + (hy / dpr - dst.top) / tk, hw / dpr / tk, hh / dpr / tk], hw, hh);
+  const data = drawn && withArtsShadow(drawn, hw, hh, tMetal.parentElement, dpr);
   return data && {
     data, w: hw, h: hh, x: hx / dpr - dst.left, y: hy / dpr - dst.top,
     px: dpr, left: dst.left, top: dst.top, width: dst.width,
   };
+}
+
+/**
+ * The lobby logo's snapshot `data` (`w` by `h`) with its art's CSS drop shadow drawn into it, as the page draws it
+ * round the letters (the village's `.logo-art`), at `dpr` texels a CSS px and the art's zoom; as it is where the art
+ * has none. The picture shown in the letters' place is in the art, so the art's own filter is set aside while it
+ * shows (`showPicture`): the points landed without it, and the shadow came in round the letters as they handed over
+ * (`lab wind`: 8% of the village's logo's pixels apart past 8 levels).
+ */
+function withArtsShadow(data: Pixels, w: number, h: number, art: HTMLElement | null, dpr: number): Pixels {
+  const filter = art ? getComputedStyle(art).filter : 'none';
+  const shadow = /^drop-shadow\((.+\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px\)$/.exec(filter);
+  if (!art || !shadow) return data;
+  const zoom = art.offsetWidth ? art.getBoundingClientRect().width / art.offsetWidth : 1;
+  const scale = dpr * zoom;
+  const [, colour, dx, dy, blur] = shadow;
+  const letters = new OffscreenCanvas(w, h);
+  letters.getContext('2d')!.putImageData(new ImageData(data, w, h), 0, 0);
+  const shaded = new OffscreenCanvas(w, h);
+  const ctx = shaded.getContext('2d', { willReadFrequently: true })!;
+  ctx.filter = `drop-shadow(${colour} ${+dx * scale}px ${+dy * scale}px ${+blur * scale}px)`;
+  ctx.drawImage(letters, 0, 0);
+  return ctx.getImageData(0, 0, w, h).data;
 }
 
 /** Whether the lobby logo's letters are `now` where `at` says they were (CSS px), on a screen of `px` px a CSS px. */
@@ -270,11 +294,14 @@ function showPicture(tMetal: SVGSVGElement, h: HomeTex): boolean {
     width: `${size.width / zoom}px`, height: `${size.height / zoom}px`,
   });
   tMetal.style.visibility = 'hidden';
+  // (the art's shadow is in the picture: withArtsShadow)
+  art.style.filter = 'none';
   const spot = { left: now.left, top: now.top, width: now.width, px: h.px };
   const back = (): void => {
     if (sameSpot(spot, tMetal.getBoundingClientRect(), window.devicePixelRatio)) return;
     picture.remove();
     tMetal.style.visibility = '';
+    art.style.filter = '';
     watch.disconnect();
     removeEventListener('resize', back);
     removeEventListener('scroll', back, true);

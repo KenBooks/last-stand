@@ -177,10 +177,20 @@ async function checkLostCapture(scenario: TouchCase): Promise<void> {
   await lab.touchDown(middleOf(shield), 1);
   await lab.step(2);
   check(captured >= 0 && blocking(hero), 'touch: cancellation control never held a shield');
-  if (captured >= 0) shield.releasePointerCapture(captured);
+  let lost = false;
+  shield.addEventListener('lostpointercapture', () => { lost = true; }, { once: true });
+  // (the capture lost as the browser loses it, an element gone or a system gesture: its own capture let go by the
+  // page, Chrome never told a touch's press, before its next event or after, and this check failed since it was
+  // written; what it checks is the game letting the shield go as the loss comes)
+  if (captured >= 0) {
+    const loss = { pointerId: captured, pointerType: 'touch', bubbles: true };
+    shield.dispatchEvent(new PointerEvent('lostpointercapture', loss));
+  }
   await window.__labClock.realFrame();
   await lab.step(1);
-  check(!input.touch.has('mouse2') && !blocking(hero), 'touch: lost capture left block held');
+  const held = `the key ${input.touch.has('mouse2') ? 'held' : 'let go'}, ${blocking(hero) ? 'blocking' : 'not blocking'}`;
+  const heard = lost ? 'its loss heard' : 'its loss never heard';
+  check(!input.touch.has('mouse2') && !blocking(hero), `touch: lost capture left block held (${held}; ${heard})`);
   await lab.touchUp(1);
 }
 

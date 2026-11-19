@@ -134,6 +134,8 @@ export function serviceHealth(): Promise<{ google: boolean }> {
   health ??= json<{ google: boolean }>(call('GET', '/health', { public: true })).catch(() => { health = null; return { google: false }; });
   return health;
 }
+/** The service's health asked again at its next use (a harness's: `lab ui`'s states each answer it their own way). */
+export const forgetServiceHealth = (): void => { health = null; };
 /** The address to send this page to for Google's sign-in (`signin`) or to link Google (`link`, production's alone);
  *  Google sends it home to this path and query. `nonce` binds it to this tab: the code it comes home with is traded
  *  with it alone. */

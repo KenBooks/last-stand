@@ -29,7 +29,10 @@
   font: 900 19px var(--font-display); color: var(--accent); text-shadow: 0 0 8px rgba($accent-glow, .5); }
 .current .sv-gem { border-color: var(--accent); box-shadow: 0 0 14px rgba($accent-glow, .45); }
 .sv-name { display: flex; flex-direction: column; font: 700 24px var(--font-display); line-height: 1.15; color: var(--ink); }
-.sv-status { font: 15px var(--font-body); color: var(--ink-dim); }
+// (its size and face alone: the `font` shorthand set its digits back to the face's old-style ones, a slot's waves rising
+// and dropping along the line, `lab ui`'s digits; its weight and line height set as the shorthand set them, or it takes
+// the name's bold over it)
+.sv-status { font-size: 15px; font-weight: 400; line-height: normal; font-family: var(--font-body); color: var(--ink-dim); }
 .current .sv-status { color: var(--highlight); }
 .sv-totals { padding: 0 16px 10px; font-size: 14px; color: var(--ink-dim); }
 .sv-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;

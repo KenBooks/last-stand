@@ -45,6 +45,8 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.09, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 /** how far the coat and the waistcoat stand off the tunic round the neckline (m) */
 const NECK_LIFT = 0.008;
+/** how much further the collar's top stands off the neck at the nape than at its points (m) */
+const COLLAR_NAPE = 0.018;
 /** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it:
  *  across, and from front to back, where it stood out behind his seat) */
 const SLUNG_IN = 1, SLUNG_IN_BACK = 0.94;
@@ -421,7 +423,9 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
       // (its foot run down into the coat's body and out under it: from the foot at 0.268 the coat's shoulders, squashed
       // front to back more than the collar, left a gap behind the neck that showed the skin and through it)
       const top = lerp(0.322, 0.372, back), y = lerp(0.235, top, v), flare = 0.01 * (1 - back) * v ** 1.6;
-      const r = lerp(0.112, 0.086, v ** 0.6) - 0.012 * Math.sin(Math.PI * v ** 0.8) * back + flare;
+      // (its top stood off the nape a little more than at the sides: drawn in to 8.6 cm all round, it ran 5 mm into the
+      // back of his neck, unseen under its rim, `lab neck`'s skin through the clothes)
+      const r = lerp(0.112, 0.086 + COLLAR_NAPE * back, v ** 0.6) - 0.012 * Math.sin(Math.PI * v ** 0.8) * back + flare;
       return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.95 + necklineBack(y));
     };
     A.add(plate(collar, 36, 6, 0.006, undefined, V(0, 0.3, 0)), coatD, j.chest);

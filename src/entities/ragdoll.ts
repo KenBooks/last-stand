@@ -86,6 +86,10 @@ const FOLDS: [Point, Point, Point, number][] = [
 const KNEES_APART = 0.6;
 /** how far a knee may go behind the line from its hip to its ankle before it's put back (m) */
 const HINGE_SLACK = 0.005;
+/** the most a knee is put forward a pass (m): put back at once from far behind its line (a body dropped onto its knees,
+ *  the hips coming down past them), the shin's bone pulled its ankle after it at 44 m/s and the leg flew up to 1.2 m,
+ *  stretched 26 to 39% (`lab death`, Hailfletch's kills, #259) */
+const HINGE_STEP = 0.01;
 /** a hip folds the thigh up to the trunk no closer than this angle between them (rad) */
 const HIP_FOLD = 0.9;
 
@@ -164,6 +168,13 @@ export class Ragdoll {
   private readonly hipsFromMiddle = new THREE.Vector3();
   private readonly spineFromHips = new THREE.Vector3();
   private readonly chestFromSpine = new THREE.Vector3();
+  /** each shoulder's point from the chest's at the fall (the world's axes, left then right), and each arm's bones'
+   *  lengths (the upper arm, the forearm) */
+  private readonly shoulderFromChest = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly armLengths: [number, number][] = [];
+  /** the chest's joint, a shoulder's and an elbow's as drawn this frame (`pose`) */
+  private readonly chestAt = new THREE.Vector3();
+  private readonly jointAt = new THREE.Vector3();
   private readonly turn = new THREE.Quaternion();
   private readonly rootTurn = new THREE.Quaternion();
   private readonly hipsAt = new THREE.Vector3();
@@ -221,6 +232,10 @@ export class Ragdoll {
     this.hipsFromMiddle.copy(hipsJoint).sub(this.middleOfHips(_b));
     this.spineFromHips.copy(spine).sub(hipsJoint);
     this.chestFromSpine.copy(this.point(I.chest, _a)).sub(spine);
+    for (const [side, [shoulder, elbow, hand]] of ARMS.entries()) {
+      this.shoulderFromChest[side].copy(this.point(I[shoulder], _b)).sub(this.point(I.chest, _a));
+      this.armLengths.push([this.between(I[shoulder], I[elbow], _c).length(), this.between(I[elbow], I[hand], _c).length()]);
+    }
     const ways: [Posed, Point, Point][] = [
       ['neck', 'neck', 'head'], ['thighL', 'thighL', 'kneeL'], ['kneeL', 'kneeL', 'ankleL'],
       ['thighR', 'thighR', 'kneeR'], ['kneeR', 'kneeR', 'ankleR'], ['shoulderL', 'shoulderL', 'elbowL'],
@@ -470,8 +485,10 @@ export class Ragdoll {
   private within(a: number, b: number, min: number, max: number): void {
     const p = this.p, ka = a * 3, kb = b * 3;
     const dx = p[kb] - p[ka], dy = p[kb + 1] - p[ka + 1], dz = p[kb + 2] - p[ka + 2];
-    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (d < 1e-6 || (d >= min && d <= max)) return;
+    // (squared first: most joins hold, and their root was a third of the solver's time, `lab crowd --profile`)
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < 1e-12 || (d2 >= min * min && d2 <= max * max)) return;
+    const d = Math.sqrt(d2);
     const goal = d < min ? min : max, wa = this.w[a], wb = this.w[b], share = (d - goal) / (d * (wa + wb));
     p[ka] += dx * share * wa; p[ka + 1] += dy * share * wa; p[ka + 2] += dz * share * wa;
     p[kb] -= dx * share * wb; p[kb + 1] -= dy * share * wb; p[kb + 2] -= dz * share * wb;
@@ -491,7 +508,7 @@ export class Ragdoll {
     // (the knee put forward and its hip and ankle back by their weights, each where it was a step ago too: a push of
     // its own is a speed in verlet, and a knee lying on the floor, pulled down by gravity and pushed back up, rocked
     // a centimetre a frame for good)
-    const fix = behind - HINGE_SLACK, wk = this.w[knee], wEnds = (this.w[hip] + this.w[ankle]) / 2;
+    const fix = Math.min(behind - HINGE_SLACK, HINGE_STEP), wk = this.w[knee], wEnds = (this.w[hip] + this.w[ankle]) / 2;
     const share = fix / (wk + wEnds);
     this.shift(knee, forward, share * wk);
     this.shift(hip, forward, -share * this.w[hip] / 2);
@@ -510,7 +527,13 @@ export class Ragdoll {
     this.point(I.spine, _a);
     this.velocity(I.spine, _b);
     const reach = 2.5 + _b.length() * dt;
-    this.near = G.arena.obstacles.filter((o) => Math.hypot(o.x - _a.x, o.z - _a.z) < reach + o.r);
+    // (squared, in a loop: `Math.hypot` over every prop of the arena, each body each frame, was 8% of the solver's time)
+    const near = this.near;
+    near.length = 0;
+    for (const o of G.arena.obstacles) {
+      const dx = o.x - _a.x, dz = o.z - _a.z, most = reach + o.r;
+      if (dx * dx + dz * dz < most * most) near.push(o);
+    }
   }
 
   /** Point `i` kept out of the floor (bouncing and sliding on it), out of the props standing above it and in the arena. */
@@ -613,12 +636,13 @@ export class Ragdoll {
     const now = this.point(I.chest, _b).sub(spineAt).normalize();
     this.turn.setFromUnitVectors(was, now).multiply(dHips);
     W.get('spine')!.copy(this.turn).multiply(Q0.get('spine')!);
+    this.chestAt.copy(now).multiplyScalar(this.chestFromSpine.length()).add(spineAt);
     W.get('chest')!.copy(dChest).multiply(Q0.get('chest')!);
     this.limb(dChest, ['neck', 'neck', 'head'], null, 'head');
     this.limb(dHips, ['thighL', 'thighL', 'kneeL'], ['kneeL', 'kneeL', 'ankleL'], 'ankleL');
     this.limb(dHips, ['thighR', 'thighR', 'kneeR'], ['kneeR', 'kneeR', 'ankleR'], 'ankleR');
-    this.limb(dChest, ['shoulderL', 'shoulderL', 'elbowL'], ['elbowL', 'elbowL', 'handL'], 'handL');
-    this.limb(dChest, ['shoulderR', 'shoulderR', 'elbowR'], ['elbowR', 'elbowR', 'handR'], 'handR');
+    this.arm(dChest, 0);
+    this.arm(dChest, 1);
     // the body unturned, placed so the hips land on their point
     j.body.quaternion.identity();
     j.body.position.set(0, 0, 0);
@@ -642,14 +666,50 @@ export class Ragdoll {
     this.world.get(end)!.copy(turn).multiply(this.q0.get(end)!);
   }
 
-  /** `turn` carried on through a link: swung from the link's way at the fall, as `turn` has it now, onto its way now. */
-  private swing(turn: THREE.Quaternion, [joint, from, to]: Link): void {
+  /** `turn` carried on through a link: swung from the link's way at the fall, as `turn` has it now, onto its way now
+   *  (from its first point to its next, or from `at`, where its joint is drawn, to its next, `length` along: `arm`). */
+  private swing(turn: THREE.Quaternion, [joint, from, to]: Link, at?: THREE.Vector3, length = 0): void {
     const was = _a.copy(this.way0.get(joint)!).applyQuaternion(turn).normalize();
-    const now = this.between(I[from], I[to], _b).normalize();
+    const now = at ? this.aimFrom(at, I[to], length, _b) : this.between(I[from], I[to], _b).normalize();
     turn.premultiply(_s.setFromUnitVectors(was, now));
     this.world.get(joint)!.copy(turn).multiply(this.q0.get(joint)!);
+  }
+
+  /** The way from `at` to point `to`, raised so the end of a bone `length` long along it lies no lower than the point
+   *  (into `out`, a unit vector): a point lying on the floor, its arm drawn from a shoulder a few centimetres off its
+   *  own point, drew its elbow 2 to 4 cm under the floor (`lab death`, Briarflight's and Rending Cleave's kills). */
+  private aimFrom(at: THREE.Vector3, to: number, length: number, out: THREE.Vector3): THREE.Vector3 {
+    const point = this.point(to, _c);
+    const target = _d.copy(point);
+    for (let i = 0; i < AIM_LIFTS; i++) {
+      out.copy(target).sub(at).normalize();
+      const low = point.y - (at.y + out.y * length);
+      if (low <= 1e-4) break;
+      target.y += low;
+    }
+    return out.copy(target).sub(at).normalize();
+  }
+
+  /** An arm (`side` 0 the left) turned in the world, each bone aimed from where its joint is drawn at its next point:
+   *  the shoulder drawn where the chest's turn puts it, the elbow along the upper arm from it. A landing bends the
+   *  upper trunk's points a little, and with each bone swung onto the way between its points, the drawn shoulder's
+   *  place off its point carried down the whole arm: an elbow or a hand lay 4 to 5 cm in the floor or a step's riser,
+   *  the pose 3 to 6 cm off its points (`lab death`, every hero's kills). */
+  private arm(chestTurn: THREE.Quaternion, side: 0 | 1): void {
+    const [shoulder, elbow, hand] = ARMS[side];
+    const [upper, forearm] = this.armLengths[side];
+    const at = this.jointAt.copy(this.shoulderFromChest[side]).applyQuaternion(this.dChest).add(this.chestAt);
+    const turn = this.turn.copy(chestTurn);
+    this.swing(turn, [shoulder, shoulder, elbow], at, upper);
+    at.addScaledVector(_b, upper);
+    this.swing(turn, [elbow, elbow, hand], at, forearm);
+    this.world.get(hand)!.copy(turn).multiply(this.q0.get(hand)!);
   }
 }
 
 /** A limb's joint and the points its way runs between. */
 type Link = [Posed, Point, Point];
+/** how many times a bone's aim is raised towards its end's point (`aimFrom`): each takes most of what is left */
+const AIM_LIFTS = 3;
+/** each arm's shoulder, elbow and hand, the left then the right */
+const ARMS = [['shoulderL', 'elbowL', 'handL'], ['shoulderR', 'elbowR', 'handR']] as const;

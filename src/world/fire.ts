@@ -641,6 +641,9 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     showMoment(moment);
     flames.uniforms.uFrame.value = moment;
     light.intensity = spec.intensity * (1 + (puff - 1) * LIGHT_SWELL);
+    // (its strength between puffs, for a measure of its light: read at a puff's moment, `lab village`'s campfire read
+    // 23.8 or 29 levels of red by the checks run before it)
+    light.userData.rest = spec.intensity;
     light.position.set(lightAt.x + (puff - 1) * LIGHT_SWAY, lightAt.y + (puff - 1) * LIGHT_SWAY * 2, lightAt.z);
     due.embers += dt * spec.embers;
     while (due.embers >= 1) {

@@ -100,6 +100,23 @@ function propNear(at: THREE.Vector3, least: number, most: number) {
   return props[0] ?? null;
 }
 
+/**
+ * A spot 1.5 m past the nearest prop between 2 m and `reach` less 4 from `hero` whose far side he could stand on, or
+ * none. (The nearest alone: with the run's props rolled otherwise, its far side was in another, and the blink stopped
+ * short of it as it should, read as stopped at the prop.)
+ */
+function pastAProp(hero: THREE.Vector3, reach: number): THREE.Vector3 | null {
+  const distanceTo = (prop: { x: number; z: number }) => Math.hypot(prop.x - hero.x, prop.z - hero.z);
+  const props = G.arena.obstacles.filter((prop) => distanceTo(prop) > 2 && distanceTo(prop) < reach - 4);
+  props.sort((a, b) => distanceTo(a) - distanceTo(b));
+  for (const prop of props) {
+    const away = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
+    const spot = new THREE.Vector3(prop.x, 0, prop.z).addScaledVector(away, prop.r + 1.5);
+    if (standable(spot)) return spot;
+  }
+  return null;
+}
+
 /** how far clear of the props a spot must be (m, past his own radius), and in from the arena's edge */
 const CLEAR_BY = 0.4;
 const EDGE_BY = 1;
@@ -156,12 +173,7 @@ function scenarios(reach: number): Scenario[] {
     {
       name: 'past a prop',
       at: [12, 22], facing: facingOf(0),
-      aim: (hero) => {
-        const prop = propNear(hero, 2, reach - 4);
-        if (!prop) return ahead(hero, 0, 8);
-        const away = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z);
-        return new THREE.Vector3(prop.x, 0, prop.z).addScaledVector(away.normalize(), prop.r + 1.5);
-      },
+      aim: (hero) => pastAProp(hero, reach) ?? ahead(hero, 0, 8),
       expect: (landing) => (landing.to.distanceTo(landing.aim) > LANDING_SLACK ? 'stopped at the prop' : null),
     },
     {

@@ -23,25 +23,29 @@
 #vmap.flat .vm-names, #vmap.flat .vm-you { opacity: 1; transition: opacity .25s; }
 #vmap.flat .vm-names { pointer-events: auto; }
 .vm-names { position: absolute; inset: 0; }
-/* (moved aside from its neighbours by ui/villageMap.ts `layNames`, its pointer kept at its place) */
-.vm-name { position: absolute; translate: calc(-50% + var(--aside, 0px)) calc(-100% - #{ui(10px)}); padding: ui(3px) ui(9px); white-space: nowrap; min-width: ui(84px); text-align: center; box-sizing: border-box;
-  font: 700 ui(13px) var(--font-display); letter-spacing: .04em; color: #3a2a1a; cursor: $cursor-hand;
+/* (moved aside from its neighbours by ui/villageMap.ts `layNames`, its pointer kept at its place; small, so the map
+   shows round them: from play, "we need smaller labels on map") */
+.vm-name { position: absolute; translate: calc(-50% + var(--aside, 0px)) calc(-100% - #{ui(8px)}); padding: ui(2px) ui(6px); white-space: nowrap; min-width: ui(60px); text-align: center; box-sizing: border-box;
+  font-weight: 700; font-size: ui(10px); font-family: var(--font-display); letter-spacing: .04em; color: #3a2a1a; cursor: $cursor-hand;
   background: rgba(240, 226, 196, .9); border: 1px solid rgba(58, 42, 26, .7); border-radius: ui(3px);
-  box-shadow: 0 ui(2px) ui(6px) rgba(40, 24, 8, .35); }
-.vm-name::after { content: ''; position: absolute; left: calc(50% + var(--tail, 0px)); top: 100%; translate: -50% 0; border: ui(5px) solid transparent;
+  box-shadow: 0 ui(1px) ui(4px) rgba(40, 24, 8, .35); }
+.vm-name::after { content: ''; position: absolute; left: calc(50% + var(--tail, 0px)); top: 100%; translate: -50% 0; border: ui(4px) solid transparent;
   border-top-color: rgba(58, 42, 26, .7); }
+/* (a name below its place, its pointer up to it: one that lay on another in its row, ui/villageMap.ts `layNames`) */
+.vm-name.below { translate: calc(-50% + var(--aside, 0px)) #{ui(8px)}; }
+.vm-name.below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: rgba(58, 42, 26, .7); }
 /* (a name beside its place, its pointer back to it: ui/villageMap.ts `NAMED_BESIDE`) */
-.vm-name.beside { translate: calc(#{ui(10px)} + var(--aside, 0px)) -50%; }
+.vm-name.beside { translate: calc(#{ui(8px)} + var(--aside, 0px)) -50%; }
 .vm-name.beside::after { left: auto; right: 100%; top: 50%; translate: 0 -50%; border-top-color: transparent; border-right-color: rgba(58, 42, 26, .7); }
 .vm-name:hover, .vm-name:focus-visible { background: #fff3d6; color: #1a0f04; }
 .vm-name[data-biome="crypt"] { color: #5a1f86; }
 .vm-name[data-biome="forest"] { color: #1f6a32; }
 /* a house walked into: a house before its name, in a hearth's brown */
-.vm-name[data-use="enter"] { display: inline-flex; align-items: center; gap: ui(5px); color: #7a3412; }
-.vm-house { width: ui(14px); height: ui(14px); flex: none; }
+.vm-name[data-use="enter"] { display: inline-flex; align-items: center; gap: ui(4px); color: #7a3412; }
+.vm-house { width: ui(11px); height: ui(11px); flex: none; }
 /* a partner inside it (ui/houseMarks.ts): his name under the house's, in the partners' blue on a dark band */
 .vm-name.occupied { flex-wrap: wrap; justify-content: center; row-gap: ui(2px); }
-.vm-inside { flex-basis: 100%; font: 700 ui(11px) var(--font-display); letter-spacing: .03em; color: #cfe6ff;
+.vm-inside { flex-basis: 100%; font-weight: 700; font-size: ui(9px); font-family: var(--font-display); letter-spacing: .03em; color: #cfe6ff;
   background: rgba(20, 42, 70, .88); border-radius: ui(2px); padding: ui(1px) ui(5px); white-space: nowrap; }
 .vm-inside[hidden] { display: none; }
 /* the hero: an arrow the way he faces */

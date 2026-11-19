@@ -803,8 +803,10 @@ export class Player {
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); this.refused = 'energy'; return false; }
     const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); this.refused = 'target'; return false; }
-    // Only a cast that can actually start lowers the shield; failed cooldown/energy/target checks keep it up.
-    if (this.channel?.skill.def.block) this.stopChannel();
+    // Only a cast that can actually start lowers the shield; failed cooldown/energy/target checks keep it up. A skill
+    // cast over a channel (Bull Rush) leaves it raised, as it leaves any channel going: lowered, the charge behind the
+    // shield ran bare (`lab rush`'s shield casts, since #399).
+    if (this.channel?.skill.def.block && !s.def.overCast) this.stopChannel();
     // (the house of records' favourite skill: the local hero's casts in a run)
     if (this.local) countCast(s.def.impl);
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);

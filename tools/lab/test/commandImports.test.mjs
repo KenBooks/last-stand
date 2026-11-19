@@ -1,7 +1,8 @@
 // Every module a command imports by a relative path is there (node/commands/): a command's heavier modules are
 // imported as it runs, so a wrong path showed only when that command was run (`ui`, `profile`, `recorder` and
 // `cloud --google` asked for `./tracesService.mjs` and `./googleWindow.mjs`, left beside them as the commands were
-// split out of node/, where those modules still are).
+// split out of node/, where those modules still are), and none names itself (`cloud` and `rooms` asked for
+// `./cloud.mjs` and `./rooms.mjs`, which beside them are the commands' own modules: "runCloud is not a function").
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -16,13 +17,15 @@ function relativeImports(source) {
   return [...source.matchAll(RELATIVE_IMPORT)].map((match) => match[1]);
 }
 
-/** Each command module's relative imports that aren't there, as `module -> path`. */
+/** Each command module's relative imports that aren't there, or are the module itself, as `module -> path`. */
 function missingImports() {
   const missing = [];
   for (const name of readdirSync(COMMANDS_DIR).filter((file) => file.endsWith('.mjs'))) {
     const source = readFileSync(new URL(name, COMMANDS_DIR), 'utf8');
     for (const path of relativeImports(source)) {
-      if (!existsSync(fileURLToPath(new URL(path, COMMANDS_DIR)))) missing.push(`${name} -> ${path}`);
+      const target = new URL(path, COMMANDS_DIR);
+      const itself = target.href === new URL(name, COMMANDS_DIR).href;
+      if (itself || !existsSync(fileURLToPath(target))) missing.push(`${name} -> ${path}`);
     }
   }
   return missing;

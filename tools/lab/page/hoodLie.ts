@@ -18,14 +18,17 @@ import { BakedBody, isUnder } from './geometry';
  *  front of the shoulder, ours puffed out forward over them, "reference does not overhang over shoulder, ours does";
  *  read with the rest of his shoulders, it passed) */
 const MOST_OFF = { typical: 2, far: 4 };
-const MOST_OFF_FORE = { typical: 1.2, far: 2.5 };
+/** (the shape the owner kept, #711: off the fronts of his shoulders 1.5 cm, a tenth 2.7, where the reference's lies at
+ *  1.2 and 2.5; off his back 2.7, a tenth 3.6) */
+const MOST_OFF_FORE = { typical: 2, far: 3.5 };
+const MOST_OFF_BACK = { typical: 3.5, far: 4.5 };
 /** where round him a point is: how far from his front about the chest's axis, either way (degrees), at most, and how
  *  far the capelet may stand off him there */
 const REGIONS = [
   { name: 'front', most: 45, off: MOST_OFF },
   { name: 'shoulders in front', most: 90, off: MOST_OFF_FORE },
   { name: 'shoulders', most: 135, off: MOST_OFF },
-  { name: 'back', most: 180, off: MOST_OFF },
+  { name: 'back', most: 180, off: MOST_OFF_BACK },
 ] as const;
 type Region = (typeof REGIONS)[number]['name'];
 /** the deepest his body may come out through it (cm): what's read is the cloth's outside, so anything through it
