@@ -18,6 +18,8 @@ import { gearOf, makeItem } from '../../loot/items';
 import { disposeGeometries } from '../../entities/models/rig';
 import { buildFirst, buildLater, buildOnly, finishNow, queued } from '../../game/behind';
 import { perfClock } from '../perfHud';
+import { QUALITY } from '../../data/quality';
+import { qualityLevel } from '../../core/quality';
 import type { Model, Profile } from '../../types';
 
 declare const __BUILD__: { ref: string; time: string };
@@ -112,7 +114,7 @@ function copied(from: CanvasImageSource): HTMLCanvasElement {
 export function portrait(id: Who): Promise<HTMLCanvasElement | null> {
   const have = made.get(id);
   if (have || failed) return Promise.resolve(have ?? null);
-  queuePortraitsBehind();
+  startPortraits();
   return new Promise((done) => waiting.set(id, [...(waiting.get(id) ?? []), done]));
 }
 
@@ -133,7 +135,7 @@ let own: Who | null = null;
  *  (called each frame it's open, from main.ts): the player is looking at them. */
 export function stepPortraits(): void {
   if (portraitPlant.notWhileOpen) return;
-  queuePortraitsBehind();
+  startPortraits();
   buildOnly(JOB, WHILE_OPEN);
 }
 
@@ -154,8 +156,14 @@ export function forgetPortraits(): void {
   requeue();
 }
 
-/** The pictures queued to be made behind the lobby (once; those the browser kept are read first). */
+/** The pictures queued to be made behind the lobby before the guide is opened, where the level makes them there
+ *  (`portraitsBehind`): called each frame the lobby shows. */
 export function queuePortraitsBehind(): void {
+  if (QUALITY[qualityLevel()].portraitsBehind) startPortraits();
+}
+
+/** The pictures queued to be made (once; those the browser kept are read first). */
+export function startPortraits(): void {
   if (started || failed) return;
   started = true;
   void kept().then(() => {

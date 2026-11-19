@@ -74,6 +74,11 @@ const SETTINGS = {
    *  lookup there), a uniform's branch once the game shows. A quarter of a phone's frame (trace DM4B-R468). WebGL's
    *  lit shading cost that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
   plainLit: { high: false, medium: false, low: true, verylow: true },
+  /** the guide's portraits made behind the lobby before the guide is opened (`queuePortraitsBehind` in
+   *  ui/guide/portraits.ts); without, the guide makes them as it opens, a spinner in each place till then. On a
+   *  phone's WebGL each portrait's compile and pieces held the lobby's frames up 130 to 950 ms, five times in 14 s
+   *  (trace S307-J274: `behind the lobby: guide portraits's piece 20 took 572 ms`, a render of 952 ms) */
+  portraitsBehind: { high: true, medium: true, low: false, verylow: false },
   /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
    *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
   poseEvery: { high: 1, medium: 1, low: 1, verylow: 2 },
