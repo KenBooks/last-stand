@@ -4,6 +4,10 @@ import type { ScholarOptions } from '../scholar';
 
 /** The library's scholar: his loop posed through with no snap, his glance and his eye while talked to, pictured. */
 export async function scholar(lab: Lab, command: ScholarOptions): Promise<Report> {
+  if (command.moments) {
+    const { scholarMoments } = await import('../scholarMoments');
+    return scholarMoments(lab);
+  }
   const { scholar: measure } = await import('../scholar');
   return measure(lab, command);
 }
