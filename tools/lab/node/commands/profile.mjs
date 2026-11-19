@@ -8,7 +8,8 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 export default {
   summary: 'the game\'s own profiler, the pause menu\'s Profile this spot, run where the hero stands (`--biome`, '
     + '`--view`, `--at`, `--level`, `--device`, `--renderer webgpu|meshlets`): each part of the frame taken out in '
-    + 'turns by the browser\'s clock, as a player\'s device times itself, the programs it compiled (over 8 fails; '
+    + 'turns by the browser\'s clock, as a player\'s device times itself (`--village` stood in the lobby\'s '
+    + 'village), the programs it compiled (over 8 fails; '
     + 'WebGPU\'s pipelines, over 24), a run cancelled midway, and its result sent and read back as `lab trace` '
     + 'reports it; `--canary` the frame drawn twice',
   help: 'the game\'s own profiler (the pause menu\'s Profile this spot) where the hero stands: each part of the '
@@ -43,6 +44,17 @@ export default {
       help: 'n spent arrows stood in the ground round him first: what they cost, its part '
         + '"the spent arrows"',
     },
+    hour: {
+      kind: 'number',
+      usage: 'h',
+      help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit; the page\'s own when not '
+        + 'given, so two sides of an --ab may stand under another sun)',
+    },
+    village: {
+      kind: 'switch',
+      help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at where the hero stands '
+        + 'there, the square by default), as `draws --village` stands him',
+    },
     canary: { kind: 'switch', help: 'a part of its own, the frame drawn twice: it must read 1.6 times once' },
     ...COMMON_OPTIONS,
   },
@@ -64,6 +76,8 @@ export default {
         canary: Boolean(options.canary),
         send: service.url,
         arrows: options.arrows === undefined ? undefined : Math.round(options.arrows),
+        village: Boolean(options.village),
+        hour: options.hour,
       };
       const result = await checkProfileSent(await side.command('profileHere', command), service);
       // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)

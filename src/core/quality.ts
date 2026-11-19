@@ -132,6 +132,9 @@ function bootLevel(): QualityLevel {
 export const hdrAllowedAtBoot = (): boolean => QUALITY[bootLevel()].hdr;
 /** The heroes' detail at the level the boot starts at, for what's made before `initQuality` (the hands' sculpts). */
 export const heroDetailAtBoot = (): number => QUALITY[bootLevel()].heroDetail;
+/** Whether the level the boot starts at makes WebGPU's lit shading plain, for its pipeline made before
+ *  `initQuality` (`plainAtBoot` in core/webgpu.ts). */
+export const plainLitAtBoot = (): boolean => QUALITY[bootLevel()].plainLit;
 
 /** the player's Resolution, a share of the screen's pixels each way (its cookie, and the choices the menu offers) */
 const RESOLUTION_COOKIE = 'last-stand-resolution';

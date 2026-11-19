@@ -1399,6 +1399,11 @@ function sanitized(colour: any): any {
   return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
 }
 
+/** the taps across the rays the sight's edge is softened by, beside the middle one (`seenAround` in core/sight.ts),
+ *  and at a level built plain (`plainAtBoot`): its 18 lookups a pixel were most of a phone's final pass */
+const SIGHT_TAPS = [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1];
+const PLAIN_SIGHT_TAPS = [-0.75, 0.75];
+
 /** `colour` in the fog where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
 function seenOnly(colour: any, depthNode: any): any {
   const { atan, dot, length, max, min, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
@@ -1425,15 +1430,20 @@ function seenOnly(colour: any, depthNode: any): any {
       const further = smoothstep(band.g.add(SIGHT_LOOK.wallFrom), band.g.add(SIGHT_LOOK.wall), far).oneMinus();
       return mix(nearer, further, band.b);
     };
+    // (built plain at the boot's level, 3 taps across the rays where 9: a phone's Very low paid for every one)
+    const taps = plainAtBoot ? PLAIN_SIGHT_TAPS : SIGHT_TAPS;
     let sum = seenAlong(across);
-    for (const tap of [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1]) sum = sum.add(seenAlong(across.add(aside.mul(tap))));
-    return select(far.lessThan(0.3), 1, sum.div(9));
+    for (const tap of taps) sum = sum.add(seenAlong(across.add(aside.mul(tap))));
+    return select(far.lessThan(0.3), 1, sum.div(taps.length + 1));
   };
   // (past the door he sees through, the room as seen from the doorway: `seeThroughDoor` in sight.ts)
   const door = reference('value', 'vec4', SIGHT.uSightDoor);
   const fromDoor = place.xz.sub(door.xy);
   const pastDoor = smoothstep(0, DOOR_SOFT, dot(fromDoor, door.zw)).mul(reference('value', 'float', SIGHT.uSightDoorOn));
-  let open = max(seenAround(to, HIS_ROW), seenAround(fromDoor, DOOR_ROW).mul(pastDoor));
+  // (the doorway's row read only with a door seen through: the same pixels, half the lookups elsewhere)
+  const doorOn = reference('value', 'float', SIGHT.uSightDoorOn);
+  const throughDoor = select(doorOn.greaterThan(0), seenAround(fromDoor, DOOR_ROW).mul(pastDoor), 0);
+  let open = max(seenAround(to, HIS_ROW), throughDoor);
   // (the ground seen through a roof is by the rays: `seenColour`)
   const offGround = smoothstep(SIGHT_LOOK.groundFrom, SIGHT_LOOK.groundTo, place.y);
   const throughRoof = smoothstep(0.9, 0.99, min(colour.a, 1)).oneMinus()
@@ -1468,8 +1478,12 @@ function seenOnly(colour: any, depthNode: any): any {
   const whole = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
   const shown = mix(mix(colour.rgb, fogged, unseen), mix(colour.rgb, whole, unseen.mul(letOff)),
     smoothstep(SIGHT_LOOK.ghostFrom, SIGHT_LOOK.ghostTo, place.y));
-  return vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves),
+  const seen = vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves),
     eaves.mul(min(min(colour.a, 1).mul(SIGHT_LOOK.eavesBy), 1))), max(colour.a, 1));
+  // (none of it while the fog is off, as WebGL's returns at once (`SIGHT_GLSL`): a fight's, a whole view's. Worked out
+  // and weighed by nothing, its 18 lookups a pixel were the final pass's 3.2 ms of 4.0 in the lab's crypt at a phone's
+  // pixels, the village on; three's `select` writes an `if` round them)
+  return select(on.greaterThan(0), seen, vec4(colour.rgb, max(colour.a, 1)));
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */

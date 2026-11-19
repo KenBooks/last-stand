@@ -8,7 +8,8 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 export default {
   summary: 'each of the frame\'s renders on WebGPU timed by three\'s timestamps (the scene, its shadows, each post '
     + 'pass, by name and size; `--features` the environment, shadows, point lights and fog taken off the scene\'s '
-    + 'pass in turns; `--paused` the game paused as its menu pauses it; the frame pictured, WebGL\'s too, for '
+    + 'pass in turns; `--paused` the game paused as its menu pauses it; `--village` stood in the lobby\'s '
+    + 'village; the frame pictured, WebGL\'s too, for '
     + '`--ab`)',
   help: 'what each of the frame\'s renders takes of the GPU on WebGPU (--renderer webgpu), by three\'s timestamps: '
     + 'the scene\'s pass, the shadow maps, each pass of the post chain and the canvas\'s, each named by what it '
@@ -46,6 +47,17 @@ export default {
       help: 'the game paused as its pause menu pauses it (no update, the same scene drawn): what a game that '
         + 'updates adds to the GPU',
     },
+    hour: {
+      kind: 'number',
+      usage: 'h',
+      help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit; the page\'s own when not '
+        + 'given, so two sides of an --ab may stand under another sun)',
+    },
+    village: {
+      kind: 'switch',
+      help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at where the hero stands '
+        + 'there, the square by default), as `draws --village` stands him',
+    },
     canary: { kind: 'switch', help: 'a render of its own, the scene again: found once a frame, with a time' },
     ...COMMON_OPTIONS,
   },
@@ -62,6 +74,8 @@ export default {
       frames: options.frames === undefined ? undefined : Math.round(options.frames),
       features: Boolean(options.features),
       paused: Boolean(options.paused),
+      village: Boolean(options.village),
+      hour: options.hour,
       canary: Boolean(options.canary),
     };
     return side.command('passesHere', command);

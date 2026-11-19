@@ -14,7 +14,7 @@ import type { ViewMode } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
 import { G } from '../../../src/state';
 import { WEBGPU, webgpuSceneTarget } from '../../../src/core/webgpu';
-import { standIn } from './light';
+import { standAt } from './draws';
 import { featureCost, sceneFeatures } from './sceneFeatures';
 import * as perfHud from '../../../src/ui/perfHud';
 
@@ -29,6 +29,10 @@ export interface PassesCommand {
   /** the game paused as its pause menu pauses it (`G.paused`: no update, the same scene drawn): a phone's GPU took
    *  11.5 ms a frame paused and 24 in the lobby, the same view and level (traces N5TH-2XC9, R5FJ-9TNN) */
   paused?: boolean;
+  /** in the lobby's village instead, as `draws --village` stands him there (`at` there, the square by default) */
+  village: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
   canary: boolean;
 }
 
@@ -114,9 +118,14 @@ function holdTimes(held: boolean): void {
   (perfHud as { holdWebGpuTimes?: (held: boolean) => void }).holdWebGpuTimes?.(held);
 }
 
+/** ` at h:00` for a village held at an hour, or nothing */
+function hourOf(command: PassesCommand): string {
+  return command.hour === undefined ? '' : ` at ${command.hour}:00`;
+}
+
 export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Report> {
   if (command.level) quality.useQuality(command.level);
-  await standIn(lab, { biome: command.biome, view: command.view, facing: 0, at: command.at, fresh: true });
+  await standAt(lab, command);
   G.paused = command.paused === true;
   // (pictured as the browser shows it: an A/B's sides compared pixel by pixel, a cost cut keeping the look)
   const pictured = await lab.screen('the frame timed');
@@ -181,7 +190,7 @@ export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Repor
   rows.sort((a, b) => b.ms - a.ms);
   const all = rows.reduce((total, row) => total + (row.name === CANARY_NAME ? 0 : row.ms), 0);
   const lines = [
-    `${G.arena.biome} ${command.view}, ${quality.qualityLevel()}, ${size.x}x${size.y} drawn`
+    `${command.village ? `the village${hourOf(command)}` : G.arena.biome} ${command.view}, ${quality.qualityLevel()}, ${size.x}x${size.y} drawn`
       + (command.paused ? ', paused' : ''),
     `  the frame's renders: ${all.toFixed(2)} ms of the GPU, over ${frames} frames; `
       + `compute ${(computeMs / frames).toFixed(2)} ms`,
