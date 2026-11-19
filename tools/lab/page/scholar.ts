@@ -39,6 +39,8 @@ export interface ScholarOptions {
   /** the points of his loop pictured (s) */
   at?: number[];
   canary: boolean;
+  /** instead, him pictured close at each beat of each task (page/scholarMoments.ts) */
+  moments?: boolean;
 }
 
 /** the frame a pose is stepped by (s): the game at 60 a second */

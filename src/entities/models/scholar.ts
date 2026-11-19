@@ -36,9 +36,15 @@ const GLANCE = { near: 3.6, hold: 2.6, rest: 13, close: 1.8 };
 const NOD = { time: 0.55, pitch: 0.14, neck: 0.35 };
 /** his walk: an old man's, slow and short-stepped: how far a step takes him (m), his walking speed (m/s, the walk
  *  cycle full there), and the cycle's stride, knee and bob */
-export const WALK = { step: 0.42, speed: 0.55, stride: 0.38, knee: 0.7, bob: 0.025 };
+export const WALK = { step: 0.36, speed: 0.5, stride: 0.3, knee: 0.55, bob: 0.018, arm: 0.1, hips: 0.07 };
+/** how fast his pose follows what it's set to each frame (1/s): on his feet, and sat (his fingers on the page he
+ *  turns kept close). Set straight to it, each new beat of his rounds began with a jump: from play, "lagged, not
+ *  smooth continuation" */
+const FOLLOW = { up: 14, settle: 0.8 };
+/** how far forward he bends on his feet (rad: his spine, his chest): bent 15 degrees, he slouched, from play */
+const STOOP = { spine: 0.05, chest: 0.03 };
 /** how low a hand's aim is (m over his feet) before he bends to it, and how much lower he's bent all the way */
-const BEND = { from: 0.95, over: 0.65 };
+const BEND = { from: 1.08, over: 0.7 };
 
 /** The open book he reads, in his frame (x across him, +z ahead, up from the floor): the spine's foot in the gutter at
  *  its middle, its shape (models/book.ts), and the page he turns's material. */
@@ -270,6 +276,7 @@ export function buildScholar(book: ScholarBook): Scholar {
   // (the habit as it sits, shown while he's sat, and as it hangs, while he's up: a robe to the floor round his legs)
   const seatedSet = parts.filter((m) => ['scholar skirt', 'scholar trim hem', 'scholar tabard lap'].includes(m.name));
   const standingSet = dressRobe(j, add, M);
+  const robeFollow = followLegs(j, standingSet);
 
   // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
   // depth, shaped as the book is (models/book.ts); hidden but while it's turned, the print under it the same page ---
@@ -363,22 +370,51 @@ export function buildScholar(book: ScholarBook): Scholar {
   const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
 
   const act: ScholarAct = { sit: 1, walk: 0, look: null, handL: null, handR: null, reachL: 0, reachR: 0, grip: 0 };
-  /** which set of his habit shows: the sat one's or the standing one's (each its sleeves too, once dressed) */
-  let satShown = true;
+  /** which set of his habit shows: the sat one's or the standing one's (each its sleeves too, once dressed), set every
+   *  frame: the room's warm-up shows both for its draw, and a set kept as it was left the standing robe round him sat */
   const showSat = (sat: boolean) => {
-    if (sat === satShown) return;
-    satShown = sat;
     for (const m of seatedSet) m.visible = sat;
     for (const m of standingSet) m.visible = !sat;
   };
 
   function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
-    if (act.sit < 1) { standing(dt, heroAt, talking, said); return; }
+    if (act.sit < 1) {
+      standing(dt, heroAt, talking, said);
+      follow(dt, FOLLOW.up);
+      if (act.sit < 0.5) robeFollow();
+      satFor = 0;
+      return;
+    }
     showSat(true);
     legs();
     j.body.position.set(0, HIPS - P.hipY, 0);
     for (const o of [j.hips, j.spine, j.chest, j.body]) o.rotation.set(0, 0, 0);
     seated(dt, heroAt, talking, said);
+    // (followed as he settles into his chair; then as his loop has him, which runs smooth of itself and keeps his
+    // fingers on the page he turns: followed, the page went 5 mm into his hand)
+    satFor = act.sit >= 1 ? satFor + dt : 0;
+    follow(dt, FOLLOW.up, smooth(clamp(satFor / FOLLOW.settle, 0, 1)));
+  }
+  let satFor = 0;
+
+  // --- his pose followed: each joint (his fingers' too) turned a share of the way to where this frame set it ---
+  const followed: THREE.Object3D[] = [];
+  for (const o of Object.values(j)) if (o instanceof THREE.Object3D && o !== j.root && !followed.includes(o)) followed.push(o);
+  for (const hand of [j.handL, j.handR]) hand.traverse((o) => { if ((o as THREE.Bone).isBone && !followed.includes(o)) followed.push(o); });
+  const was = new Map<THREE.Object3D, THREE.Quaternion>(), bodyWas = new THREE.Vector3();
+  let following = false;
+  /** the pose this frame set, reached a share of the way from the last frame's (`rate` 1/s), and `then` of the rest
+   *  (1: at once; let go of over a while, as stopped at once his hand caught up 24 degrees in a frame): no jump where
+   *  one beat of his rounds hands on to the next */
+  function follow(dt: number, rate: number, then = 0): void {
+    const k = following && dt > 0 ? 1 - Math.exp(-rate * dt) * (1 - then) : 1;
+    for (const o of followed) {
+      let q = was.get(o);
+      if (!q) was.set(o, q = o.quaternion.clone());
+      o.quaternion.copy(q.slerp(o.quaternion, k));
+    }
+    j.body.position.copy(bodyWas.lerp(j.body.position, k));
+    following = dt > 0;
   }
 
   /** where his look and his glances at the hero are: the hero's place in his frame, and whether he's near */
@@ -404,7 +440,7 @@ export function buildScholar(book: ScholarBook): Scholar {
     gaze = damp(gaze, gazeWant, gazeWant > gaze ? 3.2 : 2.2, dt);
   };
 
-  let walkPhase = 0;
+  let walkPhase = 0, grip = 0;
   const handAt = new THREE.Vector3(), lookAt = new THREE.Vector3(), hang = new THREE.Vector3();
   const aimFingers = new THREE.Vector3(), aimPalm = new THREE.Vector3();
   /**
@@ -428,9 +464,11 @@ export function buildScholar(book: ScholarBook): Scholar {
       ankle.rotation.set(lerp(-0.04, -0.1, sit), 0, 0);
     }
     j.body.position.y = lerp(0, HIPS - P.hipY, sit);
-    const rising = Math.sin(Math.PI * sit);
-    j.spine.rotation.x = 0.16 + 0.35 * rising;
-    j.chest.rotation.x = 0.1 + 0.2 * rising;
+    // (leant forward most as his weight comes off the seat, his nose over his knees, and upright once up)
+    const rising = Math.sin(Math.PI * Math.pow(sit, 0.8));
+    j.spine.rotation.x = STOOP.spine + 0.42 * rising;
+    j.chest.rotation.x = STOOP.chest + 0.18 * rising;
+    j.body.position.z += 0.05 * rising;
     // (bent at his knees and back to what a hand goes to low: a book on a stack on the floor)
     j.root.updateMatrixWorld(true);
     let low = Infinity;
@@ -457,6 +495,11 @@ export function buildScholar(book: ScholarBook): Scholar {
       const amt = clamp(act.walk / WALK.speed, 0, 1);
       walkCycle(j, walkPhase, amt, { stride: WALK.stride, knee: WALK.knee, arm: 0, bob: WALK.bob });
       swing = Math.sin(walkPhase) * amt;
+      // (his hips turning with each step and his chest against them, his weight going from foot to foot: walked with
+      // his body still, he moved as a puppet does)
+      j.hips.rotation.y += WALK.hips * swing;
+      j.chest.rotation.y -= WALK.hips * 0.7 * swing;
+      j.body.position.x += 0.012 * Math.cos(walkPhase) * amt;
     }
     j.root.updateMatrixWorld(true);
     // --- the head: to what he looks at, or up to the hero ---
@@ -486,8 +529,14 @@ export function buildScholar(book: ScholarBook): Scholar {
     ] as const) {
       shoulder.getWorldPosition(hang);
       j.root.worldToLocal(hang);
-      hang.add(tmp.set(sd * 0.04, -0.6, 0.07 - sd * swing * 0.06));
+      hang.add(tmp.set(sd * 0.04, -0.6, 0.06 - sd * swing * WALK.arm));
       handAt.copy(hang);
+      // (getting up and sitting down: his hands on his knees, pushing off them)
+      const push = Math.sin(Math.PI * sit);
+      if (push > 0.01) {
+        (sd > 0 ? j.kneeL : j.kneeR).getWorldPosition(tmp);
+        handAt.lerp(j.root.worldToLocal(tmp).add(V(sd * 0.03, 0.07, -0.04)), push);
+      }
       const k = aim ? smooth(clamp(reach, 0, 1)) : 0;
       if (aim) handAt.lerp(j.root.worldToLocal(tmp.copy(aim.at)), k);
       // (his elbows down at his sides, a little out: out at 0.7 they stood out as wings)
@@ -505,8 +554,9 @@ export function buildScholar(book: ScholarBook): Scholar {
       }
       setHand(hand, qa.clone());
     }
-    poseHand(handL, lerp(0.3, 0.75, act.grip * smooth(clamp(act.reachL, 0, 1))), 0.15, 0, clock, 0);
-    poseHand(handR, lerp(0.3, 0.75, act.grip * smooth(clamp(act.reachR, 0, 1))), 0.15, 0, clock, 0);
+    grip = damp(grip, act.grip, 8, dt);
+    poseHand(handL, lerp(0.25, 0.75, grip * smooth(clamp(act.reachL, 0, 1))), 0.15, 0, clock, 0);
+    poseHand(handR, lerp(0.25, 0.75, grip * smooth(clamp(act.reachR, 0, 1))), 0.15, 0, clock, 0);
     page.visible = false;
   }
 
@@ -707,7 +757,6 @@ export function buildScholar(book: ScholarBook): Scholar {
     standingSet.push(m);
   }
   act.sit = 1;
-  satShown = false;
   showSat(true);
   loop = 7;
   update(0, null, false);
@@ -911,9 +960,8 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
   // --- the sleeves: close over the upper arm, a wide bell from the elbow, its lining dark; shoes under the hem ---
   for (const [shoulder, elbow, ankle, s] of [[j.shoulderL, j.elbowL, j.ankleL, 1], [j.shoulderR, j.elbowR, j.ankleR, -1]] as const) {
     void elbow; void shoulder;
-    const toe = new THREE.SphereGeometry(1, 14, 10).scale(0.05, 0.04, 0.11);
-    const foot = add(toe, M.shoe, ankle, 'shoe');
-    foot.position.set(0, -0.04, 0.07);
+    const foot = add(shoeGeometry(), M.shoe, ankle, 'shoe');
+    foot.position.set(0, -0.066, 0.055);
   }
 }
 
@@ -922,12 +970,12 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
  *  more towards the elbow: on the table, where they hung free through it. */
 function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3; R: THREE.Vector3 }, fore: { L: THREE.Vector3; R: THREE.Vector3 },
   onTable = true): void {
-  const bell: [number, number][] = [[0.12, -0.25], [0.112, -0.2], [0.095, -0.13], [0.078, -0.05], [0.07, 0.01], [0.066, 0.04]];
+  const bell: [number, number][] = [[0.12, -0.25], [0.112, -0.2], [0.095, -0.13], [0.078, -0.05], [0.07, 0.01], [0.066, 0.04], [0.04, 0.06], [0, 0.068]];
   // (the upper sleeves too: laid flat 6 cm under the arm at the elbow, where it rests on the table, free above it)
   for (const [shoulder, down, s] of [[j.shoulderL, upper.L, 1], [j.shoulderR, upper.R, -1]] as const) {
     // (standing, hung free: flattened as on the table, the upper sleeves stood out from his shoulders as square pads)
     const hang: Hang = onTable ? { down, droop: () => 0, floor: (y) => (y > -0.2 ? Infinity : lerp(0.08, 0.044, smooth(clamp((-y - 0.2) / 0.11, 0, 1)))) } : { ...HANG_FREE };
-    add(sleeve([[0.064, -0.33], [0.07, -0.26], [0.074, -0.14], [0.08, -0.04], [0.078, 0.02], [0.05, 0.06], [0.02, 0.075]], hang, 0.05, 5 + s).geo,
+    add(sleeve([[0.064, -0.33], [0.07, -0.26], [0.074, -0.14], [0.08, -0.04], [0.078, 0.02], [0.05, 0.06], [0.02, 0.075], [0, 0.08]], hang, 0.05, 5 + s).geo,
       M.habit, shoulder, 'sleeve');
   }
   for (const [elbow, down, s] of [[j.elbowL, fore.L, 1], [j.elbowR, fore.R, -1]] as const) {
@@ -947,10 +995,77 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
   }
 }
 
+/** A soft leather shoe (its ankle's frame, toe +z): its sole flat, its toe narrowing and turned up a little. Round
+ *  as a ball, it showed under his hem as a pebble, from play. */
+function shoeGeometry(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 18, 12), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i);
+    const z = p.getZ(i);
+    if (y < 0) y *= 0.3;
+    x *= 1 - 0.3 * Math.max(0, z);
+    y += 0.18 * Math.max(0, z) ** 3;
+    p.setXYZ(i, x * 0.042, y * 0.036, z * 0.115);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** His robe, its hem's cord and his tabard pushed out by his legs as he walks (each mesh's points out from the robe's
+ *  middle as far as a leg comes, near it): hung stiff from his hips, his knees and feet came through it, from play.
+ *  Returns what does it, a frame. */
+function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
+  const sets = meshes.map((m) => {
+    m.frustumCulled = false;
+    const p = m.geometry.attributes.position as THREE.BufferAttribute;
+    return { m, p, base: Float32Array.from(p.array as ArrayLike<number>) };
+  });
+  const CLEAR = 0.07, WIDE = 0.13, TALL = 0.14;
+  const legs = [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const;
+  const toe = new THREE.Vector3(0, -0.06, 0.17), a = new THREE.Vector3(), b = new THREE.Vector3();
+  const pts: THREE.Vector3[] = Array.from({ length: 24 }, () => new THREE.Vector3());
+  return () => {
+    j.root.updateMatrixWorld(true);
+    // (each leg as points down it, in the hips' frame: hip to knee, knee to ankle, ankle to toe)
+    let n = 0;
+    for (const [thigh, knee, ankle] of legs) {
+      const chain = [thigh.getWorldPosition(new THREE.Vector3()), knee.getWorldPosition(new THREE.Vector3()),
+        ankle.getWorldPosition(new THREE.Vector3()), ankle.localToWorld(toe.clone())].map((v) => j.hips.worldToLocal(v));
+      for (let c = 0; c < 3; c++) for (let t = 0; t < 4; t++) {
+        a.copy(chain[c]); b.copy(chain[c + 1]);
+        pts[n++].copy(a).lerp(b, (t + (c === 2 ? 1 : 0.5)) / 4);
+      }
+    }
+    for (const { m, p, base } of sets) {
+      if (!m.visible) continue;
+      const arr = p.array as Float32Array;
+      for (let i = 0; i < arr.length; i += 3) {
+        const x = base[i], y = base[i + 1], z = base[i + 2] - 0.01, r = Math.hypot(x, z);
+        if (r < 1e-4) { arr[i] = base[i]; arr[i + 1] = y; arr[i + 2] = base[i + 2]; continue; }
+        const ux = x / r, uz = z / r;
+        let want = r;
+        for (let q = 0; q < n; q++) {
+          const pt = pts[q], dy = Math.abs(pt.y - y);
+          if (dy > TALL) continue;
+          const d = pt.x * ux + (pt.z - 0.01) * uz;
+          if (d <= 0) continue;
+          const e = Math.hypot(pt.x - d * ux, pt.z - 0.01 - d * uz);
+          if (e > WIDE) continue;
+          const w = (1 - smooth(dy / TALL)) * (1 - smooth(e / WIDE)), need = d + CLEAR;
+          if (need > r) want = Math.max(want, r + (need - r) * w);
+        }
+        arr[i] = ux * want; arr[i + 1] = y; arr[i + 2] = uz * want + 0.01;
+      }
+      p.needsUpdate = true;
+      m.geometry.computeVertexNormals();
+    }
+  };
+}
+
 /** His robe as it hangs while he's up, on his hips: round them and flaring to the floor, folds falling down it; a gold
  *  cord on its hem, and his tabard down its front from the belt to his knees. Returns its meshes (shown while he's up). */
 function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
-  const N = 40, K = 26, drop = j.P.hipY - 0.03, rows: THREE.Vector3[][] = [];
+  const N = 40, K = 26, drop = j.P.hipY - 0.012, rows: THREE.Vector3[][] = [];
   /** the robe at `s` down it (0 its top at the hips, 1 its hem) and `th` round it, `lift` off it */
   const at = (s: number, th: number, lift = 0) => {
     const y = lerp(0.04, -drop, s), fl = smooth(s);

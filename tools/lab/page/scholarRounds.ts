@@ -6,6 +6,9 @@
 // stood close as he browses must not stop him (his task goes on), and he glances up at him; talked to, he stops where
 // he is and turns to the hero, and goes on once the talk ends. From play: "have him walking around... an actual book
 // from a shelf that actually leaves the shelf... If player comes in does not mean he stops, only if he interacts".
+// Then his other tasks, each back at his table at its end and clear of what stands in the room: a case dusted (his cloth
+// in his right hand throughout, its dust let off), a row squared, the globe set turning. From play: "have him do more
+// tasks like dusting and so on".
 // Its canary holds the book he carries half a metre off his hands, which must be found.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
@@ -25,6 +28,10 @@ const HAND_MOST = 0.1;
 const CLEAR_LEAST = 0.08;
 const GLANCED = 40;
 const STILL_MOST = 0.02;
+/** how far his dusting cloth may be from his right palm (m), and how far the globe must turn once he's set it turning
+ *  (rad) */
+const CLOTH_MOST = 0.08;
+const GLOBE_TURNS = 1;
 
 /** Where the middle of each of his palms is (world): 7 cm down the hand from its joint at the wrist, the way his fingers
  *  point (the hand's -y). Measured from the wrist, a hand holding a book's edge was 8 to 10 cm off it. */
@@ -321,6 +328,31 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   lines.push(lineOf('restock', restock));
   problems.push(...problemsOf('restock', restock));
   lines.push(`books off their shelves: ${gaps} after he kept one, ${rounds.gaps} after he restocked`);
+  // (his other tasks: a case dusted, a row squared, the globe set turning)
+  const cloth = G.scene.getObjectByName('library dusting cloth')!, ball = G.scene.getObjectByName('library globe')!;
+  let clothFar = 0, clothFrames = 0;
+  rounds.begin('dust');
+  const dust = await follow(lab, s, rounds, canary, () => {
+    if (!cloth.visible || rounds.doing !== 'dusting a case') return;
+    clothFrames++;
+    const palm = hands(s)[1], at = cloth.getWorldPosition(new THREE.Vector3());
+    clothFar = Math.max(clothFar, palm.distanceTo(at));
+  });
+  lines.push(lineOf('dust', dust), `his dusting cloth shown ${clothFrames} frames, at most ${clothFar.toFixed(2)} m from his right palm`);
+  problems.push(...problemsOf('dust', dust));
+  if (!clothFrames) problems.push('rounds: he dusted with no cloth shown');
+  if (clothFar > CLOTH_MOST) problems.push(`rounds: his dusting cloth ${clothFar.toFixed(2)} m from his right palm (at most ${CLOTH_MOST})`);
+  rounds.begin('tidy');
+  const tidy = await follow(lab, s, rounds, canary);
+  lines.push(lineOf('tidy', tidy));
+  problems.push(...problemsOf('tidy', tidy));
+  const last = ball.quaternion.clone();
+  let turned = 0;
+  rounds.begin('globe');
+  const globe = await follow(lab, s, rounds, canary, () => { turned += last.angleTo(ball.quaternion); last.copy(ball.quaternion); });
+  lines.push(lineOf('globe', globe), `the globe turned ${turned.toFixed(1)} rad in all`);
+  problems.push(...problemsOf('globe', globe));
+  if (turned < GLOBE_TURNS) problems.push(`rounds: the globe he set turning turned ${turned.toFixed(2)} rad (at least ${GLOBE_TURNS})`);
   const compiled = G.renderer.info.programs!.length - programs;
   lines.push(`programs the game's renderer compiled over his rounds (pictured as he walks, takes and reads a book): ${compiled}`);
   if (compiled) problems.push(`rounds: the game's renderer compiled ${compiled} programs over his rounds (none may be)`);
