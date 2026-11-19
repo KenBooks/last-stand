@@ -30,6 +30,7 @@ type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
 import * as culling from '../../../src/world/culling';
 import { loadProfile } from '../../../src/loot/profile';
+import { isReadying, readyingLabel } from '../../../src/game/warm';
 import { pressHeld } from './holdPress';
 import * as textures from '../../../src/core/textures';
 import * as anatomy from '../../../src/entities/models/anatomy';
@@ -109,6 +110,10 @@ export interface PagePoint {
   x: number;
   y: number;
 }
+
+/** the longest a pressed control may wait under the fight's loading bar, of the browser's own time (ms): a cold
+ *  first visit's fight warmed in 6 to 8 s on the lent 4080 (`stalls --scenario boot`) */
+const READYING_MOST_MS = 120_000;
 
 /** Resolves after `ms` of the browser's own time (the lab's clock stands still meanwhile: no frame runs). The page's
  *  timers run on it, a debounce's among them. */
@@ -790,7 +795,28 @@ export class Lab {
     if (G.mode === 'run') return;
     this.firstRunAt ??= G.time;
     document.getElementById('btn-start')?.click();
+    await this.whileReadying();
     await this.until(() => G.mode === 'run' && !this.player.sandbox, 600, 'the run never started');
+  }
+
+  /**
+   * The frames a pressed control waits through while the fight's loading bar is up (a cold boot's Start: the fight's
+   * programs warmed under it, `src/game/warm.ts`), drawn as the game draws them and the browser let go to a frame of
+   * its own after each: the warm-up waits for its links and its workers in the browser's time, which `step` never
+   * yields to, and its draws compile nothing undrawn. Stepped alone, a cold boot's Start never started its run
+   * (`compiles --cold`). An error past `READYING_MOST_MS` of the browser's own time, saying what still waited.
+   */
+  private async whileReadying(): Promise<void> {
+    const start = window.__labClock.realNow();
+    // (none when nothing waits: the press counts as waiting at once, `whenWarm`, and a warm boot's frames stay as they
+    // were)
+    while (isReadying()) {
+      if (window.__labClock.realNow() - start > READYING_MOST_MS) {
+        throw new Error(`lab: "${readyingLabel()}" still readying after ${READYING_MOST_MS / 1000} s`);
+      }
+      await this.step(1);
+      await window.__labClock.realFrame();
+    }
   }
 
   /**
