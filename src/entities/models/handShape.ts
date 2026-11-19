@@ -318,6 +318,10 @@ const SHUT_SHAPE = tunable('shutShape', {
   heel: 0.002,
   // how softly the knuckles' heads join the back (m)
   headBlend: 0.011,
+  // a fist's fingers each one piece swept along its curled bones (`sweptFinger`; 0 the open hand's parts bent shut):
+  // `sweptWide` how far past half the way to its neighbour each reaches across (they overlap, and meet in a cleft),
+  // `sweptDeep` its depth back to front as a share of its width at its root, `cleft` how hard they join each other (m)
+  swept: 1, sweptWide: 1.14, sweptDeep: 0.9, cleft: 0.0005,
 });
 
 /** The palm's parts, in the hand's own frame (`toward`: the way across to the thumb, +1 or -1 along x). */
@@ -517,6 +521,105 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   parts[parts.length - 1].shapeOnly = true;
   parts[parts.length - 2].shapeOnly = true;
   return parts;
+}
+
+/** `points` with their corners cut, their ends kept: each pass rounds a bent line's elbows (Chaikin's). */
+function rounded(points: THREE.Vector4[], passes: number): THREE.Vector4[] {
+  let line = points;
+  for (let pass = 0; pass < passes; pass++) {
+    const next = [line[0]];
+    for (let i = 0; i + 1 < line.length; i++) {
+      next.push(line[i].clone().lerp(line[i + 1], 0.25), line[i].clone().lerp(line[i + 1], 0.75));
+    }
+    next.push(line[line.length - 1]);
+    line = next;
+  }
+  return line;
+}
+
+/**
+ * An oval tube swept along a bent line: `line` its middle (x, y, z) with its half-depth at each point (w), `across`
+ * the way its section is broader, `wide` times its depth. A point's distance is read with the way across squeezed by
+ * `wide`, so it is never more than the true one.
+ */
+function sweptTube(line: THREE.Vector4[], across: THREE.Vector3, wide: number): Shape {
+  const squeeze = 1 - 1 / wide;
+  const flat = line.map((point) => {
+    const at = new THREE.Vector3(point.x, point.y, point.z);
+    return at.addScaledVector(across, -squeeze * at.dot(across));
+  });
+  const centre = new THREE.Vector3();
+  for (const point of line) centre.add(new THREE.Vector3(point.x, point.y, point.z));
+  centre.divideScalar(line.length);
+  let radius = 0;
+  for (const point of line) {
+    radius = Math.max(radius, centre.distanceTo(new THREE.Vector3(point.x, point.y, point.z)) + point.w * wide);
+  }
+  return {
+    distance: (x, y, z) => {
+      const side = x * across.x + y * across.y + z * across.z;
+      const px = x - squeeze * side * across.x;
+      const py = y - squeeze * side * across.y;
+      const pz = z - squeeze * side * across.z;
+      let least = Infinity;
+      for (let i = 0; i + 1 < flat.length; i++) {
+        const a = flat[i];
+        const b = flat[i + 1];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const abz = b.z - a.z;
+        const along = ((px - a.x) * abx + (py - a.y) * aby + (pz - a.z) * abz) / (abx * abx + aby * aby + abz * abz);
+        const t = clamp(along, 0, 1);
+        const off = Math.hypot(px - a.x - t * abx, py - a.y - t * aby, pz - a.z - t * abz);
+        least = Math.min(least, off - (line[i].w + (line[i + 1].w - line[i].w) * t));
+      }
+      return least;
+    },
+    centre: centre.toArray(),
+    radius,
+  };
+}
+
+/**
+ * A fist's finger as one piece: an oval tube swept along its curled bones from inside the palm behind its knuckle to
+ * its tip, broad enough across to overlap its neighbours (`reach`: half the way to the nearer one), so they meet in
+ * a cleft, as fingers pressed side by side do. The open hand's parts bent shut (three rounded segments, a knuckle on
+ * each joint, a pad) showed each segment's ends and each knuckle as a bead, and joined softly melted into the next
+ * finger's: from play, "this looks terrible", the fists a quarter of the view each.
+ */
+function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, reach: number): Part {
+  const toSculpt = (n: number) => new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert();
+  const at = (n: number, y = 0) => new THREE.Vector3(0, y, 0).applyMatrix4(toSculpt(n));
+  const across = new THREE.Vector3(1, 0, 0).transformDirection(toSculpt(0));
+  const w = finger.width;
+  const deep = w * SHUT_SHAPE.sweptDeep;
+  const [knuckle, middle, last] = [0, 1, 2].map((n) => at(n));
+  const tipDeep = deep * 0.84;
+  const tip = at(2, -(finger.len[2] - tipDeep));
+  const inPalm = knuckle.clone().add(new THREE.Vector3(0, 0.016, 0));
+  const line = rounded([
+    new THREE.Vector4(inPalm.x, inPalm.y, inPalm.z, deep * 0.9),
+    new THREE.Vector4(knuckle.x, knuckle.y, knuckle.z, deep),
+    new THREE.Vector4(middle.x, middle.y, middle.z, deep),
+    new THREE.Vector4(last.x, last.y, last.z, deep * 0.92),
+    new THREE.Vector4(tip.x, tip.y, tip.z, tipDeep),
+  ], 2);
+  const wide = Math.max(w * 1.05, reach * SHUT_SHAPE.sweptWide) / deep;
+  return {
+    shape: sweptTube(line, across, wide), frame: IDENTITY, blend: SHUT_SHAPE.cleft, bones: [[first, 1]],
+    shapeOnly: true,
+  };
+}
+
+/** Each finger of a fist as one swept piece (`sweptFinger`), each reaching half the way to its nearer neighbour. */
+function sweptFingers(fingers: DigitShape[], space: THREE.Object3D): Part[] {
+  const knuckles = fingers.map((finger) => new THREE.Vector3()
+    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[0], space)).invert()));
+  return fingers.map((finger, i) => {
+    const gaps = [i - 1, i + 1].filter((n) => n >= 0 && n < fingers.length)
+      .map((n) => knuckles[i].distanceTo(knuckles[n]));
+    return sweptFinger(finger, 1 + i * 3, space, Math.min(...gaps) / 2);
+  });
 }
 
 /** a hand sculpted closed's fills (`tools/handref` fits them): `curl` how wide the flesh filling a finger's curl is, a
@@ -955,10 +1058,17 @@ function pointOn(digit: DigitShape, n: number, along: number, space: THREE.Objec
 export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: DigitShape, toward: number,
   build: HandBuild = PLAIN, closed = false): HandGeometries {
   const digits = [...fingers, thumb];
+  // (a fist's fingers swept whole, first, so they meet each other hard and the palm joins them softly; of the open
+  // hand's parts they keep only each bone's say in the skin)
+  const sweeps = closed && SHUT_SHAPE.swept > 0;
   const parts = [
+    ...(sweeps ? sweptFingers(fingers, space) : []),
     ...palmParts(fingers, thumb, toward, build, closed),
-    ...digits.flatMap((digit, i) => digitParts(digit, 1 + i * 3, space, i === fingers.length, closed,
-      build.thumb)),
+    ...digits.flatMap((digit, i) => {
+      const thumbs = i === fingers.length;
+      const made = digitParts(digit, 1 + i * 3, space, thumbs, closed, build.thumb);
+      return sweeps && !thumbs ? made.filter((part) => part.sayOnly) : made;
+    }),
     ...(closed ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
       i === fingers.length - 1 ? -toward : 0)) : []),
     ...(closed ? thenarFill(thumb, fingers[0], space) : []),
