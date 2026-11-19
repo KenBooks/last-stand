@@ -28,7 +28,7 @@ const BESIDE_PX = 24;
 /** the touch HUD's controls round the screen's corners, which none may lie over another */
 const CORNERS = ['#btn-pause', '#btn-full', '#btn-view', '#btn-scores', '#bottombar', '#minimap-wrap', '#touch-skills'];
 /** a short screen's height (css px; the short-screen layout, src/ui/AGENTS.md) */
-const SHORT_SCREEN = 520;
+export const SHORT_SCREEN = 520;
 /** the most of a short screen's height the choice after a wave may reach down */
 const DECISION_SHARE = 0.3;
 /** the least height of the choice's buttons (css px): a finger's */

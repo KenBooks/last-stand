@@ -54,17 +54,18 @@ let failed = false;
 /** the browser's store read (once) and the rest queued */
 let started = false;
 
-/** Each piece's name and time (ms, by `perfClock`: a harness's, `lab guide`, reads the browser's own), the latest
- *  `PIECES_KEPT`: what the slowest is made of. */
-export const portraitPieces: { what: string; ms: number; waited?: boolean }[] = [];
-/** when each picture's compile was done and when it was drawn (by `perfClock`), for a harness (`lab guide`) */
-export const portraitTimes = new Map<Who, { compiled: number; drawn: number }>();
+/** Each piece's name, when it began and how long it took (ms, by `perfClock`: a harness's, `lab guide`, reads the
+ *  browser's own), the latest `PIECES_KEPT`: what the slowest is made of, and where a late one waited. */
+export const portraitPieces: { what: string; at: number; ms: number; waited?: boolean }[] = [];
+/** when each picture's compile was done, when its draw was sent to the card and the card had done it, and when it was
+ *  drawn into its canvas (by `perfClock`), for a harness (`lab guide`) */
+export const portraitTimes = new Map<Who, { compiled: number; sent: number; onCard: number; drawn: number }>();
 const PIECES_KEPT = 2000;
 /** `work` done as a piece named `what`, its time kept. */
 function piece<T>(what: string, work: () => T): T {
   const at = perfClock.now();
   try { return work(); } finally {
-    portraitPieces.push({ what, ms: perfClock.now() - at });
+    portraitPieces.push({ what, at, ms: perfClock.now() - at });
     if (portraitPieces.length > PIECES_KEPT) portraitPieces.shift();
   }
 }
@@ -117,10 +118,16 @@ export function portrait(id: Who): Promise<HTMLCanvasElement | null> {
 
 /** `id`'s picture made before the others (a page showing it opened), the build behind the lobby moved to the front. */
 export function hurryPortrait(id: Who): void {
+  if (!made.has(id)) own = id;
   const at = pending.indexOf(id);
   if (at > 0) { pending.splice(at, 1); pending.unshift(id); }
   buildFirst(JOB);
 }
+
+/** the page's own picture while it's being made: no other picture's compile is started until it's drawn (started
+ *  beside it, theirs ran on the card ahead of its draw, and the Twins' pages showed theirs 200 to 330 ms after
+ *  their compiles, `lab guide`) */
+let own: Who | null = null;
 
 /** The pictures made while the guide is open, ahead of everything built behind the lobby and whatever holds it
  *  (called each frame it's open, from main.ts): the player is looking at them. */
@@ -194,6 +201,7 @@ function requeue(): void {
 /** `m` done with, its picture (or none) given to whoever waits for it. */
 function finished(m: Making, pic: HTMLCanvasElement | null): void {
   making = making.filter((x) => x !== m);
+  if (own === m.id) own = null;
   pending = pending.filter((who) => who !== m.id);
   try { m.scene.remove(m.model.root); disposeGeometries(m.model.root); } catch { /* let go as it is */ }
   settle(m.id, pic);
@@ -221,7 +229,7 @@ function* steps(): Generator<void, void, undefined> {
           if (c.sync) gl.deleteSync(c.sync);
           const pic = piece(`${c.m.id}: copied`, () => copied(r.domElement));
           const times = portraitTimes.get(c.m.id);
-          if (times) times.drawn = perfClock.now();
+          if (times) times.onCard = times.drawn = perfClock.now();
           // (kept for a later visit, encoded off the page's thread: nothing waits on it)
           if (CACHE.on && !portraitPlant.allAtOnce) pic.toBlob((blob) => { if (blob) keep(c.m.id, blob); }, 'image/png');
           piece(`${c.m.id}: let go`, () => finished(c.m, pic));
@@ -247,6 +255,8 @@ function* steps(): Generator<void, void, undefined> {
             const gl = r.getContext() as WebGL2RenderingContext;
             copying = { m: ready, sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0) };
             gl.flush();
+            const times = portraitTimes.get(ready.id);
+            if (times) times.sent = perfClock.now();
           });
         }
       } catch (err) {
@@ -262,13 +272,18 @@ function* steps(): Generator<void, void, undefined> {
     const sending = making.filter((m) => m.textures.length).sort((x, y) => order(x) - order(y))[0];
     const next = pending.find((id) => !made.has(id) && !making.some((m) => m.id === id));
     const firstWaits = sending && order(sending) === 0;
-    if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits))) {
+    const ownMaking = making.some((m) => m.id === own);
+    if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits && !ownMaking))) {
       try {
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
         const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
         yield;
+        // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
+        // a frame behind the lobby, past `lab behind`'s 30)
         const { scene, camera } = piece(`${next}: staged and framed`, () => staged(model));
+        yield;
         const swaps = piece(`${next}: its textures made small`, () => smallTextures(model.root));
+        yield;
         const m: Making = { id: next, model, scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
         making.push(m);
         if (portraitPlant.allAtOnce) {
@@ -280,8 +295,8 @@ function* steps(): Generator<void, void, undefined> {
           const asked = perfClock.now();
           const compiled = (): void => {
             m.compiled = true;
-            portraitTimes.set(next, { compiled: perfClock.now(), drawn: Infinity });
-            portraitPieces.push({ what: `${next}: its compile waited for (the browser's, not the page's)`, ms: perfClock.now() - asked, waited: true });
+            portraitTimes.set(next, { compiled: perfClock.now(), sent: Infinity, onCard: Infinity, drawn: Infinity });
+            portraitPieces.push({ what: `${next}: its compile waited for (the browser's, not the page's)`, at: asked, ms: perfClock.now() - asked, waited: true });
             requeue();
           };
           // (its commands sent at once, so the browser can start on it while this context waits)

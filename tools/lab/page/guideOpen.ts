@@ -40,6 +40,35 @@ const MOST_REAL_MS = 20000;
 /** the longest every picture may take to be drawn from G (ms, by the browser's clock), the browser's compiles in it:
  *  in the lab's browser on the owner's PC, 8 to 10 s (made behind the lobby alone, as they were, never) */
 const PICTURES_MS = 20000;
+/** `who`'s picture's pieces of the page's own work, how many and how long in all, with the compile it waited for: what
+ *  a late picture spent its time on. */
+function piecesOf(who: string, from: number): string {
+  const own = portraits.portraitPieces.filter((p) => p.what.startsWith(`${who}:`));
+  const worked = own.filter((p) => !p.waited);
+  const waited = own.filter((p) => p.waited).reduce((sum, p) => sum + p.ms, 0);
+  const sum = worked.reduce((total, p) => total + p.ms, 0);
+  // (each with when it began, from the page's opening or its compile's end: where a late picture waited)
+  const each = worked.map((p) => `${p.what.slice(who.length + 2)} ${p.ms.toFixed(0)} at ${(p.at - from).toFixed(0)}`);
+  return `${worked.length} pieces, ${sum.toFixed(0)} ms in all (${each.join(', ')}); its compile waited ${waited.toFixed(0)} ms`;
+}
+
+/**
+ * How long the card spent on the pictures' draws between `from` and `to` (ms): the browser's work, left out of the
+ * page's time as its compile is. A program's first draw is where ANGLE compiles it for the card
+ * (`docs/agents/shaders.md`): the Twins' draws were sent before their pages opened and the card had them done 200 to
+ * 350 ms after, every piece of the page's own in a frame of the opening; and one picture is drawn at a time, so a
+ * page's own waited for the card to finish the picture before it (`lab guide`'s late pieces, each with when it began).
+ * The draws are one after another, so their times on the card never overlap.
+ */
+function onCard(from: number, to: number): number {
+  let ms = 0;
+  for (const times of portraits.portraitTimes.values()) {
+    const end = Math.min(times.onCard, to);
+    if (Number.isFinite(end)) ms += Math.max(0, end - Math.max(times.sent, from));
+  }
+  return ms;
+}
+
 /** the longest a page's own picture may take to be drawn from the page's opening, or from the end of its compile if
  *  that came later (ms, by the browser's clock): a frame or two, a few more on a busy PC */
 const SHOWN_MS = 150;
@@ -104,7 +133,7 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
     for (let i = 0; i < 5; i++) await timed(`frame ${i + 1} after the opening`);
     // (every section and every entry, a frame each, and each page's own picture waited for)
     let pages = 0;
-    const shown: { who: string; ms: number; frames: number; compiling: number }[] = [];
+    const shown: { who: string; from: number; ms: number; frames: number; compiling: number }[] = [];
     // (every place waiting for its picture must show its spinner: its turning ring, the place's `::after`)
     const bare = new Set<string>();
     let waitingSeen = 0;
@@ -118,13 +147,23 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
       }
     };
     for (const section of ['foes', 'bosses', 'heroes', 'tips']) {
+      const sectionAt = realNow();
       document.querySelector<HTMLElement>(`#guide [data-gs="${section}"]`)!.click();
+      const sectionMade = realNow();
+      frames.push({ what: `${section}'s list made`, ms: sectionMade - sectionAt, from: sectionAt, to: sectionMade });
+      await realWait(0);
       await timed(`${section} opened`);
       const entries = [...document.querySelectorAll<HTMLElement>('#guide [data-ge]')].map((e) => e.dataset.ge!);
       for (const entry of entries) {
         const start = realNow();
         document.querySelector<HTMLElement>(`#guide [data-ge="${entry}"]`)!.click();
-        frames.push({ what: `${section}: ${entry}'s page made`, ms: realNow() - start });
+        // (its times kept as a frame's: a long task in it is named by it, not by the frame before)
+        const made = realNow();
+        frames.push({ what: `${section}: ${entry}'s page made`, ms: made - start, from: start, to: made });
+        // (the browser let go after the click, as a player's click is a task of its own and the game's frame another:
+        // stepped in the same task, a page's click, the spinners' styles read and the frame after it were one long
+        // task, the mage's 150 to 195 ms, where in a page of its own the same page made none)
+        await realWait(0);
         spinners();
         await timed(`${section}: ${entry} shown`);
         // (its own picture waited for, as a player looks at it: frames on till it's drawn)
@@ -138,9 +177,12 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
             frameCount++;
           }
           const who = own.dataset.foe! as portraits.Who;
-          const compiled = portraits.portraitTimes.get(who)?.compiled ?? -Infinity;
+          const times = portraits.portraitTimes.get(who);
+          const compiled = times?.compiled ?? -Infinity;
           const from = Math.max(start, compiled);
-          shown.push({ who, ms: own.classList.contains('waiting') ? Infinity : realNow() - from, frames: frameCount, compiling: compiled > start ? compiled - start : 0 });
+          const now = realNow();
+          const ms = own.classList.contains('waiting') ? Infinity : now - from - onCard(from, now);
+          shown.push({ who, from, ms, frames: frameCount, compiling: compiled > start ? compiled - start : 0 });
         }
         drawn();
         pages++;
@@ -197,6 +239,7 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
       `long tasks of the page's: ${tasks.length}${before.length ? ` (and ${before.length} begun before G, the lobby's own: ${before.map((t) => `${t.ms.toFixed(0)} ms`).join(', ')})` : ''}; programs the game's renderer linked: ${linked}`,
       `the browser's compiles of the pictures, waited for: ${compiles.length ? `${compiles.length}, ${Math.min(...compiles).toFixed(0)} to ${Math.max(...compiles).toFixed(0)} ms, ${compiles.reduce((a, b) => a + b, 0).toFixed(0)} ms in all (the longest: ${slowCompiles})` : 'none'}`,
       `the pictures' renderer made in ${portraits.portraitPieces.find((p) => p.what === 'the renderer made')?.ms.toFixed(1) ?? '(not this walk)'} ms; their slowest pieces: ${slowestPieces.map((p) => `${p.what} ${p.ms.toFixed(1)} ms`).join('; ') || 'none'}`,
+      ...lateShown.map((s) => `  ${s.who}, late: ${piecesOf(s.who, s.from)}`),
     ];
     const slow = longest.ms > MOST_MS;
     const late = allDrawn > PICTURES_MS;

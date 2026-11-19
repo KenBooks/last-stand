@@ -303,19 +303,35 @@ class AreaPass extends Pass {
   private steps = [[64, 36], [16, 9], [4, 3]].map(([w, h]) => new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: false }));
   readonly small = this.steps[1];
   readonly large = this.steps[2];
+  /**
+   * The first grid's scene read before the arms through the eyes are drawn over it (`readBefore`), its bloom added
+   * after: the eye adapts to the world, not to the weapon held a hand from it. Read with them, a warrior's axe filled
+   * much of a dark area of the 16x9 grid and raised its average, and the grade darkened the rest of that area round it,
+   * the far portal and the trees beside it, by up to 0.19 of white (#427, `lab haze --class warrior --facings 270`).
+   * Read texel for texel (nearest), as the first grid is drawn at its size.
+   */
+  private before = new THREE.WebGLRenderTarget(64, 36, {
+    type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+  });
+  /** whether this frame's first grid was read before the arms (`readBefore`) */
+  private readFirst = false;
   private mat = new THREE.ShaderMaterial({
     uniforms: {
       tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() },
       uFirst: { value: 0 }, tBloom: { value: null as THREE.Texture | null },
-      tSightDepth: { value: null as THREE.Texture | null },
+      tSightDepth: { value: null as THREE.Texture | null }, tBefore: { value: null as THREE.Texture | null },
     },
     vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     // 8x8 bilinear taps spread over the output texel: a box average of its footprint
     fragmentShader: /* glsl */`
       uniform sampler2D tDiffuse; uniform vec2 uStep; uniform float uFirst; uniform sampler2D tBloom; varying vec2 vUv;
+      uniform sampler2D tBefore;
       ${SCENE_READ}
-      // (the first grid's: the scene as the grade reads it, bloom with it: the eye adapts to the halos too)
+      // (uFirst: 0 a grid from the one before it; the first grid's 1 the scene as the grade reads it, bloom with it, as
+      // the eye adapts to the halos too; 2 the scene alone, before the arms are drawn; 3 bloom, added to that)
       vec3 lightAt(vec2 at) {
+        if (uFirst > 2.5) return texture2D(tBloom, at).rgb;
+        if (uFirst > 1.5) return sceneAt(tDiffuse, at).rgb;
         if (uFirst > 0.5) return sceneAt(tDiffuse, at).rgb + texture2D(tBloom, at).rgb;
         return texture2D(tDiffuse, at).rgb;
       }
@@ -323,7 +339,9 @@ class AreaPass extends Pass {
         vec3 s = vec3(0.0);
         for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
           { vec3 v = lightAt(vUv + (vec2(float(x), float(y)) - 3.5) * uStep); s += any(isnan(v)) || any(isinf(v)) ? vec3(0.0) : min(v, vec3(64.0)); }
-        gl_FragColor = vec4(s / 64.0, 1.0);
+        s /= 64.0;
+        if (uFirst > 2.5) s += texture2D(tBefore, vUv).rgb;
+        gl_FragColor = vec4(s, 1.0);
       }`,
     depthTest: false, depthWrite: false,
   });
@@ -331,16 +349,29 @@ class AreaPass extends Pass {
   /** what it draws with (`compilePasses`) */
   get material(): THREE.ShaderMaterial { return this.mat; }
   constructor() { super(); this.needsSwap = false; }
+  /** The first grid's scene read from `scene` as it stands, before the arms are drawn over it (`before`); the target
+   *  bound after is the caller's to set. */
+  readBefore(r: THREE.WebGLRenderer, scene: THREE.WebGLRenderTarget): void {
+    this.mat.uniforms.uFirst.value = 2;
+    this.mat.uniforms.tDiffuse.value = scene.texture;
+    this.mat.uniforms.uStep.value.set(1 / this.before.width / 8, 1 / this.before.height / 8);
+    r.setRenderTarget(this.before);
+    this.quad.render(r);
+    this.readFirst = true;
+  }
   override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
     let src = read;
+    this.mat.uniforms.tBefore.value = this.before.texture;
     for (const dst of this.steps) {
-      this.mat.uniforms.uFirst.value = src === read ? 1 : 0;
+      const first = src === read;
+      this.mat.uniforms.uFirst.value = !first ? 0 : this.readFirst ? 3 : 1;
       this.mat.uniforms.tDiffuse.value = src.texture; src = dst;
       // taps an eighth of an output texel apart
       this.mat.uniforms.uStep.value.set(1 / dst.width / 8, 1 / dst.height / 8);
       r.setRenderTarget(dst);
       this.quad.render(r);
     }
+    this.readFirst = false;
   }
 }
 
@@ -1531,7 +1562,12 @@ export function render(): void {
   gpuMarks.mark('scene');
   if (VILLAGE) matricesOfShownOnly(G.scene);
   gl.render(G.scene, G.camera);
-  if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
+  if (armsFov !== null) {
+    gpuMarks.mark('arms');
+    areaPass.readBefore(gl, sceneRT);
+    gl.setRenderTarget(sceneRT);
+    drawArmsOver();
+  }
   composer.render();
   shotTaken();
   gpuMarks.mark('overlay');

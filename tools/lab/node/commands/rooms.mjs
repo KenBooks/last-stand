@@ -21,7 +21,7 @@ export default {
   },
   async each(side, options) {
     // (a relay of the lab's own, server/relay: its packages installed by npm ci --prefix server/relay)
-    const { runRooms } = await import('./rooms.mjs');
+    const { runRooms } = await import('../rooms.mjs');
     return runRooms(side, { canary: Boolean(options.canary) });
   },
   textOf: asText,

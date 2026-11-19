@@ -52,8 +52,9 @@ const DASH_AFTER = 20;
 const FREED_WITHIN = 3;
 const DASHED = 1;
 /** in `shot`, how far towards the Hulk along the vine the bow is aimed (m: drawn as the vine is sent, so the arrow
- *  leaves while it holds him), and within how many frames of the loose the vine must let go */
-const SHOT = { ahead: 2.5, freedWithin: 15 };
+ *  leaves while it holds him), within how many frames of the loose the vine must let go, and how many frames into
+ *  the hold it is let go */
+const SHOT = { ahead: 2.5, freedWithin: 15, loosedAfter: 10 };
 /** the canary's faults: a splash this wide (m), a vine catching this far off its line (m) */
 const CANARY = { splash: 6, reach: 4 };
 
@@ -264,7 +265,10 @@ async function vineAt(lab: Lab, options: ThrowsOptions, how: VineCase, def: Thro
   const input = (f: number): Frame => {
     if (how === 'step') return { keys: f < 50 ? ['d'] : [] };
     if (how === 'onto') return { keys: f < ASIDE_FRAMES ? ['d'] : f >= BACK_AT && heldFrom < 0 ? ['a'] : [] };
-    if (how === 'shot' && bow) return pressing(bow.key, vineSpot, f < Math.round(holdFor(bow.def) * 60));
+    // (let go `SHOT.loosedAfter` frames into the hold, drawn as far as it is then: held for its whole draw, the
+    // quiver's fetch with it, the arrow left a frame after the vine let him go, on main too)
+    const caught = heldFrom >= 0 && frame >= heldFrom + SHOT.loosedAfter;
+    if (how === 'shot' && bow) return pressing(bow.key, vineSpot, !caught && f < Math.round(holdFor(bow.def) * 60));
     if (heldFrom < 0) return {};
     if (how === 'dash' && dash) {
       // (pressed once held a while, and let go after the skill's own hold: an aimed one goes as it's let go)

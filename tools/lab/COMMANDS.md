@@ -725,7 +725,10 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `--trace` lists every hard-thrown body frame by frame: each point's clearance as drawn, its pose's error, its
   point's own clearance, a prop touched, and its fastest point (what keeps a body from lying still). `--pictures`
   (on by default) pictures the bodies as the player sees them, and close from the hero's left and from behind, at
-  0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame,
+  0.15 s, at 0.5 s and lying still, into `out/death`; those stand back to frame every body, and a few centimetres
+  of an arm in the floor don't show in them. `--close` pictures each skill's body that lay deepest under the floor
+  close up from its left, its right and behind, framed on that part at that frame, its pass cast again as it was
+  (with `--ab`, each side's own deepest: a change to the aim fells other bodies). `--canary` puts a body a metre under the floor for a frame,
   throws one back at the hero, and turns the first struck off its middle the other way.
 - `heard <skills>`: the sounds each skill plays as its key is held (`page/heard.ts`): foes stand where it strikes and
   it's cast at them as `hits` casts it (`castAt`), its key held as a player holds it (`cast.ts` `holdFor`: a drawn

@@ -19,6 +19,7 @@ import { mulberry } from '../util';
 import { sfx } from '../core/audio';
 import { completeStep } from '../game/training';
 import { input, isDown } from '../core/input';
+import { uiScales } from './scale';
 
 /** what the map shows of the world (m): x and z from, to, the parchment's shape (the crypt's court reaches 46 m east:
  *  at 39 it ran off the parchment's edge; the palisade goes round the hall of heroes' back at 39 m north) */
@@ -29,9 +30,14 @@ export const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
 /** the least gap between two names side by side, how far in a pointer stays from its name's corners, and the rounds
  *  names are pushed apart in (css px, at the reference layout's scale for the first two) */
 const NAME_GAP = 3, TAIL_IN = 3, NAME_ROUNDS = 12;
+/** how far a name stands over or under its place, for its pointer (px of the reference layout: `ui(8px)` in
+ *  _villageMap.scss) */
+const NAME_OFF = 8;
 /** the objects named beside their places (to the east), not over them: the rack's, which over it stood in one row with
  *  the Sparring Shade's and the campfire's, the three pushed into strips across a phone's sheet */
 const NAMED_BESIDE = new Set(['rack']);
+/** where in the training yard its name points: a share of the way from its middle to its back */
+const YARD_NAMED_AT = 0.45;
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */
@@ -136,7 +142,10 @@ export function initVillageMap(h: VillageMapHooks): void {
   yard.className = 'vm-name';
   yard.dataset.use = 'yard';
   yard.textContent = 'Training Yard';
-  const [yx, yz] = yardToWorld(0, 0), [yu, yv] = toSheet(yx, yz);
+  // (its name points into its back half, where nothing else is named: at its middle the name stood in one row with the
+  // Weapons Rack's, beside it at the fence, and on a 1920x1080 screen the two were pushed apart, the rack's 83 px off
+  // its swords and still on the yard's)
+  const [yx, yz] = yardToWorld(0, 0), [yu, yv] = toSheet(...yardToWorld(0, YARD_NAMED_AT * YARD.halfZ));
   yard.style.left = `${yu * 100}%`;
   yard.style.top = `${yv * 100}%`;
   yard.addEventListener('click', () => {
@@ -270,38 +279,50 @@ function layFolds(k: number, fade: number): void {
   sheet.style.opacity = fade.toFixed(3);
 }
 
-/**
- * The names moved aside as far as they need to lie clear of each other and within the sheet, each pointer still at its
- * place: the Chronicle and the Stash stand either side of the hall's porch, and the one lay over the other (from play,
- * "need to fix the map, there is overlap"). Their sizes follow the UI's scale and the sheet the window's, so it's done
- * for the size it's shown at.
- */
-function layNames(): void {
-  const across = sheet.clientWidth, down = sheet.clientHeight;
-  const all = [...sheet.querySelectorAll<HTMLElement>('.vm-name')];
-  // (each measured at its own width, a widening of a size before let go)
-  for (const el of all) el.style.width = '';
-  const names = all.map((el) => {
-    // (its own middle: a name's height over its place, or beside it, half its height off)
-    const beside = el.classList.contains('beside');
-    return {
-      el,
-      beside,
-      x: (parseFloat(el.style.left) / 100) * across + (beside ? (el.offsetHeight + el.offsetWidth) / 2 : 0),
-      y: (parseFloat(el.style.top) / 100) * down - (beside ? 0 : el.offsetHeight),
-      wide: el.offsetWidth,
-      tall: el.offsetHeight,
-      aside: 0,
-    };
-  });
+/** A name on the map as `layNames` lays it out (css px of the sheet): its middle at its place, how far aside it's
+ *  moved, and whether it stands beside or below its place. */
+interface LaidName {
+  el: HTMLElement;
+  beside: boolean;
+  below: boolean;
+  /** its place on the sheet */
+  placeX: number;
+  placeY: number;
+  x: number;
+  y: number;
+  wide: number;
+  tall: number;
+  aside: number;
+}
+
+/** `name`'s middle as it stands over its place, beside it or below it (its pointer between). */
+function standName(name: LaidName): void {
+  const { el } = name;
+  name.x = name.placeX + (name.beside ? (el.offsetHeight + el.offsetWidth) / 2 : 0);
+  // (its middle as drawn: its pointer's room, `ui(8px)` in _villageMap.scss, and half its height off its place)
+  const off = NAME_OFF * uiScales.ui + el.offsetHeight / 2;
+  name.y = name.placeY + (name.beside ? 0 : name.below ? off : -off);
+  name.wide = el.offsetWidth;
+  name.aside = 0;
+}
+
+/** How far `a` and `b` overlap across, if they lie in one row (0: clear of each other): one a row apart from the
+ *  other by less than the gap is in it (on a 751x298 phone the Campfire's touched the Sparring Shade's from below). */
+function overlapAcross(a: LaidName, b: LaidName): number {
+  if (Math.abs(a.y - b.y) >= (a.tall + b.tall) / 2 + NAME_GAP) return 0;
+  const [left, right] = a.x + a.aside <= b.x + b.aside ? [a, b] : [b, a];
+  const apart = right.x + right.aside - (left.x + left.aside);
+  return Math.max(0, (left.wide + right.wide) / 2 + NAME_GAP - apart);
+}
+
+/** The names pushed apart across, within the sheet `across` wide, each no further than its pointer reaches. */
+function pushApart(names: LaidName[], across: number): void {
   for (let round = 0; round < NAME_ROUNDS; round++) {
     for (const [i, a] of names.entries()) {
       for (const b of names.slice(i + 1)) {
-        if (Math.abs(a.y - b.y) >= (a.tall + b.tall) / 2) continue;
-        const [left, right] = a.x + a.aside <= b.x + b.aside ? [a, b] : [b, a];
-        const apart = right.x + right.aside - (left.x + left.aside);
-        const short = (left.wide + right.wide) / 2 + NAME_GAP - apart;
+        const short = overlapAcross(a, b);
         if (short <= 0) continue;
+        const [left, right] = a.x + a.aside <= b.x + b.aside ? [a, b] : [b, a];
         left.aside -= short / 2;
         right.aside += short / 2;
       }
@@ -309,14 +330,86 @@ function layNames(): void {
     for (const name of names) {
       const least = name.wide / 2 - name.x;
       const most = across - name.wide / 2 - name.x;
-      name.aside = Math.min(most, Math.max(least, name.aside));
-      // (widened as far as its pointer must reach under it: moved further than half its width on a narrow sheet, the
-      // pointer stopped at its end, off its place)
-      if (!name.beside) name.wide = Math.max(name.wide, 2 * (Math.abs(name.aside) + TAIL_IN));
+      // (moved no further than its pointer reaches under it, its place kept: widened to reach instead, the names of a
+      // phone's crowded row grew past the sheet and over each other; the one still lying on another stands below)
+      // (one beside its place not at all: its pointer is at its end, and any way aside took it off its place)
+      const reach = name.beside ? 0 : name.wide / 2 - TAIL_IN;
+      name.aside = Math.min(most, reach, Math.max(least, -reach, name.aside));
     }
   }
-  for (const { el, wide, aside } of names) {
+}
+
+/** How much the names lie over one another in all (px across), as `pushApart` left them. */
+function overlapsOf(names: LaidName[]): number {
+  let sum = 0;
+  for (const [i, a] of names.entries()) {
+    for (const b of names.slice(i + 1)) sum += overlapAcross(a, b);
+  }
+  return sum;
+}
+
+/** The names laid out again from their places, each that's `below` standing below its own. */
+function relay(names: LaidName[], across: number): number {
+  for (const name of names) standName(name);
+  pushApart(names, across);
+  return overlapsOf(names);
+}
+
+/** The name stood below its place that leaves the names lying least over one another (on the sheet `across` by
+ *  `down`), if any lessens it: whether one was. Every name of a crowded row lowered, they lay over each other below
+ *  it as they had above; the first that lessened it taken, a phone's (751x298) Campfire went down onto the Sparring
+ *  Shade's. */
+function lowerOne(names: LaidName[], across: number, down: number): boolean {
+  const before = overlapsOf(names);
+  if (before <= 0.5) return false;
+  const free = names.filter((n) => !n.beside && !n.below && n.placeY + 2 * n.tall <= down);
+  const crowded = free.filter((n) => names.some((o) => o !== n && overlapAcross(n, o) > 0.5));
+  let best: LaidName | null = null;
+  let least = before - 0.5;
+  for (const name of crowded) {
+    name.below = true;
+    const left = relay(names, across);
+    name.below = false;
+    if (left < least) {
+      least = left;
+      best = name;
+    }
+  }
+  if (best) best.below = true;
+  relay(names, across);
+  return best !== null;
+}
+
+/**
+ * The names moved aside as far as they need to lie clear of each other and within the sheet, each pointer still at its
+ * place: the Chronicle and the Stash stand either side of the hall's porch, and the one lay over the other (from play,
+ * "need to fix the map, there is overlap"). A name that still lies on another stands below its place, its pointer up:
+ * on a phone held sideways (844x390) the sheet is some 420 px across, and the six names along its lower row (the
+ * Thornwood's portal, Odo's, the Library, the Campfire, the yard, the rack) took some 600, pushed off the sheet and
+ * over each other. Their sizes follow the UI's scale and the sheet the window's, so it's done for the size it's shown at.
+ */
+function layNames(): void {
+  const across = sheet.clientWidth, down = sheet.clientHeight;
+  const all = [...sheet.querySelectorAll<HTMLElement>('.vm-name')];
+  // (each measured at its own width and over its place, a widening and a lowering of a size before let go)
+  for (const el of all) {
+    el.style.width = '';
+    el.classList.remove('below');
+  }
+  const names: LaidName[] = all.map((el) => {
+    const name = {
+      el, beside: el.classList.contains('beside'), below: false,
+      placeX: (parseFloat(el.style.left) / 100) * across, placeY: (parseFloat(el.style.top) / 100) * down,
+      x: 0, y: 0, wide: 0, tall: el.offsetHeight, aside: 0,
+    };
+    standName(name);
+    return name;
+  });
+  pushApart(names, across);
+  for (let lowered = 0; lowered < names.length && lowerOne(names, across, down); lowered++);
+  for (const { el, wide, aside, below } of names) {
     const reach = wide / 2 - TAIL_IN;
+    el.classList.toggle('below', below);
     if (wide > el.offsetWidth) el.style.width = `${wide.toFixed(1)}px`;
     el.style.setProperty('--aside', `${aside.toFixed(1)}px`);
     el.style.setProperty('--tail', `${Math.min(reach, Math.max(-reach, -aside)).toFixed(1)}px`);

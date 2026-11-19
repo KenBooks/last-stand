@@ -657,7 +657,11 @@ export class Lab {
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
+    // (from above, turned as the panels' lobby leaves it where the fixture names no turn: the village opens at one of
+    // its starts, at random, its camera turned to face it, and a run's view kept that turn; once the rooms took random
+    // numbers at boot, W walked `sheet`'s hero into the wall and `tap`'s drags pointed out at it)
     if (fixture.yaw !== undefined) turnTopDown(fixture.yaw, spot);
+    else if ((fixture.view ?? 'top') === 'top') turnTopDown(0, spot);
     // (standing still: an older tree's `place` kept the velocity, and the hero glided on from his spot)
     this.player.vel.set(0, 0, 0);
     this.player.facing = facing;
@@ -1435,7 +1439,11 @@ export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: st
   };
   const holdsOff = style !== 'shield' || Boolean(cls.bases?.offhand?.length);
   const can = weapon !== null && (style !== 'dual' || cls.dualWield) && holdsOff;
-  if (!can || weaponStyle(cls, gear) !== style) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
+  // (a class of one loadout has no style, whatever it holds: the ranger's bows are two-handers, and `lab weapons
+  // --class ranger` stopped at its first bow)
+  const held = weaponStyle(cls, gear);
+  const holds = held === null || held === style;
+  if (!can || !holds) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
   return gear;
 }
 

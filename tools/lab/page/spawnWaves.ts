@@ -70,7 +70,9 @@ export function riseOf(foe: Enemy, wave: number, group: number, order: number): 
     depth: offX * portal.dir.x + offZ * portal.dir.z,
     side: offX * -portal.dir.z + offZ * portal.dir.x,
     props: roomFromProps(x, z, foe.radius),
-    edge: G.arena.radius - Math.hypot(x, z) - foe.radius,
+    // (the wall as drawn, a gate's opening out to its portal: read off the ring at the arena's radius, a brute rising
+    // in a gate's mouth read 0.2 m past an edge no wall stands at)
+    edge: G.arena.wall.roomOut(x, z, foe.radius),
     reached: null,
   };
 }

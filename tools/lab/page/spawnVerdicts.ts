@@ -22,7 +22,7 @@ export interface Rise {
   side: number;
   /** its body's least distance from a prop's circle (m; under 0, it is inside one) */
   props: number;
-  /** its body's distance from the arena's edge (m) */
+  /** how far its body may go straight out before it meets the wall as drawn, a gate's opening out to its portal (m) */
   edge: number;
   /** a foe of the wave's first group: the game's time it came within its reach of the hero (s), null if it never did
    *  (or if it is of another group) */

@@ -13,6 +13,8 @@ import { perfClock } from '../../../src/ui/perfHud';
 import { openHall, toLobby } from './hallMoves';
 import { headsMadeHere, headsMadeHereSince } from '../../../src/entities/models/head';
 import { setQuality } from '../../../src/core/quality';
+import { portraitPieces } from '../../../src/ui/guide/portraits';
+import { BuildingWait } from './behindQueue';
 
 /** Options of `lab behind`. */
 export interface BehindOptions {
@@ -53,19 +55,34 @@ interface Building {
 async function frameByFrame(lab: Lab): Promise<Building> {
   const building: Building = { frames: 0, pieces: 0, heroes: 0, longest: 0, slowest: [] };
   const before = Player.built;
-  while (building.frames < MOST_FRAMES && (building.frames === 0 || behind.buildingBehind())) {
+  const wait = new BuildingWait(MOST_FRAMES, realNow);
+  while (wait.more(building.frames)) {
     await lab.step(1);
-    // Workers use the browser's real clock; advancing 1200 parked frames must not starve their replies.
-    if (!behind.behindFrame.pieces) await realWait(5);
+    // Workers use the browser's real clock; advancing 1200 parked frames must not starve their replies. A frame of
+    // pieces lets the browser go too: the guide's pictures wait a piece a frame for a boss's file to load and for the
+    // card's fence, which come on the browser's own time, and never let go they spun the 1200 frames away
+    await realWait(behind.behindFrame.pieces ? 0 : 5);
     building.frames++;
     building.pieces += behind.behindFrame.pieces;
     building.longest = Math.max(building.longest, behind.behindFrame.ms);
     building.slowest.push({ name: behind.behindFrame.slowest, ms: behind.behindFrame.longest });
   }
-  if (behind.buildingBehind()) throw new Error(`lab: behind: still building after ${MOST_FRAMES} frames`);
+  if (behind.buildingBehind()) throw new Error(`lab: behind: ${wait.left()}`);
   building.heroes = Player.built - before;
   building.slowest = building.slowest.sort((a, b) => b.ms - a.ms).slice(0, SLOWEST_LISTED);
   return building;
+}
+
+/** A building's slowest pieces, each named with its time. */
+function slowestOf(building: Building): string {
+  return building.slowest.map((piece) => `${piece.name} ${piece.ms.toFixed(1)} ms`).join(', ');
+}
+
+/** The guide's pictures' slowest pieces of the page's own work, named as it names them. */
+function guideSlowest(): string {
+  const own = portraitPieces.filter((piece) => !piece.waited);
+  const slowest = [...own].sort((a, b) => b.ms - a.ms).slice(0, SLOWEST_LISTED);
+  return slowest.map((piece) => `${piece.what} ${piece.ms.toFixed(1)} ms`).join(', ');
 }
 
 /** The heroes let go and built again behind the lobby, timed by the browser's clock (`canary`: all in one frame). */
@@ -163,15 +180,16 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
   }
   const { opening, choosing, programs } = await builtByChoosing(lab, canary);
   const changed = await afterDetailChange(lab, canary);
-  const slowest = building.slowest.map((s) => `${s.name} ${s.ms.toFixed(1)} ms`).join(', ');
   const lines = [
     `${heroes} heroes built behind the lobby in ${building.frames} frames, ${building.pieces} pieces: the longest `
       + `frame's building ${building.longest.toFixed(1)} ms (at most ${MOST_MS})`,
-    `the slowest pieces: ${slowest}`,
+    `the slowest pieces: ${slowestOf(building)}`,
     `then the hall's opening built ${opening} heroes, the ${G.player.cls.id} chosen in it ${choosing}`,
     `shared hero lights stayed in the scene; the first lobby draw compiled ${programs} programs`,
     `Back after a detail change: ${changed.misses} head pieces sculpted on the input thread${changed.what.length ? ` (${changed.what.join(', ')})` : ''}; `
       + `longest background build ${changed.building.longest.toFixed(1)} ms (at most ${MOST_MS}); repeated opening completed`,
+    `the slowest pieces after it: ${slowestOf(changed.building)}`,
+    `the guide's slowest pieces: ${guideSlowest()}`,
   ];
   const slow = building.longest > MOST_MS;
   const builtThen = opening + choosing > 0;

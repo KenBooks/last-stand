@@ -318,6 +318,10 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
         await viewBy(lab, view);
         if (view !== 'top') faceCamera(Math.atan2(CAMPFIRE[0] - at.x, CAMPFIRE[1] - at.z));
         await lab.step(SETTLE);
+        // (its light at its strength between puffs, whatever moment of them the clock left it at: the checks run
+        // before this one moved the clock, and its red read 23.8 after some, 29 alone; `rest` from world/fire.ts)
+        const puffed = light.intensity;
+        light.intensity = light.userData.rest ?? puffed;
         const shown = drawFrame(lab);
         const was = flames.visible;
         flames.visible = false;
@@ -341,6 +345,7 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
             + `${light.visible ? 'on' : 'off'}, changes ${(share * 100).toFixed(1)}%, adds ${added.toFixed(1)} of red`);
           if (added < LEAST_ADDED) problems.push(`the campfire's light adds ${added.toFixed(1)} of red by night`);
         }
+        light.intensity = puffed;
         said.push(`${hour}:00 ${view} ${(drawn * 100).toFixed(2)}%`);
         if (drawn < LEAST_DRAWN) problems.push(`the campfire's flames drew nothing at ${hour}:00 ${view}`);
         moments.push(await lab.screen(`campfire ${hour}h ${view}`, []));

@@ -70,3 +70,5 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `input.ts`: a body's aim goes `AIM_INTO` in from where the eye's ray meets the foe, towards the foe's middle, not on along the ray: from the camera's height the ray is steep, and carried on along it a shot meeting a foe's side was aimed past it (Briarflight's middle arrow felled nothing, `lab death`).
+- `renderer.ts`: the adaptation's first grid reads the scene before the arms through the eyes are drawn over it, their bloom added after (`AreaPass.readBefore`): read with them, the warrior's axe raised a dark area's average and the grade darkened the rest of it, the far portal and the trees beside it, by up to 0.19 of white (#427, `lab haze --class warrior --facings 270`: 2.1% of the frame hazed, now 0.0%). Only arms drawn by their own camera (`armsFov`, the warrior's) are left out: the ranger's and the mage's are drawn in the world's pass, and the ranger's bow still hazes 1.4% looking 90°.

@@ -42,6 +42,10 @@ export const queued = (key: string): boolean => jobs.some((job) => job.key === k
 /** Whether anything is building behind the lobby. */
 export const buildingBehind = (): boolean => jobs.length > 0;
 
+/** What's queued, first first, each with its heads' state (a harness's: `lab behind` names what never finished). */
+export const queuedBehind = (): string[] =>
+  jobs.map((job) => `${job.key}, piece ${job.piece}${headsReady(job.detail) ? '' : ', its heads not made'}`);
+
 /** `key`'s build moved to the head of the queue, its pieces next: it's wanted, but not worth a held frame. False if
  *  it isn't queued. */
 export function buildFirst(key: string): boolean {

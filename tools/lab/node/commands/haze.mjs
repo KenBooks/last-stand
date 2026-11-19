@@ -13,6 +13,8 @@ export default {
     + 'bloom past it (over 0.5% of the frame), and any pixel outside their own darkened by their light (the '
     + 'adaptation to a bright area spread round them as a veil; over 0.5% of the frame): tools/lab/out/haze (the '
     + 'frame, and its map: glare yellow, bloom pink, haze red)',
+  // (`check --every`'s command line: the warrior, whose weapons are in view through the eyes; the ranger's bow isn't)
+  audit: ['--class', 'warrior'],
   options: {
     biome: {
       kind: 'choice',

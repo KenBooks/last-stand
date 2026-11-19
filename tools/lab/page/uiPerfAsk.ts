@@ -22,10 +22,11 @@ const BUTTON_PX = 28;
 /** where a finger taps the world to put the page in touch mode, as shares of the window (clear of every control) */
 const TAP_AT = { x: 0.5, y: 0.4 };
 const TOUCH_FRAMES = 2;
-/** the canary's prompt, moved down to the middle of the window */
-const CANARY_TOP = '45%';
+/** the canary's prompt, moved to the window's top, where the choice stands (moved down to the middle, as it was, took
+ *  it away from the choice: under it already on a 1080 screen, it was never planted there) */
+const CANARY_TOP = '0px';
 /** the problem the canary must raise */
-export const ASK_CANARY = { name: 'lies over', what: 'the prompt moved down onto the choice' };
+export const ASK_CANARY = { name: 'lies over', what: 'the prompt moved up onto the choice' };
 
 function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
@@ -90,7 +91,7 @@ function askFound(state: string): AskFound {
   return { lines, problems };
 }
 
-/** The prompt checked; with the canary, again moved down onto the choice (the run's states: the lobby has none). */
+/** The prompt checked; with the canary, again moved up onto the choice (the run's states: the lobby has none). */
 export function perfAskShown(state: string, canary: boolean): AskFound {
   const found = askFound(state);
   if (!canary || !G.run) return found;

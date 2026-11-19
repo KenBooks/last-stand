@@ -111,7 +111,10 @@ export async function columnsCheck(_lab: Lab, options: ColumnsOptions): Promise<
     });
   }
   if (!options.canary) return { text: lines.join('\n'), problems };
-  const caught = problems.some((p) => p.includes('open edges'));
+  // (the planted hole is the first seed's first column's: caught, it's no problem, the rest still are)
+  const planted = (p: string): boolean => p.startsWith(`seed ${seeds[0]}, column 0:`) && p.includes('open edges');
+  const caught = problems.some(planted);
   lines.push(`canary: a triangle out of a break ${caught ? 'found' : 'unseen'}`);
-  return { text: lines.join('\n'), problems: caught ? problems : [...problems, 'canary: a planted hole went unseen'] };
+  const others = problems.filter((p) => !planted(p));
+  return { text: lines.join('\n'), problems: caught ? others : [...others, 'canary: a planted hole went unseen'] };
 }

@@ -6,6 +6,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { join, relative, resolve } from 'node:path';
 import { cpus } from 'node:os';
 import { CheckQueue, pageOf, planOf, taskName, tasksOf } from './checkQueue.mjs';
+import { everyJobs } from './checkEvery.mjs';
 import { compareReports } from './checkReports.mjs';
 import { isStopping } from './running.mjs';
 import { exportCommit } from './commits.mjs';
@@ -242,6 +243,7 @@ export function jobsOf(options, plan = CHECK_PLAN) {
       for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
     }
   }
+  if (options.every) jobs.push(...everyJobs([...Object.keys(plan), ...commands]).jobs);
   const shared = sharedOut(jobs, options.share);
   if (!options.only) return shared;
   const wanted = options.only.split(',');
@@ -547,6 +549,7 @@ export async function runCheck(options) {
   const others = tasks.length - jobs.length;
   const against = sha ? `, against ${sha.slice(0, 7)} (its side run for ${others}, kept for the rest)` : '';
   logLine(started, `${jobs.length} jobs in ${workers} sessions${against}`);
+  if (options.every) logLeftOut(started, options);
   const done = [];
   const times = {};
   const keepPages = options.reuse !== false;
@@ -567,6 +570,12 @@ export async function runCheck(options) {
   for (const result of failed) logLine(started, `  ${result.job.name}${whyFailed(result.problems ?? [])}`);
   const unlike = options.like ? logLikeness(jobs, options.like, started) : 0;
   return failed.length || unlike ? 1 : 0;
+}
+
+/** What `--every` left out of the check, each with why. */
+function logLeftOut(started, options) {
+  const { left } = everyJobs([...Object.keys(CHECK_PLAN), ...(options.commands ?? [])]);
+  for (const { command, why } of left) logLine(started, `  --every leaves out ${command}: ${why}`);
 }
 
 /** Each report this check wrote against `like`'s of the same name (`--like`), logged; how many differ. */

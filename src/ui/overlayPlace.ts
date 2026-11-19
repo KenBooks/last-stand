@@ -55,12 +55,12 @@ function boundsNow(): Bounds | null {
   return within;
 }
 
-/** `at` kept inside `within`. */
+/** `at` kept inside `within`, in whole px: rounded after it was kept in, a bound of a fraction left the overlay 0.2 px
+ *  past the window's edge (`lab touchpad`). */
 function inside(at: Offset, within: Bounds): Offset {
-  return {
-    x: Math.round(Math.max(within.left, Math.min(within.right, at.x))),
-    y: Math.round(Math.max(within.top, Math.min(within.bottom, at.y))),
-  };
+  const keep = (value: number, least: number, most: number): number =>
+    Math.max(Math.ceil(least), Math.min(Math.floor(most), Math.round(value)));
+  return { x: keep(at.x, within.left, within.right), y: keep(at.y, within.top, within.bottom) };
 }
 
 /** Where the player put the overlays, kept inside the window as it is now; null where they never moved them. */

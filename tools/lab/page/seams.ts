@@ -13,12 +13,14 @@
 import * as THREE from 'three';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { G } from '../../../src/state';
-import type { Frame, Lab, Report } from './lab';
+import type { Fixture, Frame, Lab, Report } from './lab';
 import { holdFor, pressing } from './cast';
 import { meshLabeller, placeVertices } from './geometry';
 
 /** What `lab seams` takes. */
 export interface SeamsOptions {
+  /** the run he's set up in */
+  fixture?: Fixture;
   /** list every seam's worst gap, not the worst alone */
   each?: boolean;
   canary?: boolean;
@@ -123,7 +125,10 @@ function findSeams(lab: Lab): { seams: Seam[]; pieces: Piece[] } {
   const meshes: THREE.SkinnedMesh[] = [];
   lab.model.root.traverse((object) => {
     const mesh = object as THREE.SkinnedMesh;
-    if (mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex) meshes.push(mesh);
+    // (a coarse shadow twin, castAsOne.ts, shares its piece's points: "sewn" to it, the canary moved the hand with its
+    // twin and read 0.1 mm of a 10 mm move)
+    const twin = Boolean(mesh.userData.shadowTwin);
+    if (mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex && !twin) meshes.push(mesh);
   });
   const points = builtPoints(meshes);
   const cell = (value: number) => Math.round(value / SAME_PLACE);
@@ -215,12 +220,17 @@ function gapAt(stitch: Stitch): number {
 function plantMove(mesh: THREE.SkinnedMesh, metres: number): () => void {
   const position = mesh.geometry.attributes.position;
   const shift = metres / mesh.getWorldScale(new THREE.Vector3()).x;
-  const move = (by: number) => { for (let vertex = 0; vertex < position.count; vertex++) position.setX(vertex, position.getX(vertex) + by); };
+  const move = (by: number) => {
+    for (let vertex = 0; vertex < position.count; vertex++) position.setX(vertex, position.getX(vertex) + by);
+  };
   move(shift);
   return () => move(-shift);
 }
 
 export async function seams(lab: Lab, options: SeamsOptions): Promise<Report> {
+  // (in a run, where he's armed: left in the village's lobby, he cast only where its start had put him in the yard,
+  // and the mage, put elsewhere, never attacked)
+  await lab.setup(options.fixture ?? {});
   const { seams: found, pieces } = findSeams(lab);
   const problems: string[] = [];
   const lines: string[] = [];

@@ -24,3 +24,4 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `tracesService.mjs`: one service a process, shared by the commands that run beside each other (`lab check`'s sessions): `server/traces` keeps its settings, its token among them, in its module, so a second command's start took the token and the first's read back answered 401. It takes the lab's pages on any port, and closes once every holder has let it go.

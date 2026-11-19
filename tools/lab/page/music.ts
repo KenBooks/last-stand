@@ -16,6 +16,7 @@ import { musicShown } from '../../../src/core/music';
 const BIOME_SETTING = import.meta.glob<{ setBiomeSetting(b: BiomeId): void }>('../../../src/game/biome.ts');
 import { MusicJudge, type Wanted } from './musicJudge';
 import { realWait } from './lab';
+import { holdHour } from '../../../src/game/clock';
 import { Ears, SourceLog } from './musicTap';
 
 export interface MusicOptions {
@@ -29,6 +30,11 @@ const EXPECTED: Record<BiomeId, { lobby: TrackId; battle: TrackId }> = {
   forest: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
   crypt: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
 };
+
+/** the hour the village is held at for each biome's round: its lobby's music is the hour's (`biomeOfHour` in
+ *  data/village.ts, the Thornwood's by day and the crypt's at dusk and by night), and the lab's own hour left the forest's
+ *  lobby playing the crypt's track (the panels' lobby plays its battleground's at any hour) */
+const HOUR_OF: Record<BiomeId, number> = { forest: 12, crypt: 0 };
 
 /** how long each stretch runs once its moment has come (s): past the longest fade into it or out of it */
 const LOBBY_SECONDS = 4.5;
@@ -261,6 +267,7 @@ async function banked(listening: Listening, biome: BiomeId): Promise<void> {
 
 /** A biome played through: its lobby, a run's two waves with the tab hidden in the second, and back. */
 async function round(listening: Listening, lab: Lab, biome: BiomeId): Promise<void> {
+  holdHour(HOUR_OF[biome]);
   await lobby(listening, biome);
   await countdown(listening, lab, biome);
   await fight(listening, biome, 1, 'top');
@@ -369,6 +376,7 @@ export async function music(lab: Lab, options: MusicOptions): Promise<Report> {
   } finally {
     log.remove();
     ears.remove();
+    holdHour(null);
   }
   return { text: lines.join('\n'), problems };
 }

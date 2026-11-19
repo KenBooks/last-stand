@@ -65,6 +65,18 @@ folder beside it.
   `--reuse=false` then `--like`. When pages were first kept, every part came out the same line for line.
 - **`--plan`** runs nothing: the order the sessions would take the jobs in and when each would be done, by what each
   took last time (`out/check/durations.json`: each task's own work and its boot apart).
+- **`--every`** audits the whole lab (`node/checkEvery.mjs`): every other command that runs on a page, a job each,
+  as its bare command line runs it and once more with each of its canaries (a choice's, `--canary=stall`, one a
+  plant), beside the check's own. A job runs as the hero its command defaults to (`guard`'s warrior), else the
+  ranger, with what its module's `audit` adds (`hood`'s mage in his helm, `perf`'s `--village`); a command that
+  needs its argument (`eval`, `match`...) or is named in `EVERY_SKIPS` is left out, the log saying why. The whole
+  lab, `check --every --commands gait,stops,range,form,feet,carry,eyes,cast,swing,rush,hits,log,village`, is about
+  380 jobs, 86 minutes on the lent 4080 with 8 sessions: run it there through Loaner, never on the shared PC. Its
+  first run (2026-11-18) failed 105 jobs, most of them commands no check had run since they were written: two
+  commands that imported themselves (`cloud`, `rooms`), canaries that reported the plant they caught as a problem
+  (`columns`, `trees`), measures that met the village the lab now boots (`portraits`, `wind`, `dev`), and the
+  laptop's load (8 sessions, its CPU held at 86%) behind the timing measures' failures: read a failure there
+  again with `--jobs 4 --only <names>` before chasing it.
 - **`npm run lab -- stop`** stops a check (`node/running.mjs`): stopped as a task under Git Bash, `npm run lab` left
   its command no line back to it, and a stopped check ran on to its end, eight browsers at full load.
 

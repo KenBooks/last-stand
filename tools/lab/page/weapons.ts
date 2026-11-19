@@ -35,18 +35,38 @@ const VIEWS: StudioView[] = [
 /** the least share of a picture a weapon must cover to count as drawn (a blade edge on covers under 1%) */
 const LEAST_DRAWN = 0.001;
 
-/** The weapon in the hero's right hand, a copy of it at its own frame (unturned in the fist), or none. */
+/** The weapon in the hero's hand (a bow's in his left), a copy of it at its own frame (unturned in the fist), or none. */
 function weaponCopy(lab: Lab): THREE.Object3D | null {
+  // (a bow's own tip is on the bow, its limb's: its `tip` is the nocked arrow's, under the right hand, which holds no
+  // weapon, and `lab weapons --class ranger` found none)
+  const bow = lab.model.weaponTip?.parent;
   const grip = lab.model.tip?.parent;
-  if (!grip || grip === lab.model.root) return null;
-  const shown = grip.children.find((child) => child.visible && child instanceof THREE.Group && hasMeshes(child));
+  if (!bow && (!grip || grip === lab.model.root)) return null;
+  const held = (child: THREE.Object3D): boolean => child.visible && child instanceof THREE.Group && hasMeshes(child);
+  const shown = bow ?? grip!.children.find(held);
   if (!shown) return null;
-  const copy = shown.clone();
+  const copy = cloneBare(shown);
   copy.position.set(0, 0, 0);
   copy.quaternion.identity();
   copy.scale.set(1, 1, 1);
   copy.updateMatrixWorld(true);
   return copy;
+}
+
+/** A clone of `object` with no `userData`, which three copies through JSON: the bow's points back at the bow. */
+function cloneBare(object: THREE.Object3D): THREE.Object3D {
+  const kept = new Map<THREE.Object3D, Record<string, unknown>>();
+  object.traverse((child) => {
+    kept.set(child, child.userData);
+    child.userData = {};
+  });
+  try {
+    return object.clone();
+  } finally {
+    kept.forEach((data, child) => {
+      child.userData = data;
+    });
+  }
 }
 
 function hasMeshes(object: THREE.Object3D): boolean {
@@ -105,7 +125,7 @@ export async function weapons(lab: Lab, options: WeaponsOptions): Promise<Report
   for (const base of bases) {
     await lab.setup({ ...options.fixture, gear: styleOf(lab, base), weapon: base });
     const copy = weaponCopy(lab);
-    if (!copy) throw new Error(`lab: weapons: no ${base} in the hero's right hand`);
+    if (!copy) throw new Error(`lab: weapons: no ${base} in the hero's hand`);
     const { tiles, least } = pictureOf(lab, copy);
     if (least < LEAST_DRAWN) problems.push(`the ${base} covers ${(least * 100).toFixed(1)}% of a picture: not drawn`);
     const notes = notesOn(copy);

@@ -44,9 +44,21 @@ export interface HazeOptions {
   canary: boolean;
 }
 
+/**
+ * Whether `object` is something a hand holds: shown, beside the hand's own mesh, with something in it (the mage's
+ * staff, the ranger's bow). The weapons a blow is measured by are named (`isWeapon`), and those alone missed the
+ * other heroes' held things: their haze said "no weapons in the frame" with the staff filling a third of it.
+ */
+function isHeld(object: THREE.Object3D): boolean {
+  const joints = G.player?.model.joints;
+  const parent = object.parent;
+  if (!joints || !parent || (parent !== joints.handL && parent !== joints.handR)) return false;
+  return object.visible && object.userData.drawnHand !== true && object.children.length > 0;
+}
+
 /** The parts the measure can take, each a test of whether an object is one (or the top of one). */
 const PARTS = {
-  weapons: isWeapon,
+  weapons: (object: THREE.Object3D) => isWeapon(object) || isHeld(object),
   hands: (object: THREE.Object3D) => object.userData.drawnHand === true,
 };
 type PartName = keyof typeof PARTS;

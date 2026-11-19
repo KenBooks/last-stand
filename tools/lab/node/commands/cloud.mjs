@@ -39,7 +39,7 @@ export default {
       const { runGoogleWindow } = await import('../googleWindow.mjs');
       return runGoogleWindow(side, { canary: Boolean(options.canary), pictures: options.pictures !== false });
     }
-    const { runCloud } = await import('./cloud.mjs');
+    const { runCloud } = await import('../cloud.mjs');
     return runCloud(side, { canary: Boolean(options.canary), pictures: options.pictures !== false });
   },
   textOf: asText,

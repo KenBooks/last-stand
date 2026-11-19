@@ -98,10 +98,27 @@ export async function slide(lab: Lab, from: PagePoint, to: PagePoint, finger = 0
 export async function showTouchControls(lab: Lab): Promise<void> {
   const pad = element('#touch-pad');
   if (pad.getBoundingClientRect().width >= 1) return;
-  const tap = { x: MARGIN, y: innerHeight / 2 };
+  const tap = onCanvas();
   await lab.touchDown(tap);
   await lab.touchUp();
   await lab.step(1);
+}
+
+/** the places a first tap tries, as shares of the window across and down: the left edge's middle first */
+const FIRST_TAPS: [number, number][] = [[0, 0.5], [0, 0.7], [0, 0.3], [0.5, 0.3]];
+
+/**
+ * A place on the left of the window where the run's canvas itself takes a tap. (At the left edge's middle a dev
+ * build has the developer mode's DEV tab: tapped there, the panel opened over the move pad, and every push in
+ * `touch`, `touchpad` and `tap` met its rows.)
+ */
+function onCanvas(): PagePoint {
+  const canvas = G.renderer.domElement;
+  for (const [across, down] of FIRST_TAPS) {
+    const at = { x: Math.max(MARGIN, across * innerWidth), y: down * innerHeight };
+    if (document.elementFromPoint(at.x, at.y) === canvas) return at;
+  }
+  throw new Error('lab: touch: no place on the left of the window where the canvas takes a tap');
 }
 
 /**
@@ -121,8 +138,11 @@ async function padStart(lab: Lab): Promise<PagePoint> {
   const pad = element('#touch-pad');
   const box = pad.getBoundingClientRect();
   const start = { x: box.left + MARGIN, y: box.top + box.height / 2 };
-  if (document.elementFromPoint(start.x, start.y) !== pad) {
-    throw new Error(`lab: touch: the move pad isn't under ${start.x},${start.y} (it shows in touch mode, in a run)`);
+  const there = document.elementFromPoint(start.x, start.y);
+  if (there !== pad) {
+    const what = there ? `${there.tagName.toLowerCase()}${there.id ? `#${there.id}` : ''}.${there.className}` : 'nothing';
+    throw new Error(`lab: touch: the move pad isn't under ${start.x},${start.y}, ${what} is (it shows in touch mode, `
+      + 'in a run)');
   }
   return start;
 }

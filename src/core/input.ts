@@ -173,6 +173,11 @@ function clearOfHero(r: THREE.Ray, from: number, most: number): number {
 /** a foe's or a prop's cylinder round it, for the cheap test: a little wider than its circle, its arms and its edges out of
  *  it (a foe's: as far as its body reaches, drawn, if that's further) */
 const ROUND = 1.3;
+/** how far in from a foe's surface, towards its middle, its point is aimed (m): within any foe's body, deeper than an
+ *  arrow's flight strays from the point */
+const AIM_INTO = 0.15;
+const _middle = new THREE.Vector3();
+
 /**
  * The aim along a ray from the eye: the first thing it meets, as it's drawn, whatever it is: a foe's body, a prop, the
  * floor (and with nothing within `far`, the point `far` along it). Its point goes into `input.ground`, `y` how high it is
@@ -204,6 +209,13 @@ function aimAlong(far: number, offHero = false): void {
     ray.far = best; _hits.length = 0;
     meet();
     for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; on = foe; }
+  }
+  // (a foe's point taken a little inside it, towards its middle: its surface alone, a crown seen from above, lay on the
+  // top of the dome, and a shot flying near level to it grazed over it and struck nothing, `lab shots`; taken along the
+  // eye's ray, a ray from above meeting a foe's side took it further aside, and the arrow passed it, `lab death`)
+  if (what === 'body' && on) {
+    _middle.set(on.pos.x, on.obj.position.y + on.height / 2, on.pos.z).sub(_best);
+    _best.addScaledVector(_middle, Math.min(1, AIM_INTO / Math.max(_middle.length(), 1e-6)));
   }
   ray.far = Infinity;
   input.foe = what === 'body' ? on : null;

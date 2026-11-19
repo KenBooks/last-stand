@@ -28,6 +28,11 @@ export default {
       help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the '
         + 'hero, one struck off its middle turned the other way',
     },
+    close: {
+      kind: 'switch',
+      help: 'picture each skill\'s body that lay deepest under the floor close up, framed on that part, at that '
+        + 'frame (its pass cast again as it was): a change to how bodies lie, before and after with --ab',
+    },
     trace: {
       kind: 'switch',
       help: 'list each frame of each body each skill throws hard: each point\'s height over the floor less its size, '
@@ -44,6 +49,7 @@ export default {
       pictures: options.pictures !== false,
       canary: Boolean(options.canary),
       trace: Boolean(options.trace),
+      close: Boolean(options.close),
     };
     return side.command('death', command);
   },

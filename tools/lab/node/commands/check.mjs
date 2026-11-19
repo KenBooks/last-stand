@@ -72,6 +72,11 @@ export default {
         + 'tools/lab/out/check), how each run went aside: fails on any that differs',
     },
     ab: COMMON_OPTIONS.ab,
+    every: {
+      kind: 'switch',
+      help: 'every other command that runs on a page too, as its bare command line runs it and once more with each '
+        + 'of its canaries, as its own hero or the ranger: the whole lab audited in one run (node/checkEvery.mjs)',
+    },
     fresh: COMMON_OPTIONS.fresh,
   },
 };

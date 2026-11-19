@@ -28,6 +28,8 @@ export default {
     + 'end by its own meshes, in the hero\'s frame, as the camera drawing his arms sees it), a blow in the frame '
     + 'with no trail, its newest end off the blade and a trail while the weapons are still are problems; the frame '
     + 'each strike lit most pictured: tools/lab/out/trail (--class warrior)',
+  // (`check --every`'s command line: the warrior's strikes)
+  audit: ['--class', 'warrior'],
   options: {
     strikes: {
       kind: 'list',
