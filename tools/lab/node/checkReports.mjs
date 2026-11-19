@@ -7,7 +7,7 @@ import { describeDifferences } from './compare.mjs';
 
 /** the lines that say how a run went, not what it found: a side booted or read back, and the command's time */
 const RUN_NOTES = [
-  /^\S.*: booted the \w+.*\(\d+(\.\d+)? s\)$/,
+  /^\S.*: booted the \w+.*\(\d+(\.\d+)? s(: [^)]*)?\)$/,
   /^\S.*: as it ran \S+ \(kept in .*\)$/,
   /^\(\d+(\.\d+)? s\)$/,
 ];

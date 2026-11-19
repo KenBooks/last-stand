@@ -26,7 +26,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 
 - **Can go, made again on the next run** (sizes as they stood on 2026-10-14, after a few weeks' work):
   - `tools/facelab/out/`: each run's renders and sheets, about 160 MB a run (8.3 GB);
-  - `tools/lab/out/` (7.2 GB): pictures, logs and the Vite servers' caches; `ab-cache/`, main's side of each A/B, run again by the next `--ab` (2.4 GB); `tmp/`, the browsers' profiles and Playwright's artifacts, which a run that was killed leaves behind (3.9 GB); `profiles/`, a check's sessions' browser profiles kept from check to check (each its maps and the GPU's cached programs, about 0.2 GB a session: a check after deleting it boots slower once);
+  - `tools/lab/out/` (7.2 GB): pictures, logs and the Vite servers' caches; `ab-cache/`, main's side of each A/B, run again by the next `--ab` (2.4 GB); `tmp/`, the browsers' profiles and Playwright's artifacts, which a run that was killed leaves behind (3.9 GB); `profiles/`, the browser profiles kept from run to run, a check's sessions' and a command's own (`command`) (each its maps and the GPU's cached programs, about 0.2 GB a session: a run after deleting it boots slower once);
   - `tools/stalls/out/`: traces and the installed Chrome's profiles (0.5 GB);
   - `tools/music/out/`, `tools/icons/out/`: a few MB;
   - `tools/photos/out/`: the Poly Haven textures it fetched, fetched again by the next `ground` (a few MB each).

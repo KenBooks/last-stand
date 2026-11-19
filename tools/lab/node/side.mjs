@@ -5,6 +5,7 @@
 // Every command runs on a page booted for it: a page a command has run on is left as that command left it (the
 // game's clock on, the hero wherever it took him), and a set-up on it started from another moment than a fresh
 // boot's, so the same command gave other numbers depending on what ran before it.
+import { BootSteps } from './bootSteps.mjs';
 import { createServer } from 'vite';
 import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -29,7 +30,7 @@ const BOOT_POLL_MS = 16;
 /** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
  *  clock holds, never settled, and every command after it waited on it, `status` too, till the server was stopped */
 const EVALUATE_TIMEOUT_MS = 60_000;
-const BOOTED = 'booted';
+const SHOWN = 'shown';
 
 /** What an expression that never settled is told. */
 function evaluateTimeoutText() {
@@ -38,28 +39,42 @@ function evaluateTimeoutText() {
     + 'window.__labClock.realFrame())';
 }
 
-/** In the page: whether its boot is over, `BOOTED` or what its loading screen says went wrong (src/ui/loading.ts
- *  `loadingFailed`); false while it's still loading, or while the fight's programs are still warmed behind the
- *  lobby, asked for at once (src/game/warm.ts: a page from before it has no `allWarm`). A `cold` boot asks for
- *  nothing: over once the lobby shows, the fight's and the other heroes' programs left cold as a first visit's. */
-function bootOutcome(cold) {
+/** In the page: whether its loading screen is gone (`SHOWN`), or what it says went wrong (src/ui/loading.ts
+ *  `loadingFailed`); false while it's still loading. */
+function loadingOutcome() {
   const loading = document.getElementById('loading');
   if (loading) return loading.classList.contains('failed') ? loading.textContent.trim() : false;
-  if (cold) return 'booted';
-  window.__dev?.hurry?.();
-  // The reveal parks requestAnimationFrame in the lab clock. Warm-ups still need those frames before Lab exists.
+  return 'shown';
+}
+
+/**
+ * In the page: everything the game warms after the lobby shows asked for at once and waited for (src/game/warm.ts;
+ * a page from before it has no `allWarm`), for at most `mostMs` of the browser's own time: whether it all came.
+ * The reveal parks the game's animation frames on the lab's clock, and the warm-ups step a frame at a time, so each
+ * frame is run here, then the page let go a task for what the frame set off (a warm-up's step resumes in a timeout
+ * after its frame), then the next. Run a frame a poll from Node (every 16 ms and a round trip each), the fight's,
+ * the heroes', the rooms' and the bosses' warm-ups took 23 to 27 s of a 45 to 52 s boot, about 35 ms a frame.
+ */
+async function warmAll(mostMs) {
   const clock = window.__labClock;
-  if (clock?.mode === 'manual' && window.__dev?.allWarm?.() === false) {
-    clock.t += clock.frame;
-    const callbacks = clock.queue.splice(0);
-    for (const callback of callbacks) callback(clock.t);
+  const start = clock.realNow();
+  const allWarm = () => window.__dev?.allWarm?.() !== false;
+  window.__dev?.hurry?.();
+  while (!allWarm()) {
+    if (clock.realNow() - start > mostMs) return false;
+    if (clock.mode === 'manual') {
+      clock.t += clock.frame;
+      const callbacks = clock.queue.splice(0);
+      for (const callback of callbacks) callback(clock.t);
+    }
+    await new Promise((resolve) => setTimeout(resolve));
   }
-  return window.__dev?.allWarm?.() === false ? false : 'booted';
+  return true;
 }
 
 /**
  * How a page boots: at `quality` (`low@518400`, the pixels let go; null: the lab's own, High), `cold` or
- * not (`bootOutcome`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
+ * not (`warmAll`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
  * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too. It
  * draws with `renderer`: WebGL, WebGPU or WebGPU with its GPU-driven drawing (`RENDERER_QUERIES`). Its lobby is the
@@ -523,7 +538,9 @@ export class Side {
    * program an earlier command had compiled was there for the next, which counted none). Returns whether it booted.
    */
   async ready(heroClass, how = LAB_BOOT, { used = false, clean = false } = {}) {
+    this.bootSteps = new BootSteps();
     await this.serve();
+    this.bootSteps.done('the server');
     if (this.isFresh(heroClass, how)) return false;
     const kept = used && this.isBooted(heroClass, how);
     if (kept && !(clean && (await this.compiledSinceLoad()) > 0)) return false;
@@ -544,7 +561,7 @@ export class Side {
    * Boots a page for `heroClass`: the game loaded with nothing kept from the last boot, the lab installed once the
    * loading screen is gone, and the hero checked, as `how` asks (`LAB_BOOT`'s fields). At its `quality`
    * (`low@518400`), it boots as a device that settled there: the boot's warm-ups run at that level, the
-   * hero built at its detail; `cold`, it asks for nothing warmed after the lobby (`bootOutcome`). A boot that fails
+   * hero built at its detail; `cold`, it asks for nothing warmed after the lobby (`warmAll`). A boot that fails
    * leaves no page behind (none counts as fresh).
    */
   async boot(heroClass, how = LAB_BOOT) {
@@ -560,6 +577,7 @@ export class Side {
         await lab.mapsCome();
         return lab.install().heroes();
       });
+      this.bootSteps?.done('the lab installed');
       if (booted.hero !== heroClass && how.first) {
         throw labError(`--first boots a first visit's hero, the ${booted.hero}: run it with --class ${booted.hero}`);
       }
@@ -698,6 +716,7 @@ export class Side {
   async bootBy(page, load, prefix, cold) {
     const failed = scriptFailure(page);
     await load();
+    this.bootSteps?.done('the page loaded');
     // (Chrome raises a page's renderer to normal priority as it shows it: lowered again to the lab's)
     await lowerProcesses(this.browser);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
@@ -706,10 +725,18 @@ export class Side {
     // screen to go alone, either was waited out to the timeout, three minutes)
     try {
       const outcome = await Promise.race([
-        page.waitForFunction(bootOutcome, cold, polling).then((booted) => booted.jsonValue()),
+        page.waitForFunction(loadingOutcome, null, polling).then((shown) => shown.jsonValue()),
         failed.promise,
       ]);
-      if (outcome !== BOOTED) throw labError(`${prefix}the game failed to boot: ${outcome}`);
+      if (outcome !== SHOWN) throw labError(`${prefix}the game failed to boot: ${outcome}`);
+      this.bootSteps?.done('the loading screen');
+      // (a cold boot asks for nothing: over once the lobby shows, the fight's and the other heroes' programs left cold
+      // as a first visit's)
+      if (!cold) {
+        const warm = await page.evaluate(warmAll, BOOT_TIMEOUT_MS);
+        if (!warm) throw labError(`${prefix}the warm-ups after the lobby weren't done in ${BOOT_TIMEOUT_MS / 1000} s`);
+        this.bootSteps?.done('the warm-ups');
+      }
     } catch (error) {
       const stage = await page.evaluate(() => {
         // (its text as shown: the loading screen holds a script of its own, whose source `textContent` read out as
