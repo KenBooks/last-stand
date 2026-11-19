@@ -7,6 +7,7 @@ import { perfClock } from '../ui/perfHud';
 import { atHeroDetail, heroDetail } from '../entities/models/armor';
 import { headsReady, preloadHeads } from '../entities/models/head';
 import { builtInSlices } from '../entities/models/steps';
+import { recorder } from '../perf/recorder';
 
 /** A build in pieces: `steps` builds a piece a `next()`, `done` takes what the last returns. */
 interface Job {
@@ -16,6 +17,10 @@ interface Job {
   piece: number;
   detail: number;
 }
+
+/** a piece that took this long (ms) is named in the performance trace's marks: a phone's lobby showed the stage
+ *  `hall` 150 to 323 ms in one frame, a single piece, and the trace couldn't say which (83ZZ-9EWC, DN9Z-YK8F) */
+const SLOW_PIECE_MS = 50;
 
 /** the builds queued, the first's pieces built first */
 const jobs: Job[] = [];
@@ -129,4 +134,7 @@ export function buildBehind(): void {
   }
   behindFrame.ms = perfClock.now() - start;
   owed = Math.max(0, behindFrame.ms - BEHIND.ms);
+  if (behindFrame.longest >= SLOW_PIECE_MS) {
+    recorder.mark(`behind the lobby: ${behindFrame.slowest} took ${Math.round(behindFrame.longest)} ms`);
+  }
 }

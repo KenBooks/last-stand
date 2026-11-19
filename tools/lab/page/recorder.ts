@@ -13,6 +13,7 @@ import { foesAhead } from './cast';
 import { quantile, timeCalls, type Timing } from './timing';
 import { G } from '../../../src/state';
 import { manualRecording } from './manualRecording';
+import { perfClock } from '../../../src/ui/perfHud';
 
 export interface RecorderOptions {
   /** frames played and timed */
@@ -57,6 +58,38 @@ function slowedBegin(ms: number): () => void {
 }
 
 /** The fight played `frames` frames, the recorder's calls timed; each frame's sum of them (ms). */
+/** how much slower one frame's render is made, for its frame callback's parts to be named (src/perf/frameParts.ts) */
+const SLOW_RENDER_MS = 150;
+/** the mark a slow frame callback leaves */
+const SLOW_FRAME_MARK = 'slow frame callback';
+
+/** One frame stepped with its render made `SLOW_RENDER_MS` slower, timed by the browser's clock (the page's stands
+ *  still within a frame), so the frame's parts are marked as a phone's slow frame's are. */
+async function slowRenderFrame(lab: Lab): Promise<void> {
+  const renderer = G.renderer as unknown as { render: (...args: unknown[]) => unknown };
+  const render = renderer.render;
+  const now = perfClock.now;
+  let slowed = false;
+  renderer.render = (...args: unknown[]) => {
+    if (!slowed) busyFor(SLOW_RENDER_MS);
+    slowed = true;
+    return render.apply(renderer, args);
+  };
+  perfClock.now = () => window.__labClock.realNow();
+  try {
+    await lab.step(1);
+  } finally {
+    renderer.render = render;
+    perfClock.now = now;
+  }
+}
+
+/** Whether the trace marks the slow frame with its render named. */
+function slowFrameMarked(trace: ReturnType<typeof decodeTrace>): string | undefined {
+  const marked = trace.header.marks.find(([, text]) => text.startsWith(SLOW_FRAME_MARK));
+  return marked && /render \d+/.test(marked[1]) ? marked[1] : undefined;
+}
+
 async function timedFight(lab: Lab, frames: number): Promise<number[]> {
   const timings: Timing[] = CALLS.map((method) => timeCalls(recorder, method));
   const drawing = lab.drawing;
@@ -139,6 +172,9 @@ async function traceNow(send: string, canary: boolean): Promise<{ lines: string[
   else problems.push(`the trace couldn't be sent: ${sent.error}`);
   if (!stages.length) problems.push('the trace holds no update stage');
   if (!casts) problems.push('the trace marks no cast, though the hero attacked throughout');
+  const slowFrame = slowFrameMarked(trace);
+  lines.push(`  a frame's render made ${SLOW_RENDER_MS} ms slower: ${slowFrame ? `marked "${slowFrame}"` : 'not marked'}`);
+  if (!slowFrame) problems.push('the trace doesn\'t name the slow frame\'s render in its marks');
   if (!(trace.header.frames > 0)) problems.push('the trace holds no frame');
   problems.push(...countsKept(trace.header.columns));
   if (!canary) return { lines, problems };
@@ -215,6 +251,7 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const lines = ['the always-on performance recorder, the basic attack held into the foes, every frame drawn:', fight.line];
   const problems: string[] = [];
   if (fight.mean > BUDGET_MS) problems.push(`the recorder took ${fight.mean.toFixed(3)} ms a frame, over ${BUDGET_MS}`);
+  await slowRenderFrame(lab);
   const trace = await traceNow(options.send, options.canary);
   lines.push(...trace.lines);
   problems.push(...trace.problems);
