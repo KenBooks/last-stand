@@ -65,6 +65,14 @@ function noParallelCompile() {
 /** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
 const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
 
+/**
+ * The page booted at a quality level the player chose (the `last-stand-quality` cookie, src/core/quality.ts), set
+ * before the page's scripts read it: two variants boot one build at two levels, what a level costs the boot.
+ */
+function quality(level) {
+  document.cookie = `last-stand-quality=${level}; path=/; max-age=31536000`;
+}
+
 /** The parts of a variant as the command line names it: `a+b` is `a` and `b` applied together, in turn. */
 export const partsOf = (name) => name.split('+');
 
@@ -105,6 +113,10 @@ export const VARIANTS = {
   noLoadout: { script: styled, arg: '#loadout { display: none !important; }' },
   noMenuRight: { script: styled, arg: '#menu .menu-right { display: none !important; }' },
   cpuCanvas: { script: cpuCanvas },
+  // (the boot at a level the player chose, Auto's cookie left aside: what each level costs it)
+  qualityHigh: { script: quality, arg: 'high' },
+  qualityMedium: { script: quality, arg: 'medium' },
+  qualityLow: { script: quality, arg: 'low' },
   noParallelCompile: { script: noParallelCompile },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
