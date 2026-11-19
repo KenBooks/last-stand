@@ -85,15 +85,15 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isWarming, want, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isReadying, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
-import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
 const COARSE_HANDS_UNDER = 0.2;
 import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
-import { checkPrograms, commandsDone, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
+import { checkPrograms, commandsDone, markLoaded, pinPrograms, programsCompiledInGame, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
@@ -1333,6 +1333,9 @@ function recordInputDelivery(force = false): void {
   }
 }
 
+/** the programs compiled in game as the frame before began: one more is a frame Auto leaves out */
+let compiledBefore = 0;
+
 function frame(timestamp: number): void {
   lastStep = performance.now();
   recordInputDelivery();
@@ -1350,8 +1353,14 @@ function frame(timestamp: number): void {
   // (the developer mode's time: frozen, slowed, a step)
   const simDt = dev ? dev.simDt(dt) : dt;
   if (!G.paused && revealed && simDt > 0) {
-    // The hall's three staged heroes aren't a play workload; keep its prepared detail stable for selection.
-    if (isWarming() || hallOpen()) holdQuality();
+    // (the loading's frames aren't the device's: the hall's three staged heroes, a warm-up, the loading bar, a program
+    // compiled at a draw; Auto starts again a settle after them)
+    const compiled = programsCompiledInGame();
+    const loading = loadingFrame({
+      warming: isWarming(), readying: isReadying(), hall: hallOpen(), compiled: compiled !== compiledBefore,
+    });
+    compiledBefore = compiled;
+    if (loading) holdQuality();
     else {
       // (each of Auto's steps marked in the performance trace: a slow start is Auto walking down from High)
       const stepped = sampleQuality(rawDt);

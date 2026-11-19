@@ -16,12 +16,20 @@
 // and must leave the phone's High too late; a boot that starts at the settled level as Auto used to, whose fast device
 // must be found never stepped back up; and the trial's cookie lost between boots, which must be found trying every
 // boot.
+// Then a strong GPU's real boot and lobby walk (`node/autoTraces/`: a performance trace's frames, the owner's 4070 Ti
+// in P307-C0HE) played through Auto from the level it had settled on and from a first visit's Low: Auto must end on
+// High, its GPU's frames far within the target's while its loading and its CPU held the frames up. Its canary is Auto
+// as main judged it (every frame but a warm-up's judged, the GPU's time unread, no try again): it must settle lower.
+// A device whose GPU is what's slow, its GPU times known, must still step down, and a fast device stepped down by a
+// stretch of slow frames with no GPU times must come back up within a try again's wait, a settle and a window.
 import type { Report } from './lab';
 import { AUTO_QUALITY } from '../../../src/data/quality';
 import type { QualityLevel } from '../../../src/data/quality';
 import {
-  autoAtBottom, autoSettled, autoTrying, bootAuto, qualityLevel, qualitySetting, sampleQuality, setQuality, useQuality,
+  autoAtBottom, autoSettled, autoTrying, bootAuto, holdQuality, loadingFrame, noteGpuFrame, qualityLevel,
+  qualitySetting, sampleQuality, setQuality, useQuality,
 } from '../../../src/core/quality';
+import { STATE } from '../../../src/perf/traceFormat';
 import { scenePixels } from '../../../src/core/renderer';
 import { removeCookie, writeCookie } from '../../../src/core/cookies';
 
@@ -30,8 +38,23 @@ const AUTO_COOKIE = 'last-stand-quality-auto';
 /** the missed trial's cookie, the boots it still skips (`TRIAL_COOKIE` in src/core/quality.ts) */
 const TRIAL_COOKIE = 'last-stand-quality-trial';
 
+/** A performance trace's frames as `lab auto` plays them (`node/autoTraces.mjs`). */
+export interface TraceFrames {
+  code: string;
+  gpuName: string;
+  /** when the game was shown (ms from the first frame): Auto samples nothing before */
+  shownAt: number;
+  /** the level each stretch was drawn at, from when (ms) */
+  levels: [number, QualityLevel][];
+  /** each frame's interval and the GPU's time for it (ms; -1 none), its states (`STATE`), the programs compiled */
+  interval: number[];
+  gpu: number[];
+  state: number[];
+  programs: number[];
+}
+
 /** What `lab auto` is given. */
-export interface AutoOptions { canary: boolean }
+export interface AutoOptions { canary: boolean; traces: TraceFrames[] }
 
 /** The slow device: its frame's time (ms) a million scene pixels at each level (High's MSAA and shadows dearest). */
 const DEVICE: Record<QualityLevel, number> = { high: 45, medium: 36, low: 29, verylow: 24 };
@@ -290,6 +313,155 @@ function walkLines(label: string, w: ReturnType<typeof walk>): string[] {
   ];
 }
 
+/** Auto's judgement as main had it before this measure: the GPU's time unread, a step down never tried again */
+const MAIN_PACE = { gpuFrames: Infinity, retry: Infinity };
+
+/** A frame's GPU cost at the level Auto is at, from the level it was drawn at (the slow device's ratios, `DEVICE`) */
+const gpuAt = (ms: number, drawn: QualityLevel, now: QualityLevel): number => ms * DEVICE[now] / DEVICE[drawn];
+
+/** The level `trace` was drawn at, `ms` from its first frame. */
+function drawnAt(trace: TraceFrames, ms: number): QualityLevel {
+  let drawn = trace.levels[0][1];
+  for (const [at, level] of trace.levels) if (at <= ms) drawn = level;
+  return drawn;
+}
+
+/** How a trace's play went through Auto: where it ended, what it keeps, its steps. */
+interface Played { end: QualityLevel; saved: QualityLevel; steps: string[] }
+
+/**
+ * `trace`'s frames from its reveal fed to Auto as the game feeds them (main.ts `frame`): a paused or hidden frame not
+ * sampled, a loading one held (as main held them, a warm-up's alone, when `asMain`), the GPU's time noted at the level
+ * Auto is at (scaled from the level the frame was drawn at), the frame as long as its GPU's time at least.
+ */
+function playTrace(trace: TraceFrames, asMain: boolean): Played {
+  const steps: string[] = [];
+  let ms = 0;
+  for (let i = 0; i < trace.interval.length; i++) {
+    ms += trace.interval[i];
+    const state = trace.state[i];
+    if (ms < trace.shownAt || state & (STATE.paused | STATE.hidden)) continue;
+    const compiled = i > 0 && trace.programs[i] > trace.programs[i - 1];
+    const warming = Boolean(state & STATE.warming);
+    const readying = Boolean(state & STATE.readying);
+    const loading = asMain ? warming : loadingFrame({ warming, readying, hall: false, compiled });
+    if (loading) {
+      holdQuality();
+      continue;
+    }
+    const gpu = trace.gpu[i] > 0 ? gpuAt(trace.gpu[i], drawnAt(trace, ms), qualityLevel()) : 0;
+    if (gpu > 0) noteGpuFrame(gpu);
+    const said = sampleQuality(Math.max(trace.interval[i], gpu) / 1000);
+    if (said) steps.push(`${(ms / 1000).toFixed(1)} s: ${said}`);
+  }
+  return { end: qualityLevel(), saved: autoSettled(), steps };
+}
+
+/** `trace` played from a boot of Auto's settled on `settled` (a first visit's when null), as main judged if
+ *  `asMain`. */
+function played(trace: TraceFrames, settled: QualityLevel | null, asMain: boolean): Played {
+  return withPace(asMain ? MAIN_PACE : {}, () => {
+    setQuality('auto');
+    if (settled) {
+      writeCookie(AUTO_COOKIE, settled);
+      writeCookie(TRIAL_COOKIE, '0/0');
+      bootAuto(settled);
+    }
+    return playTrace(trace, asMain);
+  });
+}
+
+/** A play in a line. */
+const playedLine = (label: string, p: Played): string => `  ${label}: at ${p.end}, ${p.saved} kept for the next `
+  + `boot${p.steps.length ? ` (${p.steps.join('; ')})` : ''}`;
+
+/** The kept traces of strong GPUs played from their settled level and a first visit's, each as main judged too. */
+function tracesPlayed(options: AutoOptions, problems: string[]): string[] {
+  const lines = ["A strong GPU's real boot and lobby walk played through Auto (its frames, its GPU's times):"];
+  for (const trace of options.traces) {
+    const settled = trace.levels[0][1];
+    const starts: [string, QualityLevel | null][] = [[`settled on ${settled}`, settled], ['a first visit', null]];
+    lines.push(`  ${trace.code} (${trace.gpuName}), ${trace.interval.length} frames:`);
+    for (const [start, level] of starts) {
+      const now = played(trace, level, false);
+      lines.push(playedLine(`  ${start}`, now));
+      if (now.end !== 'high' || now.saved !== 'high') {
+        problems.push(`${trace.code} ${start}: Auto ended at ${now.end} (${now.saved} kept), not High`);
+      }
+      if (!options.canary) continue;
+      const main = played(trace, level, true);
+      const caught = main.saved !== 'high';
+      lines.push(playedLine(`  canary, ${start} as main judged`, main));
+      lines.push(`    canary: main settling under High ${caught ? 'caught' : 'went unseen'}`);
+      if (!caught && level) problems.push(`canary: ${trace.code} ${start} as main judged went unseen`);
+    }
+  }
+  return lines;
+}
+
+/** A device's frames fed to Auto from `settled` for `seconds`: each frame (s) and its GPU's time (ms, 0: none
+ *  known). */
+function fed(settled: QualityLevel, seconds: number, frame: (at: number, level: QualityLevel) => [number, number],
+  pace: Partial<typeof AUTO_QUALITY> = {}): Played {
+  return withPace(pace, () => {
+    setQuality('auto');
+    writeCookie(AUTO_COOKIE, settled);
+    writeCookie(TRIAL_COOKIE, '0/0');
+    bootAuto(settled);
+    const steps: string[] = [];
+    for (let at = 0; at < seconds;) {
+      const [dt, gpu] = frame(at, qualityLevel());
+      at += dt;
+      if (gpu > 0) noteGpuFrame(gpu);
+      const said = sampleQuality(dt);
+      if (said) steps.push(`${at.toFixed(1)} s: ${said}`);
+    }
+    return { end: qualityLevel(), saved: autoSettled(), steps };
+  });
+}
+
+/** the stretch of slow frames in the hitch case (s from the boot) */
+const SLOW_STRETCH = { from: 8, to: 14 };
+/** how long the hitch case is fed (s): past its way back up */
+const HITCH_FED_S = 90;
+
+/** The GPU's say: a CPU-bound strong GPU kept on High, a GPU-bound one stepped down, a hitch's step come back. */
+function gpuCases(canary: boolean, problems: string[]): string[] {
+  const lines = ["The GPU's own time a frame:"];
+  // (40 fps for the CPU's work, the GPU 8 ms: no lower level helps)
+  const cpuBound = fed('high', BOOT_S, () => [1 / 40, 8]);
+  lines.push(playedLine('a strong GPU held to 40 fps by its CPU, the GPU 8 ms a frame', cpuBound));
+  if (cpuBound.end !== 'high') problems.push(`a CPU-bound strong GPU ended at ${cpuBound.end}, not High`);
+  // (the GPU the frame: 30 ms at High, its cost at each level as the slow device's)
+  const gpuBound = fed('high', BOOT_S, (_at, level) => {
+    const ms = 30 * DEVICE[level] / DEVICE.high;
+    return [ms / 1000, ms];
+  });
+  lines.push(playedLine('a GPU held to 33 fps by its GPU, its times known', gpuBound));
+  if (gpuBound.end === 'high') problems.push('a GPU-bound device with its GPU times known never stepped down');
+  // (a fast device with no GPU times, slowed for 6 s by something else: stepped down, then back once tried again)
+  const slowFor = SLOW_STRETCH.to - SLOW_STRETCH.from;
+  const slowed = (at: number): [number, number] => {
+    const slow = at >= SLOW_STRETCH.from && at < SLOW_STRETCH.to;
+    return [slow ? 1 / 30 : FAST_FRAME_S, 0];
+  };
+  const hitch = fed('high', HITCH_FED_S, slowed);
+  lines.push(playedLine(`a fast device with no GPU times, slowed ${slowFor} s once`, hitch));
+  // (its last step a window after the stretch at most, then the wait and a trial of each level it went down)
+  const trial = AUTO_QUALITY.settle + AUTO_QUALITY.window;
+  const back = SLOW_STRETCH.to + AUTO_QUALITY.window + AUTO_QUALITY.retry + 2 * trial + 2;
+  const keptAt = Number.parseFloat(hitch.steps.findLast((said) => said.includes('high kept')) ?? 'Infinity');
+  if (hitch.end !== 'high' || hitch.saved !== 'high') problems.push(`the slowed fast device ended at ${hitch.end}`);
+  else if (keptAt > back) problems.push(`the slowed fast device came back at ${keptAt.toFixed(1)} s, over ${back}`);
+  if (!canary) return lines;
+  const main = fed('high', HITCH_FED_S, slowed, MAIN_PACE);
+  const caught = main.saved !== 'high';
+  lines.push(playedLine('canary, the slowed fast device as main judged', main));
+  lines.push(`  canary: never tried again ${caught ? 'caught' : 'went unseen'}`);
+  if (!caught) problems.push('canary: the slowed fast device as main judged went unseen');
+  return lines;
+}
+
 export function autoQuality(options: AutoOptions): Report {
   const lines = [`Auto quality's walk down from High on a slow device (${DEVICE.high} ms a Mpx at High):`];
   const problems: string[] = [];
@@ -305,6 +477,8 @@ export function autoQuality(options: AutoOptions): Report {
     + `${HITCHED_S} s: ${hitches.length ? hitches.join('; ') : 'no step'}`);
   if (hitches.length) problems.push(`Auto stepped a fast device down for its hitches: ${hitches.join('; ')}`);
   lines.push(...boots(options.canary, problems));
+  lines.push(...gpuCases(options.canary, problems));
+  lines.push(...tracesPlayed(options, problems));
   if (!options.canary) return { text: lines.join('\n'), problems };
   const old = walkAt(OLD_PACE);
   lines.push(...walkLines('canary, the old pace', old));

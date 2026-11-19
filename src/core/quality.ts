@@ -1,5 +1,6 @@
 // Graphics quality: the player's setting (auto / high / medium / low / very low, cookie) and the
-// level in effect. Auto steps down while frame rate stays low. Each boot or fresh Auto choice,
+// level in effect. Auto steps down while frame rate stays low, judging play alone (no loading frame) and, where its
+// GPU's time a frame is known, only a GPU too slow for the target. Each boot or fresh Auto choice,
 // once the game is shown, it tries higher levels in turn, each kept once it holds its frame rate for a
 // window, else left for the settled one at its first quick window under the target and put off
 // for a few boots (`bootAuto`, `trialMissed`). Every level renders the
@@ -63,12 +64,39 @@ let frames = 0, time = 0, settle = 0;
 /** the window's frame times up to `longestFrame` (s), and their sum: the quick path's median reads them */
 const quick: number[] = [];
 let quickTime = 0;
+/** the GPU's own times a frame (ms) come back over each path's window, where a timer query gives them
+ *  (`noteGpuFrame`): a window under the target with these within the target's frame steps nothing */
+const gpuQuick: number[] = [];
+const gpuWindow: number[] = [];
+/** the play (s) still to go before the level a step down left is tried again, Infinity: none to try */
+let retryIn = Infinity;
+/** the levels already tried again this visit: each a step down left is tried once */
+const retried = new Set<QualityLevel>();
 
 /** The window started again, both paths. */
 function restart(): void {
   frames = time = 0;
   quick.length = 0;
   quickTime = 0;
+  gpuQuick.length = 0;
+  gpuWindow.length = 0;
+}
+
+/** the most GPU frames a window keeps (its last ones) */
+const GPU_KEPT = 600;
+
+/** A frame's GPU time as its timer query gave it (ms), a few frames after it was drawn (ui/perfHud.ts). */
+export function noteGpuFrame(ms: number): void {
+  if (setting !== 'auto' || !(ms > 0)) return;
+  if (gpuQuick.push(ms) > GPU_KEPT) gpuQuick.shift();
+  if (gpuWindow.push(ms) > GPU_KEPT) gpuWindow.shift();
+}
+
+/** Whether the GPU's frames of a window held the target (its middle frame within `gpuShare` of the target's frame):
+ *  then a slow window was the CPU's or the loading's, and no lower level helps. None known: no say. */
+function gpuHeld(times: number[]): boolean {
+  if (times.length < AUTO_QUALITY.gpuFrames) return false;
+  return median([...times]) <= AUTO_QUALITY.gpuShare * 1000 / AUTO_QUALITY.minFps;
 }
 
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
@@ -144,6 +172,8 @@ export function initQuality(): void {
  */
 export function bootAuto(settled: QualityLevel): void {
   trialFrom = null;
+  retryIn = Infinity;
+  retried.clear();
   aboveNext = settled !== QUALITY_ORDER[0] && trialDue();
   apply(settled);
 }
@@ -184,6 +214,8 @@ export const qualityBudget = (): number => budget;
 export function setQuality(s: QualitySetting): void {
   setting = s;
   trialFrom = null;
+  retryIn = Infinity;
+  retried.clear();
   aboveNext = false;
   writeCookie(COOKIE, s);
   apply(s === 'auto' ? autoStart() : s);
@@ -267,33 +299,55 @@ export function holdQuality(): void {
   settle = AUTO_QUALITY.settle;
 }
 
+/** Whether a frame is the game's loading, not its play, and Auto leaves it out (`holdQuality`): a warm-up behind the
+ *  lobby or under the fight's loading bar, anything else under that bar, the hall of heroes' staged heroes, or a
+ *  program compiled at a draw in the frame before (its time three's link, not the device's pace). From play, a 4070
+ *  Ti's trial of High was judged on the frames round its fight's loading bar and left (trace P307-C0HE). */
+export const loadingFrame = (s: { warming: boolean; readying: boolean; hall: boolean; compiled: boolean }): boolean =>
+  s.warming || s.readying || s.hall || s.compiled;
+
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
  *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || (atBottom() && !aboveNext)) return null;
+  if (setting !== 'auto' || (atBottom() && !aboveNext && retryIn === Infinity)) return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
-  if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
+  if (settle > 0) {
+    // let a level change take effect first (the GPU's frames still coming back drawn at the level before)
+    settle -= dt;
+    gpuQuick.length = gpuWindow.length = 0;
+    return null;
+  }
+  if (!trialFrom && (retryIn -= dt) <= 0) {
+    retryIn = Infinity;
+    aboveNext = true;
+  }
   if (aboveNext) return tryAbove();
+  // (at the bottom, only waiting to try the level above again: nothing lower to judge)
+  if (atBottom() && !trialFrom) return null;
   quick.push(dt);
   quickTime += dt;
   // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
   // too slow for the 4 s path's frames, over `HITCH` each, stepped never)
   if (quickTime >= AUTO_QUALITY.quickWindow) {
     const fps = 1 / median(quick);
+    // (the GPU within its frame: whatever held the frames up, a lower level wouldn't help)
+    const gpuFine = gpuHeld(gpuQuick);
     // (the level above, tried, is left at the first window under the target: judged by the 4 s path, a phone at 26
     // to 47 frames a second there stayed 6 s a boot, trace 9JA7-BSSS)
-    if (trialFrom && fps < AUTO_QUALITY.minFps) return step(false);
-    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(true);
+    if (trialFrom && fps < AUTO_QUALITY.minFps && !gpuFine) return step(false);
+    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow && !gpuFine) return step(true);
     quick.length = 0;
     quickTime = 0;
+    gpuQuick.length = 0;
   }
   // (the 4 s path as it always was: the mean of frames up to `HITCH`, a level a step)
   if (dt > HITCH) return null;
   frames++; time += dt;
   if (time < AUTO_QUALITY.window) return null;
   const fps = frames / time;
+  const gpuFine = gpuHeld(gpuWindow);
   restart();
-  if (fps < AUTO_QUALITY.minFps) return step(false);
+  if (fps < AUTO_QUALITY.minFps && !gpuFine) return step(false);
   return trialFrom ? keepTrial() : null;
 }
 
@@ -322,6 +376,13 @@ function step(far: boolean): string {
   const steps = far ? QUALITY_ORDER.length : 1;
   for (let i = 0; i < steps && !atBottom(); i++) stepDown();
   writeAuto();
+  // (the level above tried again after a while, once a level: a hitch's step comes back this visit, a device that
+  // can't hold it spends a trial's settle and quick window there)
+  const above = QUALITY_ORDER[QUALITY_ORDER.indexOf(level) - 1];
+  if (!retried.has(above)) {
+    retried.add(above);
+    retryIn = AUTO_QUALITY.retry;
+  }
   return level;
 }
 
