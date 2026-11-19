@@ -78,6 +78,7 @@ import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { recorder } from './perf/recorder';
+import { framePart, framePartsBegin, framePartsEnd } from './perf/frameParts';
 import { traceNow } from './perf/upload';
 import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
@@ -1340,6 +1341,7 @@ function recordInputDelivery(force = false): void {
 let compiledBefore = 0;
 
 function frame(timestamp: number): void {
+  framePartsBegin();
   lastStep = performance.now();
   recordInputDelivery();
 
@@ -1350,8 +1352,10 @@ function frame(timestamp: number): void {
   // frames timed on the other's ticks, 13.8 and 20.7 ms in turn, and the world juddered, #552; Auto reads the raw)
   const dt = Math.min(pacedStep(rawDt, revealed && !framesUncapped()), 1 / 20);
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
+  framePart('input and view');
   joinWhenShown();
   updateMusic(dt, musicWanted());
+  framePart('music');
   const t0 = perfClock.now();
   // (the developer mode's time: frozen, slowed, a step)
   const simDt = dev ? dev.simDt(dt) : dt;
@@ -1373,6 +1377,7 @@ function frame(timestamp: number): void {
     G.time += simDt;
     update(simDt);
   }
+  framePart('update');
   // (the guide open: its pictures made first, whatever else is building or warming, ui/guide/portraits.ts)
   if (guideOpen()) stepPortraits();
   // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
@@ -1383,12 +1388,15 @@ function frame(timestamp: number): void {
   tickItemGlow(G.time);
   drawBattleLog();
   clearOverlays();
+  framePart('guide, overlays');
   const t1 = perfClock.now();
   render();
+  framePart('render');
   bugReportAfterRender();
   perfSplit(t1 - t0, perfClock.now() - t1);
   pinPrograms(G.renderer, compileContext);
   endInputFrame();
+  framePartsEnd();
   perfEndFrame();
 }
 
