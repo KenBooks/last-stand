@@ -31,6 +31,8 @@ export interface PassesCommand {
   paused?: boolean;
   /** in the lobby's village instead, as `draws --village` stands him there (`at` there, the square by default) */
   village: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
   canary: boolean;
 }
 
@@ -116,6 +118,11 @@ function holdTimes(held: boolean): void {
   (perfHud as { holdWebGpuTimes?: (held: boolean) => void }).holdWebGpuTimes?.(held);
 }
 
+/** ` at h:00` for a village held at an hour, or nothing */
+function hourOf(command: PassesCommand): string {
+  return command.hour === undefined ? '' : ` at ${command.hour}:00`;
+}
+
 export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Report> {
   if (command.level) quality.useQuality(command.level);
   await standAt(lab, command);
@@ -183,7 +190,7 @@ export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Repor
   rows.sort((a, b) => b.ms - a.ms);
   const all = rows.reduce((total, row) => total + (row.name === CANARY_NAME ? 0 : row.ms), 0);
   const lines = [
-    `${command.village ? 'the village' : G.arena.biome} ${command.view}, ${quality.qualityLevel()}, ${size.x}x${size.y} drawn`
+    `${command.village ? `the village${hourOf(command)}` : G.arena.biome} ${command.view}, ${quality.qualityLevel()}, ${size.x}x${size.y} drawn`
       + (command.paused ? ', paused' : ''),
     `  the frame's renders: ${all.toFixed(2)} ms of the GPU, over ${frames} frames; `
       + `compute ${(computeMs / frames).toFixed(2)} ms`,

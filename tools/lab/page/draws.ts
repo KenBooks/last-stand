@@ -611,6 +611,8 @@ export interface Stand {
   /** where he stands (x, z): the biome's spot off the dais, or the village's square, when not given */
   at?: [number, number];
   village: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
 }
 
 /** The hero stood where `stand` asks: in a biome, or in the lobby's village as `draws --village` stands him. */
@@ -620,6 +622,7 @@ export async function standAt(lab: Lab, stand: Stand): Promise<void> {
     return;
   }
   await lab.setup({ view: stand.view, facing: VILLAGE_FACING, fresh: true });
+  if (stand.hour !== undefined) holdHour(stand.hour);
   await inVillage(lab, stand.at ?? VILLAGE_SPOT, VILLAGE_FACING);
 }
 

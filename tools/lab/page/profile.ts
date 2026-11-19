@@ -36,6 +36,8 @@ export interface ProfileCommand {
   arrows?: number;
   /** in the lobby's village instead, as `draws --village` stands him there (`at` there, the square by default) */
   village: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
 }
 
 
@@ -292,7 +294,8 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     }
     problems.push(...await cancelProblems(lab));
     if (command.canary) problems.push(...await redrawCanaryProblems(lab));
-    const place = command.village ? 'the village' : command.biome;
+    const hour = command.hour === undefined ? '' : ` at ${command.hour}:00`;
+    const place = command.village ? `the village${hour}` : command.biome;
     const name = `${place} ${command.view}, ${quality.qualityLevel()}`;
     const lines = profileLines(found);
     const text = [name, ...lines.map((line) => `  ${line}`)];

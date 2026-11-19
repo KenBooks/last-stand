@@ -345,6 +345,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   and level (traces N5TH-2XC9, R5FJ-9TNN); here the crypt's scene pass read 5.25 ms paused and 6.24 updating, at the
   phone's pixels. `--village` stands the hero in the lobby's village, as `draws --village` does (`--at` there, the
   square by default): a phone's slow report was taken there (FJJ1-Z9XM), and `--biome` stands him in a fight's arena.
+  `--hour h` holds the village's hour (0 by night, its lamps lit): left to the page's own, the sun moved between an
+  A/B's two sides and its shadows differed by 5% of the pixels.
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest), or in the lobby's village
   with `--village` (`standAt` in `page/draws.ts`), in `--view` (top) at `--level`

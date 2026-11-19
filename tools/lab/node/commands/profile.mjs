@@ -44,6 +44,12 @@ export default {
       help: 'n spent arrows stood in the ground round him first: what they cost, its part '
         + '"the spent arrows"',
     },
+    hour: {
+      kind: 'number',
+      usage: 'h',
+      help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit; the page\'s own when not '
+        + 'given, so two sides of an --ab may stand under another sun)',
+    },
     village: {
       kind: 'switch',
       help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at where the hero stands '
@@ -71,6 +77,7 @@ export default {
         send: service.url,
         arrows: options.arrows === undefined ? undefined : Math.round(options.arrows),
         village: Boolean(options.village),
+        hour: options.hour,
       };
       const result = await checkProfileSent(await side.command('profileHere', command), service);
       // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)

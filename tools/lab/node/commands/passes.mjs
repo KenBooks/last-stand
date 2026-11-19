@@ -47,6 +47,12 @@ export default {
       help: 'the game paused as its pause menu pauses it (no update, the same scene drawn): what a game that '
         + 'updates adds to the GPU',
     },
+    hour: {
+      kind: 'number',
+      usage: 'h',
+      help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit; the page\'s own when not '
+        + 'given, so two sides of an --ab may stand under another sun)',
+    },
     village: {
       kind: 'switch',
       help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at where the hero stands '
@@ -69,6 +75,7 @@ export default {
       features: Boolean(options.features),
       paused: Boolean(options.paused),
       village: Boolean(options.village),
+      hour: options.hour,
       canary: Boolean(options.canary),
     };
     return side.command('passesHere', command);
