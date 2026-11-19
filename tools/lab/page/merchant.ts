@@ -119,6 +119,14 @@ function stepsAre(now: number, waiting: boolean, when: string, lines: string[], 
   if (!stashWaits && waiting) problems.push(`${when}: the stash is open with no ware chosen`);
 }
 
+/** Whether Odo stands at his desk serving (none in a commit without his day: then he always stands there). */
+function odoAtDesk(): boolean {
+  const odo = G.arena.rooms?.merchant?.odo?.();
+  if (!odo?.life) return true;
+  const { walker, shop } = odo.life;
+  return odo.life.serving && walker.arrived && Math.hypot(walker.x - shop.desk.x, walker.z - shop.desk.z) < 0.05;
+}
+
 /** where Odo stands in the shop's room (its frame: shop.ts stands him there), and the height his face is pictured at */
 const ODO_AT = { x: 0.1, fromBack: 0.85, face: 1.5 };
 
@@ -171,6 +179,9 @@ export async function merchant(lab: Lab, options: MerchantOptions): Promise<Repo
   await stand(lab, counter.stand[0], counter.stand[1], Math.PI);
   moments.push(await lab.screen('merchant-shop'));
   if (objectNear() !== counter) problems.push(`at the counter the object near is ${objectNear()?.id ?? 'none'}`);
+  // (Odo comes to his desk to serve the hero at his counter, finishing what he was doing first: his pictures once he's
+  // there, the trade as the player meets it; taken at once they were of his empty desk)
+  await lab.until(() => odoAtDesk(), 900, 'Odo never came to his desk for the hero at his counter');
   moments.push(...odoPictured(lab));
   await lab.step(1, () => ({ keys: ['e'] }));
   await lab.step(SETTLE);

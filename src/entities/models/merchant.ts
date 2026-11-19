@@ -1,62 +1,109 @@
-// Odo the merchant (world/houses/merchant.ts stands him behind his counter; his trade is ui/merchant.ts): a stocky, cheerful
+// Odo the merchant (world/houses/merchant.ts stands him in his shop; his trade is ui/merchant.ts): a stocky, cheerful
 // travelling trader, drawn to read nothing like the library's Brother Hollis (from review: "why Odo looks like
 // librarian?": both had a grey beard, spectacles, a felt cap and an oxblood front over brown): a saffron shirt with its
 // sleeves rolled to the elbow over bare forearms, a teal waistcoat with brass buttons, a wide belt hung with pouches, a
 // coin purse and a ring of keys, a short tan apron, a broad teal hat with a yellow plume, and a dark beard. Built on the
-// heroes' own rig, head and hands (the ranger's bearded face), so he holds up as close as they do. His idle is a loop
-// that never snaps (`ODO_LOOP` long: every motion in it a pulse still at both its ends, or a whole number of turns): he
-// breathes, rests his hands on the counter and drums his fingers, weighs a coin from his scale and holds it up to his
-// eye, writes a line in his ledger with a quill, and looks up from it.
-// A hero coming near is glanced at, and a trade made earns a nod (`odoNods`).
+// heroes' own rig, head and hands (the ranger's bearded face), so he holds up as close as they do.
+// What he does is his day (`odoLife.ts`: his tasks round the shop behind his counter, his glances, serving whoever
+// comes in, his feet planted and stepped); here he's posed from it each frame: his hips over his feet, his legs reached
+// to them, his trunk bent and turned, his head on what he looks at, his arms from their rest (hanging, or on the
+// counter at his desk) to where his hands are wanted, and the things he handles moved into and out of his hands.
+// A trade made earns a nod (`odoNods`).
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, reachArm, type Joints } from './rig';
+import { buildHumanoid, reachArm, updateJoints, type Joints } from './rig';
 import { stripRig } from './shapes';
 import { buildHead, buildNeck, handSkin, toGroup, HERO_HEADS, type Head } from './head';
-import { buildHand, bare, poseHand, type Hand } from './hands';
+import { buildHand, bare, poseHand, type Digit, type Hand } from './hands';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
+import { OdoLife, handTurn, type OdoScene, type OdoShop } from './odoLife';
 
-/** how long his idle loop is (s) */
-export const ODO_LOOP = 36;
-/** what happens when in the loop (s): a coin weighed from the scale and held up to his eye, a line written in the
- *  ledger, a look up and round his shop */
-const BEATS = { weigh: [8, 15.5], write: [18, 27], look: [29, 33] } as const satisfies Record<string, readonly [number, number]>;
-/** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again */
-const GLANCE = { near: 3.8, hold: 2.4, rest: 10 };
-
-/** Where the counter and what he uses on it stand, in his frame (x across him, his left +x; +z ahead; up from the
- *  floor). */
-export interface OdoCounter {
-  /** the counter's top (m) and its near edge (z) */
-  top: number; near: number;
-  /** the scale's near pan, the one he takes a coin from */
-  pan: THREE.Vector3;
-  /** the ledger's middle, where he writes */
-  ledger: THREE.Vector3;
-}
+/** how high his hips ride over the rig's (m: his legs nearly straight over feet on the floor), and his ankles over the
+ *  floor (his boots' soles under them) */
+const BODY_Y = 0.03;
+const ANKLE_H = 0.086;
+/** how quickly his hands, his trunk and his gaze follow what his day asks of them (per s) */
+const FOLLOW = { hands: 16, trunk: 8, gaze: 6, things: 12 };
+/** past this far from the camera he's posed every other frame (m) */
+export const ODO_FAR = 7;
 
 export interface Odo {
-  /** his root: stand it on the floor behind the counter, facing it (+z) */
+  /** his root: the shop's group is its parent, his place and facing his day's */
   root: THREE.Group;
-  /** his pose for the frame: `hero` where the local hero is (world space) or null */
-  update(dt: number, hero: THREE.Vector3 | null): void;
-  /** how far into his loop he is (s), for the lab's pictures at set points of it */
-  loopAt: number;
+  /** his day stepped and his pose for the frame; `far` (the camera past `ODO_FAR`) poses him every other frame */
+  update(dt: number, scene: OdoScene, far?: boolean): void;
+  /** his day (the lab reads and steers it) */
+  readonly life: OdoLife;
   /** his meshes (the lab reads them) */
   readonly parts: THREE.Mesh[];
+  /** whether the last update posed him (a far one may not: the lab reads his feet when it did) */
+  readonly posed: boolean;
+  /** his joints and his hands (the lab reads his arms against his body and the counter, his hands against what they
+   *  hold) */
+  readonly joints: Joints;
+  readonly hands: { L: Hand; R: Hand };
 }
 
-/** a trade made: the next frame he nods (ui/merchant.ts) */
+const UP_Y = new THREE.Vector3(0, 1, 0), FACE_Z = new THREE.Vector3(0, 0, 1);
+
+/** His hand pinching a coin: the thumb's pad against the index and middle fingers' pads, the fingers bent at their
+ *  middle joints and nearly straight at the last, the ring and little fingers curled loosely under; never the coin
+ *  stuck to a flat open palm. */
+function coinGrip(h: Hand): void {
+  poseHand(h, 0, 0.12);
+  const bends: [number, number, number][] = [[0.62, 0.62, 0.18], [0.7, 0.66, 0.2], [0.95, 1.1, 0.7], [1.05, 1.15, 0.75]];
+  h.f.forEach((f, i) => {
+    const [a, b, c] = bends[i];
+    f.j[0].rotation.set(a, 0, h.s * (i - 1.2) * 0.04);
+    f.j[1].rotation.set(b, 0, 0);
+    f.j[2].rotation.set(c, 0, 0);
+  });
+  h.thumb.j[0].rotation.set(0.7, h.s * 0.85, -h.s * 0.3);
+  h.thumb.j[0].rotateY(h.s * -1.3);
+  h.thumb.j[1].rotation.set(0.22, 0, 0);
+  h.thumb.j[2].rotation.set(0.12, 0, 0);
+}
+
+/** His writing hand holding a pen as a pen is held (a tripod grip): the pen pinched between the thumb's pad and the
+ *  index finger's tip, resting on the middle finger's side, the ring and little fingers curled under; not a hand
+ *  hanging limp with the quill through its wrist (from play: "not how you hold pen"). */
+function penGrip(h: Hand): void {
+  poseHand(h, 0, 0.1);
+  const bends: [number, number, number][] = [[0.5, 0.42, 0.22], [0.72, 0.85, 0.45], [1.05, 1.25, 0.8], [1.15, 1.3, 0.85]];
+  h.f.forEach((f, i) => {
+    const [a, b, c] = bends[i];
+    f.j[0].rotation.set(a, 0, h.s * (i - 1.2) * 0.05);
+    f.j[1].rotation.set(b, 0, 0);
+    f.j[2].rotation.set(c, 0, 0);
+  });
+  // (the thumb across to meet the index finger's tip, its pad on the pen)
+  h.thumb.j[0].rotation.set(0.62, h.s * 0.72, -h.s * 0.38);
+  h.thumb.j[0].rotateY(h.s * -1.3);
+  h.thumb.j[1].rotation.set(0.32, 0, 0);
+  h.thumb.j[2].rotation.set(0.2, 0, 0);
+}
+
+/** A struck coin (its faces along y, 34 mm across): a raised rim round each face, the face sunk inside it, a boss in
+ *  its middle where the head is struck, the edge worn round. */
+export function coinGeometry(): THREE.LatheGeometry {
+  const r = 0.017, h = 0.0014;
+  const half: [number, number][] = [[0, h + 0.0004], [0.004, h + 0.0005], [0.006, h], [r - 0.003, h], [r - 0.0018, h + 0.0005],
+    [r - 0.0004, h + 0.0002], [r, 0]];
+  // (from the bottom face's middle round the rim to the top's: a lathe's profile, bottom to top)
+  const profile = [...half.map(([x, y]) => [x, -y] as [number, number]), ...half.slice(0, -1).reverse()];
+  return new THREE.LatheGeometry(profile.map(([x, y]) => new THREE.Vector2(x, y)), 28);
+}
+
+/** a trade made: the next frame he nods (ui/screens/merchant/merchant.ts) */
 let nodAsked = false;
 export const odoNods = (): void => { nodAsked = true; };
+/** whether his trade is open (ui/screens/merchant/merchant.ts tells him; world/houses/merchant.ts reads it for his day) */
+let tradeOpen = false;
+export const odoTrades = (on: boolean): void => { tradeOpen = on; };
+export const odoTrading = (): boolean => tradeOpen;
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-/** 0 outside [a, b], 1 inside it, eased in and out over `rise` at each end */
-const span = (t: number, a: number, b: number, rise: number): number =>
-  smooth(clamp((t - a) / rise, 0, 1)) * (1 - smooth(clamp((t - (b - rise)) / rise, 0, 1)));
-/** where `t` is between a and b (0 to 1) */
-const along = (t: number, a: number, b: number): number => clamp((t - a) / (b - a), 0, 1);
 
 /** A surface of rows of points (each row the same count, its first and last points the same for a closed one), its
  *  faces wound out when each row runs the way the right hand's fingers curl round the rows' direction (bottom to top). */
@@ -123,14 +170,15 @@ function inHead(g: THREE.BufferGeometry): THREE.BufferGeometry {
 interface Mats {
   shirt: THREE.Material; waistcoat: THREE.Material; apron: THREE.Material; belt: THREE.Material; pouch: THREE.Material;
   arm: THREE.Material; brass: THREE.Material; iron: THREE.Material; trousers: THREE.Material; boot: THREE.Material;
+  bootCuff: THREE.Material; sole: THREE.Material; thread: THREE.Material;
 }
 type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
 
 /**
- * Odo, standing behind `counter`. His head and hands are the heroes': build him once their workers have made them
+ * Odo, at work in `shop`. His head and hands are the heroes': build him once their workers have made them
  * (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
-export function buildOdo(counter: OdoCounter): Odo {
+export function buildOdo(shop: OdoShop): Odo {
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);
@@ -139,18 +187,25 @@ export function buildOdo(counter: OdoCounter): Odo {
   // (his palette is a market's, not the library's: saffron, teal and tan, where Hollis wears brown and oxblood)
   const shirt = kit.rim({ color: 0xd8962a, roughness: 1, ...tex(clothMaps(), 1.2), side: THREE.DoubleSide }, 0xf0b850, 0.3);
   const waistcoat = kit.rim({ color: 0x1f5a62, roughness: 0.85, ...tex(feltMaps(), 0.9) }, 0x3a8a90, 0.3);
-  const apron = kit.std({ color: 0xa8743e, roughness: 0.7, ...tex(leatherMaps(), 1.2), side: THREE.DoubleSide });
+  // (a soft, worn leather: its grain faint, the full map read as noise from across the room)
+  const apron = kit.std({ color: 0x9a6234, roughness: 0.62, ...tex(leatherMaps(), 0.45), side: THREE.DoubleSide });
   const belt = kit.std({ color: 0x3a2412, roughness: 0.55, ...tex(leatherMaps(), 1) });
   const pouch = kit.std({ color: 0x7a4a24, roughness: 0.65, ...tex(leatherMaps(), 1.1) });
-  const arm = kit.rim({ color: 0xc08a68, roughness: 0.75 }, 0xe0a888, 0.25);
+  // (his forearms the same skin as his hands: lighter and pinker, they met them at the wrist in a seam)
+  const arm = handSkin(kit, 'ranger');
   const brass = kit.std({ color: 0xd0a850, metalness: 0.9, roughness: 0.32 });
   const iron = kit.std({ color: 0x4a4a4e, metalness: 0.85, roughness: 0.45 });
-  const trousers = kit.std({ color: 0x3e3a30, roughness: 1, ...tex(woolMaps(), 1) });
-  const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
+  // (breeches of a mid-brown wool and tall riding boots: near black, in the shop's light his legs read as one dark column)
+  const trousers = kit.std({ color: 0x74603f, roughness: 0.95, ...tex(woolMaps(), 0.7) });
+  const boot = kit.std({ color: 0x4e2e18, roughness: 0.48, ...tex(leatherMaps(), 0.6) });
+  const bootCuff = kit.std({ color: 0x7e5230, roughness: 0.55, ...tex(leatherMaps(), 0.6) });
+  const sole = kit.std({ color: 0x1c140e, roughness: 0.8 });
+  const thread = kit.std({ color: 0xcdb88a, roughness: 0.9 });
   const hatFelt = kit.rim({ color: 0x1f5a62, roughness: 1, ...tex(feltMaps(), 0.8), side: THREE.DoubleSide }, 0x3a8a90, 0.3);
   const band = kit.std({ color: 0xd8962a, roughness: 0.9, ...tex(clothMaps(), 1) });
   const feather = kit.rim({ color: 0xf0c020, roughness: 0.85, side: THREE.DoubleSide }, 0xffe060, 0.4);
-  const gold = kit.std({ color: 0xf0c050, metalness: 1, roughness: 0.25 });
+  // (bright enough to read in the candlelight: at full metalness it took the room's dark and showed nothing)
+  const gold = kit.std({ color: 0xf2c454, metalness: 0.75, roughness: 0.35, emissive: 0x3a2a08 });
   const quillMat = kit.std({ color: 0xece4d4, roughness: 0.8, side: THREE.DoubleSide });
 
   // --- the rig, standing, stocky: a broad chest and a round belly ---
@@ -172,7 +227,8 @@ export function buildOdo(counter: OdoCounter): Odo {
   for (const b of head.beards.slice(1)) darken(b.material, 0.7);
   // (a ruddy, weathered face: a man on the roads)
   (head.face.material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(1.04, 0.94, 0.86));
-  dressHead(head, hatFelt, band, feather);
+  dressHead(head, hatFelt, band, feather, brass);
+  seatEars(head);
 
   // --- the hands: the heroes' own, bare ---
   const skin = handSkin(kit, 'ranger');
@@ -189,161 +245,255 @@ export function buildOdo(counter: OdoCounter): Odo {
     parts.push(m);
     return m;
   };
-  dressBody(j, add, { shirt, waistcoat, apron, belt, pouch, arm, brass, iron, trousers, boot });
+  dressBody(j, add, { shirt, waistcoat, apron, belt, pouch, arm, brass, iron, trousers, boot, bootCuff, sole, thread });
 
-  // --- what he holds: a coin from his scale, a quill as he writes (at no size while not held: a hidden mesh compiles
-  // nothing in the room's warm-up, and would at his first beat) ---
-  const coin = add(new THREE.CylinderGeometry(0.016, 0.016, 0.003, 18).rotateX(Math.PI / 2), gold, j.handR, 'coin', false);
-  coin.position.set(-0.01, -0.07, 0.035);
+  // --- what he holds of his own: a coin from his scale, a quill as he writes (at no size while not held: a hidden mesh
+  // compiles nothing in the room's warm-up, and would at his first use of it) ---
+  // (its faces along its own z: pinched by them, `placeCoin`)
+  const coin = add(coinGeometry().rotateX(Math.PI / 2), gold, j.handR, 'coin', false);
+  // (the quill: its nib at its origin, its shaft along +y, the vane from a third of the way up; placed each frame
+  // between his fingertips and over the web of his hand, `placeQuill`)
   const quill = new THREE.Group();
-  quill.position.set(0.012, -0.075, 0.03);
-  quill.rotation.set(-0.5, 0, 0.35);
   j.handL.add(quill);
-  add(new THREE.CylinderGeometry(0.0018, 0.001, 0.2, 6).translate(0, 0.07, 0), quillMat, quill, 'quill shaft', false);
+  add(new THREE.CylinderGeometry(0.0022, 0.0016, 0.21, 6).translate(0, 0.105, 0), quillMat, quill, 'quill shaft', false);
+  add(new THREE.ConeGeometry(0.0016, 0.012, 6).rotateX(Math.PI).translate(0, 0.006, 0), iron, quill, 'quill nib', false);
   {
     const vane = new THREE.Shape();
-    vane.moveTo(0, 0.04); vane.quadraticCurveTo(0.022, 0.1, 0.004, 0.17); vane.lineTo(-0.004, 0.17);
-    vane.quadraticCurveTo(-0.014, 0.1, 0, 0.04);
+    vane.moveTo(0, 0.07); vane.quadraticCurveTo(0.024, 0.13, 0.004, 0.21); vane.lineTo(-0.004, 0.21);
+    vane.quadraticCurveTo(-0.014, 0.13, 0, 0.07);
     add(new THREE.ShapeGeometry(vane, 8), quillMat, quill, 'quill vane', false);
   }
 
-  // --- his pose, a frame at a time ---
-  const eyes = head.eyes;
-  let loop = 2, gaze = 0, gazeWant = 0, gazeUntil = -1, nextGlance = 0, clock = 0, nod = 0;
-  const lookYaw = { v: 0 }, lookPitch = { v: 0 };
-  const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
-  const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
-  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qp = new THREE.Quaternion(), basis = new THREE.Matrix4();
-  const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3();
-  /** a hand's turn in his frame: its fingers along `fingers`, its palm facing `palm` */
-  const handTurn = (fingers: THREE.Vector3, palm: THREE.Vector3, out: THREE.Quaternion) => {
-    fy.copy(fingers).normalize().negate();
-    fz.copy(palm).negate().addScaledVector(fy, -palm.clone().negate().dot(fy)).normalize();
-    fx.crossVectors(fy, fz);
-    return out.setFromRotationMatrix(basis.makeBasis(fx, fy, fz));
+  // --- his day, and his pose from it a frame at a time ---
+  const life = new OdoLife(shop);
+  /** a digit's tip (its pad, a little short of its end) in the frame of the hand joint `on` */
+  const tipIn = (on: THREE.Object3D, d: Digit, out: THREE.Vector3) => {
+    const last = d.j[d.j.length - 1];
+    return on.worldToLocal(last.localToWorld(out.set(0, -d.len[d.len.length - 1] * 0.85, 0)));
   };
+  const tipOf = (d: Digit, out: THREE.Vector3) => tipIn(j.handL, d, out);
+  const thumbPad = new THREE.Vector3(), fingerPad = new THREE.Vector3(), knuckle = new THREE.Vector3(), eyeAt = new THREE.Vector3();
+  /** The coin between his right thumb's pad and his index and middle fingers' as they hold it now: its faces against
+   *  the pads, its rim standing out past the fingertips. */
+  const placeCoin = () => {
+    j.handR.updateWorldMatrix(true, true);
+    tipIn(j.handR, handR.f[0], fingerPad).lerp(tipIn(j.handR, handR.f[1], tipT), 0.35);
+    tipIn(j.handR, handR.thumb, thumbPad);
+    const across = axis.subVectors(fingerPad, thumbPad).normalize();
+    // (out: from the index finger's knuckle toward the pinch, the way the fingers point)
+    j.handR.worldToLocal(handR.f[0].j[0].getWorldPosition(knuckle));
+    // (on the fingers' pads, its face against them and the thumb pressing it there, its rim out past the fingertips:
+    // placed between the thumb's tip and the fingers' it lay in the palm, 4 cm from any fingertip)
+    const out = knuckle.subVectors(fingerPad, knuckle).normalize();
+    coin.position.copy(fingerPad).addScaledVector(across, -0.004).addScaledVector(out, 0.013);
+    // (its face the way his palm faces, a little toward the thumb: held up, to his eye. Fixed in his hand, it turns
+    // as his hand turns; turned to his eye every frame, it hung still in the air as he twisted his hand, from play)
+    const face = eyeAt.set(0, 0, -1).addScaledVector(across, -0.35).normalize();
+    coin.quaternion.setFromUnitVectors(FACE_Z, face);
+  };
+  const pinch = new THREE.Vector3(), web = new THREE.Vector3(), tipT = new THREE.Vector3(), axis = new THREE.Vector3();
+  /** The quill laid in his writing hand as he holds it now: pinched between his thumb's and index finger's tips, its
+   *  shaft back over the web of his hand, its nib 3 cm past his fingertips. */
+  const placeQuill = () => {
+    j.handL.updateWorldMatrix(true, true);
+    // (along the index finger, as a pen lies in a hand: at its tip's pad, the thumb's side of it, and back over its
+    // knuckle toward the web; placed between the thumb's tip and the finger's, it stood clear of the hand, the thumb
+    // short of the finger)
+    tipOf(handL.f[0], pinch);
+    pinch.lerp(tipOf(handL.thumb, tipT), 0.5);
+    pinch.lerp(tipOf(handL.f[1], tipT), 0.2);
+    // (the web: between the index finger's knuckle and the thumb's middle joint, out on the thumb's side of the hand
+    // and a little to the palm's: laid back over the hand's back (+z), the shaft went in above the knuckles and out
+    // under the palm, from play)
+    j.handL.worldToLocal(handL.f[0].j[0].getWorldPosition(web));
+    web.lerp(j.handL.worldToLocal(handL.thumb.j[1].getWorldPosition(tipT)), 0.55);
+    web.x += -handL.s * 0.012;
+    web.z -= 0.006;
+    axis.subVectors(web, pinch).normalize();
+    quill.position.copy(pinch).addScaledVector(axis, -0.03);
+    quill.quaternion.setFromUnitVectors(UP_Y, axis);
+  };
+  // (the nib's place in his hand's frame as he holds the pen: his day places the hand by it)
+  penGrip(handL);
+  placeQuill();
+  life.penNib.copy(quill.position);
+  // (and the coin's in his right hand's frame as he pinches one: his day places that hand by it)
+  coinGrip(handR);
+  placeCoin();
+  life.coinPinch.copy(coin.position);
+  const eyes = head.eyes;
+  const sides = [
+    { s: 1, goal: life.doing.L, shoulder: j.shoulderL, elbow: j.elbowL, hand: j.handL, fingers: handL, at: new THREE.Vector3(), turn: new THREE.Quaternion(), w: 0, fresh: true },
+    { s: -1, goal: life.doing.R, shoulder: j.shoulderR, elbow: j.elbowR, hand: j.handR, fingers: handR, at: new THREE.Vector3(), turn: new THREE.Quaternion(), w: 0, fresh: true },
+  ];
+  const legs = [
+    { thigh: j.thighL, knee: j.kneeL, ankle: j.ankleL, s: 1 },
+    { thigh: j.thighR, knee: j.kneeR, ankle: j.ankleR, s: -1 },
+  ];
+  const trunk = { bend: 0, crouch: 0, twist: 0 };
+  let clock = 0, lookYaw = 0, lookPitch = 0, nod = 0, frame = 0, owed = 0;
+  const lookAt = new THREE.Vector3(0, 1.4, 2), neckAt = new THREE.Vector3(), tmp = new THREE.Vector3(), target = new THREE.Vector3();
+  const base = new THREE.Vector3(), baseTurn = new THREE.Quaternion(), pole = new THREE.Vector3(), poleHang = new THREE.Vector3();
+  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qp = new THREE.Quaternion(), shopQ = new THREE.Quaternion();
+  const UP = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0);
   const setHand = (hand: THREE.Object3D, turn: THREE.Quaternion) => {
     hand.parent!.getWorldQuaternion(qp);
     j.root.getWorldQuaternion(qa);
     hand.quaternion.copy(qp.invert().multiply(qa).multiply(turn));
   };
   const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
-  /** where his hands rest on the counter: just in from its near edge, a shoulder's width apart */
-  const rest = (s: number, out: THREE.Vector3) => out.set(s * 0.19, counter.top + 0.035, counter.near + 0.12);
+  const rootLocalOfChest = (v: THREE.Vector3) => j.root.worldToLocal(j.chest.localToWorld(v));
 
-  function update(dt: number, heroAt: THREE.Vector3 | null): void {
+  function pose(dt: number): void {
     clock += dt;
-    loop = (loop + dt * (1 - 0.6 * gaze)) % ODO_LOOP;
-    const t = loop;
-    // --- whether he's looking up at the hero: a glance as one comes near ---
-    let heroNear = false;
-    if (heroAt) {
-      j.root.updateWorldMatrix(true, false);
-      hero.copy(heroAt);
-      j.root.worldToLocal(hero);
-      heroNear = Math.hypot(hero.x, hero.z) < GLANCE.near;
-      hero.y += 1.55;
-    }
-    if (heroNear && clock > nextGlance) { gazeWant = 1; gazeUntil = clock + GLANCE.hold; nextGlance = clock + GLANCE.hold + GLANCE.rest; }
-    else if (clock > gazeUntil) gazeWant = 0;
-    if (!heroAt) gazeWant = 0;
-    gaze = damp(gaze, gazeWant, gazeWant > gaze ? 3.2 : 2.2, dt);
+    const d = life.doing, w = life.walker, shopG = j.root.parent;
+    j.root.position.set(w.x, 0, w.z);
+    j.root.rotation.set(0, w.yaw, 0);
+    const k = (rate: number) => 1 - Math.exp(-rate * dt);
+    trunk.bend = damp(trunk.bend, d.bend, FOLLOW.trunk, dt);
+    trunk.crouch = damp(trunk.crouch, d.crouch, FOLLOW.trunk, dt);
+    trunk.twist = damp(trunk.twist, d.twist, FOLLOW.trunk, dt);
     if (nodAsked) { nodAsked = false; nod = 1; }
     nod = Math.max(0, nod - dt / 1.3);
-    // (one nod, down and back up, still at both ends)
-    const nodding = Math.sin(Math.PI * (1 - nod)) ** 2 * (nod > 0 ? 1 : 0);
+    const nodding = Math.max(d.nod, nod > 0 ? Math.sin(Math.PI * (1 - nod)) ** 2 : 0);
+    const breath = Math.sin(clock * Math.PI * 2 / 4);
 
-    // --- the beats of the loop ---
-    const weigh = span(t, ...BEATS.weigh, 1.1), write = span(t, ...BEATS.write, 1.2), look = span(t, ...BEATS.look, 1.0);
-    const weighK = along(t, ...BEATS.weigh), writeK = along(t, ...BEATS.write), lookK = along(t, ...BEATS.look);
-    // (the coin taken from the pan, held up to his eye, turned, and put back)
-    const up = span(weighK, 0.22, 0.8, 0.16);
-    const breath = Math.sin((t / ODO_LOOP) * Math.PI * 2 * 9);
-
-    // --- body, neck, head ---
+    // --- the hips over his feet, the trunk bent and turned ---
     for (const o of [j.hips, j.spine, j.chest, j.neck, j.head]) o.rotation.set(0, 0, 0);
-    j.spine.rotation.x = 0.06 + write * 0.1 + weigh * (1 - up) * 0.08 + breath * 0.006;
-    j.chest.rotation.x = 0.03 + write * 0.04 - breath * 0.01;
-    j.chest.rotation.y = -weigh * (1 - up) * 0.18 + write * 0.12 + look * 0.12 * Math.sin(lookK * Math.PI * 2);
-    // (he looks at what his hands do: down at the counter at rest, the pan, the coin up close, the ledger; round the
-    // shop as he looks up)
-    let headX = 0.32 - up * 0.3 + write * 0.18 - look * 0.42, headY = -weigh * (1 - up) * 0.35 + write * 0.25;
-    headY += look * 0.5 * Math.sin(lookK * Math.PI * 2);
-    let neckX = 0.06;
-    if (gaze > 0.001) {
-      j.root.updateMatrixWorld(true);
-      j.neck.getWorldPosition(headAt);
-      j.root.worldToLocal(headAt);
-      tmp.subVectors(hero, headAt);
-      const yaw = clamp(Math.atan2(tmp.x, tmp.z), -1.2, 1.2), pitch = clamp(Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z)), -0.5, 0.5);
-      lookYaw.v = damp(lookYaw.v, yaw, 6, dt);
-      lookPitch.v = damp(lookPitch.v, pitch, 6, dt);
-      j.chest.rotation.y = lerp(j.chest.rotation.y, lookYaw.v * 0.25, gaze);
-      neckX = lerp(neckX, -lookPitch.v * 0.4, gaze);
-      headX = lerp(headX, -lookPitch.v * 0.6, gaze);
-      headY = lerp(headY, lookYaw.v * 0.6, gaze);
-      j.neck.rotation.y = lookYaw.v * 0.15 * gaze;
-    }
-    headX += nodding * 0.32;
-    j.neck.rotation.x = neckX;
-    j.head.rotation.set(headX, headY, -headY * 0.06);
-    // (his eyes on what he looks at: down to the counter, up to the hero)
-    const eyeX = 0.22 * (1 - gaze) * (1 - look) + up * -0.1;
-    for (const e of eyes) e.rotation.set(eyeX, 0, 0);
-    j.root.updateMatrixWorld(true);
+    // (his hips turned halfway to where his feet point, his chest kept to his facing)
+    const feetYaw = Math.atan2(Math.sin(w.feet[0].yaw) + Math.sin(w.feet[1].yaw), Math.cos(w.feet[0].yaw) + Math.cos(w.feet[1].yaw));
+    const hipYaw = Math.atan2(Math.sin(feetYaw - w.yaw), Math.cos(feetYaw - w.yaw)) * 0.5;
+    // (his hips a little lower as he walks: a stride's feet are further from them than his legs reach standing tall)
+    const striding = Math.min(1, w.speed / 0.5) * 0.04;
+    j.body.position.set(w.sway, BODY_Y + w.bob - trunk.crouch - striding, 0);
+    // (the hips dropping a little on the side of the swinging leg, the weight carried over the standing one)
+    j.hips.rotation.set(0, hipYaw, w.sway * 1.6);
+    j.spine.rotation.set(0.04 + trunk.bend * 0.65 + breath * 0.006, trunk.twist * 0.4 - hipYaw, -w.sway * 1.6);
+    j.chest.rotation.set(0.02 + trunk.bend * 0.35 - breath * 0.01, trunk.twist * 0.6, 0);
+    updateJoints(j.root);
 
-    // --- the arms ---
-    rest(1, tL); rest(-1, tR);
-    tL.y += breath * 0.002; tR.y += breath * 0.002;
-    // the right: to the scale's pan, the coin up to his eye, back to the pan, back to rest
-    const toPan = span(weighK, 0.05, 0.95, 0.14) * weigh;
-    tmp.copy(counter.pan).add(V(0.03, 0.05, -0.02));
-    tR.lerp(tmp, toPan);
-    tR.lerp(tmp.set(-0.06, 1.52, 0.33), up * weigh);
-    // the left: to the ledger, a line written along it in small strokes
-    tmp.copy(counter.ledger).add(V(lerp(-0.08, 0.08, writeK) + 0.008 * Math.sin(clock * 22), 0.06 + 0.004 * Math.sin(clock * 9), -0.05));
-    tL.lerp(tmp, write);
-    // (in an arc over the counter there and back, never through it)
-    tR.y += 0.06 * Math.sin(Math.PI * toPan) * (1 - up);
-    tL.y += 0.05 * Math.sin(Math.PI * Math.min(1, write * 1.0)) * (1 - write);
-    // (the elbows out and a little back, as a stout man leans his hands on a counter)
-    poleL.set(1, -0.5, -0.6).normalize();
-    poleR.set(-1, -0.5, -0.6).normalize();
-    reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(tL.clone()), poleL, 1, 0.08);
-    reachArm(j.shoulderR, j.elbowR, P.upperL, P.foreL, chestLocal(tR.clone()), poleR, 1, 0.08);
-    j.root.updateMatrixWorld(true);
-    // the hands' turns: flat on the counter, fingers ahead and a little in; pinching the coin; the quill's hand on its side
-    handTurn(V(-0.3, -0.05, 1), V(0, -1, 0.05), qa);
-    handTurn(V(-0.2, -0.6, 0.8), V(0.3, -0.6, 0.6), qb); qa.slerp(qb, write);
-    setHand(j.handL, qa.clone());
-    handTurn(V(0.3, -0.05, 1), V(0, -1, 0.05), qa);
-    handTurn(V(0.2, -0.5, 0.9), V(0, -1, 0.2), qb); qa.slerp(qb, toPan * (1 - up));
-    handTurn(V(0.4, 0.75, 0.3), V(0.6, 0, -0.8), qb); qa.slerp(qb, up * weigh);
-    setHand(j.handR, qa.clone());
-    // (his fingers drum the counter now and then at rest: one after another, as a pulse)
-    const drum = Math.max(0, Math.sin(clock * 9)) ** 3 * span(t, 1, 7, 1) * (1 - gaze);
-    poseHand(handL, lerp(lerp(0.12, 0.6, write), 0.18, 0), 0.15, 0, clock, 0);
-    poseHand(handR, lerp(0.12 + 0.18 * drum, 0.75, toPan), 0.15, 0, clock, drum);
+    // --- the head on what he looks at: his chest, neck and head share the turn ---
+    lookAt.lerp(d.look, k(FOLLOW.gaze * 1.5));
+    j.neck.getWorldPosition(neckAt);
+    j.root.worldToLocal(neckAt);
+    tmp.subVectors(lookAt, neckAt);
+    const yaw = clamp(Math.atan2(tmp.x, tmp.z), -1.9, 1.9), pitch = clamp(Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z)), -0.9, 0.6);
+    lookYaw = damp(lookYaw, yaw, FOLLOW.gaze, dt);
+    lookPitch = damp(lookPitch, pitch, FOLLOW.gaze, dt);
+    const chestYaw = clamp(lookYaw - trunk.twist, -1.9, 1.9);
+    j.chest.rotation.y += chestYaw * 0.22;
+    j.neck.rotation.set(-lookPitch * 0.35 + 0.04, chestYaw * 0.2, 0);
+    j.head.rotation.set(-lookPitch * 0.55 + nodding * 0.32, chestYaw * 0.5, -chestYaw * 0.03);
+    const eyeX = clamp(-lookPitch * 0.3, -0.15, 0.3);
+    for (const e of eyes) e.rotation.set(eyeX, 0, 0);
+    updateJoints(j.root);
+
+    // --- the legs: each ankle reached to its foot, the foot laid at its heading and pitch ---
+    if (shopG) {
+      shopG.getWorldQuaternion(shopQ);
+      for (const [i, leg] of legs.entries()) {
+        const f = w.feet[i];
+        target.set(f.x, ANKLE_H + f.lift, f.z);
+        shopG.localToWorld(target);
+        leg.thigh.parent!.worldToLocal(target);
+        const heading = f.yaw - w.yaw - hipYaw;
+        pole.set(Math.sin(heading) + leg.s * 0.08, 0, Math.cos(heading));
+        reachArm(leg.thigh, leg.knee, P.thighL, P.shinL, target, pole, -1);
+        leg.knee.updateWorldMatrix(true, false);
+        leg.knee.getWorldQuaternion(qa);
+        qb.copy(shopQ).multiply(qp.setFromAxisAngle(UP, f.yaw));
+        qb.multiply(qp.setFromAxisAngle(X, f.pitch));
+        leg.ankle.quaternion.copy(qa.invert().multiply(qb));
+      }
+    }
+
+    // --- the arms: from their rest to where his hands are wanted ---
+    const front = life.toMe(tmp.set(w.x, 0, shop.counter.near + 0.12)).z;
+    for (const side of sides) {
+      const { s, goal } = side;
+      // (each arm swings with the other side's leg, a little bent at the elbow)
+      const footAhead = (life.toMe(tmp.set(w.feet[1].x, 0, w.feet[1].z)).z - life.toMe(target.set(w.feet[0].x, 0, w.feet[0].z)).z) * 0.35 * s;
+      if (d.onCounter) {
+        base.set(s * 0.19, shop.counter.top + 0.035 + breath * 0.002, front);
+        handTurn(V(-0.3 * s, -0.05, 1), V(0, -1, 0.05), baseTurn);
+        poleHang.set(s, -0.5, -0.6);
+      } else {
+        rootLocalOfChest(base.set(s * 0.255, 0.18 - 0.535 + 0.06 * Math.abs(footAhead), 0.04 + footAhead));
+        handTurn(V(0, -1, 0.12), V(-s, 0, 0.15), baseTurn);
+        poleHang.set(s * 0.3, 0, -1);
+      }
+      side.w = damp(side.w, goal.w, FOLLOW.hands * 0.7, dt);
+      const wt = smooth(clamp(side.w, 0, 1));
+      target.copy(base).lerp(goal.at, wt);
+      // (a hand going to or from a task rises a little on its way, as a hand does over what lies between: in a line
+      // from his side up to the counter's top, it cut through the counter's edge)
+      // ...and out to his side and a little forward, round his belly: dropped straight back to his side from before
+      // his middle, a hand went through it (from the lab)
+      if (!d.onCounter) {
+        const way = Math.sin(Math.PI * wt);
+        target.y += 0.09 * way;
+        target.x += s * 0.12 * way;
+        target.z += 0.07 * way;
+      }
+      qb.copy(baseTurn).slerp(goal.turn, wt);
+      if (side.fresh || life.settled) { side.at.copy(target); side.turn.copy(qb); side.fresh = false; }
+      side.at.lerp(target, k(FOLLOW.hands));
+      side.turn.slerp(qb, k(FOLLOW.hands));
+      pole.copy(poleHang).lerp(tmp.set(s * 0.8, -0.7, -0.4), d.onCounter ? 0 : wt).normalize();
+      reachArm(side.shoulder, side.elbow, P.upperL, P.foreL, chestLocal(tmp.copy(side.at)), pole, 1, 0.08);
+      side.elbow.updateWorldMatrix(true, false);
+      setHand(side.hand, side.turn);
+      if (side.s > 0 && d.quill) {
+        penGrip(side.fingers);
+        placeQuill();
+      } else if (side.s < 0 && d.pinch) {
+        coinGrip(side.fingers);
+        placeCoin();
+      } else {
+        const curl = lerp(0.15, goal.curl, Math.max(wt, d.onCounter ? 1 : 0)) + 0.18 * goal.drum;
+        poseHand(side.fingers, curl, lerp(0.15, goal.spread, wt), 0, clock, goal.drum);
+      }
+    }
+
+    // --- the things he handles: into his hand as he takes one, laid where he puts it ---
+    const ease = life.settled ? 1 : k(FOLLOW.things);
+    for (const t of life.things) {
+      const hand = t.held === 'L' ? j.handL : t.held === 'R' ? j.handR : shopG;
+      if (!hand) continue;
+      if (t.obj.parent !== hand) { hand.updateWorldMatrix(true, false); hand.attach(t.obj); }
+      const want = t.held ? t.grip : t.at;
+      t.obj.position.lerp(want.pos, ease);
+      t.obj.quaternion.slerp(want.turn, ease);
+    }
+    life.settled = false;
+    if (shopG) life.shopWorld.copy(shopG.matrixWorld);
     // (held, the coin and the quill at their size; at none otherwise)
-    coin.scale.setScalar(Math.max(0.001, smooth(clamp((weighK - 0.2) / 0.05, 0, 1)) * (1 - smooth(clamp((weighK - 0.82) / 0.05, 0, 1))) * (weigh > 0 ? 1 : 0)));
-    quill.scale.setScalar(Math.max(0.001, write > 0.05 ? 1 : 0));
+    coin.scale.setScalar(d.coin ? 1 : 0.001);
+    quill.scale.setScalar(d.quill ? 1 : 0.001);
   }
 
-  update(0, null);
+  let posed = false;
+  function update(dt: number, scene: OdoScene, far = false): void {
+    life.update(dt, scene);
+    owed += dt;
+    frame++;
+    posed = !far || frame % 2 === 0;
+    if (!posed) return;
+    pose(owed);
+    owed = 0;
+  }
 
-  return {
-    root: j.root,
-    update,
-    get loopAt() { return loop; },
-    set loopAt(v: number) { loop = ((v % ODO_LOOP) + ODO_LOOP) % ODO_LOOP; },
-    parts,
-  };
+  life.update(0, { customers: [], trading: false, t: 0 });
+  pose(0);
+
+  return { root: j.root, update, life, parts, joints: j, hands: { L: handL, R: handR }, get posed() { return posed; } };
 }
 
 /** His clothes on the rig: a teal waistcoat over a stocky chest and belly, buttoned in brass, his saffron shirt's
  *  collar open at the neck; a wide belt with a brass buckle, two pouches, a coin purse and a ring of keys; a short tan
- *  apron from the belt to above his knees; trousers and boots under; his shirt's sleeves rolled up over the elbow,
- *  bare forearms below. Nothing hangs past his hips but the apron: no coat skirt, no bib (both read as a habit). */
+ *  leather apron from the belt to above his knees; knee breeches and tall riding boots under; his shirt's sleeves rolled
+ *  up to just above the elbow, round elbows and bare forearms below. Nothing hangs past his hips but the apron: no coat
+ *  skirt, no bib (both read as a habit). */
 function dressBody(j: Joints, add: Add, M: Mats): void {
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds, how far the belly comes forward */
@@ -372,7 +522,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
   ];
   add(rowsSurface(neckRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 0.4)), 1.2), M.shirt, j.chest, 'shirt neck');
   const waistRows: [number, number, number, number, number][] = [
-    [-0.12, 0.25, 0.2, 0.008, 0.04], [-0.06, 0.245, 0.205, 0.009, 0.075], [0.02, 0.235, 0.205, 0.01, 0.095],
+    [-0.12, 0.256, 0.218, 0.008, 0.04], [-0.06, 0.25, 0.212, 0.009, 0.075], [0.02, 0.235, 0.205, 0.01, 0.095],
     [0.1, 0.225, 0.195, 0.009, 0.08], [0.2, 0.22, 0.18, 0.007, 0.06],
   ];
   add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.1)), 1.2), M.waistcoat, j.spine, 'waistcoat belly');
@@ -404,27 +554,55 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     for (const y of [0.1, 0.03, -0.05]) add(button.clone(), M.brass, j.chest, 'button', false).position.copy(onFront(chestRows, 0, y, 0.008));
     for (const y of [0.16, 0.08]) add(button.clone(), M.brass, j.spine, 'button', false).position.copy(onFront(waistRows, 0, y, 0.008));
   }
-  // --- the belt: wide, a brass buckle; two pouches, a coin purse and a ring of keys hung from it ---
+  // --- the belt: wide, stitched along both edges, a brass buckle with its tongue and a keeper; two pouches, a coin
+  // purse and a ring of keys hung from it ---
   const BELT = -0.02;
   add(rowsSurface([ring(BELT - 0.03, 0.258, 0.214, 0, 0.05, 0), ring(BELT + 0.03, 0.256, 0.21, 0, 0.07, 0)], 2), M.belt, j.spine, 'belt');
+  for (const [dy, belly] of [[-0.024, 0.052], [0.024, 0.068]] as const) {
+    add(cord(ring(BELT + dy, 0.2615, 0.2175, 0, belly, 0).slice(0, -1), 0.0015, true, 96), M.thread, j.spine, 'belt stitch', false);
+  }
   {
+    const at = onFront(waistRows, 0, BELT, 0.012);
     const buckle = new THREE.TorusGeometry(0.03, 0.006, 6, 4).rotateZ(Math.PI / 4).scale(1.2, 0.9, 1);
-    add(buckle, M.brass, j.spine, 'buckle', false).position.copy(onFront(waistRows, 0, BELT, 0.012));
-    // (a pouch on each hip, a flap over it)
-    for (const s of [1, -1]) {
-      const at = onFront(waistRows, s * 0.2, BELT - 0.07, 0.025);
-      const bag = add(new THREE.BoxGeometry(0.09, 0.1, 0.045, 2, 2, 1), M.pouch, j.spine, 'pouch');
-      bag.position.copy(at);
-      bag.rotation.y = s * 0.7;
-      const flap = add(new THREE.BoxGeometry(0.094, 0.045, 0.05), M.belt, j.spine, 'pouch flap', false);
-      flap.position.copy(at).add(V(0, 0.035, 0.003));
-      flap.rotation.y = s * 0.7;
+    add(buckle, M.brass, j.spine, 'buckle', false).position.copy(at);
+    add(new THREE.BoxGeometry(0.05, 0.005, 0.004), M.brass, j.spine, 'buckle tongue', false).position.copy(at).add(V(0.012, 0, 0.003));
+    // (the belt's end through its keeper, past the buckle)
+    add(new THREE.BoxGeometry(0.06, 0.05, 0.006), M.belt, j.spine, 'belt end', false).position.copy(onFront(waistRows, 0.06, BELT, 0.016));
+    add(new THREE.BoxGeometry(0.012, 0.062, 0.01), M.belt, j.spine, 'belt keeper', false).position.copy(onFront(waistRows, 0.075, BELT, 0.02));
+  }
+  // (a pouch on each hip, hung from the belt on two loops: its body rounded, a flap stitched round its edge and shut with
+  // a brass stud)
+  for (const s of [1, -1]) {
+    const at = onFront(waistRows, s * 0.205, BELT - 0.075, 0.03);
+    const pouchGroup = new THREE.Group();
+    pouchGroup.position.copy(at);
+    pouchGroup.rotation.y = s * 0.72;
+    j.spine.add(pouchGroup);
+    add(new THREE.SphereGeometry(1, 14, 10).scale(0.05, 0.058, 0.026), M.pouch, pouchGroup, 'pouch');
+    const flap = new THREE.Shape();
+    flap.moveTo(-0.05, 0.03); flap.lineTo(0.05, 0.03); flap.lineTo(0.05, 0.0); flap.quadraticCurveTo(0, -0.04, -0.05, 0.0);
+    flap.lineTo(-0.05, 0.03);
+    add(new THREE.ExtrudeGeometry(flap, { depth: 0.004, bevelEnabled: false }), M.belt, pouchGroup, 'pouch flap', false).position.set(0, 0.018, 0.022);
+    const edge = new THREE.EllipseCurve(0, 0.006, 0.043, 0.032, Math.PI * 1.05, Math.PI * 1.95).getPoints(14)
+      .map((p) => V(p.x, p.y + 0.018, 0.0275));
+    add(cord(edge, 0.0012, false, 24), M.thread, pouchGroup, 'pouch stitch', false);
+    add(new THREE.SphereGeometry(0.0055, 8, 6), M.brass, pouchGroup, 'pouch stud', false).position.set(0, -0.012, 0.028);
+    for (const lx of [-0.028, 0.028]) {
+      add(new THREE.BoxGeometry(0.012, 0.05, 0.006), M.belt, pouchGroup, 'pouch loop', false).position.set(lx, 0.055, 0.004);
     }
-    // (a round coin purse at his right front, drawn shut)
-    const purse = add(new THREE.SphereGeometry(0.04, 12, 8).scale(1, 1.15, 0.8), M.pouch, j.spine, 'purse');
-    purse.position.copy(onFront(waistRows, -0.11, BELT - 0.075, 0.03));
-    add(new THREE.TorusGeometry(0.018, 0.004, 5, 12).rotateX(Math.PI / 2), M.brass, j.spine, 'purse ring', false)
-      .position.copy(purse.position).add(V(0, 0.045, 0));
+  }
+  {
+    // (a round coin purse at his right front, drawn shut by a cord tied off in two tassels)
+    const purse = add(new THREE.SphereGeometry(0.04, 14, 10).scale(1, 1.15, 0.8), M.pouch, j.spine, 'purse');
+    purse.position.copy(onFront(waistRows, -0.11, BELT - 0.08, 0.03));
+    const neck = purse.position.clone().add(V(0, 0.04, 0));
+    add(new THREE.TorusGeometry(0.016, 0.003, 5, 14).rotateX(Math.PI / 2), M.thread, j.spine, 'purse cord', false).position.copy(neck);
+    add(new THREE.CylinderGeometry(0.012, 0.018, 0.016, 10), M.pouch, j.spine, 'purse neck', false).position.copy(neck).add(V(0, 0.008, 0));
+    for (const dx of [-0.008, 0.006]) {
+      const tassel = add(new THREE.CylinderGeometry(0.0018, 0.003, 0.04, 5).translate(0, -0.02, 0), M.thread, j.spine, 'purse tassel', false);
+      tassel.position.copy(neck).add(V(dx, -0.002, 0.012));
+      tassel.rotation.z = dx * 18;
+    }
     // (a ring of keys at his left front)
     const ringAt = onFront(waistRows, 0.11, BELT - 0.05, 0.03);
     add(new THREE.TorusGeometry(0.022, 0.003, 5, 16), M.iron, j.spine, 'key ring', false).position.copy(ringAt);
@@ -432,53 +610,206 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       const key = add(new THREE.BoxGeometry(0.008, 0.06, 0.003).translate(0, -0.03, 0), M.iron, j.spine, 'key', false);
       key.position.copy(ringAt).add(V((k - 1) * 0.012, -0.018, 0.004));
       key.rotation.z = (k - 1) * 0.3;
+      const bow = add(new THREE.TorusGeometry(0.007, 0.002, 4, 10), M.iron, j.spine, 'key bow', false);
+      bow.position.copy(key.position).add(V(0, -0.002, 0));
     }
   }
-  // --- the apron: short, tan leather, from the belt to above his knees, over the hips ---
+  // --- the apron: a short apron of soft leather from the belt to above his knees, flaring a little at its hem, bound
+  // in darker leather round its edge, stitched inside it, a pocket on it, tied at his sides ---
   {
-    const lap: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 10; k++) {
-      const t = k / 10, y = lerp(-0.34, 0.07, t), w = lerp(0.27, 0.25, t), d = lerp(0.23, 0.21, t), half = lerp(0.2, 0.18, t);
-      const row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 8; i++) {
-        const x = lerp(-half, half, i / 8), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
-        row.push(V(x, y, z + lerp(0.03, 0.06, t) * Math.cos(a) ** 2 + 0.02));
+    /** a point of the apron: `u` across it (-1 his right edge to 1 his left), `t` up it (0 its hem to 1 its top),
+     *  `lift` off its face */
+    const apronAt = (u: number, t: number, lift = 0): THREE.Vector3 => {
+      const y = lerp(-0.34, 0.07, t), w = lerp(0.27, 0.25, t), d = lerp(0.23, 0.21, t), half = lerp(0.205, 0.18, t);
+      const x = u * half, a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
+      const flare = 0.035 * (1 - t) ** 2, wave = 0.006 * Math.sin(u * 5.5 + 0.7) * (1 - t);
+      return V(x, y, z + lerp(0.03, 0.06, t) * Math.cos(a) ** 2 + 0.02 + flare + wave + lift);
+    };
+    const sheet = (u0: number, u1: number, t0: number, t1: number, lift: number, cols: number, rows: number) => {
+      const out: THREE.Vector3[][] = [];
+      for (let k = 0; k <= rows; k++) {
+        const row: THREE.Vector3[] = [];
+        for (let i = 0; i <= cols; i++) row.push(apronAt(lerp(u0, u1, i / cols), lerp(t0, t1, k / rows), lift));
+        out.push(row);
       }
-      lap.push(row);
+      return out;
+    };
+    add(rowsSurface(sheet(-1, 1, 0, 1, 0, 12, 12), 1.5), M.apron, j.hips, 'apron');
+    // (its binding: down one side, along the hem, up the other)
+    const bound: THREE.Vector3[] = [];
+    for (let k = 10; k >= 0; k--) bound.push(apronAt(-1, k / 10, 0.002));
+    for (let i = 1; i <= 12; i++) bound.push(apronAt(-1 + (2 * i) / 12, 0, 0.002));
+    for (let k = 1; k <= 10; k++) bound.push(apronAt(1, k / 10, 0.002));
+    add(cord(bound, 0.004, false, 96), M.belt, j.hips, 'apron binding', false);
+    const stitch: THREE.Vector3[] = [];
+    for (let k = 10; k >= 0; k--) stitch.push(apronAt(-0.9, lerp(0.07, 0.94, k / 10), 0.0025));
+    for (let i = 1; i <= 12; i++) stitch.push(apronAt(-0.9 + (1.8 * i) / 12, 0.07, 0.0025));
+    for (let k = 1; k <= 10; k++) stitch.push(apronAt(0.9, lerp(0.07, 0.94, k / 10), 0.0025));
+    add(cord(stitch, 0.0012, false, 120), M.thread, j.hips, 'apron stitch', false);
+    // (a pocket on his left, stitched on three sides, open at its top, its lip bound)
+    add(rowsSurface(sheet(0.1, 0.62, 0.34, 0.6, 0.004, 4, 4), 1.5), M.apron, j.hips, 'apron pocket', false);
+    const pocketSeam = [apronAt(0.12, 0.6, 0.006), apronAt(0.12, 0.36, 0.006), apronAt(0.6, 0.36, 0.006), apronAt(0.6, 0.6, 0.006)];
+    add(cord(pocketSeam, 0.0012, false, 30), M.thread, j.hips, 'pocket stitch', false);
+    add(cord([apronAt(0.1, 0.6, 0.006), apronAt(0.36, 0.605, 0.006), apronAt(0.62, 0.6, 0.006)], 0.003, false, 12), M.belt, j.hips, 'pocket lip', false);
+    // (its ties: from each top corner round his hips under the belt)
+    for (const s of [1, -1]) {
+      const from = apronAt(s, 0.97, 0);
+      const tie = [from, V(s * 0.25, from.y - 0.005, from.z - 0.06), V(s * 0.262, from.y - 0.01, 0.0)];
+      add(cord(tie, 0.006, false, 12), M.apron, j.hips, 'apron tie', false);
     }
-    add(rowsSurface(lap, 2), M.apron, j.hips, 'apron');
   }
-  // --- trousers from the hips to the boots ---
+  // --- breeches: a seat round his hips, each thigh full, creased and seamed down its outside, a round knee, buckled
+  // in a band below it; tall riding boots over the calf, their tops turned down, soled and heeled ---
   {
-    const rows: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 4; k++) {
-      const t = k / 4;
-      rows.push(ring(lerp(-0.1, 0.08, t), lerp(0.24, 0.245, t), lerp(0.2, 0.2, t), 0.01, lerp(0.02, 0.05, t), 5.1));
-    }
-    add(rowsSurface(rows, 1.2), M.trousers, j.hips, 'trouser seat');
+    /** a ring of the breeches' seat: like the body's, with the seat's fullness behind */
+    const seatRing = (y: number, w: number, d: number, back: number) => {
+      const row = ring(y, w, d, 0.012, 0.01, 5.1);
+      return row.map((p) => {
+        const a = Math.atan2(p.x, p.z);
+        return V(p.x, p.y, p.z - back * Math.max(0, -Math.cos(a)) ** 2);
+      });
+    };
+    // (its fullness behind low, under the waistcoat's hem: higher, it stood out through the hem as his hips turned)
+    const seat: [number, number, number, number][] = [[-0.19, 0.2, 0.17, 0.02], [-0.13, 0.232, 0.195, 0.04], [-0.085, 0.236, 0.196, 0.018], [-0.03, 0.232, 0.19, 0], [0.06, 0.228, 0.186, 0]];
+    add(rowsSurface(seat.map(([y, w, d, back]) => seatRing(y, w, d, back)), 1.2), M.trousers, j.hips, 'breeches seat');
+    // (the seam up the back of the seat)
+    add(cord(seat.map(([y, , d, back]) => V(0, y, -d - back - 0.002)), 0.0018, false, 12), M.thread, j.hips, 'seat seam', false);
   }
   for (const [thigh, knee, ankle, s] of [[j.thighL, j.kneeL, j.ankleL, 1], [j.thighR, j.kneeR, j.ankleR, -1]] as const) {
-    add(sleeve([[0.08, -j.P.thighL - 0.02], [0.085, -0.3], [0.09, -0.15], [0.095, 0.02]], 0.03, 1 + s), M.trousers, thigh, 'trouser thigh');
-    add(sleeve([[0.058, -0.42], [0.06, -0.3], [0.064, -0.15], [0.07, 0], [0.078, 0.06]], 0.03, 3 + s), M.trousers, knee, 'trouser');
-    add(new THREE.CylinderGeometry(0.064, 0.058, 0.22, 14).translate(0, 0.07, 0), M.boot, ankle, 'boot');
-    const toe = add(new THREE.SphereGeometry(1, 14, 10).scale(0.056, 0.046, 0.12), M.boot, ankle, 'boot toe');
-    toe.position.set(0, -0.04, 0.07);
+    const T = j.P.thighL;
+    // (the thigh: full at the top, where it reaches up into the seat, narrowing to the knee, its folds deeper behind)
+    const thighProfile: [number, number][] = [[0.07, -T + 0.03], [0.078, -T + 0.12], [0.088, -0.22], [0.098, -0.08], [0.108, 0.02], [0.1, 0.07]];
+    const leg = sleeve(thighProfile, 0.04, 1 + s);
+    leg.scale(1, 1, 0.94);
+    add(leg, M.trousers, thigh, 'breeches thigh');
+    const radius = (y: number) => {
+      for (let i = 1; i < thighProfile.length; i++) {
+        const [r0, y0] = thighProfile[i - 1], [r1, y1] = thighProfile[i];
+        if (y <= y1) return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1));
+      }
+      return thighProfile[thighProfile.length - 1][0];
+    };
+    const seam: THREE.Vector3[] = [];
+    for (let k = 0; k <= 10; k++) { const y = lerp(0.03, -T + 0.04, k / 10); seam.push(V(s * (radius(y) + 0.002), y, 0)); }
+    add(cord(seam, 0.0018, false, 20), M.thread, thigh, 'breeches seam', false);
+    // (the knee: a round of cloth over the joint, so a bent knee is cloth and not a gap between two tubes)
+    add(new THREE.SphereGeometry(0.07, 16, 12).scale(1, 1, 1.05), M.trousers, knee, 'breeches knee').position.set(0, 0.005, 0.006);
+    add(sleeve([[0.066, -0.12], [0.068, -0.06], [0.072, 0.0], [0.074, 0.04]], 0.03, 3 + s), M.trousers, knee, 'breeches calf');
+    // (the band buckled below the knee)
+    add(new THREE.CylinderGeometry(0.069, 0.068, 0.03, 18), M.belt, knee, 'knee band').position.y = -0.085;
+    add(new THREE.BoxGeometry(0.004, 0.026, 0.022), M.brass, knee, 'knee buckle', false).position.set(s * 0.07, -0.085, 0);
+    // (the boot's shaft over the calf to below the knee, creased at the ankle; its top turned down in a paler cuff)
+    const S = j.P.shinL;
+    add(sleeve([[0.05, -S - 0.02], [0.049, -S + 0.05], [0.056, -S + 0.14], [0.064, -0.24], [0.068, -0.16], [0.07, -0.12]], 0.02, 9 + s), M.boot, knee, 'boot shaft');
+    add(sleeve([[0.071, -0.175], [0.078, -0.165], [0.08, -0.12], [0.075, -0.104]], 0.015, 11 + s), M.bootCuff, knee, 'boot cuff');
+    // (the foot: its upper and toe over a sole cut to a foot's outline, a heel under it)
+    add(new THREE.SphereGeometry(1, 16, 12).scale(0.05, 0.046, 0.115), M.boot, ankle, 'boot foot').position.set(0, -0.034, 0.045);
+    add(new THREE.SphereGeometry(1, 14, 10).scale(0.046, 0.034, 0.06), M.boot, ankle, 'boot toe').position.set(0, -0.05, 0.12);
+    const print = new THREE.Shape();
+    print.moveTo(0, -0.075);
+    print.bezierCurveTo(0.036, -0.075, 0.038, -0.03, 0.034, 0.0);
+    print.bezierCurveTo(0.03, 0.04, 0.052, 0.09, 0.05, 0.13);
+    print.bezierCurveTo(0.046, 0.18, -0.046, 0.18, -0.05, 0.13);
+    print.bezierCurveTo(-0.052, 0.09, -0.03, 0.04, -0.034, 0.0);
+    print.bezierCurveTo(-0.038, -0.03, -0.036, -0.075, 0, -0.075);
+    // (the outline in x and z, extruded up: laid flat with its top up)
+    const soleGeo = new THREE.ExtrudeGeometry(print, { depth: 0.012, bevelEnabled: false, curveSegments: 6 }).rotateX(Math.PI / 2);
+    add(soleGeo, M.sole, ankle, 'boot sole').position.set(0, -0.074, 0);
+    add(new THREE.BoxGeometry(0.066, 0.026, 0.064), M.sole, ankle, 'boot heel').position.set(0, -0.073, -0.04);
   }
-  // --- the sleeves: the shirt's, full, to the elbow, rolled up in a thick band over it; his forearms bare below ---
+  // --- the sleeves: the shirt's, full and gathered, rolled up in a soft band that sits just above the elbow; a round
+  // elbow and his bare forearm below, shaped as an arm is (wider by the elbow, flatter toward the wrist), in his
+  // hands' skin. The roll on the elbow's own joint stood out as a hard cylinder pinched in at every bend ---
   for (const [shoulder, elbow, s] of [[j.shoulderL, j.elbowL, 1], [j.shoulderR, j.elbowR, -1]] as const) {
-    add(sleeve([[0.07, -0.33], [0.078, -0.25], [0.084, -0.12], [0.09, -0.03], [0.088, 0.03], [0.06, 0.075], [0.024, 0.09]], 0.06, 5 + s),
+    const U = j.P.upperL;
+    add(sleeve([[0.062, -U + 0.05], [0.074, -U + 0.08], [0.085, -0.13], [0.09, -0.03], [0.088, 0.03], [0.06, 0.075], [0.024, 0.09], [0, 0.094]], 0.075, 5 + s),
       M.shirt, shoulder, 'sleeve');
-    // (the roll: a fat band of the shirt turned up round the elbow)
-    add(sleeve([[0.056, -0.05], [0.07, -0.04], [0.074, -0.01], [0.072, 0.03], [0.06, 0.045]], 0.05, 7 + s), M.shirt, elbow, 'sleeve roll');
+    add(sleeve([[0.054, -U + 0.012], [0.068, -U + 0.02], [0.075, -U + 0.035], [0.073, -U + 0.058], [0.062, -U + 0.07]], 0.05, 7 + s),
+      M.shirt, shoulder, 'sleeve roll');
+    // (the elbow: the upper arm's end under the roll, a small round filling the bend's crease, and the point of the
+    // elbow behind, the forearm's own bone, so it turns with the forearm. A ball the arm's width round the joint read as
+    // a ball stuck on the arm, from play)
+    add(sleeve([[0.036, -U - 0.004], [0.039, -U + 0.01], [0.043, -U + 0.03]], 0, 17 + s), M.arm, shoulder, 'upper arm end');
+    add(new THREE.SphereGeometry(0.035, 14, 10), M.arm, elbow, 'elbow').position.set(0, 0.002, 0.004);
     const fore = -j.P.foreL;
-    add(sleeve([[0.026, fore - 0.012], [0.03, fore + 0.02], [0.038, fore * 0.55], [0.046, -0.05], [0.05, -0.02]], 0, 13 + s),
-      M.arm, elbow, 'forearm');
+    // (the forearm: the muscle at its top swelling out toward the thumb's side, tapering to a flat wrist, its top closed
+    // and running up under the upper arm's end so no join shows bent or straight)
+    const forearm = sleeve([[0.026, fore - 0.012], [0.029, fore + 0.025], [0.035, fore * 0.6], [0.044, fore * 0.32], [0.047, -0.045],
+      [0.042, -0.005], [0.034, 0.022], [0.016, 0.034], [0, 0.036]], 0, 13 + s);
+    forearm.scale(1, 1, 0.84);
+    {
+      const fp = forearm.attributes.position;
+      for (let i = 0; i < fp.count; i++) {
+        const y = fp.getY(i), z = fp.getZ(i), swell = Math.exp(-(((y + 0.06) / 0.07) ** 2));
+        fp.setX(i, fp.getX(i) - s * 0.006 * swell);
+        // (the point of the elbow, the ulna's end, swelling out of the back of the forearm's top: a separate round
+        // stuck there read as a knob)
+        const point = Math.exp(-(((y - 0.004) / 0.022) ** 2)) * Math.max(0, -z / 0.036) ** 2;
+        fp.setZ(i, z - 0.011 * point);
+      }
+      forearm.computeVertexNormals();
+    }
+    add(forearm, M.arm, elbow, 'forearm');
+  }
+}
+
+/** his ear's thickness through it, and how far back its top leans (m, rad) */
+const EAR = { thick: 0.011, tilt: 0.22 };
+
+/**
+ * His ears made his own, solid, where the heroes' stand (the heroes' are thin cards flared off the skull, their edges
+ * and their join hidden by hair: with Odo's hair under his hat they showed as paper leaves standing off his head, from
+ * the front and from behind, from play). Each is a rounded body the size of the hero's ear, `EAR.thick` through, its
+ * inner side sunk into the skull so no edge shows from any side: its outline narrowing to a lobe at the bottom, a
+ * rolled rim round the top and back, a bowl hollowed in its face, its top leaning back and its back edge standing out
+ * a little from the head.
+ */
+function seatEars(head: Head): void {
+  const ears: THREE.Mesh[] = [];
+  (head.group.parent ?? head.group).traverse((o) => { if ((o as THREE.Mesh).isMesh && o.name === 'ear') ears.push(o as THREE.Mesh); });
+  for (const ear of ears) {
+    ear.geometry.computeBoundingBox();
+    const box = ear.geometry.boundingBox!;
+    const s = Math.sign(box.min.x + box.max.x);
+    const root = Math.min(Math.abs(box.min.x), Math.abs(box.max.x));
+    const cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
+    const hy = (box.max.y - box.min.y) / 2, hz = (box.max.z - box.min.z) / 2;
+    const geo = new THREE.SphereGeometry(1, 28, 18);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      let x = p.getX(i);
+      const y = p.getY(i), z = p.getZ(i);
+      // (the bowl hollowed in its face, above the middle and toward the front; the rim round it left standing)
+      const bowl = Math.exp(-(((y + 0.05) / 0.48) ** 2) - (((z + 0.1) / 0.42) ** 2));
+      if (x > 0) x = Math.max(-0.25, x * (1 - 1.55 * bowl));
+      // (narrower at the bottom, to a lobe)
+      const across = 0.6 + 0.4 * smooth(clamp((y + 1) / 1.4, 0, 1));
+      const dy = y * hy, dz = z * hz * across;
+      const ty = dy * Math.cos(EAR.tilt) + dz * Math.sin(EAR.tilt), tz = dz * Math.cos(EAR.tilt) - dy * Math.sin(EAR.tilt);
+      // (its inner side sunk in the skull, its back edge standing out from the head)
+      const out = root + EAR.thick * (0.3 + 0.5 * x) + Math.max(0, -tz) * 0.22;
+      p.setXYZ(i, s * out, cy + ty, cz + tz);
+    }
+    geo.computeVertexNormals();
+    // (the skin's colours, as the head's ear has them: its material reads them)
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(new Array(p.count * 3).fill(1), 3));
+    // (a mirrored winding on the right: x flipped by the sign keeps the sphere's faces outward on the left only)
+    if (s < 0) {
+      const index = geo.index!;
+      for (let i = 0; i < index.count; i += 3) {
+        const a = index.getX(i + 1);
+        index.setX(i + 1, index.getX(i + 2));
+        index.setX(i + 2, a);
+      }
+      geo.computeVertexNormals();
+    }
+    ear.geometry = geo;
   }
 }
 
 /** His head dressed: a broad teal felt hat, its brim wide and turned up at one side, a saffron band and a yellow plume.
  *  All in the head's group, made in the face's frame (mm). */
-function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, feather: THREE.Material): void {
+function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, feather: THREE.Material, buckleMat: THREE.Material): void {
   const G = head.group;
   const put = (geo: THREE.BufferGeometry, mat: THREE.Material, name: string, cast = true) => {
     const m = new THREE.Mesh(inHead(geo), mat);
@@ -492,12 +823,15 @@ function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, fe
   const crown = new THREE.LatheGeometry([[92, BASE], [96, BASE + 20], [94, BASE + 50], [86, BASE + 72], [60, BASE + 84], [0, BASE + 86]]
     .map(([r, y]) => new THREE.Vector2(r, y)), 32);
   crown.scale(1, 1, 1.18).translate(0, 0, CZ);
-  // (a dent down the middle of its top, as a felt hat is pinched)
+  // (a dent down the middle of its top, and pinched in at either side of the front, as a felt hat is shaped by the
+  // hand that puts it on)
   {
     const p = crown.attributes.position;
     for (let i = 0; i < p.count; i++) {
-      const y = p.getY(i), x = p.getX(i);
+      const y = p.getY(i), x = p.getX(i), z = p.getZ(i) - CZ;
       if (y > BASE + 60) p.setY(i, y - 10 * Math.exp(-((x / 28) ** 2)) * smooth(clamp((y - BASE - 60) / 26, 0, 1)));
+      const pinch = 0.11 * Math.exp(-(((z - 62) / 42) ** 2)) * smooth(clamp((y - BASE - 32) / 36, 0, 1));
+      p.setX(i, x * (1 - pinch));
     }
   }
   put(crown, hatFelt, 'hat crown');
@@ -514,6 +848,20 @@ function dressHead(head: Head, hatFelt: THREE.Material, band: THREE.Material, fe
   }
   put(brim, hatFelt, 'hat brim');
   put(new THREE.CylinderGeometry(97, 94, 22, 32, 1, true).scale(1, 1, 1.18).translate(0, BASE + 11, CZ), band, 'hat band');
+  // (the brim's edge bound in a cord of the felt, following its turn)
+  {
+    const edge: THREE.Vector3[] = [];
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * Math.PI * 2, x = 208 * Math.sin(a), z = 208 * 1.12 * Math.cos(a);
+      edge.push(V(x, BASE + 11 - 0.06 * z + 0.5 * Math.max(0, x), z + CZ));
+    }
+    put(cord(edge, 3, true, 128), hatFelt, 'hat brim binding', false);
+  }
+  // (a square brass buckle on the band, toward his left)
+  {
+    const a = 0.55, at = V(99 * Math.sin(a), BASE + 11, 99 * 1.18 * Math.cos(a) + CZ);
+    put(new THREE.TorusGeometry(10, 1.8, 4, 4).rotateZ(Math.PI / 4).rotateY(a).translate(at.x, at.y, at.z), buckleMat, 'hat buckle', false);
+  }
   // --- the feather: tucked in the band at his left side, sweeping up and back ---
   {
     const rows: THREE.Vector3[][] = [];
