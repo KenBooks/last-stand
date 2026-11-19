@@ -64,3 +64,4 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `ghost.ts`: the ghost is drawn in its kind's crowd while shown (`drawnInCrowd`), out of it while hidden (the other hour's, the village left): a crowd draws a body whatever its meshes' visibility. Drawn on its own a thornling was 46 of the village's draws (`lab draws --village`'s parts).

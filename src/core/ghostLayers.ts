@@ -56,16 +56,16 @@ function clearCount(gl: THREE.WebGLRenderer, into: THREE.WebGLRenderTarget): voi
 /**
  * The ghosts over each pixel counted for the frame `camera` is about to draw of `scene`, at the scene target's
  * `width` by `height`, while `wanted` (what blends is thinned only from above and over the shoulder, in the village).
- * Leaves `gl`'s target for the caller to set.
+ * Leaves `gl`'s target for the caller to set. Returns whether it drew `scene`, so made its world matrices for the frame.
  */
 export function countGhostLayers(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, width: number,
-  height: number, wanted: boolean): void {
+  height: number, wanted: boolean): boolean {
   const counting = wanted && !countHeld && ghostsCounted();
-  if (!counting && !holdsAny) return;
+  if (!counting && !holdsAny) return false;
   const into = countTarget(width, height);
   clearCount(gl, into);
   holdsAny = counting;
-  if (!counting) return;
+  if (!counting) return false;
   const mask = camera.layers.mask;
   const { autoClear } = gl;
   const shadows = gl.shadowMap.autoUpdate;
@@ -82,4 +82,5 @@ export function countGhostLayers(gl: THREE.WebGLRenderer, scene: THREE.Scene, ca
     gl.shadowMap.autoUpdate = shadows;
     scene.background = background;
   }
+  return true;
 }

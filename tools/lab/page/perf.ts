@@ -28,6 +28,8 @@ import { standIn } from './light';
 import { toLobby } from './hallMoves';
 import { quantile } from './timing';
 import { particleFill } from './particleFill';
+import { matrixWalks } from './matrixWalks';
+import { programSwitches } from './programSwitches';
 import { reportRead } from './perfReport';
 import { WEBGPU, gpuDone } from '../../../src/core/webgpu';
 import { inVillage, VILLAGE_SPOT } from './draws';
@@ -135,6 +137,10 @@ interface Timed {
   render: number;
   stages: Record<string, number>;
   draws: number;
+  /** the programs the frame switched between (`programSwitches.ts`) */
+  switches: number;
+  /** the objects whose world matrices the frame walked (`matrixWalks.ts`) */
+  walked: number;
   triangles: number;
   particles: number;
   /** the pixels the particles cover, every layer, and the scene's pixels (`particleFill.ts`) */
@@ -201,7 +207,11 @@ async function waitForGpu(): Promise<void> {
 async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
   const start = now();
+  const switchesBefore = programSwitches();
+  const walksBefore = matrixWalks();
   await lab.step(1, input);
+  const switches = programSwitches() - switchesBefore;
+  const walked = matrixWalks() - walksBefore;
   await waitForGpu();
   const frame = now() - start;
   await nextTask();
@@ -215,6 +225,8 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
     render: timed?.rnd ?? 0,
     stages: { ...(timed?.stages ?? {}) },
     draws: drawn.calls,
+    switches,
+    walked,
     triangles: drawn.triangles,
     particles: particles.glow.count + particles.smoke.count,
     fill,
@@ -274,8 +286,10 @@ function phaseLines(phase: Phase, device?: Device): string[] {
     `  the page's work ${spreadWords(of((frame) => frame.cpu))}: the update ${ms(of((frame) => frame.update).median)},`
       + ` the render ${ms(of((frame) => frame.render).median)}; ${gpuWords}`,
     ...(device ? [deviceLine(device, gpu.whole)] : []),
-    `  draws ${Math.round(of((frame) => frame.draws).median)} (most ${most((frame) => frame.draws)}), triangles `
-      + `${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
+    `  draws ${Math.round(of((frame) => frame.draws).median)} (most ${most((frame) => frame.draws)}), programs `
+      + `switched ${Math.round(of((frame) => frame.switches).median)} (most ${most((frame) => frame.switches)}), `
+      + `objects walked ${Math.round(of((frame) => frame.walked).median)}, `
+      + `triangles ${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
   ];
   const fill = of((frame) => frame.fill);
   const pixels = phase.frames[0]?.pixels ?? 1;

@@ -28,6 +28,7 @@ import { holdHour } from '../../../src/game/clock';
 import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera } from '../../../src/core/renderer';
+import { GHOST_COUNT_LAYER } from '../../../src/core/layers';
 
 export interface DrawsOptions {
   fixture: Fixture;
@@ -60,13 +61,13 @@ const CANARY_AWAY = 500;
 /** how far before the eyes (m) the canary's box on the arms' layer stands: within their camera's reach */
 const CANARY_ARMS_AHEAD = 1.5;
 
-/** a frame's passes: the scene's, the arms' own camera's over it (through the eyes), the shadow map's, and after them
- *  (the post, the overlays) */
-type Pass = 'scene' | 'arms' | 'shadow' | 'other';
-const PASSES: Pass[] = ['scene', 'arms', 'shadow', 'other'];
+/** a frame's passes: the ghosts' count drawn before the scene (`core/ghostLayers.ts`, the village's), the scene's,
+ *  the arms' own camera's over it (through the eyes), the shadow map's, and after them (the post, the overlays) */
+type Pass = 'ghosts' | 'scene' | 'arms' | 'shadow' | 'other';
+const PASSES: Pass[] = ['ghosts', 'scene', 'arms', 'shadow', 'other'];
 /** the passes that draw the world, whose triangles the GPU's vertices cost */
-const WORLD_PASSES: Pass[] = ['scene', 'arms', 'shadow'];
-const noDraws = (): Record<Pass, number> => ({ scene: 0, arms: 0, shadow: 0, other: 0 });
+const WORLD_PASSES: Pass[] = ['ghosts', 'scene', 'arms', 'shadow'];
+const noDraws = (): Record<Pass, number> => ({ ghosts: 0, scene: 0, arms: 0, shadow: 0, other: 0 });
 
 /** What one geometry cost the frame: its draws in each pass, the most vertices and triangles a draw of it drew, the
  *  triangles it drew in each pass and those of them outside the view of the pass that drew them, and what drew it. */
@@ -97,6 +98,15 @@ interface FrameDraws {
   /** the triangles drawn under each part of the scene, by pass (its shadow maps' too) */
   weights: Map<string, Record<Pass, number>>;
   arms: Map<THREE.Object3D, number>;
+  /** the scene's draws by program and look, and the materials and parts of the scene they drew with */
+  alike: Map<string, Alike>;
+}
+
+/** The scene's draws of one program and look: their materials, apart, and the parts of the scene that drew them. */
+interface Alike {
+  draws: number;
+  materials: Set<THREE.Material>;
+  parts: Set<string>;
 }
 
 /** The vertices a draw of `geometry` (by `object`) ran: its range, times its instances. */
@@ -150,6 +160,7 @@ export function lookOf(material: THREE.Material): string {
 function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
   if (scene === null) return 'shadow';
   if (scene !== G.scene) return 'other';
+  if (camera === G.camera && camera.layers.mask === 1 << GHOST_COUNT_LAYER) return 'ghosts';
   return camera === G.camera ? 'scene' : 'arms';
 }
 
@@ -178,7 +189,9 @@ function webgpuPassOf(drawn: RenderObject): Pass {
 /** Records every draw call until `stop()`: what was drawn, and the record. On WebGPU, each draw its backend is given
  *  (`backend.draw`, a `RenderObject` a draw: WebGL's `renderBufferDirect` isn't there). */
 function recordDraws(): { record: FrameDraws; stop(): void } {
-  const record: FrameDraws = { geometries: new Map(), looks: new Map(), parts: new Map(), weights: new Map(), arms: new Map() };
+  const record: FrameDraws = {
+    geometries: new Map(), looks: new Map(), parts: new Map(), weights: new Map(), arms: new Map(), alike: new Map(),
+  };
   if (WEBGPU) {
     const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
     const draw = backend.draw;
@@ -232,7 +245,34 @@ function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geomet
     record.looks.set(key, look);
     const part = scenePartOf(object);
     record.parts.set(part, (record.parts.get(part) ?? 0) + 1);
+    recordAlike(record, material, part);
   }
+}
+
+/** A scene's draw by its program and look (`Alike`). */
+function recordAlike(record: FrameDraws, material: THREE.Material, part: string): void {
+  const key = `${lookOf(material)}, program ${programOf(material)}`;
+  const alike = record.alike.get(key) ?? { draws: 0, materials: new Set(), parts: new Set() };
+  alike.draws++;
+  alike.materials.add(material);
+  alike.parts.add(part);
+  record.alike.set(key, alike);
+}
+
+/** The program `material` last drew with, by three's id (WebGL's; none on WebGPU). */
+function programOf(material: THREE.Material): string {
+  if (WEBGPU) return '?';
+  const program = (G.renderer.properties.get(material) as { currentProgram?: { id: number } }).currentProgram;
+  return program ? String(program.id) : '?';
+}
+
+/** The scene's programs and looks drawn by more than one material, the most materials first: what a merge by
+ *  material can't join, each material a draw of its own however alike they are. */
+function alikeRows(record: FrameDraws, rows: number): string[] {
+  const apart = [...record.alike].filter(([, alike]) => alike.materials.size > 1);
+  apart.sort((a, b) => b[1].materials.size - a[1].materials.size || b[1].draws - a[1].draws);
+  return apart.slice(0, rows).map(([key, alike]) => `  ${String(alike.materials.size).padStart(4)} materials, `
+    + `${alike.draws} draws  ${key}  in ${[...alike.parts].slice(0, 3).join(', ')}`);
 }
 
 /** An object's place in the scene as names (or types), from the scene down: `crowd mossback`, `forest > Group`. */
@@ -256,7 +296,7 @@ function scenePartOf(object: THREE.Object3D): string {
 }
 
 /** every pass */
-const ALL_PASSES: Pass[] = ['scene', 'arms', 'shadow', 'other'];
+const ALL_PASSES: Pass[] = ['ghosts', 'scene', 'arms', 'shadow', 'other'];
 
 /** A part's row: its triangles in all, in the scene and in the shadow maps. */
 function weightRow([part, weight]: [string, Record<Pass, number>]): string {
@@ -387,6 +427,8 @@ function lists(record: FrameDraws, rows: number): string[] {
     ...nothingRows(geometries, rows),
     'the scene\'s draws by their material\'s look:', ...looks,
     'the scene\'s draws by the scene\'s part:', ...parts,
+    'the scene\'s programs and looks drawn by more than one material (each a draw of its own, however alike):',
+    ...alikeRows(record, rows),
     ...(record.arms.size ? ['what the arms\' own camera drew over the frame (the hero\'s arms and what they hold '
       + 'alone):', ...armsRows(record, rows)] : []),
   ];
@@ -403,7 +445,8 @@ function totalsOf(record: FrameDraws): string {
     sum.off += offIn(drawn);
   }
   const arms = sum.arms ? `, ${sum.arms} by the arms' own camera` : '';
-  return `${sum.scene} draws in the scene${arms}, ${sum.shadow} in its shadow map, ${sum.other} after it, `
+  const ghosts = sum.ghosts ? `, ${sum.ghosts} in the ghosts' count before it` : '';
+  return `${sum.scene} draws in the scene${ghosts}${arms}, ${sum.shadow} in its shadow map, ${sum.other} after it, `
     + `${sum.nothing} of them of nothing; ${sum.triangles} triangles in the scene and shadows, ${sum.off} of them `
     + `outside the view; ${record.geometries.size} geometries`;
 }

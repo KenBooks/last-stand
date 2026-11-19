@@ -992,8 +992,24 @@ function ghostCountMaterial(kind: keyof typeof kinds, side: THREE.Side): THREE.S
 /** the twins the count is drawn with, each under the mesh it counts, and the layer they're on */
 const ghostTwins: THREE.Mesh[] = [];
 
-/** Whether any ghost is counted: the count is drawn only then. */
-export const ghostsCounted = (): boolean => ghostTwins.length > 0;
+/** the kinds a twin counts */
+const kindsCounted = new Set<keyof typeof kinds>();
+
+/** Whether `kind` may thin any of itself this frame: none of its uniforms asks for any, and its fragment is dropped. */
+function mayThin(kind: keyof typeof kinds): boolean {
+  const u = kinds[kind] as Kind;
+  if (u.k.value.z > 0 || u.whole.value > 0) return true;
+  if ((u.doorOn ?? DOOR_SHUT).value !== 0) return true;
+  return u.sight === true && (u.sightOn ?? HALL_SIGHT).value !== 0;
+}
+
+/** Whether any ghost is counted: the count is drawn only while there are twins and one of their kinds may thin (over
+ *  the shoulder on the square none does, and the count's render was 48 draws and a walk of the whole scene for nothing). */
+export function ghostsCounted(): boolean {
+  if (ghostTwins.length === 0) return false;
+  for (const kind of kindsCounted) if (mayThin(kind)) return true;
+  return false;
+}
 
 /**
  * For each mesh under `root` that thins by blending, a twin drawn into the count of ghosts alone, on `layer`, which no
@@ -1013,6 +1029,7 @@ export function countGhosts(root: THREE.Object3D, layer: number): void {
     const key = `${kind}|${mesh.material.side}`;
     let material = made.get(key);
     if (!material) made.set(key, material = ghostCountMaterial(kind, mesh.material.side));
+    kindsCounted.add(kind);
     twins.push({ twin: ghostTwin(mesh, material), of: mesh });
   });
   for (const { twin, of } of twins) {
