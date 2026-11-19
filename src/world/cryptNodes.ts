@@ -47,7 +47,8 @@ export function dampNodes(cobbles: THREE.MeshStandardMaterial, damp: Damp): { co
   const spots = uniformArray(damp.earth, 'vec3');
   // (each spot's reach is its z: the earth's edge ragged by the damp's own noise, cut round the cobbles' tops)
   const earth = Fn(() => {
-    const stoneTop = texture(heightMap, uv().mul(vec2(heightMap.repeat.x, heightMap.repeat.y))).r;
+    // (read once, out of the loop: inside it, each spot read it again, six reads a pixel)
+    const stoneTop = texture(heightMap, uv().mul(vec2(heightMap.repeat.x, heightMap.repeat.y))).r.toVar();
     const amount = float(0).toVar();
     const inward = float(1).toVar();
     Loop(damp.earth.length, ({ i }: { i: N }) => {

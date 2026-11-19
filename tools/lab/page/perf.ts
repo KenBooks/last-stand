@@ -235,7 +235,7 @@ async function timePhase(lab: Lab, name: string, count: number, input: (f: numbe
 
 /** The GPU's frames timed whole (ms), and each part's median over the frames timed in parts, the most first. */
 function gpuOf(phase: Phase): { whole: number[]; parts: [string, number][] } {
-  const whole = phase.gpu.filter((frame) => !frame.parts).map((frame) => frame.ms);
+  const whole = phase.gpu.filter((frame) => !frame.parts || frame.whole).map((frame) => frame.ms);
   const byPart = new Map<string, number[]>();
   for (const frame of phase.gpu) {
     for (const [part, took] of Object.entries(frame.parts ?? {})) {

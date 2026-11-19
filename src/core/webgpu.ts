@@ -8,6 +8,8 @@ import { RUNNING } from './rendererChoice';
 import { VILLAGE } from './beta';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';
+import { SKY_ENVIRONMENT, skyEnvironment, type SkyEnvironment } from './skyEnvironment';
+import type { EnvColours } from '../world/props';
 
 /** Whether this page draws with WebGPURenderer: by its address alone (`?renderer=webgpu`, which the pause menu opens;
  *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
@@ -132,6 +134,78 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   };
 }
 
+/** the lit shading made plain now (`plainLitNodes`'s branches): 1 at a level that asks for it, a uniform's value */
+const plainLit = { value: 0 };
+/** whether the boot's level made the lit shading plain: its pipelines built without the maps' code, a shadow read
+ *  with one lookup */
+let plainAtBoot = false;
+/** whether any frame has been drawn: till then the level is the boot's */
+let drawnYet = false;
+
+/**
+ * Low's and Very low's lit shading made plain (`QualityPreset.plainLit`), or whole again. At the boot's level the
+ * lit pipelines are built plain (`plainLitNodes`); a level chosen once the game is shown switches the maps' branch on
+ * a uniform, nothing compiled, its pipelines built plain from the next boot (as WebGPU's canvas takes HDR or not
+ * once, as it's made: `initHdrForWebGPU`). Built plain, a level that's whole later keeps the plain look till a
+ * reload.
+ */
+export function setPlainLitOnWebGPU(on: boolean): void {
+  plainLit.value = on ? 1 : 0;
+  if (!drawnYet) plainAtBoot = on;
+}
+
+/** the surface maps' scopes a material's node reads, each with what it is without its map */
+const PLAIN_SCOPES = ['normal', 'roughness', 'metalness', 'ao'] as const;
+type PlainScope = (typeof PLAIN_SCOPES)[number];
+/** the material's maps each scope reads (the normal's bump map too) */
+const MAPS_OF: Record<PlainScope, string[]> = {
+  normal: ['normalMap', 'bumpMap'],
+  roughness: ['roughnessMap'],
+  metalness: ['metalnessMap'],
+  ao: ['aoMap'],
+};
+
+/**
+ * The lit shading made plain at Low and Very low: no surface maps (normal, bump, roughness, metalness, occlusion: each
+ * surface its material's own roughness and metalness, its normal the geometry's), and each shadow, the sun's and the
+ * point lights', read with one lookup (three's basic filter, the hardware's compare of four texels) in place of five.
+ * Booted at such a level, the lit pipelines are built so (`plainAtBoot`): `MaterialNode` reads no map. Otherwise the
+ * maps are a branch on a uniform (three's `select` writes an `if` around the lookups), switched live, and the shadows
+ * are read whole. On the owner's phone the branch saved about half of the maps' cost (trace NR72-ZXSK, Very low: 19%
+ * of its frame against 26% whole): its compiler may flatten an `if`, and the code's registers weigh on every pixel.
+ * Its GPU slows 2.35 times after a few seconds of play (DM4B-R468), so held at 60 frames a second its frame must cost
+ * 7 ms at full speed, where it cost 11 with the maps and the shadows whole. No shadows at all cost a quarter of its
+ * frame less, but lit every surface as if out of them: the fires through the props round them, flickering with their
+ * flames, and the daylit forest a fifth brighter than High (from play, "fire flickers too much (blinding frames)",
+ * "other objects also too bright on very low"; `lab light --renderer webgpu --levels`). Pipelines of their own for
+ * each shading, compiled beside the frames as a level switched, still made 12 at a draw and held a frame 710 ms.
+ */
+function plainLitNodes(): void {
+  const { uniform, renderGroup, select, float, normalView } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const plain = uniform(0).setGroup(renderGroup).onRenderUpdate(() => plainLit.value);
+  const whole = plain.lessThan(0.5);
+  type Built = { context: { material: Record<string, unknown> } };
+  type Scoped = { scope: string; getFloat(scope: string): unknown; setup(builder: Built): unknown };
+  const material = gpu.MaterialNode.prototype as unknown as Scoped;
+  const setup = material.setup;
+  material.setup = function (this: Scoped, builder: Built) {
+    const scope = this.scope as PlainScope;
+    const maps = MAPS_OF[scope];
+    if (!maps || !maps.some((map) => builder.context.material[map])) return setup.call(this, builder);
+    const without = scope === 'normal' ? normalView : scope === 'ao' ? float(1) : this.getFloat(scope);
+    return plainAtBoot ? without : select(whole, setup.call(this, builder), without);
+  };
+  // (booted plain: each shadow, the sun's and a point light's, read by three's basic filter)
+  type Filtering = { getShadowFilterFn(type: number): unknown };
+  for (const shadowNode of [gpu.ShadowNode, gpu.PointShadowNode]) {
+    const filtering = shadowNode.prototype as unknown as Filtering;
+    const filterFn = filtering.getShadowFilterFn;
+    filtering.getShadowFilterFn = function (this: Filtering, type: number) {
+      return filterFn.call(this, plainAtBoot ? THREE.BasicShadowMap : type);
+    };
+  }
+}
+
 /** The scene and bloom drawn at `share` of the screen's pixels each way (the quality's and Auto's, `sceneShare` in
  *  core/renderer.ts), the last pass scaling it up to the canvas. */
 export function setSceneShare(share: number): void {
@@ -254,6 +328,7 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
     const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
+  plainLitNodes();
   compileShadowsToo(renderer);
   compilesTakeTurns(renderer);
   walkedAtOnce(renderer);
@@ -1582,18 +1657,29 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */
 let environment: { value: THREE.Texture } | null = null;
+/** the sky worked out in its place, its colours set per biome (`skyEnvironment.ts`) */
+let sky: SkyEnvironment | null = null;
 
 /**
  * The scene's environment map given to WebGPU as one node for good, its map swapped as the look changes: three
  * makes each map a node of its own, whose id is in every lit pipeline's key, so each biome's map and the hall of
  * heroes' had a copy of every lit pipeline, made at the first frames in its look (a first visit's hall: 6 s held up).
  */
-export function oneEnvironment(scene: THREE.Scene): void {
+export function oneEnvironment(scene: THREE.Scene, colours: EnvColours): void {
   const map = scene.environment;
   if (!WEBGPU || !map) return;
+  sky ??= skyEnvironment();
+  sky.set(colours);
   environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
   environment.value = map;
-  (scene as unknown as { environmentNode: unknown }).environmentNode = environment;
+  environmentWorkedOut(scene, SKY_ENVIRONMENT.sky === 1);
+}
+
+/** The scene's environment the sky worked out (`skyEnvironment.ts`), or three's map looked up: Profile this spot's
+ *  part times one against the other (`perf/shadingParts.ts`). */
+export function environmentWorkedOut(scene: THREE.Scene, workedOut: boolean): void {
+  const node = workedOut ? sky?.node : environment;
+  if (node) (scene as unknown as { environmentNode: unknown }).environmentNode = node;
 }
 
 /** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
@@ -1705,5 +1791,6 @@ export function renderWebGPU(): void {
   // (each frame a node frame of its own: three's passes draw their scene once a node frame, `newNodeFrame`)
   newNodeFrame(renderer as unknown as THREE.WebGLRenderer);
   renderer.setRenderTarget(null);
+  drawnYet = true;
   pipeline.render();
 }

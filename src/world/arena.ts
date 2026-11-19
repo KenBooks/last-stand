@@ -217,7 +217,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   function setLook(L: BiomeLook): void {
     setColours(L);
     scene.environment = envMap(renderer, L.env);
-    oneEnvironment(scene);
+    oneEnvironment(scene, L.env);
   }
   /** what of a look changes with the hour: everything but its environment's map */
   function setColours(L: BiomeLook): void {

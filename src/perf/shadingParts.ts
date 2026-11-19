@@ -6,7 +6,8 @@
 // WebGL's programs would compile in the frames timed, every one in view each time: timed on WebGPU alone.
 import * as THREE from 'three';
 import { G } from '../state';
-import { WEBGPU } from '../core/webgpu';
+import { WEBGPU, environmentWorkedOut } from '../core/webgpu';
+import { SKY_ENVIRONMENT } from '../core/skyEnvironment';
 import type { ScenePart } from './sceneParts';
 
 /** why these parts aren't timed on WebGL */
@@ -58,6 +59,17 @@ function environmentPart(): ScenePart {
       scene.environment = on ? kept.map : null;
       scene.environmentNode = on ? kept.node : null;
     },
+  };
+}
+
+/** A part that has WebGPU's environment worked out (`core/skyEnvironment.ts`, the default) or three's map looked up
+ *  in its place: what the sky saves on the device, read as its cost (less than nothing where it saves). From the
+ *  owner's phone: the map's lookups took 42 of a 74 ms frame (trace 5BKG-8B3K). */
+function workedOutPart(): ScenePart {
+  const kept = SKY_ENVIRONMENT.sky === 1;
+  return {
+    name: 'the lit shading\'s environment worked out, against its map',
+    change: (on) => environmentWorkedOut(G.scene, on ? kept : !kept),
   };
 }
 
@@ -114,7 +126,7 @@ function surfaceMapsPart(): ScenePart {
 
 /** The lit shading's parts, each named as part of it; untimed on WebGL (`WEBGL_COMPILES`). */
 export function shadingParts(): ScenePart[] {
-  const parts = [environmentPart(), shadowsTakenPart(), fogPart(), surfaceMapsPart()];
+  const parts = [environmentPart(), workedOutPart(), shadowsTakenPart(), fogPart(), surfaceMapsPart()];
   if (WEBGPU) return parts;
   return parts.map((part) => ({ ...part, untimed: WEBGL_COMPILES }));
 }
