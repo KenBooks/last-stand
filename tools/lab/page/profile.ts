@@ -13,7 +13,7 @@ import { G } from '../../../src/state';
 import {
   CANARY_PART, PROFILE_TURNS, ProfileCancelled, profile, profileLines, type Profile, type ProfileOptions,
 } from '../../../src/perf/profiler';
-import { standIn } from './light';
+import { standAt } from './draws';
 import { WEBGPU } from '../../../src/core/webgpu';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { packTrace, sendTrace } from '../../../src/perf/upload';
@@ -34,7 +34,10 @@ export interface ProfileCommand {
   send?: string;
   /** spent arrows stood in the ground round him first: what keeping them costs, its part `the spent arrows` */
   arrows?: number;
+  /** in the lobby's village instead, as `draws --village` stands him there (`at` there, the square by default) */
+  village: boolean;
 }
+
 
 /** how far round the hero the planted arrows stand (m): about what the top view shows round him */
 const ARROWS_REACH = 9;
@@ -266,7 +269,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
   const level = quality.qualityLevel();
   const budget = quality.qualityBudget();
   if (command.level) quality.useQuality(command.level);
-  await standIn(lab, { biome: command.biome, view: command.view, facing: 0, at: command.at, fresh: true });
+  await standAt(lab, command);
   if (command.arrows) plantArrows(lab, command.arrows);
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -289,7 +292,8 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     }
     problems.push(...await cancelProblems(lab));
     if (command.canary) problems.push(...await redrawCanaryProblems(lab));
-    const name = `${command.biome} ${command.view}, ${quality.qualityLevel()}`;
+    const place = command.village ? 'the village' : command.biome;
+    const name = `${place} ${command.view}, ${quality.qualityLevel()}`;
     const lines = profileLines(found);
     const text = [name, ...lines.map((line) => `  ${line}`)];
     if (command.send) {

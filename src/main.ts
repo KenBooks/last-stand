@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
-import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
+import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
@@ -87,7 +87,7 @@ import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isReadying, isWarming, want, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
-import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, plainLitAtBoot, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
 const COARSE_HANDS_UNDER = 0.2;
 import { framesUncapped, runFrames } from './core/frameLoop';
@@ -170,6 +170,9 @@ async function boot() {
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
+  // (WebGPU's pipeline is made with the renderer: told first whether the boot's level is plain, as its sight is built
+  // by it)
+  if (WEBGPU) setPlainLitOnWebGPU(plainLitAtBoot());
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
   if (!WEBGPU) {

@@ -27,8 +27,9 @@ import { toLobby } from './hallMoves';
 import { holdHour } from '../../../src/game/clock';
 import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import { groundHeight } from '../../../src/world/ground';
-import { faceCamera } from '../../../src/core/renderer';
+import { faceCamera, type ViewMode } from '../../../src/core/renderer';
 import { GHOST_COUNT_LAYER } from '../../../src/core/layers';
+import { standIn } from './light';
 
 export interface DrawsOptions {
   fixture: Fixture;
@@ -598,6 +599,28 @@ async function recordedFrame(lab: Lab): Promise<FrameDraws> {
   } finally {
     lab.drawing = false;
   }
+}
+
+/** where he faces in the village: as `draws --village` has him */
+export const VILLAGE_FACING = Math.PI;
+
+/** Where a measure stands the hero: in a biome (`standIn` in page/light.ts), or in the lobby's village. */
+export interface Stand {
+  biome: BiomeId;
+  view: ViewMode;
+  /** where he stands (x, z): the biome's spot off the dais, or the village's square, when not given */
+  at?: [number, number];
+  village: boolean;
+}
+
+/** The hero stood where `stand` asks: in a biome, or in the lobby's village as `draws --village` stands him. */
+export async function standAt(lab: Lab, stand: Stand): Promise<void> {
+  if (!stand.village) {
+    await standIn(lab, { biome: stand.biome, view: stand.view, facing: 0, at: stand.at, fresh: true });
+    return;
+  }
+  await lab.setup({ view: stand.view, facing: VILLAGE_FACING, fresh: true });
+  await inVillage(lab, stand.at ?? VILLAGE_SPOT, VILLAGE_FACING);
 }
 
 /** The run the set-up started left for the village, the hero put at (x, z) facing `facing` and let settle. */
