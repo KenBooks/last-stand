@@ -491,7 +491,11 @@ async function warmBuilt(built: Built[], { step, progress, patient, linkingMost,
   });
   if (took.cold) return took;
   // (the other biomes each drawn in place of the lobby's, for their shadows' programs: compiled with the first)
-  for (const b of swaps.slice(1)) await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap: b.swap, step });
+  // (its links waited for a frame apart too: given none, the wait asked every step, and under the fight's bar spun
+  // through each slice; under the lab's still clock it spun for good, `lab compiles --cold`, #716)
+  for (const b of swaps.slice(1)) {
+    await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap: b.swap, step, poll });
+  }
   await step?.();
   // (the outline a held skill draws round a foe: every foe's meshes drawn into its mask; its edge's program is the
   // lobby's, and behind it, a pass over the whole canvas)
