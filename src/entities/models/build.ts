@@ -44,7 +44,7 @@ export const PLAIN: HandBuild = {
  *  palm a paddle on it, and the thumb at the fingers' width was thinner than the index (an adversarial review of its
  *  proportions) */
 export const HEAVY: HandBuild = {
-  name: 'heavy', digits: 1.07, wide: 1.06, deep: 0.95, wrist: 1.2, knuckles: 1.15, thumb: 1.1, fist: true,
+  name: 'heavy', digits: 1.07, wide: 1, deep: 0.95, wrist: 1.14, knuckles: 1.15, thumb: 1.1, fist: true,
 };
 
 /** every build by name (a worker sculpting a hand is told its build's name) */

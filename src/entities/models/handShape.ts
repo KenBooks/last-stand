@@ -378,9 +378,12 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     } else {
       // (a fighter's one hand's stand prouder, the middle finger's highest: bent into its fist they are its knuckles'
       // row, and at the open hand's size the back ran into one soft bulge with a scalloped hem, an adversarial review)
-      const proud = build.fist && SHUT_SHAPE.universal > 0 ? 1.45 * SHUT_SHAPE.heads[i] : 1;
-      palm(ellipsoid(k.x, k.y + 0.0015, k.z + 0.0062 * deep * proud, head * 0.62 * proud, head * 0.62 * proud,
-        head * 0.42 * proud), 0.004);
+      // (and long up the back, joined softly, each a rise in the skin from the back of the hand into its finger:
+      // round and joined hard they were beads stuck across the fingers' roots, the next review)
+      const one = build.fist && SHUT_SHAPE.universal > 0;
+      const proud = one ? 1.25 * SHUT_SHAPE.heads[i] : 1;
+      palm(ellipsoid(k.x, k.y + (one ? 0.005 : 0.0015), k.z + 0.0062 * deep * proud, head * 0.62 * proud,
+        head * (one ? 1.15 : 0.62) * proud, head * 0.42 * proud), one ? 0.008 : 0.004);
     }
     palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
@@ -413,7 +416,9 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
   // the palm's hollow (none in a hand sculpted closed: the fist presses it full, and it showed over the fingers)
   // (off the thumb's mound towards the little finger's: over against it, the mound read as a crater)
-  if (!closed) parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, 0.0095 * deep), frame: IDENTITY,
+  // (shallower on a fighter's hand: under its thumb's pad it was a deep dimple with a hard edge, a review)
+  const hollow = build.fist ? 0.006 : 0.0095;
+  if (!closed) parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248 * deep), 0.02 * wide, 0.024, hollow * deep), frame: IDENTITY,
     blend: 0.006, cut: true, bones: [] });
   return parts;
 }
@@ -746,6 +751,25 @@ function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D)
     fill(root, indexKnuckle, w * SHUT_FILL.web),
     fill(root.clone().lerp(knuckle, 0.5), indexKnuckle, w * SHUT_FILL.web),
   ];
+}
+
+/** how thick a fighter's open hand's thumb's pad is round its bone in the palm, a share of the thumb's width */
+const OPEN_PAD_THENAR = 1.0;
+
+/** The thumb's pad on a fighter's one hand: full round its bone in the palm and in towards the palm's middle, moving
+ *  mostly with the thumb's root. */
+function thenarPad(thumb: DigitShape, space: THREE.Object3D): Part[] {
+  const toSculpt = (joint: THREE.Object3D) => new THREE.Vector3()
+    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(joint, space)).invert());
+  const [root, knuckle] = [thumb.j[0], thumb.j[1]].map(toSculpt);
+  const heel = root.clone();
+  heel.x *= 0.4;
+  heel.z -= 0.004;
+  const r = thumb.width * slimOf(true) * OPEN_PAD_THENAR;
+  const bones: [number, number][] = [[0, 0.4], [THUMB_ROOT, 0.6]];
+  return [[root, knuckle], [heel, root.clone().lerp(knuckle, 0.7)]].map(([a, b]) => (
+    { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.009, bones, shapeOnly: true }
+  ));
 }
 
 /** how far out from the skin its closing in is read (m), and how much darker it is where it closes in wholly */
@@ -1157,7 +1181,9 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
     // (a swept finger is whole: the fill inside its curl would join it to the palm's skin again)
     ...(closed && !sweeps ? fingers.flatMap((finger, i) => curlFill(finger, 1 + i * 3, space,
       i === fingers.length - 1 ? -toward : 0)) : []),
-    ...(closed ? thenarFill(thumb, fingers[0], space) : []),
+    // (and on a fighter's one hand, lighter: bent into its fist its thumb's root was a tube down the palm's edge
+    // where a hand has a full pad, an adversarial review)
+    ...(closed ? thenarFill(thumb, fingers[0], space) : sweeps ? thenarPad(thumb, space) : []),
   ];
   const hand = lifted(fieldOf(parts), tendons(fingers));
   // (a closed hand's thumb's mound stands further off its bones: within 16 mm, its side was cut open)
