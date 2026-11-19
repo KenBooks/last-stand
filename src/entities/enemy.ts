@@ -8,6 +8,7 @@ import { buildModel } from './models/index';
 import { reachOf, type Reach } from './models/hulls';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
+import { trampleProps } from '../world/destructible';
 import { AI, fx, lured } from './enemyAI';
 import { carrying, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
 import { lures, type Lure } from '../combat/lures';
@@ -498,6 +499,9 @@ export class Enemy {
    *  into the room's corner, by the fountain, and left there: `lab houses`). */
   private keepInWorld(): void {
     if (G.arena.room) return;
+    // (a big one breaks the breakable props it walks into, before it's kept off them: from the owner, "Big enemies
+    // should break it by simply walking over it")
+    trampleProps(this.pos.x, this.pos.z, this.radius);
     resolveWorld(this.pos, this.radius);
   }
 

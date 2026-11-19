@@ -1333,6 +1333,58 @@ function chip(kind: string | undefined): void {
   v.start(); v.stopAt(v.t + 0.8);
 }
 
+/** A band of noise round `hz` (wood's hollow knock, `q` wide), driven, struck `at` s in: no tone, the wood's own body. */
+function hedgeKnock(v: ReturnType<typeof voice>, at: number, hz: number, q: number, peak: number, decay: number, to: AudioNode = v.out): void {
+  const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz * (0.9 + Math.random() * 0.2); f.Q.value = q;
+  v.loop(f); f.connect(drive(4)).connect(blowAt(v, at, peak, decay, to, 0.002));
+}
+
+/** The Hedgeward rising: the earth heaved open under it, the stakes driven in one after another down its length
+ *  (wood's knock on earth, each its own pitch and place across the ears), the weave and bramble rustling up after,
+ *  and the earth settling. Earth, wood and leaves alone: no note over the music. */
+function hedgeRise(): void {
+  const v = voice(0, 0.22);
+  whump(v, 0, 0.32, 0.4);
+  rumble(v, 0.02, 0.18, 0.45);
+  for (let i = 0; i < 5; i++) {
+    const at = 0.03 + i * 0.045 + Math.random() * 0.015, lane = v.lane(1, -0.6 + i * 0.3);
+    hedgeKnock(v, at, 330, 1.4, 0.22, 0.16, lane);
+    thump(v, at, 800, 120, 0.12, 0.2, lane, 3);
+  }
+  // (the withies and the bramble's leaves rushing up: a band of noise rising and settling)
+  const rustle = glide(v, 'bandpass', 0.9, [[0, 1800], [0.1, 1800], [0.3, 3600], [0.6, 2200]]);
+  v.loop(rustle); rustle.connect(blowAt(v, 0.1, 0.12, 0.45, v.out, 0.06));
+  grit(v, 12, 0.08, 0.5, 600, 2400, 0.12);
+  v.start(); v.stopAt(v.t + 1.2);
+}
+
+/** A blow on the Hedgeward: timber's thock under a shake of leaves and creaking withies, splinters flying. */
+function hedgeHit(): void {
+  const v = voice(0, 0.2);
+  const lane = v.lane(1, Math.random() * 0.8 - 0.4);
+  // (its weight in the mids: closing to 90 Hz, 57% of it was over 150 Hz, `lab sound hedgeHit`)
+  hedgeKnock(v, 0, 280, 1.2, 0.62, 0.26, lane);
+  hedgeKnock(v, 0.004, 520, 1.6, 0.3, 0.16, lane);
+  thump(v, 0, 1000, 180, 0.32, 0.28, lane, 3.5);
+  const leaves = v.c.createBiquadFilter(); leaves.type = 'bandpass'; leaves.frequency.value = 3000 + Math.random() * 800; leaves.Q.value = 0.8;
+  v.loop(leaves); leaves.connect(blowAt(v, 0.01, 0.1, 0.28, lane, 0.02));
+  grit(v, 6, 0.005, 0.15, 900, 3400, 0.18);
+  v.start(); v.stopAt(v.t + 0.7);
+}
+
+/** The Hedgeward broken: its stakes snapping (a smash of wood), splinters, the weave tearing and the whole of it
+ *  falling in on the earth. */
+function hedgeBreak(): void {
+  const v = voice(0, 0.3);
+  smash(v, 0, 0.3, 0.35);
+  for (let i = 0; i < 4; i++) hedgeKnock(v, i * 0.06 + Math.random() * 0.03, 240 + i * 40, 1.1, 0.24, 0.2, v.lane(1, Math.random() * 1.2 - 0.6));
+  whump(v, 0.12, 0.34, 0.5);
+  const tear = glide(v, 'bandpass', 0.8, [[0, 2600], [0.05, 2600], [0.5, 1200]]);
+  v.loop(tear); tear.connect(blowAt(v, 0.04, 0.14, 0.5, v.out, 0.03));
+  grit(v, 16, 0.05, 0.6, 500, 3000, 0.16);
+  v.start(); v.stopAt(v.t + 1.4);
+}
+
 /** Healing Draught drunk: the cork's soft pop, three glugs of the draught, each falling as it's swallowed with a
  *  small swallow under it, then its warmth spreading through him, a dark rush rising and settling. Liquid and breath
  *  alone, nothing high (from the owner's review of #527, "needs work": its gulps rose 380 to 820 Hz each, a wah like a
@@ -1824,6 +1876,10 @@ export const sfx = {
   straw: guard((rise: number = 0.3) => { strawRise(rise); }),
   strawHit: guard(() => { if (throttle('strawHit', 70)) return; strawHit(); }),
   strawSink: guard((sink: number = 0.45) => { strawSink(sink); }),
+  /** the Hedgeward driven up out of the ground, a blow on it, and its breaking */
+  hedgeRise: guard(() => hedgeRise()),
+  hedgeHit: guard(() => { if (throttle('hedgeHit', 70)) return; hedgeHit(); }),
+  hedgeBreak: guard(() => hedgeBreak()),
   /** Splintering Bolt cast, at every cast (a held button casts again and again) */
   bolt: guard(() => { if (throttle('bolt', 60)) return; boltCast(); }),
   /** a Splintering Bolt bursting on a foe: the bolt itself, splitting (`split`), or one of its splits */

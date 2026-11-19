@@ -7,9 +7,13 @@
 // hugging the obstacles rather than grid steps. With a clear line to the player it walks straight.
 // Paths keep a margin off every obstacle, and `steerClear` bends any other movement (flanking,
 // strafing, backing off) round what's ahead before touching it, so enemies never bump and slide.
+// A big foe (`TRAMPLES_FROM`) walks through the breakable props as if they weren't there, breaking each it walks into
+// (`trampleProps`): its paths, its straight lines and its steering read the props that stand firm alone (`through`).
+// Every other foe goes round them; where no way round is left (`navTarget` says so), it breaks its way through the
+// breakable prop across its line (`propAcross`, enemyAI's `chase`).
 import { G } from '../state';
 import type { Obstacle } from '../types';
-import { state as propState } from './destructible';
+import { state as propState, TRAMPLES_FROM } from './destructible';
 
 /** cell size (m), and how often a field follows the player (s) */
 const CELL = 0.5, REFRESH = 0.2;
@@ -20,7 +24,9 @@ const LOOKAHEAD = 20;
 /** bodies share the field of the smallest size class that holds them (fewer fields to keep fresh) */
 const SIZES = [0.65, 1.05];
 
-interface Grid { obstacles: Obstacle[]; rev: number; n: number; half: number; clear: Float32Array; steps: Int32Array; weights: Float32Array; sideX: Int32Array; sideZ: Int32Array }
+/** `clear`: each cell's clearance from the wall and every obstacle; `firm`: from the wall and the obstacles that don't
+ *  break alone (a big foe's, which walks through the rest) */
+interface Grid { obstacles: Obstacle[]; rev: number; n: number; half: number; clear: Float32Array; firm: Float32Array; steps: Int32Array; weights: Float32Array; sideX: Int32Array; sideZ: Int32Array }
 interface Field { r: number; open: Uint8Array; cost: Float32Array; t: number; cell: number }
 
 let grid: Grid | null = null;
@@ -41,19 +47,24 @@ function getGrid(): Grid {
   if (grid?.obstacles === obstacles && grid.rev === propState.rev) return grid;
   // the outermost cells lie beyond the wall, so they're never open: no bounds checks needed
   const wall = G.arena.wall, n = Math.ceil((2 * wall.most) / CELL) + 2, half = (n * CELL) / 2;
-  const clear = new Float32Array(n * n);
+  const clear = new Float32Array(n * n), firm = new Float32Array(n * n);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = (i + 0.5) * CELL - half, z = (j + 0.5) * CELL - half;
-    let c = wall.reachAt(x, z) - Math.hypot(x, z);
-    for (const o of obstacles) c = Math.min(c, Math.hypot(x - o.x, z - o.z) - o.r);
+    let c = wall.reachAt(x, z) - Math.hypot(x, z), f = c;
+    for (const o of obstacles) {
+      const d = Math.hypot(x - o.x, z - o.z) - o.r;
+      c = Math.min(c, d);
+      if (!o.prop) f = Math.min(f, d);
+    }
     clear[j * n + i] = c;
+    firm[j * n + i] = f;
   }
   // the 8 neighbours; a diagonal step's two side cells are sideX[k] and sideZ[k] away
   const steps = new Int32Array([1, -1, n, -n, n + 1, n - 1, -n + 1, -n - 1]);
   const sideX = new Int32Array([0, 0, 0, 0, 1, -1, 1, -1]), sideZ = new Int32Array([0, 0, 0, 0, n, n, -n, -n]);
   const weights = new Float32Array([1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2].map((w) => w * CELL));
   fields.clear();
-  return (grid = { obstacles, rev: propState.rev, n, half, clear, steps, weights, sideX, sideZ });
+  return (grid = { obstacles, rev: propState.rev, n, half, clear, firm, steps, weights, sideX, sideZ });
 }
 
 const cellOf = (g: Grid, x: number, z: number): number => {
@@ -65,11 +76,13 @@ const cx = (g: Grid, c: number): number => ((c % g.n) + 0.5) * CELL - g.half;
 const cz = (g: Grid, c: number): number => (Math.floor(c / g.n) + 0.5) * CELL - g.half;
 
 /** Is the straight line from a to b clear of obstacles for a body of this radius? `above`: the line
- *  runs at that height (a shot), so obstacles whose top is lower don't block it. */
-export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number, above = -Infinity): boolean {
+ *  runs at that height (a shot), so obstacles whose top is lower don't block it; `through`: a big foe's way, which the
+ *  breakable props don't block. */
+export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number, above = -Infinity,
+  through = false): boolean {
   const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
   for (const o of G.arena.obstacles) {
-    if (o.h <= above) continue;
+    if (o.h <= above || (through && o.prop)) continue;
     const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
     const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;
     if (px * px + pz * pz < r * r) return false;
@@ -107,15 +120,16 @@ function pop(cost: Float32Array): number {
 /** Path lengths to (tx, tz) for bodies up to radius `r`, over the cells wide enough for them.
  *  Each co-op player (`slot`) has fields of their own, as enemies go for either. */
 function getField(g: Grid, r: number, tx: number, tz: number, slot: number): Field {
-  const size = SIZES.find((s) => r <= s) ?? r;
-  const key = Math.round(size * 100) + slot * 1000, target = cellOf(g, tx, tz);
+  const size = SIZES.find((s) => r <= s) ?? r, through = r >= TRAMPLES_FROM;
+  const key = Math.round(size * 100) + slot * 1000 + (through ? 100000 : 0), target = cellOf(g, tx, tz);
   let f = fields.get(key);
   // at most one field is rebuilt per frame (a couple of ms each): the others wait their turn
   if (f && (f.cell === target || G.time - f.t < REFRESH || rebuiltAt === G.time)) return f;
   rebuiltAt = G.time;
   if (!f) {
     const open = new Uint8Array(g.n * g.n);
-    for (let c = 0; c < open.length; c++) open[c] = g.clear[c] >= size + MARGIN * 0.5 ? 1 : 0;
+    const clear = through ? g.firm : g.clear;
+    for (let c = 0; c < open.length; c++) open[c] = clear[c] >= size + MARGIN * 0.5 ? 1 : 0;
     f = { r: size, open, cost: new Float32Array(g.n * g.n), t: 0, cell: -1 };
     fields.set(key, f);
   }
@@ -130,7 +144,7 @@ function getField(g: Grid, r: number, tx: number, tz: number, slot: number): Fie
       const c = j * n + i;
       if (!open[c]) continue;
       const d = Math.hypot(cx(g, c) - tx, cz(g, c) - tz);
-      if (d > size + 1.5 || !lineClear(cx(g, c), cz(g, c), tx, tz, 0.3)) continue;
+      if (d > size + 1.5 || !lineClear(cx(g, c), cz(g, c), tx, tz, 0.3, -Infinity, through)) continue;
       cost[c] = d;
       push(cost, c);
     }
@@ -152,11 +166,13 @@ function getField(g: Grid, r: number, tx: number, tz: number, slot: number): Fie
 
 /**
  * Where a body of radius `r` at (x, z) should head to reach (tx, tz): the target itself when the way
- * is clear, else a waypoint around what's in the way. Writes the waypoint into `out`.
+ * is clear, else a waypoint around what's in the way. Writes the waypoint into `out`; false where no way round is
+ * left (it walks straight then).
  */
-export function navTarget(x: number, z: number, r: number, tx: number, tz: number, slot: number, out: { x: number; z: number }): void {
+export function navTarget(x: number, z: number, r: number, tx: number, tz: number, slot: number, out: { x: number; z: number }): boolean {
   out.x = tx; out.z = tz;
-  if (lineClear(x, z, tx, tz, r + MARGIN)) return;
+  const through = r >= TRAMPLES_FROM;
+  if (lineClear(x, z, tx, tz, r + MARGIN, -Infinity, through)) return true;
   const g = getGrid(), f = getField(g, r, tx, tz, slot), cost = f.cost;
 
   let c = cellOf(g, x, z);
@@ -170,7 +186,7 @@ export function navTarget(x: number, z: number, r: number, tx: number, tz: numbe
         if (cost[nc] < bestCost) { bestCost = cost[nc]; best = nc; }
       }
     }
-    if (best < 0) return;   // nowhere known: fall back to walking straight
+    if (best < 0) return false;   // no way round: walking straight, and the caller may break its way through
     c = best;
   }
   // follow the path downhill, keeping the furthest cell still in plain sight
@@ -184,10 +200,25 @@ export function navTarget(x: number, z: number, r: number, tx: number, tz: numbe
     }
     if (next < 0) break;   // reached the seeded cells round the target
     c = next;
-    if (lineClear(x, z, cx(g, c), cz(g, c), r + MARGIN * 0.5)) seen = c;
+    if (lineClear(x, z, cx(g, c), cz(g, c), r + MARGIN * 0.5, -Infinity, through)) seen = c;
     else if (k > 3) break;
   }
   out.x = cx(g, seen); out.z = cz(g, seen);
+  return true;
+}
+
+/** The first breakable prop's circle across the floor's line from (ax, az) to (bx, bz) for a body of `radius`, the
+ *  nearest along it; null if none (what a foe with no way round breaks its way through). */
+export function propAcross(ax: number, az: number, bx: number, bz: number, radius: number): Obstacle | null {
+  const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  let best: Obstacle | null = null, bestK = Infinity;
+  for (const o of G.arena.obstacles) {
+    if (!o.prop || o.prop.broken) continue;
+    const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
+    const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;
+    if (px * px + pz * pz < r * r && k < bestK) { best = o; bestK = k; }
+  }
+  return best;
 }
 
 /**
@@ -201,10 +232,11 @@ export function navTarget(x: number, z: number, r: number, tx: number, tz: numbe
 export function steerClear(x: number, z: number, r: number, ux: number, uz: number, reach: number, out: { x: number; z: number },
   skip?: (o: Obstacle, ahead: number) => boolean): void {
   let last: Obstacle | null = null;
+  const through = r >= TRAMPLES_FROM;
   for (let pass = 0; pass < 3; pass++) {
     let hit: Obstacle | null = null, hitT = Infinity, hitR = 0;
     for (const o of G.arena.obstacles) {
-      if (o === last) continue;   // already on its tangent
+      if (o === last || (through && o.prop)) continue;   // already on its tangent; a big foe's to break
       const ox = o.x - x, oz = o.z - z, R = o.r + r + MARGIN;
       const t = ox * ux + oz * uz, side = ox * uz - oz * ux;
       if (t <= 0 || t - R > reach || Math.abs(side) >= R || t >= hitT || skip?.(o, t)) continue;

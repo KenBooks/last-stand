@@ -4,6 +4,9 @@
 // flow field is rebuilt from `state.rev`), its mesh goes, and rubble flies. Tall props (the trees round the ring, pillars,
 // walls, the lights) stay. The fight's owner deals the damage (`simulates`); a co-op guest is told which
 // prop's health (`setPropSink` / `setPropLife`). A damaged prop shows a bar for a few seconds. A new run brings everything back (`restoreProps`).
+// A prop raised in the fight (the ranger's Hedgeward: `raiseProp`) is one like any other, worn by the same hits; and
+// every breakable prop is worn by the foes' blows that land on it (`hurtPropsNear`), and broken outright by a big foe
+// walking into it (`trampleProps`: from the owner, "Big enemies should break it by simply walking over it").
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
@@ -39,13 +42,20 @@ export interface Prop {
   /** game time of the last damage, and its health bar while it shows */
   hurtT: number;
   bar: Label | null;
+  /** how its health is told to every game, where its index in the biome's list isn't the same on each (a prop raised
+   *  in the fight: by where it stands); none: by `id` */
+  tell?: (life: number) => void;
 }
 
 /** Bumped whenever the set of obstacles changes, so the navigation grid follows */
 export const state = { rev: 0 };
 
-/** How much one strike takes off a prop's `hp`: a player's bolt, an enemy's bolt, a melee swing, a second of the Void Lance */
+/** How much one strike takes off a prop's `hp`: a player's bolt, an enemy's bolt, a melee swing (a hero's or a foe's
+ *  blow, its slam), a second of the Void Lance */
 export const PROP_DAMAGE = { bolt: 1, hostile: 0.5, swing: 1, beam: 3, /** a blast (a Starfall shard) */ blast: 2, /** a nova, a war cry */ burst: 4, /** per second, in a channelled area (Maelstrom, Tempest) */ zone: 3, /** a charge running one down */ trample: 3 };
+/** a foe this wide or wider (m, its body's radius: the Brute, the Hulk, the bosses) breaks a breakable prop it walks
+ *  into */
+export const TRAMPLES_FROM = 0.9;
 
 let propSink: (id: number, life: number) => void = () => {};
 /** the fight's owner reports each prop's health as it changes (0: broken) */
@@ -119,12 +129,12 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
   const p = o.prop;
   if (!p || p.broken || !simulates()) return false;
   p.life -= amount;
-  if (p.life <= 0) { breakProp(p); propSink(p.id, 0); return true; }
+  if (p.life <= 0) { breakProp(p); tellLife(p, 0); return true; }
   showBar(p);
   const now = performance.now();
   if (now - p.chipT > 140) {
     p.chipT = now;
-    propSink(p.id, Math.round(p.life * 10) / 10);
+    tellLife(p, Math.round(p.life * 10) / 10);
     debris(centre(p, _p), { count: 3, color: p.color, speed: 3, size: 0.12, life: 0.7 });
     rubble(_p.x, _p.z, { count: 1, color: p.color, kind: p.kind, radius: 0.4, height: 0.3, size: 0.1, speed: 2 });
     sfx.chip(p.kind);
@@ -132,10 +142,19 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
   return false;
 }
 
+/** A prop's health told to every game: by its own way, or its index in the biome's list. */
+const tellLife = (p: Prop, life: number): void => (p.tell ? p.tell(life) : propSink(p.id, life));
+
 /** An area attack of `by` (a circle at x, z): every prop it touches takes `amount`, once per call (a `seen`
  *  set makes it once for a moving one, like Crescent's) */
 export function hurtPropsIn(by: Player, x: number, z: number, radius: number, amount: number, seen?: Set<Prop>): void {
   if (!hurtsProps(by)) return;
+  hurtPropsNear(x, z, radius, amount, seen);
+}
+
+/** Every prop a circle at (x, z) touches takes `amount`, once per call: a foe's blow or slam landing there, or a
+ *  hero's area (`hurtPropsIn`). Where the fight is simulated alone (`hurtProp`). */
+export function hurtPropsNear(x: number, z: number, radius: number, amount: number, seen?: Set<Prop>): void {
   const hit = seen ?? new Set<Prop>();
   for (const o of [...G.arena.obstacles]) {   // (a copy: breaking one takes its circles out)
     const p = o.prop;
@@ -144,6 +163,43 @@ export function hurtPropsIn(by: Player, x: number, z: number, radius: number, am
     hurtProp(o, amount);
   }
 }
+/** A big foe's body of `radius` at (x, z) breaking every breakable prop it walks into (`TRAMPLES_FROM`): as it's kept
+ *  off the props, before it's pushed off one. Where the fight is simulated alone (`hurtProp`). */
+export function trampleProps(x: number, z: number, radius: number): void {
+  if (radius < TRAMPLES_FROM) return;
+  for (const o of [...G.arena.obstacles]) {
+    const p = o.prop;
+    if (!p || p.broken || Math.hypot(o.x - x, o.z - z) >= o.r + radius) continue;
+    hurtProp(o, p.life);
+  }
+}
+
+/**
+ * A breakable prop raised in the fight (a hero's wall): its circles `parts` into the arena's obstacles from now on,
+ * worn and broken as every other prop is, its health told to every game by `tell`. Not one of the biome's: a new run
+ * doesn't bring it back, and it goes for good when broken or lowered (`lowerProp`).
+ */
+export function raiseProp(parts: Obstacle[], hp: number, color: number, look: PropLook, kind: RubbleKind,
+  tell: (life: number) => void): Prop {
+  const list = G.arena.obstacles;
+  const prop: Prop = { id: -1, life: hp, max: hp, broken: false, color, kind, parts, list, chipT: 0, hurtT: -1e9, bar: null, tell, ...look };
+  for (const o of parts) o.prop = prop;
+  list.push(...parts);
+  state.rev++;
+  return prop;
+}
+
+/** A prop raised in the fight taken away whole (its wave cleared, a newer one raised): its circles out, no rubble. */
+export function lowerProp(p: Prop): void {
+  hideBar(p);
+  let changed = false;
+  for (const o of p.parts) {
+    const i = p.list.indexOf(o);
+    if (i >= 0) { p.list.splice(i, 1); changed = true; }
+  }
+  if (changed) state.rev++;
+}
+
 /** A prop's health as the fight's owner reports it (a co-op guest) */
 export function setPropLife(p: Prop, life: number): void {
   if (life <= 0) { breakProp(p); return; }

@@ -66,6 +66,7 @@ const READERS: Record<string, PreviewReader> = {
   blink: meshReader('blink-preview'),
   starfall: meshReader('starfall-preview'),
   strawman: meshReader('strawman-preview-spot'),
+  hedgeward: meshReader('hedgeward-preview'),
   quarryMark: outlineReader,
 };
 

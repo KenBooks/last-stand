@@ -105,6 +105,16 @@ export function skillRamHTML(def: SkillDef): string {
   return `<div class="tt-foot tt-ram">${lines.join(' ')}</div>`;
 }
 
+/** A wall's figures (the ranger's Hedgeward, `SkillDef.wall`): a breakable prop's, so its life in the props' own hits,
+ *  how long it stands and how wide it is. */
+export function skillWallHTML(def: SkillDef, _wave: number): string {
+  if (!def.wall) return '';
+  const lasts = def.duration ? ` for ${secs(def.duration)}` : ' until broken or the wave is cleared';
+  return `<div class="tt-dmg"><div class="tt-hit">Stands${lasts}, broken as any prop: <b class="tt-wall">${whole(def.wall.life)}</b>`
+    + ' arrows or blows, fewer blasts; a big foe walking into it breaks it</div>'
+    + `<div class="tt-note">${def.wall.width} m wide, ${def.wall.height} m tall</div></div>`;
+}
+
 /** A warding skill's figure for a hero of `stats`: the blows its ward absorbs now (Iron Bellow's, a share of his most
  *  Health; empty without a hero: its text says how). */
 export function skillWardHTML(def: SkillDef, stats: DerivedStats | null): string {

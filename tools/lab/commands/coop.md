@@ -217,6 +217,10 @@ both; the match's score and winner the same on every game, "Victory", "Defeat" o
 own, no hero of the side that struck down, and every game back in the village with no hero left out
 (`out/coop/duel3-*.png`, `duel4-*.png`: the host's and the guest's screens).
 
+`wall` (`--class ranger`): the guest raises its Hedgeward between it and a Sporecaller shooting at it, the host
+standing off. The wall must stand on both screens in one place (its middle within a few centimetres), a breakable
+prop on each (the host's health told the guest by the `ward` fx), and standing on both at the end.
+
 `ghosts` (`diesLost`): the host kills three dazed foes by the guest, and the lab's link drops every death report on
 its way to the guest, as a game in #579 lost them (its copies stood, still, with their bars, through the choice after
 the wave and on into the next). Each copy must go from the guest's screen within 1.6 s of the host's foe

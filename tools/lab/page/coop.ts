@@ -157,6 +157,8 @@ export interface Sample {
   preview?: import('./coopPing').PreviewSample | null;
   view?: import('./coopPing').ViewSample;
   planned?: typeof PINGS;
+  /** in `wall`: the guest's Hedgeward as this game shows it (page/coopWall.ts), none while none stands */
+  wall?: import('./coopWall').WallSample | null;
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
@@ -417,6 +419,26 @@ function keyOf(impl: string): SkillKey | null {
   return SKILL_KEYS.find((key) => G.player.skillAt(key)?.def.impl === impl) ?? null;
 }
 
+/** `wall`: the guest's spot, the Sporecaller's, where the guest aims its Hedgeward between them, and the frame it
+ *  presses its key at and for how many it holds it */
+const WALL = { guest: [16, 25] as XZ, foe: [16, 13] as XZ, aim: [16, 21] as XZ, at: 30, hold: 12 };
+
+/** The guest in `wall`: its Hedgeward held over the spot between it and the Sporecaller and let go, its cooldown and
+ *  energy made ready first. */
+function wallInput(frame: number): Frame {
+  const key = keyOf('hedgeward');
+  if (!key || frame < WALL.at || frame > WALL.at + WALL.hold + 1) return {};
+  if (frame === WALL.at) {
+    G.player.cooldowns.clear();
+    G.player.energy = G.player.stats.maxEnergy;
+  }
+  const aim = new THREE.Vector3(WALL.aim[0], 0, WALL.aim[1]);
+  return { keys: frame < WALL.at + WALL.hold ? [key] : [], aim };
+}
+
+/** The wall each game shows, read as `wall` starts (none in another scenario) */
+let wallNow: (() => import('./coopWall').WallSample | null) | null = null;
+
 /** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
  *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
 function blinkInput(frame: number): Frame {
@@ -617,6 +639,18 @@ const SCENARIOS: Record<string, Scenario> = {
     ],
     hostInput: () => ({}),
     guestInput: () => ({ keys: (G.player as { rooted?: boolean }).rooted ? ['d'] : [] }),
+  },
+  wall: {
+    about: 'the guest, a ranger, raises its Hedgeward between it and a Sporecaller shooting at it, the host standing '
+      + 'off: the wall on both screens in one place, the bolts flying over it, and standing on both to the end',
+    frames: 600,
+    host: [-4, 22],
+    guest: WALL.guest,
+    foes: [{ type: 'sporecaller', at: WALL.foe }],
+    skill: 'hedgeward',
+    pictures: [60, 300],
+    hostInput: () => ({}),
+    guestInput: wallInput,
   },
   blink: {
     about: 'the guest, a mage, blinks between two spots as foes close on it, the host standing off',
@@ -1120,9 +1154,11 @@ function makeUnhurt(player: Player): void {
 }
 
 /** Sets scenario `name` up on this page: its hero on its spot, the foes spawned on the host, nothing recorded yet. */
-export function coopScenario(lab: Lab, { name }: { name: string }): void {
+export async function coopScenario(lab: Lab, { name }: { name: string }): Promise<void> {
   const scenario = SCENARIOS[name];
   if (!scenario) throw new Error(`lab: coop: no scenario ${name}`);
+  // (the wall's module loaded only for its scenario: a tree without the wall still plays the others)
+  wallNow = name === 'wall' ? (await import('./coopWall')).wallNow : null;
   play.scenario = name;
   play.frame = 0;
   play.samples = [];
@@ -1233,6 +1269,7 @@ function sampleNow(): Sample {
     Object.assign(sample, { slot: self.slot, ...pingsNow() });
     if (!play.samples.length) sample.planned = PINGS;
   }
+  if (play.scenario === 'wall' && wallNow) sample.wall = wallNow();
   if (play.scenario === 'chat') {
     sample.chat = chatNow();
     if (!play.samples.length) Object.assign(sample, { said: SAID, escAt: ESC_AT, quiet: QUIET });

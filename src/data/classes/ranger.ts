@@ -1,9 +1,10 @@
-// Ranger: physical bow shots, a hunter's tricks (a mark on his quarry, a scarecrow to draw foes off), a separate gear pool.
+// Ranger: physical bow shots, a hunter's tricks (a wall of stakes and bramble to shelter behind, a scarecrow to draw foes
+// off), a separate gear pool. Quarry Mark (`combat/skills/quarryMark.ts`) is kept, off his bar, for its future (#401, #564).
 import type { ClassDef } from '../../types';
 
 const ranger: ClassDef = {
   id: 'ranger', name: 'Ranger', model: 'ranger',
-  tagline: 'A patient hunter who marks his quarry and rains arrows on the pack.',
+  tagline: 'A patient hunter who holds his ground and rains arrows on the pack.',
   accent: '#c9d993', book: 'Fieldcraft',
   hall: {
     role: 'Marksman · Ranged bow',
@@ -50,10 +51,17 @@ const ranger: ClassDef = {
       icon: { glyph: '⇊', color: '#6f9bff' },
     },
     {
-      key: '3', impl: 'quarryMark', name: 'Quarry Mark',
-      desc: 'Mark the foe nearest your aim as your quarry for 12 seconds: it takes 25% more damage from everyone. If it dies marked, your cooldowns are refreshed, all but the draught\'s.', tags: ['physical'],
-      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26, aimed: true,
-      icon: { glyph: '⌖', color: '#ff9a6c' },
+      key: '3', impl: 'hedgeward', name: 'Hedgeward',
+      desc: 'Hold to choose where, release to drive a low wall of sharpened stakes and bramble into the ground across your aim, close by and clear of foes and props, facing away from you. It is a breakable prop like any other: foes go round it, striking it only when no way round is left, big foes walk straight through it, and arrows, blows and spells break it. It stands until broken or the wave is cleared.', tags: ['physical'],
+      // (waist high and standing until the wave is cleared, from play: "make it shorter, so projectiles go through",
+      // "make disappear after each wave"; an ordinary breakable prop, from the owner: "its just another prop, lets not
+      // introduce new game mechanics per object"; no cap on how many stand: "dont see why we need a limit")
+      // (its reach close before him, from the owner: "Reduce cast range to near player"; it was 6 m)
+      cost: 35, cooldown: 14, castTime: 0.45, range: 3, aimed: true,
+      // (a prop's health, in the props' own hits: an arrow or a blow 1, a blast 2, a nova 4; from the owner, it
+      // "should break easily when struck by enemies")
+      wall: { width: 3.6, height: 1, life: 8 },
+      icon: { glyph: 'ᚦ', color: '#3fd17a' },
     },
     {
       key: '4', impl: 'strawman', name: 'Strawman',

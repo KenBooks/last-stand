@@ -456,6 +456,62 @@ function describeStaffs(host, guest) {
   return { line, problems };
 }
 
+/** how far apart the two games may raise the guest's wall (m), and how far apart its life may end on them */
+const WALL_APART = 0.3;
+const WALL_LIFE_APART = 0.5;
+
+/** The last frame a game showed its wall in (-1: none). */
+function lastWallFrame(samples) {
+  for (let i = samples.length - 1; i >= 0; i--) if (samples[i].wall) return i;
+  return -1;
+}
+
+/**
+ * Whether the guest's wall's last life on the guest's screen is one the host's had shown about then: the host's word
+ * of a blow comes a link's delay late, so the host's lives over twice that delay before the matching frame count.
+ */
+function endedAlike(host, guest, lag) {
+  const lastHere = lastWallFrame(guest);
+  if (lastHere < 0) return false;
+  const endHere = guest[lastHere].wall.life;
+  const at = Math.min(host.length - 1, lastHere + lag);
+  for (let i = Math.max(0, at - 2 * lag); i <= at; i++) {
+    if (host[i].wall && Math.abs(host[i].wall.life - endHere) <= WALL_LIFE_APART) return true;
+  }
+  return false;
+}
+
+/**
+ * The guest's Hedgeward in `wall`: raised on both screens at one place, the Sporecaller's bolts flying over it (low,
+ * it takes nothing from a shot), its life alike on the guest's as the host tells it, and still standing on both at the
+ * scenario's end (it has no time of its own: it goes when broken or its wave is cleared).
+ */
+function describeWall(host, guest, frameMs) {
+  const firstHere = guest.findIndex((sample) => sample.wall);
+  const firstThere = host.findIndex((sample) => sample.wall);
+  const problems = [];
+  if (firstHere < 0) return { line: 'wall: the guest raised none', problems: ['the guest raised no wall'] };
+  if (firstThere < 0) {
+    return { line: 'wall: never on the host\'s screen', problems: ['the guest\'s wall never stood on the host\'s'] };
+  }
+  const here = guest[firstHere].wall, there = host[firstThere].wall;
+  const apart = Math.hypot(here.x - there.x, here.z - there.z);
+  const lowest = Math.min(...host.filter((sample) => sample.wall).map((sample) => sample.wall.life));
+  const endHere = guest[lastWallFrame(guest)].wall.life, endThere = host[lastWallFrame(host)].wall.life;
+  const standsHere = Boolean(guest[guest.length - 1].wall), standsThere = Boolean(host[host.length - 1].wall);
+  const line = `wall: raised on the guest's screen, on the host's ${ms(firstThere - firstHere, frameMs)} later, `
+    + `${apart.toFixed(2)} m apart; its life on the host's ${there.max} to ${Math.round(lowest)} at least; its last life `
+    + `${Math.round(endHere)} on the guest's, ${Math.round(endThere)} on the host's; standing at the end on the guest's `
+    + `${standsHere ? 'yes' : 'NO'}, on the host's ${standsThere ? 'yes' : 'NO'}`;
+  if (apart > WALL_APART) problems.push(`the wall stood ${apart.toFixed(2)} m apart on the two screens`);
+  if (lowest < there.max) problems.push(`the Sporecaller's bolts wore the wall (to ${Math.round(lowest)}): they fly over it`);
+  if (!endedAlike(host, guest, Math.max(1, firstThere - firstHere))) {
+    problems.push(`the wall's life ended ${Math.round(endHere)} on the guest's, a life the host's never showed as it went`);
+  }
+  if (!standsHere || !standsThere) problems.push('the wall went by itself on one of the screens before the end');
+  return { line, problems };
+}
+
 function describeBlinks(host, guest, frameMs) {
   const { blinks, unmatched } = judgeBlinks(host, guest);
   const seen = blinks.filter((blink) => blink.delay !== undefined);
@@ -908,5 +964,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'ghosts') add(describeGhosts(host, guest, frameMs));
   if (name === 'ping') add(describePings(host, guest, frameMs));
   if (name === 'chat') add(describeChat(host, guest, frameMs));
+  if (name === 'wall') add(describeWall(host, guest, frameMs));
   return { lines, problems };
 }

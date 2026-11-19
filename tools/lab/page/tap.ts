@@ -91,6 +91,9 @@ interface Cast {
   frame: number;
   /** where the round's foe stood as it was cast (none: a round with no foe) */
   foe: THREE.Vector3 | null;
+  /** for a skill that settles where it's cast (`InstantSkill.settle`), the aim it settled from and where it placed
+   *  it: the Hedgeward's wall stands within its reach and clear of the props, not on the foe aimed at */
+  settled?: { aim: THREE.Vector3; placed: THREE.Vector3 };
 }
 
 /** How a skill is tapped: the hero standing, down and up between two frames, or walking. */
@@ -166,6 +169,7 @@ const SPOTS: Record<string, () => THREE.Vector3 | null> = {
   blink: meshSpot('blink-preview'),
   starfall: meshSpot('starfall-preview'),
   strawman: meshSpot('strawman-preview-spot'),
+  hedgeward: meshSpot('hedgeward-preview'),
   quarryMark: outlinedSpot,
 };
 /** the held skills whose preview is the foe they'd strike, outlined */
@@ -324,16 +328,26 @@ interface Watch {
 function watchCasts(key: SkillKey, foe: Enemy | null = null): Watch {
   const impl = G.player.skillAt(key)!.impl as InstantSkill;
   const cast = impl.cast;
+  const settle = impl.settle;
+  let settled: Cast['settled'];
   const watch: Watch = {
     casts: [],
     frames: 0,
     stop: () => {
       impl.cast = cast;
+      impl.settle = settle;
     },
   };
+  if (settle) {
+    impl.settle = (player, def, target) => {
+      const placed = settle.call(impl, player, def, target);
+      if (player === G.player) settled = { aim: flat(target), placed: flat(placed) };
+      return placed;
+    };
+  }
   impl.cast = (player, def, target, power) => {
     if (player === G.player) {
-      const at = { from: flat(player.pos), at: flat(target), frame: watch.frames, foe: foe && flat(foe.pos) };
+      const at = { from: flat(player.pos), at: flat(target), frame: watch.frames, foe: foe && flat(foe.pos), settled };
       watch.casts.push(at);
     }
     cast.call(impl, player, def, target, power);
@@ -449,8 +463,12 @@ function tapFaults(skill: Aimed, tap: Tapped): string[] {
 function castOffFaults(skill: Aimed, tap: Tapped): string[] {
   if (!tap.cast) return ['never cast'];
   if (!skill.movement) {
-    const miss = tap.cast.at.distanceTo(tap.foe);
-    return miss > FOE_SLACK ? [`cast ${metres(miss)} from the foe`] : [];
+    // (a skill that settles where it's cast is aimed at the foe, and cast where that aim placed it)
+    const settled = OUTLINING.has(skill.impl) ? undefined : tap.cast.settled;
+    const miss = (settled?.aim ?? tap.cast.at).distanceTo(tap.foe);
+    if (miss > FOE_SLACK) return [`${settled ? 'aimed' : 'cast'} ${metres(miss)} from the foe`];
+    const off = settled ? tap.cast.at.distanceTo(settled.placed) : 0;
+    return off > FOE_SLACK ? [`cast ${metres(off)} from where its aim placed it`] : [];
   }
   const way = wayTo(tap.cast.from, tap.cast.at);
   if (!way) return ['cast at his feet'];
@@ -472,7 +490,11 @@ function tapLine(skill: Aimed, tap: Tapped): string {
   const toFoe = metres(tap.cast.at.distanceTo(tap.foe));
   const off = way ? `${degrees(degreesOff(way, tap.way))} off ${wayName(tap.how)}` : 'at his feet';
   const facing = tap.facingOff === null ? '' : `, he faced ${degrees(tap.facingOff)} off the stick's way`;
-  const what = skill.movement ? `${far} out, ${off}, ${toFoe} from the foe` : `${toFoe} from the foe, ${far} out`;
+  const settled = OUTLINING.has(skill.impl) ? undefined : tap.cast.settled;
+  const aimed = settled ? `aimed ${metres(settled.aim.distanceTo(tap.foe))} from the foe and placed ` : '';
+  const what = skill.movement
+    ? `${far} out, ${off}, ${toFoe} from the foe`
+    : `${aimed}${toFoe} from the foe, ${far} out`;
   const tooltip = tap.tooltip ? ', its tooltip opened' : '';
   const later = tap.cast.foe ? tap.cast.foe.distanceTo(tap.foe) : 0;
   const moving = later > FOE_SLACK ? ` (as it was cast, the foe ${metres(later)} on from where it was)` : '';
