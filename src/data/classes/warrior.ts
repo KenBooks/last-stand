@@ -84,7 +84,7 @@ const warrior: ClassDef = {
     },
     {
       key: '3', impl: 'wrath', name: 'Wrath',
-      desc: 'Spend all your Frenzy in one blow, harder for every stack. Under 5 stacks it is a single hook; from 5 a two-fisted slam that also strikes every foe round where it lands; at 10 or more it cracks the ground and throws them back. The damage you take goes back to normal. Needs a stack of Frenzy.',
+      desc: 'Spend all your Frenzy in one blow, harder for every stack. Under 5 stacks it is a single hook; from 5 a two-fisted slam that also strikes every foe round where it lands; at 10 or more it cracks the ground and throws them back. The damage you take goes back to normal. Cast in the air of a Pounce or as a Bloodrush ends, it lands up to half as hard again. Needs a stack of Frenzy.',
       tags: ['physical'], cost: 15, cooldown: 4, castTime: 0.4, fireAt: 0.65,
       damage: 60, perStack: 70, range: 1.5, arc: 1.2, radius: 3, knock: 8,
       needs: 'bare',
