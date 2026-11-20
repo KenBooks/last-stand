@@ -9,8 +9,13 @@ combat scenarios keep their existing room checks.
 `coop --scenarios houses` runs alone, in the village with no run (`node/coopHouses.mjs`, `page/coopHouses.ts`): the
 host stands before the tavern's door and the guest goes into the tavern. The host's game must draw the marker over
 its door with the guest's name (`ui/houseMarks.ts`), a dot for him at the door on its minimap, and his name under the
-tavern's on the village's map; none of them before he goes in or once he's out. `--pictures` takes the marker and the
-map (`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn, which must be found.
+tavern's on the village's map; none of them before he goes in or once he's out. Then the host enters the tavern and
+creates a party inside it: every guest joining from outside in the village must spawn inside the tavern (zoom locked,
+spaced apart with `--party 3|4`, all partners visible to each other), and leaving back to the village must restore
+zoom with zero late shader compiles (#740); last, a guest inside the tavern joining a host outside in the village must
+leave the tavern and appear with the host outside. `--pictures` takes the marker, the map and the party in the tavern
+(`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn and moves the guest out of the
+tavern after joining, both of which must be found.
 
 `coop --scenarios seats` runs alone, in the village with no run (`node/coopSeats.mjs`, `page/coopSeats.ts`): a seat a
 partner sits on can't be used (`seatTaken` in `world/seats.ts`; from the owner, "need to check if another player is

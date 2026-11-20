@@ -5,9 +5,11 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { outsideOf, type RoomId } from '../../../src/data/houses';
 import { enterRoom, leaveRoom } from '../../../src/game/rooms';
+import { hostRoom, joinRoom, leaveRoom as leaveParty, session } from '../../../src/net/session';
 import { houseMarkOf, partnersByHouse } from '../../../src/ui/houseMarks';
 import { groundHeight } from '../../../src/world/ground';
-import { faceCamera, settleCamera } from '../../../src/core/renderer';
+import { faceCamera, settleCamera, zoomHeldTo } from '../../../src/core/renderer';
+import { programsCompiledInGame } from '../../../src/core/shaders';
 import { setVillageMap } from '../../../src/ui/villageMap';
 import type { Lab } from './lab';
 
@@ -58,4 +60,44 @@ export function coopHouseMarkLost(_lab: Lab, { id }: { id: RoomId }): void {
 /** The village's map opened on this game (as M opens it), or folded away. */
 export function coopVillageMap(_lab: Lab, { on }: { on: boolean }): void {
   setVillageMap(on);
+}
+
+/** Where this game's hero stands relative to the houses, and whether partners are visible with him. */
+export interface HousePartyState {
+  room: RoomId | null;
+  pos: [number, number];
+  zoomHeld: boolean;
+  lateCompiles: number;
+  partnersVisible: number;
+  partnersAway: number;
+  status: string;
+}
+
+export function coopHousePartyState(): HousePartyState {
+  const partners = G.players.filter((player) => !player.local);
+  return {
+    room: G.arena.room,
+    pos: [G.player.pos.x, G.player.pos.z],
+    zoomHeld: zoomHeldTo() !== null,
+    lateCompiles: programsCompiledInGame(),
+    partnersVisible: partners.filter((player) => player.obj.visible).length,
+    partnersAway: partners.filter((player) => player.away).length,
+    status: session.status,
+  };
+}
+
+/** Leave the current co-op party (keeps the lab's simulated link in place for the next room). */
+export function coopPartyLeave(): void {
+  leaveParty();
+}
+
+/** Host a new co-op party as `tag` from wherever the hero currently stands (e.g. inside a house). */
+export async function coopPartyHost(_lab: Lab, { tag }: { tag: string }): Promise<string> {
+  await hostRoom(tag);
+  return session.code;
+}
+
+/** Join co-op party `code` as `tag` from wherever the hero currently stands. */
+export async function coopPartyJoin(_lab: Lab, { code, tag }: { code: string; tag: string }): Promise<void> {
+  await joinRoom(code, tag);
 }
