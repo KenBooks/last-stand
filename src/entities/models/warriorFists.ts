@@ -72,10 +72,11 @@ const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.
  * from a corner as a thin stick); and where the other fist goes meanwhile, off its guard (`other`: out to its own
  * side and up on the screen, and ahead, m: drawn back to the jaw as the body turns behind the blow).
  */
-/** through the eyes, the one point both fists' knuckles land on: on the screen (across, up) and ahead of the eyes
+/** through the eyes, the one point both fists' knuckles land on: on the screen (across, up: the knuckles on the
+ *  crosshair's line, the fist's body under it) and ahead of the eyes
  *  (m), how far a fist's knuckles are on from its wrist (m), and how far the fist is turned over from its guard as it
  *  lands (rad) */
-const STRIKE = tunable('strikeEyes', { at: [0, -0.13], ahead: 0.56, hand: 0.1, turn: 2.1, past: 0.03 });
+const STRIKE = tunable('strikeEyes', { at: [0, -0.04], ahead: 0.56, hand: 0.1, turn: 2.75, past: 0.03 });
 const PUNCH_EYES = {
   jab: tunable('jabEyes', {
     reach: 0.97, flare: 0.7, shoulder: [0.03, 0.02, 0.08], other: [0.12, -0.12, 0],
@@ -113,9 +114,13 @@ const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.
 /** the jab's and the cross's own: neither is wound up (a boxer doesn't tell his punch; the cross sits back onto the
  *  rear hip a hair as the hips start), the fist quickest as it lands, held on the blow a moment and brought back to
  *  the guard slower than it went. Eased in and out alike, it was a piston pushed out and pulled back. */
-const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.51, 1], [0.66, 0.4], [0.86, 0.05], [1, 0]];
-const CROSS_OUT: Keys = [[0, 0], [0.12, -0.08], [0.28, 0.2], [0.43, 0.92], [0.48, 1], [0.55, 1], [0.7, 0.42], [0.9, 0.05], [1, 0]];
+const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.51, 1], [0.66, 0.4], [0.8, 0], [1, 0]];
+const CROSS_OUT: Keys = [[0, 0], [0.12, -0.08], [0.28, 0.2], [0.43, 0.92], [0.48, 1], [0.55, 1], [0.69, 0.4], [0.8, 0], [1, 0]];
 const LEAD = { hips: 0.09, chest: 0.045 };
+/** through the eyes, how far the fist is turned over from its guard through a punch's cast */
+// (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
+// left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
+const TURN_OVER: Keys = [[0, 0], [0.16, 0], [0.44, 1], [0.54, 1], [0.8, 0], [1, 0]];
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
 const FREE_IN = [0.13, 0.02];
 /** a two-fisted hammer over its cast: the fists raised together, held up a moment, brought down to land at 0.5 */
@@ -349,8 +354,10 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
     // line went through nothing, and the fist flipped over in one frame as it left the guard and again as it came
     // back to it, from play: "on fist retraction from strike.... fist position jerks at last moment"; and by the
     // fist's own way out, all of it: over its first 70%, three frames out and one at the end of its way back, it
-    // still rolled 150 degrees in a frame, read off the screen. It lands three quarters turned, the thumb in and up)
-    const outer = sided(GUARD_EYES.line, lead)[0], by = STRIKE.turn * smooth(Math.min(1, Math.max(0, out)));
+    // still rolled 150 degrees in a frame, read off the screen; and by its way back too, which is two frames long,
+    // 136. So over the cast's own time (`TURN_OVER`): over as it lands, and back over all the rest of the cast, the
+    // fist still turning as it settles into its guard. It lands palm down, the thumb in and a little up)
+    const outer = sided(GUARD_EYES.line, lead)[0], by = STRIKE.turn * curve(TURN_OVER, k);
     line.set(outer * Math.cos(by), Math.sin(by), 0);
   } else lineTo(line, sided(LINE.punch, lead), turned);
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
