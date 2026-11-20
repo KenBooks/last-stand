@@ -17,7 +17,7 @@ import { villageUse } from '../../../game/villageUses';
 import { showVillageCard } from '../../villageCard';
 import { openPanels } from '../../menus';
 import { itemIconSVG } from '../../itemIcons';
-import { odoNods } from '../../../entities/models/merchant';
+import { odoNods, odoTrades } from '../../../entities/models/merchant';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../../tooltip';
 import { renderMenu } from '../../menus';
 import type { Item } from '../../../types';
@@ -75,6 +75,8 @@ villageUse('merchant', {
 /** The trade screen shown (his stock restocked first if it's due), or put away. */
 export function showMerchant(on: boolean): void {
   $('#merchant').classList.toggle('hidden', !on);
+  // (Odo stays at his desk while it's open)
+  odoTrades(on);
   hideTooltip();
   if (!on) return;
   wanted = null;
