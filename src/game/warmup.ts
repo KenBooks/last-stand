@@ -47,7 +47,9 @@ import { compileOutline, warmOutline, type OutlineTarget } from '../ui/overlay/o
 import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
 import { buildHallAhead, hallOpen, prepareSpareHero } from './hall';
-import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
+import {
+  approached, heroWarming, isAsked, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need,
+} from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -659,31 +661,48 @@ const PARTS_AT_ONCE = 4;
  * time" (`npm run stalls -- --scenario boot --variants base,noParallelCompile`). A part at a time, each a step a
  * task, the cold Start's bar took 17.4 s where at once it took 4.4.
  */
-async function warmInTasks(need: Need, parts: Part[], progress: (share: number) => void, size: number): Promise<void> {
+async function warmInTasks(
+  need: Need,
+  parts: Part[],
+  progress: (share: number) => void,
+  size: number,
+  stopIf?: () => boolean,
+): Promise<number> {
   const start = performance.now();
+  // (with `stopIf`, given up at the step it says so: a lot's builds kept for the warm-up after, its parts not warm)
+  const step = async (): Promise<void> => {
+    await stepBehind();
+    if (stopIf?.()) throw GIVEN_UP;
+  };
   for (let from = 0; from < parts.length; from += size) {
     const lot = parts.slice(from, from + size);
     const built: Built[] = [];
-    for (const part of lot) {
-      // (a frame between each build, a task of up to 200 ms: back to back, a return's Change hero held its bar 618 ms)
-      await aheadOf(part, nextFrame);
-      if (!part.built) await nextFrame();
-      built.push(part.built ?? part.build());
-      part.built = undefined;
+    try {
+      for (const part of lot) {
+        // (a frame between each build, a task of up to 200 ms: back to back, a return's Change hero held its bar 618 ms)
+        await aheadOf(part, nextFrame);
+        if (!part.built) await nextFrame();
+        built.push(part.built ?? part.build());
+        part.built = undefined;
+      }
+      const share = (s: number): void => {
+        progress((from + s * lot.length) / parts.length);
+        if (need === 'heroes') for (const part of lot) heroWarming(part.name, s * 0.99);
+      };
+      // (a step a frame where no loading bar covers the page, a first visit's hall of heroes, and a step a task under
+      // one: a lot's compile in one task was 30 to 64 ms, a hero chosen in it held the hall's frame up 104 ms, and
+      // under the fight's bar each held its frame up as long, a frozen bar)
+      await warmBuilt(built, { progress: share, step, patient: true, linkingMost: LINKING_MOST, poll: nextFrame });
+      for (const part of lot) await part.ready?.(step);
+    } catch (error) {
+      if (error !== GIVEN_UP) throw error;
+      built.forEach((made, i) => { lot[i].built = made; });
+      return from;
     }
-    const share = (s: number): void => {
-      progress((from + s * lot.length) / parts.length);
-      if (need === 'heroes') for (const part of lot) heroWarming(part.name, s * 0.99);
-    };
-    // (a step a frame where no loading bar covers the page, a first visit's hall of heroes, and a step a task under
-    // one: a lot's compile in one task was 30 to 64 ms, a hero chosen in it held the hall's frame up 104 ms, and under
-    // the fight's bar each held its frame up as long, a frozen bar)
-    await warmBuilt(built, { progress: share, step: stepBehind, patient: true, linkingMost: LINKING_MOST,
-      poll: nextFrame });
-    for (const part of lot) await part.ready?.(stepBehind);
     if (need === 'heroes') for (const part of lot) heroWarming(part.name, 1);
   }
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });
+  return parts.length;
 }
 
 /**
@@ -799,14 +818,29 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   if (next < parts.length && !hurried && heldLong()) {
     for (const any of BEHIND_NEEDS) if (!isWarm(any)) WARM_BEHIND.givenUp.add(any);
   }
+  // (the heroes a hero at a time, each shown in the hall as he's warm)
+  const lot = need === 'heroes' ? 1 : PARTS_AT_ONCE;
+  const toldFrom = (from: number) => (s: number): void => {
+    const done = from / parts.length;
+    warming(need, done + (1 - done) * s);
+  };
+  // (come near where it's needed, warmed while no frame is held, as behind the lobby: asked for at once as the hero
+  // neared the hall, a phone's village held frames of 280 to 320 ms walking on its square, every one in the scene's
+  // draw behind the heroes' compile, trace 476Y-88D5)
+  if (next < parts.length && !WEBGPU) {
+    await approached(need);
+    if (!isAsked(need) && !WARM_BEHIND.givenUp.has(need)) {
+      const nearHeld = framesHeld();
+      const stop = (): boolean => !isAsked(need) && nearHeld.worst() > WARM_BEHIND.heldMost;
+      next += await inTurn(() => warmInTasks(need, parts.slice(next), toldFrom(next), lot, stop));
+      nearHeld.stop();
+    }
+  }
   if (next < parts.length) {
     await wanted(need);
-    const done = next / parts.length;
     const left = parts.slice(next);
-    const told = (s: number): void => warming(need, done + (1 - done) * s);
-    // (the heroes a hero at a time, each shown in the hall as he's warm)
-    const lot = need === 'heroes' ? 1 : PARTS_AT_ONCE;
-    await inTurn(() => (WEBGPU ? warmAtOnce(need, left, told) : warmInTasks(need, left, told, lot)));
+    const told = toldFrom(next);
+    await inTurn(async () => { await (WEBGPU ? warmAtOnce(need, left, told) : warmInTasks(need, left, told, lot)); });
   }
   // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
   // frame 290 to 400 ms, trace FD2V-NB48)
@@ -848,7 +882,7 @@ export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: P
     // (with no village the hall is a screen opened from the lobby: its heroes are warmed once something needs them)
     if (!VILLAGE) return false;
     const cached = await behind();
-    await Promise.race([fightWarm, wanted('heroes')]);
+    await Promise.race([fightWarm, approached('heroes')]);
     return cached;
   };
   const heroes = warmNeed('heroes', heroParts(), heroesBehind);

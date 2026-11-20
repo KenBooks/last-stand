@@ -19,7 +19,7 @@ import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
-import { want } from './warm';
+import { approach } from './warm';
 import { stands, walkLength } from '../world/walkPath';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
@@ -389,8 +389,9 @@ export function updateVillage(dt = 0): void {
   }
   // (in the close views the pointer is the crosshair's, and picks nothing: the object near is named)
   if (viewMode() !== 'top') pointed = null;
-  // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet)
-  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) want('heroes');
+  // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet: behind the
+  // lobby still, given up at a held frame, `approach`)
+  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) approach('heroes');
   syncLabels();
 }
 
