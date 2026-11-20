@@ -851,6 +851,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const cuff = lathe([[open - 0.002, 0.001], [open + 0.005, 0], [open + 0.007, 0.005], [open + 0.01, 0.029],
       [open + 0.007, 0.040]], 16);
     B.add(scaleUV(foreSleeve, 2, 1), cloth, el);
+    // (and its inside, from the open end's rim up and in to the arm: with one-sided cloth the eyes looked into the
+    // open end past the forearm and saw the world through the sleeve's far wall, from play: "seeing through the
+    // sleeves". Its profile runs top to bottom, so its faces point in, `lathe`)
+    const lining = lathe([[0.016, BARE_CUFF + 0.1], [open + 0.004, BARE_CUFF + 0.07], [open - 0.001, BARE_CUFF + 0.002]], 16);
+    B.add(scaleUV(lining, 2, 1), cloth, el);
     B.add(scaleUV(cuff, 2, 0.3), cloth, el, [0, BARE_CUFF, 0]);
     yield;
   }

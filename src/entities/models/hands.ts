@@ -87,6 +87,10 @@ const NAIL_TINT = new THREE.Color(0xd8a39c);
 const NAIL_SKIN = new THREE.Color(0.72, 0.6, 0.57);
 const NAIL_PINK = 0.14;
 const NAIL_ROUGH = 0.5;
+/** a fighter's, seen close: the skin's own colour well towards a nail's pale pink, and smoother (tinted as the
+ *  others' it was the skin's colour to within a shade, 0.5 mm off it: no nail was seen on his thumbs at all) */
+const NAIL_NEAR = new THREE.Color(0xe6b0a6);
+const NAIL_PINK_NEAR = 0.6, NAIL_ROUGH_NEAR = 0.34;
 
 /** A digit's joints on the hand (`s` its side), as `spec` places and sizes them, its width by `build`'s. */
 function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec, build: HandBuild): Digit {
@@ -319,8 +323,11 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   for (const m of [h.skin, h.bareSkin]) if (m) wrinkled(m.material as THREE.MeshStandardMaterial);
   h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
   const nail = h.nails.material as THREE.MeshStandardMaterial;
-  nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
-  nail.roughness = NAIL_ROUGH;
+  // (a fighter's bare fists are seen close through his own eyes, each a quarter of the view: tinted as the others'
+  // his nails were lost in the skin, from play: "need nails too")
+  if (build.fist) nail.color.lerp(NAIL_NEAR, NAIL_PINK_NEAR);
+  else nail.color.multiply(NAIL_SKIN).lerp(NAIL_TINT, NAIL_PINK);
+  nail.roughness = build.fist ? NAIL_ROUGH_NEAR : NAIL_ROUGH;
   if (build.fist && bareSkin && FIST_SCULPT) shutOf(h, bones, bareSkin, skin);
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)

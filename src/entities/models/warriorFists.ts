@@ -64,20 +64,24 @@ const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
 
 /**
- * A punch through the eyes, the jab's and the cross's: where it lands on the screen (`at`: across towards its own
- * side, up) and at what share of the arm's reach (short of straight: at 0.93 and 0.97 the fist was a speck at the
+ * A punch through the eyes, the jab's and the cross's (both land on `STRIKE`): the most of the arm's reach its wrist
+ * goes to (short of straight: at 0.93 and 0.97 the fist was a speck at the
  * crosshair behind its own sleeve, the sleeve the largest thing in the view, an adversarial review's "sleeve thrust"); how far its elbow comes up and out as the fist turns over (`flare`,
  * 0 down by the ribs, 1 level with the fist); how far its shoulder is sent after it (`shoulder`: in, up, ahead, m: up
  * to the chin and in under the eyes, so the arm runs from the view's foot to its middle, foreshortened, and not in
  * from a corner as a thin stick); and where the other fist goes meanwhile, off its guard (`other`: out to its own
  * side and up on the screen, and ahead, m: drawn back to the jaw as the body turns behind the blow).
  */
+/** through the eyes, the one point both fists' knuckles land on: on the screen (across, up) and ahead of the eyes
+ *  (m), how far a fist's knuckles are on from its wrist (m), and how far the fist is turned over from its guard as it
+ *  lands (rad) */
+const STRIKE = tunable('strikeEyes', { at: [0, -0.13], ahead: 0.56, hand: 0.1, turn: 2.1, past: 0.03 });
 const PUNCH_EYES = {
   jab: tunable('jabEyes', {
-    at: [0.04, -0.16], reach: 0.8, flare: 0.7, shoulder: [0.03, 0.02, 0.08], other: [0.12, -0.12, 0],
+    reach: 0.97, flare: 0.7, shoulder: [0.03, 0.02, 0.08], other: [0.12, -0.12, 0],
   }),
   cross: tunable('crossEyes', {
-    at: [-0.03, -0.14], reach: 0.84, flare: 0.8, shoulder: [0.06, 0.02, 0.12], other: [0.22, -0.22, -0.04],
+    reach: 0.97, flare: 0.8, shoulder: [0.06, 0.02, 0.12], other: [0.22, -0.22, -0.04],
   }),
 };
 
@@ -230,15 +234,44 @@ function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): T
   // shoulder's place in the world, every punch thrown out to its arm's full length, the elbow locked straight)
   if (!eyes) from(between(j, _mid), PUNCH_AT, out);
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
-  if (eyes) {
-    const [across, up] = seenAs.at;
-    const on = [left ? -across : across, up];
-    if (onReach(onScreen(j, [on[0], on[1], 0.1], _near), onScreen(j, [on[0], on[1], 1.5], out), _sh, reach, out)) {
-      return out;
-    }
-  }
+  if (eyes) return strikeWrist(j, left, _sh, reach, out);
   return out.sub(_sh).setLength(reach).add(_sh);
 }
+
+/**
+ * Through the eyes both fists land on one point, straight ahead under the crosshair (`STRIKE`): from play, "attack
+ * point should be same, roughly in front... currently each fist is hitting its own target". Each wrist was sent to a
+ * place of its own on the screen, and its knuckles, a hand's length on along its own forearm, landed either side of
+ * the middle, a tenth of the view apart. Where the wrist goes (`out`, the body's frame) so the knuckles land on the
+ * point: the hand's length back from it along the forearm as the arm reaches it (`shoulder` in the body's frame,
+ * `reach` the furthest the wrist goes from it), found by reaching once and reading the forearm.
+ */
+function strikeWrist(j: Joints, left: boolean, shoulder: THREE.Vector3, reach: number, out: THREE.Vector3): THREE.Vector3 {
+  // (each aimed a little past the middle: as read off the screen (the lab's live session, the knuckles a hand's
+  // length on along the forearm) each landed 0.03 of the view short of it on its own side)
+  const at = onScreen(j, [STRIKE.at[0] + (left ? STRIKE.past : -STRIKE.past), STRIKE.at[1], STRIKE.ahead], _strike);
+  const back = (to: THREE.Vector3): THREE.Vector3 => {
+    out.copy(at).addScaledVector(to, -STRIKE.hand);
+    _reach.subVectors(out, shoulder);
+    if (_reach.length() > reach) out.copy(shoulder).add(_reach.setLength(reach));
+    return out;
+  };
+  back(_way.subVectors(at, shoulder).normalize());
+  // (the forearm's way as the arm reaches that: the arm reached there and put back)
+  const sh = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR, hand = left ? j.handL : j.handR;
+  _keepS.copy(sh.quaternion); _keepE.copy(elbow.quaternion);
+  const flare = (left ? PUNCH_EYES.jab : PUNCH_EYES.cross).flare;
+  place(j, left, _trial.copy(out), 1, true, flare);
+  j.root.updateMatrixWorld(true);
+  j.body.worldToLocal(hand.getWorldPosition(_way));
+  j.body.worldToLocal(elbow.getWorldPosition(_reach));
+  _way.sub(_reach).normalize();
+  sh.quaternion.copy(_keepS); elbow.quaternion.copy(_keepE);
+  // (`back` works in `_reach`: the way kept apart)
+  return back(_trial.copy(_way));
+}
+const _strike = new THREE.Vector3(), _way = new THREE.Vector3(), _reach = new THREE.Vector3(), _trial = new THREE.Vector3();
+const _keepS = new THREE.Quaternion(), _keepE = new THREE.Quaternion();
 
 /** The point of the line from `near` to `far` that lies `reach` from `shoulder`, the further one, into `out`; false
  *  where the line passes beyond the reach. */
@@ -309,7 +342,17 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
     guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
     place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * 8)), true, seenAs.flare * over);
   } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
-  lineTo(lead ? fistLine.L : fistLine.R, sided(LINE.punch, lead), smooth(Math.min(1, Math.max(0, out) * 1.4)));
+  const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;
+  if (eyes) {
+    // (through the eyes the guard's line and the punch's are opposite, the thumb out and the thumb in: the fist is
+    // turned over between them through thumb up, as a forearm turns it. Eased straight from one to the other the
+    // line went through nothing, and the fist flipped over in one frame as it left the guard and again as it came
+    // back to it, from play: "on fist retraction from strike.... fist position jerks at last moment"; and by the
+    // fist's own way out, all of it: over its first 70%, three frames out and one at the end of its way back, it
+    // still rolled 150 degrees in a frame, read off the screen. It lands three quarters turned, the thumb in and up)
+    const outer = sided(GUARD_EYES.line, lead)[0], by = STRIKE.turn * smooth(Math.min(1, Math.max(0, out)));
+    line.set(outer * Math.cos(by), Math.sin(by), 0);
+  } else lineTo(line, sided(LINE.punch, lead), turned);
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
   if (shielded) return;
