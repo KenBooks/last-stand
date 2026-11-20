@@ -28,9 +28,9 @@ export interface LobbyStartOptions {
 const NEEDS: Need[] = ['fight', 'heroes', 'rooms'];
 /** the most work behind the lobby a frame may hold (ms). The aim is 12, the queue's 2 ms and a piece over it (a
  *  hero's pieces take up to 10 ms here, `lab behind`), as a 144 Hz screen's frame is 6.9 ms and the lobby's own 4 to
- *  5; what's over it now is each warm-up part's draw, one task of 20 to 40 ms (a room's or a hero's first draw,
- *  `warmUp` in core/shaders.ts). Built whole, as before, a hero held a frame 130 to 350 ms. */
-const MOST_MS = 45;
+ *  5; each warm-up's tasks are 10 ms at most now, and a frame reads up to 20 where two run between it and the next.
+ *  Built whole, as before, a hero held a frame 130 to 350 ms, and drawn in one render a part 20 to 40 ms. */
+const MOST_MS = 25;
 /** the frames the lobby may take to warm everything behind it (60 s of the lab's frames) */
 const MOST_FRAMES = 3600;
 /** the canary's budget behind the lobby (ms): more than any hero's build takes */

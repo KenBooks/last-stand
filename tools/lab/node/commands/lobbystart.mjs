@@ -23,12 +23,12 @@ export default {
   summary: 'a return\'s lobby from its reveal, frame by frame, till nothing is left to do behind it: the page '
     + 'reloaded as a player opens the game again, each frame stepped and drawn and timed by the browser\'s clock (the '
     + 'game\'s frame, the queue\'s building, each warm-up\'s slices after it), over its first 2 s, to 10 s and after; '
-    + 'the most work behind the lobby a frame at most 45 ms (`--canary`: each hero built whole behind it)',
+    + 'the most work behind the lobby a frame at most 25 ms (`--canary`: each hero built whole behind it)',
   help: 'a return\'s lobby from its reveal, as the player meets it: the page booted, then reloaded with its storage '
     + 'kept, so the fight\'s, the heroes\' and the rooms\' warm-ups run behind the lobby and its queue still builds '
     + 'the heroes; each frame stepped and drawn, the browser let go for the warm-ups\' slice of it, and timed by the '
     + 'browser\'s clock (the game\'s frame, the queue\'s building, each warm-up\'s slices), over its first 2 s, to '
-    + '10 s and after; the most work behind the lobby a frame at most 45 ms, the slowest slices named',
+    + '10 s and after; the most work behind the lobby a frame at most 25 ms, the slowest slices named',
   options: {
     canary: { kind: 'switch', help: 'the lobby\'s budget for what\'s built behind it lifted, each hero built whole '
         + 'there as before: must be caught' },

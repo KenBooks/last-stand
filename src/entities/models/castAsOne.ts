@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { aroundShadows, inShadowsOnly, outOfShadowsOnly } from '../../world/culling';
 import { SKIN_DEPTH } from './shapes';
-import { coarseIndex, holdShadowsWhole, shadowDetailVersion } from './shadowDetail';
+import { coarseIndex, detailSettled, holdShadowsWhole, shadowDetailVersion, shadowsWhole } from './shadowDetail';
 
 /** Whether the hero's pieces are cast as one (`?castAsOne=0`: each on its own; the lab's `shadows` flips it). */
 export const castingAsOne = {
@@ -161,8 +161,14 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
   let pieces: THREE.Mesh[] = [];
   let mesh: THREE.SkinnedMesh | null = null;
   let made = 0;
-  /** the shadows' detail the mesh was made at (`shadowDetailVersion`): made again when it changes */
+  /** the shadows' detail the mesh was made at (`shadowDetailVersion`): made again when it changes, while any of its
+   *  geometries' fewer triangles were still to come or every triangle has been asked for or let go since
+   *  (`detailSettled`) */
   let detail = -1;
+  let settled = false;
+  let wasWhole = false;
+  /** the meshes whose fewer triangles the last `make` asked for */
+  let asked: THREE.Mesh[] = [];
   /** what casts alone and from fewer triangles, each with its twin (`coarseTwin`) */
   const twins = new Map<THREE.Mesh, THREE.Mesh>();
 
@@ -180,6 +186,7 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     root.traverse((object) => {
       const alone = object as THREE.Mesh;
       if (!castsCoarse(alone) || pieces.includes(alone)) return;
+      asked.push(alone);
       const index = coarseIndex(alone.geometry);
       if (index) twins.set(alone, coarseTwin(alone, index));
     });
@@ -203,7 +210,10 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     for (const piece of pieces) versions.set(piece, versionOf(piece));
     detail = shadowDetailVersion();
     made++;
+    asked = [...pieces];
     twin();
+    settled = asked.every((piece) => detailSettled(piece.geometry, 'shadow'));
+    wasWhole = shadowsWhole();
     if (!pieces.length) return;
     // (each piece its own bone, its inverse none: a vertex goes where the piece's world matrix puts it)
     const skeleton = new THREE.Skeleton(pieces as unknown as THREE.Bone[], pieces.map(() => new THREE.Matrix4()));
@@ -242,7 +252,8 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
       if (mesh) mesh.castShadow = castingAsOne.on;
       return NOTHING;
     }
-    let changed = reshaped() || detail !== shadowDetailVersion();
+    const detailMoved = detail !== shadowDetailVersion() && (!settled || wasWhole !== shadowsWhole());
+    let changed = reshaped() || detailMoved;
     candidates.forEach((piece, i) => {
       // (a piece the quality cuts from casting is left out as one hidden: `applyShadowDetail`)
       const now = piece.castShadow && shownUnder(piece, root);
