@@ -257,12 +257,12 @@ export const PUNCH_CHARGE = { full: 4, stun: 0.5, swing: 0.25 };
 /** A punch to the head (from play: "hitting enemy into the head with punch should deal critical strike, always",
  *  "should work on dummies too", "aim should not matter, where hit lands matters"): the punching fist as it lands
  *  between `from` and `to` of a foe's height over its feet, and Savage Fists' punch on that foe is a critical hit. */
-export const HEAD_SHOT = { from: 0.82, to: 1.1 };
-/** How far to either side of a foe's body the line of a Savage Fists punch may pass and still strike it (m): the
- *  fist's own breadth. A punch strikes what its fist meets on the way it's thrown, not what stands in an arc before
+export const HEAD_SHOT = { from: 0.8, to: 1.15 };
+/** Half the breadth of a Savage Fists punch (m): its line and one this far to either side are tried against a
+ *  foe's body as drawn. A punch strikes what its fist meets on the way it's thrown, not what stands in an arc before
  *  him (from play, of a fist thrown past a dummy that stood beside it: "this should be no hit ... and it crits
  *  somehow"). */
-export const PUNCH_WIDE = 0.18;
+export const PUNCH_WIDE = 0.07;
 
 /** His bare fists' guard (from play: "leaving guard on (idle fists) should decrease damage from frontal arc while
  *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are

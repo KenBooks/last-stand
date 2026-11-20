@@ -4202,7 +4202,12 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       if (w > 0) h.vis.quaternion.setFromAxisAngle(PALM_AXIS, side * IDLE_PALM.turn * Math.min(1, w));
     };
     const knuckles = (g: THREE.Object3D, line: THREE.Vector3, hand: THREE.Object3D) =>
-      line.lengthSq() > 0 ? thumbNotDown(_hd.copy(line).transformDirection(j.body.matrixWorld), hand, fp ? THUMB_UP_EYES : THUMB_UP) : along(g);
+      line.lengthSq() > 0 ? thumbNotDown(_hd.copy(line).transformDirection(j.body.matrixWorld), hand, fp ? THUMB_UP_EYES : THUMB_UP)
+        // (no line of a move's: a loose fist hanging as he walks, its knuckles' row along his way, the thumb ahead and
+        // the palm to his thigh, as the open hand hangs at rest, `palmIn`. Left to the grip's own way it went back to
+        // the rig's rest, palms to his back, with his first step, from play: "when he walks in 3rd person, he rotates
+        // arms to old positions")
+        : fp ? along(g) : _hd.set(0, 0, 1).transformDirection(j.body.matrixWorld);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held && twoSits && twoSit.stood) holdStood(held, slantR);
     else if (held) {

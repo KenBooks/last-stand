@@ -138,10 +138,12 @@ const LEAD = { hips: 0.09, chest: 0.045 };
  *  chest is wound back behind it from outside (rad) */
 // (and where the charged fist is drawn back to: through the eyes on the screen, out to its own side, low and close,
 // half out of the view; from outside from its guard, out, down and back by the ribs, the elbow behind him. Drawn
+// (beside the jaw, not before the face: held 17 cm ahead of the eyes it filled his own view, from play: "why when
+// charging he brings his fist to his face")
 // back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
 // ring, from play: "held punch needs to pull back, not just draw a charge circle")
 const COIL = { jab: 0.3, cross: 0.42 };
-const BACK = tunable('punchBack', { eyes: [0.5, -0.62, 0.17], body: [0.02, 0, -0.17], elbow: 0.4 });
+const BACK = tunable('punchBack', { eyes: [0, 0.05, 0.06], body: [0.07, -0.02, -0.24], elbow: 0.8 });
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
@@ -383,8 +385,14 @@ export function fistPunch(
     guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
     // (taken from the guard's own pose over the first third of the way: over its first eighth, the fist on its way
     // home went from full speed to still in a frame, 21 mm then 1)
-    const [aside, down, close] = BACK.eyes;
-    if (pull > 0) _from.lerp(onScreen(j, [(lead ? -1 : 1) * aside, down, close], _mid), smooth(pull));
+    // (cocked where it is from outside, beside the jaw in the body's own frame, `eyes` more of the way back: placed
+    // on the screen it was wherever the arm could reach towards that spot, close before the eye and huge)
+    if (pull > 0) {
+      const [aside, down, back] = BACK.body, more = BACK.eyes;
+      guardAt(j, lead, false, 0, 0, _mid);
+      _mid.x += (lead ? 1 : -1) * (aside + more[0]); _mid.y += down + more[1]; _mid.z += back + more[2];
+      _from.lerp(_mid, smooth(pull));
+    }
     const w = Math.max(smooth(pull), smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))));
     place(j, lead, _from, w, true, seenAs.flare * over, BACK.elbow * smooth(pull));
   } else {

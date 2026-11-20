@@ -13,6 +13,7 @@ import { rand } from '../../util';
 import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
 import { schedule } from '../../core/timers';
 import { dazeEnemy } from '../damage';
+import { strikesBody } from '../strikes';
 import type { SkillDef } from '../../types';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
@@ -169,20 +170,48 @@ const skill: InstantSkill = {
   },
 };
 
-const _fist = new THREE.Vector3();
+const _from = new THREE.Vector3(), _way = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+/** how far behind where the punch starts its line is begun (m: a body he stands against is met from outside it),
+ *  and the fist's half breadth, the lines either side of its middle (m) */
+const LINE_BACK = 0.6;
+/** where on each foe the punch landing now met its body: how high over its feet (m) */
+const landed = new WeakMap<Enemy, number>();
 
 /**
- * Whether the punch landing now lands on `e`'s head (`HEAD_SHOT`): the punching fist, where the model has it as it
- * lands, at the height of the foe's head. Where the blow goes, not where the aim is (from play: "aim should not
- * matter, where hit lands matters... because we have direction now"): through the eyes the fist lands on the
- * crosshair, so looking up at a head sends it there; from outside it lands at his own shoulders' height, a head's
- * on a foe about his size. A punch there is a critical hit, a training dummy's too.
+ * Whether the punch landing now meets `e`'s body, and where (`landed`): the fist's line from his shoulder the way
+ * it's thrown, to the skill's reach, against the body as drawn (`strikesBody`, as an arrow's flight is), its middle
+ * and either edge of the fist's breadth (`PUNCH_WIDE`). Through his own eyes the line is the crosshair's; from
+ * outside it's level along his facing at the height of the foe's chest, his own shoulders' at the most. A foe whose
+ * middle the line passed within its size of was struck, and a fist thrown past a dummy he stood against struck it
+ * (from play: "this should be no hit ... and it crits somehow", "and this should be no hit").
  */
-function toHead(player: Player, e: Enemy): boolean {
-  const j = player.model.joints;
-  if (!j) return false;
-  const up = (isJab(player) ? j.handL : j.handR).getWorldPosition(_fist).y - e.obj.position.y;
-  return up >= e.height * HEAD_SHOT.from && up <= e.height * HEAD_SHOT.to;
+function meetsBody(player: Player, def: Def, e: Enemy): boolean {
+  if (player.eyes) {
+    G.camera.getWorldPosition(_from); G.camera.getWorldDirection(_way);
+    _from.y -= 0.1;
+  } else {
+    const base = e.obj.position.y;
+    _from.set(player.pos.x, base + Math.min(1.35, e.height * 0.7), player.pos.z);
+    _way.set(Math.sin(player.facing), 0, Math.cos(player.facing));
+  }
+  const reach = def.range + e.radius, sideX = _way.z, sideZ = -_way.x;
+  for (const off of [0, PUNCH_WIDE, -PUNCH_WIDE]) {
+    _a.copy(_from).addScaledVector(_way, -LINE_BACK); _a.x += sideX * off; _a.z += sideZ * off;
+    _b.copy(_from).addScaledVector(_way, reach); _b.x += sideX * off; _b.z += sideZ * off;
+    const t = strikesBody(e, _a, _b);
+    if (t < 0 || t * (reach + LINE_BACK) < LINE_BACK - 0.15) continue;
+    landed.set(e, _a.y + (_b.y - _a.y) * t - e.obj.position.y);
+    return true;
+  }
+  return false;
+}
+
+/** Whether the punch landing now met `e` on its head (`HEAD_SHOT`, `meetsBody`): a critical hit, a training
+ *  dummy's too. Where the blow lands, not where the aim is (from play: "aim should not matter, where hit lands
+ *  matters... because we have direction now"). */
+function toHead(e: Enemy): boolean {
+  const up = landed.get(e);
+  return up !== undefined && up >= e.height * HEAD_SHOT.from && up <= e.height * HEAD_SHOT.to;
 }
 
 /** The punch lands, charged `charge` of the way past a click (0..1). */
@@ -208,12 +237,8 @@ function land(player: Player, def: Def, charge: number): void {
     const hits = sweep(player, def, facing, {
       knock: def.knock * (1 + charge), blow: { dir: way, lift: 0.2 + 0.2 * charge, force: driven * (1 + charge) },
       scale: (gap) => cleanHit(gap) * driven * charged,
-      sharp: (gap, e) => (toHead(player, e) ? 100 : edge(gap)),
-      // (what the fist meets on its way: a foe ahead of him whose body its line passes through or within its breadth of)
-      meets: (e) => {
-        const tx = e.pos.x - player.pos.x, tz = e.pos.z - player.pos.z;
-        return tx * dir.x + tz * dir.z > 0 && Math.abs(tx * dir.z - tz * dir.x) <= e.radius + PUNCH_WIDE;
-      },
+      sharp: (gap, e) => (toHead(e) ? 100 : edge(gap)),
+      meets: (e) => meetsBody(player, def, e),
       mark: (e, k) => {
         fistMark(e, heat, Math.round(5 * (k > 1 ? 2 : 1) * (1 + charge)));
         if (full && !e.boss && !e.hero) dazeEnemy(e, PUNCH_CHARGE.stun, player);
