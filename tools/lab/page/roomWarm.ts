@@ -1,22 +1,26 @@
-// `lab roomwarm`: a warm-up behind the lobby finishing while the hero stands in a house's room (Odo's shop). Each
-// warm-up that draws another place draws it in the village's stead (`Swap` in `src/core/shaders.ts`; the parts in
-// `src/game/warmup.ts`: the other biomes, the hall of heroes, the houses' rooms) and must put back what it found. On
-// main it put the village back on whatever it was, so a warm-up that ran on after the door was used left the village
-// drawn under the room, its fountain in the middle of the shop. Each swap the warm-ups make is drawn here by the game's
-// own `warmUp`, as `warmBuilt` draws a part's later swaps, with the hero inside; after each, what the next frame draws:
-// the village hidden, the shop shown, no biome, other room or the hall with it.
+// `lab roomwarm`: the warm-ups behind the lobby drawing their places while the hero stands in a house's room (Odo's
+// shop). Each warm-up that draws another place draws it in the shown one's stead (`Swap` in `src/core/shaders.ts`)
+// and must hide what's shown as it draws and put back what it found. Before #746 one put the village back on
+// whatever it was, so a warm-up that ran on after the door was used left the village drawn under the room, its
+// fountain in the middle of the shop. Every part the warm-ups draw a place by (`placeSwaps` in `src/game/warmup.ts`:
+// each battleground built, the hall of heroes' room, each house's room) is built as the warm-ups build it and drawn
+// by the game's own `warmUp`, with the hero inside: at its draw its own place must be the only one shown, and after
+// it the arena's own check (`placesWrong` in `src/world/arena.ts`, which dev builds run every frame) must find the
+// shop alone shown.
 import type * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
-import { ROOM_IDS, outsideOf, type RoomId } from '../../../src/data/houses';
+import { outsideOf, type RoomId } from '../../../src/data/houses';
 import { enterRoom } from '../../../src/game/rooms';
+import { placeSwaps } from '../../../src/game/warmup';
 import { warmUp, type Swap } from '../../../src/core/shaders';
 import { sceneTarget } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { toVillage } from './village';
 
-/** `--canary`: the village shown under the room after the first swap, which must be caught. */
+/** `--canary`: the first part's swap hiding the village alone, as before #746 (the shop drawn with it), and the
+ *  village left shown after it: both caught. */
 export interface RoomWarmOptions {
   canary: boolean;
 }
@@ -27,37 +31,40 @@ const ROOM: RoomId = 'merchant';
 const DOOR_FRAMES = 600;
 const SETTLE = 15;
 
-/** A swap a warm-up makes, named as the report says it. */
-interface Drawing {
-  name: string;
-  swap: () => Swap;
+/** Every place that may stand where the player is, each with its name: the village, each battleground built, the
+ *  hall of heroes' room, each house's room. */
+function everyPlace(): { name: string; group: THREE.Object3D }[] {
+  const biomes = BIOME_IDS.filter((id) => G.arena.biomeBuilt(id)).map((id) => ({ name: id, group: G.arena.groupOf(id) }));
+  const rooms = Object.values(G.arena.rooms ?? {}).map((room) => ({ name: `room ${room.id}`, group: room.group }));
+  return [{ name: 'village', group: G.arena.groupOf('village') }, ...biomes, { name: 'hall', group: G.arena.hallGroup },
+    ...rooms];
 }
 
-const village = (): THREE.Object3D => G.arena.groupOf('village');
-const roomGroup = (id: RoomId): THREE.Object3D | undefined => G.arena.rooms?.[id]?.group;
+/** The places shown now, by name. */
+const shownPlaces = (): string[] => everyPlace().filter((place) => place.group.visible).map((place) => place.name);
 
-/** Each kind of swap the warm-ups make, drawn in the village's place as main's parts had it. */
-function drawings(): Drawing[] {
-  const biome = BIOME_IDS[0];
-  return [
-    { name: `the ${biome} (the fight's warm-up)`, swap: () => ({ show: G.arena.groupOf(biome), hide: village() }) },
-    { name: 'the hall of heroes (the heroes\')', swap: () => ({ show: G.arena.hallGroup, hide: village() }) },
-    { name: 'the shop itself (the rooms\')', swap: () => ({ show: roomGroup(ROOM)!, hide: village() }) },
-  ];
+/**
+ * `swap` drawn by the game's own warm-up, the places shown at each of its renders read: the scene's
+ * `onBeforeRender` wrapped for the draw (the cells' culling is hooked there, so it's called on as it was).
+ */
+async function drawnWith(swap: Swap | undefined): Promise<string[][]> {
+  const seen: string[][] = [];
+  const scene = G.scene;
+  const before = scene.onBeforeRender;
+  scene.onBeforeRender = function (...args) {
+    seen.push(shownPlaces());
+    before.apply(this, args);
+  };
+  try {
+    await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap });
+  } finally {
+    scene.onBeforeRender = before;
+  }
+  return seen;
 }
 
-/** What's wrong with what the next frame draws round the hero in the shop: none where it alone shows. */
-function wrongNow(): string[] {
-  const wrong: string[] = [];
-  if (village().visible) wrong.push('the village drawn under the shop');
-  if (!roomGroup(ROOM)?.visible) wrong.push('the shop hidden');
-  const others = ROOM_IDS.filter((id) => id !== ROOM && roomGroup(id)?.visible);
-  if (others.length) wrong.push(`another room drawn with it (${others.join(', ')})`);
-  const biomes = BIOME_IDS.filter((id) => G.arena.groupOf(id).visible);
-  if (biomes.length) wrong.push(`a battleground drawn with it (${biomes.join(', ')})`);
-  if (G.arena.hallGroup.visible) wrong.push('the hall of heroes drawn with it');
-  return wrong;
-}
+/** The name of the place `group` is. */
+const nameOf = (group: THREE.Object3D): string => everyPlace().find((place) => place.group === group)?.name ?? '?';
 
 /** The hero into the shop by its door, as the door takes him in. */
 async function intoTheShop(lab: Lab): Promise<boolean> {
@@ -72,29 +79,65 @@ async function intoTheShop(lab: Lab): Promise<boolean> {
   return G.arena.room === ROOM;
 }
 
+/** What's wrong with one part's draw: its own place not alone at a render, the shop not alone after. */
+function wrongWith(swap: Swap, seen: string[][]): string[] {
+  const wrong: string[] = [];
+  const own = nameOf(swap.show);
+  if (!seen.length) wrong.push('never drawn');
+  for (const shown of new Set(seen.map((places) => places.join(', ')))) {
+    if (shown !== own) wrong.push(`drawn with ${shown || 'nothing'} shown, where ${own} alone should be`);
+  }
+  wrong.push(...G.arena.placesWrong().map((place) => `after it, ${place}`));
+  return wrong;
+}
+
+/** Each place's warm-up drawn with the hero in the shop, its lines and problems said: whether any was wrong. */
+async function drawEach(lab: Lab, options: RoomWarmOptions, lines: string[], problems: string[]): Promise<boolean> {
+  let caught = false;
+  for (const [at, part] of placeSwaps().entries()) {
+    const swap = part.swap();
+    if (!swap) {
+      problems.push(`${part.name}: no swap`);
+      continue;
+    }
+    // (the canary: the village hidden alone, whatever's shown, as the parts' swaps had it before #746)
+    const drawn = options.canary && at === 0 ? { ...swap, hide: G.arena.groupOf('village') } : swap;
+    const seen = await drawnWith(drawn);
+    // (and the village left shown after it, as #746 left it: found by the arena's own check, which dev builds run
+    // every frame, and put back before a frame draws it, or that check's error would fail the canary's run)
+    const village = G.arena.groupOf('village');
+    if (options.canary && at === 0) village.visible = true;
+    const wrong = wrongWith(drawn, seen);
+    if (options.canary && at === 0) village.visible = false;
+    lines.push(`${part.name} drawn in the shop's stead: ${wrong.join('; ') || 'alone, then the shop alone'}`);
+    if (wrong.length) caught = true;
+    if (!options.canary) problems.push(...wrong.map((what) => `${part.name}: ${what}`));
+    await lab.step(1);
+  }
+  return caught;
+}
+
 export async function roomWarm(lab: Lab, options: RoomWarmOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
   await toVillage(lab);
   if (!(await intoTheShop(lab))) return { text: 'the shop never opened', problems: ['the shop never opened'], moments };
-  const before = wrongNow();
+  const before = G.arena.placesWrong();
   lines.push(`in the shop: ${before.join(', ') || 'the shop alone'}`);
   problems.push(...before.map((wrong) => `before any warm-up: ${wrong}`));
   moments.push(await lab.screen('roomwarm-before', ['in the shop, before any warm-up']));
+  // (the draws made: the lab skips them unless a measure asks, and a warm-up's draw is what's read here)
+  const drawing = lab.drawing;
+  lab.drawing = true;
   let caught = false;
-  for (const [at, drawing] of drawings().entries()) {
-    await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap: drawing.swap() });
-    if (options.canary && at === 0) village().visible = true;
-    await lab.step(1);
-    const wrong = wrongNow();
-    lines.push(`after ${drawing.name} drawn in the village's stead: ${wrong.join(', ') || 'the shop alone'}`);
-    if (wrong.length) caught = true;
-    if (!options.canary) problems.push(...wrong.map((what) => `after ${drawing.name}: ${what}`));
-    if (options.canary) village().visible = false;
+  try {
+    caught = await drawEach(lab, options, lines, problems);
+  } finally {
+    lab.drawing = drawing;
   }
   await lab.step(SETTLE);
-  moments.push(await lab.screen('roomwarm-after', ['in the shop, after a warm-up of each kind drew behind it']));
-  if (options.canary && !caught) problems.push('canary: the village shown under the shop went unseen');
+  moments.push(await lab.screen('roomwarm-after', ['in the shop, after every place\'s warm-up drew behind it']));
+  if (options.canary && !caught) problems.push('canary: a part drawn with the shop shown under it went unseen');
   return { text: lines.join('\n'), problems, moments };
 }
