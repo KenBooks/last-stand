@@ -117,13 +117,23 @@ const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.
 /** the jab's and the cross's own: neither is wound up (a boxer doesn't tell his punch; the cross sits back onto the
  *  rear hip a hair as the hips start), the fist quickest as it lands, held on the blow a moment and brought back to
  *  the guard slower than it went. Eased in and out alike, it was a piston pushed out and pulled back. */
-const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.51, 1], [0.66, 0.4], [0.8, 0], [1, 0]];
-const CROSS_OUT: Keys = [[0, 0], [0.12, -0.08], [0.28, 0.2], [0.43, 0.92], [0.48, 1], [0.55, 1], [0.69, 0.4], [0.8, 0], [1, 0]];
+// (moving through nearly the whole cast, as a weapon's cut does: gathering from its start, quickest as it lands, and
+// easing home until just before the next. Still for the first quarter and the last fifth, with the way out and back
+// packed between, a row of punches was a stop and a start each, from play: "make the attacks smooth like our weapon
+// attacks are smooth")
+const JAB_OUT: Keys = [
+  [0, 0], [0.12, 0.05], [0.24, 0.18], [0.36, 0.5], [0.46, 0.94], [0.5, 1], [0.54, 1], [0.66, 0.62], [0.76, 0.3],
+  [0.85, 0.09], [0.94, 0], [1, 0],
+];
+const CROSS_OUT: Keys = [
+  [0, 0], [0.1, -0.08], [0.2, 0.02], [0.29, 0.2], [0.38, 0.5], [0.47, 0.94], [0.51, 1], [0.56, 1], [0.68, 0.62], [0.78, 0.3],
+  [0.86, 0.09], [0.95, 0], [1, 0],
+];
 const LEAD = { hips: 0.09, chest: 0.045 };
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
-const TURN_OVER: Keys = [[0, 0], [0.16, 0], [0.44, 1], [0.54, 1], [0.8, 0], [1, 0]];
+const TURN_OVER: Keys = [[0, 0], [0.1, 0], [0.46, 1], [0.56, 1], [0.92, 0], [1, 0]];
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
 const FREE_IN = [0.13, 0.02];
 
@@ -345,7 +355,9 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
     // made and back down it, a piston with no path of its own, from play: "punches are hilarious", "where is punch
     // trajectory in 1st person? proper motion")
     guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
-    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * 8)), true, seenAs.flare * over);
+    // (taken from the guard's own pose over the first third of the way: over its first eighth, the fist on its way
+    // home went from full speed to still in a frame, 21 mm then 1)
+    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))), true, seenAs.flare * over);
   } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;
   if (eyes) {

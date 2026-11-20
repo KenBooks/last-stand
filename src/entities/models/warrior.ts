@@ -2907,7 +2907,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const charged = raw?.name === 'charge' || raw?.under?.name === 'charge', legsFade = !(charged && lastCharged);
     // (a move begun from the shoulder carry, `shouldered` still last frame's, fades in slower: in 0.14 s Power Strike
     // flicked the axe off the shoulder into its raise, its tip's way turning 37 cm in a frame)
-    // (a fist's move fades in fast: its punch is 0.24 s, less with Frenzy, and faded in over 0.14 s from arms hanging,
+    // (a fist's move fades in fast: its punch was 0.24 s, less with Frenzy, and faded in over 0.14 s from arms hanging,
     // both arms were half raised and reaching at its blow, the guard nowhere, an adversarial review's "zombie")
     const fadeIn = !raw ? 0.14 : chain && alternates(raw.name) ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : FISTED.has(raw.name) ? FIST_IN : 0.14;
     if (began) fade.cut(fadeIn, legsFade);

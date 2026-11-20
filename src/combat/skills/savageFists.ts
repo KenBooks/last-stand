@@ -1,6 +1,6 @@
 // Savage Fists: the warrior with both hands empty (#400). Punches, the lead hand then the rear in turn, each striking
 // what stands close before him, restoring Energy and building a stack of Frenzy as it lands (combat/frenzy.ts): less
-// reach and less in a blow than a weapon's cut, more of them a second, and quicker the more Frenzy he has. (At full
+// reach than a weapon's cut, about as much in a blow, and quicker the more Frenzy he has. (At full
 // Frenzy every third blow was a two-fisted hammer, taken out: from play, "lets remove two handed strike under
 // freenzy, it makes no sense, practically".)
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).

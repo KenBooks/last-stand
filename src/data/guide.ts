@@ -77,13 +77,13 @@ export const STYLE_NOTES: Record<string, StyleNote> = {
   shieldBare: {
     name: 'Shield and no weapon',
     how: 'A shield on one arm and an empty fist: left click punches with the free hand, a little lighter than two fists, and right click still raises the shield. The safest way to fight, if the slowest to kill.',
-    strengths: ['Raise Shield and the shield\'s own chance to block, as with a weapon.', 'Quick punches that keep your Energy coming.'],
+    strengths: ['Raise Shield and the shield\'s own chance to block, as with a weapon.', 'Punches that keep your Energy coming.'],
     weaknesses: ['The lightest blows of any style: no weapon damage behind them.', 'Short reach: you must stand right on top of a foe.'],
   },
   bare: {
     name: 'Bare hands',
     how: 'Nothing in either hand: you fight as a berserker, and the weapon skills give way to the fists\' own. Every blow that lands builds Frenzy (the pips over your skill bar): each stack makes you attack faster and heals you for a share of the damage you deal, but you take more damage too. Stop landing blows and it drains away. Wrath spends it all in one blow.',
-    strengths: ['The fastest attacks and the most Energy a second.', 'Frenzy heals you as you hit: keep hitting and you keep standing.', 'Pounce and Bloodrush get you onto a foe at once.'],
+    strengths: ['Heavy punches that quicken as Frenzy builds, and the most Energy a second.', 'Frenzy heals you as you hit: keep hitting and you keep standing.', 'Pounce and Bloodrush get you onto a foe at once.'],
     weaknesses: ['No block.', 'Less damage in each blow and a short reach.', 'At high Frenzy you take a lot more damage: spend it with Wrath before a big hit lands.'],
   },
 };
@@ -155,7 +155,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       powerStrike: 'Start it before the foe arrives: the blow lands after the wind-up.',
       ironBellow: 'Use it when surrounded, or just before a hit you cannot avoid.',
       potion: 'You can move while drinking. Drink early rather than late.',
-      savageFists: 'Fast and short: step right up to the foe, a punch landing hardest at full stretch. Each punch refills Energy and builds Frenzy.',
+      savageFists: 'Heavy and short: step right up to the foe, a punch landing hardest at full stretch. Each punch refills Energy and builds Frenzy.',
       pounce: 'Aim at a foe up to 8 m off: you land on it and pin it while you pound it. Elites and bosses are not pinned.',
       rampage: 'Hold it and walk into the pack, punching all the way: the longer you hold it, the harder it hits and the more Energy it burns. Frenzy does not drain while you hold it.',
       bloodrush: 'Dash through a line of foes: each one you pass through is struck and adds a stack of Frenzy.',
