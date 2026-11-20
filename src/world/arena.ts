@@ -217,10 +217,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   function checkLights(groups: THREE.Group[]): void {
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Places must have the same number of point lights (switching recompiles every shader): ${lights}`);
-    // (and as many casting: each is written out in every lit program, `loopPointLights`)
+    // (and as many casting: each is written out in every lit program, `loopPointLights`; the village's own two count
+    // by night too, when they hand their shadows to the pool's lights lit at the lamps, outside its group, and the
+    // scene casts as many: `castFromLamps` in game/village.ts. Counted as they stood, a run's biome built at night
+    // said they differed, and every lab command that set a run up in the evening failed on it)
+    const handed = new Set<THREE.Object3D>(village?.stillLights ?? []);
     const casting = groups.map((g) => {
       let n = 0;
-      g.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) n++; });
+      g.traverse((o) => { if ((o as THREE.PointLight).isPointLight && (o.castShadow || handed.has(o))) n++; });
       return n;
     });
     if (new Set(casting).size > 1) console.error(`Places must have as many point lights casting shadows: ${casting}`);
