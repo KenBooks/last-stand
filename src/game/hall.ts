@@ -27,6 +27,7 @@ import { heroShare, warmingRuns } from './warm';
 import { preloadHeads } from '../entities/models/head';
 import { builtInSlices, type SliceMs } from '../entities/models/steps';
 import { HALL, TERRACE } from '../data/village';
+import { StillAsOne } from '../entities/models/stillAsOne';
 import { buildableLook, profileLook, readyLook } from './looks';
 
 /** the way the heroes face (to the camera) */
@@ -150,12 +151,18 @@ function castShadows(p: Player, on: boolean): void {
 /** the objects of each standing hero whose matrices are held as they are (`holdStill`) */
 const heldOf = new Map<Player, THREE.Object3D[]>();
 
-/** `p`'s matrices held as he stands, or made each frame again: a hero's 280 objects' were made again every
- *  frame he stood there, posed or not. */
+/** each standing hero held still drawn as a few meshes (`models/stillAsOne.ts`): from the square, the two were 133
+ *  draws of the frame's 439 */
+const stillOf = new Map<Player, StillAsOne>();
+
+/** `p`'s matrices held as he stands, and he drawn as a few meshes, or made each frame again and drawn part by part: a
+ *  hero's 280 objects' were made again every frame he stood there, posed or not. */
 function holdStill(p: Player, held: boolean): void {
   const had = heldOf.get(p);
   if (held === !!had) return;
   if (had) {
+    stillOf.get(p)?.undo();
+    stillOf.delete(p);
     for (const o of had) o.matrixAutoUpdate = true;
     heldOf.delete(p);
     return;
@@ -169,6 +176,7 @@ function holdStill(p: Player, held: boolean): void {
   const objects: THREE.Object3D[] = [];
   p.obj.traverse((o) => { if (o.matrixAutoUpdate) { objects.push(o); o.matrixAutoUpdate = false; } });
   heldOf.set(p, objects);
+  stillOf.set(p, new StillAsOne(p.obj));
 }
 
 /** Those standing in the village's hall taken down, their shadows back. */
@@ -260,6 +268,8 @@ export function standHeroes(on: boolean, dt: number, still = false): void {
   // (each told how far the camera is every frame, not at his turn alone: his detail is by it, `farDetail`)
   for (const p of standing) p.farDetail.update(G.camera.position.distanceTo(p.obj.position));
   for (const p of standing) holdStill(p, still);
+  // (merged a slice a frame once held, after his far detail is set: a part's geometry changed merges him again)
+  for (const p of standing) stillOf.get(p)?.step();
   if (still) {
     for (const p of standing) waited.set(p, 0);
     for (const p of standing) haloRound(p, dt);
