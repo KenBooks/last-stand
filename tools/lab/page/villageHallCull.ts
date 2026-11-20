@@ -22,6 +22,8 @@ import type { LightsChecked } from './villageLights';
  *  trailing him in the doorway), the hours read, and the frames he's given to settle */
 const IN_FROM = 7;
 const WALKED_IN = 4.6;
+/** the fewest triangles the doorway must cull walked in, the grass's aside: the trees behind the walls are 61k */
+const TREES_CULLED = 20_000;
 const HOURS = [0, 12];
 const SETTLE = 30;
 /** the most presses of V to come round to a view (top, over the shoulder, through the eyes) */
@@ -31,20 +33,35 @@ const SAME = 1.5 / 255;
 /** the most of the frame's pixels the cull may change */
 const MOST_CHANGED = 0.0005;
 
-/** A frame drawn by the game's camera: its pixels, and the scene's draws in it (those by the game's camera). */
-interface Counted { canvas: Canvas; draws: number }
+/** A frame drawn by the game's camera: its pixels, and the scene's draws in it (those by the game's camera) and the
+ *  triangles they drew. */
+interface Counted { canvas: Canvas; draws: number; triangles: number }
 
-/** The frame drawn now, its scene's draws counted. */
+/** The triangles a draw of `geometry` by `object` draws: its range's, times an instanced mesh's instances (the
+ *  grass's, an instanced geometry, is counted by its vertices apart: `grassVertices`). */
+function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
+  const indices = geometry.index?.count ?? geometry.getAttribute('position')?.count ?? 0;
+  const ranged = Math.min(indices, geometry.drawRange.count);
+  const instanced = object as THREE.InstancedMesh;
+  const instances = instanced.isInstancedMesh ? instanced.count : 1;
+  return Math.floor(ranged / 3) * instances;
+}
+
+/** The frame drawn now, its scene's draws and their triangles counted. */
 function countedFrame(lab: Lab): Counted {
   const renderer = G.renderer;
   const own = renderer.renderBufferDirect.bind(renderer);
   let draws = 0;
+  let triangles = 0;
   renderer.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    if (camera === G.camera) draws++;
+    if (camera === G.camera) {
+      draws++;
+      triangles += trianglesOf(geometry, object);
+    }
     own(camera, scene, geometry, material, object, group);
   };
   try {
-    return { canvas: drawFrame(lab), draws };
+    return { canvas: drawFrame(lab), draws, triangles };
   } finally {
     renderer.renderBufferDirect = own;
   }
@@ -128,7 +145,7 @@ function holdEyeWithinOccluders(held: boolean): void {
 /** One hour's frames culled (or, the canary, culled whole) and not: their draws, the share of pixels changed, and
  *  the grass's vertices drawn in each. */
 async function readHour(lab: Lab, hour: number, canary: boolean): Promise<{ culled: number; whole: number;
-  changed: number; grass: number; grassWhole: number }> {
+  changed: number; grass: number; grassWhole: number; triangles: number; trianglesWhole: number }> {
   holdHour(hour);
   await lab.step(SETTLE);
   setHallCull(canary ? 'all' : 'door');
@@ -139,8 +156,14 @@ async function readHour(lab: Lab, hour: number, canary: boolean): Promise<{ cull
   const grassWhole = grassVertices();
   setHallCull('door');
   const changed = changedShare(culled.canvas, whole.canvas);
-  return { culled: culled.draws, whole: whole.draws, changed, grass, grassWhole };
+  return {
+    culled: culled.draws, whole: whole.draws, changed, grass, grassWhole,
+    triangles: culled.triangles, trianglesWhole: whole.triangles,
+  };
 }
+
+/** `count` in thousands, as a reading says it. */
+const thousands = (count: number): string => `${Math.round(count / 1000)}k`;
 
 /** What one stand's readings found: its line, its problems, and whether the canary's plant showed. */
 interface StandRead { line: string; problems: string[]; changedAny: boolean; grassGone: boolean }
@@ -156,14 +179,20 @@ async function readStand(lab: Lab, stand: Stand, canary: boolean): Promise<Stand
   // (walked in, the camera must be where the report had it, or this reads a frame the cull always took)
   if (!stand.seesGrass && !cameraInDoorway()) problems.push(`${at}: the camera isn't in the doorway`);
   for (const hour of HOURS) {
-    const { culled, whole, changed, grass, grassWhole } = await readHour(lab, hour, canary);
+    const { culled, whole, changed, grass, grassWhole, triangles, trianglesWhole } = await readHour(lab, hour, canary);
     read.push(`${hour}:00 ${whole} -> ${culled} draws, ${(changed * 100).toFixed(3)}% of pixels changed, `
-      + `${grassWhole} -> ${grass} of the grass's vertices`);
+      + `${grassWhole} -> ${grass} of the grass's vertices, ${thousands(trianglesWhole)} -> ${thousands(triangles)}`
+      + ' triangles');
     if (grass === 0) grassGone = true;
     if (changed > MOST_CHANGED) changedAny = true;
     if (canary) continue;
     if (stand.seesGrass && culled >= whole) problems.push(`${at}: at ${hour}:00 no draw was culled`);
     // (half of it at least: the tiles meeting the hall's box are kept, as what's merged spans the village)
+    // (and the trees round the village, instanced, culled by their cells: `hideCellsWhere` in `culling.ts`)
+    if (!stand.seesGrass && trianglesWhole - triangles < TREES_CULLED) {
+      problems.push(`${at}: at ${hour}:00 the trees behind the hall's walls were drawn (${thousands(triangles)} of `
+        + `${thousands(trianglesWhole)} triangles)`);
+    }
     if (!stand.seesGrass && grass > grassWhole / 2) {
       problems.push(`${at}: at ${hour}:00 the grass behind the hall's walls was drawn (${grass} of ${grassWhole})`);
     }

@@ -23,7 +23,7 @@ export const AREAS = [
   {
     name: 'what thins',
     files: /^src\/core\/(seeThrough|heroHidden|ghostLayers)\.ts$/,
-    checks: /hall|wall|column|roof|ghost|behind|houses|dots|seen|fog|door|capital|props|portal|freeCam/i,
+    checks: /hall|wall|column|roof|ghost|behind|houses|dots|seen|fog|door|capital|props|portal|freeCam|blended/i,
   },
   {
     name: 'the lamps',
