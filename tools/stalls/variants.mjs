@@ -117,6 +117,7 @@ export const VARIANTS = {
   qualityHigh: { script: quality, arg: 'high' },
   qualityMedium: { script: quality, arg: 'medium' },
   qualityLow: { script: quality, arg: 'low' },
+  qualityVerylow: { script: quality, arg: 'verylow' },
   noParallelCompile: { script: noParallelCompile },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },

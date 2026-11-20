@@ -1,5 +1,6 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
 import * as THREE from 'three';
+import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
@@ -294,7 +295,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide, photo: openPhoto });
+  initMenus({ start: biomeFirst(whenWarm(['fight'], start, READYING.fight), start), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide, photo: openPhoto });
   initPhoto({ back: (toPause) => openPause(toPause) });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
@@ -307,7 +308,7 @@ async function boot() {
     onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
-    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
+    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
     // (how to play laid out under the loading screen: ui/menus.ts)
     layOutHelpAhead(true);
     initTrainingTracker();
@@ -369,7 +370,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm(), hurry: labHurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
@@ -653,12 +654,28 @@ function buildNextRunAhead(): void {
 /** the pause between two pieces of the next run's props built ahead (ms): one a frame or so */
 const AHEAD_PAUSE_MS = 16;
 
+/**
+ * `press` (Start, a duel's), but where its battleground isn't built yet (the village's first run in it): that readied
+ * first, the fight's own warm-up with it under one bar (game/biomeReady.ts), and then `act`. Through `whenWarm` the
+ * fight's bar filled and then the biome's began again from nothing.
+ */
+function biomeFirst(press: () => void, act: () => void, ground = (): BiomeId => G.arena.biome): () => void {
+  return () => {
+    const id = ground();
+    // (a guest's press waits for the host, who readies it)
+    if (isGuest() || biomeReady(id)) press();
+    else void readyBiome(id).then(() => { if (G.mode === 'menu') act(); });
+  };
+}
+
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
   // (the panels' lobby's battleground, Random rolled now among those the starting wave is unlocked in; the village's
   // is the portal's)
   if (!VILLAGE) rollBiome(startBests(), selectedWave());
+  // (its battleground built and warmed first, under the fight's bar, before the guests are told: game/biomeReady.ts)
+  if (!biomeReady(G.arena.biome)) { void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') start(); }); return; }
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);
@@ -670,6 +687,7 @@ function start() {
 function startDuel() {
   if (!isHost() || G.mode !== 'menu' || partnerInRun()) return;
   const setup = setupNow();
+  if (!biomeReady(setup.ground)) { void readyBiome(setup.ground).then(startDuel); return; }
   const seed = nextSeed;
   nextSeed = Math.floor(Math.random() * 2 ** 31);
   G.arena.setBiome(setup.ground);
@@ -679,6 +697,7 @@ function startDuel() {
 
 /** A guest: the host began a duel. */
 function guestDuel(setup: DuelSetup, seed: number) {
+  if (!biomeReady(setup.ground)) { void readyBiome(setup.ground).then(() => guestDuel(setup, seed)); return; }
   G.arena.setBiome(setup.ground);
   beginRun(1, seed, false, setup);
   sendInRun();
@@ -705,7 +724,8 @@ function guestStarted(biome: BiomeId, wave: number, seed: number, training: bool
   setVillageMap(false);
   openCoop(false);
   hideHelp();
-  joinWhenWarm(biome, wave, seed, training);
+  // (the host's battleground built and warmed here first, if it isn't: game/biomeReady.ts)
+  afterBiome(biome, () => joinWhenWarm(biome, wave, seed, training));
 }
 const joinWhenWarm = whenWarm(['fight'], (biome: BiomeId, wave: number, seed: number, training: boolean) => {
   joinAsked = { biome, wave, seed, training, frames: JOIN_SHOWN_FRAMES };
@@ -732,6 +752,11 @@ function guestStart(biome: BiomeId, wave: number, seed: number, training: boolea
 }
 
 function beginRun(wave: number, seed: number, training = false, duel: DuelSetup | null = null) {
+  // (a way in that didn't ready its battleground, a dev build's wave picked: readied first, game/biomeReady.ts)
+  if (!biomeReady(G.arena.biome)) {
+    void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') beginRun(wave, seed, training, duel); });
+    return;
+  }
   hideBetaNotice();
   endTrades('a run started');   // a trade in the lobby is off, nothing moved (net/trade.ts)
   clearGround();   // what's left on the lobby floor is lost
@@ -829,6 +854,7 @@ function chooseContinue() {
 function labHurry(): void {
   hurry();
   void readyEveryBoss();
+  void readyEveryBiome();
 }
 
 /** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */

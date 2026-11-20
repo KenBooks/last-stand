@@ -16,7 +16,7 @@
 #readying .rd-bar { position: relative; width: min(#{ui(320px)}, calc(100vw - 80px)); height: ui(6px); border-radius: ui(3px);
   overflow: hidden; background: #140606; box-shadow: inset 0 1px 2px #000, 0 0 0 1px #3a1a14; }
 #readying .rd-fill { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--p, 0));
-  background: linear-gradient(90deg, #5a0e06, #c2300e 55%, #ff8a3a 92%, #ffe0a0); transition: transform .3s ease-out; }
+  background: linear-gradient(90deg, #5a0e06, #c2300e 55%, #ff8a3a 92%, #ffe0a0); transition: transform var(--glide, .3s) ease-out; }
 @media (prefers-reduced-motion: reduce) {
   #readying .rd-fill { transition: none; }
 }
