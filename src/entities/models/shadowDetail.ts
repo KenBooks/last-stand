@@ -50,6 +50,19 @@ if (typeof location !== 'undefined') {
 /** What `coarseIndex` and `farIndex` give now, as a number that changes when it does. */
 export const shadowDetailVersion = (): number => version;
 
+/**
+ * Whether what `coarseIndex` (`use` 'shadow') or `farIndex` ('far') gives for `geometry` is settled: made (fewer
+ * triangles, or none worth it), or every triangle held whole. A hero made again of his indices at each
+ * `shadowDetailVersion` asks it, and once all his are settled leaves the version be: it moves on as any hero's are made,
+ * and every hero built behind the lobby had each one already built merge his shadow again, 14 ms a frame
+ * (`npm run lab -- lobbystart`).
+ */
+export const detailSettled = (geometry: THREE.BufferGeometry, use: Use): boolean =>
+  whole || (simplifier !== null && kept[use].has(geometry));
+
+/** Whether every triangle is cast and drawn (`holdShadowsWhole`, `?shadowDetail=1`). */
+export const shadowsWhole = (): boolean => whole;
+
 /** For a harness (tools/lab): every triangle cast and drawn, as it was. */
 export function holdShadowsWhole(held: boolean): void {
   if (whole === held) return;

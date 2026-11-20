@@ -723,25 +723,63 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   pinPrograms(renderer);
   if (!ready) return { compileMs, compileStepMs, mapsMs, uploadsMs, linksMs, drawMs: 0, cold: true };
   await step?.();
-  renderer.setRenderTarget(target);
-  at = performance.now();
-  for (const o of objects) scene.add(o);
-  how.show?.();
-  // once: the shadow pass of a render sees the light setup of the one before, and shadow depth
-  // programs are keyed by light counts, but the compile above set the scene's lights up
-  const notAlone = swap?.alone?.();
-  const swappedBack = swapIn(swap);
   const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
-  drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
-  swappedBack();
-  notAlone?.();
-  how.hide?.();
-  const drawMs = performance.now() - at;
-  renderer.setRenderTarget(prev);
+  // (behind the lobby its meshes a lot at a time, in slices: drawn in one render, a hero's or a house's room took 20 to
+  // 40 ms of a frame, each program's first use read back from the GPU's process and every buffer uploaded,
+  // `npm run lab -- lobbystart`)
+  const lots = step && drawn ? drawLots(drawn) : [drawn];
+  let drawMs = 0;
+  let slice = performance.now();
+  for (const [i, lot] of lots.entries()) {
+    if (i && step && performance.now() - slice >= COMPILE_SLICE_BEHIND_MS) {
+      await step();
+      slice = performance.now();
+    }
+    const drew = performance.now();
+    drawAlone(renderer, scene, camera, target, how, lot);
+    drawMs += performance.now() - drew;
+  }
   pinPrograms(renderer);
-  for (const o of objects) scene.remove(o);
   progress?.(1);
   return { compileMs, compileStepMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
+}
+
+/** the meshes of a warm-up's part drawn in one render behind the lobby */
+const DRAWN_AT_A_TIME = 16;
+
+/** The meshes (lines, points) under `roots`, in `DRAWN_AT_A_TIME`s: a warm-up's draws behind the lobby. */
+function drawLots(roots: THREE.Object3D[]): THREE.Object3D[][] {
+  const meshes = [...new Set(roots.flatMap((root) => meshesIn(root).flat()))];
+  const lots: THREE.Object3D[][] = [];
+  for (let at = 0; at < meshes.length; at += DRAWN_AT_A_TIME) lots.push(meshes.slice(at, at + DRAWN_AT_A_TIME));
+  return lots;
+}
+
+/**
+ * A warm-up's draw of `drawn` (the whole scene with none) into `target`, the scene set up for it and back after, in
+ * the one task: its `objects` added, its `show`, its swap's place shown and its lights (`Swap.alone`), so no frame of
+ * the lobby between two of a part's draws sees any of it.
+ */
+function drawAlone(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
+  target: THREE.WebGLRenderTarget, how: WarmUp, drawn: THREE.Object3D[] | undefined): void {
+  const { objects = [], leaveOut = [], swap } = how;
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  for (const o of objects) scene.add(o);
+  how.show?.();
+  // the shadow pass of a render sees the light setup of the one before, and shadow depth programs are keyed by light
+  // counts, but the compile above set the scene's lights up
+  const notAlone = swap?.alone?.();
+  const swappedBack = swapIn(swap);
+  try {
+    drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
+  } finally {
+    swappedBack();
+    notAlone?.();
+    how.hide?.();
+    for (const o of objects) scene.remove(o);
+    renderer.setRenderTarget(prev);
+  }
 }
 
 /** What a quality level hides that a warm-up compiles all the same (`compiledThoughHidden`): each shows it, and

@@ -6,7 +6,7 @@
 // `FAR.back`. A swap of geometry: no program, no material. WebGL's alone (on WebGPU he's merged as he's built,
 // `drawAsOne.ts`). `?farDetail=0` draws every triangle at any distance, for A/B.
 import * as THREE from 'three';
-import { farIndex, shadowDetailVersion, tickDetail } from './shadowDetail';
+import { detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
 import { WEBGPU } from '../../core/webgpu';
 
 /** how far from the camera he goes coarse, and how near he comes back whole (m): apart, so he never flips on a line.
@@ -102,6 +102,10 @@ export function farDetail(root: THREE.Object3D): FarDetail {
   /** each mesh that goes coarse, with its own geometry and its coarse one */
   let pairs: [THREE.Mesh, THREE.BufferGeometry, THREE.BufferGeometry][] = [];
   let found = -1;
+  /** whether every mesh's fewer triangles were settled as they were found (`detailSettled`), and whether every
+   *  triangle was held whole then: found again at a new `shadowDetailVersion` only if not, or if that's changed */
+  let settled = false;
+  let wasWhole = false;
   let far = false;
 
   const show = (coarse: boolean): void => {
@@ -114,10 +118,13 @@ export function farDetail(root: THREE.Object3D): FarDetail {
     show(false);
     pairs = [];
     found = shadowDetailVersion();
+    settled = true;
+    wasWhole = shadowsWhole();
     root.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!goesCoarse(mesh)) return;
       const cards = (mesh.material as THREE.Material).alphaTest > 0;
+      if (!cards && !detailSettled(mesh.geometry, 'far')) settled = false;
       const fewer = coarseGeometry(mesh.geometry, cards);
       if (fewer) pairs.push([mesh, mesh.geometry, fewer]);
     });
@@ -130,7 +137,7 @@ export function farDetail(root: THREE.Object3D): FarDetail {
       if (WEBGPU) return;
       // (a frame's turn at the geometries still to be simplified, his and his shadow's)
       tickDetail();
-      if (found !== shadowDetailVersion()) find();
+      if (found !== shadowDetailVersion() && (!settled || wasWhole !== shadowsWhole())) find();
       const coarse = farDetailOn.on && distance > (far ? FAR.back : FAR.out);
       if (coarse !== far) show(coarse);
     },
