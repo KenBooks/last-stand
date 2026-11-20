@@ -1,14 +1,16 @@
 // The dashboard on sample data, to work on it and take its pictures (`npm run traces:demo`): the service on
 // localhost with its own folder (.tmp/traces-demo, emptied at each start), a token of its own, and a few dozen
-// traces and bug reports sent to it the way games send them. It prints a sign-in link, signed as Dokci signs one
+// traces and bug reports sent to it the way games send them, and 30 days of made-up players' sums with a few live
+// heartbeats. It prints a sign-in link, signed as Dokci signs one
 // (server/traces/AGENTS.md), good once for 5 minutes; open it in a browser. Never touches production's data.
 // `-- --pictures` instead takes each section's picture at a desktop's and a phone's width in the installed Chrome,
 // headless, into .tmp/traces-demo-pictures, and stops (a PR's pictures of the dashboard).
 import { createHmac } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { encodeTrace } from '../../src/perf/traceFormat.ts';
+import { dayOf } from './stats.mjs';
 import { start } from './traces.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -27,6 +29,11 @@ const GPUS = ['Mali-G78', 'Adreno 740', 'Intel Iris Xe', 'Apple M1', 'NVIDIA GeF
 const QUALITY = ['low', 'medium', 'high', 'very low'];
 const COMMITS = ['37c2e75', '466acd5', '6b811b1', '676fe76', 'b5d008a'];
 const TRACES = 42;
+/** the made-up players' history: days of it, and the live heartbeats sent on top */
+const STAT_DAYS = 30;
+const LIVE_PLAYERS = 7;
+const DAY = 24 * HOUR;
+const SLOTS = 288;
 
 const REPORTS = [
   ['looks', 'The warrior\'s arm goes through his shield when he blocks while running.', 'The shield stays on his arm.'],
@@ -37,10 +44,12 @@ const REPORTS = [
   ['idea', 'A key to repeat the last skill would help on the mage.', ''],
 ];
 
-/** Each section's address and a name for its pictures. */
+/** Each section's address, a name for its pictures, what shows once it has read what it shows, and what the
+ *  pointer rests on for its picture (a chart's tooltip). */
 const SECTIONS = [
-  { name: 'traces', path: '/traces' },
-  { name: 'reports', path: '/traces/reports' },
+  { name: 'traces', path: '/traces', ready: 'tbody tr' },
+  { name: 'players', path: '/traces/players', ready: 'app-time-chart .line', hover: 'app-time-chart svg' },
+  { name: 'reports', path: '/traces/reports', ready: 'tbody tr' },
 ];
 const SCREENS = [
   { name: 'desktop', width: 1280, height: 900 },
@@ -67,6 +76,52 @@ function sample(i) {
   return gzipSync(encodeTrace(header, frames, { interval }));
 }
 
+/** How many are online in slot `slot` (5 minutes) of a day `growth` far into the history: an evening's peak, a
+ *  night's low, a little wobble. */
+function onlineAt(slot, growth) {
+  const hour = slot / 12;
+  const evening = Math.exp(-((hour - 20) ** 2) / 18);
+  const afternoon = 0.5 * Math.exp(-((hour - 15) ** 2) / 10);
+  const wobble = 0.85 + 0.3 * Math.abs(Math.sin(slot * 12.9898));
+  return Math.round((2 + 26 * (evening + afternoon)) * growth * wobble);
+}
+
+/** A made-up day's sums as stats.mjs keeps them (ids as stand-ins for the hashed ones), `back` days ago. */
+function statDay(back, now) {
+  const growth = 0.6 + 0.4 * (1 - back / STAT_DAYS);
+  const lastSlot = back === 0 ? Math.floor((now % DAY) / (5 * 60_000)) : SLOTS - 1;
+  const online = Array.from({ length: SLOTS }, (_, slot) => (slot <= lastSlot ? onlineAt(slot, growth) : 0));
+  const minutes = online.reduce((sum, count) => sum + count * 5, 0);
+  const players = Math.round(minutes / 38);
+  // (players overlap from day to day, each day's distinct: a pool of 4 times a day's, so a week's and a month's
+  // count each once)
+  const pool = players * 4;
+  const shift = Math.round(players * 0.3) * back;
+  const ids = Array.from({ length: players }, (_, i) => `p${(i + shift) % pool}`);
+  const sums = {
+    minutes, fight: Math.round(minutes * 0.62), coop: Math.round(minutes * 0.18), sessions: Math.round(players * 1.6),
+    newPlayers: Math.round(players * 0.15), online, ids,
+  };
+  const test = { minutes: 40 + back * 3, fight: 20, coop: 5, sessions: 3, newPlayers: 0, online: online.map(() => 0), ids: ['t1', 't2'] };
+  return { live: sums, test };
+}
+
+/** The made-up history written where the service reads it at its start. */
+function writeStatHistory() {
+  const folder = join(DATA, 'stats');
+  mkdirSync(folder, { recursive: true });
+  const now = Date.now();
+  for (let back = 0; back < STAT_DAYS; back++) {
+    writeFileSync(join(folder, `${dayOf(now - back * DAY)}.json`), JSON.stringify(statDay(back, now)));
+  }
+}
+
+/** A heartbeat as the game sends one, from the i-th live player. */
+function heartbeat(i) {
+  const id = Buffer.from(`demo-player-${i}`.padEnd(16, '.')).toString('base64url');
+  return JSON.stringify({ id, where: i % 3 ? 'fight' : 'lobby', coop: i % 4 === 0, start: true, first: false });
+}
+
 /** Sends `body` to `path` as a game does. */
 function post(path, body) {
   const headers = { origin: ORIGIN, 'x-forwarded-for': `1.2.3.4, ${SENDER}` };
@@ -76,11 +131,13 @@ function post(path, body) {
 /** The service started on an empty folder, the sample sent to it. */
 async function startWithSample() {
   rmSync(DATA, { recursive: true, force: true });
+  writeStatHistory();
   const server = await start(PORT, {
     DATA, TRACES_TOKEN: TOKEN, ORIGINS: ORIGIN, TRUSTED_ADDRESSES: SENDER,
     PER_DAY: '1000', PER_DAY_ALL: '1000', REPORT_PER_HOUR: '100', REPORT_PER_DAY: '100',
   });
   for (let i = 0; i < TRACES; i++) await post('/traces', sample(i));
+  for (let i = 0; i < LIVE_PLAYERS; i++) await post('/traces/beat', heartbeat(i));
   for (const [kind, text, expected] of REPORTS) {
     const facts = ['Where: the lobby', `Build: ${COMMITS[0]}`, 'Quality: medium'];
     await post('/traces/reports', JSON.stringify({ kind, text, expected, facts, picture: null }));
@@ -112,7 +169,8 @@ async function takePictures() {
       await page.setViewportSize({ width: screen.width, height: screen.height });
       for (const section of SECTIONS) {
         await page.goto(`http://localhost:${PORT}${section.path}`);
-        await page.locator('tbody tr').first().waitFor();
+        await page.locator(section.ready).first().waitFor();
+        if (section.hover) await page.locator(section.hover).first().hover();
         const path = join(PICTURES, `${section.name}-${screen.name}.png`);
         await page.screenshot({ path, fullPage: screen.name === 'desktop' });
         written.push(path);

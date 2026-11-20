@@ -88,7 +88,13 @@
         <div class="pb-opt-col">
         <!-- a report sent when the game runs slowly (perf/consent.ts): asked first, sent without asking, or never -->
         <div class="opt-row quality-row"><span>Slow-game reports</span>
-          <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
+          <!-- beside the reports' choice, a heartbeat a minute for the dashboard's player counts (stats/heartbeat.ts): an
+               anonymous id, nothing else. On the choice's line: a row of its own, a line under it or one in the other
+               column scrolled a phone held sideways (lab ui --states pausePerformance --screen 844x390@3) -->
+          <div class="opt-pair">
+            <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
+            <label class="opt-inline"><input type="checkbox" id="opt-stats"> Anonymous play stats</label>
+          </div>
         </div>
         <div class="opt-row quality-row"><span>Performance recording</span>
           <div class="recording-controls">

@@ -51,6 +51,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 import { setTraceConsent, traceConsent, type TraceConsent } from '../perf/consent';
+import { playStats, setPlayStats } from '../stats/heartbeat';
 import { initProfileTab } from './profileTab';
 import { initRecordingTab } from './recordingTab';
 import { recorder } from '../perf/recorder';
@@ -262,6 +263,7 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => {
     b.onclick = () => { sfx.click(); setTraceConsent(b.dataset.t as TraceConsent); renderTraceOptions(); };
   });
+  $<HTMLInputElement>('#opt-stats').onchange = (e) => setPlayStats((e.target as HTMLInputElement).checked ? 'on' : 'off');
   document.querySelectorAll<HTMLElement>('#opt-perf button').forEach((b) => {
     b.onclick = () => { sfx.click(); setPerfHudSize(b.dataset.perf as PerfHudSize); renderPerfOptions(); };
   });
@@ -1235,6 +1237,7 @@ function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers 
 function renderTraceOptions(): void {
   const t = traceConsent();
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => b.classList.toggle('active', b.dataset.t === t));
+  $<HTMLInputElement>('#opt-stats').checked = playStats() === 'on';
 }
 /** The Vsync setting's buttons, the one in effect lit (`?vsync=` may have set it for this visit). */
 function renderVsyncOptions(): void {

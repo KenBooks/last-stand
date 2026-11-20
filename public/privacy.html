@@ -21,7 +21,7 @@
 <body>
 <main>
   <h1>Privacy</h1>
-  <p class="dim">Last Stand, an open-source browser game. Updated 12 November 2026.</p>
+  <p class="dim">Last Stand, an open-source browser game. Updated 20 November 2026.</p>
 
   <section>
     <h2>Playing without an account</h2>
@@ -54,6 +54,16 @@
     </ul>
   </section>
 
+  <section>
+    <h2>Anonymous play stats</h2>
+    <p>So the game's maintainer can see how many people play and for how long, the game tells its server once a minute while it's on screen that it is being played. Each message holds only:</p>
+    <ul>
+      <li>a random id this browser made for it, which isn't linked to an account, a name, your saves or your address;</li>
+      <li>whether you're in the lobby or a fight, and whether in co-op;</li>
+      <li>whether it's the first message of this visit, or of this browser.</li>
+    </ul>
+    <p>The server keeps the id only scrambled (a salted hash), and only for 35 days; after that, only each day's totals (how many players, minutes played, visits). It writes down no address. Turn it off in the pause menu (Performance, Anonymous play stats): the id is then deleted from this browser. If your browser sends Global Privacy Control, it starts off.</p>
+  </section>
   <section>
     <h2>Logs and reports</h2>
     <p>The server's logs name an account by the first letters of its id and never hold a save's contents. Performance reports are sent only when you agree to it in the game, and hold no account.</p>

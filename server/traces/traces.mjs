@@ -12,6 +12,7 @@
 //   GET  /traces/latest           the newest trace's gzip (read), its code in X-Trace-Code
 //   GET  /traces/<code>           a trace's gzip (read)
 //   POST /traces/reports, GET /traces/reports[/<code>[.jpg]]  the pause menu's bug reports (reports.mjs)
+//   POST /traces/beat, GET /traces/stats?days=  the games' heartbeats and the players' sums (stats.mjs)
 // Reading takes the secret token (`Authorization: Bearer <TRACES_TOKEN>`) or the session cookie a Dokci link set (a
 // browser never sees the token): a report's code alone reads nothing. Kept for KEEP_DAYS, the oldest dropped first
 // past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours from
@@ -27,6 +28,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { asset, notePage, PAGES, pageBuilt, viewerPage } from './page.mjs';
 import { reportsService } from './reports.mjs';
+import { BEAT_MAX_BYTES, checkBeat, statsLimits, statsService } from './stats.mjs';
 
 const env = process.env;
 /** Origins from a comma-separated list, a `*` standing for one DNS label's worth (`https://pr-*.ls.wellscoped.dev`:
@@ -78,6 +80,8 @@ export function settingsFrom(vars) {
     reportPerDayAll: Number(vars.REPORT_PER_DAY_ALL ?? 200),
     reportKeepDays: Number(vars.REPORT_KEEP_DAYS ?? 90),
     reportDiskMax: Number(vars.REPORT_DISK_MAX ?? 100 << 20),
+    // the player stats' (stats.mjs: each limit and what happens past it in the AGENTS.md)
+    stats: statsLimits(vars),
   };
 }
 let settings = settingsFrom(env);
@@ -99,6 +103,10 @@ let diskBytes = 0, uploading = 0;
 const sent = new Map();
 /** the bug reports' part (reports.mjs), made afresh at each start */
 let reports = null;
+/** the player stats' part (stats.mjs), made afresh at each start */
+let stats = null;
+/** how often the stats' changed days are written */
+const SAVE_STATS_EVERY = 60_000;
 
 function newCode() {
   const bytes = randomBytes(8);
@@ -334,6 +342,32 @@ async function reportUpload(req, res) {
   }
 }
 
+/** A heartbeat (stats.mjs): its JSON from the game's own pages, a plain request (no preflight), counted. */
+async function beat(req, res) {
+  const headers = cors(req);
+  const origin = req.headers.origin ?? '';
+  if (!settings.origins.has(origin)) return answer(res, 403, 'not from the game', headers);
+  if (Number(req.headers['content-length'] ?? 0) > BEAT_MAX_BYTES) return answer(res, 413, 'over its most', headers);
+  const address = addressOf(req);
+  const allowed = stats.allowed(address);
+  if (!allowed.ok) return answer(res, 429, allowed.why, headers);
+  const body = await bodyOf(req, BEAT_MAX_BYTES);
+  if (!body) return answer(res, 413, 'over its most', headers);
+  let json;
+  try { json = JSON.parse(body.toString('utf8')); } catch { return answer(res, 400, 'not JSON', headers); }
+  const checked = checkBeat(json);
+  if (checked.error) return answer(res, 400, checked.error, headers);
+  if (!stats.take(checked.beat, origin, address)) return answer(res, 429, 'too many players from here', headers);
+  return answer(res, 204, '', headers);
+}
+
+/** The players' sums over the last `days` days (1 to the days kept; 30 by default). */
+function statsRead(res, url) {
+  const asked = Number(url.searchParams.get('days') ?? 30);
+  const days = Math.min(settings.stats.keepDays, Math.max(1, Math.floor(asked) || 30));
+  return answer(res, 200, stats.read(days));
+}
+
 /** What reading asks of the reports: the list, a report whole, its picture. */
 async function reportRead(res, url, path) {
   if (path === '/traces/reports') return answer(res, 200, reports.list(url));
@@ -423,6 +457,7 @@ async function handle(req, res) {
     return answer(res, 204, '', { ...cors(req), 'access-control-allow-methods': 'POST', 'access-control-max-age': '86400' });
   }
   if (req.method === 'POST' && path === '/traces/reports') return reportUpload(req, res);
+  if (req.method === 'POST' && path === '/traces/beat') return beat(req, res);
   if (req.method !== 'GET' || !path.startsWith('/traces')) return answer(res, 404, 'not here');
   const file = /^\/traces\/([^/]+\.(?:js|css))$/.exec(path);
   if (file) return serveAsset(res, file[1]);
@@ -442,6 +477,7 @@ async function handle(req, res) {
   if (browsing) return dashboard(res);
   if (path === '/traces') return answer(res, 200, list(url));
   if (path === '/traces/summary') return answer(res, 200, summary());
+  if (path === '/traces/stats') return statsRead(res, url);
   if (path === '/traces/reports' || path.startsWith('/traces/reports/')) return reportRead(res, url, path);
   if (path === '/traces/latest') {
     const newest = [...index.keys()].pop();
@@ -496,13 +532,21 @@ export async function start(port, overrides = {}) {
   await load();
   reports = reportsService(settings, { log, newCode });
   await reports.load();
+  stats = statsService(settings, { log });
+  await stats.load();
   const http = createServer((req, res) => {
     handle(req, res).catch((e) => { log('error', e); if (!res.headersSent) answer(res, 500, 'error'); else res.end(); });
   });
   http.requestTimeout = 30_000;
-  const timer = setInterval(() => { void prune(); void reports.prune(); }, PRUNE_EVERY);
+  const timer = setInterval(() => { void prune(); void reports.prune(); void stats.prune(); }, PRUNE_EVERY);
   timer.unref();
-  http.on('close', () => clearInterval(timer));
+  const saving = setInterval(() => void stats.save(), SAVE_STATS_EVERY);
+  saving.unref();
+  http.on('close', () => {
+    clearInterval(timer);
+    clearInterval(saving);
+    void stats.save();
+  });
   await new Promise((resolve) => http.listen(port ?? settings.port, resolve));
   log(`traces on :${http.address().port}, ${index.size} kept (${Math.round(diskBytes / 1024)} KB), reading ${settings.token ? 'on' : 'off'}`);
   return http;

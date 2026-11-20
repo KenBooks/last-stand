@@ -17,6 +17,9 @@ export const summaryUrl = `${BASE}/summary`;
 /** Where a trace's gzip downloads from. */
 export const traceUrl = (code: string): string => `${BASE}/${encodeURIComponent(code)}`;
 
+/** The players' sums over the last `days` days (stats.mjs). */
+export const statsUrl = (days: number): string => `${BASE}/stats?days=${days}`;
+
 /** A page of the bug reports from `offset`, newest first. */
 export const reportsUrl = (offset: number, limit: number): string =>
   `${BASE}/reports?${new URLSearchParams({ limit: String(limit), offset: String(offset) })}`;

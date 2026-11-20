@@ -78,6 +78,7 @@ import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
+import { startHeartbeat } from './stats/heartbeat';
 import { recorder } from './perf/recorder';
 import { framePart, framePartsBegin, framePartsEnd } from './perf/frameParts';
 import { traceNow } from './perf/upload';
@@ -433,6 +434,7 @@ async function boot() {
     revealed = true;
     oweBetaNotice();
     recorder.revealed(!navigator.serviceWorker?.controller);
+    startHeartbeat();
     if (WEBGPU) pipelinesAtOnceFromNow();
     setTimeout(() => checkPrograms(renderer));
     void rest.then(() => checkPrograms(renderer));
