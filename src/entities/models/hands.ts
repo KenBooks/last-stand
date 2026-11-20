@@ -371,6 +371,7 @@ export function drawnSkin(h: Hand): THREE.SkinnedMesh {
 /** A fighter's bare hand shown shut in its fist (`on`), or open: its sculpt shut in place of its open one. A gloved
  *  hand, or one with no sculpt shut, keeps its own. */
 export function shut(h: Hand, on: boolean): void {
+  if (!on) fistCore(h, null);
   const closed = h.shut;
   if (!closed || !h.bareSkin) return;
   const want = on && !h.glove.visible;
@@ -786,6 +787,53 @@ function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THRE
   return new THREE.BufferAttribute(colour, 3);
 }
 
+/** the flesh inside a fighter's shut fist (`fistCore`): its radius, and how far past the index's and the little
+ *  finger's curls it runs (m, at the plain hand's size) */
+const FIST_CORE = tunable('fistCore', { r: 0.012, past: 0.006 });
+const CORE_SHAPE = new THREE.SphereGeometry(1, 14, 10);
+const CORES = new Map<string, { at: THREE.Vector3; turn: THREE.Quaternion; half: number }>();
+
+/**
+ * The flesh that fills a fighter's shut fist, `pose` its closed pose (null: the hand is open, and it's put away). The
+ * fingers are four tubes curled round nothing, and through his own eyes, which look into the fist's thumb side, the
+ * tunnel they make was open from end to end: the fist read as a claw, hooked fingers over a hole (adversarial reviews,
+ * one after another: "the visible hole", "gaps under the curled fingers", "reads as a claw"). A real fist's fingers
+ * close on the palm's own flesh. A rounded bar of skin lies along the middle of the curls, from the index finger's to
+ * the little finger's, inside them all; drawn always, at no size while the hand is open, so its program is made as
+ * the hero is warmed.
+ */
+function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
+  if (!h.build.fist || !h.skin) return;
+  let core = h.vis.userData.core as THREE.Mesh | undefined;
+  if (!core) {
+    core = new THREE.Mesh(CORE_SHAPE, h.made.bareSkin ?? h.made.skin);
+    core.castShadow = false;
+    core.scale.setScalar(1e-4);
+    h.vis.add(core);
+    h.vis.userData.core = core;
+  }
+  if (!pose) { core.scale.setScalar(1e-4); return; }
+  const key = handKey(h.s, h.build);
+  let made = CORES.get(key);
+  if (!made) {
+    // (each finger's curl's middle: the mean of its four joints)
+    const middle = (i: number): THREE.Vector3 => {
+      const points = chainOf(h.f[i].j[0].position, h.f[i].len, pose[i]).points;
+      return points[0].clone().add(points[1]).add(points[2]).add(points[3]).multiplyScalar(0.25);
+    };
+    const from = middle(0), to = middle(3), along = to.clone().sub(from);
+    made = {
+      at: from.clone().add(to).multiplyScalar(0.5), half: along.length() / 2,
+      turn: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize()),
+    };
+    CORES.set(key, made);
+  }
+  const r = FIST_CORE.r * h.build.digits;
+  core.position.copy(made.at);
+  core.quaternion.copy(made.turn);
+  core.scale.set(made.half + FIST_CORE.past, r, r);
+}
+
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
 export function closeFist(h: Hand, line: THREE.Vector3): void {
   shut(h, true);
@@ -795,6 +843,7 @@ export function closeFist(h: Hand, line: THREE.Vector3): void {
     pose = closedFistPose(h);
     CLOSED_FISTS.set(key, pose);
   }
+  fistCore(h, pose);
   const wrist = h.vis.parent!;
   wrist.updateWorldMatrix(true, false);
   _q2.setFromRotationMatrix(_m.extractRotation(wrist.matrixWorld));

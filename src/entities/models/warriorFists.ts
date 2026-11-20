@@ -142,8 +142,25 @@ const LEAD = { hips: 0.09, chest: 0.045 };
 // charging he brings his fist to his face")
 // back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
 // ring, from play: "held punch needs to pull back, not just draw a charge circle")
-const COIL = { jab: 0.3, cross: 0.42 };
-const BACK = tunable('punchBack', { eyes: [0, 0.05, 0.06], body: [0.07, -0.02, -0.24], elbow: 0.8 });
+const COIL = { jab: 0.5, cross: 0.55 };
+// (and then chambered by his ribs, the owner's choice of three after six poses held up by the jaw or at the view's
+// edge each failed an adversarial review as a second guard fist: a boxer doesn't draw a hand back to load a straight,
+// he loads his legs and hips, so a hand drawn back is a karateka's chamber. From its guard: out a little, down to the
+// lower ribs and back, the elbow behind him, in the body's own frame in both views; through his own eyes that is
+// under the view, and the fist left in its guard says which hand is loaded)
+// (`body`: from his shoulder, out to its side, down and ahead, m: the fist just ahead of his lower ribs, so the upper
+// arm hangs back from the shoulder and the forearm lies about level, the elbow straight behind the fist. Placed from
+// the guard's fist, behind his chest's front, the arm reached it only with the elbow swung out at the shoulder's
+// height, and he stood holding his belly: three adversarial reviews)
+const BACK = tunable('punchBack', { body: [0.06, -0.3, 0], elbow: 1 });
+
+/** Where a chambered fist is (the body's frame), into `out`: off its own shoulder as it stands now (`BACK.body`). */
+function chamberAt(j: Joints, lead: boolean, out: THREE.Vector3): THREE.Vector3 {
+  const [aside, down, ahead] = BACK.body;
+  j.body.worldToLocal((lead ? j.shoulderL : j.shoulderR).getWorldPosition(out));
+  out.x += (lead ? 1 : -1) * aside; out.y += down; out.z += ahead;
+  return out;
+}
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
@@ -166,7 +183,11 @@ export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };
  *  right's mirrored (the same line for both turned the left palm up, its fingers curled at the eyes as a claw) */
 // (in the guard ahead and across, the palm turned in by half: the knuckles face forward along the sloping forearm, the
 // thumb across the fingers; a line mostly upward turned the fist against the forearm, the wrist bent back by `hold`)
-const LINE = tunable('fistLines', { guard: [0.7, 0, 0.7], punch: [1, 0, 0] });
+// (the guard's from outside: the knuckles' row across, the index finger's end out to its own side and a little back,
+// so the palm faces his own face and a little in, the back of the hand to what's before him, as the owner asked of the
+// guard through the eyes and then of this one against a reference: "palm facing the face, look at reference". On
+// [0.7, 0, 0.7] the raised fist showed its palm and curled fingers to the front)
+const LINE = tunable('fistLines', { guard: [-0.9, 0, -0.35], punch: [1, 0, 0] });
 /** a knuckle line for the hand on that side: mirrored across his middle for the left */
 const sided = (line: readonly number[], left: boolean): number[] => (left ? [-line[0], line[1], line[2]] : [...line]);
 
@@ -215,7 +236,7 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = fa
   if (flare > 0) { _pole.x = lerp(_pole.x, left ? 1 : -1, flare); _pole.y = lerp(_pole.y, -0.15, flare); }
   // (and behind him as a fist is drawn back to charge, `back`: the forearm lined up behind the knuckles, not stood
   // up under them as a guard's is)
-  if (back > 0) _pole.set(lerp(_pole.x, (left ? 1 : -1) * 0.3, back), lerp(_pole.y, -0.3, back), lerp(_pole.z, -1, back));
+  if (back > 0) _pole.set(lerp(_pole.x, (left ? 1 : -1) * 0.12, back), lerp(_pole.y, -1, back), lerp(_pole.z, -0.75, back));
   reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _at, _pole);
   // (each from the pose's own towards the reach: `slerpQuaternions` into one of its own ends copies over it first)
   if (w < 1) { shoulder.quaternion.copy(_sq.slerp(shoulder.quaternion, w)); elbow.quaternion.copy(_eq.slerp(elbow.quaternion, w)); }
@@ -387,22 +408,12 @@ export function fistPunch(
     // home went from full speed to still in a frame, 21 mm then 1)
     // (cocked where it is from outside, beside the jaw in the body's own frame, `eyes` more of the way back: placed
     // on the screen it was wherever the arm could reach towards that spot, close before the eye and huge)
-    if (pull > 0) {
-      const [aside, down, back] = BACK.body, more = BACK.eyes;
-      guardAt(j, lead, false, 0, 0, _mid);
-      _mid.x += (lead ? 1 : -1) * (aside + more[0]); _mid.y += down + more[1]; _mid.z += back + more[2];
-      _from.lerp(_mid, smooth(pull));
-    }
+    if (pull > 0) _from.lerp(chamberAt(j, lead, _mid), smooth(pull));
     const w = Math.max(smooth(pull), smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))));
     place(j, lead, _from, w, true, seenAs.flare * over, BACK.elbow * smooth(pull));
   } else {
     place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
-    if (pull > 0) {
-      const [aside, down, back] = BACK.body;
-      guardAt(j, lead, false, 0, 0, _far);
-      _far.x += (lead ? 1 : -1) * aside; _far.y += down; _far.z += back;
-      place(j, lead, _far, smooth(pull), false, 0, BACK.elbow);
-    }
+    if (pull > 0) place(j, lead, chamberAt(j, lead, _far), smooth(pull), false, 0, BACK.elbow);
   }
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;
   if (eyes) {
@@ -415,16 +426,24 @@ export function fistPunch(
     const [gx, gy] = GUARD_EYES.line, guarded = Math.atan2(gy, gx);
     const at = lerp(guarded, STRIKE.lands, curve(TURN_OVER, k));
     line.set((lead ? -1 : 1) * Math.cos(at), Math.sin(at), 0);
-  } else lineTo(line, sided(LINE.punch, lead), turned);
+  } else {
+    lineTo(line, sided(LINE.punch, lead), turned);
+    // (chambered, its knuckles' row upright, the thumb on top, in line with a level forearm: on the guard's slanted
+    // line it hung at the wrist)
+    lineTo(line, [0, 1, 0], smooth(pull));
+  }
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
   if (shielded) return;
-  const back = Math.max(0, out);
+  // (and from outside the fist left in its guard is tucked in to the jaw as the other is chambered, as it is as the
+  // other lands: held out before his chest it hung below the jaw, an adversarial review)
+  const back = Math.max(0, out, eyes ? 0 : smooth(pull));
   if (eyes) {
     // (and drawn back and down a little as the other goes out, the body's turn behind the blow: held dead still it
     // was a prop in the view's corner)
     const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead, [aside, up, ahead] = seenAs.other;
-    const to = [on[0] + Math.sign(on[0]) * aside * back, on[1] + up * back, on[2] + ahead * back];
+    // (and lifted a little as the other is chambered: alone in the view, it sat low, an adversarial review)
+    const to = [on[0] + Math.sign(on[0]) * aside * back, on[1] + up * back + 0.06 * smooth(pull), on[2] + ahead * back];
     place(j, !lead, onScreen(j, to, _far), 1, eyes);
   } else {
     // (drawn in to the cheek, its elbow under it: left out in its guard it floated before the jaw, the same review)

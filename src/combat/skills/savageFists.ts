@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
-import { addShake, rollView } from '../../core/renderer';
+import { addShake, liftView, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
@@ -31,6 +31,8 @@ const GATHER = 0.38, STRIKE = 0.055;
  *  click's, at once, so the hand that charges shows (from play: "he should instantly pull back... so its clear which
  *  hand is charging", "pulling back means cocking the hand near jaw, as boxers do"); a click hardly cocks it. */
 const COCK = 0.05;
+/** a charged punch through his own eyes: how far the view tips towards the chambered hand's side (rad) and sinks (m) */
+const LOAD = { roll: 0.045, sink: 0.04 };
 const cockOf = (def: SkillDef, share: number): number =>
   Math.min(1, Math.max(0, (share - (def.minDraw ?? 0)) / COCK));
 
@@ -159,9 +161,16 @@ const skill: InstantSkill = {
     action.t = GATHER + (1 - GATHER) * after;
     action.draw = cockOf(def, c.power ?? 0);
   },
-  charging(player, _def, _k, dt) {
+  charging(player, def, k, dt) {
     handOf(player);
     readTurning(player, dt);
+    // (held to charge, through his own eyes: his shoulders turn back with the hand he chambers and he sinks a little
+    // onto his rear leg, as a body loads a blow, so the view tips towards that side and drops; the fist itself is
+    // under the view)
+    if (!player.local) return;
+    const cocked = cockOf(def, k);
+    rollView((isJab(player) ? 1 : -1) * LOAD.roll * cocked);
+    liftView(-LOAD.sink * cocked);
   },
   cast(player, rawDef, _target, power = 0) {
     // (let go: the fist is thrown, and lands a moment on)
