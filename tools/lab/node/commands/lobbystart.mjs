@@ -32,11 +32,13 @@ export default {
   options: {
     canary: { kind: 'switch', help: 'the lobby\'s budget for what\'s built behind it lifted, each hero built whole '
         + 'there as before: must be caught' },
+    held: { kind: 'switch', help: 'every frame counted as held past what warming behind the lobby may hold (as a '
+        + 'phone\'s GPU holds them): every warm-up must give up there within a few slices, none begun after' },
     ...COMMON_OPTIONS,
   },
   async each(side, options) {
     await asReturn(side);
-    return side.command('lobbyStart', { canary: Boolean(options.canary) });
+    return side.command('lobbyStart', { canary: Boolean(options.canary), held: Boolean(options.held) });
   },
   textOf: asText,
   problemsOf: problemsIn,

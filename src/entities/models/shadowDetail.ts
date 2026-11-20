@@ -4,28 +4,34 @@
 // (from play, the village's frame going from 400k to 900k triangles and back as he stood by the hall; `npm run lab --
 // draws --village --moving`). So each geometry's triangles are simplified once (three's meshoptimizer: the vertices
 // kept as they are, an index of fewer triangles over them). A hero's take 45 to 55 ms of a desktop's CPU for each use,
-// so they're made a few ms a frame (`tickDetail`), every triangle drawn until they're ready. `?shadowDetail=1` casts
-// and draws every triangle, for A/B.
+// so they're made in a worker (`simplify.worker.ts`), every triangle drawn until they're ready: made a few ms a frame on
+// the page, a piece's one call (up to 15 ms, the hair's) held the lobby's first frames 12 to 16 ms (`npm run lab --
+// lobbystart`). A harness has them made on the page, a frame's slice at a time, which its fixed clock steps the same
+// on every run (`detailWork`). `?shadowDetail=1` casts and draws every triangle, for A/B.
 import * as THREE from 'three';
 import { perfClock } from '../../core/perfClock.ts';
+import { simplifiedIndex, type Detail, type Simplifier } from './simplifyIndex.ts';
+import type { SimplifyAsked, SimplifyMade } from './simplify.worker.ts';
 
 /** what a geometry's fewer triangles are for: its shadow, or the frame from afar */
 type Use = 'shadow' | 'far';
 /** for each use: the share of its triangles a geometry keeps, how far from its surface a kept triangle may lie (m:
  *  as a share of a body's size, the shadow's own caster stood out of the mage's sleeves and staff through the eyes and
  *  shaded them, 23k pixels of the frame, `lab shadows --class mage`), and the same for the grid a piece falls back to */
-const DETAIL: Record<Use, { share: number; error: number; sloppy: number }> = {
+const DETAIL: Record<Use, Detail> = {
   shadow: { share: 0.2, error: 0.006, sloppy: 0.012 },
   far: { share: 0.3, error: 0.004, sloppy: 0.008 },
 };
-/** the fewest triangles worth simplifying, and the most of them a simplified piece may keep to be worth keeping */
+/** the fewest triangles worth simplifying */
 const WORTH = 60;
-const WORTH_UNDER = 0.8;
-/** the time a frame gives to simplifying (ms), and the least between two turns at it (several heroes ask a frame) */
+/** the time a frame gives to simplifying on the page, or to handing it to the worker (ms), and the least between two
+ *  turns at it (several heroes ask a frame) */
 const SLICE_MS = 3;
 const TURN_MS = 4;
 
-type Simplifier = typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier;
+/** Where the fewer triangles are made: in the worker (`inWorker`, the game's), or on the page a frame's slice at a time
+ *  (a harness's, as its fixed clock steps them the same on every run; and the game's if the worker fails). */
+export const detailWork = { inWorker: typeof Worker !== 'undefined' };
 /** the simplifier, once it has loaded: null until then */
 let simplifier: Simplifier | null = null;
 /** whether a harness or the address has every triangle cast and drawn, as it was */
@@ -38,6 +44,10 @@ const kept: Record<Use, WeakMap<THREE.BufferGeometry, Uint32Array | null>> = { s
 const waiting: { geometry: THREE.BufferGeometry; use: Use }[] = [];
 const asked: Record<Use, WeakSet<THREE.BufferGeometry>> = { shadow: new WeakSet(), far: new WeakSet() };
 let lastTurn = -Infinity;
+/** what the worker is making, by the id it was sent with */
+const sent = new Map<number, { geometry: THREE.BufferGeometry; use: Use }>();
+let lastId = 0;
+let worker: Worker | null = null;
 
 if (typeof location !== 'undefined') {
   void import('three/addons/libs/meshopt_simplifier.module.js').then(async ({ MeshoptSimplifier }) => {
@@ -85,27 +95,75 @@ function positionsOf(geometry: THREE.BufferGeometry): Float32Array {
   return positions;
 }
 
-/** `geometry`'s triangles simplified for `use`, or null where it has too few or gives up too few. */
-function simplified(simplify: Simplifier, geometry: THREE.BufferGeometry, use: Use): Uint32Array | null {
+/** `geometry`'s index as its own list of corners (one made of its vertices in order where it has none), or null where
+ *  it has too few triangles to be worth simplifying. */
+function indexOf(geometry: THREE.BufferGeometry): Uint32Array | null {
   const own = geometry.index;
   const count = own ? own.count : geometry.attributes.position.count;
   if (count < WORTH * 3) return null;
-  const detail = DETAIL[use];
   const index = new Uint32Array(count);
   for (let i = 0; i < count; i++) index[i] = own ? own.getX(i) : i;
-  const target = Math.max(3, Math.floor((count / 3) * detail.share) * 3);
-  const positions = positionsOf(geometry);
-  let [fewer] = simplify.simplify(index, positions, 3, target, detail.error, ['ErrorAbsolute']);
-  // (a piece of faces that share no vertices, each its own normals', gives up few that way: by a grid of its points
-  // then, which keeps its outline and its vertices' normals and nothing of its faces' edges)
-  if (fewer.length > target * 1.6) {
-    const scale = Math.max(simplify.getScale(positions, 3), 1e-6);
-    const [sloppy] = simplify.simplifySloppy(index, positions, 3, null, target, detail.sloppy / scale);
-    // (unless it gave up most of the piece: a thin one falls into a cell or two of the grid)
-    if (sloppy.length >= target * 0.6) fewer = sloppy;
-  }
-  return fewer.length <= count * WORTH_UNDER ? fewer.slice() : null;
+  return index;
 }
+
+/** `geometry`'s triangles simplified for `use` on the page, or null where it has too few or gives up too few. */
+function simplified(simplify: Simplifier, geometry: THREE.BufferGeometry, use: Use): Uint32Array | null {
+  const index = indexOf(geometry);
+  return index && simplifiedIndex(simplify, index, positionsOf(geometry), DETAIL[use]);
+}
+
+/** The worker, started once: a reply kept as its geometry's fewer triangles; one that fails hands what it was making
+ *  back to the page. */
+function theWorker(): Worker | null {
+  if (worker) return worker;
+  try {
+    worker = new Worker(new URL('./simplify.worker.ts', import.meta.url), { type: 'module', name: 'simplify' });
+  } catch {
+    detailWork.inWorker = false;
+    return null;
+  }
+  worker.onmessage = (event: MessageEvent<SimplifyMade>) => {
+    const asked = sent.get(event.data.id);
+    if (!asked) return;
+    sent.delete(event.data.id);
+    kept[asked.use].set(asked.geometry, event.data.fewer);
+    if (!sent.size && !waiting.length) version++;
+  };
+  worker.onerror = () => {
+    detailWork.inWorker = false;
+    waiting.unshift(...sent.values());
+    sent.clear();
+  };
+  return worker;
+}
+
+/** `geometry` sent to the worker to simplify for `use` (copies of its index and positions, handed over), or kept as
+ *  having none worth making. */
+function sendOff(to: Worker, geometry: THREE.BufferGeometry, use: Use): void {
+  const index = indexOf(geometry);
+  if (!index) {
+    kept[use].set(geometry, null);
+    return;
+  }
+  const positions = positionsOf(geometry).slice();
+  const id = ++lastId;
+  sent.set(id, { geometry, use });
+  const message: SimplifyAsked = { id, index, positions, detail: DETAIL[use] };
+  to.postMessage(message, [index.buffer, positions.buffer]);
+}
+
+/** For a harness (tools/lab): the fewer triangles made on the page from now on, what the worker was making asked for
+ *  again there (its late replies passed over), so a run steps the same work on its fixed clock every time; `false`
+ *  hands them to the worker again (`lab lobbystart`, which times what a player's page does). */
+export function detailOnPage(onPage: boolean): void {
+  detailWork.inWorker = !onPage && typeof Worker !== 'undefined';
+  if (!onPage) return;
+  waiting.unshift(...sent.values());
+  sent.clear();
+}
+
+/** Whether fewer triangles are still being made (asked for and not yet come). */
+export const detailPending = (): boolean => waiting.length > 0 || sent.size > 0;
 
 /** `geometry`'s fewer triangles for `use` if they're made, or null for its own, asked for then. */
 function indexFor(geometry: THREE.BufferGeometry, use: Use): Uint32Array | null {
@@ -129,19 +187,21 @@ export const coarseIndex = (geometry: THREE.BufferGeometry): Uint32Array | null 
 export const farIndex = (geometry: THREE.BufferGeometry): Uint32Array | null => indexFor(geometry, 'far');
 
 /**
- * A frame's turn at the geometries asked for: `SLICE_MS` of them, by `perfClock` (the lab's page clock stands still
- * within a frame, and there a frame made all that was asked: a harness timing the frames puts the browser's in its
- * place, `lab lobbystart`). Once none waits, `shadowDetailVersion` moves on, and what was made of whole geometries
- * meanwhile is made again.
+ * A frame's turn at the geometries asked for: `SLICE_MS` of them sent to the worker, or made on the page
+ * (`detailWork`), by `perfClock` (the lab's page clock stands still within a frame, and there a frame does all that's
+ * asked: a harness timing the frames puts the browser's in its place, `lab lobbystart`). Once none waits or is being
+ * made, `shadowDetailVersion` moves on, and what was made of whole geometries meanwhile is made again.
  */
 export function tickDetail(): void {
   if (!waiting.length || !simplifier) return;
   const start = perfClock.now();
   if (start - lastTurn < TURN_MS && start !== lastTurn) return;
   lastTurn = start;
+  const to = detailWork.inWorker ? theWorker() : null;
   do {
     const { geometry, use } = waiting.shift()!;
-    kept[use].set(geometry, simplified(simplifier, geometry, use));
+    if (to) sendOff(to, geometry, use);
+    else kept[use].set(geometry, simplified(simplifier, geometry, use));
   } while (waiting.length && perfClock.now() - start < SLICE_MS);
-  if (!waiting.length) version++;
+  if (!waiting.length && !sent.size) version++;
 }

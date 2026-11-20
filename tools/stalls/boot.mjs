@@ -109,7 +109,7 @@ const LEFT_NOTES = {
   cold: 'left without pressing Start, the fight never compiled',
   warm: 'left without pressing Start, its fight warm all the same (warmed before the lobby): not a cold return',
   behind: `the fight not warm ${BEHIND_MOST_MS / 1000} s into the lobby: given up behind it (a frame held past the `
-    + "game's HELD_MOST_MS, or a part cold), the rest left for Start",
+    + "game's WARM_BEHIND.heldMost, or a part cold), the rest left for Start",
 };
 
 /** The lobby watched till the fight has warmed behind it and `AFTER_WARM_MS` more: null, or `behind` where it was
