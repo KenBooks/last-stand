@@ -331,6 +331,10 @@ const SHUT_SHAPE = tunable('shutShape', {
   universal: 1,
 });
 
+/** a fighter's one hand's knuckles: how proud they stand (over the plain hand's), how long up the back and how tall
+ *  (shares of the head's size), and how softly they join the back (m) */
+const FIST_KNUCKLE = [1.5, 0.95, 0.5, 0.006];
+
 /** A fist's knuckle's head, standing proud on the back as the skin pulls taut over the bone's end (the hand's frame). */
 function knuckleHead(finger: DigitShape, i: number, build: HandBuild): Shape {
   const k = finger.j[0].position;
@@ -381,9 +385,13 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
       // (and long up the back, joined softly, each a rise in the skin from the back of the hand into its finger:
       // round and joined hard they were beads stuck across the fingers' roots, the next review)
       const one = build.fist && SHUT_SHAPE.universal > 0;
-      const proud = one ? 1.25 * SHUT_SHAPE.heads[i] : 1;
+      // (and prouder again, shorter up the back and joined harder, `FIST_KNUCKLE`: from behind, the fist raised in its
+      // guard, the back ran into the fingers as one soft lump with no row of knuckles, from play: "the fist itself
+      // needs work")
+      const [high, long, tall, soft] = FIST_KNUCKLE;
+      const proud = one ? high * SHUT_SHAPE.heads[i] : 1;
       palm(ellipsoid(k.x, k.y + (one ? 0.005 : 0.0015), k.z + 0.0062 * deep * proud, head * 0.62 * proud,
-        head * (one ? 1.15 : 0.62) * proud, head * 0.42 * proud), one ? 0.008 : 0.004);
+        head * (one ? long : 0.62) * proud, head * (one ? tall : 0.42) * proud), one ? soft : 0.004);
     }
     palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055 * deep, w * 0.98, 0.0082, 0.0046 * deep), 0.006);
   }
