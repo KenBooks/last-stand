@@ -20,12 +20,19 @@ interface NeedState {
   wanted: Promise<void>;
   share: number;
   waiting: number;
+  /** whether something asked for it (`wanted` resolved): its warm-up goes on at once, not behind the lobby */
+  asked: boolean;
 }
 
 function needState(): NeedState {
-  const state = { warm: false, share: 0, waiting: 0 } as NeedState;
+  const state = { warm: false, share: 0, waiting: 0, asked: false } as NeedState;
   state.warmed = new Promise<void>((resolve) => { state.resolveWarm = resolve; });
-  state.wanted = new Promise<void>((resolve) => { state.resolveWanted = resolve; });
+  state.wanted = new Promise<void>((resolve) => {
+    state.resolveWanted = (): void => {
+      state.asked = true;
+      resolve();
+    };
+  });
   return state;
 }
 
@@ -46,6 +53,18 @@ export const wanted = (need: Need): Promise<void> => needs[need].wanted;
 /** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
 export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
+
+/** The needs not warm yet, each how far along and whether it was asked for, and whether a warm-up is running: what a
+ *  slow frame's mark says was under way (`perf/frameParts.ts`), `warming: fight 40% asked, heroes 0%, running`; empty
+ *  once all are warm. */
+export function warmingNote(): string {
+  const cold = NEEDS.filter((need) => !needs[need].warm).map((need) => {
+    const { share, asked } = needs[need];
+    return `${need} ${Math.round(share * 100)}%${asked ? ' asked' : ''}`;
+  });
+  if (!cold.length && running === 0) return '';
+  return `warming: ${[...cold, ...(running > 0 ? ['running'] : [])].join(', ')}`;
+}
 /** what's readied now beside the needs, under the fight's loading bar (`readyingWhile`: a boss at its wave), each
  *  with how long the bar may take to glide to its share (`glideMs`, a long step's guess) */
 const tasks: { label: string; share: number; glideMs: number }[] = [];

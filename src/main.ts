@@ -80,7 +80,7 @@ import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { startHeartbeat } from './stats/heartbeat';
 import { recorder } from './perf/recorder';
-import { framePart, framePartsBegin, framePartsEnd } from './perf/frameParts';
+import { framePart, framePartsBegin, framePartsEnd, noteSlowFramesWith } from './perf/frameParts';
 import { markPassesWith } from './core/renderer';
 import { traceNow } from './perf/upload';
 import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
@@ -89,7 +89,7 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isReadying, isWarming, want, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isReadying, isWarming, want, warmingNote, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
 import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, plainLitAtBoot, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
@@ -182,6 +182,7 @@ async function boot() {
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (a slow frame's mark names the render's pass that held it: perf/frameParts.ts)
   markPassesWith(framePart);
+  noteSlowFramesWith(() => renderer.info.programs?.length ?? 0, warmingNote);
   // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
   if (!WEBGPU) {
     // (the GPU's name and timer asked before anything compiles: ui/perfHud.ts)

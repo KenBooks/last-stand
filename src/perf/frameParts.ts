@@ -15,12 +15,29 @@ const PARTS_MOST = 32;
 const parts: { name: string; ms: number }[] = [];
 let start = 0;
 let last = 0;
+/** the programs made so far (`noteSlowFramesWith`), as the frame began */
+let programsAtStart = 0;
+let programsNow: () => number = () => 0;
+/** what was under way behind the page, said with a slow frame (`noteSlowFramesWith`) */
+let underWay: () => string = () => '';
+
+/**
+ * A slow frame's mark says too how many programs it made (`programs`, a running count: each linked in its frame on a
+ * phone's driver) and what was under way (`note`: the warm-ups not yet warm). A phone's slow frames were held in the
+ * scene's draw, its JavaScript a few ms of each, while the lobby warmed behind it (trace 4WR3-NHN7: 174 to 232 ms);
+ * set from main.ts, as the warm-ups' module would bring the game's in here.
+ */
+export function noteSlowFramesWith(programs: () => number, note: () => string): void {
+  programsNow = programs;
+  underWay = note;
+}
 
 /** The frame callback begins: its parts timed from here. */
 export function framePartsBegin(): void {
   start = perfClock.now();
   last = start;
   parts.length = 0;
+  programsAtStart = programsNow();
 }
 
 /** What ran since the last part (or the frame's beginning) was `name`. */
@@ -38,5 +55,8 @@ export function framePartsEnd(): void {
   const total = last - start;
   if (total < SLOW_FRAME_MS) return;
   const named = parts.filter((part) => part.ms >= NAMED_MS).map((part) => `${part.name} ${Math.round(part.ms)}`);
-  recorder.mark(`slow frame callback ${Math.round(total)} ms: ${named.join(', ') || 'no part over 5 ms'}`);
+  const made = programsNow() - programsAtStart;
+  const note = underWay();
+  const more = `${made > 0 ? `; ${made} programs made` : ''}${note ? `; ${note}` : ''}`;
+  recorder.mark(`slow frame callback ${Math.round(total)} ms: ${named.join(', ') || 'no part over 5 ms'}${more}`);
 }
