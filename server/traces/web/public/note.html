@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- A short page: not signed in, a link that didn't hold, or one that just signed in and moves on. page.mjs fills the
+     {{...}} slots (each escaped) and, to move on, adds a refresh to the head. No script: it shows before signing in. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Last Stand dashboard</title>
+    <link rel="stylesheet" href="/traces/note.css" />
+  </head>
+  <body>
+    <div class="note">
+      <h1>{{heading}}</h1>
+      <p>{{text}}</p>
+    </div>
+  </body>
+</html>

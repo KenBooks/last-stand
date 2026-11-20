@@ -1,4 +1,4 @@
-// How the page writes sizes, ages and shares.
+// How the dashboard writes sizes, ages and shares.
 
 const KB = 1024;
 const MB = 1024 * 1024;
@@ -36,4 +36,11 @@ export function percent(fraction: number): string {
   if (fraction > 0 && fraction < 0.001) return '<0.1%';
   if (fraction > 0 && fraction < 0.1) return `${(fraction * 100).toFixed(1)}%`;
   return `${Math.round(fraction * 100)}%`;
+}
+
+/** Counts as chips' rows, the most first; an empty name shows as "(none)". */
+export function countsOf(counts: Record<string, number>): { name: string; count: number }[] {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name: name || '(none)', count }));
 }

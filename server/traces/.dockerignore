@@ -1,4 +1,4 @@
-# The image builds the page itself (Dockerfile): a local build or install never goes in.
-dist
+# (what the image builds for itself: never the local install or build)
 web/node_modules
-test
+web/.angular
+dist

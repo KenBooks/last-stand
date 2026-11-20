@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- The dashboard (served at /traces and its pages to a signed-in browser). page.mjs puts a fresh nonce in
+     ngCspNonce for each response, which the CSP names: Angular gives it to the style elements its components add. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Last Stand dashboard</title>
+    <base href="/traces/" />
+  </head>
+  <body>
+    <app-root ngCspNonce="{{nonce}}"></app-root>
+  </body>
+</html>

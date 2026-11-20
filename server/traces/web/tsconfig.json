@@ -1,17 +1,24 @@
 {
+  "compileOnSave": false,
   "compilerOptions": {
-    "target": "ES2023",
-    "module": "ESNext",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "moduleResolution": "Bundler",
-    "types": ["vite/client", "node"],
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true,
-    "noEmit": true,
     "strict": true,
     "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve"
   },
-  "include": ["src", "vite.config.ts"]
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.spec.json" }]
 }

@@ -1,9 +1,6 @@
-// The traces page: the summary, then the list, then the bug reports.
-import './style.css';
-import { showList } from './list';
-import { showReports } from './reports';
-import { showSummary } from './summary';
+// The dashboard's start: zoneless and standalone (Angular 22's defaults), its providers in app.config.ts.
+import { bootstrapApplication } from '@angular/platform-browser';
+import { App } from './app/app';
+import { appConfig } from './app/app.config';
 
-void showSummary();
-showList();
-showReports();
+bootstrapApplication(App, appConfig).catch((error: unknown) => console.error(error));

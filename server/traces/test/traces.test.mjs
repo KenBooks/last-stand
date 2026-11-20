@@ -177,17 +177,37 @@ test('serves a browser the page, an API client the list', async () => {
   assert.equal(pageR.headers.get('cache-control'), 'no-store', 'the page names the build\'s files: never cached');
   const html = await pageR.text();
   assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>|<style/, 'nothing inline: the CSP allows none');
-  assert.match(html, /id="report-rows"/, 'the page lists the bug reports under the traces');
-  // Its script and style: the build's, named by their content's hash, cached for good, without signing in.
-  const files = [...html.matchAll(/(?:src|href)="(\/traces\/assets\/[^"]+)"/g)].map((m) => m[1]);
-  assert.ok(files.some((f) => /\/index-[\w-]{8}\.js$/.test(f)) && files.some((f) => /-[\w-]{8}\.css$/.test(f)), files.join());
+  assert.match(html, /<app-root/, 'the dashboard (an Angular app)');
+  // (a nonce made for this response, named by the CSP and given to Angular for its components' styles)
+  const nonce = /'nonce-([A-Za-z0-9+/=]{24})'/.exec(csp)?.[1];
+  assert.ok(nonce, csp);
+  assert.ok(csp.includes(`style-src 'self' 'nonce-${nonce}'`), csp);
+  assert.ok(html.includes(`ngcspnonce="${nonce}"`) || html.includes(`ngCspNonce="${nonce}"`), 'Angular reads the same nonce');
+  assert.doesNotMatch(html, /\{\{nonce\}\}/);
+  const again = await fetch(`${base}/traces`, { headers: { accept: HTML, authorization: `Bearer ${TOKEN}` } });
+  assert.notEqual(again.headers.get('content-security-policy'), csp, 'a new nonce for each response');
+  // Its scripts and style: the build's, named by their content's hash (relative to <base href="/traces/">), cached
+  // for good, without signing in.
+  assert.match(html, /<base href="\/traces\/"/);
+  const files = [...html.matchAll(/(?:src|href)="([\w-]+\.(?:js|css))"/g)].map((m) => `/traces/${m[1]}`);
+  assert.ok(files.some((f) => /\/main-[\w]{8}\.js$/.test(f)) && files.some((f) => /-[\w]{8}\.css$/.test(f)), files.join());
   for (const file of files) {
     const r = await fetch(base + file);
     assert.equal(r.status, 200, file);
     assert.match(r.headers.get('cache-control'), /immutable/);
   }
-  assert.equal((await fetch(`${base}/traces/assets/..%2Ftraces.mjs`)).status, 404, 'only what the build made');
-  assert.equal((await fetch(`${base}/traces/assets/nothing-12345678.js`)).status, 404);
+  assert.equal((await fetch(`${base}/traces/..%2Fdist%2Findex.js`)).status, 404, 'only what the build made');
+  assert.equal((await fetch(`${base}/traces/..%2Ftraces.mjs`)).status, 401, 'nothing else is a file');
+  assert.equal((await fetch(`${base}/traces/nothing-12345678.js`)).status, 404);
+  // The bug reports are a section of their own: the app to a browser, the list as JSON to the API.
+  const reportsPage = await fetch(`${base}/traces/reports`, { headers: { accept: HTML, authorization: `Bearer ${TOKEN}` } });
+  assert.match(await reportsPage.text(), /<app-root/);
+  assert.ok(Array.isArray((await (await read('/traces/reports')).json()).reports));
+  assert.equal((await browse('/traces/reports')).status, 401, 'a section is signed in as the dashboard is');
+  // The short pages' style, for a browser not yet signed in: unhashed, so asked again each time.
+  const noteCss = await fetch(`${base}/traces/note.css`);
+  assert.equal(noteCss.status, 200);
+  assert.equal(noteCss.headers.get('cache-control'), 'no-cache');
   const api = await read('/traces');
   assert.match(api.headers.get('content-type'), /^application\/json/);
   assert.ok(Array.isArray((await api.json()).traces));
@@ -234,7 +254,7 @@ test('signs a browser in by a Dokci link, once, and reads by its cookie', async 
   const cookie = set.split(';')[0];
   const pageR = await browse('/traces', cookie);
   assert.equal(pageR.status, 200);
-  assert.match(await pageR.text(), /<table>/);
+  assert.match(await pageR.text(), /<app-root/);
   assert.equal((await withCookie('/traces/summary', cookie)).status, 200);
   const { traces } = await (await withCookie('/traces', cookie)).json();
   const got = await withCookie(`/traces/${traces[0].code}`, cookie);
