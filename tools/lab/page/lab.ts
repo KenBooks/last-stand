@@ -52,6 +52,9 @@ interface LabClock {
   realNow: () => number;
   /** resolves after a frame the browser draws, the game's own frames left queued */
   realFrame: () => Promise<void>;
+  /** the page's time let pass between frames, from the last frame's, as the browser's does (`true`), or held at the
+   *  last frame's again (`false`): for the game's own tasks between frames, which time their slices by it */
+  flow: (on: boolean) => void;
 }
 
 declare global {

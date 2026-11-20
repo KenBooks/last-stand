@@ -37,10 +37,10 @@ const GRAPH_W = 160, GRAPH_H = 40;
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
-/** The clock the overlay times the frame's work by (ms): the page's own, or a harness's in its place (tools/lab
- *  `perf`: the browser's, as the page's stands still within a frame there). The frames' own timestamps keep the
- *  window and the graph's time. */
-export const perfClock = { now: (): number => performance.now() };
+// (the clock the overlay times the frame's work by, `core/perfClock.ts`; the frames' own timestamps keep the window
+// and the graph's time)
+export { perfClock } from '../core/perfClock';
+import { perfClock } from '../core/perfClock';
 
 /** One frame: rAF time, interval since the previous one, our total / update / render time,
  *  how late our callback started after the rAF timestamp, the update split by stage, and what was on screen. */

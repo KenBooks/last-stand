@@ -107,6 +107,7 @@ import { preloadHands } from './entities/models/hands';
 import { preloadHeads } from './entities/models/head';
 import { heroDetail } from './entities/models/armor';
 import { preloadEngraving } from './core/engraving';
+import { coatPanels } from './entities/models/mage';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
@@ -247,6 +248,8 @@ async function boot() {
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
   await Promise.all([heads, engraving]);
+  // (the mage's embroidery painted now, whoever's shown: painted in his build behind the lobby, it held a frame)
+  coatPanels();
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
   if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();

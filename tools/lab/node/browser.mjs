@@ -239,6 +239,12 @@ export function noCapture() {
  * exactly 1000/60 ms, each boot's frame time came out a few bits apart (0.01666666666666606 s on one, ...697 on
  * another), and a cast lasting a whole number of 60ths ended a frame early or late, as its sum of them fell either
  * side. On the grid every boot has the same frame time, and a cast of n 60ths always takes n frames.
+ *
+ * `flow(true)` lets the page's time pass between the lab's frames, from the last frame's on, as the browser's does,
+ * until `flow(false)`: the work the game does in its own tasks between frames (a warm-up's slices behind the lobby)
+ * times its slices by `performance.now`, and on a clock standing still a slice of 2 ms never ended, a hero's whole
+ * build one task (`lab lobbystart`). The frames still take the grid's time: the next frame's is the last one's and a
+ * frame's length, whatever passed between.
  */
 function labClock() {
   const GRID = 1024;
@@ -248,7 +254,10 @@ function labClock() {
   // (`realNow`: the browser's own clock, off the grid, for timing the page's work: performance.now is the lab's;
   // `realFrame`: a frame the browser draws, the game's own left queued, for a page change to reach the screen)
   const realFrame = () => new Promise((resolve) => browserFrame(() => resolve()));
-  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [], realNow: browserNow, realFrame };
+  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [], realNow: browserNow, realFrame, since: null };
+  clock.flow = (on) => {
+    clock.since = on ? browserNow() : null;
+  };
   window.__labClock = clock;
   window.requestAnimationFrame = (callback) => {
     if (clock.mode !== 'real') {
@@ -264,7 +273,8 @@ function labClock() {
       callback(clock.t);
     });
   };
-  performance.now = () => (clock.mode === 'real' ? onGrid(browserNow()) : clock.t);
+  const passed = () => (clock.since === null ? 0 : onGrid(browserNow() - clock.since));
+  performance.now = () => (clock.mode === 'real' ? onGrid(browserNow()) : clock.t + passed());
   // (manual from the moment the loading screen reveals the game, which starts its updates: the frames until the lab
   // took over ran on the browser's clock, as many as the page managed, and every boot's state was a little different)
   const reveal = new MutationObserver(() => {

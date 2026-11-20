@@ -369,7 +369,9 @@ export async function buildHallAhead(step: () => Promise<void>, ms?: SliceMs): P
       if (kept.get(id)?.gear !== gearOf(profile) || !inItsLook(kept.get(id)?.player, profile)) {
         const old = kept.get(id);
         if (old) { halos.delete(old.player); old.player.dispose(); }
-        const steps = Player.inSteps(id, profile.equipped, false, profileLook(profile));
+        // (stood at rest on his plinth a pose a piece too, as the queue's are: stood at rest whole as the dais first
+        // had him, 11 poses, he held a frame 60 to 80 ms behind a return's lobby, `npm run lab -- lobbystart`)
+        const steps = hallHeroSteps(id, profile, profileLook(profile));
         keepHero(id, profile, await builtInSlices(steps, step, ms));
       }
       G.scene.remove(kept.get(id)!.player.obj);
@@ -445,8 +447,9 @@ export function queueHallBehind(): void {
 /** Class `id`'s hall hero built a piece at a time, then stood at rest on his plinth in the village's hall a pose a
  *  piece (`restingSteps`), out of the scene: stood there as the doorway first came on screen, his 11 poses took 47 ms
  *  of that frame, and all in his build's last piece 40 to 60 ms (`lab behind`). */
-function* hallHeroSteps(id: string, profile: Profile): Generator<void, Player, undefined> {
-  const player = yield* Player.inSteps(id, profile.equipped, false, buildableLook(id, profileLook(profile)));
+function* hallHeroSteps(id: string, profile: Profile, look = buildableLook(id, profileLook(profile))):
+  Generator<void, Player, undefined> {
+  const player = yield* Player.inSteps(id, profile.equipped, false, look);
   G.scene.remove(player.obj);
   // (with no village there are no plinths to stand at rest on: he's posed as the hall's room opens)
   if (!VILLAGE) return player;

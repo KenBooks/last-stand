@@ -75,6 +75,16 @@ function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()):
   return out.copy(tunicFront(x, y, lift));
 }
 
+/**
+ * The coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's. Painted
+ * on the page once (`embroidered`): under the loading screen (main.ts), as painted in his build behind a return's
+ * lobby, a piece of 25 to 55 ms held a frame (`npm run lab -- lobbystart`).
+ */
+export function coatPanels(): ReturnType<typeof embroidered> {
+  const PW = 256, PH = 1024;
+  return embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
+}
+
 /** the coat's front panels' embroidery: a column of diamonds, each with a smaller one inside (`embroidered`'s motif) */
 function diamondColumn(c: CanvasRenderingContext2D, w: number, h: number): void {
   const m = w / 2;
@@ -334,9 +344,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   yield;
-  // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
-  const PW = 256, PH = 1024;
-  const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
+  const panelTex = coatPanels();
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
   yield;
   // the runes inked on his forearms (an alpha-tested layer over the skin)

@@ -7,6 +7,7 @@
 // so they're made a few ms a frame (`tickDetail`), every triangle drawn until they're ready. `?shadowDetail=1` casts
 // and draws every triangle, for A/B.
 import * as THREE from 'three';
+import { perfClock } from '../../core/perfClock.ts';
 
 /** what a geometry's fewer triangles are for: its shadow, or the frame from afar */
 type Use = 'shadow' | 'far';
@@ -115,17 +116,19 @@ export const coarseIndex = (geometry: THREE.BufferGeometry): Uint32Array | null 
 export const farIndex = (geometry: THREE.BufferGeometry): Uint32Array | null => indexFor(geometry, 'far');
 
 /**
- * A frame's turn at the geometries asked for: `SLICE_MS` of them, by the browser's own clock. Once none waits,
- * `shadowDetailVersion` moves on, and what was made of whole geometries meanwhile is made again.
+ * A frame's turn at the geometries asked for: `SLICE_MS` of them, by `perfClock` (the lab's page clock stands still
+ * within a frame, and there a frame made all that was asked: a harness timing the frames puts the browser's in its
+ * place, `lab lobbystart`). Once none waits, `shadowDetailVersion` moves on, and what was made of whole geometries
+ * meanwhile is made again.
  */
 export function tickDetail(): void {
   if (!waiting.length || !simplifier) return;
-  const start = performance.now();
+  const start = perfClock.now();
   if (start - lastTurn < TURN_MS && start !== lastTurn) return;
   lastTurn = start;
   do {
     const { geometry, use } = waiting.shift()!;
     kept[use].set(geometry, simplified(simplifier, geometry, use));
-  } while (waiting.length && performance.now() - start < SLICE_MS);
+  } while (waiting.length && perfClock.now() - start < SLICE_MS);
   if (!waiting.length) version++;
 }
