@@ -1,4 +1,4 @@
-// Biomes: each has its own arena (world/), enemy roster and boss. The wave rules
+// Biomes: each has its own arena (world/), enemy roster and ladder of bosses. The wave rules
 // (budget, groups, loot) in waves.ts are shared.
 import { WAVES } from './waves';
 import type { EnemyId } from './enemies';
@@ -8,6 +8,15 @@ export type BiomeId = 'crypt' | 'forest';
 /** the player's choice in the lobby: a biome, or a random one each run */
 export type BiomeSetting = BiomeId | 'random';
 
+/** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave;
+ *  `twin`, a second boss rising with it and sharing its life (`EnemyDef.shares`: the Ossuary Twins). */
+export interface BossRung {
+  id: EnemyId;
+  twin?: EnemyId;
+  short: string;
+  banner: string;
+}
+
 export interface BiomeDef {
   /** short label for the lobby picker */
   label: string;
@@ -15,13 +24,9 @@ export interface BiomeDef {
   title: string;
   /** enemy pool unlocked at wave `w`, as [enemy, weight] */
   pool(w: number): [EnemyId, number][];
-  boss: EnemyId;
-  /** short boss name for the Continue button */
-  bossShort: string;
-  /** banner subtitle on boss waves */
-  bossBanner: string;
-  /** boss waves another boss holds in place of `boss` (`bossOfWave`): from wave `wave` and every `every` after */
-  bossWaves?: BossWave[];
+  /** its bosses in the order the boss waves meet them: the first on the first boss wave (`WAVES.bossEvery`), the
+   *  second on the next, and round again from the first when the list runs out (each time harder, by `SCALING`) */
+  bosses: BossRung[];
   /** minimap: shape of the boundary and colour of the spawn gates */
   minimap: { wall: 'octagon' | 'circle'; portal: string };
   /** what the floor (off the dais, which is stone) is made of: an arrow glances off stone and sticks in the rest (the wall's
@@ -30,21 +35,6 @@ export interface BiomeDef {
   /** its music (data/music.ts): in its lobby and between its runs' waves, and through each wave's fight */
   music: { lobby: TrackId; battle: TrackId };
 }
-
-/** A boss wave held by another boss than the biome's own: from wave `wave` (a boss wave) and every `every` waves after
- *  (a multiple of `WAVES.bossEvery`). `twin`: a second boss rising with it, sharing its life (`EnemyDef.shares`).
- *  `short` names it on the Continue button, `banner` under the wave's. */
-export interface BossWave {
-  wave: number;
-  every: number;
-  id: EnemyId;
-  twin?: EnemyId;
-  short: string;
-  banner: string;
-}
-
-/** A boss wave's boss: who rises, and what the Continue button and the banner say. */
-export interface WaveBoss { id: EnemyId; twin?: EnemyId; short: string; banner: string }
 
 export const BIOMES: Record<BiomeId, BiomeDef> = {
   crypt: {
@@ -55,9 +45,13 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['brute', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
-    // (the Ossuary Twins at wave 15, 35, 55...: the Colossus keeps every other boss wave)
-    bossWaves: [{ wave: 15, every: 20, id: 'twinslab', twin: 'twinreliquary', short: 'Ossuary Twins', banner: 'Two rise, bound in bone…' }],
+    // (the Colossus, the Bell-Warden, the Ossuary Twins, the Bell-Warden: the Twins at wave 15, 35, 55...)
+    bosses: [
+      { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
+      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+      { id: 'twinslab', twin: 'twinreliquary', short: 'Ossuary Twins', banner: 'Two rise, bound in bone…' },
+      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+    ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
     music: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
@@ -70,7 +64,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['barkhulk', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
+    bosses: [{ id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' }],
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth' },
     music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
@@ -79,18 +73,23 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
 
 export const BIOME_IDS = Object.keys(BIOMES) as BiomeId[];
 
-/** Wave `w`'s boss in `biome`, or null on a wave that has none: a special boss wave's (`bossWaves`) where one falls on
- *  it, else the biome's own. */
-export function bossOfWave(biome: BiomeId, w: number): WaveBoss | null {
-  if (w % WAVES.bossEvery !== 0) return null;
-  const b = BIOMES[biome];
-  const special = b.bossWaves?.find((s) => w >= s.wave && (w - s.wave) % s.every === 0);
-  return special ? { id: special.id, twin: special.twin, short: special.short, banner: special.banner } : { id: b.boss, short: b.bossShort, banner: b.bossBanner };
+/** Whether wave `wave` is a boss wave. */
+export const isBossWave = (wave: number): boolean => wave > 0 && wave % WAVES.bossEvery === 0;
+
+/** The boss of `biome`'s boss wave `wave` (its ladder's rung for the wave, round again past its end), null on any other. */
+export function bossOfWave(biome: BiomeId, wave: number): BossRung | null {
+  if (!isBossWave(wave)) return null;
+  const ladder = BIOMES[biome].bosses;
+  return ladder[(wave / WAVES.bossEvery - 1) % ladder.length];
 }
+
+/** Every boss a run in `biome` can meet (its ladder's, once each). */
+export const bossesOf = (biome: BiomeId): EnemyId[] =>
+  [...new Set(BIOMES[biome].bosses.flatMap((rung) => (rung.twin ? [rung.id, rung.twin] : [rung.id])))];
 
 /** The boss a fight is counted under (records, trophies): a twin under the boss it rises with. */
 export function rungBoss(id: EnemyId): EnemyId {
-  for (const b of BIOME_IDS) for (const s of BIOMES[b].bossWaves ?? []) if (s.twin === id) return s.id;
+  for (const b of BIOME_IDS) for (const rung of BIOMES[b].bosses) if (rung.twin === id) return rung.id;
   return id;
 }
 

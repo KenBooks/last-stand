@@ -16,12 +16,13 @@ type Pos = { x: number; y?: number; z: number };
 const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos.z));
 
 const active: Effect[] = [];
-const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
+const GEO = {} as Record<'ring' | 'thinRing' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
 const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'rune' | 'cracks', THREE.Texture>;
 
 export function initEffects(): void {
   initRubble();
   GEO.ring = new THREE.RingGeometry(0.82, 1, 64, 1).rotateX(-Math.PI / 2);
+  GEO.thinRing = new THREE.RingGeometry(0.965, 1, 160, 1).rotateX(-Math.PI / 2);
   GEO.disc = new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2);
   GEO.plane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   GEO.spike = new THREE.ConeGeometry(0.22, 1.6, 5, 1).translate(0, 0.8, 0);
@@ -79,6 +80,42 @@ export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius 
   const dispose = tracked(m, [mat]);
   let t = 0;
   return addEffect({ update(dt: number) { t += dt; mat.opacity = Math.max(0, 1 - t / life); return t < life; }, dispose });
+}
+
+/**
+ * A ring of sound rolling out over the floor (the Bell-Warden's toll): its radius grows at `speed` m/s, linear as the
+ * gameplay's front is (a shockwave eases out), from `from` to `reach`, fading as it goes, `thickness` its band's share
+ * of the radius. Dim and one sweep a ring (the root's flash rule: a pattern crossing the view flashes too). `onStep`
+ * is told the radius before and after each frame's growth (the toll judges its hero there).
+ */
+export function soundRing(pos: Pos, { color = 0xd8e4ff, intensity = 1.3, speed = 9, from = 1, reach = 24, delay = 0,
+  onStep = null as ((r0: number, r1: number) => void) | null } = {}) {
+  const mat = additive(color, intensity, 0);
+  const inner = additive(color, intensity * 0.35, 0);
+  const m = new THREE.Mesh(GEO.thinRing, mat), wash = new THREE.Mesh(GEO.ring, inner);
+  const g = new THREE.Group();
+  g.add(m, wash);
+  g.position.set(pos.x, floor(pos) + 0.09, pos.z);
+  g.visible = false;
+  const dispose = tracked(g, [mat, inner]);
+  let t = -delay, r = from;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      if (t < 0) return true;
+      const r0 = r;
+      r = from + speed * t;
+      onStep?.(r0, Math.min(r, reach));
+      const k = Math.min(1, (r - from) / (reach - from));
+      g.visible = true;
+      m.scale.set(r, 1, r);
+      wash.scale.set(r * 0.93, 1, r * 0.93);
+      mat.opacity = (1 - k) ** 1.4;
+      inner.opacity = (1 - k) ** 2 * 0.8;
+      return r < reach;
+    },
+    dispose,
+  });
 }
 
 // Ground decal that fades out (scorch / frost).

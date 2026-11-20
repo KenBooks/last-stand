@@ -14,6 +14,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `beta`: the village beta opted into and out of on a page of its own, by the browser's own clicks and loads (the pause menu's Beta tab saying what the page runs and offering Reload once switched, Reload loading the page with `?village=1`, the choice kept in its cookie, the notice shown as the game opens there, kept through the village's own frames and put away by a screen opened over it, the next visit without a parameter in the village too, its notice left alone gone by itself, the notice's Back to the old lobby and the visit after it; then a co-op room hosted by the command's page asked from the other lobby: refused, told which lobby the room is in, the switch offered in the dialog, clicked, the page loaded in the room's lobby as an invite to it and the room joined; `--panels` hosts the room in the lobby without the village; `--canary` keeps the notice by the pointer past its time, puts it away before it's read, loses the cookie before the next visit and forgets the lobby the room refused the game for)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
+- `boss`: the bosses' fights (each battleground's ladder sending the right boss on each boss wave, its banner and Continue name; the Bell-Warden's phases at their shares; its toll stunning a hero near, not one far off or behind a raised shield; its chains dropping the bell for its double-damage window and whole after; a boss walked into giving way a hair; its bell swinging as a pendulum about the yoke, no jolt, no spin, its frame turned slowly (`swing`); its ghosts seizing a hero near and dropping him for damage, not one far off; no program compiled in its fight; each hero's time to kill the Colossus at wave 5 and the Bell-Warden at 10; `--canary`)
 - `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5 and 15 shows the bar readying the Colossus and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
 - `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (each biome, each kind of prop, 0.25 and 0.5 m off it: the nocked arrow, the bow's tip and the hero must not turn back frame after frame; the point the pose aims from within 5 cm of the arrow drawn level; the aim preview stopped by the prop, never through it; `--canary` aims the pose from the arrow as posed, #317)
 - `carry`: measures the carried bow
@@ -113,7 +114,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `training`: Training grounds (#405): attempted-wave persistence/migration, the village's ghost talked to and its card's battleground and wave controls, harmless projections, no rewards or records, repeat and leave; `--canary` plants ordinary damage and a solid ghost.
 - `trees`: the trees in the play area as the ranger's arrows meet them (every tree inside the wall a wooden prop, an arrow shot at each one's trunk standing in it; then another biome shown, and no arrow left)
 - `turnaround`: the hero standing in a plain studio from a sheet's four sides and his head close, with a reference sheet's panels in a row under ours (`--ref`, `--panels`), and his triangles (`--parts`: by joint and material)
-- `twins`: the Ossuary Twins (the Crypt's 15th wave and every 20th after sending them, the Colossus on its other boss waves, both risen within their chain's reach; one life between them, the chain snapping past its reach, the collapse at half, a mend a stun breaks; no program compiled in their fight; `--parts pictures,look` for the eye, each twin's triangles held to 45k)
+- `twins`: the Ossuary Twins (the Crypt's 15th wave and every 20th after sending them, the ladder's rungs on its other boss waves, both risen within their chain's reach; one life between them, the chain snapping past its reach, the collapse at half, a mend a stun breaks; no program compiled in their fight; `--parts pictures,look` for the eye, each twin's triangles held to 45k)
 - `ui`: pictures the UI in its states (the lobby, the stash, tooltips, the dialogs, the hero selection screen, the run's HUD, the pause menu's tabs, the summary, the touch HUD...) at each screen size, each fitting the window (`--states`, `--screens`; in full in `commands/ui.md`)
 - `village`: the lobby's village as a player walks it: every object usable from its stand, walks and ways, the grass and the lamps by quality, the light at midnight, the fog from above, the hall and the houses (`--only`; in full in `commands/village.md`)
 - `village --only signpostsReadable`: the signposts, each arm pointing where its name leads, each post off the paving, the paths and what stands, each arm read face on from the paving near it (`--canary` turns an arm and stands a post in a road)
@@ -897,7 +898,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
 - `twins`: the Ossuary Twins (`page/twins.ts`; `src/entities/twins.ts`, `src/entities/bossKit.ts`), the Crypt's
-  special boss wave (`bossWaves` in `src/data/biomes.ts`). `waves`: each battleground's boss waves (5 to 35) set off
+  third rung of its ladder (`bosses` in `src/data/biomes.ts`). `waves`: each battleground's boss waves (5 to 35) set off
   as the game sets them off, the run's wave and its timer, and stopped before anyone comes: the bosses the run holds
   (`RunState.boss`), the banner's line and the Continue button's name, against what each should send (the Twins on
   the Crypt's 15th and 35th, the Colossus on its others, the Thornheart on every one of the Thornwood's); then the
@@ -913,6 +914,33 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   at most 45k (Slab 42k, Reliquary 44k), with each bone's. `--canary`: the Crypt's special wave taken out, the pair's
   `shares`, a chain whose reach is a kilometre, Slab's `hurt` hook, a mend that heals nothing, a program compiled.
   About a minute for the default parts.
+- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`), in parts
+  (`--parts`, all by default). `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their
+  countdown as the run sets one off (its wave and timer), the boss the run holds for it (`RunState.boss`) against its
+  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, Bell-Warden, Ossuary
+  Twins, Bell-Warden; the Thornwood's Thornheart), the banner's line and the Continue button's name. `phases`: a Bell-Warden
+  held still, its life taken to a hundredth over and under each phase's share: in the phase before, then the next,
+  and the next's banner shown. `toll`: a Bell-Warden left to think and toll at the hero 7 m off (he must be stunned,
+  for its `stun` within 0.1 s, its ring reaching him no sooner than its warning's end after the bell began its swing),
+  19 m off (past where its ring fades, `stunsTo`: never stunned), and with his shield raised towards it (a warrior
+  with `--gear shield`: never stunned; the part says so where the hero has none); the hero is turned to it and kept
+  where he stands, the set-up keeping him whole. `chains`: each chain struck from its own side (5 m off, a share of
+  its life and a little more): each must break, all four drop the bell for its window (`down` s within 0.1, `taken`
+  times the damage), it mustn't toll while down, and the chains are whole after. `swing` (`page/bossSwing.ts`): the
+  bell read off its own joint through a toll at the hero and a walk after a hero circling it 8 m out: its turn about
+  the yoke's axis and off it (0.5 degrees at most), its swing's angular acceleration (20 rad/s² at most: a pendulum's
+  is its swing times its rate squared, about 9; the old swing back and fling through, 350), the body's turn as it
+  tolls (none) and as it walks (its `EnemyDef.turn`, 0.8 rad/s; at a small foe's quick turn, 1.6, the whole bell
+  spun on the spot); pictured from its side through the toll and from above walking; its canary swings it four times
+  as far and lets it turn at 20 rad/s. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `compiles`: its tolls, a shard, the
+  chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
+  Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
+  Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
+  its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
+  gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
+  plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
+  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled, an attack that deals
+  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

@@ -23,11 +23,8 @@ export const READYING = {
   boss: (short: string): string => `Readying ${short}`,
 };
 
-/** every boss's short name, each biome's own and those of its boss waves */
-const bossShorts = (): string[] => BIOME_IDS.flatMap((id) => [
-  BIOMES[id].bossShort,
-  ...(BIOMES[id].bossWaves ?? []).map((wave) => wave.short),
-]);
+/** every boss's short name, each rung's of each biome's ladder */
+const bossShorts = (): string[] => BIOME_IDS.flatMap((id) => BIOMES[id].bosses.map((rung) => rung.short));
 
 /** Every label the bar can show (tools/lab `ui --states readyingHeroes` lays each out on its screen). */
 export const readyingLabels = (): string[] => [

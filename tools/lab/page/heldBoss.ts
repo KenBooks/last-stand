@@ -51,7 +51,7 @@ export async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode):
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
-  const kind = BIOMES[G.arena.biome].boss;
+  const kind = BIOMES[G.arena.biome].bosses[0].id;
   const boss = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(cameraAhead(), AHEAD).setY(0));
   const small = (ENEMIES[kind].summon ?? 'thornling') as EnemyId;
   const toHero = hero.pos.clone().sub(boss.pos).setY(0).normalize();

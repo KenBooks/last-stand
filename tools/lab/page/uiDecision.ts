@@ -60,7 +60,8 @@ export function labelsOnOneLine(state: string): DecisionFound {
 
 /** The longest words each button's stake can say (`showDecision` in `ui/hud.ts`). */
 function longestStakeTexts(): { bank: string; cont: string } {
-  const names = Object.values(BIOMES).map((biome) => biome.bossShort);
+  // (every rung's short name on every battleground's ladder)
+  const names = Object.values(BIOMES).flatMap((biome) => biome.bosses.map((rung) => rung.short));
   const longest = names.reduce((a, b) => (b.length > a.length ? b : a));
   const banks = ['Keep all you carry · the run ends', 'Keep yours · the rest fight on'];
   const bank = banks.reduce((a, b) => (b.length > a.length ? b : a));

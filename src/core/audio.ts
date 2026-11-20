@@ -225,7 +225,7 @@ function space(): GainNode {
 /** A soft clipper (tanh), one curve per drive: its harmonics are what make a sound read as loud on any speaker,
  *  as a laptop's plays almost nothing under 100 Hz (the lance's first drone was a 41 Hz sub, silence there). */
 const curves = new Map<number, Float32Array<ArrayBuffer>>();
-function drive(k: number): WaveShaperNode {
+export function drive(k: number): WaveShaperNode {
   let curve = curves.get(k);
   if (!curve) {
     curve = new Float32Array(1024);
@@ -444,7 +444,7 @@ function lanceOut(): void {
 /** A gain shaped as a blow starting `delay` s in, into `to`. Silent till then: a gain node is 1 until its first
  *  scheduled value, so a blow scheduled late played its layer at full from the start (Glacial Nova's 22 grains of
  *  ice all at once, Veilstep's forming before he'd gone). */
-function blowAt(v: ReturnType<typeof voice>, delay: number, peak: number, decay: number, to: AudioNode = v.out, attack = 0.004): GainNode {
+export function blowAt(v: ReturnType<typeof voice>, delay: number, peak: number, decay: number, to: AudioNode = v.out, attack = 0.004): GainNode {
   const g = v.c.createGain(); g.gain.setValueAtTime(0.0001, v.t); env(g, v.t + delay, attack, peak, decay); g.connect(to); return g;
 }
 
@@ -844,7 +844,7 @@ export function glide(v: ReturnType<typeof voice>, type: BiquadFilterType, q: nu
  *  metal does and never as the same note (the old `clang` was a triangle falling from 1180 Hz, the same at every hit).
  *  Narrow and long, as steel rings: wide bands dying in a tenth of a second were a knock of wood (from play, "sounds
  *  like wooden swords"). */
-function iron(v: ReturnType<typeof voice>, at: number, n: number, lo: number, hi: number, peak: number, decay: number, to: AudioNode = v.out): void {
+export function iron(v: ReturnType<typeof voice>, at: number, n: number, lo: number, hi: number, peak: number, decay: number, to: AudioNode = v.out): void {
   for (let i = 0; i < n; i++) {
     const f = v.c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 12;
     f.frequency.value = lo * (hi / lo) ** ((i + Math.random()) / n);
@@ -865,7 +865,7 @@ export function grit(v: ReturnType<typeof voice>, n: number, from: number, span:
 /** A blow's weight, `at` s in: dark noise closing from `from` Hz to `to`, driven, so a laptop hears its mids; and
  *  under it the floor of the noise driven hard, so its harmonics carry the weight at 200 to 700 Hz and it lasts
  *  (a knock alone, starting at 2 kHz and gone in a quarter second, was a wooden sword's). */
-function thump(v: ReturnType<typeof voice>, at: number, from: number, to: number, peak: number, decay: number, out: AudioNode = v.out, k = 3.2): void {
+export function thump(v: ReturnType<typeof voice>, at: number, from: number, to: number, peak: number, decay: number, out: AudioNode = v.out, k = 3.2): void {
   // (closing no lower than 110 Hz, and nothing under 70 kept: the dark of it is heard, the sub under it isn't)
   const f = glide(v, 'lowpass', 0.9, [[0, from], [at, from], [at + decay * 0.5, Math.max(110, to)]]);
   const floor = v.c.createBiquadFilter(); floor.type = 'highpass'; floor.frequency.value = 70; floor.Q.value = 0.6;
@@ -900,7 +900,7 @@ export function whump(v: ReturnType<typeof voice>, at: number, peak: number, dec
 /** A smash, `at` s in: its instant, all the noise over 500 Hz driven hard and gone in a tenth of a second, a driven
  *  body of it round 1.4 kHz, and what breaks under it, a burst of stone and grit thinning over `spread` s. The front a
  *  great blow needs: without it, earth and weight alone were a muffled thud (from play, "should be a smash!"). */
-function smash(v: ReturnType<typeof voice>, at: number, peak: number, spread: number, out: AudioNode = v.out): void {
+export function smash(v: ReturnType<typeof voice>, at: number, peak: number, spread: number, out: AudioNode = v.out): void {
   const edge = v.c.createBiquadFilter(); edge.type = 'highpass'; edge.frequency.value = 500; edge.Q.value = 0.5;
   v.loop(edge); edge.connect(drive(6)).connect(blowAt(v, at, peak, 0.14, out, 0.0008));
   const body = v.c.createBiquadFilter(); body.type = 'bandpass'; body.frequency.value = 1400; body.Q.value = 0.5;

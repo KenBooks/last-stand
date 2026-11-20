@@ -7,16 +7,21 @@ import type { EnemyId } from '../data/enemies';
 
 /** What a boss does of its own as its phases come and go and its parts break (each optional). */
 export interface BossHooks {
-  /** phase `phase` begun, where the fight is simulated (its gameplay: the Twins' survivor faster) */
+  /** phase `phase` begun, where the fight is simulated (its gameplay: summons, a stance, the Twins' survivor faster) */
   enter?(e: Enemy, phase: number): void;
   /** phase `phase` over as the next begins, where the fight is simulated */
   exit?(e: Enemy, phase: number): void;
   /** phase `phase` begun, on every game (its own sound or effect beside the banner) */
   cue?(e: Enemy, phase: number): void;
+  /** part `part` broken, on every game (its sound, its pieces flying) */
+  broke?(e: Enemy, part: number): void;
+  /** every part broken, where the fight is simulated */
+  allBroken?(e: Enemy): void;
   /** a hero's hit of `amount` taken (and not its last), where the fight is simulated */
   hurt?(e: Enemy, amount: number): void;
-  /** each frame it lives, on every game: what its look does each frame (the Twins' chain laid between them, its snap
-   *  past its reach where the fight is simulated) */
+  /** each frame it lives, on every game: what its look does each frame, and to this game's own hero as its screen
+   *  shows it (the Twins' chain laid between them, its snap past its reach where the fight is simulated; the
+   *  Bell-Warden's ghosts seizing a hero who comes too near) */
   frame?(e: Enemy, dt: number): void;
 }
 

@@ -4,12 +4,12 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab twins`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
-  summary: 'the Ossuary Twins (the Crypt\'s 15th wave and every 20th after sending them, the Colossus on its other '
-    + 'boss waves, both risen within their chain\'s reach; one life between them, the chain snapping past its reach, '
+  summary: 'the Ossuary Twins (the Crypt\'s 15th wave and every 20th after sending them, the ladder\'s rungs on its '
+    + 'other boss waves, both risen within their chain\'s reach; one life between them, the chain snapping past its reach, '
     + 'the collapse at half, a mend a stun breaks; no program compiled in their fight; `--parts pictures,look` for '
     + 'the eye, each twin\'s triangles held to 45k)',
   help: 'the Ossuary Twins: each battleground\'s boss waves set off, the bosses the run sends, its banner and the '
-    + 'Continue button\'s name (the Twins on the Crypt\'s 15th and every 20th after, the Colossus on its other boss '
+    + 'Continue button\'s name (the Twins on the Crypt\'s 15th and every 20th after, the ladder\'s rungs on its other boss '
     + 'waves), and the 15th let come, both risen within their chain\'s reach (waves); one life between them, the '
     + 'chain snapping past its reach, the collapse at half, a mend that a stun breaks (fight); their fight\'s '
     + 'effects drawn, no program compiled (compiles)',
@@ -24,7 +24,7 @@ export default {
     },
     canary: {
       kind: 'switch',
-      help: 'plant a fault each part must catch: no special boss wave, Twins that share nothing, a chain that never '
+      help: 'plant a fault each part must catch: no Twins on the Crypt\'s ladder, Twins that share nothing, a chain that never '
         + 'snaps, no collapse at half, a mend that mends nothing, a program compiled in the fight',
     },
     ...SETUP_OPTIONS,
