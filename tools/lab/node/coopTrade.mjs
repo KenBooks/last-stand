@@ -5,8 +5,11 @@
 // screens; then both accept and the items must have moved on both games, each stash exactly the other's items and
 // what it kept, none twice and none lost, nothing left locked. Then a second trade the other way round, by taps (the
 // guest asks, the host takes it up), both offers in and the host's accept given, and the guest's link lost as a
-// closed tab's is: nothing may move on either game, and the host's window must close, its items free again.
-// `--canary`: the guest's changes to its offer are lost on their way to the host, which the reset must find.
+// closed tab's is: nothing may move on either game, and the host's window must close, its items free again. On
+// both games, as soon as the trade is done and with nothing clicked, the inventory as drawn (the stash's tiles and
+// count, the worn slots) and the hero's gear must be the profile's (#739: the stash showed the old items till clicked).
+// `--canary`: the guest's changes to its offer are lost on their way to the host, which the reset must find, and an
+// item put in the guest's stash and never drawn, which the inventory's check must find.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
@@ -85,11 +88,7 @@ export async function tradeTogether(pair, callPage, lines, { canary = false, pic
     problems.push(`the guest's changed offer didn't take the host's accept back on both screens (the host shows `
       + `${listed(host.theirs)}, accepting: ${host.accepted}; the guest shows the host accepting: ${guest.theirAccept})`);
   } else lines.push(`the guest adds ${guestItems[1]}: the host shows ${listed(reset[0].theirs)}, both accepts taken back`);
-  if (canary) {
-    const caught = problems.some((problem) => problem.includes('take the host\'s accept back'));
-    lines.push(`canary: the guest's change lost on its way to the host ${caught ? 'caught' : 'missed'}`);
-    return caught ? [] : ['canary missed: the host kept its accept over an offer it never saw change'];
-  }
+  if (canary) return tradeCanaries(pair, callPage, lines, problems);
 
   // --- both accept: the swap on both games ---------------------------------------------------------------
   await callPage(pair.host, 'coopTradeAccept');
@@ -104,6 +103,9 @@ export async function tradeTogether(pair, callPage, lines, { canary = false, pic
   if (!sameNames(guestDone.stash, guestAfter)) problems.push(`the guest's stash after the trade isn't ${listed(guestAfter)}`);
   problems.push(...countProblems([...hostItems, ...guestItems], [...hostDone.stash, ...guestDone.stash]));
   if (hostDone.locked || guestDone.locked) problems.push('items stayed locked after the trade was done');
+  problems.push(...shownProblems('host', hostDone), ...shownProblems('guest', guestDone));
+  lines.push(`the inventory and gear as drawn, the moment it's done: on the host's game ${shownLine(hostDone)}; `
+    + `on the guest's ${shownLine(guestDone)}`);
   lines.push(`the word on each: "${hostDone.note}" / "${guestDone.note}"`);
   await picture('done');
 
@@ -137,6 +139,31 @@ export async function tradeTogether(pair, callPage, lines, { canary = false, pic
   if (!sameNames(guestLeft.stash, guestAfter)) problems.push('the guest\'s stash changed as its link went mid-trade');
   if (hostLeft.locked || guestLeft.locked) problems.push('items stayed locked after the trade broke off');
   return problems;
+}
+
+/** Where a game's inventory as drawn or its hero's gear isn't its profile, as problems naming the game. */
+function shownProblems(who, trade) {
+  return trade.shown.map((problem) => `${who}: ${problem}, with nothing clicked after the trade`);
+}
+
+/** A game's inventory against its profile, as a line says it. */
+function shownLine(trade) {
+  return trade.shown.length ? trade.shown.join('; ') : 'the profile\'s';
+}
+
+/** The canaries, once the guest's changed offer has been read (`problems` so far): the change lost on its way to the
+ *  host must be found, and an item put in the guest's stash and never drawn must be. Returns the canaries missed. */
+async function tradeCanaries(pair, callPage, lines, problems) {
+  const missed = [];
+  const reset = problems.some((problem) => problem.includes('take the host\'s accept back'));
+  lines.push(`canary: the guest's change lost on its way to the host ${reset ? 'caught' : 'missed'}`);
+  if (!reset) missed.push('canary missed: the host kept its accept over an offer it never saw change');
+  await callPage(pair.guest, 'coopTradeHiddenItem');
+  const [, guest] = (await pair.run(1)).map((state) => state.trade);
+  const unseen = guest.shown.length > 0;
+  lines.push(`canary: an item in the guest's stash never drawn ${unseen ? 'caught' : 'missed'} (${shownLine(guest)})`);
+  if (!unseen) missed.push('canary missed: the guest\'s inventory was taken as drawn with an item it never drew');
+  return missed;
 }
 
 /** The trade window on `page` fitted on each screen of page/coopTrade.ts `TRADE_SCREENS`, and with `pictures` the

@@ -36,8 +36,8 @@ import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coop
 import { duelInput, duelNow, pickLost, type DuelNow } from './coopDuel';
 import { tradeLost, tradeNow, type TradeNow } from './coopTrade';
 export {
-  coopTradeAccept, coopTradeAnswer, coopTradeAsk, coopTradeBack, coopTradeDrop, coopTradeFit, coopTradeList, coopTradeLoseChanges,
-  coopTradeOffer, coopTradeScreens, coopTradeStock,
+  coopTradeAccept, coopTradeAnswer, coopTradeAsk, coopTradeBack, coopTradeDrop, coopTradeFit, coopTradeHiddenItem,
+  coopTradeList, coopTradeLoseChanges, coopTradeOffer, coopTradeScreens, coopTradeStock,
 } from './coopTrade';
 export {
   coopDuelAnswer, coopDuelFit, coopDuelGo, coopDuelLosePicks, coopDuelMenu, coopDuelMouseBack, coopDuelParts,

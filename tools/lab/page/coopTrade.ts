@@ -4,10 +4,15 @@
 // read back: its window, both offers, both accepts, its stash and its locks. The game's trade modules are looked up
 // as they are (an older tree has none: `tradeNow` says so), so a command loading this module on such a tree runs on.
 import { G } from '../../../src/state';
-import { makeItem } from '../../../src/loot/items';
+import { gearOf, makeItem } from '../../../src/loot/items';
+import { SLOT_INFO, SLOTS } from '../../../src/data/items';
 import { saveProfile } from '../../../src/loot/profile';
 import { leaveRoom } from '../../../src/net/session';
 import { openCoop } from '../../../src/ui/coop';
+import { renderMenu } from '../../../src/ui/menus';
+import { itemIconSVG } from '../../../src/ui/itemIcons';
+import { sortStash } from '../../../src/ui/stashFilter';
+import type { Item } from '../../../src/types';
 import type { Lab, Screen } from './lab';
 
 type NetTrade = typeof import('../../../src/net/trade');
@@ -42,13 +47,16 @@ export interface TradeNow {
   /** the last word of a trade, and whether it was a trade done */
   note: string | null;
   done: boolean;
+  /** where the inventory as drawn (the stash's tiles and count, the worn slots) or the hero's gear isn't this
+   *  game's profile (none: all of it is) */
+  shown: string[];
 }
 
 /** the words the check's items are named by: `<tag> <n>`, so each one is found by name on every game */
 const NAMED = /^Lab (Host|Guest) \d+$/;
 
 /** This game's stash stocked with `count` items named `Lab <tag> 1`... and `filler` more of every rarity (any it
- *  held left out: a stash as a player's looks, for the pictures, which the check's names leave out), saved. */
+ *  held left out: a stash as a player's looks, for the pictures, which the check's names leave out), saved and drawn. */
 export function coopTradeStock(_lab: Lab, { tag, count, filler = 0 }: { tag: string; count: number; filler?: number }): string[] {
   const cls = G.player.cls;
   const named = (i: number) => ({ ...makeItem({ cls, rarity: 'rare', ilvl: 5 }), name: `Lab ${tag} ${i + 1}` });
@@ -57,6 +65,8 @@ export function coopTradeStock(_lab: Lab, { tag, count, filler = 0 }: { tag: str
   const more = Array.from({ length: filler }, (_, i) => makeItem({ cls, rarity: rarities[i % rarities.length], ilvl: 5 + i }));
   G.profile.stash = [...items, ...more];
   saveProfile(G.profile);
+  // (drawn, as a stash banked into is: what the trade changes is then read against what was drawn before it)
+  renderMenu();
   return items.map((it) => it.name);
 }
 
@@ -132,7 +142,58 @@ export function tradeNow(): TradeNow {
     locked: lootTrade?.tradeLocked.size ?? 0,
     note: note?.text ?? null,
     done: note?.done ?? false,
+    shown: [...stashShown(), ...wornShown(), ...gearShown()],
   };
+}
+
+/** Where the inventory's stash as drawn isn't the profile's: its count, and each tile's icon in the order the
+ *  inventory sorts the stash (read from the page as it is, so a stash changed but never drawn again is found). */
+function stashShown(): string[] {
+  const problems: string[] = [];
+  const stash = G.profile.stash;
+  const count = document.querySelector('#stash-count')?.textContent ?? '';
+  if (!count.startsWith(`(${stash.length}/`)) problems.push(`the stash's count says ${count} of ${stash.length} items`);
+  const tiles = [...document.querySelectorAll<HTMLElement>('#stash .sitem')].filter((tile) => tile.innerHTML !== '');
+  if (tiles.length !== stash.length) problems.push(`the stash shows ${tiles.length} items of ${stash.length}`);
+  const sorted = sortStash(stash);
+  const wrong = sorted.filter((item, index) => tiles[index]?.innerHTML !== iconMarkup(item, tiles[index]));
+  if (wrong.length) problems.push(`the stash shows other items in place of ${wrong.length} of its ${stash.length}`);
+  return problems;
+}
+
+/** `item`'s icon as the inventory draws it into a tile, parsed as the page parses it (the tile's glow kept). */
+function iconMarkup(item: Item, tile: HTMLElement | undefined): string {
+  const glow = tile?.querySelector('.slot-glow')?.outerHTML ?? '';
+  const parsed = document.createElement('div');
+  parsed.innerHTML = itemIconSVG(item) + glow;
+  return parsed.innerHTML;
+}
+
+/** Where the inventory's worn slots as drawn aren't what the profile has worn: each slot's label names its item, or
+ *  says it's empty (or locked, a two-hander's off-hand). */
+function wornShown(): string[] {
+  const problems: string[] = [];
+  for (const slot of SLOTS) {
+    const label = document.querySelector(`#equip .eslot[data-slot="${slot}"]`)?.getAttribute('aria-label') ?? '';
+    const worn = G.profile.equipped[slot];
+    const right = worn ? label === `${SLOT_INFO[slot].label}: ${worn.name}` : /: (empty|locked)/.test(label);
+    if (!right) problems.push(`the ${slot} slot shows "${label}" for ${worn?.name ?? 'nothing'}`);
+  }
+  return problems;
+}
+
+/** Where the hero's model and stats aren't made from what the profile has worn (`recomputeStats` gives both). */
+function gearShown(): string[] {
+  const player = G.player;
+  if (player.equipped !== G.profile.equipped) return ['the hero is made from other gear than the profile has worn'];
+  const wanted = JSON.stringify(gearOf(player.cls, G.profile.equipped));
+  if (JSON.stringify(player.gear) !== wanted) return ['the hero\'s model shows other gear than he wears'];
+  return [];
+}
+
+/** The canary of the inventory's check: an item put in this game's stash and never drawn, which `shown` must find. */
+export function coopTradeHiddenItem(): void {
+  G.profile.stash.unshift({ ...makeItem({ cls: G.player.cls, rarity: 'epic', ilvl: 9 }), name: 'Lab Unseen' });
 }
 
 /** The element `selector` names, or the step fails saying it's missing. */
