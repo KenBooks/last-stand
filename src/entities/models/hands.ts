@@ -476,12 +476,15 @@ const STRIKE_BEND = THREE.MathUtils.degToRad(96);
 // (`shift` moves every finger's `crease` together, y and z)
 const FIST_SHAPE = tunable('fistShape', {
   strike: 86,
-  crease: [-0.086, -0.011, -0.088, -0.011, -0.086, -0.011, -0.08, -0.011],
-  fan: [6, 1.5, -2, -10],
+  crease: [-0.086, -0.011, -0.088, -0.0075, -0.086, -0.011, -0.08, -0.011],
+  fan: [3, 1.2, -1.9, -5.8],
   shift: [0, 0.004],
   // the thumb's root turned in over the fingers past where it was solved, and its last joint bent more (degrees)
   // how far towards its fist the thumb is held as the hand is sculpted (0 wide open, 1 shut)
   restThumb: 0.3,
+  // how far past the middle finger towards the ring finger the thumb's tip is aimed (a share), and how far along
+  // their middle segments it lies
+  thumbOn: [0, 0.5],
 });
 // The thumb laid over the closed fingers as a boxer's lies: its bone in the palm aimed at the fist's corner beside
 // the index (`corner` of the way down the index's first phalanx, off its side), so its knuckle and the mound under it
@@ -556,12 +559,12 @@ function thumbLaid(h: Hand, fingers: THREE.Quaternion[][], from: THREE.Quaternio
   const index = chainOf(h.f[0].j[0].position, h.f[0].len, fingers[0]);
   const middle = chainOf(h.f[1].j[0].position, h.f[1].len, fingers[1]);
   // (on a finger's middle segment, off its front: its nail's side, out of the fist)
-  const laidOn = (chain: Chain, finger: Digit) => chain.points[1].clone().lerp(chain.points[2], THUMB_LAID.along)
+  const laidOn = (chain: Chain, finger: Digit) => chain.points[1].clone().lerp(chain.points[2], FIST_SHAPE.thumbOn[1])
     .addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(chain.frames[1]), (finger.r + h.thumb.r) * THUMB_LAID.press);
   const jointAt = laidOn(index, h.f[0]);
   // (its tip on past the middle finger's middle, towards the ring finger's: a fist's thumb's nail sits near the fist's
   // middle, and aimed at the middle finger's own middle it stopped over the index, an adversarial review)
-  const tipAt = laidOn(middle, h.f[1]).lerp(laidOn(chainOf(h.f[2].j[0].position, h.f[2].len, fingers[2]), h.f[2]), 0.3);
+  const tipAt = laidOn(middle, h.f[1]).lerp(laidOn(chainOf(h.f[2].j[0].position, h.f[2].len, fingers[2]), h.f[2]), FIST_SHAPE.thumbOn[0]);
   const axes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
   const bend = (angle: number) => new THREE.Quaternion().setFromAxisAngle(axes[0], angle);
   // (its root's turn from `from`'s about each of its own axes, then its two joints' bends)
