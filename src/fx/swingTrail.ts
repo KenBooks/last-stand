@@ -149,7 +149,7 @@ class Trail {
     // a place is swung as fast as the slower of the moves into it and on from it, the newest's by the move before:
     // a weapon put elsewhere in a frame is no swing (by its own move, Steel Tempest's blade put back 53 cm in a frame
     // as it ended through the eyes left a slash across the top of the view)
-    s.w = smooth(TRAIL.slow, TRAIL.fast, Math.min(speed, last?.v ?? 0)) * (blade.glow ?? 1);
+    s.w = smooth(TRAIL.slow, TRAIL.fast, Math.min(speed, last?.v ?? 0));
     if (last) last.w = s.w;
     this.count++;
     this.following = true;

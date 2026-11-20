@@ -644,12 +644,7 @@ export interface KeyedArm {
 
 /** a held weapon's striking part, by two points on its grip: from near a blade's root to its point, or a head's lower
  *  end to its top */
-export interface Blade {
-  from: THREE.Object3D; to: THREE.Object3D;
-  /** how bright its trail is against a weapon's (1 when left out): a fist's is seen along its own path through the
-   *  eyes, where a weapon's full light stacked into a white flare at the knuckles */
-  glow?: number;
-}
+export interface Blade { from: THREE.Object3D; to: THREE.Object3D }
 
 export interface XZ { x: number; z: number }
 export interface XYZ { x: number; y: number; z: number }

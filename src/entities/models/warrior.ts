@@ -133,10 +133,6 @@ const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
-/** the bare fists' blows that leave a trail too (`fistBladeL`, `fistBladeR`) */
-const FIST_STRIKES = new Set(['punch', 'rampage']);
-/** a fist's trail: how far down the hand its knuckles are, and how far out either side of them it reaches (m) */
-const FIST_TRAIL = { down: -0.1, out: 0.085, glow: 0 };
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
 /** his trousers' cut (models/trousers.ts): a fighter's hips and thighs under the hide, tucked into the boots under their fur */
 const TROUSERS: TrouserCut = {
@@ -1094,17 +1090,6 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   let offHeld: Weapon | null = null;
   const tipL = joint(gripL, 0, 1, 0);
   const bladeL = { from: joint(gripL, 0, 0, 0), to: joint(gripL, 0, 0, 0) };
-  /** each bare fist's striking part, its knuckles' row from the little finger's to the index's: a punch leaves a
-   *  trail as a weapon's swing does (from play: "where is punch trajectory in 1st person?") */
-  // (two a fist, from its knuckles' middle out past either side of it: a punch goes straight away from his eyes, and a
-  // trail no wider than the fist lay hidden behind his own arm; out past it, its two edges run either side of the arm)
-  const fistBlades = (hand: Hand): Blade[] => [1, -1].map((side) => (
-    {
-      from: joint(hand.vis, 0, FIST_TRAIL.down, 0), to: joint(hand.vis, side * FIST_TRAIL.out, FIST_TRAIL.down, 0),
-      glow: FIST_TRAIL.glow,
-    }
-  ));
-  const fistBladeL = fistBlades(handL), fistBladeR = fistBlades(handR);
   /** the weapons a strike swings this frame (`swung`): every one in a hand, none between strikes */
   const struck: Blade[] = [];
   /** Seen through its own eyes (entities/viewModel.ts) the weapons are posed to be seen but keep the middle
@@ -2863,13 +2848,6 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     if (a && STRIKES.has(a.name)) {
       if (held) struck.push(bladeR);
       if (offHeld) struck.push(bladeL);
-    }
-    // (and his fists through a punch: the one thrown moves fast enough to leave a trail, the other none. Not through
-    // the eyes: a punch goes straight away from them, and its trail, seen along its own length, lay behind his arm
-    // or, wider than it, piled up into a white flare at the knuckles)
-    if (a && !fp && FIST_STRIKES.has(a.name)) {
-      if (!held) struck.push(...fistBladeR);
-      if (!offHeld && !shield.visible) struck.push(...fistBladeL);
     }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
