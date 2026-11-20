@@ -60,6 +60,8 @@ interface Part {
   geometry: THREE.BufferGeometry;
   matrix: THREE.Matrix4;
   sphere: THREE.Sphere;
+  /** the box round it where it stands, the world's axes (what a ray enters first: `entersAt`) */
+  box: THREE.Box3;
   stone: boolean;
   use: WallUse;
   /** the mesh it came from (what bounds the floor, as `boundAt` says it) */
@@ -87,6 +89,10 @@ const hits: THREE.Intersection[] = [];
 /** the nearest surface a cast has met so far (`nearest`) */
 const met: Met = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3(), part: null! };
 const _from = new THREE.Vector3(), _along = new THREE.Vector3(), _normal = new THREE.Matrix3();
+const _enters = new THREE.Vector3();
+/** how much nearer a part's box is taken to be entered than worked out (m): a surface on the box's face is met no
+ *  nearer than the box, and rounding mustn't put it a hair past a surface met on another part at that distance */
+const ENTERS_SLACK = 1e-6;
 /** a stretch of the line round the floor (`stretch`, `nearestOn`) */
 const _stretch = { ax: 0, az: 0, dx: 0, dz: 0, nx: 0, nz: 0, cx: 0, cz: 0 };
 
@@ -142,10 +148,12 @@ export class Wall {
   addGeometry(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, stone: boolean, use: WallUse = 'wall',
     hull?: Float32Array, name = ''): void {
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
     const sphere = geometry.boundingSphere!.clone().applyMatrix4(matrix);
+    const box = geometry.boundingBox!.clone().applyMatrix4(matrix);
     const inverse = hull && matrix.clone().invert();
     const hullGeometry = hull ? geometry : undefined;
-    this.parts.push({ geometry, matrix: matrix.clone(), sphere, stone, use, name, hull, inverse, hullGeometry, seen: -1 });
+    this.parts.push({ geometry, matrix: matrix.clone(), sphere, box, stone, use, name, hull, inverse, hullGeometry, seen: -1 });
   }
 
   /**
@@ -289,13 +297,22 @@ export class Wall {
     }
   }
 
-  /** How far along the ray it enters `part`'s sphere (0 from inside it), or -1 if it doesn't within its reach. */
+  /**
+   * How far along the ray it enters `part`'s box (0 from inside it), or -1 if it doesn't within its reach: its sphere
+   * first, which is quicker to miss. By the sphere alone, a room's walls (each run of plaster, panel and rail 11 m
+   * long round its middle) were entered at 0 by every ray, each met triangle by triangle: a room's seal was 135 ms
+   * at the boot, four rooms 2 to 5 s on a CPU slowed four times (`npm run lab -- seals`). By its box, the wall the ray
+   * points at is met first and the others are entered past it.
+   */
   private entersAt(part: Part): number {
     const { center, radius } = part.sphere;
-    const off2 = ray.ray.distanceSqToPoint(center);
-    if (off2 > radius * radius) return -1;
-    const along = _c.subVectors(center, ray.ray.origin).dot(ray.ray.direction);
-    const enters = Math.max(0, along - Math.sqrt(radius * radius - off2));
+    if (ray.ray.distanceSqToPoint(center) > radius * radius) return -1;
+    // (from inside the box, at once: three's `intersectBox` says where the ray leaves it then, and an arrow's step
+    // begun inside a bush's box took its far side for where it entered, met the leaves no more and stood in the air)
+    if (part.box.containsPoint(ray.ray.origin)) return 0;
+    const at = ray.ray.intersectBox(part.box, _enters);
+    if (!at) return -1;
+    const enters = Math.max(0, at.distanceTo(ray.ray.origin) - ENTERS_SLACK);
     return enters <= ray.far ? enters : -1;
   }
 

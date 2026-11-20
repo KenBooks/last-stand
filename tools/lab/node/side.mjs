@@ -375,11 +375,17 @@ const PAGE_STAMP = 'tools/lab/page/.lab-stamp';
  * could hand it a file half written.
  */
 export function copyLabPage(repo, root) {
-  const stamp = stampOf(['tools/lab/page']);
+  const stamp = labPageStamp();
   const note = join(root, PAGE_STAMP);
-  if (existsSync(note) && readFileSync(note, 'utf8') === stamp) return;
+  if (existsSync(note) && readFileSync(note, 'utf8') === stamp) return stamp;
   cpSync(join(repo, 'tools/lab/page'), join(root, 'tools/lab/page'), { recursive: true });
   writeFileSync(note, stamp);
+  return stamp;
+}
+
+/** A stamp of the lab's page code as it is in this tree now (what `copyLabPage` copies). */
+function labPageStamp() {
+  return stampOf(['tools/lab/page']);
 }
 
 export class Side {
@@ -423,6 +429,8 @@ export class Side {
     this.serverStale = false;
     /** a command has run on the page since it booted */
     this.used = false;
+    /** an exported tree's: the stamp of the lab's page code copied into it as its page booted (`copyLabPage`) */
+    this.pageStamp = null;
     /** its commands' set-ups build the hero afresh (session.mjs `afresh`) */
     this.afresh = false;
     /** the kind of page it has up, as the commands run on it (commands.mjs `pageKind`; null: none to keep) */
@@ -524,11 +532,17 @@ export class Side {
     return this.isBooted(heroClass, how) && !this.used;
   }
 
-  /** Whether its page is booted for `heroClass` as `how` asks from the current source, used or not. */
+  /**
+   * Whether its page is booted for `heroClass` as `how` asks from the current source, used or not. An exported
+   * tree's page is booted from the lab's page code as it was copied in (`pageStamp`): a page the lab's server booted
+   * ahead before a measure was written ran main's side of an A/B on the copy from before, and its new module wasn't
+   * there (`lab seals --ab` threw on main's side alone, under `lab:serve`).
+   */
   isBooted(heroClass, how = LAB_BOOT) {
     const alive = this.page && !this.page.isClosed();
     const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
-    return Boolean(alive && !this.stale && booted);
+    const pageCode = this.isRepo || this.pageStamp === labPageStamp();
+    return Boolean(alive && !this.stale && booted && pageCode);
   }
 
   /**
@@ -565,7 +579,7 @@ export class Side {
    * leaves no page behind (none counts as fresh).
    */
   async boot(heroClass, how = LAB_BOOT) {
-    if (!this.isRepo) copyLabPage(this.repo, this.root);
+    if (!this.isRepo) this.pageStamp = copyLabPage(this.repo, this.root);
     await this.closePage();
     this.heroClass = null;
     this.bootedAs = null;

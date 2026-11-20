@@ -47,3 +47,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 <!-- sorted -->
 - `houses.ts`, `houses/`: each house's room built by its file (`build(group)`), found by the folder and matched to its data (`data/houses/<id>.ts`) by id; a house with data and no build fails as the village is built (`builderOf`). What every room has (walls, roof, door, sign, bookcase, chandelier) is the kit, `rooms.ts`.
 - `places.ts`, `places/`: a place's build of its own (`build(kit)`, `placeKit.ts`: the scene, the wall, the village's materials, its obstacles and updaters), built where the village built the weapons rack, before the lamps; a place with nothing to build has its data file alone (`data/places/<id>.ts`).
+- `wall.ts`: a ray enters a part where it enters the part's box (`Part.box`, the world's axes; its sphere first, quicker
+  to miss), and the parts are met in that order until the next is entered past a surface met. By the sphere alone, a
+  room's walls (each run of plaster, panel, rail and skirting as long as the room round its middle) were entered at 0
+  by every ray of its seal and met triangle by triangle: 107 to 135 ms a room, the four rooms 2 to 5 s of a village
+  boot on a CPU slowed four times; by the box, 20 ms (`npm run lab -- seals --ab`: every wall's bounds the same as
+  main's, slice by slice). A ray from inside a box enters it at 0: three's `Ray.intersectBox` says where it leaves
+  then, and the ranger's arrows over the thicket stood in the air (`lab beyond --class ranger --panels --ab`).
