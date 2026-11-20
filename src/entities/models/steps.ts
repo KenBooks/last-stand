@@ -1,6 +1,7 @@
 // A model built a piece at a time: its builder a generator that yields between its pieces, so a hero is built behind
 // the live lobby a piece a frame (game/hall.ts) where built whole he held a frame up 100 to 170 ms.
 import type { Model } from '../../types';
+import { perfClock } from '../../core/perfClock.ts';
 
 /** A model's build in pieces: each `next()` builds one, the last returns the model. */
 export type ModelSteps = Generator<void, Model, undefined>;
@@ -17,9 +18,10 @@ export function built<T>(steps: Generator<void, T, undefined>): T {
  *  behind the live lobby keeps to the lobby's budget while no loading bar is up: game/warmup.ts `behindSlice`). */
 export type SliceMs = number | (() => number);
 
-/** Finish a stepped build under a loading screen, yielding only at its existing safe boundaries after a time slice. */
+/** Finish a stepped build under a loading screen, yielding only at its existing safe boundaries after a time slice
+ *  (by `perfClock`: a harness's clock, where the page's stands still, `lab lobbystart`). */
 export async function builtInSlices<T>(
-  steps: Generator<void, T, undefined>, pause: () => Promise<void>, ms: SliceMs = 12, now = () => performance.now(),
+  steps: Generator<void, T, undefined>, pause: () => Promise<void>, ms: SliceMs = 12, now = () => perfClock.now(),
 ): Promise<T> {
   let since = now();
   for (;;) {

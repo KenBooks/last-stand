@@ -75,13 +75,14 @@ export function finishNow(key: string): boolean {
 }
 
 /** A wanted queued build finished without holding input up, after its head workers have returned: `ms` of it
- *  before each `pause` (`builtInSlices`). */
-export async function finishInSlices(key: string, pause: () => Promise<void>, ms?: SliceMs): Promise<void> {
+ *  before each `pause` (`builtInSlices`). False if it isn't queued. */
+export async function finishInSlices(key: string, pause: () => Promise<void>, ms?: SliceMs): Promise<boolean> {
   const i = jobs.findIndex((job) => job.key === key);
-  if (i < 0) return;
+  if (i < 0) return false;
   const [job] = jobs.splice(i, 1);
   await preloadHeads(job.detail);
   job.done(await builtInSlices(job.steps, pause, ms));
+  return true;
 }
 
 /** `key`'s next pieces alone, ahead of the queue and whatever holds it (the fight's warm-up, a hall open, a run):

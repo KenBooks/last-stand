@@ -24,8 +24,9 @@ import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
-import { built } from '../entities/models/steps';
+import { built, builtInSlices } from '../entities/models/steps';
 import { BEHIND, buildLater, finishInSlices, finishNow } from './behind';
+import { perfClock } from '../core/perfClock';
 import { makeHeadAhead, preloadHeads } from '../entities/models/head';
 import { heroDetail } from '../entities/models/armor';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
@@ -245,8 +246,9 @@ interface Part {
   built?: Built;
   /** what of its build is made in a task of its own before it (a hero's head: `makeHeadAhead`) */
   ahead?: () => void;
-  /** What its build would otherwise finish whole, finished first behind the lobby in slices (`behindSlice`): a hero
-   *  still queued behind it (`warmPart`). */
+  /** What its build would otherwise do whole, done first behind the lobby in slices (`behindSlice`, `warmPart`): a
+   *  hero, his head among his pieces, so his `ahead` is left out there (made whole, a head was one task of up to
+   *  150 ms behind a return's lobby, `npm run lab -- lobbystart`). */
   before?: (step: () => Promise<void>) => Promise<void>;
   /** Work that must finish before a hero's progress bar permits selecting him. */
   ready?: (step: () => Promise<void>) => Promise<void>;
@@ -465,11 +467,24 @@ export function placeSwaps(): PlaceSwap[] {
   return parts.map((part) => ({ name: part.name, swap: () => part.build().swap }));
 }
 
+/**
+ * `model`'s hero with all he can wear built ahead of his part, `behindSlice` of it before each `step`: his queued
+ * build finished so (`queueHeroesBehind`), or, where none was queued (a return's lobby queues nothing while its
+ * warm-ups run behind it, `isWarming` in main.ts), built afresh so. Built by his part's `build`, each hero was one
+ * task of 100 to 350 ms behind a return's lobby (`npm run lab -- lobbystart`).
+ */
+async function heroBuiltInSlices(model: string, step: () => Promise<void>): Promise<void> {
+  if (heroesAhead.has(model)) return;
+  if (await finishInSlices(`worn ${model}`, step, behindSlice)) return;
+  await preloadHeads(heroDetail());
+  heroesAhead.set(model, await builtInSlices(heroAllWornSteps(model, AWAY), step, behindSlice));
+}
+
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
 function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
-    before: (step) => finishInSlices(`worn ${model}`, step, behindSlice),
+    before: (step) => heroBuiltInSlices(model, step),
     ready: async (step) => {
       for (const cls of Object.values(CLASSES)) if (cls.model === model) await prepareSpareHero(cls.id, step, behindSlice);
     },
@@ -561,7 +576,7 @@ async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
  *  warm-up at once). Timed as a user timing measure, `warm <part>`, its detail what its steps took (the stalls' boot
  *  lists them; its build only where it wasn't built ahead). */
 async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean> {
-  await aheadOf(part, step);
+  if (!part.before) await aheadOf(part, step);
   if (!part.built) await part.before?.(step);
   await step();
   const start = performance.now();
@@ -698,6 +713,38 @@ function framesHeld(): { worst: () => number; stop: () => void } {
   return { worst: () => worst, stop };
 }
 
+/** A slice of a warm-up's work behind the lobby: its need, the part it was on, its time (ms, by `perfClock`). */
+export interface WorkSlice { need: Need; part: string; ms: number }
+
+/**
+ * The warm-ups' work behind the lobby, a slice at a time: each from one of its steps' waits ending to its next
+ * (`timedSteps`), kept while a harness asks (`on`) and emptied by it (`npm run lab -- lobbystart`). A slice holds
+ * whatever ran then, an await of a worker's reply too, so it names what ran more than it times it: the harness times
+ * the page's work between frames itself, waiting for every step `waiting` to have `resumed` and run its slice.
+ */
+export const behindWork = { on: false, slices: [] as WorkSlice[], waiting: 0, resumed: 0 };
+
+/** `need`'s steps timed into `behindWork`: `wrap` a wait, and `part` names what's being warmed. */
+function timedSteps(need: Need): { part: string; wrap: (wait: () => Promise<void>) => () => Promise<void> } {
+  let resumed = -1;
+  const steps = {
+    part: '',
+    wrap: (wait: () => Promise<void>) => async (): Promise<void> => {
+      if (behindWork.on && resumed >= 0) behindWork.slices.push({ need, part: steps.part, ms: perfClock.now() - resumed });
+      resumed = -1;
+      behindWork.waiting++;
+      try {
+        await wait();
+      } finally {
+        behindWork.waiting--;
+        behindWork.resumed++;
+      }
+      resumed = perfClock.now();
+    },
+  };
+  return steps;
+}
+
 /**
  * `need`'s `parts` warmed: a part at a time behind the lobby, a step a frame, where `behind` says so once it's time
  * and while they come from a cache and hold no frame of the lobby long (a part found cold, or a frame held past
@@ -709,11 +756,13 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   if (isWarm(need)) return;
   let hurried = false;
   void wanted(need).then(() => { hurried = true; });
-  const step = (): Promise<void> => (hurried ? nextTask() : nextFrame());
+  const timed = timedSteps(need);
+  const step = timed.wrap(() => (hurried ? nextTask() : nextFrame()));
   let cold = !(await behind());
   let next = 0;
   const held = framesHeld();
   while (next < parts.length && !cold && !hurried) {
+    timed.part = parts[next].name;
     const partCold = await inTurn(async () => {
       const cold = await warmPart(parts[next], step);
       if (!cold) await parts[next].ready?.(step);
@@ -735,7 +784,8 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   }
   // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
   // frame 290 to 400 ms, trace FD2V-NB48)
-  if (need === 'heroes') await buildHallAhead(nextFrame, behindSlice);
+  timed.part = 'hall heroes';
+  if (need === 'heroes') await buildHallAhead(timed.wrap(nextFrame), behindSlice);
   warming(need, 1);
   markWarm(need);
 }
