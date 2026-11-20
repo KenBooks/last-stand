@@ -254,6 +254,14 @@ const shown = (o: THREE.Object3D | null): boolean => {
 const twinSeen = (mesh: THREE.InstancedMesh, camera: THREE.Camera): boolean => mesh.children.some((child) =>
   (child as THREE.InstancedMesh).instanceMatrix === mesh.instanceMatrix && camera.layers.test(child.layers));
 
+/** What else hides a cell from the scene's camera this frame, by its sphere in the world (the hall of heroes' doorway,
+ *  `hallPortal.ts`, registered here as it imports this module) */
+let cellHidden: ((sphere: THREE.Sphere) => boolean) | null = null;
+/** Cells whose sphere `test` says is hidden left out of the scene's draw too, as the frustum's are. */
+export function hideCellsWhere(test: (sphere: THREE.Sphere) => boolean): void {
+  cellHidden = test;
+}
+
 const _frustum = new THREE.Frustum(), _viewProjection = new THREE.Matrix4();
 /** Each culled mesh `camera` sees packed with its cells in that camera's view, or all of them while the mesh isn't
  *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. */
@@ -269,7 +277,8 @@ function cullFor(camera: THREE.Camera): void {
     let changed = false;
     for (const cell of c.cells) {
       const inView = !c.mesh.frustumCulled
-        || _frustum.intersectsSphere(_sphere.copy(cell.sphere).applyMatrix4(c.mesh.matrixWorld));
+        || (_frustum.intersectsSphere(_sphere.copy(cell.sphere).applyMatrix4(c.mesh.matrixWorld))
+          && !cellHidden?.(_sphere));
       if (inView !== cell.shown) changed = true;
       cell.shown = inView;
     }

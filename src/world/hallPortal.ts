@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { fadedWhole } from '../core/seeThrough';
 import { HALL, TERRACE } from '../data/village';
-import { aroundShadows, isDrawingStill } from './culling';
+import { aroundShadows, hideCellsWhere, isDrawingStill } from './culling';
 import { G } from '../state';
 
 /** how far past the doorway's own edges the cone reaches (m): the camera's matrices stand as the frame's, and a
@@ -124,6 +124,13 @@ export function hiddenByHallDoor(box: THREE.Box3): boolean {
   return coneSet && !seenThroughDoor(box.getBoundingSphere(_boxRound));
 }
 
+/** Whether a cell of an instanced mesh outside the hall (`sphere`, in the world) is out of this frame's sight, its
+ *  doorway showing none of it (`culling.ts`'s cells: the trees round the village, instanced, were never culled by the
+ *  doorway, and their leaves cut out behind the hall's walls were 3.8 ms of the 4080's scene pass at 20.7 Mpx). */
+function cellHiddenByDoor(sphere: THREE.Sphere): boolean {
+  return coneSet && !hallBox.intersectsSphere(sphere) && !seenThroughDoor(sphere);
+}
+
 /** Whether the frame drawn by `camera` looks out of the hall through its doorway alone: the game's camera inside it,
  *  its roof and front wall drawn (from above, or over the shoulder from before the wall, they're cut away). */
 function lookingOut(camera: THREE.Camera, village: THREE.Object3D, cutaway: readonly THREE.Object3D[]): boolean {
@@ -166,14 +173,17 @@ function showHidden(on: boolean): void {
 /** Culls `village`'s parts and the foes outside the hall of heroes by its doorway as `scene` is drawn from inside it
  *  (`cutaway`: its roof and front wall, cut away when the camera isn't under them). */
 export function cullOutsideHall(scene: THREE.Scene, village: THREE.Object3D, cutaway: readonly THREE.Object3D[]): void {
+  hideCellsWhere(cellHiddenByDoor);
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
-    before.apply(scene, args);
+    // (the cone set before the cells are culled, `cullWhileDrawn`'s, which runs in `before`)
     const camera = args[2];
-    if (!lookingOut(camera, village, cutaway)) return;
-    coneFrom(_eye);
-    coneSet = true;
-    hideOutside(village);
+    if (lookingOut(camera, village, cutaway)) {
+      coneFrom(_eye);
+      coneSet = true;
+      hideOutside(village);
+    }
+    before.apply(scene, args);
   };
   const after = scene.onAfterRender;
   scene.onAfterRender = (...args) => {

@@ -8,6 +8,7 @@ import { VILLAGE } from './beta';
 import * as plain from './seeThroughPlain';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT } from './sight';
 import { onWholeView, wholeView } from './wholeView';
+import { tunable } from './tuning';
 
 /** how far over his floor a prop starts to dissolve (m): the terrace's and the hall's floor came apart round his feet
  *  when this was held at the village's ground, 1.6 m under them */
@@ -734,8 +735,15 @@ export function holdPropsThinned(held: boolean): void {
  *  With its depth let go a whole wall past him was painted over by what stood behind it, in an order that changed with
  *  the camera, as all a merge draws stands at the origin (from play, "this is still flickering"). */
 function blendedOrder(a: Sorted, b: Sorted): number {
+  const nearFirst = orderHeld === 'nearFirst' || (orderHeld === 'asIs' && solidNow && BLENDED_ORDER.nearFirst > 0);
+  // (in their turns either way: where two lie at one depth, a column's base on its block, the turn decides which shows,
+  // as it did; ordered by distance alone, which showed changed with what else was drawn, the hall's doorway culling)
   const turn = drawnInTurn(a.material) - drawnInTurn(b.material);
   if (turn !== 0) return turn;
+  if (nearFirst) {
+    const nearer = awayFromEye(a.object) - awayFromEye(b.object);
+    return nearer !== 0 ? nearer : a.id - b.id;
+  }
   const away = awayFromEye(b.object) - awayFromEye(a.object);
   return away !== 0 ? away : a.id - b.id;
 }
@@ -796,10 +804,37 @@ const drawsWithTheBlended = (material: THREE.Material): boolean =>
 /** where the camera stands, for what thins by blending to be ordered by */
 const sortEye = { value: new THREE.Vector3() };
 
-/** The camera's place told to the order of what blends, as it's about to be drawn, and the way it looks. */
+/** whether nothing that thins by blending may thin this frame: each is as solid as what's opaque, drawn whole */
+let solidNow = false;
+/** For a harness (tools/lab, `--tune blendedOrder.nearFirst=0`): what blends drawn back to front even when it's all
+ *  solid, as it was. */
+const BLENDED_ORDER = tunable('blendedOrder', { nearFirst: 1 });
+
+/** How a harness holds the order of what blends: as the game has it, back to front always (as it was), or near to far
+ *  always (the canary's: with something thinned, a ghost drawn before what's behind it hides it). */
+export type BlendedOrderHeld = 'asIs' | 'backToFront' | 'nearFirst';
+let orderHeld: BlendedOrderHeld = 'asIs';
+
+/** For a harness (tools/lab): the order of what blends held as `how` says. */
+export function holdBlendedOrder(how: BlendedOrderHeld): void {
+  orderHeld = how;
+}
+
+/** Whether what blends was all solid as this frame was sorted (a harness's state checked). */
+export const blendedSolid = (): boolean => solidNow;
+
+/** Whether every kind that thins by blending is whole this frame (nothing thinned, no hole, no door open). */
+const allBlendedSolid = (): boolean =>
+  (Object.keys(kinds) as (keyof typeof kinds)[]).every((kind) => !(kinds[kind] as Kind).blended || !mayThin(kind));
+
+/** The camera's place told to the order of what blends, as it's about to be drawn, and the way it looks; with nothing
+ *  of it thinning (over the shoulder, in the hall or on the square), it's drawn near to far, as what's opaque is, so
+ *  what a nearer wall or column covers is never lit (back to front, the hall's walls lit the floor and walls behind
+ *  each column and each other: what's see-through or cut out, 21 ms of the 4080's 34 ms scene pass there). */
 export function sortBlendedFrom(eye: THREE.Vector3, toward: THREE.Vector3): void {
   sortEye.value.copy(eye);
   measureRings(toward);
+  solidNow = allBlendedSolid();
 }
 
 /** whether a harness has what thins by blending sorted among the glows, as it was */
