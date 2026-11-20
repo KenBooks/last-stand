@@ -1,7 +1,8 @@
 // The guide's portraits: each foe's own model and each hero's in his starting gear (entities/models), drawn once into a
 // picture by a small WebGL renderer of the guide's own. The game's renderer never sees these models, so it links no
-// program for them (the root's "shaders compile at load"). They're made behind the lobby a piece a frame, as the
-// heroes are (game/behind.ts, `queuePortraitsBehind` from main.ts once its warm-ups are done): the renderer, each
+// program for them (the root's "shaders compile at load"). They're made once the guide is first opened, never before
+// (most players never open it, and on a phone's WebGL each portrait made behind the lobby beforehand held its frames
+// up 130 to 950 ms, trace S307-J274), a piece a frame as the heroes are (game/behind.ts): the renderer, each
 // model (a hero's in his build's own pieces), its compile waited on (`compileAsync`, in parallel where the browser can),
 // and its draw copied into a canvas of its own the guide's places are drawn from (`made`: shown the frame it's drawn,
 // where a PNG encoded first held each picture back a few frames more; Victor on #665: "model renders take 5-10sec to
@@ -18,8 +19,6 @@ import { gearOf, makeItem } from '../../loot/items';
 import { disposeGeometries } from '../../entities/models/rig';
 import { buildFirst, buildLater, buildOnly, finishNow, queued } from '../../game/behind';
 import { perfClock } from '../perfHud';
-import { QUALITY } from '../../data/quality';
-import { qualityLevel } from '../../core/quality';
 import type { Model, Profile } from '../../types';
 
 declare const __BUILD__: { ref: string; time: string };
@@ -156,13 +155,7 @@ export function forgetPortraits(): void {
   requeue();
 }
 
-/** The pictures queued to be made behind the lobby before the guide is opened, where the level makes them there
- *  (`portraitsBehind`): called each frame the lobby shows. */
-export function queuePortraitsBehind(): void {
-  if (QUALITY[qualityLevel()].portraitsBehind) startPortraits();
-}
-
-/** The pictures queued to be made (once; those the browser kept are read first). */
+/** The pictures queued to be made, once the guide is first opened (once; those the browser kept are read first). */
 export function startPortraits(): void {
   if (started || failed) return;
   started = true;

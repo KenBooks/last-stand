@@ -13,7 +13,7 @@ import { perfClock } from '../../../src/ui/perfHud';
 import { openHall, toLobby } from './hallMoves';
 import { headsMadeHere, headsMadeHereSince } from '../../../src/entities/models/head';
 import { setQuality } from '../../../src/core/quality';
-import { portraitPieces } from '../../../src/ui/guide/portraits';
+import { portraitPieces, startPortraits } from '../../../src/ui/guide/portraits';
 import { BuildingWait } from './behindQueue';
 
 /** Options of `lab behind`. */
@@ -78,11 +78,11 @@ function slowestOf(building: Building): string {
   return building.slowest.map((piece) => `${piece.name} ${piece.ms.toFixed(1)} ms`).join(', ');
 }
 
-/** The guide's pictures' slowest pieces of the page's own work, named as it names them. */
-function guideSlowest(): string {
-  const own = portraitPieces.filter((piece) => !piece.waited);
-  const slowest = [...own].sort((a, b) => b.ms - a.ms).slice(0, SLOWEST_LISTED);
-  return slowest.map((piece) => `${piece.what} ${piece.ms.toFixed(1)} ms`).join(', ');
+/** The guide's pictures' pieces made with the guide never opened, named as it names them: none is (they're made once
+ *  it's opened, `startPortraits` in ui/guide/portraits.ts; made behind the lobby before, a phone's lobby was held up
+ *  130 to 950 ms by them, trace S307-J274). */
+function guideMadeUnopened(): string[] {
+  return portraitPieces.map((piece) => piece.what);
 }
 
 /** The heroes let go and built again behind the lobby, timed by the browser's clock (`canary`: all in one frame). */
@@ -173,6 +173,8 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
   if (G.paused) await lab.step(1, () => ({ keys: ['escape'] }));
   await lab.step(SETTLE);
   if (G.paused) throw new Error('lab: behind: the lobby stayed paused');
+  // (the canary's: the guide's pictures started with the guide never opened, as the lobby started them before)
+  if (canary) startPortraits();
   const building = await builtAgain(lab, canary);
   const heroes = CLASS_IDS.length * 2 - 1;
   if (building.heroes !== heroes) {
@@ -189,16 +191,21 @@ export async function heroesBehind(lab: Lab, options: BehindOptions): Promise<Re
     `Back after a detail change: ${changed.misses} head pieces sculpted on the input thread${changed.what.length ? ` (${changed.what.join(', ')})` : ''}; `
       + `longest background build ${changed.building.longest.toFixed(1)} ms (at most ${MOST_MS}); repeated opening completed`,
     `the slowest pieces after it: ${slowestOf(changed.building)}`,
-    `the guide's slowest pieces: ${guideSlowest()}`,
   ];
+  const unopened = guideMadeUnopened();
+  const named = unopened.length ? unopened.slice(0, SLOWEST_LISTED).join(', ') : 'none';
+  lines.push(`the guide's pictures made with the guide never opened: ${named}`);
   const slow = building.longest > MOST_MS;
   const builtThen = opening + choosing > 0;
   if (canary) {
     const missed = [slow ? '' : 'the building in one frame was missed', builtThen ? '' : 'the lost spare was missed',
-      changed.misses ? '' : 'the missing worker detail was missed'];
-    return { text: [...lines, 'canary: one frame and the spares let go'].join('\n'), problems: missed.filter(Boolean) };
+      changed.misses ? '' : 'the missing worker detail was missed',
+      unopened.length ? '' : 'the guide\'s pictures made unopened were missed'];
+    const said = 'canary: one frame, the spares let go and the guide\'s pictures made unopened';
+    return { text: [...lines, said].join('\n'), problems: missed.filter(Boolean) };
   }
   const problems = [slow ? lines[0] : '', builtThen ? lines[2] : '', programs ? lines[3] : '',
-    changed.misses || changed.building.longest > MOST_MS ? lines[4] : ''].filter(Boolean);
+    changed.misses || changed.building.longest > MOST_MS ? lines[4] : '', unopened.length ? lines[7] : '']
+    .filter(Boolean);
   return { text: lines.join('\n'), problems };
 }
