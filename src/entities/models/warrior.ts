@@ -1796,20 +1796,25 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     forearm.updateWorldMatrix(true, false);
     const along = _thumbV[0].setFromMatrixColumn(forearm.matrixWorld, 1).normalize();
     line.addScaledVector(along, -line.dot(along));
-    if (line.y >= least * line.length()) return line;
     const level = _thumbV[1].set(along.z, 0, -along.x);
-    // (a forearm straight up or down has no level line across it: the line as it is, laid level)
-    if (level.lengthSq() < 1e-4) return line.setY(0);
-    if (level.dot(line) < 0) level.negate();
-    // (a little up from level, the way up the forearm's own slope: what turns the hand after this, the arm's fit and
-    // the view's own placing of the arms, left a level line up to 10 degrees down, `THUMB_UP`)
-    const rise = _thumbV[2].crossVectors(along, level.normalize());
+    // (a forearm straight up or down has no level line across it: the line as it is, laid level if it dips)
+    if (level.lengthSq() < 1e-4) return line.y < 0 ? line.setY(0) : line;
+    level.normalize();
+    // (the line read across the forearm as level and rise, the way up the forearm's own slope, and its angle up from
+    // level held to the least: read as its height in the world against a line built of level and rise, the two met
+    // only on a level forearm, and on a guard's steep one the fist snapped 32 to 36 degrees between them, a frame at
+    // a time, as a strafe leant the body across the limit, from play: "fists jerk between 2 positions sometimes",
+    // "it turns outwards, to what it was, then back")
+    const rise = _thumbV[2].crossVectors(along, level);
     if (rise.y < 0) rise.negate();
-    return line.copy(level).addScaledVector(rise, least).normalize();
+    const across = line.dot(level), up = line.dot(rise), length = Math.hypot(across, up);
+    if (length < 1e-6 || up >= least * length) return line;
+    const flat = Math.sqrt(1 - least * least) * (across < 0 ? -1 : 1);
+    return line.copy(level).multiplyScalar(flat).addScaledVector(rise, least);
   }
   const _thumbV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  /** how far up from level a fist's thumb end is kept at the least (the tangent of its angle: about 12 degrees), and
-   *  through the eyes, where the view's placing of the arms takes 10 degrees of it back */
+  /** how far up from level a fist's thumb end is kept at the least (the sine of its angle up the forearm's slope:
+   *  about 12 degrees), and through the eyes, where the view's placing of the arms takes 10 degrees of it back */
   const THUMB_UP = 0.22, THUMB_UP_EYES = 0.42;
   const _rollQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
 
