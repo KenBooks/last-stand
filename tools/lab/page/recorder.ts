@@ -84,10 +84,17 @@ async function slowRenderFrame(lab: Lab): Promise<void> {
   }
 }
 
-/** Whether the trace marks the slow frame with its render named. */
+/** The render's pass named in a slow frame's mark with the time it held the page (`render: the scene and its shadows
+ *  156`: the renderer's passes are parts of their own, `render()` in core/renderer.ts), or a commit's before them
+ *  (`render 156`). */
+const RENDER_PART = /render(?:: [^,\d]+)? (\d+)/g;
+
+/** Whether the trace marks the slow frame with the render's pass that was made slow named, at its time or more. */
 function slowFrameMarked(trace: ReturnType<typeof decodeTrace>): string | undefined {
   const marked = trace.header.marks.find(([, text]) => text.startsWith(SLOW_FRAME_MARK));
-  return marked && /render \d+/.test(marked[1]) ? marked[1] : undefined;
+  if (!marked) return undefined;
+  const longest = Math.max(0, ...[...marked[1].matchAll(RENDER_PART)].map((match) => Number(match[1])));
+  return longest >= SLOW_RENDER_MS ? marked[1] : undefined;
 }
 
 async function timedFight(lab: Lab, frames: number): Promise<number[]> {

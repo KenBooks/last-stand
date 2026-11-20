@@ -30,6 +30,7 @@ import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { matrixWalks } from './matrixWalks';
 import { programSwitches } from './programSwitches';
+import { buffersChanged, uploadsBetween, uploadsSoFar, type UploadCount } from './uploads';
 import { materialSwitches } from './materialSwitches';
 import { reportRead } from './perfReport';
 import { WEBGPU, gpuDone } from '../../../src/core/webgpu';
@@ -144,6 +145,10 @@ interface Timed {
   materials: number;
   /** the objects whose world matrices the frame walked (`matrixWalks.ts`) */
   walked: number;
+  /** what the frame sent to the GPU, by the call (`uploads.ts`) */
+  uploads: Map<string, UploadCount>;
+  /** the scene's buffers changed for the frame, each sent again (`uploads.ts`) */
+  changed: { name: string; bytes: number }[];
   triangles: number;
   particles: number;
   /** the pixels the particles cover, every layer, and the scene's pixels (`particleFill.ts`) */
@@ -213,7 +218,11 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const switchesBefore = programSwitches();
   const materialsBefore = materialSwitches();
   const walksBefore = matrixWalks();
+  const uploadsBefore = uploadsSoFar();
+  buffersChanged();
   await lab.step(1, input);
+  const changed = buffersChanged();
+  const uploads = uploadsBetween(uploadsBefore, uploadsSoFar());
   const switches = programSwitches() - switchesBefore;
   const materials = materialSwitches() - materialsBefore;
   const walked = matrixWalks() - walksBefore;
@@ -233,6 +242,8 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
     switches,
     materials,
     walked,
+    uploads,
+    changed,
     triangles: drawn.triangles,
     particles: particles.glow.count + particles.smoke.count,
     fill,
@@ -298,6 +309,8 @@ function phaseLines(phase: Phase, device?: Device): string[] {
       + `objects walked ${Math.round(of((frame) => frame.walked).median)}, `
       + `triangles ${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
   ];
+  lines.push(`  sent to the GPU a frame (mean): ${uploadsWords(phase)}`);
+  lines.push(`  the buffers changed most often: ${changedWords(phase)}`);
   const fill = of((frame) => frame.fill);
   const pixels = phase.frames[0]?.pixels ?? 1;
   const times = (value: number) => (value / pixels).toFixed(1);
@@ -311,6 +324,52 @@ function phaseLines(phase: Phase, device?: Device): string[] {
   lines.push(`  the update by stage: ${stages.join(', ')}`);
   lines.push(`  the slowest frames: ${slowestFrames(phase).join('; ')}`);
   return lines;
+}
+
+/** What a phase's frames sent to the GPU, a frame's mean by call, the most bytes first: `bufferSubData 41 KB in 12
+ *  calls; ...`, and the share of its frames that sent anything. */
+function uploadsWords(phase: Phase): string {
+  const sums = new Map<string, UploadCount>();
+  let sending = 0;
+  for (const frame of phase.frames) {
+    if (frame.uploads.size > 0) sending++;
+    for (const [name, { calls, bytes }] of frame.uploads) {
+      const sum = sums.get(name) ?? { calls: 0, bytes: 0 };
+      sum.calls += calls;
+      sum.bytes += bytes;
+      sums.set(name, sum);
+    }
+  }
+  const frames = Math.max(1, phase.frames.length);
+  const sorted = [...sums].sort((a, b) => b[1].bytes - a[1].bytes);
+  const each = sorted.map(([name, { calls, bytes }]) => {
+    const kilobytes = (bytes / frames / 1024).toFixed(1);
+    return `${name} ${kilobytes} KB in ${(calls / frames).toFixed(1)} calls`;
+  });
+  const share = `${Math.round((sending / frames) * 100)}% of its frames sent any`;
+  return each.length ? `${each.join('; ')} (${share})` : 'nothing';
+}
+
+/** the buffers changed listed */
+const CHANGED_LISTED = 8;
+
+/** The buffers a phase's frames changed, by how many frames changed each and its bytes: `crowd imp instanceMatrix
+ *  (12 KB) in 100% of the frames; ...`. */
+function changedWords(phase: Phase): string {
+  const byName = new Map<string, { frames: number; bytes: number }>();
+  for (const frame of phase.frames) {
+    for (const { name, bytes } of frame.changed) {
+      const seen = byName.get(name) ?? { frames: 0, bytes };
+      seen.frames++;
+      byName.set(name, seen);
+    }
+  }
+  const frames = Math.max(1, phase.frames.length);
+  const sorted = [...byName].sort((a, b) => b[1].frames * b[1].bytes - a[1].frames * a[1].bytes);
+  const listed = sorted.slice(0, CHANGED_LISTED).map(([name, { frames: changedIn, bytes }]) => {
+    return `${name} (${(bytes / 1024).toFixed(1)} KB) in ${Math.round((changedIn / frames) * 100)}% of the frames`;
+  });
+  return listed.length ? listed.join('; ') : 'none';
 }
 
 /** A phase's slowest frames by the browser's clock, each with its page's work and its slowest stages. */
