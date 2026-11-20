@@ -35,6 +35,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   blendedNearFirst: 2,
   heroesStillAsOne: 2,
   sunShadowKept: 1,
+  sweepWithinBudgets: 11,
   sunStepDrawsItsMap: 2,
   lampHandOverByFaces: 2,
   heroesStandInPieces: 3,

@@ -178,6 +178,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     blendedNearFirst: async () => (await import('./villageBlendedOrder')).blendedNearFirst(lab, options.canary),
     heroesStillAsOne: async () => (await import('./villageStillHeroes')).heroesStillAsOne(lab, options.canary),
     sunShadowKept: () => sunShadowKept(lab, options.canary),
+    sweepWithinBudgets: async () => (await import('./villageSweep')).sweepWithinBudgets(lab, options.canary),
     sunStepDrawsItsMap: () => sunStepDrawsItsMap(lab, options.canary),
     lampHandOverByFaces: () => lampHandOverByFaces(lab, options.canary),
     heroesStandInPieces: () => heroesStandInPieces(lab, options.canary),
