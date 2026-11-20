@@ -121,6 +121,19 @@ function watchLongFrames(): void {
   }).observe({ type: LONG_FRAMES, buffered: true });
 }
 
+/**
+ * The GPU's name and timer read from WebGL as the renderer is made, before the boot's first compile: each a round
+ * trip to the GPU's process, read in `initPerfHud` they waited behind the lobby's compiles, a task of 1.9 s on a CPU
+ * slowed four times (`npm run stalls -- --scenario boot --url "this?village=1" --cpu-slowdown 4 --js`).
+ */
+export function readGpuAhead(r: THREE.WebGLRenderer): void {
+  if (WEBGPU || gl) return;
+  gl = r.getContext() as WebGL2RenderingContext;
+  timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  gpuName = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+}
+
 export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer = r;
   el = $('#perf');
@@ -137,8 +150,7 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
     setPerfHudSize(keptPerfHudSize(), false);
     return;
   }
-  gl = renderer.getContext() as WebGL2RenderingContext;
-  timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  readGpuAhead(r);
   gpuMarks.mark = gpuMark;
   // the shadow map renders inside the scene's render call
   const sm = renderer.shadowMap, smRender = sm.render.bind(sm);
@@ -149,8 +161,6 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
     gpuMark('shadow'); smRender(lights, scene, camera); gpuMark(resume);
   };
 
-  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-  gpuName = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
   el.onclick = copyReport;
   watchLongFrames();
   setPerfHudSize(keptPerfHudSize(), false);

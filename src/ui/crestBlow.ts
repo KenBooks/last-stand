@@ -4,7 +4,11 @@
 // Its context is made ahead (at the boot, and as it's put back for the next time) and it blows once that has linked:
 // made as it blew, a first visit's blow came in the fight's warm-up after Start and its reads waited behind its
 // compiles, the page held 840 ms (`npm run stalls -- --scenario boot`, from Start).
-import { logoWindOff, prepareBlow, windAhead, windLinked, type WindContext } from './logoWind';
+import {
+  crestWindAhead, dropCrestWind, logoWindOff, prepareBlow, prepareCrestWind, windAhead, windLinked, type WindContext,
+} from './logoWind';
+import { levelAtBoot, qualityLevel } from '../core/quality';
+import type { QualityLevel } from '../data/quality';
 
 /** how long the crest stays over the village before the wind takes it (s) */
 const STAYS = 8;
@@ -14,11 +18,35 @@ let crest: HTMLElement, art: HTMLElement;
 let shownFor = 0, state: 'up' | 'blowing' | 'gone' = 'up';
 /** the next blow's context, made ahead (none where it fades) */
 let wind: WindContext | null = null;
+/** how the last blow went (none yet), and whether the next blow's context is the one the boot made */
+let went: 'wind' | 'fade' | null = null, fromBoot = false;
 
-const plainBlow = (): boolean => logoWindOff() || matchMedia('(prefers-reduced-motion: reduce)').matches;
-/** The next blow's context made, where it will blow. */
+/** How the crest stands, for a harness (`lab crest`): up, blowing or gone, how its last blow went, whether a context
+ *  waits for the next, whether it's the one the boot made (`prepareCrest`), and whether it has linked or was lost. */
+export const crestNow = () => ({
+  state, went, waiting: wind !== null, fromBoot, linked: wind !== null && windLinked(wind), lost: wind?.gl.isContextLost() ?? false,
+});
+
+/** Whether the crest fades at `level` (reduced motion, Low quality or the wind off), as the loading screen's exit
+ *  does: at Very low a laptop's AMD Radeon made a context for a blow that never came (trace EP2G-9M10). */
+const plainBlow = (level: QualityLevel = qualityLevel()): boolean =>
+  logoWindOff() || matchMedia('(prefers-reduced-motion: reduce)').matches || level === 'low' || level === 'verylow';
+
+/** The first blow's context made at the boot's start, while the GPU's process is idle (`prepareCrestWind`), where
+ *  the level the boot starts at blows it. */
+export function prepareCrest(): void {
+  if (!plainBlow(levelAtBoot())) prepareCrestWind();
+}
+
+/** The next blow's context made, where it will blow (the boot's own first: `prepareCrest`). */
 function windForNext(): void {
-  if (!wind && !plainBlow()) wind = windAhead();
+  if (plainBlow()) {
+    dropCrestWind();
+    return;
+  }
+  if (wind) return;
+  fromBoot = crestWindAhead();
+  wind = windAhead();
 }
 
 /** The crest found. */
@@ -52,6 +80,7 @@ async function blowAway(fade: boolean): Promise<void> {
   const own = fade ? null : wind;
   if (own) wind = null;
   const blow = plainBlow() || !own ? null : await prepareBlow(art, null, own);
+  went = blow ? 'wind' : 'fade';
   if (state !== 'blowing') {
     blow?.cancel();
     return;

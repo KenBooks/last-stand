@@ -486,6 +486,8 @@ interface Context {
 }
 /** the context made ahead (`prepareWind`) */
 let ahead: Context | null = null;
+/** the lobby crest's first blow's context, made ahead with it (`prepareWind`) */
+let crestAhead: Context | null = null;
 /** A blow's context and its programs, made ahead of it (`windAhead`). */
 export type WindContext = Context;
 
@@ -560,10 +562,32 @@ function makeContext(): Context | null {
  */
 export function prepareWind(): void { ahead ??= makeContext(); }
 
+/**
+ * The lobby crest's first blow's context made now too, at the boot's start (ui/crestBlow.ts): made as the crest was
+ * found, half way through the boot, the context waited on the GPU's process, busy with the lobby's compiles, in a
+ * task of 3.7 s on a CPU slowed four times (`npm run stalls -- --scenario boot --url "this?village=1"
+ * --cpu-slowdown 4 --js`), as a laptop's AMD Radeon and an Adreno 810 held theirs 3.8 and 7.4 s (traces EP2G-9M10,
+ * 4NA2-KWVF).
+ */
+export function prepareCrestWind(): void { crestAhead ??= makeContext(); }
+
 /** A context of the field's own made ahead of a blow other than the loading screen's (the lobby's crest:
  *  ui/crestBlow.ts), its programs linking meanwhile: made as it blew, on a first visit, its reads waited behind the
- *  fight's compiles after Start (840 ms). */
-export const windAhead = (): WindContext | null => makeContext();
+ *  fight's compiles after Start (840 ms). The first is the one the boot made (`prepareCrestWind`). */
+export function windAhead(): WindContext | null {
+  const made = crestAhead ?? makeContext();
+  crestAhead = null;
+  return made;
+}
+
+/** Whether the crest's context made at the boot is still waiting for its first blow. */
+export const crestWindAhead = (): boolean => crestAhead !== null;
+
+/** The crest's context made at the boot let go, where its blow is a fade. */
+export function dropCrestWind(): void {
+  crestAhead?.gl.getExtension('WEBGL_lose_context')?.loseContext();
+  crestAhead = null;
+}
 
 /** Whether `made`'s programs have linked, so a blow on it waits on nothing (where the browser can't say, at once). */
 export const windLinked = (made: WindContext): boolean =>

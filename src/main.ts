@@ -59,7 +59,7 @@ import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
 import { initTraining, completeStep, restartTraining } from './game/training';
 import { initTrainingTracker, updateTrainingTracker } from './ui/training';
-import { initCrestBlow, updateCrestBlow } from './ui/crestBlow';
+import { initCrestBlow, prepareCrest, updateCrestBlow } from './ui/crestBlow';
 import { hourNow, holdHour } from './game/clock';
 import { initSaves, savesOpen, savesBack, openSaves, refreshSaves } from './ui/saves';
 import { askConflicts, renderCloudBar, showGoogleLanding } from './ui/cloudSaves';
@@ -82,7 +82,7 @@ import { recorder } from './perf/recorder';
 import { framePart, framePartsBegin, framePartsEnd } from './perf/frameParts';
 import { traceNow } from './perf/upload';
 import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
-import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
+import { initPerfHud, readGpuAhead, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
@@ -169,6 +169,7 @@ async function boot() {
   preloadStump();
   preloadFlames();
   prepareWind();
+  if (VILLAGE) prepareCrest();
   await loadingStep('Forging the arena', 0.08);
   initUIScale();
   releaseClickedFocus();
@@ -179,6 +180,8 @@ async function boot() {
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
   if (!WEBGPU) {
+    // (the GPU's name and timer asked before anything compiles: ui/perfHud.ts)
+    readGpuAhead(renderer);
     steadyShadowPrograms(renderer);
     watchPrograms(renderer);
     // (the environments' programs linked as the arena is built, each made as its biome is first shown)
