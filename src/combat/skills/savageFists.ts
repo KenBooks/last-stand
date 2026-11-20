@@ -9,7 +9,7 @@ import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY, PUNCH_CHARGE, PUNCH_DRIVE } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE } from '../../data/balance';
 import { schedule } from '../../core/timers';
 import { dazeEnemy } from '../damage';
 import type { SkillDef } from '../../types';
@@ -161,6 +161,11 @@ const skill: InstantSkill = {
   },
 };
 
+/** Whether his aim is on `e`'s head (`HEAD_SHOT`): a punch there is a critical hit, a training dummy's too. */
+function toHead(player: Player, e: Enemy): boolean {
+  return player.aimFoe === e && player.aimFoeY >= e.height * HEAD_SHOT.from;
+}
+
 /** The punch lands, charged `charge` of the way past a click (0..1). */
 function land(player: Player, def: Def, charge: number): void {
     if (!player.alive) return;
@@ -179,11 +184,12 @@ function land(player: Player, def: Def, charge: number): void {
     const across = Math.max(-0.8, Math.min(0.8, rate * PUNCH_CHARGE.swing));
     const wx = dir.x + Math.cos(facing) * across, wz = dir.z - Math.sin(facing) * across, wl = Math.hypot(wx, wz) || 1;
     const way = { x: wx / wl, z: wz / wl };
+    const edge = punchSharp(drive);
     // (and by its charge, a modifier of its own over those; charged to the full it dazes what it hits)
     const hits = sweep(player, def, facing, {
       knock: def.knock * (1 + charge), blow: { dir: way, lift: 0.2 + 0.2 * charge, force: driven * (1 + charge) },
       scale: (gap) => cleanHit(gap) * driven * charged,
-      sharp: punchSharp(drive),
+      sharp: (gap, e) => (toHead(player, e) ? 100 : edge(gap)),
       mark: (e, k) => {
         fistMark(e, heat, Math.round(5 * (k > 1 ? 2 : 1) * (1 + charge)));
         if (full && !e.boss && !e.hero) dazeEnemy(e, PUNCH_CHARGE.stun, player);

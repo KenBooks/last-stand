@@ -136,7 +136,12 @@ const CROSS_OUT: Keys = [
 const LEAD = { hips: 0.09, chest: 0.045 };
 /** a charged punch: how far back along its line the fist is drawn at a full charge (of its reach), and how far the
  *  chest is wound back behind it from outside (rad) */
-const PULL = 0.45, COIL = { jab: 0.22, cross: 0.32 };
+// (and where the charged fist is drawn back to: through the eyes on the screen, out to its own side, low and close,
+// half out of the view; from outside from its guard, out, down and back by the ribs, the elbow behind him. Drawn
+// back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
+// ring, from play: "held punch needs to pull back, not just draw a charge circle")
+const COIL = { jab: 0.3, cross: 0.42 };
+const BACK = tunable('punchBack', { eyes: [0.6, -1, 0.3], body: [0.12, -0.16, -0.34] });
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
@@ -360,7 +365,7 @@ export function fistPunch(
     j.spine.rotation.y += 0.4 * (lead ? COIL.jab : -COIL.cross) * pull;
   }
   fistGuard(j, 1, t, eyes, shielded);
-  const out = curve(lead ? JAB_OUT : CROSS_OUT, k) - PULL * pull, seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
+  const out = curve(lead ? JAB_OUT : CROSS_OUT, k), seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
   // (the elbow comes up only as the fist turns over at the end of its reach, and folds down by the ribs on the way
   // back: up with the fist's whole way, it came back flared out at the shoulder's height, the fist swept across the
   // chest, an adversarial review)
@@ -373,8 +378,19 @@ export function fistPunch(
     guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
     // (taken from the guard's own pose over the first third of the way: over its first eighth, the fist on its way
     // home went from full speed to still in a frame, 21 mm then 1)
-    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))), true, seenAs.flare * over);
-  } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
+    const [aside, down, close] = BACK.eyes;
+    if (pull > 0) _from.lerp(onScreen(j, [(lead ? -1 : 1) * aside, down, close], _mid), smooth(pull));
+    const w = Math.max(smooth(pull), smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))));
+    place(j, lead, _from, w, true, seenAs.flare * over);
+  } else {
+    place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
+    if (pull > 0) {
+      const [aside, down, back] = BACK.body;
+      guardAt(j, lead, false, 0, 0, _far);
+      _far.x += (lead ? 1 : -1) * aside; _far.y += down; _far.z += back;
+      place(j, lead, _far, smooth(pull));
+    }
+  }
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;
   if (eyes) {
     // (through the eyes the fist is turned over from its guard's line, the thumb up, to the punch's, the thumb in,

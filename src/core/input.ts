@@ -21,6 +21,8 @@ export const input = {
   ground: new THREE.Vector3(),   // cursor projected onto the arena floor (y 0, under the dais's top)
   /** the foe whose body the aim is on, the eye's ray met it there (none on the floor or a prop, or aimed by touch) */
   foe: null as Enemy | null,
+  /** and how high up its body the aim's ray met it (m over its feet): a punch to the head */
+  foeY: 0,
   /** touch is the active input: the browser's emulated mouse events are ignored */
   touchMode: false,
   /** touch move stick: screen space, x right / y down, length 0..1 */
@@ -203,12 +205,13 @@ function aimAlong(far: number, offHero = false): void {
     if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits), null]);
   }
   near.sort((a, b) => a[0] - b[0]);
-  let on: Enemy | null = null;
+  let on: Enemy | null = null, metY = 0;
   for (const [t, meet, foe] of near) {
     if (t >= best) break;
     ray.far = best; _hits.length = 0;
     meet();
     for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; on = foe; }
+    if (on) metY = _best.y - on.obj.position.y;
   }
   // (a foe's point taken a little inside it, towards its middle: its surface alone, a crown seen from above, lay on the
   // top of the dome, and a shot flying near level to it grazed over it and struck nothing, `lab shots`; taken along the
@@ -219,6 +222,7 @@ function aimAlong(far: number, offHero = false): void {
   }
   ray.far = Infinity;
   input.foe = what === 'body' ? on : null;
+  input.foeY = input.foe ? metY : 0;
   // (the foe met is still the one aimed at; the point alone goes on, to the floor or the aim's range at the most)
   if (offHero && what === 'body' && floor < Infinity) r.at(clearOfHero(r, best, floor), _best);
   if (what === 'none') { if (far === Infinity) return; _best.copy(r.origin).addScaledVector(r.direction, far); }

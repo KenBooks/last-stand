@@ -254,6 +254,11 @@ export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, lead: 1.2, crit:
  *  punch's swing of the aim is read over (s). First takes, for tuning in play. */
 export const PUNCH_CHARGE = { full: 4, stun: 0.5, swing: 0.25 };
 
+/** A punch to the head (from play: "hitting enemy into the head with punch should deal critical strike, always",
+ *  "should work on dummies too"): his aim on a foe's body from `from` of its height up (`Player.aimFoeY`, where the
+ *  aim's ray meets it), and Savage Fists' punch on that foe is a critical hit. */
+export const HEAD_SHOT = { from: 0.78 };
+
 /** His bare fists' guard (from play: "leaving guard on (idle fists) should decrease damage from frontal arc while
  *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are
  *  attacking him"): up for `after` s after he last struck or was hurt, and while a foe is within `near` m of him;
