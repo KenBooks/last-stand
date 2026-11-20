@@ -8,7 +8,7 @@ import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
 import { shockwave, decal } from '../../fx/effects';
 import { particles, col, smokePuff, debris } from '../../fx/particles';
-import { addShake, kickFov } from '../../core/renderer';
+import { addShake, kickFov, liftView, rollView, tipView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
@@ -45,6 +45,55 @@ function bloodSpray(at: { x: number; y: number; z: number }, dir: THREE.Vector3,
   smokePuff(at, { count: 5, color: GORE.mist, alpha: 0.55, size: 0.45, sizeEnd: 1.3, life: 0.6, speed: 1.2, rise: 0.2 });
 }
 
+/**
+ * The dash through his own eyes (from play: "bloodrush needs better visual effects in 1st person": all of its blood
+ * and dust was behind him or round his body, where the eyes don't see, and the view only widened a little). The view
+ * sinks as he braces, drops in behind his lead shoulder and rolls with it as he goes, wider with the speed, and is
+ * thrown forward and down onto his front foot as he stops (`EYES`: m, rad, degrees).
+ */
+const EYES = { brace: 0.1, low: 0.16, roll: 0.07, tip: 0.07, fov: 11, stop: 0.14 };
+
+/** His own view at `t` s of the dash of `dur` s, `stopped` once it has come to its stop. */
+function rushView(t: number, dur: number, stopped: boolean): void {
+  if (t < BRACE) { liftView(-EYES.brace * (t / BRACE)); return; }
+  if (!stopped && t <= dur) {
+    const go = Math.min(1, (t - BRACE) / 0.06);
+    liftView(-EYES.low * go); rollView(EYES.roll * go); tipView(EYES.tip * go); kickFov(EYES.fov);
+    return;
+  }
+  const settle = Math.exp(-(t - dur) / 0.1);
+  if (settle > 0.03) { liftView(-EYES.stop * settle); tipView(EYES.tip * 1.5 * settle); }
+}
+
+/** What rushes at his eyes as he goes from `p` along `dir`: pale streaks of air from ahead, and his own blood torn
+ *  off him and thrown on ahead to fall back past the view (blended drops and mist, not light). */
+function rushAtEyes(p: THREE.Vector3, dir: THREE.Vector3): void {
+  for (let i = 0; i < 3; i++) {
+    const side = rand(-1.8, 1.8), ahead = rand(3.5, 6.5);
+    particles.glow.spawn({
+      x: p.x - dir.z * side + dir.x * ahead, y: rand(0.3, 2.4), z: p.z + dir.x * side + dir.z * ahead,
+      vx: -dir.x * rand(14, 20), vz: -dir.z * rand(14, 20),
+      life: rand(0.18, 0.3), size: rand(0.04, 0.07), sizeEnd: 0, color: col(0xf0d8d0, 0.9), colorEnd: col(0x601010, 0.15),
+    });
+  }
+  for (let i = 0; i < 2; i++) {
+    const side = rand(-1.3, 1.3), ahead = rand(4, 7);
+    particles.smoke.spawn({
+      x: p.x - dir.z * side + dir.x * ahead, y: rand(0.6, 2), z: p.z + dir.x * side + dir.z * ahead,
+      vx: -dir.x * rand(6, 12), vy: rand(-0.5, 1), vz: -dir.z * rand(6, 12),
+      life: rand(0.3, 0.5), size: rand(0.05, 0.1), sizeEnd: 0.04, color: col(GORE.drop), alpha: 0.9, gravity: 6, drag: 0.4,
+    });
+  }
+  if (Math.random() < 0.5) {
+    const side = rand(-1.5, 1.5), ahead = rand(4.5, 7);
+    particles.smoke.spawn({
+      x: p.x - dir.z * side + dir.x * ahead, y: rand(0.8, 1.8), z: p.z + dir.x * side + dir.z * ahead,
+      vx: -dir.x * rand(4, 8), vy: rand(0, 0.4), vz: -dir.z * rand(4, 8),
+      life: rand(0.35, 0.5), size: rand(0.3, 0.5), sizeEnd: 1, color: col(GORE.mist), alpha: 0.22, drag: 1.5,
+    });
+  }
+}
+
 /** The way covered by `u` of the dash: nothing while it braces, then flat out, slowing over its last fifth. */
 function pace(brace: number): (u: number) => number {
   return (u) => {
@@ -65,10 +114,19 @@ const skill: InstantSkill = {
     dir.normalize();
     const run = def.range / def.speed, dur = BRACE + run;
     const hit = new Set<Enemy>(), struck = new Set<Prop>();
-    let built = 0, launched = false, dust = 0;
+    let built = 0, launched = false, dust = 0, stopped = false;
     sfx.bullRush(BRACE, run);
     player.startDash(dir, def.range / dur, dur, { anim: 'bloodrush', hold: HOLD, pace: pace(BRACE / dur), step: () => {
       const p = player.pos, d = player.dash;
+      if (d && player.local) rushView(d.t, d.dur, stopped);
+      if (d && d.t > d.dur && !stopped) {
+        // (the stop: his weight thrown onto his front foot, dust rolling on ahead of him into the view)
+        stopped = true;
+        const ahead = { x: p.x + dir.x * 0.9, y: 0, z: p.z + dir.z * 0.9 };
+        smokePuff(ahead, { count: 6, color: DUST, alpha: 0.45, size: 0.7, sizeEnd: 2.2, speed: 2.4, life: 0.8 });
+        debris(ahead, { count: 6, speed: 4 });
+        if (player.local) addShake(0.16);
+      }
       if (!d || d.t < BRACE || d.t > d.dur) return;
       if (!launched) {
         launched = true;
@@ -79,7 +137,7 @@ const skill: InstantSkill = {
         sfx.bullLaunch();
         bloodSpray({ x: p.x, y: 1.1, z: p.z }, dir, 8);
       }
-      if (player.local) kickFov(6);
+      if (player.eyes) rushAtEyes(p, dir);
       // dust thrown up behind, and a red haze of his blood streaming off him, a drop now and then falling from it (no
       // glowing sparks: red light read as embers, not blood)
       if ((dust -= G.dt) <= 0) {
@@ -108,7 +166,7 @@ const skill: InstantSkill = {
         // (blood thrown on from what he hit, along his way)
         bloodSpray({ x: e.pos.x, y: e.height * 0.6, z: e.pos.z }, dir, 22);
         sfx.bullHit();
-        if (player.local) addShake(0.12);
+        if (player.local) addShake(player.eyes ? 0.22 : 0.12);
         if (dealt > 0 && !player.sandbox && built < (def.frenzyMost ?? Infinity)) { built++; gainFrenzy(player, def.frenzy ?? 0); }
       }
     } });

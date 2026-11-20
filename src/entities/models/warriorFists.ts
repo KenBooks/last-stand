@@ -121,19 +121,23 @@ const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.
 // easing home until just before the next. Still for the first quarter and the last fifth, with the way out and back
 // packed between, a row of punches was a stop and a start each, from play: "make the attacks smooth like our weapon
 // attacks are smooth")
+// (and the blow itself is short: gathered slowly over the cast's first third, drawn back a little as the weight
+// loads, then thrown in about 45 ms, as it was at twice the pace, and brought home slowly. Spread evenly over the
+// slower cast it was a push, from play: "we need to speed up the actual attack.... like the strike itself... so it
+// looks natural like something with actual strike power")
 const JAB_OUT: Keys = [
-  [0, 0], [0.12, 0.05], [0.24, 0.18], [0.36, 0.5], [0.46, 0.94], [0.5, 1], [0.54, 1], [0.66, 0.62], [0.76, 0.3],
-  [0.85, 0.09], [0.94, 0], [1, 0],
+  [0, 0], [0.14, -0.05], [0.3, 0.03], [0.38, 0.18], [0.47, 0.94], [0.5, 1], [0.55, 1], [0.68, 0.6], [0.8, 0.25],
+  [0.9, 0.06], [0.96, 0], [1, 0],
 ];
 const CROSS_OUT: Keys = [
-  [0, 0], [0.1, -0.08], [0.2, 0.02], [0.29, 0.2], [0.38, 0.5], [0.47, 0.94], [0.51, 1], [0.56, 1], [0.68, 0.62], [0.78, 0.3],
-  [0.86, 0.09], [0.95, 0], [1, 0],
+  [0, 0], [0.16, -0.1], [0.31, 0], [0.39, 0.16], [0.48, 0.94], [0.51, 1], [0.57, 1], [0.7, 0.6], [0.82, 0.25],
+  [0.91, 0.06], [0.96, 0], [1, 0],
 ];
 const LEAD = { hips: 0.09, chest: 0.045 };
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
-const TURN_OVER: Keys = [[0, 0], [0.1, 0], [0.46, 1], [0.56, 1], [0.92, 0], [1, 0]];
+const TURN_OVER: Keys = [[0, 0], [0.3, 0], [0.47, 1], [0.57, 1], [0.92, 0], [1, 0]];
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
 const FREE_IN = [0.13, 0.02];
 
@@ -402,18 +406,18 @@ export function fistRampage(j: Joints, beat: number, still: number, t: number, e
  *  thrown up as he leaves the ground, and driven down as he lands */
 const POUNCE_EYES = tunable('pounceEyes', { thrown: [0.56, 0.5, 0.62], driven: [0.1, -0.3, 0.56] });
 
-/** Pounce's shares of its pose: the leap's, and each blow's middle after it (`POUNCE` in data/balance.ts) */
+/** Pounce's shares of its pose: the leap's, and the share `s` seconds after the landing (`POUNCE` in data/balance.ts) */
 const pounceShares = () => {
-  const total = POUNCE.leap + POUNCE.first + POUNCE.apart * (POUNCE.blows - 1) + POUNCE.after;
-  return { leap: POUNCE.leap / total, blow: (i: number) => (POUNCE.leap + POUNCE.first + POUNCE.apart * i) / total, apart: POUNCE.apart / total };
+  const total = POUNCE.leap + POUNCE.after;
+  return { leap: POUNCE.leap / total, landed: (s: number) => (POUNCE.leap + s) / total };
 };
 
 /**
- * Pounce at `k` of its leap and its blows, as a body leaps at something: sunk into his knees, then sprung up and
+ * Pounce at `k` of its leap and its landing, as a body leaps at something: sunk into his knees, then sprung up and
  * forward at about 45 degrees, the lead fist reaching ahead and the rear one cocked by his ear, the knees driven up under
  * him; then the fists coming down ahead of him as he lands, a moment's give in the knees and up to his full height an
- * arm's length off what he lands on, and each fist driven into it, a blow at each of the skill's (`POUNCE`). Returns how
- * far the pose owns the legs.
+ * arm's length off what he lands on, his fists back in their guard for what he throws next. Returns how far the pose
+ * owns the legs.
  */
 export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): number {
   const s = pounceShares(), p = k / s.leap;
@@ -422,9 +426,9 @@ export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): numb
   const crouch = ramp(p, 0, 0.08) * (1 - ramp(p, 0.12, 0.22));
   const launch = ramp(p, 0.1, 0.2) * (1 - ramp(p, 0.28, 0.45));
   const tuck = ramp(p, 0.3, 0.5) * (1 - ramp(p, 0.72, 0.92));
-  const fall = ramp(p, 0.7, 0.88) * (1 - ramp(k, s.leap + 0.01, s.leap + 0.06));
+  const fall = ramp(p, 0.7, 0.88) * (1 - ramp(k, s.landed(0.01), s.landed(0.05)));
   const air = Math.max(crouch, launch, tuck, fall);
-  const low = ramp(k, s.leap - 0.03, s.leap + 0.02) * (1 - ramp(k, s.leap + 0.04, s.leap + 0.12));
+  const low = ramp(k, s.landed(-0.025), s.landed(0.02)) * (1 - ramp(k, s.landed(0.035), s.landed(0.11)));
   if (!eyes) {
     // (sunk into his knees to spring; launched up and forward at about 45 degrees, the trunk upright over the hips and
     // the knees driven up, not dived flat; leaning into what he comes down on; a moment's give in the knees as he lands,
@@ -466,20 +470,6 @@ export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): numb
       place(j, true, _far.set(_mid.x + 0.16, _mid.y + lead, _mid.z + leadZ), air);
       place(j, false, _far.set(_mid.x - 0.2, _mid.y + rear, _mid.z + rearZ), air);
     }
-  }
-  // on it: each blow a fist driven into its body, the lead hand first (a pinned foe still stands: driven down to
-  // the floor, the blows went into its knees)
-  for (let i = 0; i < POUNCE.blows; i++) {
-    const at = s.blow(i), u = (k - at) / s.apart + 0.5;
-    if (u <= 0 || u >= 1) continue;
-    const out = curve(PUNCH_OUT, u), left = i % 2 === 0;
-    if (!eyes) j.chest.rotation.y += (left ? -0.18 : 0.22) * out;
-    if (eyes) place(j, left, onScreen(j, [left ? -0.08 : 0.08, -0.3, 0.55], _far), out, eyes);
-    else {
-      between(j, _mid);
-      place(j, left, _far.set(_mid.x + (left ? 0.05 : -0.05), _mid.y - 0.18, _mid.z + 0.55), out);
-    }
-    lineTo(left ? fistLine.L : fistLine.R, sided(LINE.punch, left), out);
   }
   return eyes ? 0 : air;
 }

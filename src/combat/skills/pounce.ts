@@ -1,31 +1,28 @@
 // Pounce: the warrior with both hands empty (#400). An instant leap onto the foe aimed at, up to `range` m off, landing
-// on it with his weight and pinning it under a flurry of `blows` short punches to its body, the lead hand and the rear
-// in turn. The foe is pinned (dazed) from the landing until the last blow; an elite or a boss is too strong to pin, and
-// takes the blows standing. The first blow that lands builds a stack of Frenzy (combat/frenzy.ts).
+// at arm's length from it with his weight, which staggers it a moment (dazed for `POUNCE.pin`; not an elite or a
+// boss). The leap alone: it strikes nothing and builds no Frenzy, and he's free at once for whatever he casts next.
+// (It pinned the foe under four blows of its own, taken out: from play, "lets change pounce to only jump, this allows
+// stacking it with other attacks naturally".)
 import * as THREE from 'three';
 import { G } from '../../state';
-import { dazeEnemy, hitEnemy } from '../damage';
-import { schedule } from '../../core/timers';
-import { shockwave, decal } from '../../fx/effects';
-import { smokePuff, debris } from '../../fx/particles';
+import { dazeEnemy } from '../damage';
+import { shockwave, crackDecal, decal } from '../../fx/effects';
+import { particles, col, smokePuff, debris } from '../../fx/particles';
+import { rand } from '../../util';
 import { addShake, kickFov, liftView, tipView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
-import { gainFrenzy } from '../frenzy';
 import { FRENZY, POUNCE } from '../../data/balance';
-import { fistMark } from './savageFists';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 
-type Def = Needs<'damage' | 'range' | 'blows'>;
+type Def = Needs<'range'>;
 
-/** where he lands: this far short of the foe's body (m, past both sizes), at arm's length, so his blows come down on
- *  it (0.4 short, his forearms went into a husk's body as they came down: the blows reach 0.6 m before him) */
+/** where he lands: this far short of the foe's body (m, past both sizes), at arm's length, where a punch thrown next
+ *  lands clean (0.4 short, his forearms went into a husk's body as they came down) */
 const SHORT = 0.75;
 /** a foe within this of the aim's point is the one meant, where the aim isn't on a body (m) */
 const NEAR_AIM = 2.5;
-/** his blows reach a foe this far from him past its size (m): one that slips further off is missed */
-const REACH = 1.6;
 /**
  * The leap through his own eyes: the view rises and falls with it (`rise` of the leap's own height: the body's lift
  * left the eyes on the ground, and the leap was a slide forward, from play: "1 skill is underwhelming in 1st person
@@ -51,6 +48,42 @@ function leapView(k: number, landed: number, lift: number): void {
   tipView(EYES.tip * settle);
 }
 
+const DUST = 0x2a241c, EARTH = 0xd8b890;
+
+/** The spring off the ground, seen from outside: the floor kicked out behind him. */
+function springOff(at: THREE.Vector3, dir: THREE.Vector3): void {
+  shockwave(at, { color: EARTH, intensity: 1, from: 0.15, to: 1.5, life: 0.25 });
+  smokePuff({ x: at.x - dir.x * 0.3, y: 0, z: at.z - dir.z * 0.3 }, { count: 7, color: DUST, alpha: 0.5, size: 0.6, sizeEnd: 1.9, speed: 2.2, life: 0.9 });
+  debris({ x: at.x, y: 0, z: at.z }, { count: 8, speed: 4.5 });
+  decal(at, { type: 'scorch', size: 0.7, life: 2.5, opacity: 0.35 });
+}
+
+/** His way through the air at `high` m over the floor: streaks of air torn off him and dust carried up after him, so
+ *  the leap reads as an arc from above and over the shoulder (through the eyes the view itself rises and falls). */
+function airTrail(p: THREE.Vector3, dir: THREE.Vector3, high: number, speed: number): void {
+  for (let i = 0; i < 3; i++) {
+    const side = rand(-0.35, 0.35), up = high + rand(0.5, 1.5);
+    particles.glow.spawn({
+      x: p.x - dir.z * side - dir.x * 0.3, y: up, z: p.z + dir.x * side - dir.z * 0.3,
+      vx: -dir.x * speed * 0.25, vy: rand(-0.3, 0.3), vz: -dir.z * speed * 0.25,
+      life: rand(0.18, 0.3), size: rand(0.05, 0.09), sizeEnd: 0, color: col(EARTH, 0.45), colorEnd: col(0x5a4a3a, 0.1),
+      gravity: 0, drag: 2,
+    });
+  }
+  smokePuff({ x: p.x - dir.x * 0.4, y: high + 0.6, z: p.z - dir.z * 0.4 }, { count: 1, color: DUST, alpha: 0.3, size: 0.5, sizeEnd: 1.4, life: 0.5, speed: 0.4, rise: 0.1 });
+}
+
+/** The landing, his weight coming down from `high` m: the floor cracked under him and thrown out in a ring. */
+function comeDown(at: THREE.Vector3, high: number): void {
+  const hard = Math.min(1, 0.4 + high / POUNCE.top * 0.6);
+  shockwave(at, { color: EARTH, intensity: 1.6 * hard, from: 0.2, to: 1.6 + 1.4 * hard, life: 0.35 });
+  shockwave(at, { color: 0xffffff, intensity: 0.6 * hard, from: 0.15, to: 1 + 0.8 * hard, life: 0.22 });
+  crackDecal(at, { size: 1.4 + 1.2 * hard, color: EARTH, intensity: 1.2, life: 2.5 });
+  smokePuff(at, { count: 12, color: DUST, alpha: 0.55, size: 0.8, sizeEnd: 2.4, speed: 3.2, life: 1 });
+  debris({ x: at.x, y: 0, z: at.z }, { count: Math.round(8 + 10 * hard), speed: 4 + 3 * hard });
+  decal(at, { type: 'scorch', size: 1 + 0.6 * hard, life: 3, opacity: 0.45 });
+}
+
 /** The foe it would leap onto for the aim at `target`: the one the aim is on, else the nearest the aim's point, within
  *  `range` of him. */
 function quarry(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
@@ -66,10 +99,6 @@ function quarry(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
   return best;
 }
 
-/** The pose's length after the landing (s): the blows and the hold after them (the model keys its blows to these,
- *  `POUNCE` in data/balance.ts). */
-const pounceHold = (blows: number): number => POUNCE.first + POUNCE.apart * (blows - 1) + POUNCE.after;
-
 /** The rest of the leap aimed `SHORT` from the foe's body where it is now, along the leap's way, never back: aimed at
  *  where it stood as he sprang, he landed inside a foe that walked at him (an adversarial review). */
 function steer(dash: { vx: number; vz: number; t: number; dur: number }, player: Player, foe: Enemy, dir: THREE.Vector3): void {
@@ -84,7 +113,6 @@ function steer(dash: { vx: number; vz: number; t: number; dur: number }, player:
 const skill: InstantSkill = {
   anim: 'pounce',
   dashes: true,
-  hits: (def) => [{ per: 'blow', base: (def as Def).damage, type: 'physical', note: `${(def as Def).blows} blows on the foe pinned` }],
   canCast: (player, def, target) => quarry(player, def as Def, target) !== null,
   cast(player, rawDef, target) {
     const def = rawDef as Def;
@@ -94,41 +122,30 @@ const skill: InstantSkill = {
     const dx = foe.pos.x - p.x, dz = foe.pos.z - p.z, d = Math.hypot(dx, dz);
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
     const go = Math.max(0, d - foe.radius - player.radius - SHORT);
-    const dur = POUNCE.leap, hold = pounceHold(def.blows);
-    let down = false, built = false;
+    const dur = POUNCE.leap, hold = POUNCE.after;
+    let down = false;
     sfx.bullLaunch(); sfx.grunt(player.frenzy / FRENZY.cap);
+    const lift = Math.min(POUNCE.top, go * POUNCE.rise);
+    springOff(p.clone(), dir);
     player.startDash(dir, go / dur, dur, {
-      anim: 'pounce', hold, lift: Math.min(POUNCE.top, go * POUNCE.rise),
+      anim: 'pounce', hold, lift,
       step: () => {
         const dash = player.dash;
         if (player.local && dash) leapView(Math.min(1, dash.t / dash.dur), dash.t - dash.dur, dash.lift);
+        if (dash && dash.t < dash.dur) {
+          const k = dash.t / dash.dur;
+          airTrail(player.pos, dir, lift * 4 * k * (1 - k), go / dur);
+        }
         if (!down && dash && dash.t < dash.dur && foe.alive) steer(dash, player, foe, dir);
         if (down || !dash || dash.t < dash.dur) return;
-        // the landing: his weight on it, the dust thrown out round them, and the foe pinned under him
+        // the landing: his weight on it, the dust thrown out round them, and the foe staggered by it
         down = true;
-        const at = player.pos.clone();
-        shockwave(at, { color: 0xd8b890, intensity: 0.8, from: 0.2, to: 1.8, life: 0.3 });
-        smokePuff(at, { count: 8, color: 0x2a241c, alpha: 0.5, size: 0.7, sizeEnd: 2, speed: 2.5 });
-        debris({ x: at.x, y: 0, z: at.z }, { count: 6, speed: 4 });
-        decal(at, { type: 'scorch', size: 0.9, life: 2.5, opacity: 0.4 });
+        comeDown(player.pos.clone(), lift);
         if (player.local) addShake(0.34);
         sfx.bullLand();
-        if (foe.alive && !foe.hero && !foe.boss) dazeEnemy(foe, hold, player);
+        if (foe.alive && !foe.hero && !foe.boss) dazeEnemy(foe, POUNCE.pin, player);
       },
     });
-    for (let i = 0; i < def.blows; i++) {
-      schedule(dur + POUNCE.first + POUNCE.apart * i, () => {
-        if (!player.alive || player.stunned || !foe.alive) return;
-        if (Math.hypot(foe.pos.x - player.pos.x, foe.pos.z - player.pos.z) > REACH + foe.radius) return;
-        const way = { x: foe.pos.x - player.pos.x, z: foe.pos.z - player.pos.z }, len = Math.hypot(way.x, way.z) || 1;
-        // (a blow into its body: what it kills is thrown back off it)
-        hitEnemy(foe, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: player.pos, blow: { dir: { x: way.x / len, z: way.z / len }, lift: 0.1, at: 0.9 } });
-        fistMark(foe, player.frenzy, 6);
-        sfx.punchLand(i % 2 ? 1 : -1, player.frenzy / FRENZY.cap);
-        if (player.local) addShake(0.06);
-        if (!built && !player.sandbox) { built = true; gainFrenzy(player, def.frenzy ?? 0); }
-      });
-    }
   },
 };
 

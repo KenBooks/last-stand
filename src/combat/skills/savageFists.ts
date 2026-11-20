@@ -8,7 +8,7 @@ import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, PUNCH_DRIVE } from '../../data/balance';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
@@ -22,6 +22,26 @@ const ROLL = { jab: 0.018, cross: 0.04 };
 
 /** casts whose punch is already heard (its air starts with the punch and peaks as the fist lands) */
 const thrown = new WeakSet<object>();
+/** each cast's turn so far: the way he faced last frame, and how far he has turned through the wind-up (rad, + to
+ *  his left) */
+const turns = new WeakMap<object, { last: number; sum: number }>();
+
+/** Whether this punch is the lead hand's jab (else the rear hand's cross, every punch with a shield on the arm). */
+const isJab = (player: Player): boolean => (player.model.swing ?? 1) > 0 && !player.gear.shield;
+
+/**
+ * What his body puts behind the punch landing now, as shares of its damage to add (`PUNCH_DRIVE`): `step` for walking
+ * at the foe, `swipe` for the aim swung through the wind-up the way the punching hand travels.
+ */
+export function punchDrive(player: Player, facing: number): { step: number; swipe: number } {
+  const pace = Math.max(1e-3, player.stats.moveSpeed);
+  const ahead = (player.vel.x * Math.sin(facing) + player.vel.z * Math.cos(facing)) / pace;
+  const turn = player.casting ? turns.get(player.casting)?.sum ?? 0 : 0;
+  // (a cross comes round from his right, so a turn to his left is behind it; a jab's the other way)
+  const with_ = (isJab(player) ? -turn : turn) / PUNCH_DRIVE.turn;
+  const share = (x: number): number => Math.min(1, Math.max(0, x));
+  return { step: PUNCH_DRIVE.step * share(ahead), swipe: PUNCH_DRIVE.swipe * share(with_) };
+}
 
 /** The colour of what flies off a blow at `frenzy` stacks: dust and sweat, hotter, then embers. */
 export function heatOf(frenzy: number): number {
@@ -51,6 +71,10 @@ const skill: InstantSkill = {
   hits: (def) => [
     { per: 'foe', base: (def as Def).damage, type: 'physical' },
     { per: 'clean hit', base: (def as Def).damage * (1 + CLEAN_HIT.bonus), type: 'physical', note: 'at arm\'s length' },
+    {
+      per: 'driven hit', type: 'physical', note: 'clean, stepping in, the aim swung with the fist',
+      base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe),
+    },
   ],
   charging(player, _def, k) {
     const c = player.casting;
@@ -58,6 +82,13 @@ const skill: InstantSkill = {
     // jab's: the frame held dead level, the arm went out from a body that never moved)
     if (player.local) rollView(((player.model.swing ?? 1) > 0 ? -ROLL.jab : ROLL.cross) * k * k);
     if (c && !thrown.has(c)) { thrown.add(c); sfx.punch(c.fireAt - c.t, -(player.model.swing ?? 1)); }
+    if (c) {
+      const turn = turns.get(c) ?? { last: player.facing, sum: 0 };
+      const by = player.facing - turn.last;
+      turn.sum += Math.atan2(Math.sin(by), Math.cos(by));
+      turn.last = player.facing;
+      turns.set(c, turn);
+    }
   },
   cast(player, rawDef) {
     const def = rawDef as Def;
@@ -65,9 +96,10 @@ const skill: InstantSkill = {
     const facing = player.facing, dir = { x: Math.sin(facing), z: Math.cos(facing) };
     const heat = player.frenzy;
     // (a straight blow: what it kills goes back along it, struck through its middle; a clean hit at arm's length lands
-    // harder, and throws twice the spray)
+    // harder, and throws twice the spray; harder again with his step and his turn behind it, `punchDrive`)
+    const drive = punchDrive(player, facing), driven = 1 + drive.step + drive.swipe;
     const hits = sweep(player, def, facing, {
-      knock: def.knock, blow: { dir, lift: 0.2 }, scale: cleanHit,
+      knock: def.knock, blow: { dir, lift: 0.2 }, scale: (gap) => cleanHit(gap) * driven,
       mark: (e, k) => fistMark(e, heat, 5 * (k > 1 ? 2 : 1)),
     });
     if (!hits) return;
@@ -75,7 +107,7 @@ const skill: InstantSkill = {
     const hot = heat / FRENZY.cap;
     sfx.punchLand(-(player.model.swing ?? 1), hot);
     if (hot >= 0.5 && Math.random() < 0.3) sfx.grunt(hot);
-    addShake(0.05);
+    if (player.local) addShake(0.05 + 0.12 * (driven - 1));
     if (player.sandbox) return;
     player.energy = Math.min(player.stats.maxEnergy, player.energy + (def.gain ?? 0) * hits);
     gainFrenzy(player, def.frenzy ?? 0);

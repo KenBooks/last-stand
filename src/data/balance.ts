@@ -232,13 +232,21 @@ export const RAMPAGE = { perSecond: 0.05, most: 0.5 };
 
 export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
 
+/** What his body puts behind a punch of Savage Fists (from play: "if moving towards target, punch should land
+ *  harder, also if swiping from the direction of attack with mouse (stationary) it should hit even harder, those 2
+ *  should stack"): `step` more of its damage walking straight at the foe at his full pace, less by how far off that
+ *  way or how much slower; `swipe` more with the aim swung `turn` rad or more through the wind-up the way the
+ *  punching hand travels (a cross's from his right to his left, a jab's from his left to his right), less for a
+ *  smaller swing. Added together, over a clean hit's. First takes, for tuning in play. */
+export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5 };
+
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
   slam: 5, quake: 10,
 };
 
 /** Pounce's timing (s), the skill's (combat/skills/pounce) and the warrior's pose keyed to it
- *  (entities/models/warriorFists): the leap, whatever its length; its first blow after the landing and each after
- *  that; how long he holds on after the last; and how many blows. How high a leap goes for each metre (m), at most
+ *  (entities/models/warriorFists): the leap, whatever its length; how long the landing holds him after it, before
+ *  his next cast; and how long it staggers what he lands on. How high a leap goes for each metre (m), at most
  *  `top`. */
-export const POUNCE = { leap: 0.3, first: 0.06, apart: 0.12, after: 0.16, blows: 4, rise: 0.17, top: 1.3 };
+export const POUNCE = { leap: 0.3, after: 0.12, pin: 0.5, rise: 0.17, top: 1.3 };
