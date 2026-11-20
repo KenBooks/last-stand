@@ -237,8 +237,11 @@ export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
  *  should stack"): `step` more of its damage walking straight at the foe at his full pace, less by how far off that
  *  way or how much slower; `swipe` more with the aim swung `turn` rad or more through the wind-up the way the
  *  punching hand travels (a cross's from his right to his left, a jab's from his left to his right), less for a
- *  smaller swing. Added together, over a clean hit's. First takes, for tuning in play. */
-export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5 };
+ *  smaller swing. Added together, over a clean hit's. Each of the three also sharpens the punch (from play: "for LMB
+ *  performing a technique should increase critical hit chance too"): `crit` points of a hundred more chance of a
+ *  critical hit for a clean hit, a full step and a full swing, the step's and the swing's by their shares, added
+ *  together. First takes, for tuning in play. */
+export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, crit: { clean: 10, step: 10, swipe: 15 } };
 
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
@@ -249,4 +252,6 @@ export const FRENZY = {
  *  (entities/models/warriorFists): the leap, whatever its length; how long the landing holds him after it, before
  *  his next cast; and how long it staggers what he lands on. How high a leap goes for each metre (m), at most
  *  `top`. */
-export const POUNCE = { leap: 0.3, after: 0.12, pin: 0.5, rise: 0.17, top: 1.3 };
+// (the leap 0.4 s, where 0.3: up to 1.3 m up and down again in 0.3 s he was shot along a rail, from play: "we still
+// need to move the jump in 3rd person look more convincing")
+export const POUNCE = { leap: 0.4, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3 };

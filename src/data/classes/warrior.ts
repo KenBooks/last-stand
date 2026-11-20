@@ -39,7 +39,7 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
-      desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
+      desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
       // (half as often and twice as hard as first set, 0.24 s and 30, from play: "lets slow down the attacks, its too
       // fast... and increase damage to make up for it... I'd say 2x"; the Energy a blow doubled with it)
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.48, fireAt: 0.5,
@@ -55,9 +55,10 @@ const warrior: ClassDef = {
     },
     {
       key: '1', impl: 'pounce', name: 'Pounce',
-      desc: 'Leap onto the foe you aim at, up to 8 metres off, landing at arm\'s length and staggering it for a moment. Elites and bosses are too strong to stagger. You are free to strike the moment you land.',
+      desc: 'Leap onto the foe you aim at, up to 8 metres off, striking it with both fists from two sides as you land and staggering it for a moment. Elites and bosses are too strong to stagger. Builds a stack of Frenzy, and you are free to strike again the moment you land.',
       tags: ['physical'], cost: 20, cooldown: 3, castTime: 0,
-      range: 8,
+      // (one blow; its four were 35 each, 140 together, and 200 is the owner's: "make it 200 base damage")
+      damage: 200, range: 8, frenzy: 1,
       needs: 'bare',
       color: 0xd8b890,
       icon: { glyph: '⤵', color: '#3fd8c0' },

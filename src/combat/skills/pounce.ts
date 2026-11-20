@@ -1,22 +1,27 @@
 // Pounce: the warrior with both hands empty (#400). An instant leap onto the foe aimed at, up to `range` m off, landing
 // at arm's length from it with his weight, which staggers it a moment (dazed for `POUNCE.pin`; not an elite or a
-// boss). The leap alone: it strikes nothing and builds no Frenzy, and he's free at once for whatever he casts next.
-// (It pinned the foe under four blows of its own, taken out: from play, "lets change pounce to only jump, this allows
-// stacking it with other attacks naturally".)
+// boss), and striking it as he lands with both fists swung in from his two sides: one blow, a stack of Frenzy if it
+// lands, and he's free at once for whatever he casts next. (It pinned the foe under four blows after the landing,
+// taken out: from play, "lets change pounce to only jump, this allows stacking it with other attacks naturally", then
+// "lets change pounce strike to attack with both hands from two opposite sides" and "no, pounce does damage".)
 import * as THREE from 'three';
 import { G } from '../../state';
-import { dazeEnemy } from '../damage';
+import { dazeEnemy, hitEnemy } from '../damage';
+import { gainFrenzy } from '../frenzy';
 import { shockwave, crackDecal, decal } from '../../fx/effects';
 import { particles, col, smokePuff, debris } from '../../fx/particles';
 import { rand } from '../../util';
 import { addShake, kickFov, liftView, tipView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { FRENZY, POUNCE } from '../../data/balance';
+import { fistMark, punchSharp } from './savageFists';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 
-type Def = Needs<'range'>;
+type Def = Needs<'damage' | 'range'>;
+/** his fists reach a foe this far from him past its size as he lands (m): one that slipped further off is missed */
+const REACH = 1.6;
 
 /** where he lands: this far short of the foe's body (m, past both sizes), at arm's length, where a punch thrown next
  *  lands clean (0.4 short, his forearms went into a husk's body as they came down) */
@@ -113,6 +118,7 @@ function steer(dash: { vx: number; vz: number; t: number; dur: number }, player:
 const skill: InstantSkill = {
   anim: 'pounce',
   dashes: true,
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical', note: 'both fists as he lands' }],
   canCast: (player, def, target) => quarry(player, def as Def, target) !== null,
   cast(player, rawDef, target) {
     const def = rawDef as Def;
@@ -144,6 +150,16 @@ const skill: InstantSkill = {
         if (player.local) addShake(0.34);
         sfx.bullLand();
         if (foe.alive && !foe.hero && !foe.boss) dazeEnemy(foe, POUNCE.pin, player);
+        // (his two fists meeting on it from both sides, the model's: a blow into its body, what it kills thrown
+        // back off it)
+        const dx = foe.pos.x - player.pos.x, dz = foe.pos.z - player.pos.z, far = Math.hypot(dx, dz) || 1;
+        if (!foe.alive || far > REACH + foe.radius) return;
+        const blow = { dir: { x: dx / far, z: dz / far }, lift: 0.15, at: 0.8 };
+        const sharp = punchSharp({ step: 0, swipe: 0 })(far - foe.radius);
+        const dealt = hitEnemy(foe, def.damage, { by: player, skill: def, sharp, tags: def.tags, type: 'physical', from: player.pos, blow });
+        fistMark(foe, player.frenzy, 12);
+        sfx.punchLand(0, player.frenzy / FRENZY.cap);
+        if (dealt > 0 && !player.sandbox) gainFrenzy(player, def.frenzy ?? 0);
       },
     });
   },

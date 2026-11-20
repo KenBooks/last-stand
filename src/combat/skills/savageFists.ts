@@ -54,6 +54,18 @@ export function heatOf(frenzy: number): number {
  *  the end of the arm's reach, else whole. */
 export const cleanHit = (gap: number): number => (gap >= CLEAN_HIT.from && gap <= CLEAN_HIT.to ? 1 + CLEAN_HIT.bonus : 1);
 
+/**
+ * A punch's extra chance of a critical hit on a foe whose edge is `gap` m from his middle, thrown with `drive` behind
+ * it (`PUNCH_DRIVE.crit`, points of a hundred): a clean hit's, and the step's and the swing's by their shares. Any
+ * punch's (from play: "or I guess for any punch,,, just LMB will be most affected by it"): Savage Fists' has all
+ * three, Rampage's blows the first two, Pounce's landing the first.
+ */
+export function punchSharp(drive: { step: number; swipe: number }): (gap: number) => number {
+  const C = PUNCH_DRIVE.crit;
+  const edge = C.step * (drive.step / PUNCH_DRIVE.step) + C.swipe * (drive.swipe / PUNCH_DRIVE.swipe);
+  return (gap) => edge + (cleanHit(gap) > 1 ? C.clean : 0);
+}
+
 export function fistMark(e: Enemy, frenzy = 0, n = 5): void {
   const hot = heatOf(frenzy);
   for (let i = 0; i < n; i++) {
@@ -98,8 +110,10 @@ const skill: InstantSkill = {
     // (a straight blow: what it kills goes back along it, struck through its middle; a clean hit at arm's length lands
     // harder, and throws twice the spray; harder again with his step and his turn behind it, `punchDrive`)
     const drive = punchDrive(player, facing), driven = 1 + drive.step + drive.swipe;
+
     const hits = sweep(player, def, facing, {
       knock: def.knock, blow: { dir, lift: 0.2 }, scale: (gap) => cleanHit(gap) * driven,
+      sharp: punchSharp(drive),
       mark: (e, k) => fistMark(e, heat, 5 * (k > 1 ? 2 : 1)),
     });
     if (!hits) return;

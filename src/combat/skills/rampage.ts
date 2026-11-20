@@ -8,7 +8,7 @@ import { sfx } from '../../core/audio';
 import { gainFrenzy } from '../frenzy';
 import { CLEAN_HIT, FRENZY, RAMPAGE } from '../../data/balance';
 import { sweep } from './cleave';
-import { cleanHit, fistMark } from './savageFists';
+import { cleanHit, fistMark, punchDrive, punchSharp } from './savageFists';
 import type { ChannelSkill, Needs } from './types';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
@@ -55,7 +55,7 @@ const skill: ChannelSkill<RampageState> = {
     if (before < land && st.into >= land) {
       const heat = player.frenzy, way = { x: Math.sin(player.facing), z: Math.cos(player.facing) };
       const hits = sweep(player, { ...def, damage: def.damage * PACE * builtUp(st.held) }, player.facing, {
-        knock: def.knock, blow: { dir: way, lift: 0.2 }, scale: cleanHit, mark: (e, k) => fistMark(e, heat, k > 1 ? 8 : 4),
+        knock: def.knock, blow: { dir: way, lift: 0.2 }, scale: cleanHit, sharp: punchSharp(punchDrive(player, player.facing)), mark: (e, k) => fistMark(e, heat, k > 1 ? 8 : 4),
       });
       if (hits) {
         sfx.punchLand(st.blows % 2 ? 1 : -1, heat / FRENZY.cap);

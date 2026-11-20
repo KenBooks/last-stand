@@ -41,6 +41,8 @@ interface SweepOpts {
   mark?: (e: Enemy, k: number) => void;
   /** each foe's share of the damage by how far its edge is from his middle (m): a fist's clean hit */
   scale?: (gap: number) => number;
+  /** each foe's extra chance of a critical hit by the same gap (points of a hundred) */
+  sharp?: (gap: number) => number;
 }
 
 /** Hit every enemy within `range` and half of `arc` of `facing` around the player. */
@@ -55,7 +57,8 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     const swing = opts.swing ?? 1;
     const blow = opts.blow ?? { dir: swingWay(p, e.pos, swing), lift: opts.lift ?? 0.3, on: swingOn(p, e.pos, swing, e.radius) };
     const k = opts.scale ? opts.scale(d - e.radius) : 1;
-    hitEnemy(e, def.damage * k, { by: player, skill: def, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
+    const sharp = opts.sharp?.(d - e.radius);
+    hitEnemy(e, def.damage * k, { by: player, skill: def, sharp, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
     if (opts.mark) opts.mark(e, k); else sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }
