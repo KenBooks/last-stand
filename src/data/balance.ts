@@ -246,6 +246,14 @@ export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
  *  together. First takes, for tuning in play. */
 export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, lead: 1.2, crit: { clean: 10, step: 10, swipe: 15 } };
 
+/** Savage Fists held (from play: "lets remove autoattack on LMB, hold mouse = charge strike (pull back) (2sec
+ *  charge), release = strike (should apply all modifiers previously discussed) 2sec charge is a separate modifier
+ *  ..... user should be able to keep clicking too, for short strikes", "2sec charged strike should give 0.5sec stun
+ *  on enemies"): a full charge lands `full` times a click's punch, less by how far it was charged, over every other
+ *  modifier; charged to the full it dazes what it hits for `stun` s (not an elite or a boss). `swing`: the time a
+ *  punch's swing of the aim is read over (s). First takes, for tuning in play. */
+export const PUNCH_CHARGE = { full: 4, stun: 0.5, swing: 0.25 };
+
 /** His bare fists' guard (from play: "leaving guard on (idle fists) should decrease damage from frontal arc while
  *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are
  *  attacking him"): up for `after` s after he last struck or was hurt, and while a foe is within `near` m of him;

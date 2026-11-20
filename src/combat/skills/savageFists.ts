@@ -9,7 +9,10 @@ import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY, PUNCH_DRIVE } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, PUNCH_CHARGE, PUNCH_DRIVE } from '../../data/balance';
+import { schedule } from '../../core/timers';
+import { dazeEnemy } from '../damage';
+import type { SkillDef } from '../../types';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
@@ -18,14 +21,15 @@ import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
 
-/** how far the view through the eyes rolls with a punch's shoulders as it lands (rad) */
-const ROLL = { jab: 0.018, cross: 0.04 };
+/** the share of the pose's time the gather takes, before the blow (the model's `JAB_OUT`, `CROSS_OUT`), and how long
+ *  after the button is let go the fist lands (s): the hit waits for it */
+const GATHER = 0.38, STRIKE = 0.055;
 
-/** casts whose punch is already heard (its air starts with the punch and peaks as the fist lands) */
-const thrown = new WeakSet<object>();
-/** each cast's turn so far: the way he faced last frame, and how far he has turned through the wind-up (rad, + to
- *  his left) */
-const turns = new WeakMap<object, { last: number; sum: number }>();
+/** How far a punch let go at `power` of its draw was charged past a click (0..1). */
+const chargeOf = (def: SkillDef, power: number): number => {
+  const least = def.minDraw ?? 0;
+  return Math.min(1, Math.max(0, (power - least) / Math.max(1e-3, 1 - least)));
+};
 
 /** each player's turning through his punches: game time it was last read, the way he faced then, and how fast he
  *  was turning (rad/s, + to his left) */
@@ -70,7 +74,9 @@ const isJab = (player: Player): boolean => (player.model.swing ?? 1) > 0 && !pla
 export function punchDrive(player: Player, facing: number): { step: number; swipe: number } {
   const pace = Math.max(1e-3, player.stats.moveSpeed);
   const ahead = (player.vel.x * Math.sin(facing) + player.vel.z * Math.cos(facing)) / pace;
-  const turn = player.casting ? turns.get(player.casting)?.sum ?? 0 : 0;
+  // (his turning now, over the time a punch swings: held to charge, the wind-up is as long as he likes)
+  const now = turning.get(player);
+  const turn = now && G.time - now.at < 0.2 ? now.rate * PUNCH_CHARGE.swing : 0;
   // (a cross comes round from his right, so a turn to his left is behind it; a jab's the other way)
   const with_ = (isJab(player) ? -turn : turn) / PUNCH_DRIVE.turn;
   const share = (x: number): number => Math.min(1, Math.max(0, x));
@@ -121,29 +127,44 @@ const skill: InstantSkill = {
       per: 'driven hit', type: 'physical', note: 'clean, stepping in, the aim swung with the fist',
       base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe),
     },
+    {
+      per: 'charged hit', type: 'physical', note: `held ${def.draw ?? 2} s, all of the above with it`,
+      base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe) * PUNCH_CHARGE.full,
+    },
   ],
-  pose(player, _def, action) {
+  pose(player, def, action) {
     const hand = handOf(player);
     if (hand !== undefined) action.hand = hand;
-  },
-  charging(player, _def, k, dt) {
+    // (the pose's time is the punch's own: gathered as the button goes down, held there with the fist drawn back
+    // further the longer it's charged, `draw`, and thrown as it's let go)
     const c = player.casting;
+    if (!c?.drawT) return;
+    const least = def.minDraw ?? 0;
+    if (!c.fired) {
+      const share = Math.min(1, c.t / c.drawT);
+      action.t = GATHER * Math.min(1, share / Math.max(1e-3, least));
+      action.draw = chargeOf(def, share);
+      return;
+    }
+    const after = Math.min(1, (c.t - c.fireAt) / Math.max(1e-3, c.dur - c.fireAt));
+    action.t = GATHER + (1 - GATHER) * after;
+    action.draw = chargeOf(def, c.power ?? 0);
+  },
+  charging(player, _def, _k, dt) {
     handOf(player);
     readTurning(player, dt);
-    // (through his own eyes the view tips with his shoulders as they turn behind the blow, a cross's further than a
-    // jab's: the frame held dead level, the arm went out from a body that never moved)
-    if (player.local) rollView(((player.model.swing ?? 1) > 0 ? -ROLL.jab : ROLL.cross) * k * k);
-    if (c && !thrown.has(c)) { thrown.add(c); sfx.punch(c.fireAt - c.t, -(player.model.swing ?? 1)); }
-    if (c) {
-      const turn = turns.get(c) ?? { last: player.facing, sum: 0 };
-      const by = player.facing - turn.last;
-      turn.sum += Math.atan2(Math.sin(by), Math.cos(by));
-      turn.last = player.facing;
-      turns.set(c, turn);
-    }
   },
-  cast(player, rawDef) {
-    const def = rawDef as Def;
+  cast(player, rawDef, _target, power = 0) {
+    // (let go: the fist is thrown, and lands a moment on)
+    sfx.punch(STRIKE, -(player.model.swing ?? 1));
+    schedule(STRIKE, () => land(player, rawDef as Def, chargeOf(rawDef, power)));
+  },
+};
+
+/** The punch lands, charged `charge` of the way past a click (0..1). */
+function land(player: Player, def: Def, charge: number): void {
+    if (!player.alive) return;
+    const full = charge >= 0.97, charged = 1 + (PUNCH_CHARGE.full - 1) * charge;
     // the way the body (and so the punch) faces, which turned to the target during the cast
     const facing = player.facing, dir = { x: Math.sin(facing), z: Math.cos(facing) };
     const heat = player.frenzy;
@@ -151,21 +172,32 @@ const skill: InstantSkill = {
     // harder, and throws twice the spray; harder again with his step and his turn behind it, `punchDrive`)
     const drive = punchDrive(player, facing), driven = 1 + drive.step + drive.swipe;
 
+    // (what it kills is thrown the way the blow went and as hard as it was thrown: on along his facing, carried
+    // across by the swing of his aim behind it, harder with his step, his swing and its charge, from play: "ragdoll
+    // should account for strike direction and momentum too")
+    const now = turning.get(player), rate = now && G.time - now.at < 0.2 ? now.rate : 0;
+    const across = Math.max(-0.8, Math.min(0.8, rate * PUNCH_CHARGE.swing));
+    const wx = dir.x + Math.cos(facing) * across, wz = dir.z - Math.sin(facing) * across, wl = Math.hypot(wx, wz) || 1;
+    const way = { x: wx / wl, z: wz / wl };
+    // (and by its charge, a modifier of its own over those; charged to the full it dazes what it hits)
     const hits = sweep(player, def, facing, {
-      knock: def.knock, blow: { dir, lift: 0.2 }, scale: (gap) => cleanHit(gap) * driven,
+      knock: def.knock * (1 + charge), blow: { dir: way, lift: 0.2 + 0.2 * charge, force: driven * (1 + charge) },
+      scale: (gap) => cleanHit(gap) * driven * charged,
       sharp: punchSharp(drive),
-      mark: (e, k) => fistMark(e, heat, 5 * (k > 1 ? 2 : 1)),
+      mark: (e, k) => {
+        fistMark(e, heat, Math.round(5 * (k > 1 ? 2 : 1) * (1 + charge)));
+        if (full && !e.boss && !e.hero) dazeEnemy(e, PUNCH_CHARGE.stun, player);
+      },
     });
     if (!hits) return;
     // (heavier as the Frenzy rises, a grunt now and then with a blow at high Frenzy)
     const hot = heat / FRENZY.cap;
     sfx.punchLand(-(player.model.swing ?? 1), hot);
     if (hot >= 0.5 && Math.random() < 0.3) sfx.grunt(hot);
-    if (player.local) addShake(0.05 + 0.12 * (driven - 1));
+    if (player.local) addShake(0.05 + 0.12 * (driven - 1) + 0.25 * charge);
     if (player.sandbox) return;
     player.energy = Math.min(player.stats.maxEnergy, player.energy + (def.gain ?? 0) * hits);
     gainFrenzy(player, def.frenzy ?? 0);
-  },
-};
+}
 
 export default skill;

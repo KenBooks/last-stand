@@ -134,6 +134,9 @@ const CROSS_OUT: Keys = [
   [0.91, 0.06], [0.96, 0], [1, 0],
 ];
 const LEAD = { hips: 0.09, chest: 0.045 };
+/** a charged punch: how far back along its line the fist is drawn at a full charge (of its reach), and how far the
+ *  chest is wound back behind it from outside (rad) */
+const PULL = 0.45, COIL = { jab: 0.22, cross: 0.32 };
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
@@ -345,10 +348,19 @@ export function fistStance(j: Joints, w: number): void {
  * A punch at `k` of its cast: the lead hand's jab (`lead`) or the rear hand's cross, over the guard. `still`: how far
  * he stands; `shielded`: a shield on the left arm, which keeps its own pose (every punch is then the right hand's).
  */
-export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t: number, eyes: boolean, shielded = false): void {
+export function fistPunch(
+  j: Joints, k: number, lead: boolean, still: number, t: number, eyes: boolean, shielded = false, charge = 0,
+): void {
   trunkBehind(j, k, lead, still, eyes);
+  // (held to charge, `charge` of the way: the fist drawn back along its line past the guard and the chest wound back
+  // behind it, until the blow goes, from play: "hold mouse = charge strike (pull back)")
+  const pull = charge * (1 - ramp(k, 0.36, 0.45));
+  if (!eyes && pull > 0) {
+    j.chest.rotation.y += (lead ? COIL.jab : -COIL.cross) * pull;
+    j.spine.rotation.y += 0.4 * (lead ? COIL.jab : -COIL.cross) * pull;
+  }
   fistGuard(j, 1, t, eyes, shielded);
-  const out = curve(lead ? JAB_OUT : CROSS_OUT, k), seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
+  const out = curve(lead ? JAB_OUT : CROSS_OUT, k) - PULL * pull, seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
   // (the elbow comes up only as the fist turns over at the end of its reach, and folds down by the ribs on the way
   // back: up with the fist's whole way, it came back flared out at the shoulder's height, the fist swept across the
   // chest, an adversarial review)

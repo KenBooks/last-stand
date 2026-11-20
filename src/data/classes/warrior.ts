@@ -39,10 +39,12 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
-      desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
+      desc: 'Click to punch what stands close before you, or hold to pull the fist back and charge it for up to 2 seconds, then let go: a full charge lands four times as hard and stuns what it hits for half a second. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
       // (half as often and twice as hard as first set, 0.24 s and 30, from play: "lets slow down the attacks, its too
       // fast... and increase damage to make up for it... I'd say 2x"; the Energy a blow doubled with it)
-      tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.48, fireAt: 0.5,
+      // (and then held to charge: a click is a short punch, the gather 0.12 s and the blow and its way home 0.3;
+      // held up to 2 s it's charged, `PUNCH_CHARGE`. Nothing repeats while the button is held)
+      tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.3, draw: 2, minDraw: 0.06,
       // (range from his middle to a foe's edge: a fist lands about 0.75 m ahead of it, the arm and the step into it; at 2.4
       // it struck a dummy from more than three arm's lengths off, from play: "this distance is too far for punch to hit")
       damage: 60, range: 1.3, arc: 1.3, knock: 1.2, gain: 8, frenzy: 1,
