@@ -12,7 +12,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); the service
   room, a save, a build or the device. The owner's choice (2026-11-20): an anonymous id, so weekly and monthly active
   players count each player once. Don't add a field without asking: the privacy page (`public/privacy.html`) says
   what's sent.
-- **On by default, off in one click** (the pause menu's Performance tab, the checkbox Anonymous play stats beside Slow-game reports, `#opt-stats`, `localStorage`
+- **On by default, off in one click** (the owner's choice, 2026-11-20: "Keep on by default") (the pause menu's Performance tab, the checkbox Anonymous play stats beside Slow-game reports, `#opt-stats`, `localStorage`
   `last-stand-play-stats`). A browser sending Global Privacy Control starts off. Turned off, the id is deleted: turned
   on again it's a new id.
 - **Sends nothing from the dev server or an automated browser** (`navigator.webdriver`: the lab, the stalls), so
