@@ -3,7 +3,7 @@
 // far along their warm-up is, in the middle of the dimmed lobby, and goes ahead once it's done (game/warm.ts). It says
 // what it readies, the latest press's: the fight, the hero picked, the save slot, the battleground, co-op. A co-op
 // guest's start shows it too, warm or not, over whatever the guest has open, until its run has begun (`showJoining`).
-import { isReadying, onReadying, readyingLabel, readyingShare } from '../game/warm';
+import { isReadying, onReadying, readyingGlide, readyingLabel, readyingShare } from '../game/warm';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { SAVE_SLOTS } from '../loot/saveSlots';
 
@@ -57,6 +57,11 @@ function paint(): void {
   // anywhere in its lobby as the host's comes)
   bar.classList.toggle('join', joining);
   bar.style.setProperty('--p', String(joining ? joiningShare() : readyingShare()));
+  // (a step that holds the page, a biome's build: the fill glides over its guessed time, the compositor drawing it
+  // while the page is held, where it stood still and then leapt)
+  const glide = readyingGlide();
+  if (glide > 0) bar.style.setProperty('--glide', `${Math.round(glide)}ms`);
+  else bar.style.removeProperty('--glide');
   // (a class pick said "Readying the fight": the text was the page's own, whatever was waiting)
   if (on) bar.querySelector('.rd-sub')!.textContent = joining ? READYING.join : readyingLabel();
 }

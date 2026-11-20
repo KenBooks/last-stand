@@ -6,11 +6,17 @@
 import { G } from '../state';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { biomeWarm, warmBiome } from './warmup';
-import { readyingWhile } from './warm';
+import { isWarm, needShare, readyingWhile, want } from './warm';
+
+/** the next frame (the fight's warm-up's share read once a frame meanwhile) */
+const nextFrame = (): Promise<void> => new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
 import { READYING } from '../ui/readying';
 import { VILLAGE } from '../core/beta';
 
-/** how far along building a biome takes its readying (0 to 1): its warm-up the rest */
+/** how much of the bar the fight's own warm-up takes, where it's cold as the run's biome is first needed (a first
+ *  visit's Start): one bar from the press to the run, where the fight's filled and then the biome's began again */
+const FIGHT_SHARE = 0.4;
+/** how far along the rest building a biome takes its readying (0 to 1): its warm-up the rest */
 const BUILT_SHARE = 0.6;
 
 /** Whether a run can begin in biome `id` with nothing of it to build or warm (without the village the boot built
@@ -26,9 +32,17 @@ export function readyBiome(id: BiomeId): Promise<void> {
   let ready = readying.get(id);
   if (!ready) {
     ready = readyingWhile(READYING.biome(id), async (progress) => {
-      await G.arena.buildBiome(id);
-      progress(BUILT_SHARE);
-      await warmBiome(id, (share) => progress(BUILT_SHARE + (1 - BUILT_SHARE) * share));
+      // (the fight's programs first, where they're still cold: its warm-up runs under this bar)
+      const fight = isWarm('fight') ? 0 : FIGHT_SHARE;
+      if (fight) want('fight');
+      while (!isWarm('fight')) {
+        progress(fight * needShare('fight'));
+        await nextFrame();
+      }
+      const rest = (share: number): number => fight + (1 - fight) * share;
+      progress(rest(0));
+      await G.arena.buildBiome(id, (share, glideMs) => progress(rest(BUILT_SHARE * share), glideMs));
+      await warmBiome(id, (share) => progress(rest(BUILT_SHARE + (1 - BUILT_SHARE) * share)));
     }).finally(() => readying.delete(id));
     readying.set(id, ready);
   }

@@ -41,6 +41,23 @@ export type { Portal } from './props';
 
 const BUILDERS: Record<BiomeId, BiomeBuilder> = { crypt: buildCrypt, forest: buildForest };
 
+/** A biome's build told how far along it will be once the step about to run is done (0 to 1), and how long that step
+ *  is guessed to take (ms): game/biomeReady.ts glides the fight's bar through it. */
+export type BuildStep = (share: number, glideMs: number) => void;
+/** how far a biome's build is once each step is done: the builder, the wall's seal, the shadows' bake */
+/** A biome's build against the village's, and its seal and its bake against its build, from the arena's measures
+ *  (`arena <place> <step>`, `tools/stalls/walks/barClimb.js`: the crypt's build 182 ms against the village's 414, its
+ *  seal 21 and its bake 8; the forest's seal reads its thicket's rocks and bushes by their hulls, about 8 times the
+ *  crypt's, `src/world/AGENTS.md`'s wall). */
+const BIOME_OF_VILLAGE = 0.45;
+const SEAL_OF_BUILD: Record<BiomeId, number> = { crypt: 0.12, forest: 0.5 };
+const BAKE_OF_BUILD = 0.05;
+/** How far biome `id`'s build is once each step is done (0 to 1): the builder, the wall's seal, the shadows' bake. */
+function buildSteps(id: BiomeId): { build: number; seal: number; bake: number } {
+  const whole = 1 + SEAL_OF_BUILD[id] + BAKE_OF_BUILD;
+  return { build: 1 / whole, seal: (1 + SEAL_OF_BUILD[id]) / whole, bake: 1 };
+}
+
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
 
 /** Every place's environment's programs compiled ahead of the places, linked as they're built (`compileEnvMaps`). */
@@ -102,28 +119,45 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   /** the fight's biomes built so far */
   const builtBiomes = (): BiomeId[] => BIOME_IDS.filter((id) => places[id]);
   /** Biome `id` built into its group and put in the scene, hidden. */
-  async function buildPlace(id: BiomeId): Promise<void> {
+  async function buildPlace(id: BiomeId, step: BuildStep = () => undefined): Promise<void> {
     // (what a worker sculpts for a biome meanwhile: the forest's stump)
     await stumpPreloaded();
     // one place at a time, letting the page paint between them (a window moved to another monitor stays black until
     // the main thread is free), and between its build and its wall's seal (on a phone the arena's build froze the
-    // loading screen 1 s at a time: on a CPU slowed six times the crypt's build was 3 s, the walls' seals 3.7)
+    // loading screen 1 s at a time: on a CPU slowed six times the crypt's build was 3 s, the walls' seals 3.7); each
+    // step told before it, with its guessed time, so the fight's bar glides through it (game/biomeReady.ts)
+    const steps = buildSteps(id);
+    step(steps.build, guessMs());
     await painted();
     const group = new THREE.Group();
     group.name = id;
+    let at = performance.now();
     const b = BUILDERS[id](group);
+    // (the seal and the bake guessed from the build's own time on this device)
+    const buildMs = performance.now() - at;
+    performance.measure(`arena ${id} build`, { start: at });
+    step(steps.seal, buildMs * SEAL_OF_BUILD[id]);
     await painted();
+    at = performance.now();
     b.wall.seal();
+    performance.measure(`arena ${id} seal`, { start: at });
+    step(steps.bake, buildMs * BAKE_OF_BUILD);
     await painted();
+    at = performance.now();
     bakeStaticShadows(group);
     const breakables = castBreakablesAsOne(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
+    performance.measure(`arena ${id} bake`, { start: at });
     group.visible = false;
     group.matrixAutoUpdate = false;
     b.setCalm(calm);
     scene.add(group);
     places[id] = { group, b, breakables };
   }
+  /** the village's build on this device (ms), the guess at a biome's before one is built (`guessMs`) */
+  let villageBuildMs = 0;
+  /** How long a biome's builder is guessed to take (ms), from the village's build on this device. */
+  const guessMs = (): number => villageBuildMs * BIOME_OF_VILLAGE;
   /** how calm the biomes are (`setCalm`): one built later takes it */
   let calm = 1;
   // (where the lobby is the village, a fight's biome is built as a run first needs it, `buildBiome`)
@@ -135,7 +169,10 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     await painted();
     const villageGroup = new THREE.Group();
     villageGroup.name = 'village';
+    const villageAt = performance.now();
     village = buildVillage(villageGroup);
+    villageBuildMs = performance.now() - villageAt;
+    performance.measure('arena village build', { start: villageAt });
     await painted();
     village.wall.seal();
     await painted();
@@ -193,11 +230,11 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   /** the biomes being built, each its build (`buildBiome`) */
   const building = new Map<BiomeId, Promise<void>>();
   /** Biome `id` built, as a run first needs it (game/biomeReady.ts), its place rigged and checked as the boot's are. */
-  function buildBiome(id: BiomeId): Promise<void> {
+  function buildBiome(id: BiomeId, step?: BuildStep): Promise<void> {
     if (places[id]) return Promise.resolve();
     let build = building.get(id);
     if (!build) {
-      build = buildPlace(id).then(() => {
+      build = buildPlace(id, step).then(() => {
         const group = placeOf(id).group;
         rigMorePointLights(group);
         stillForMeshlets(group);

@@ -46,8 +46,9 @@ export const wanted = (need: Need): Promise<void> => needs[need].wanted;
 /** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
 export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
-/** what's readied now beside the needs, under the fight's loading bar (`readyingWhile`: a boss at its wave) */
-const tasks: { label: string; share: number }[] = [];
+/** what's readied now beside the needs, under the fight's loading bar (`readyingWhile`: a boss at its wave), each
+ *  with how long the bar may take to glide to its share (`glideMs`, a long step's guess) */
+const tasks: { label: string; share: number; glideMs: number }[] = [];
 /** whether something pressed is waiting (the lobby shows the fight's loading bar) */
 export const isReadying = (): boolean => NEEDS.some((need) => needs[need].waiting > 0) || tasks.length > 0;
 /** how far the warm-ups waited for have got, 0 to 1: their mean */
@@ -56,16 +57,29 @@ export function readyingShare(): number {
     ...tasks.map((task) => task.share)];
   return shares.length ? shares.reduce((sum, share) => sum + share, 0) / shares.length : 0;
 }
+/** How long the bar may glide to its share (ms): the latest task's guess at the step under way, 0 for its usual ease. */
+export const readyingGlide = (): number => tasks[tasks.length - 1]?.glideMs ?? 0;
+/** How far `need`'s warm-up has got (0 to 1; 1 once it's warm). */
+export const needShare = (need: Need): number => (needs[need].warm ? 1 : needs[need].share);
 /** what the latest press still waiting readies (its `whenWarm` label), else what's readied beside, '' with none */
 export const readyingLabel = (): string => waitingFor[waitingFor.length - 1]?.label ?? tasks[tasks.length - 1]?.label ?? '';
 
+/** How far a readying's work has got (0 to 1), and, before a step that holds the page (a build), how long that step
+ *  is guessed to take (ms): the bar glides to `share` over it, drawn by the compositor while the page is held. */
+export type Progress = (share: number, glideMs?: number) => void;
+
 /** `work` done under the fight's loading bar, which says `label` and how far `work` has told it it is (0 to 1). */
-export async function readyingWhile(label: string, work: (progress: (share: number) => void) => Promise<void>): Promise<void> {
-  const task = { label, share: 0 };
+export async function readyingWhile(label: string, work: (progress: Progress) => Promise<void>): Promise<void> {
+  const task = { label, share: 0, glideMs: 0 };
   tasks.push(task);
   changed();
   try {
-    await work((share) => { task.share = share; changed(); });
+    await work((share, glideMs = 0) => {
+      // (never back: a bar that slid back read as begun again)
+      task.share = Math.max(task.share, share);
+      task.glideMs = glideMs;
+      changed();
+    });
   } finally {
     tasks.splice(tasks.indexOf(task), 1);
     changed();

@@ -295,7 +295,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide, photo: openPhoto });
+  initMenus({ start: biomeFirst(whenWarm(['fight'], start, READYING.fight), start), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged, guide: showGuide, photo: openPhoto });
   initPhoto({ back: (toPause) => openPause(toPause) });
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
@@ -308,7 +308,7 @@ async function boot() {
     onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
-    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, whenWarm(['fight'], startDuel, READYING.fight));
+    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
     // (how to play laid out under the loading screen: ui/menus.ts)
     layOutHelpAhead(true);
     initTrainingTracker();
@@ -653,6 +653,20 @@ function buildNextRunAhead(): void {
 }
 /** the pause between two pieces of the next run's props built ahead (ms): one a frame or so */
 const AHEAD_PAUSE_MS = 16;
+
+/**
+ * `press` (Start, a duel's), but where its battleground isn't built yet (the village's first run in it): that readied
+ * first, the fight's own warm-up with it under one bar (game/biomeReady.ts), and then `act`. Through `whenWarm` the
+ * fight's bar filled and then the biome's began again from nothing.
+ */
+function biomeFirst(press: () => void, act: () => void, ground = (): BiomeId => G.arena.biome): () => void {
+  return () => {
+    const id = ground();
+    // (a guest's press waits for the host, who readies it)
+    if (isGuest() || biomeReady(id)) press();
+    else void readyBiome(id).then(() => { if (G.mode === 'menu') act(); });
+  };
+}
 
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
