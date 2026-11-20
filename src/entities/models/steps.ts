@@ -13,15 +13,19 @@ export function built<T>(steps: Generator<void, T, undefined>): T {
   }
 }
 
+/** How long a slice of a build goes on before it lets the page go (ms): a number, or read at each slice (a build
+ *  behind the live lobby keeps to the lobby's budget while no loading bar is up: game/warmup.ts `behindSlice`). */
+export type SliceMs = number | (() => number);
+
 /** Finish a stepped build under a loading screen, yielding only at its existing safe boundaries after a time slice. */
 export async function builtInSlices<T>(
-  steps: Generator<void, T, undefined>, pause: () => Promise<void>, ms = 12, now = () => performance.now(),
+  steps: Generator<void, T, undefined>, pause: () => Promise<void>, ms: SliceMs = 12, now = () => performance.now(),
 ): Promise<T> {
   let since = now();
   for (;;) {
     const step = steps.next();
     if (step.done) return step.value;
-    if (now() - since < ms) continue;
+    if (now() - since < (typeof ms === 'function' ? ms() : ms)) continue;
     await pause();
     since = now();
   }

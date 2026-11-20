@@ -6,7 +6,7 @@
 import { perfClock } from '../ui/perfHud';
 import { atHeroDetail, heroDetail } from '../entities/models/armor';
 import { headsReady, preloadHeads } from '../entities/models/head';
-import { builtInSlices } from '../entities/models/steps';
+import { builtInSlices, type SliceMs } from '../entities/models/steps';
 import { recorder } from '../perf/recorder';
 
 /** A build in pieces: `steps` builds a piece a `next()`, `done` takes what the last returns. */
@@ -74,13 +74,14 @@ export function finishNow(key: string): boolean {
   }
 }
 
-/** A wanted queued build finished without holding input up, after its head workers have returned. */
-export async function finishInSlices(key: string, pause: () => Promise<void>): Promise<void> {
+/** A wanted queued build finished without holding input up, after its head workers have returned: `ms` of it
+ *  before each `pause` (`builtInSlices`). */
+export async function finishInSlices(key: string, pause: () => Promise<void>, ms?: SliceMs): Promise<void> {
   const i = jobs.findIndex((job) => job.key === key);
   if (i < 0) return;
   const [job] = jobs.splice(i, 1);
   await preloadHeads(job.detail);
-  job.done(await builtInSlices(job.steps, pause));
+  job.done(await builtInSlices(job.steps, pause, ms));
 }
 
 /** `key`'s next pieces alone, ahead of the queue and whatever holds it (the fight's warm-up, a hall open, a run):
