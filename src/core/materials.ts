@@ -98,7 +98,10 @@ export function tickItemGlow(time: number): void {
  * The glow's pattern, GLSL (the kit's patch) and WGSL (WebGPU's kit, core/shaderPorts.ts) alike: a value noise whose
  * lattice wraps along y at `per.x` cells, and through time, slice by slice, at `per.y` (two of its 3D fields
  * blended a slice apart, each slice's at an offset of its own), so the pattern drifting up and moving on through
- * time comes back to itself after a cycle.
+ * time comes back to itself after a cycle. Its warp's two fields, each noise's octaves and each octave's two slices are
+ * loops, the same sums in the same order: written out, ANGLE's D3D compiler made the 14 noises' 112 hashes one by one,
+ * and the glow was half of a kit program's compile, some 25 programs of a first visit's boot (`npm run lab --
+ * programs --cost`'s kit material, compiled in turns: 1.14 s summed by hand, 0.54 without the glow).
  */
 export const AURA_GLSL = /* glsl */ `
 float auraHash(vec3 c, float per){ c.y = mod(c.y, per); return fxHash(c); }
@@ -110,17 +113,27 @@ float auraNoise3(vec3 x, float per){
 float auraNoise(vec3 p, float w, vec2 per){
   float s = floor(w); float f = fract(w); f = f*f*(3.0-2.0*f);
   float s0 = mod(s, per.y); float s1 = mod(s + 1.0, per.y);
-  return mix(auraNoise3(p + vec3(17.31, 7.0, 11.13) * s0, per.x), auraNoise3(p + vec3(17.31, 7.0, 11.13) * s1, per.x), f);
+  vec2 n;
+  for (int k = 0; k < 2; k++) n[k] = auraNoise3(p + vec3(17.31, 7.0, 11.13) * (k == 0 ? s0 : s1), per.x);
+  return mix(n.x, n.y, f);
 }
-float auraFbm(vec3 p, float w, vec2 per){
-  return auraNoise(p, w, per)*0.5 + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.3 + auraNoise(p*4.0+9.1, w*4.0, per*4.0)*0.2;
+float auraOctaves(vec3 p, float w, vec2 per, int count, vec3 weights){
+  float sum = 0.0; float scale = 1.0;
+  for (int o = 0; o < count; o++) {
+    vec3 shift = vec3(o == 0 ? 0.0 : o == 1 ? 3.7 : 9.1);
+    sum += auraNoise(p*scale + shift, w*scale, per*scale)*weights[o];
+    scale *= 2.0;
+  }
+  return sum;
 }
-float auraWarp(vec3 p, float w, vec2 per){ return auraNoise(p, w, per)*0.62 + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.38; }
+float auraFbm(vec3 p, float w, vec2 per){ return auraOctaves(p, w, per, 3, vec3(0.5, 0.3, 0.2)); }
+float auraWarp(vec3 p, float w, vec2 per){ return auraOctaves(p, w, per, 2, vec3(0.62, 0.38, 0.0)); }
 float auraTendrils(vec3 at, float c, vec4 shape, vec4 loop){
   vec3 p = at * shape.xyx - vec3(0.0, c * loop.x, 0.0);
   float w = c * loop.y;
   vec2 per = loop.xy;
-  vec2 warp = vec2(auraWarp(p * 0.5, w * 0.5, per * 0.5), auraWarp(p * 0.5 + vec3(5.0, 1.0, 3.0), w * 0.5 + 1.0, per * 0.5));
+  vec2 warp;
+  for (int k = 0; k < 2; k++) warp[k] = auraWarp(p * 0.5 + vec3(5.0, 1.0, 3.0) * float(k), w * 0.5 + float(k), per * 0.5);
   float tex = auraFbm(p + vec3(warp.x, warp.y, warp.x) * 2.2, w, per);
   float strand = smoothstep(0.0, 1.0, 1.0 - abs(tex - shape.z) / shape.w);
   return loop.z + strand * mix(0.4, 1.0, smoothstep(0.3, 0.5, warp.x));

@@ -8,7 +8,7 @@ export default {
     + 'the lobby too, by the warm-ups\' compile or by a draw; each kind with the fields of its key that set its '
     + 'programs apart; those never drawn; those made after the reveal); `--cost`: each compiled again alone, salted '
     + 'so no cache answers, and timed (by kind, by what uses them, each step\'s by what uses them, by its point '
-    + 'lights, the longest, a plain lit material by part)',
+    + 'lights, the longest, a plain lit material by part, a kit material with its glow written out and without)',
   help: 'the programs the boot compiled (the game\'s ledger of them, dev builds alone): how many each loading '
     + 'step made, by the warm-ups\' compile or by a draw; each kind with the fields of its key that set its '
     + 'programs apart; those never drawn; those made after the reveal',
