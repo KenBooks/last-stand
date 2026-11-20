@@ -1,5 +1,5 @@
 // The warrior's poses with both hands empty (no weapon, no shield; #400): a berserker's guard and his fists' skills,
-// Savage Fists' punches and hammer ('punch'), Rampage's flurry as he walks ('rampage'), Pounce's leap and the blows
+// Savage Fists' punches ('punch'), Rampage's flurry as he walks ('rampage'), Pounce's leap and the blows
 // he rains on what he lands on ('pounce'), Bloodrush's shoulder-first dash ('bloodrush') and Wrath's hook, slam and
 // quake ('wrath'). Each poses the trunk as a fighter's body moves, then places each fist where it is before him
 // (`place`), the arm reaching it; through the eyes each fist is placed where it's seen in the view (`seen`), from the
@@ -47,10 +47,13 @@ const GUARD = tunable('fistGuard', { lead: [0.13, 0.03, 0.34], rear: [-0.12, 0.0
  *  eyes, they were huge blobs at the view's foot */
 const GUARD_EYES = tunable('fistsEyes', {
   lead: [-0.32, -0.45, 0.36], rear: [0.36, -0.5, 0.34],
-  /** Across, the index end out: the palms towards his face and the thumbs on the fists' outer sides, as a boxer
-   *  holds his guard (from play: "thumbs are facing outward... and face looking at inside palms"); index end up and
-   *  low at the view's foot, the fists showed their knuckles from above, and index end in, their backs. */
-  line: [-1, 0, 0],
+  /** The index end up and a little in: the fists turned in towards his body, the palms facing each other and the
+   *  thumbs on top towards his own face, as a boxer holds his guard, a quarter turn from the palm down a punch lands
+   *  with. Index end out, the palms towards his face and the thumbs on the fists' outer sides, was the top of a
+   *  curl, from play: "fists are rotated in a way that makes it anatomically difficult to have strength in a strike,
+   *  so it looks fake, you need to rotate fists towards the body ... in guard pose" (his earlier "thumbs are facing
+   *  outward... and face looking at inside palms" said what was wrong, and was read as what he wanted). */
+  line: [-0.55, 0.85, 0],
   /** The elbows down by the ribs so the palm can turn inward without winding the forearms past their range. */
   pole: 0.4,
 }), EASY_EYES = -0.22;
@@ -74,9 +77,9 @@ const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.
  */
 /** through the eyes, the one point both fists' knuckles land on: on the screen (across, up: the knuckles on the
  *  crosshair's line, the fist's body under it) and ahead of the eyes
- *  (m), how far a fist's knuckles are on from its wrist (m), and how far the fist is turned over from its guard as it
- *  lands (rad) */
-const STRIKE = tunable('strikeEyes', { at: [0, -0.04], ahead: 0.56, hand: 0.1, turn: 2.75, past: 0.03 });
+ *  (m), how far a fist's knuckles are on from its wrist (m), and how its knuckle line lies as it lands (rad up from
+ *  across, the thumb in: nearly palm down) */
+const STRIKE = tunable('strikeEyes', { at: [0, -0.04], ahead: 0.56, hand: 0.1, lands: 0.12, past: 0.03 });
 const PUNCH_EYES = {
   jab: tunable('jabEyes', {
     reach: 0.97, flare: 0.7, shoulder: [0.03, 0.02, 0.08], other: [0.12, -0.12, 0],
@@ -123,9 +126,6 @@ const LEAD = { hips: 0.09, chest: 0.045 };
 const TURN_OVER: Keys = [[0, 0], [0.16, 0], [0.44, 1], [0.54, 1], [0.8, 0], [1, 0]];
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
 const FREE_IN = [0.13, 0.02];
-/** a two-fisted hammer over its cast: the fists raised together, held up a moment, brought down to land at 0.5 */
-const HAMMER_UP: Keys = [[0, 0], [0.22, 1], [0.32, 1], [0.48, 0], [1, 0]];
-const HAMMER_DOWN: Keys = [[0, 0], [0.3, 0], [0.5, 1], [0.75, 1], [1, 0.2]];
 
 /**
  * The line of each fist's knuckles this frame, in the body's frame (to his left, up, ahead; the model clears both
@@ -349,16 +349,15 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;
   if (eyes) {
-    // (through the eyes the guard's line and the punch's are opposite, the thumb out and the thumb in: the fist is
-    // turned over between them through thumb up, as a forearm turns it. Eased straight from one to the other the
-    // line went through nothing, and the fist flipped over in one frame as it left the guard and again as it came
-    // back to it, from play: "on fist retraction from strike.... fist position jerks at last moment"; and by the
-    // fist's own way out, all of it: over its first 70%, three frames out and one at the end of its way back, it
-    // still rolled 150 degrees in a frame, read off the screen; and by its way back too, which is two frames long,
-    // 136. So over the cast's own time (`TURN_OVER`): over as it lands, and back over all the rest of the cast, the
-    // fist still turning as it settles into its guard. It lands palm down, the thumb in and a little up)
-    const outer = sided(GUARD_EYES.line, lead)[0], by = STRIKE.turn * curve(TURN_OVER, k);
-    line.set(outer * Math.cos(by), Math.sin(by), 0);
+    // (through the eyes the fist is turned over from its guard's line, the thumb up, to the punch's, the thumb in,
+    // a quarter turn, as a forearm turns it: by the angle between them, never eased from one line to the other (with
+    // an older guard, the thumb out, that went through nothing and the fist flipped over in a frame). And over the
+    // cast's own time (`TURN_OVER`), not the fist's way out, which is three frames long and its way back two: over as
+    // it lands, and back as the fist settles into its guard, from play: "on fist retraction from strike.... fist
+    // position jerks at last moment")
+    const [gx, gy] = GUARD_EYES.line, guarded = Math.atan2(gy, gx);
+    const at = lerp(guarded, STRIKE.lands, curve(TURN_OVER, k));
+    line.set((lead ? -1 : 1) * Math.cos(at), Math.sin(at), 0);
   } else lineTo(line, sided(LINE.punch, lead), turned);
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
@@ -376,38 +375,6 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
     _far.z -= FREE_IN[0] * back; _far.y += FREE_IN[1] * back;
     place(j, !lead, _far, back);
   }
-}
-
-/**
- * A two-fisted hammer at `k` of its cast (Savage Fists' at full Frenzy): both fists raised together over his head,
- * the back arching, then brought down onto what's before him as the skill lands, the knees giving under it.
- */
-export function fistHammer(j: Joints, k: number, eyes: boolean): void {
-  const up = curve(HAMMER_UP, k), down = curve(HAMMER_DOWN, k);
-  if (!eyes) {
-    // (standing tall through it, the trunk over the hips: bent into it, 24 degrees at the spine and 12 cm down, he
-    // ducked under his own blow, from play: "his two handed punch he ducks down as well, looks weird")
-    j.spine.rotation.x += -0.12 * up + 0.05 * down; j.chest.rotation.x += -0.06 * up + 0.03 * down;
-    j.neck.rotation.x += -0.06 * up - 0.12 * down;
-    j.hips.rotation.y += 0.2 * Math.max(up, down);
-    j.body.position.y += 0.02 * up; j.body.position.z += 0.03 * down;
-  }
-  const w = Math.max(up, down, ramp(k, 0, 0.15) * (1 - ramp(k, 0.85, 1)));
-  if (eyes) {
-    // (in the view: up into its top, then down through the middle to under the crosshair)
-    // (raised at arm's length to the eyes' height, not over the head: on his own shoulders, raised into the view's
-    // top, the arms filled it)
-    const y = lerp(lerp(-0.3, 0.06, up), -0.35, down), ahead = lerp(0.64, 0.66, down);
-    place(j, true, onScreen(j, [-0.1, y, ahead], _far), w, eyes);
-    place(j, false, onScreen(j, [0.1, y, ahead], _far), w, eyes);
-  } else {
-    between(j, _mid);
-    const y = lerp(lerp(0, 0.45, up), -0.28, down), z = lerp(lerp(0.3, 0.18, up), 0.55, down);
-    place(j, true, _far.set(_mid.x + 0.07, _mid.y + y, _mid.z + z), w);
-    place(j, false, _far.set(_mid.x - 0.07, _mid.y + y, _mid.z + z), w);
-  }
-  // (the fists side by side, knuckles out)
-  lineTo(fistLine.L, sided(LINE.punch, true), w); lineTo(fistLine.R, LINE.punch, w);
 }
 
 /** Rampage: the flurry at `beat` (the blows thrown so far and the share of the next): each blow a punch, the lead
@@ -571,7 +538,7 @@ export function fistWrath(j: Joints, k: number, form: number, t: number, eyes: b
   }
   const w = Math.max(smooth(ramp(k, 0, 0.3)), down);
   if (eyes) {
-    // (as the hammer: raised at arm's length to the eyes' height, then down through the view to the floor before him)
+    // (raised at arm's length to the eyes' height, then down through the view to the floor before him)
     const [across, high, near] = WRATH_EYES.raised;
     const y = lerp(lerp(-0.4, high, up), -0.75, down), ahead = lerp(lerp(0.64, near, up), 0.68, down);
     const x = lerp(lerp(0.11, across, up), 0.11, down);

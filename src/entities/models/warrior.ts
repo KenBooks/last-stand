@@ -36,7 +36,7 @@ import { tunable } from '../../core/tuning';
 import { armSection, FIGHTER_FOREARM, HEAVY, type ArmBuild } from './build';
 import { FANGS } from '../../data/balance';
 import {
-  FIST, fistGuard, fistStance, fistPunch, fistHammer, fistRampage, fistPounce, fistRush, fistWrath, fistLine, fistsLens,
+  FIST, fistGuard, fistStance, fistPunch, fistRampage, fistPounce, fistRush, fistWrath, fistLine, fistsLens,
 } from './warriorFists';
 import type { Hand } from './hands';
 import {
@@ -3379,11 +3379,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
         j.kneeL.rotation.x += 0.35 * hit + 0.2 * reel; j.kneeR.rotation.x += 0.15 * hit + 0.2 * reel;
         j.thighR.rotation.x += 0.35 * hit;
       } else if (a.name === 'punch') {
-        // Savage Fists: the lead hand's jab, then the rear hand's cross, over the guard; at full Frenzy every third a
-        // two-fisted hammer (`form` 1). A shield on the other arm: every punch is the right hand's, the shield held
+        // Savage Fists: the lead hand's jab, then the rear hand's cross, over the guard. A shield on the other arm:
+        // every punch is the right hand's, the shield held
         aw = 1;
-        if (a.form === 1 && !shield.visible) fistHammer(j, k, fp);
-        else fistPunch(j, k, side > 0 && !shield.visible, still, t, fp, shield.visible);
+        fistPunch(j, k, side > 0 && !shield.visible, still, t, fp, shield.visible);
       } else if (a.name === 'rampage') {
         // Rampage: a flurry of punches thrown as he walks on, the lead hand's and the rear's in turn
         aw = 1; fistRampage(j, a.beat ?? 0, still, t, fp);

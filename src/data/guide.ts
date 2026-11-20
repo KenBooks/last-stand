@@ -155,7 +155,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       powerStrike: 'Start it before the foe arrives: the blow lands after the wind-up.',
       ironBellow: 'Use it when surrounded, or just before a hit you cannot avoid.',
       potion: 'You can move while drinking. Drink early rather than late.',
-      savageFists: 'Fast and short: step right up to the foe, a punch landing hardest at full stretch. Each punch refills Energy and builds Frenzy; at full Frenzy every third blow is a two-fisted hammer.',
+      savageFists: 'Fast and short: step right up to the foe, a punch landing hardest at full stretch. Each punch refills Energy and builds Frenzy.',
       pounce: 'Aim at a foe up to 8 m off: you land on it and pin it while you pound it. Elites and bosses are not pinned.',
       rampage: 'Hold it and walk into the pack, punching all the way: the longer you hold it, the harder it hits and the more Energy it burns. Frenzy does not drain while you hold it.',
       bloodrush: 'Dash through a line of foes: each one you pass through is struck and adds a stack of Frenzy.',

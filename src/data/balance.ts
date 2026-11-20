@@ -219,8 +219,8 @@ export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
 /** Frenzy, the warrior's with both hands empty (#400, combat/frenzy.ts): his fists' hits build it, up to `cap` stacks
  *  (`unchained` under Unchained). Each stack quickens his attacks by `haste` % (his casting speed), heals back `leech`
  *  % of the damage he deals and adds `frail` % to the damage he takes. `wait` s after his last hit landed it decays a
- *  stack every `every` s. At `hammer` stacks every `third` blow of Savage Fists is a two-fisted hammer, `hammerK` times
- *  a punch's damage; Wrath's slam takes from `slam` stacks, its quake from `quake`. First takes, for tuning in play. */
+ *  stack every `every` s. Wrath's slam takes from `slam` stacks, its quake from `quake`. First takes, for tuning in
+ *  play. */
 /** A punch's clean hit: a fist lands hardest at the end of its reach, the arm all but straight, so a foe whose edge is
  *  `from` to `to` m from his middle takes `bonus` more of a punch (Savage Fists', Rampage's); one crowding him, the
  *  arm still bent, or at the reach's edge takes it plain (from play: "we need to add punch damage bonus for optimal
@@ -234,7 +234,7 @@ export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
 
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
-  hammer: 10, third: 3, hammerK: 2, slam: 5, quake: 10,
+  slam: 5, quake: 10,
 };
 
 /** Pounce's timing (s), the skill's (combat/skills/pounce) and the warrior's pose keyed to it

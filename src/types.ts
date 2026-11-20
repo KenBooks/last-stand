@@ -484,7 +484,7 @@ export interface ActionState {
   yaw?: number; arrows?: number; fan?: number;
   /** a bow's shot with no arrow on the string: how far the hand is through taking one from the quiver first (0..1) */
   fetch?: number;
-  /** the warrior's fists (#400): which form of the move it is (Savage Fists' 1 a two-fisted hammer; Wrath's 0 a hook,
+  /** the warrior's fists (#400): which form of the move it is (Wrath's 0 a hook,
    *  1 a slam, 2 a quake), and a flurry's blows so far with the share of the next thrown (Rampage's: 2.4 the third
    *  blow two fifths out) */
   form?: number; beat?: number;

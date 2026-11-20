@@ -39,7 +39,7 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
-      desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. At 10 Frenzy every third blow is a two-fisted hammer. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
+      desc: 'Punch left and right at what stands close before you. Each hit restores Energy and builds a stack of Frenzy. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.24, fireAt: 0.5,
       // (range from his middle to a foe's edge: a fist lands about 0.75 m ahead of it, the arm and the step into it; at 2.4
       // it struck a dummy from more than three arm's lengths off, from play: "this distance is too far for punch to hit")

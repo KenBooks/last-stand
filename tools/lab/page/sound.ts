@@ -173,14 +173,14 @@ const WARRIOR: Record<string, Scene> = {
     ]),
   },
   fistsHot: {
-    what: 'Savage Fists at full Frenzy: six punches at its quicker pace, the third and sixth a hammer with a grunt',
+    what: 'Savage Fists at full Frenzy: six punches at its quicker pace, the third and sixth with a grunt',
     cues: [0, 1, 2, 3, 4, 5].flatMap((punch) => {
-      const pace = PUNCH.pace / HOT_HASTE, way = punch % 2 ? 1 : -1, hammer = punch % 3 === 2;
+      const pace = PUNCH.pace / HOT_HASTE, way = punch % 2 ? 1 : -1, grunts = punch % 3 === 2;
       const lands = punch * pace + pace * PUNCH.fires;
       return [
         { at: punch * pace, sound: ['punch'], args: [pace * PUNCH.fires, way] },
-        { at: lands, sound: ['punchLand'], args: [way, hammer ? 1.5 : 1] },
-        ...(hammer ? [{ at: lands, sound: ['grunt'], args: [1] }] : []),
+        { at: lands, sound: ['punchLand'], args: [way, 1] },
+        ...(grunts ? [{ at: lands, sound: ['grunt'], args: [1] }] : []),
       ];
     }),
   },
