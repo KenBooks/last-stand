@@ -269,6 +269,71 @@ export async function partsText(
   return `  a plain lit material, each its fastest of ${PART_TIMES} compiled in turns: ${pieces.join('; ')}`;
 }
 
+/** a kit material's item glow in its fragment shader (`core/materials.ts` `patch`): its call, under its branch */
+const KIT_GLOW_CALL = /totalEmissiveRadiance \+= uAura \* uAuraLoop\.w \* auraTendrils\([^;]*\);/;
+/** the glow's pattern from its noise of two slices to its tendrils (`AURA_GLSL`), its loops and all */
+const KIT_GLOW_PATTERN = /float auraNoise\(vec3 p[\s\S]*?float auraTendrils\([\s\S]*?\n}\n/;
+/** that pattern as it was before its loops, every noise written out (main's at b32109c) */
+const KIT_GLOW_WRITTEN = [
+  'float auraNoise(vec3 p, float w, vec2 per){',
+  '  float s = floor(w); float f = fract(w); f = f*f*(3.0-2.0*f);',
+  '  float s0 = mod(s, per.y); float s1 = mod(s + 1.0, per.y);',
+  '  return mix(auraNoise3(p + vec3(17.31, 7.0, 11.13) * s0, per.x),'
+    + ' auraNoise3(p + vec3(17.31, 7.0, 11.13) * s1, per.x), f);',
+  '}',
+  'float auraFbm(vec3 p, float w, vec2 per){',
+  '  return auraNoise(p, w, per)*0.5 + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.3'
+    + ' + auraNoise(p*4.0+9.1, w*4.0, per*4.0)*0.2;',
+  '}',
+  'float auraWarp(vec3 p, float w, vec2 per){ return auraNoise(p, w, per)*0.62'
+    + ' + auraNoise(p*2.0+3.7, w*2.0, per*2.0)*0.38; }',
+  'float auraTendrils(vec3 at, float c, vec4 shape, vec4 loop){',
+  '  vec3 p = at * shape.xyx - vec3(0.0, c * loop.x, 0.0);',
+  '  float w = c * loop.y;',
+  '  vec2 per = loop.xy;',
+  '  vec2 warp = vec2(auraWarp(p * 0.5, w * 0.5, per * 0.5),'
+    + ' auraWarp(p * 0.5 + vec3(5.0, 1.0, 3.0), w * 0.5 + 1.0, per * 0.5));',
+  '  float tex = auraFbm(p + vec3(warp.x, warp.y, warp.x) * 2.2, w, per);',
+  '  float strand = smoothstep(0.0, 1.0, 1.0 - abs(tex - shape.z) / shape.w);',
+  '  return loop.z + strand * mix(0.4, 1.0, smoothstep(0.3, 0.5, warp.x));',
+  '}',
+  '',
+].join('\n');
+
+/** the parts of a kit material's program measured: each taken out of its source in turn */
+const KIT_PARTS: SourcePart[] = [
+  { name: 'as made', edit: (fragment) => fragment },
+  {
+    name: 'its glow\'s noises written out, as before their loops',
+    edit: (fragment) => {
+      const written = fragment.replace(KIT_GLOW_PATTERN, KIT_GLOW_WRITTEN);
+      return written === fragment ? null : written;
+    },
+  },
+  {
+    name: 'without its item glow (the tendrils\' noise)',
+    edit: (fragment) => (KIT_GLOW_CALL.test(fragment) ? fragment.replace(KIT_GLOW_CALL, '') : null),
+  },
+];
+
+/** What the longest kit material's program (one with the item glow) costs as made, with the glow's noises written
+ *  out as they were before their loops, and without the glow; none where no program has the glow. */
+export async function kitPartsText(gl: WebGL2RenderingContext, measured: ProgramCost[]): Promise<string> {
+  const kit = [...measured].sort((a, b) => b.ms - a.ms).find(({ entry }) => KIT_GLOW_CALL.test(entry.fragment));
+  if (!kit) return '  a kit material: none in the boot has the item glow';
+  const variants = KIT_PARTS.map(({ name, edit }) => {
+    const fragment = edit(kit.entry.fragment);
+    return { name, entry: fragment === null ? null : { ...kit.entry, fragment } };
+  });
+  const fastest = await fastestInTurns(gl, variants.map(({ entry }) => entry));
+  const pieces = variants.map(({ name, entry }, i) => {
+    if (!entry) return `none ${name}`;
+    return `${(fastest[i] / 1000).toFixed(2)} s ${name}`;
+  });
+  return `  a kit material (${kit.entry.owner.slice(0, 60)}), each its fastest of ${PART_TIMES} compiled in turns: `
+    + pieces.join('; ');
+}
+
 /**
  * Each of `entries` compiled `PART_TIMES` times, a round of one each in turn, each its fastest time (ms; none where an
  * entry is null). The machine's load comes and goes: timed one variant after another, a variant timed under another

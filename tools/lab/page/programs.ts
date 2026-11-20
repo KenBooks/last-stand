@@ -16,7 +16,9 @@ import { sceneTarget } from '../../../src/core/renderer';
 import { markLoaded, programsCompiledInGame, programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
 import { apartText, fieldsOf, kindOf, kindsApart, type KindApart } from './programKeys';
 import { LEAST_LIMITS, limitsReport } from './programLimits';
-import { cacheCanary, costs, lightsText, longestText, partsText, summedText, type ProgramCost } from './programCost';
+import {
+  cacheCanary, costs, kitPartsText, lightsText, longestText, partsText, summedText, type ProgramCost,
+} from './programCost';
 
 export interface ProgramsOptions {
   canary: boolean;
@@ -272,6 +274,7 @@ async function costReport(made: ProgramMade[], of: string): Promise<Report> {
     ...longestText(measured, groupOf),
     ...(of ? ofUserText(measured, of) : []),
     await partsText(G.renderer, G.scene, G.camera),
+    await kitPartsText(gl, measured),
     canaryReport.text,
   ];
   return { text: lines.join('\n'), problems: canaryReport.problems, counts: { 'compile ms': Math.round(total) } };
