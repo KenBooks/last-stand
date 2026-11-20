@@ -34,7 +34,11 @@ export const AREAS = [
   { name: 'the free camera', files: /^src\/(core\/wholeView|dev\/freeCam)\.ts$/, checks: /freeCam/i },
   { name: 'the fires', files: /^src\/world\/fire(Nodes)?\.ts$/, checks: /fire/i },
   { name: 'the training', files: /^src\/(game|data|ui)\/training\.ts$/, checks: /training/i },
-  { name: 'the hall\'s heroes', files: /^src\/(game\/hall|world\/heroHall)\.ts$/, checks: /hero|hall|dais|built/i },
+  {
+    name: 'the hall\'s heroes',
+    files: /^src\/(game\/hall|world\/heroHall|entities\/models\/stillAsOne)\.ts$/,
+    checks: /hero|hall|dais|built/i,
+  },
   { name: 'the kept shadows', files: /^src\/world\/(shadowsOnMove|culling)\.ts$/, checks: /shadow/i },
 ];
 

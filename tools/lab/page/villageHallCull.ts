@@ -35,7 +35,7 @@ const MOST_CHANGED = 0.0005;
 
 /** A frame drawn by the game's camera: its pixels, and the scene's draws in it (those by the game's camera) and the
  *  triangles they drew. */
-interface Counted { canvas: Canvas; draws: number; triangles: number }
+export interface Counted { canvas: Canvas; draws: number; triangles: number }
 
 /** The triangles a draw of `geometry` by `object` draws: its range's, times an instanced mesh's instances (the
  *  grass's, an instanced geometry, is counted by its vertices apart: `grassVertices`). */
@@ -48,7 +48,7 @@ function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): nu
 }
 
 /** The frame drawn now, its scene's draws and their triangles counted. */
-function countedFrame(lab: Lab): Counted {
+export function countedFrame(lab: Lab): Counted {
   const renderer = G.renderer;
   const own = renderer.renderBufferDirect.bind(renderer);
   let draws = 0;
