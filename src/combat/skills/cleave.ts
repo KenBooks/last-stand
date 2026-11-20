@@ -43,6 +43,8 @@ interface SweepOpts {
   scale?: (gap: number) => number;
   /** each foe's extra chance of a critical hit by the same gap (points of a hundred) */
   sharp?: (gap: number, e: Enemy) => number;
+  /** which foes in reach it strikes, in place of the arc (a punch's: what its fist's line meets) */
+  meets?: (e: Enemy) => boolean;
 }
 
 /** Hit every enemy within `range` and half of `arc` of `facing` around the player. */
@@ -53,7 +55,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     if (!e.alive) continue;
     const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
     if (d > def.range + e.radius) continue;
-    if (d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
+    if (opts.meets ? !opts.meets(e) : d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
     const swing = opts.swing ?? 1;
     const blow = opts.blow ?? { dir: swingWay(p, e.pos, swing), lift: opts.lift ?? 0.3, on: swingOn(p, e.pos, swing, e.radius) };
     const k = opts.scale ? opts.scale(d - e.radius) : 1;

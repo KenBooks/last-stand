@@ -10,7 +10,7 @@ import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
 import { schedule } from '../../core/timers';
 import { dazeEnemy } from '../damage';
 import type { SkillDef } from '../../types';
@@ -25,6 +25,13 @@ type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
 /** the share of the pose's time the gather takes, before the blow (the model's `JAB_OUT`, `CROSS_OUT`), and how long
  *  after the button is let go the fist lands (s): the hit waits for it */
 const GATHER = 0.38, STRIKE = 0.055;
+
+/** How far the fist is cocked back by the jaw at `share` of the draw: all the way within `COCK` of the draw past a
+ *  click's, at once, so the hand that charges shows (from play: "he should instantly pull back... so its clear which
+ *  hand is charging", "pulling back means cocking the hand near jaw, as boxers do"); a click hardly cocks it. */
+const COCK = 0.05;
+const cockOf = (def: SkillDef, share: number): number =>
+  Math.min(1, Math.max(0, (share - (def.minDraw ?? 0)) / COCK));
 
 /** How far a punch let go at `power` of its draw was charged past a click (0..1). */
 const chargeOf = (def: SkillDef, power: number): number => {
@@ -144,12 +151,12 @@ const skill: InstantSkill = {
     if (!c.fired) {
       const share = Math.min(1, c.t / c.drawT);
       action.t = GATHER * Math.min(1, share / Math.max(1e-3, least));
-      action.draw = chargeOf(def, share);
+      action.draw = cockOf(def, share);
       return;
     }
     const after = Math.min(1, (c.t - c.fireAt) / Math.max(1e-3, c.dur - c.fireAt));
     action.t = GATHER + (1 - GATHER) * after;
-    action.draw = chargeOf(def, c.power ?? 0);
+    action.draw = cockOf(def, c.power ?? 0);
   },
   charging(player, _def, _k, dt) {
     handOf(player);
@@ -202,6 +209,11 @@ function land(player: Player, def: Def, charge: number): void {
       knock: def.knock * (1 + charge), blow: { dir: way, lift: 0.2 + 0.2 * charge, force: driven * (1 + charge) },
       scale: (gap) => cleanHit(gap) * driven * charged,
       sharp: (gap, e) => (toHead(player, e) ? 100 : edge(gap)),
+      // (what the fist meets on its way: a foe ahead of him whose body its line passes through or within its breadth of)
+      meets: (e) => {
+        const tx = e.pos.x - player.pos.x, tz = e.pos.z - player.pos.z;
+        return tx * dir.x + tz * dir.z > 0 && Math.abs(tx * dir.z - tz * dir.x) <= e.radius + PUNCH_WIDE;
+      },
       mark: (e, k) => {
         fistMark(e, heat, Math.round(5 * (k > 1 ? 2 : 1) * (1 + charge)));
         if (full && !e.boss && !e.hero) dazeEnemy(e, PUNCH_CHARGE.stun, player);

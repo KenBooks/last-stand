@@ -141,7 +141,7 @@ const LEAD = { hips: 0.09, chest: 0.045 };
 // back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
 // ring, from play: "held punch needs to pull back, not just draw a charge circle")
 const COIL = { jab: 0.3, cross: 0.42 };
-const BACK = tunable('punchBack', { eyes: [0.8, -0.7, 0.22], body: [0.12, -0.16, -0.34] });
+const BACK = tunable('punchBack', { eyes: [0.5, -0.62, 0.17], body: [0.02, 0, -0.17], elbow: 0.4 });
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
@@ -386,14 +386,14 @@ export function fistPunch(
     const [aside, down, close] = BACK.eyes;
     if (pull > 0) _from.lerp(onScreen(j, [(lead ? -1 : 1) * aside, down, close], _mid), smooth(pull));
     const w = Math.max(smooth(pull), smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))));
-    place(j, lead, _from, w, true, seenAs.flare * over, smooth(pull));
+    place(j, lead, _from, w, true, seenAs.flare * over, BACK.elbow * smooth(pull));
   } else {
     place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
     if (pull > 0) {
       const [aside, down, back] = BACK.body;
       guardAt(j, lead, false, 0, 0, _far);
       _far.x += (lead ? 1 : -1) * aside; _far.y += down; _far.z += back;
-      place(j, lead, _far, smooth(pull), false, 0, 1);
+      place(j, lead, _far, smooth(pull), false, 0, BACK.elbow);
     }
   }
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;

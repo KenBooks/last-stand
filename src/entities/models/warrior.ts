@@ -353,6 +353,9 @@ const FISTS_UP = 4;
 const FIST_IN = 0.06;
 /** both hands empty, moving: how far the hands close (of a fist) and how far the wrists let them hang (rad) */
 const WALK_FIST = 0.45, WALK_DROOP = 0.3;
+/** an empty hand hanging: how far it's turned on its forearm from the rig's rest, the palm in to the thigh (rad) */
+const IDLE_PALM = tunable('idlePalm', { turn: 1.5 });
+const PALM_AXIS = new THREE.Vector3(0, 1, 0);
 /** and how much further the elbows bend as he moves (rad: to about 45 degrees, the owner's "bend elbows a tiny bit
  *  more, like 45 degress"; hanging at 20 to 30 they read as stiff) */
 const WALK_BEND = 0.35;
@@ -4192,6 +4195,12 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // The pose sets the knuckle line. `closeFist` keeps it square to the forearm even on a slanted grip line.
+    // (an empty hand hanging at his side is turned on its forearm so its palm lies along his thigh, as a man's hangs:
+    // the rig's rest has the palms to his back, the forearms turned fully over, from play: "in idle pose, can you turn
+    // hands parallel to body, like ranger ?". The hand as drawn, `vis`, as a fist's line turns it: `side` its way round)
+    const palmIn = (h: Hand, side: number, w: number): void => {
+      if (w > 0) h.vis.quaternion.setFromAxisAngle(PALM_AXIS, side * IDLE_PALM.turn * Math.min(1, w));
+    };
     const knuckles = (g: THREE.Object3D, line: THREE.Vector3, hand: THREE.Object3D) =>
       line.lengthSq() > 0 ? thumbNotDown(_hd.copy(line).transformDirection(j.body.matrixWorld), hand, fp ? THUMB_UP_EYES : THUMB_UP) : along(g);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
@@ -4211,7 +4220,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       if (fp) rollForearm(handR, j.elbowR, j.handR, fistLine.R);
       closeFist(handR, knuckles(grip, fistLine.R, j.handR));
     }
-    else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
+    else {
+      poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
+      if (freeR && !fp) palmIn(handR, -1, 1 - fistedR / FIST.from);
+    }
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
@@ -4219,7 +4231,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       if (fp) rollForearm(handL, j.elbowL, j.handL, fistLine.L);
       closeFist(handL, knuckles(gripL, fistLine.L, j.handL));
     }
-    else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
+    else {
+      poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
+      if (bare && !fp) palmIn(handL, 1, 1 - fisted / FIST.from);
+    }
 
     wrists.L.bend(handL.vis);
     wrists.R.bend(handR.vis);
