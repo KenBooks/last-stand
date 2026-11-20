@@ -12,7 +12,7 @@ const HASHED = /-[A-Za-z0-9_]{8}\.(js|css)$/;
 
 /** The dashboard's sections a browser may open by their address: the app answers each (web/src/app/app.routes.ts).
  *  The same paths asked for as JSON are the API's. */
-export const PAGES = new Set(['/traces', '/traces/reports']);
+export const PAGES = new Set(['/traces', '/traces/players', '/traces/reports']);
 
 /** What the build made, or null when it wasn't built (the service still takes and serves traces as JSON). */
 function load() {

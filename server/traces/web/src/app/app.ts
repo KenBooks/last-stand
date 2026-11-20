@@ -36,6 +36,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 export class App {
   protected readonly sections = [
     { path: '/', label: 'Traces' },
+    { path: '/players', label: 'Players' },
     { path: '/reports', label: 'Bug reports' },
   ];
 }

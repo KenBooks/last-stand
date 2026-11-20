@@ -22,6 +22,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 | `game/` | The run (waves, loot, bank or continue), the warm-up at boot, the lobby floor, the scores |
 | `loot/` | Items, profiles, loadouts, save slots |
 | `net/` | Co-op |
+| `stats/` | Anonymous play stats: a heartbeat a minute for the operations dashboard |
 | `ui/` | The page's UI, its styles (`styles/`), the world's overlays (`overlay/`), the skill icons |
 | `world/` | The biomes' arenas, their props, the wall, navigation |
 

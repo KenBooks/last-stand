@@ -5,10 +5,10 @@ serves under `/traces` to a browser signed in from Dokci. How it's built, served
 [`server/traces/AGENTS.md`](../AGENTS.md); the rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
 - `src/app/app.ts` the frame (the name, a link to each section), `app.routes.ts` the sections, each loaded when first
-  opened: `traces/` (the summary and the list) and `reports/` (the bug reports). `core/` what every section shares:
+  opened: `traces/` (the summary and the list), `players/` (the player stats: `players-logic.ts`, pure and spec'd, makes the cards, the charts' points and the table from `/traces/stats`) and `reports/` (the bug reports). `core/` what every section shares:
   the service's addresses and the signed-out interceptor (`api.ts`), its answers' types (`models.ts`), a list read a
   page at a time (`paged.ts`), how sizes and ages are written (`format.ts`, spec'd). `shared/` small components
-  (`StatCard`, `Chips`, `When`). `src/styles.css` what every table and card shares; each component's own look is in
+  (`StatCard`, `Chips`, `When`, and `TimeChart`: one measure over time as a line or bars, a crosshair and tooltip at the point nearest the pointer, the arrow keys stepping through it; its layout is `chart-logic.ts`, pure and spec'd). `src/styles.css` what every table and card shares; each component's own look is in
   its `styles`.
 - **A new section** is a folder under `src/app/`, a route in `app.routes.ts`, its link in `app.ts` and its path in
   `PAGES` (`../page.mjs`): the server serves the app only at the paths it knows, the same paths as JSON being the API.
@@ -36,6 +36,7 @@ types: remove boilerplate newer versions made default.
 
 ## Gotchas
 
+- **A chart has one series and one axis** (the dataviz rules): its colour is `--viz` (checked against the panel: OKLCH L 0.48 to 0.67, 3:1 and more; the UI's own accent is too light for a mark), the mark under the pointer `--viz-on`. Every value in a chart is in a table too (`players-table.ts`). Day bars are UTC days, as the service sums them; the online line's times are the viewer's own.
 - **The CSP allows no inline script or style but what carries this response's nonce** (`../page.mjs` fills
   `index.html`'s `{{nonce}}`, which Angular reads from `ngCspNonce` for the `<style>`s its components add). Nothing
   may set a `style` attribute in markup or add an inline handler; `[style.x]` bindings are fine (they set the CSSOM).

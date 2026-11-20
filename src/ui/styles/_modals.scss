@@ -134,6 +134,10 @@ body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1));
 .pb-opts .opt-row { justify-content: flex-start; margin: 4px 0 14px; }
 .pb-opts .quality-row { flex-direction: column; align-items: flex-start; gap: 6px; }
 .pb-opts .quality-row > span { color: var(--ink-dim); font-size: 13px; }
+/* a checkbox beside a row's choice, wrapping under it where there's no room (the anonymous play stats beside the
+   slow-game reports) */
+.pb-opts .opt-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.pb-opts .opt-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: $cursor-hand; }
 /* a choice beside its name, among the overlays' switches: a row no taller than theirs */
 .pb-opts .seg-row { flex-direction: row; align-items: center; gap: 10px; }
 .pb-opts .seg-row .seg button { padding-block: 3px; }

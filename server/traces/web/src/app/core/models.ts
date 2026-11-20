@@ -38,6 +38,41 @@ export interface Summary {
   diskFull: number;
 }
 
+/** A day's player sums for one kind of site (stats.mjs): production's (`live`) or the test builds'. */
+export interface KindSums {
+  players: number;
+  minutes: number;
+  fight: number;
+  coop: number;
+  sessions: number;
+  newPlayers: number;
+  /** how many were online in each 5-minute slot of the day (UTC) */
+  online: number[];
+}
+
+/** A day's sums (`day` as 2026-11-20, UTC). */
+export interface DaySums {
+  day: string;
+  live: KindSums;
+  test: KindSums;
+}
+
+/** Active players over a day, a week and a month. */
+export interface Active {
+  day: number;
+  week: number;
+  month: number;
+}
+
+/** The players' sums (GET /traces/stats). */
+export interface Stats {
+  now: string;
+  slotMinutes: number;
+  online: { live: number; test: number };
+  active: { live: Active; test: Active };
+  days: DaySums[];
+}
+
 /** A bug report's line in its list: what happened cut to 200 characters. */
 export interface ReportLine {
   code: string;
