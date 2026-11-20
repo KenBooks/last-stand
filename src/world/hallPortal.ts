@@ -6,8 +6,14 @@
 // the frame's draw unless its bounds meet the cone from the camera through the doorway; the shadow maps still draw
 // it (shown again round their draw), so its shadow seen through the doorway stays. The meadow's tiles are culled by
 // it as they're listed (`hiddenByHallDoor`).
+//
+// From outside it's the other way round: with the camera before the hall's front, its walls and roof whole and
+// nothing thinning, what stands wholly inside its walls (its room's loose parts and what's merged of them, the heroes
+// on its dais) is seen through the doorway alone (its windows are too high, their panes show nothing), and is left
+// out of the frame unless it meets the cone from the camera through the doorway: facing the hall from the square, the
+// room and the heroes were 128 of the frame's 429 draws, all drawn whatever the doorway showed of them.
 import * as THREE from 'three';
-import { fadedWhole } from '../core/seeThrough';
+import { blendedSolid, fadedWhole } from '../core/seeThrough';
 import { HALL, TERRACE } from '../data/village';
 import { aroundShadows, hideCellsWhere, isDrawingStill } from './culling';
 import { G } from '../state';
@@ -22,6 +28,12 @@ const FOE_ROUND = { up: 1, radius: 1.5 };
 const hallBox = new THREE.Box3(
   new THREE.Vector3(TERRACE.x - HALL.half, -1, HALL.wall - 1),
   new THREE.Vector3(TERRACE.x + HALL.half, 12, HALL.door + 0.5),
+);
+/** the hall's inside, between its walls' inner faces from its floor up: what lies wholly in it is seen from outside
+ *  through the doorway alone */
+const insideBox = new THREE.Box3(
+  new THREE.Vector3(TERRACE.x - HALL.inHalf - 0.05, TERRACE.high - 0.3, HALL.wall - 0.05),
+  new THREE.Vector3(TERRACE.x + HALL.inHalf + 0.05, 12, HALL.inFront + 0.05),
 );
 /** the cone's four sides through the doorway's edges, each facing in */
 const sides = Array.from({ length: 4 }, () => new THREE.Plane());
@@ -95,8 +107,9 @@ const inDoorway = (eye: THREE.Vector3): boolean =>
   Math.abs(eye.x - TERRACE.x) < HALL.doorHalf && eye.y < TERRACE.high + HALL.doorHigh
   && eye.z >= HALL.inFront && eye.z < HALL.door - DOORWAY_SPARE;
 
-/** The cone's sides set from `eye` through the doorway's edges, each facing the doorway's middle. */
-function coneFrom(eye: THREE.Vector3): void {
+/** The cone's sides set from `eye` through the doorway's edges, each facing the doorway's middle (`inward`: the
+ *  eye outside, the cone opening into the hall). */
+function coneFrom(eye: THREE.Vector3, inward = false): void {
   const x0 = TERRACE.x - HALL.doorHalf - DOOR_MARGIN, x1 = TERRACE.x + HALL.doorHalf + DOOR_MARGIN;
   const y0 = TERRACE.high - DOOR_MARGIN, y1 = TERRACE.high + HALL.doorHigh + DOOR_MARGIN;
   // (round the doorway: bottom left, top left, top right, bottom right)
@@ -104,7 +117,7 @@ function coneFrom(eye: THREE.Vector3): void {
   _corners[1].set(x0, y1, HALL.door);
   _corners[2].set(x1, y1, HALL.door);
   _corners[3].set(x1, y0, HALL.door);
-  _middle.set(TERRACE.x, TERRACE.high + HALL.doorHigh / 2, HALL.door + 1);
+  _middle.set(TERRACE.x, TERRACE.high + HALL.doorHigh / 2, HALL.door + (inward ? -1 : 1));
   for (let k = 0; k < 4; k++) {
     const side = sides[k].setFromCoplanarPoints(eye, _corners[k], _corners[(k + 1) % 4]);
     if (side.distanceToPoint(_middle) < 0) side.negate();
@@ -138,6 +151,58 @@ function lookingOut(camera: THREE.Camera, village: THREE.Object3D, cutaway: read
   // (cut away, thinned to a ghost: what's beyond it shows)
   if (!cutaway.every((part) => part.visible) || fadedWhole('hallFront') || fadedWhole('hallRoof')) return false;
   return eyeInside(camera.getWorldPosition(_eye));
+}
+
+/** Whether the frame drawn by `camera` looks into the hall through its doorway alone: the game's camera before its
+ *  front, its walls and roof drawn whole and nothing that blends thinning (a wall thinned, a hole round him, shows
+ *  what's past it). */
+function lookingIn(camera: THREE.Camera, village: THREE.Object3D, cutaway: readonly THREE.Object3D[]): boolean {
+  if (mode === 'off' || camera !== G.camera || !village.visible || isDrawingStill()) return false;
+  if (!cutaway.every((part) => part.visible) || !blendedSolid()) return false;
+  const eye = camera.getWorldPosition(_eye);
+  return eye.z > HALL.door + DOORWAY_SPARE && !eyeInside(eye);
+}
+
+/** What lies wholly inside the hall's walls, each with its sphere: the village's parts (a part holding a light never,
+ *  as hidden the frame's lights would change), found as first needed (what the village builds stands still). */
+let inside: { part: THREE.Object3D; round: THREE.Sphere }[] | null = null;
+
+/** The village's parts wholly inside the hall's walls, down to its groups' groups. */
+function insideOf(village: THREE.Object3D): { part: THREE.Object3D; round: THREE.Sphere }[] {
+  const found: { part: THREE.Object3D; round: THREE.Sphere }[] = [];
+  const visit = (group: THREE.Object3D, deep: number): void => {
+    for (const part of group.children) {
+      if (keptAlways(part)) continue;
+      _box.setFromObject(part, true);
+      if (_box.isEmpty()) continue;
+      if (insideBox.containsBox(_box) && !holdsKept(part)) {
+        found.push({ part, round: _box.getBoundingSphere(new THREE.Sphere()) });
+      } else if (deep < 2 && !(part as THREE.Mesh).isMesh && _box.intersectsBox(insideBox)) visit(part, deep + 1);
+    }
+  };
+  visit(village, 0);
+  return found;
+}
+
+/** Leaves out of the frame's draw what stands inside the hall and isn't seen through its doorway: the village's parts
+ *  there, and what stands on its floor of the scene's own (the heroes on its dais, a sphere round each one's feet). */
+function hideInside(scene: THREE.Scene, village: THREE.Object3D): void {
+  inside ??= insideOf(village);
+  for (const { part, round } of inside) {
+    if (!part.visible || seenThroughDoor(round)) continue;
+    part.visible = false;
+    hidden.push(part);
+  }
+  for (const part of scene.children) {
+    if (!part.visible || part === village || keptAlways(part)) continue;
+    const at = part.position;
+    if (!insideBox.containsPoint(at)) continue;
+    _foe.center.copy(at).y += FOE_ROUND.up;
+    _foe.radius = FOE_ROUND.radius;
+    if (seenThroughDoor(_foe)) continue;
+    part.visible = false;
+    hidden.push(part);
+  }
 }
 
 /** `parts` left out of the frame's draw where they stand outside the hall and aren't seen through its doorway. */
@@ -182,6 +247,10 @@ export function cullOutsideHall(scene: THREE.Scene, village: THREE.Object3D, cut
       coneFrom(_eye);
       coneSet = true;
       hideOutside(village);
+    } else if (lookingIn(camera, village, cutaway)) {
+      // (the cone isn't set for the cells and the meadow: they're outside, before the hall)
+      coneFrom(_eye, true);
+      hideInside(scene, village);
     }
     before.apply(scene, args);
   };
