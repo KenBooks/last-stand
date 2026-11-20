@@ -65,7 +65,8 @@ const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.
 
 /**
  * A punch through the eyes, the jab's and the cross's: where it lands on the screen (`at`: across towards its own
- * side, up) and at what share of the arm's reach; how far its elbow comes up and out as the fist turns over (`flare`,
+ * side, up) and at what share of the arm's reach (short of straight: at 0.93 and 0.97 the fist was a speck at the
+ * crosshair behind its own sleeve, the sleeve the largest thing in the view, an adversarial review's "sleeve thrust"); how far its elbow comes up and out as the fist turns over (`flare`,
  * 0 down by the ribs, 1 level with the fist); how far its shoulder is sent after it (`shoulder`: in, up, ahead, m: up
  * to the chin and in under the eyes, so the arm runs from the view's foot to its middle, foreshortened, and not in
  * from a corner as a thin stick); and where the other fist goes meanwhile, off its guard (`other`: out to its own
@@ -73,31 +74,32 @@ const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.
  */
 const PUNCH_EYES = {
   jab: tunable('jabEyes', {
-    at: [0.03, -0.1], reach: 0.93, flare: 0.7, shoulder: [0.05, 0.06, 0.12], other: [0.12, -0.12, 0],
+    at: [0.04, -0.16], reach: 0.8, flare: 0.7, shoulder: [0.03, 0.02, 0.08], other: [0.12, -0.12, 0],
   }),
   cross: tunable('crossEyes', {
-    at: [-0.02, -0.07], reach: 0.97, flare: 0.8, shoulder: [0.12, 0.07, 0.2], other: [0.22, -0.22, -0.04],
+    at: [-0.03, -0.14], reach: 0.84, flare: 0.8, shoulder: [0.06, 0.02, 0.12], other: [0.22, -0.22, -0.04],
   }),
 };
 
 /** a boxer's stance, the fists up (third person): the trunk bladed, the lead side to the foe (the hips' and the
  *  chest's turn, rad), leant a little over the lead knee, the chin down behind the lead shoulder, sunk into the knees
  *  (m). Square and upright with the fists up he stood as a man waiting for a bus (from play: "current is very lame") */
-const BOX = tunable('boxStance', { hips: -0.3, chest: -0.14, lean: 0.14, chin: 0.05, sink: -0.03, ahead: 0.05 });
+const BOX = tunable('boxStance', { hips: -0.3, chest: -0.14, lean: 0.14, chin: 0.12, sink: 0.015, ahead: 0.03 });
 
 /**
  * The body behind each punch (third person), over the stance: how far the hips, the spine and the chest turn into it
  * (rad: a jab snaps the lead shoulder out a little further; a cross turns the hips through from bladed to past
- * square, the chest further, the rear shoulder ending where the lead one was), how far the weight goes forward, down
+ * square, the chest further, the rear shoulder ending where the lead one was; the feet kept where they stand
+ * meanwhile, `LegIK.rooted`), how far the weight goes forward, down
  * and across onto the lead leg (m), how far the trunk leans into it (rad), and how far the shoulder is sent after the
  * fist (ahead and up, m).
  */
 const BODY = {
   jab: tunable('jabBody', {
-    hips: -0.08, spine: -0.05, chest: -0.3, ahead: 0.06, down: 0.01, across: 0, lean: 0.02, shoulder: [0.1, 0.05],
+    hips: -0.12, spine: -0.1, chest: -0.4, ahead: 0.07, down: 0.02, across: 0, lean: 0.02, shoulder: [0.12, 0.06],
   }),
   cross: tunable('crossBody', {
-    hips: 0.95, spine: 0.2, chest: 0.5, ahead: 0.09, down: 0.03, across: 0.03, lean: 0.05, shoulder: [0.09, 0.04],
+    hips: 0.6, spine: 0.4, chest: 0.4, ahead: 0.08, down: 0.05, across: 0.03, lean: 0.05, shoulder: [0.09, 0.04],
   }),
 };
 
@@ -107,11 +109,11 @@ const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.
 /** the jab's and the cross's own: neither is wound up (a boxer doesn't tell his punch; the cross sits back onto the
  *  rear hip a hair as the hips start), the fist quickest as it lands, held on the blow a moment and brought back to
  *  the guard slower than it went. Eased in and out alike, it was a piston pushed out and pulled back. */
-const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.53, 1], [0.67, 0.4], [0.86, 0.05], [1, 0]];
+const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.51, 1], [0.66, 0.4], [0.86, 0.05], [1, 0]];
 const CROSS_OUT: Keys = [[0, 0], [0.12, -0.08], [0.28, 0.2], [0.43, 0.92], [0.48, 1], [0.55, 1], [0.7, 0.42], [0.9, 0.05], [1, 0]];
 const LEAD = { hips: 0.09, chest: 0.045 };
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
-const FREE_IN = [0.1, 0.02];
+const FREE_IN = [0.13, 0.02];
 /** a two-fisted hammer over its cast: the fists raised together, held up a moment, brought down to land at 0.5 */
 const HAMMER_UP: Keys = [[0, 0], [0.22, 1], [0.32, 1], [0.48, 0], [1, 0]];
 const HAMMER_DOWN: Keys = [[0, 0], [0.3, 0], [0.5, 1], [0.75, 1], [1, 0.2]];

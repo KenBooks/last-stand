@@ -410,7 +410,7 @@ const MOUNT = -Math.PI / 2;
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
 /** a boxer's, the fists up: the lead foot a good step ahead and turned in a little, the rear one back and out, its
  *  toes out 45 degrees, the feet a shoulder's width apart across */
-const BOX_FEET = [0.15, 0.27, -0.2, -0.17, -0.2, -0.8];
+const BOX_FEET = [0.15, 0.25, -0.2, -0.17, -0.17, -0.8];
 /** Twin Fangs as the skill times it (data/balance `FANGS`, as tuned): the shares of it that are the lunge and that its
  *  blades strike at, the right's and the left's (each cut's start; through the eyes, where it crosses the aim), and
  *  halfway between them, where the left takes over */
@@ -1766,9 +1766,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const along = _rollV[0].setFromMatrixColumn(hand.matrixWorld, 1).normalize();
     // (the hand's own knuckle line: `hold` puts a handle along minus its side's x)
     const now = _rollV[1].setFromMatrixColumn(hand.matrixWorld, 0).multiplyScalar(-h.s);
-    const want = _rollV[2].copy(line).transformDirection(j.body.matrixWorld);
+    const want = thumbNotDown(_rollV[2].copy(line).transformDirection(j.body.matrixWorld), hand, THUMB_UP_EYES);
     now.addScaledVector(along, -now.dot(along));
-    want.addScaledVector(along, -want.dot(along));
     if (now.lengthSq() < 1e-6 || want.lengthSq() < 1e-6) return;
     const turn = Math.atan2(along.dot(_rollV[3].crossVectors(now, want)), now.dot(want));
     const by = clamp(turn, -FOREARM_ROLL, FOREARM_ROLL);
@@ -1777,6 +1776,36 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     elbow.quaternion.copy(_rollQ[1].multiply(_rollQ[2].setFromAxisAngle(along, by)).multiply(_rollQ[0]));
   }
   const _rollV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+  /**
+   * A fist's knuckle line (`line`, in the world, from the little finger's knuckle to the index's: the thumb is at its
+   * index end) squared to its forearm, its thumb's end never below level: where squaring it would tip that end down,
+   * the level line across the forearm instead. From play: "thumbs cannot be pointing down at any time during strike,
+   * either up, or parallel to the ground (or in between)". A level line asked of a fist held over its elbow, its
+   * forearm sloping in across the body (a punch on its way back), squared to that forearm with its thumb end down.
+   */
+  function thumbNotDown(line: THREE.Vector3, hand: THREE.Object3D, least = THUMB_UP): THREE.Vector3 {
+    // (about the forearm's own length, the elbow joint's: `closeFist` turns the hand about that alone, and squared to
+    // the wrist joint's, which the arm's fit turns, the thumb end still came out up to 23 degrees down)
+    const forearm = hand.parent ?? hand;
+    forearm.updateWorldMatrix(true, false);
+    const along = _thumbV[0].setFromMatrixColumn(forearm.matrixWorld, 1).normalize();
+    line.addScaledVector(along, -line.dot(along));
+    if (line.y >= least * line.length()) return line;
+    const level = _thumbV[1].set(along.z, 0, -along.x);
+    // (a forearm straight up or down has no level line across it: the line as it is, laid level)
+    if (level.lengthSq() < 1e-4) return line.setY(0);
+    if (level.dot(line) < 0) level.negate();
+    // (a little up from level, the way up the forearm's own slope: what turns the hand after this, the arm's fit and
+    // the view's own placing of the arms, left a level line up to 10 degrees down, `THUMB_UP`)
+    const rise = _thumbV[2].crossVectors(along, level.normalize());
+    if (rise.y < 0) rise.negate();
+    return line.copy(level).addScaledVector(rise, least).normalize();
+  }
+  const _thumbV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  /** how far up from level a fist's thumb end is kept at the least (the tangent of its angle: about 12 degrees), and
+   *  through the eyes, where the view's placing of the arms takes 10 degrees of it back */
+  const THUMB_UP = 0.22, THUMB_UP_EYES = 0.42;
   const _rollQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
 
   /** The shoulders' own places on the chest, and whether the eyes have moved them (`armsFromBelow`). */
@@ -3591,6 +3620,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       // the feet: side-on, the left forward and the right back and turned out; fighting, the left steps further in
       const F = feet ?? (t - fightT < 1.6 ? FIGHT_FEET : REST_FEET);
       legs.stance(0, F[0], F[1], F[2]); legs.stance(1, F[3], F[4], F[5]);
+      // (a punch turns over his feet where they stand)
+      legs.rooted = bare && a?.name === 'punch';
       legs.update(dt, st.phase, st.dead, (1 - legOwn) * legW, fp ? 0 : 1, _legW);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
@@ -4149,8 +4180,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // The pose sets the knuckle line. `closeFist` keeps it square to the forearm even on a slanted grip line.
-    const knuckles = (g: THREE.Object3D, line: THREE.Vector3) =>
-      line.lengthSq() > 0 ? _hd.copy(line).transformDirection(j.body.matrixWorld) : along(g);
+    const knuckles = (g: THREE.Object3D, line: THREE.Vector3, hand: THREE.Object3D) =>
+      line.lengthSq() > 0 ? thumbNotDown(_hd.copy(line).transformDirection(j.body.matrixWorld), hand, fp ? THUMB_UP_EYES : THUMB_UP) : along(g);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     if (held && twoSits && twoSit.stood) holdStood(held, slantR);
     else if (held) {
@@ -4166,7 +4197,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     }
     else if (fistedR > FIST.from) {
       if (fp) rollForearm(handR, j.elbowR, j.handR, fistLine.R);
-      closeFist(handR, knuckles(grip, fistLine.R));
+      closeFist(handR, knuckles(grip, fistLine.R, j.handR));
     }
     else poseHand(handR, lerp(0.5 + Math.sin(t * 1.3) * 0.05, FIST.curl, fistedR), lerp(0.1, FIST.spread, fistedR));
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
@@ -4174,7 +4205,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     else if (fisted > FIST.from) {
       if (fp) rollForearm(handL, j.elbowL, j.handL, fistLine.L);
-      closeFist(handL, knuckles(gripL, fistLine.L));
+      closeFist(handL, knuckles(gripL, fistLine.L, j.handL));
     }
     else poseHand(handL, shield.visible ? 1.35 : lerp(0.5 + Math.sin(t * 1.3 + 1) * 0.05, FIST.curl, fisted), lerp(0.08, FIST.spread, fisted));
 

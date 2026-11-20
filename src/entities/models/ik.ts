@@ -827,6 +827,12 @@ export class LegIK {
    * (x left, z forward, rig units) and how far it is turned out (rad, + to the left); null puts it under its hip.
    * A planted foot further than a few cm from its spot steps there, one foot at a time; moving, the gait ignores it.
    */
+  /** Set by a pose each frame: a standing body's planted feet stay where they are, turning on their balls and lifting
+   *  their heels as the body turns and leans over them, and never step (a punch: the trunk's turn behind a cross
+   *  stepped the rear foot round after the pelvis, in the air through the whole blow, where a boxer's turns on its
+   *  ball, the heel free). */
+  rooted = false;
+
   stance(i: number, x: number | null, z = 0, yaw = 0): void {
     const f = this.feet[i];
     if (x === null) {
@@ -1608,7 +1614,7 @@ export class LegIK {
     // own, it went out of turn. Wheeling round on its feet, only slowly: turning round from a run, a foot landed out of
     // reach stepped again seven frames on, the other only just up)
     const wheels = this.yawRate >= 3 && g.speed < WHEEL_SPEED;
-    if ((this.moving && !wheels) || own) return;
+    if ((this.moving && !wheels) || own || (this.rooted && !this.moving)) return;
     // (moving, further than the stride's own early start: at a run a foot pushing off stays down till it is well
     // behind, and stepped here first, quickly, it left as a step rather than a stride, out of turn)
     const tooFar = this.moving ? this.farBehind(g) / 0.9 : this.standingSlack(f) * reach;
