@@ -27,7 +27,8 @@ import { heroShare, warmingRuns } from './warm';
 import { preloadHeads } from '../entities/models/head';
 import { builtInSlices, type SliceMs } from '../entities/models/steps';
 import { HALL, TERRACE } from '../data/village';
-import { StillAsOne } from '../entities/models/stillAsOne';
+import { StillAsOne, stillAsOne } from '../entities/models/stillAsOne';
+import { registerCull } from '../world/culls';
 import { buildableLook, profileLook, readyLook } from './looks';
 
 /** the way the heroes face (to the camera) */
@@ -154,6 +155,11 @@ const heldOf = new Map<Player, THREE.Object3D[]>();
 /** each standing hero held still drawn as a few meshes (`models/stillAsOne.ts`): from the square, the two were 133
  *  draws of the frame's 439 */
 const stillOf = new Map<Player, StillAsOne>();
+// (held off, each let go of at once: merged again as each steps once let run)
+registerCull('the standing heroes as one', (off) => {
+  stillAsOne.on = !off;
+  if (off) for (const still of stillOf.values()) still.undo();
+});
 
 /** `p`'s matrices held as he stands, and he drawn as a few meshes, or made each frame again and drawn part by part: a
  *  hero's 280 objects' were made again every frame he stood there, posed or not. */

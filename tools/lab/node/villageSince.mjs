@@ -42,6 +42,9 @@ export const AREAS = [
   { name: 'the kept shadows', files: /^src\/world\/(shadowsOnMove|culling)\.ts$/, checks: /shadow/i },
 ];
 
+/** the checks every change to the village's source runs, whatever its area: the sweep holds every stand's frame to
+ *  its budget and its culls to the frame drawn whole (`page/villageSweep.ts`) */
+export const ALWAYS = /^sweepWithinBudgets$/;
 /** files no check reads: notes, and the lab's own tests */
 const READ_BY_NONE = /\.md$|^tools\/lab\/test\//;
 /** a check's own module in the lab's page */
@@ -81,7 +84,7 @@ export function checksSince(files, names, byModule = new Map()) {
       for (const name of its) chosen.add(name);
       why.push(`${file}: its own checks (${its.length})`);
     } else if (area) {
-      const its = names.filter((name) => area.checks.test(name));
+      const its = names.filter((name) => area.checks.test(name) || ALWAYS.test(name));
       for (const name of its) chosen.add(name);
       why.push(`${file}: ${area.name} (${its.length})`);
     } else if (file.startsWith('src/') || file.startsWith('tools/lab/')) {

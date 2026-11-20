@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { blendedSolid, fadedWhole } from '../core/seeThrough';
 import { HALL, TERRACE } from '../data/village';
 import { aroundShadows, hideCellsWhere, isDrawingStill } from './culling';
+import { registerCull } from './culls';
 import { G } from '../state';
 
 /** how far past the doorway's own edges the cone reaches (m): the camera's matrices stand as the frame's, and a
@@ -50,6 +51,7 @@ let mode: HallCull = 'door';
 export function setHallCull(how: HallCull): void {
   mode = how;
 }
+registerCull('the hall by its doorway', (off) => setHallCull(off ? 'off' : 'door'));
 
 const _box = new THREE.Box3(), _eye = new THREE.Vector3(), _middle = new THREE.Vector3();
 const _corners = Array.from({ length: 4 }, () => new THREE.Vector3());

@@ -27,6 +27,8 @@ test('village --since: a note or a test runs nothing, the fog its own checks, th
   assert.ok(fog.names.includes('fogHoldsSteady') && fog.names.includes('sightBlacksOut'));
   assert.ok(!fog.names.includes('shadowsOnMove') && !fog.names.includes('heroChosenQuick'));
   assert.ok(fog.names.length < NAMES.length / 2, `${fog.names.length} of ${NAMES.length}`);
+  // (the sweep runs on every change to the village's source: its budgets and culls hold every stand)
+  assert.ok(fog.names.includes('sweepWithinBudgets'));
 
   const own = checksSince(['tools/lab/page/villageShadowsOnMove.ts'], NAMES, MODULES);
   assert.deepEqual(own.names, ['shadowsOnMove']);

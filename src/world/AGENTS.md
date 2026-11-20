@@ -45,6 +45,7 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `culls.ts`: every cull or merge of what's drawn that can be held off live registers its hold there (`registerCull`: the hall's doorway, the grass behind walls, the hall's heroes as one), and `lab village --only sweepWithinBudgets` holds the frame with them all to the frame with none from every stand of its sweep (`docs/agents/village.md`). A new one registers too, or nothing checks that it hides only what isn't seen.
 - `houses.ts`, `houses/`: each house's room built by its file (`build(group)`), found by the folder and matched to its data (`data/houses/<id>.ts`) by id; a house with data and no build fails as the village is built (`builderOf`). What every room has (walls, roof, door, sign, bookcase, chandelier) is the kit, `rooms.ts`.
 - `places.ts`, `places/`: a place's build of its own (`build(kit)`, `placeKit.ts`: the scene, the wall, the village's materials, its obstacles and updaters), built where the village built the weapons rack, before the lamps; a place with nothing to build has its data file alone (`data/places/<id>.ts`).
 - `wall.ts`: a ray enters a part where it enters the part's box (`Part.box`, the world's axes; its sphere first, quicker

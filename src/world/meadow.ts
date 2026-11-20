@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import { asGrass, type Updater } from './props';
 import { hiddenByHallDoor } from './hallPortal';
+import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
@@ -845,6 +846,7 @@ export function setMeadowOccluders(list: readonly GrassOccluder[]): void {
 export function holdMeadowOcclusion(held: boolean): void {
   occlusionHeld = held;
 }
+registerCull('the grass behind walls', holdMeadowOcclusion);
 
 /** Whether the line from the eye (`ex`, `ey`, `ez`) to a point passes through `o`'s box, both in its own frame. */
 function throughBox(o: GrassOccluder, ex: number, ey: number, ez: number, px: number, py: number, pz: number): boolean {
