@@ -33,6 +33,13 @@ const WAVES: { before: number; wave: number; bosses: EnemyId[]; label: string }[
 /** how long a warm-up, a readying or a wave's countdown may take, each, by the browser's clock (ms): a warm-up's
  *  links are waited for in real time, which the lab's frames, run as fast as the page can, don't pass */
 const PATIENCE_MS = 60_000;
+/** how long the game's own clock may run before a boss rises (s): he comes as the wave's first group would reach the
+ *  hero, give or take `bossJitter` (`bossAt` in src/game/run.ts). Waited for by the browser's clock, a PC run slow by
+ *  other work ran out of real time first: "wave 15's twinslab and twinreliquary never came in 60 s" with nothing
+ *  readying, on a shared PC and a lent one with 8 sessions at once, and passed run alone */
+const RISE_PATIENCE_S = 120;
+/** the most the browser's clock may run while the game's waits for a boss (ms), so a page that stalls still ends */
+const RISE_MOST_MS = 600_000;
 
 const element = (selector: string): HTMLElement => {
   const found = document.querySelector<HTMLElement>(selector);
@@ -66,6 +73,30 @@ async function stepUntil(lab: Lab, done: () => boolean, what: string): Promise<v
     await lab.step(1);
     await window.__labClock.realFrame();
   }
+}
+
+/** Frames until `done`, as `stepUntil`, for what the game's own clock brings: an error saying `what` never came past
+ *  `RISE_PATIENCE_S` of the game's time (or `RISE_MOST_MS` of the browser's), with the run as it stands. */
+async function stepUntilInGame(lab: Lab, done: () => boolean, what: string): Promise<void> {
+  const start = G.time;
+  const realStart = window.__labClock.realNow();
+  while (!done()) {
+    const ran = G.time - start;
+    if (ran > RISE_PATIENCE_S || window.__labClock.realNow() - realStart > RISE_MOST_MS) {
+      throw new Error(`lab: bosswave: ${what} never came in ${Math.round(ran)} s of the game's time (${runNow()})`);
+    }
+    await lab.step(1);
+    await window.__labClock.realFrame();
+  }
+}
+
+/** The run as it stands, for an error: its phase, the boss's time to come, whether the hero stands. */
+function runNow(): string {
+  const run = G.run;
+  if (!run) return `no run; ${readyingNow()}`;
+  const boss = run.boss ? `the boss in ${run.bossT.toFixed(1)} s` : 'no boss to come';
+  const hero = G.player.alive ? 'the hero standing' : 'the hero down';
+  return `wave ${run.wave} ${run.phase}, ${boss}, ${run.dealt} foes come, ${hero}; ${readyingNow()}`;
 }
 
 /** the page's errors and rejections heard since the measure began, for a wait's error: a warm-up that threw
@@ -184,7 +215,7 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
     const compiledBefore = programsCompiledInGame();
     const describedBefore = lateCompiles.length;
     if (canaryHere) await drawUnwarmed(lab);
-    await stepUntil(lab, () => risen(bosses) === bosses.length, `wave ${wave}'s ${bosses.join(' and ')}`);
+    await stepUntilInGame(lab, () => risen(bosses) === bosses.length, `wave ${wave}'s ${bosses.join(' and ')}`);
     await lab.step(60);
     const compiled = programsCompiledInGame() - compiledBefore;
     if (compiled) {
