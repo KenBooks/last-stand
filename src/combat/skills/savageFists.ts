@@ -5,7 +5,7 @@
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).
 import { particles, col, smokePuff } from '../../fx/particles';
 import { shockwave } from '../../fx/effects';
-import { addShake } from '../../core/renderer';
+import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { CLEAN_HIT, FRENZY } from '../../data/balance';
@@ -16,6 +16,9 @@ import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
+
+/** how far the view through the eyes rolls with a punch's shoulders as it lands (rad) */
+const ROLL = { jab: 0.018, cross: 0.04 };
 
 /** casts whose punch is already heard (its air starts with the punch and peaks as the fist lands) */
 const thrown = new WeakSet<object>();
@@ -68,9 +71,11 @@ const skill: InstantSkill = {
     { per: 'clean hammer', base: (def as Def).damage * FRENZY.hammerK * (1 + CLEAN_HIT.bonus), type: 'physical', note: 'at arm\'s length' },
   ],
   pose(player, _def, action) { action.form = formOf(player); },
-  charging(player) {
+  charging(player, _def, k) {
     const c = player.casting;
-    formOf(player);
+    // (through his own eyes the view tips with his shoulders as they turn behind the blow, a cross's further than a
+    // jab's: the frame held dead level, the arm went out from a body that never moved)
+    if (player.local && formOf(player) === 0) rollView(((player.model.swing ?? 1) > 0 ? -ROLL.jab : ROLL.cross) * k * k);
     if (c && !thrown.has(c)) { thrown.add(c); sfx.punch(c.fireAt - c.t, -(player.model.swing ?? 1)); }
   },
   cast(player, rawDef) {

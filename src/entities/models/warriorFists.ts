@@ -53,8 +53,6 @@ const GUARD_EYES = tunable('fistsEyes', {
   line: [-1, 0, 0],
   /** The elbows down by the ribs so the palm can turn inward without winding the forearms past their range. */
   pole: 0.4,
-  /** where a punch lands on the screen (across, up), the right fist's (the left's mirrored) */
-  punch: [0.12, -0.28],
 }), EASY_EYES = -0.22;
 /** where a punch lands: on his middle line at the chin's height, further than the arm reaches (it goes out straight
  *  at it, a little short of locked); through the eyes under the crosshair, a little to the fist's own side, where
@@ -65,14 +63,55 @@ const PUNCH_AT = [0, -0.04, 1.2];
 const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
 
-/** through the eyes, the fist that isn't punching as the other lands: how far it sinks on the screen and how far it's
- *  drawn back towards him (m) */
-const PUNCH_EYES = tunable('punchEyes', { otherDown: 0.06, otherBack: 0.04 });
+/**
+ * A punch through the eyes, the jab's and the cross's: where it lands on the screen (`at`: across towards its own
+ * side, up) and at what share of the arm's reach; how far its elbow comes up and out as the fist turns over (`flare`,
+ * 0 down by the ribs, 1 level with the fist); how far its shoulder is sent after it (`shoulder`: in, up, ahead, m: up
+ * to the chin and in under the eyes, so the arm runs from the view's foot to its middle, foreshortened, and not in
+ * from a corner as a thin stick); and where the other fist goes meanwhile, off its guard (`other`: out to its own
+ * side and up on the screen, and ahead, m: drawn back to the jaw as the body turns behind the blow).
+ */
+const PUNCH_EYES = {
+  jab: tunable('jabEyes', {
+    at: [0.03, -0.1], reach: 0.93, flare: 0.7, shoulder: [0.05, 0.06, 0.12], other: [0.12, -0.12, 0],
+  }),
+  cross: tunable('crossEyes', {
+    at: [-0.02, -0.07], reach: 0.97, flare: 0.8, shoulder: [0.12, 0.07, 0.2], other: [0.22, -0.22, -0.04],
+  }),
+};
+
+/** a boxer's stance, the fists up (third person): the trunk bladed, the lead side to the foe (the hips' and the
+ *  chest's turn, rad), leant a little over the lead knee, the chin down behind the lead shoulder, sunk into the knees
+ *  (m). Square and upright with the fists up he stood as a man waiting for a bus (from play: "current is very lame") */
+const BOX = tunable('boxStance', { hips: -0.3, chest: -0.14, lean: 0.14, chin: 0.05, sink: -0.03, ahead: 0.05 });
+
+/**
+ * The body behind each punch (third person), over the stance: how far the hips, the spine and the chest turn into it
+ * (rad: a jab snaps the lead shoulder out a little further; a cross turns the hips through from bladed to past
+ * square, the chest further, the rear shoulder ending where the lead one was), how far the weight goes forward, down
+ * and across onto the lead leg (m), how far the trunk leans into it (rad), and how far the shoulder is sent after the
+ * fist (ahead and up, m).
+ */
+const BODY = {
+  jab: tunable('jabBody', {
+    hips: -0.08, spine: -0.05, chest: -0.3, ahead: 0.06, down: 0.01, across: 0, lean: 0.02, shoulder: [0.1, 0.05],
+  }),
+  cross: tunable('crossBody', {
+    hips: 0.95, spine: 0.2, chest: 0.5, ahead: 0.09, down: 0.03, across: 0.03, lean: 0.05, shoulder: [0.09, 0.04],
+  }),
+};
 
 /** a punch over its cast: how far the fist is out (a hair drawn back first, out fast, held on the blow as the skill
  *  lands at 0.5, back to the guard), and the hips' and the chest's turn led a little ahead of it */
 const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.97], [0.88, 0.08], [1, 0]];
-const LEAD = { hips: 0.07, chest: 0.035 };
+/** the jab's and the cross's own: neither is wound up (a boxer doesn't tell his punch; the cross sits back onto the
+ *  rear hip a hair as the hips start), the fist quickest as it lands, held on the blow a moment and brought back to
+ *  the guard slower than it went. Eased in and out alike, it was a piston pushed out and pulled back. */
+const JAB_OUT: Keys = [[0, 0], [0.06, -0.03], [0.26, 0.22], [0.42, 0.93], [0.47, 1], [0.53, 1], [0.67, 0.4], [0.86, 0.05], [1, 0]];
+const CROSS_OUT: Keys = [[0, 0], [0.12, -0.08], [0.28, 0.2], [0.43, 0.92], [0.48, 1], [0.55, 1], [0.7, 0.42], [0.9, 0.05], [1, 0]];
+const LEAD = { hips: 0.09, chest: 0.045 };
+/** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
+const FREE_IN = [0.1, 0.02];
 /** a two-fisted hammer over its cast: the fists raised together, held up a moment, brought down to land at 0.5 */
 const HAMMER_UP: Keys = [[0, 0], [0.22, 1], [0.32, 1], [0.48, 0], [1, 0]];
 const HAMMER_DOWN: Keys = [[0, 0], [0.3, 0], [0.5, 1], [0.75, 1], [1, 0.2]];
@@ -128,13 +167,15 @@ const onScreen = (j: Joints, on: readonly number[], out: THREE.Vector3): THREE.V
 
 /** An arm reaching `at` (the body's frame) by `w` of the way from the pose's own, its elbow towards its pole (through
  *  the eyes down and out from the arms' shoulders under the view). */
-function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = false): void {
+function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = false, flare = 0): void {
   if (w <= 0) return;
   const shoulder = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR;
   _sq.copy(shoulder.quaternion); _eq.copy(elbow.quaternion);
   j.chest.worldToLocal(j.body.localToWorld(_at.copy(at)));
   _pole.copy(left ? POLE_L : POLE_R);
   if (eyes) _pole.x *= GUARD_EYES.pole / POLE_L.x;
+  // (the elbow up and out as a punch's fist turns over: `flare`, 1 level with the fist)
+  if (flare > 0) { _pole.x = lerp(_pole.x, left ? 1 : -1, flare); _pole.y = lerp(_pole.y, -0.15, flare); }
   reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _at, _pole);
   // (each from the pose's own towards the reach: `slerpQuaternions` into one of its own ends copies over it first)
   if (w < 1) { shoulder.quaternion.copy(_sq.slerp(shoulder.quaternion, w)); elbow.quaternion.copy(_eq.slerp(elbow.quaternion, w)); }
@@ -181,13 +222,14 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
 /** Where a punch lands, into `out` (the body's frame): straight out along the middle line from the shoulder, a little
  *  short of the arm's length; through the eyes just under the crosshair. */
 function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): THREE.Vector3 {
-  const shoulder = left ? j.shoulderL : j.shoulderR, reach = (j.P.upperL + j.P.foreL) * (eyes ? FIST.eyesReach : FIST.reach);
+  const shoulder = left ? j.shoulderL : j.shoulderR, seenAs = left ? PUNCH_EYES.jab : PUNCH_EYES.cross;
+  const reach = (j.P.upperL + j.P.foreL) * (eyes ? seenAs.reach : FIST.reach);
   // (the middle line first: `between` works in `_sh` too, and read before it the punch was measured from the other
   // shoulder's place in the world, every punch thrown out to its arm's full length, the elbow locked straight)
   if (!eyes) from(between(j, _mid), PUNCH_AT, out);
   j.body.worldToLocal(shoulder.getWorldPosition(_sh));
   if (eyes) {
-    const [across, up] = GUARD_EYES.punch;
+    const [across, up] = seenAs.at;
     const on = [left ? -across : across, up];
     if (onReach(onScreen(j, [on[0], on[1], 0.1], _near), onScreen(j, [on[0], on[1], 1.5], out), _sh, reach, out)) {
       return out;
@@ -206,31 +248,43 @@ function onReach(near: THREE.Vector3, far: THREE.Vector3, shoulder: THREE.Vector
   return true;
 }
 
-/** how far a punch turns the trunk into it (the hips half of it, the chest the whole), the jab's and the cross's: the
- *  whole body behind it (0.3 and 0.5, the arm read as alone from behind him, an adversarial review) */
-const PUNCH_TURN = tunable('punchTurn', { jab: 0.5, cross: 0.75 });
-
 /**
  * The trunk behind a punch at `k` of its cast, out `out` of the way (`lead`: the jab, else the cross): the hips first,
  * the chest after them, the shoulder sent after the fist; the head kept on the foe. Moving, the legs step and the
  * weight stays over them (`still`). Through the eyes the camera rides the head, so the shoulder alone goes.
  */
 function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: boolean): void {
-  const hips = curve(PUNCH_OUT, k + LEAD.hips), chest = curve(PUNCH_OUT, k + LEAD.chest), out = curve(PUNCH_OUT, k);
-  const shoulder = lead ? j.shoulderL : j.shoulderR;
-  // (the shoulder sent in after the fist: forward and in, as the collarbone carries it)
-  shoulder.position.z += (eyes ? 0.14 : 0.07) * out;
-  shoulder.position.x += (lead ? -1 : 1) * (eyes ? 0.03 : 0.012) * out;
-  if (eyes) return;
-  // (a jab turns the lead shoulder into it too, 17 degrees: at 9 it read as the arm alone)
-  const turn = lead ? -PUNCH_TURN.jab : PUNCH_TURN.cross, w = 0.45 + 0.55 * still;
-  j.hips.rotation.y += 0.5 * turn * hips * w;
-  j.spine.rotation.y += 0.2 * turn * chest;
-  j.chest.rotation.y += 0.5 * turn * chest;
-  j.neck.rotation.y -= 0.9 * turn * (0.5 * hips * w + 0.7 * chest);
-  j.spine.rotation.x += (lead ? 0.02 : 0.05) * chest;
-  j.body.position.z += (lead ? 0.03 : 0.07) * hips * w;
-  j.body.position.y += (lead ? -0.005 : -0.012) * hips * w;
+  const keys = lead ? JAB_OUT : CROSS_OUT;
+  const hips = curve(keys, k + LEAD.hips), chest = curve(keys, k + LEAD.chest), out = curve(keys, k);
+  const shoulder = lead ? j.shoulderL : j.shoulderR, side = lead ? -1 : 1;
+  if (eyes) {
+    // (the shoulder sent after the fist, up to the chin and in under the eyes)
+    const [inward, up, ahead] = (lead ? PUNCH_EYES.jab : PUNCH_EYES.cross).shoulder;
+    shoulder.position.x += side * inward * out; shoulder.position.y += up * out; shoulder.position.z += ahead * out;
+    return;
+  }
+  const B = lead ? BODY.jab : BODY.cross, w = 0.45 + 0.55 * still;
+  shoulder.position.z += B.shoulder[0] * out; shoulder.position.y += B.shoulder[1] * out;
+  shoulder.position.x += side * 0.012 * out;
+  fistStance(j, 1);
+  j.hips.rotation.y += B.hips * hips * w;
+  j.spine.rotation.y += B.spine * chest;
+  j.chest.rotation.y += B.chest * chest;
+  j.neck.rotation.y -= 0.9 * (B.hips * hips * w + (B.spine + B.chest) * chest);
+  j.spine.rotation.x += B.lean * chest;
+  j.neck.rotation.x -= 0.6 * B.lean * chest;
+  j.body.position.z += B.ahead * hips * w;
+  j.body.position.y -= B.down * hips * w;
+  j.body.position.x += B.across * hips * w;
+}
+
+/** A boxer's stance by `w` (third person, `BOX`): the trunk bladed, leant in and sunk, the head kept on the foe. */
+export function fistStance(j: Joints, w: number): void {
+  if (w <= 0) return;
+  j.hips.rotation.y += BOX.hips * w; j.chest.rotation.y += BOX.chest * w;
+  j.neck.rotation.y -= 0.9 * (BOX.hips + BOX.chest) * w;
+  j.spine.rotation.x += BOX.lean * w; j.neck.rotation.x += (BOX.chin - 0.5 * BOX.lean) * w;
+  j.body.position.y -= BOX.sink * w; j.body.position.z += BOX.ahead * w;
 }
 
 /**
@@ -240,25 +294,36 @@ function trunkBehind(j: Joints, k: number, lead: boolean, still: number, eyes: b
 export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t: number, eyes: boolean, shielded = false): void {
   trunkBehind(j, k, lead, still, eyes);
   fistGuard(j, 1, t, eyes, shielded);
-  const out = curve(PUNCH_OUT, k);
+  const out = curve(lead ? JAB_OUT : CROSS_OUT, k), seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
+  // (the elbow comes up only as the fist turns over at the end of its reach, and folds down by the ribs on the way
+  // back: up with the fist's whole way, it came back flared out at the shoulder's height, the fist swept across the
+  // chest, an adversarial review)
+  const over = smooth(Math.min(1, Math.max(0, (out - 0.55) / 0.45)));
   if (eyes) {
     // (through the eyes the fist itself is driven along the line from its guard to where it lands, drawn back along
     // it first: with the arm's joints eased from the guard's to the reach's, the fist swung out on whatever arc they
     // made and back down it, a piston with no path of its own, from play: "punches are hilarious", "where is punch
     // trajectory in 1st person? proper motion")
     guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
-    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * 8)), true);
-  } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes);
+    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * 8)), true, seenAs.flare * over);
+  } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
   lineTo(lead ? fistLine.L : fistLine.R, sided(LINE.punch, lead), smooth(Math.min(1, Math.max(0, out) * 1.4)));
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
   if (shielded) return;
+  const back = Math.max(0, out);
   if (eyes) {
     // (and drawn back and down a little as the other goes out, the body's turn behind the blow: held dead still it
     // was a prop in the view's corner)
-    const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead, back = Math.max(0, out);
-    place(j, !lead, onScreen(j, [on[0], on[1] - PUNCH_EYES.otherDown * back, on[2] - PUNCH_EYES.otherBack * back], _far), 1, eyes);
-  } else (lead ? j.elbowR : j.elbowL).rotation.x += -0.1 * out;
+    const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead, [aside, up, ahead] = seenAs.other;
+    const to = [on[0] + Math.sign(on[0]) * aside * back, on[1] + up * back, on[2] + ahead * back];
+    place(j, !lead, onScreen(j, to, _far), 1, eyes);
+  } else {
+    // (drawn in to the cheek, its elbow under it: left out in its guard it floated before the jaw, the same review)
+    guardAt(j, !lead, false, 0, 0, _far);
+    _far.z -= FREE_IN[0] * back; _far.y += FREE_IN[1] * back;
+    place(j, !lead, _far, back);
+  }
 }
 
 /**

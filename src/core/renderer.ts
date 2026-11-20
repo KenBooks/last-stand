@@ -479,6 +479,8 @@ const rig = {
   shake: 0,
   /** the field of view's widening for speed (kickFov), and what it eases to this frame */
   kick: 0, kickTo: 0,
+  /** the view's roll through the eyes (rollView, rad), and what it eases to this frame */
+  roll: 0, rollTo: 0,
   focus: new THREE.Vector3(),
   hurt: 0,
   yaw: 0,          // rotation around the focus; 0 looks toward -Z
@@ -1107,6 +1109,9 @@ export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.s
 /** Widen the close views' field of view by `deg` while called each frame (a rush's speed): it eases in
  *  and back out. */
 export function kickFov(deg: number): void { rig.kickTo = Math.max(rig.kickTo, deg); }
+/** Roll the view through the eyes by `rad` (+ his head tipped to his left) while called each frame (a punch's turn
+ *  of the shoulders behind it): it eases in and back out. About the line of sight, so the aim stays where it is. */
+export function rollView(rad: number): void { rig.rollTo = rad; }
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }
 /** How near to nothing the local hero's Health is shown (0 not at all, 1 nothing left) and the heart's beat (core/lowLife.ts). */
 export function setLowLife(low: number, beat: number): void { grade.uniforms.uLow.value = low; grade.uniforms.uBeat.value = beat; }
@@ -1211,7 +1216,7 @@ export function setViewShift(x: number, y: number): void { shift.tx = x; shift.t
 export function settleCamera(focus: THREE.Vector3): void {
   rig.focus.set(focus.x, 0, focus.z);
   rig.zoom = rig.targetZoom; rig.yaw = rig.targetYaw; rig.boom = rig.targetBoom;
-  rig.shake = rig.kick = rig.kickTo = rig.hurt = 0;
+  rig.shake = rig.kick = rig.kickTo = rig.roll = rig.rollTo = rig.hurt = 0;
   shift.x = shift.tx; shift.y = shift.ty;
 }
 
@@ -1510,6 +1515,8 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
     cam.position.z += Math.sin(t * 1.1 + 2) * s;
   }
   rig.shake = Math.max(0, rig.shake - dt * 2.2);
+  rig.roll = damp(rig.roll, rig.rollTo, Math.abs(rig.rollTo) > Math.abs(rig.roll) ? 30 : 12, dt); rig.rollTo = 0;
+  if (rig.view === 'first' && rig.blend >= 1 && Math.abs(rig.roll) > 1e-4) cam.rotateZ(rig.roll);
   rig.hurt = Math.max(0, rig.hurt - dt * 1.6);
   // (its matrices as the frame will draw it: the world's labels are placed by them before the frame is drawn, and
   // with the last frame's turn they slid off what they label as a view switch glided round)

@@ -36,7 +36,7 @@ import { tunable } from '../../core/tuning';
 import { armSection, FIGHTER_FOREARM, HEAVY, type ArmBuild } from './build';
 import { FANGS } from '../../data/balance';
 import {
-  FIST, fistGuard, fistPunch, fistHammer, fistRampage, fistPounce, fistRush, fistWrath, fistLine, fistsLens,
+  FIST, fistGuard, fistStance, fistPunch, fistHammer, fistRampage, fistPounce, fistRush, fistWrath, fistLine, fistsLens,
 } from './warriorFists';
 import type { Hand } from './hands';
 import {
@@ -408,6 +408,9 @@ function dipUnder(at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, fa
 /** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
 const MOUNT = -Math.PI / 2;
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
+/** a boxer's, the fists up: the lead foot a good step ahead and turned in a little, the rear one back and out, its
+ *  toes out 45 degrees, the feet a shoulder's width apart across */
+const BOX_FEET = [0.15, 0.27, -0.2, -0.17, -0.2, -0.8];
 /** Twin Fangs as the skill times it (data/balance `FANGS`, as tuned): the shares of it that are the lunge and that its
  *  blades strike at, the right's and the left's (each cut's start; through the eyes, where it crosses the aim), and
  *  halfway between them, where the left takes over */
@@ -3378,7 +3381,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP ? 1 : 0, 6, dt) : 0;
     // (through the eyes the fists are always up in the view, as a brawler's in a first-person game: lower out of a
     // fight; let down out of the view, the screen showed no hands at all)
-    if (bare && !a && st.dead < 0) fistGuard(j, fp ? 1 : fistsUp * (1 - runK), t, fp, false, fp ? 1 - fistsUp : 0);
+    if (bare && !a && st.dead < 0) {
+      if (!fp) fistStance(j, fistsUp * (1 - runK) * still);
+      fistGuard(j, fp ? 1 : fistsUp * (1 - runK), t, fp, false, fp ? 1 - fistsUp : 0);
+    }
+    if (bare && !feet && (fistsUp > 0.5 || a?.name === 'punch')) feet = BOX_FEET;
     const fisting = a && FISTED.has(a.name) ? 1 : a ? 0 : fp && bare ? 1 : Math.max(fistsUp, WALK_FIST * Math.min(1, move * 2));
     const fisted = bare ? fisting : 0, fistedR = freeR ? fisting : 0;
     // (and as he moves the wrists let the hands hang a little, the knuckles down)
