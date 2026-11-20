@@ -25,7 +25,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { modelSteps } from '../entities/models/index';
 import { built } from '../entities/models/steps';
-import { buildLater, finishNow } from './behind';
+import { BEHIND, buildLater, finishInSlices, finishNow } from './behind';
 import { makeHeadAhead, preloadHeads } from '../entities/models/head';
 import { heroDetail } from '../entities/models/armor';
 import { drawnAsOneSamples } from '../entities/models/drawAsOne';
@@ -45,7 +45,7 @@ import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline, type OutlineTarget } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
-import { buildHallAhead, prepareSpareHero } from './hall';
+import { buildHallAhead, hallOpen, prepareSpareHero } from './hall';
 import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
@@ -245,6 +245,9 @@ interface Part {
   built?: Built;
   /** what of its build is made in a task of its own before it (a hero's head: `makeHeadAhead`) */
   ahead?: () => void;
+  /** What its build would otherwise finish whole, finished first behind the lobby in slices (`behindSlice`): a hero
+   *  still queued behind it (`warmPart`). */
+  before?: (step: () => Promise<void>) => Promise<void>;
   /** Work that must finish before a hero's progress bar permits selecting him. */
   ready?: (step: () => Promise<void>) => Promise<void>;
 }
@@ -466,8 +469,9 @@ export function placeSwaps(): PlaceSwap[] {
 function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
+    before: (step) => finishInSlices(`worn ${model}`, step, behindSlice),
     ready: async (step) => {
-      for (const cls of Object.values(CLASSES)) if (cls.model === model) await prepareSpareHero(cls.id, step);
+      for (const cls of Object.values(CLASSES)) if (cls.model === model) await prepareSpareHero(cls.id, step, behindSlice);
     },
     build() {
       // (one building behind the lobby finished now: he's wanted)
@@ -558,6 +562,7 @@ async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
  *  lists them; its build only where it wasn't built ahead). */
 async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean> {
   await aheadOf(part, step);
+  if (!part.built) await part.before?.(step);
   await step();
   const start = performance.now();
   const ahead = part.built !== undefined;
@@ -587,6 +592,16 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
   for (const part of parts) await part.ready?.(nextFrame);
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start, detail: took });
 }
+
+/**
+ * How long a hero's build goes on in a frame before it lets the page go (ms, `builtInSlices`): under a loading bar or
+ * with the hall of heroes open (a first visit's, its heroes' tabs each with a bar of its own, the choice waiting for
+ * them) `BAR_SLICE_MS`, behind the live lobby the lobby's own budget (`BEHIND.ms`). At 12 ms behind the lobby, a return's
+ * heroes' warm-up (their spares, the hall's heroes) held the village at 37 to 70 frames a second for its first 10 s on
+ * a 143 Hz screen, where the queue behind it keeps to 2 ms a frame (from play, "should start above 100 FPS"; trace
+ * Z7FP-MNKT, `npm run stalls -- --scenario boot --url "this?village=1" --warm-behind --js`).
+ */
+const behindSlice = (): number => (isReadying() || hallOpen() ? BAR_SLICE_MS : BEHIND.ms);
 
 /** when `inSlices` last let the page go */
 let sliceFrom = 0;
@@ -720,7 +735,7 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   }
   // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
   // frame 290 to 400 ms, trace FD2V-NB48)
-  if (need === 'heroes') await buildHallAhead(nextFrame);
+  if (need === 'heroes') await buildHallAhead(nextFrame, behindSlice);
   warming(need, 1);
   markWarm(need);
 }

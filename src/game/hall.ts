@@ -25,7 +25,7 @@ import type { Profile } from '../types';
 import { buildFirst, buildLater, finishNow, finishInSlices, queued } from './behind';
 import { heroShare, warmingRuns } from './warm';
 import { preloadHeads } from '../entities/models/head';
-import { builtInSlices } from '../entities/models/steps';
+import { builtInSlices, type SliceMs } from '../entities/models/steps';
 import { HALL, TERRACE } from '../data/village';
 import { buildableLook, profileLook, readyLook } from './looks';
 
@@ -351,9 +351,9 @@ const inItsLook = (player: Player | undefined, profile: Profile): boolean => pla
  * Each class's hero the hall would show built ahead of its opening, out of the scene, a hero after each `step`, where
  * none is kept in the gear he'd wear: built in the opening's task, the three held its first frame 290 to 400 ms on
  * the owner's PC (trace FD2V-NB48). Called under the heroes' loading bar (game/warmup.ts), so the opening finds them
- * kept; a hall already open (a first visit's) builds its own.
+ * kept; a hall already open (a first visit's) builds its own. `ms` of a build before each `step` (`builtInSlices`).
  */
-export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
+export async function buildHallAhead(step: () => Promise<void>, ms?: SliceMs): Promise<void> {
   // Also called by shader warm-up, outside prepareHeroSelection: don't let the frame queue duplicate jobs
   // while a sliced build has temporarily taken its job out of the background queue.
   warmingRuns(true);
@@ -365,11 +365,12 @@ export async function buildHallAhead(step: () => Promise<void>): Promise<void> {
       if (kept.get(id)?.gear === gearOf(profile) && inItsLook(kept.get(id)?.player, profile)) continue;
       await step();
       if (hallOpen()) return;
-      await finishInSlices(`hall ${id}`, step);
+      await finishInSlices(`hall ${id}`, step, ms);
       if (kept.get(id)?.gear !== gearOf(profile) || !inItsLook(kept.get(id)?.player, profile)) {
         const old = kept.get(id);
         if (old) { halos.delete(old.player); old.player.dispose(); }
-        keepHero(id, profile, await builtInSlices(Player.inSteps(id, profile.equipped, false, profileLook(profile)), step));
+        const steps = Player.inSteps(id, profile.equipped, false, profileLook(profile));
+        keepHero(id, profile, await builtInSlices(steps, step, ms));
       }
       G.scene.remove(kept.get(id)!.player.obj);
     }
@@ -387,20 +388,20 @@ export async function prepareHeroSelection(step: () => Promise<void>): Promise<v
 
 /** A first visit's hall has no lobby frames to build its playable copy; readiness must include that copy. The lobby's
  *  own class has one only once his look has changed in the hall (built in Back's click otherwise: `restyleHallHero`). */
-export async function prepareSpareHero(id: string, step: () => Promise<void>): Promise<void> {
+export async function prepareSpareHero(id: string, step: () => Promise<void>, ms?: SliceMs): Promise<void> {
   if (id === G.profile.classId && G.player.heroLook.preset === profileLook(G.profile).preset) return;
   warmingRuns(true);
   try {
     await preloadHeads(heroDetail());
     // Finish a partial spare at its original detail, then replace it in slices if the preset changed.
-    await finishInSlices(`spare ${id}`, step);
+    await finishInSlices(`spare ${id}`, step, ms);
     const spare = spares.get(id);
     const profile = profileOf(id), gear = gearOf(profile);
     if (spare?.gear === gear && inItsLook(spare.player, profile)) return;
     spare?.player.dispose();
     spares.delete(id);
     await readyLook(id, profileLook(profile));
-    const player = await builtInSlices(Player.inSteps(id, profile.equipped, true, profileLook(profile)), step);
+    const player = await builtInSlices(Player.inSteps(id, profile.equipped, true, profileLook(profile)), step, ms);
     player.stowed();
     spares.set(id, { player, gear });
   } finally { warmingRuns(false); }
