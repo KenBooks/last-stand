@@ -728,6 +728,35 @@ export function meadowHandOver(wide: boolean): void {
   });
 }
 
+/** A tuft's direct light, matte: the diffuse alone, as three's physical light gives it (its share the specular leaves,
+ *  `F`, kept), the specular's GGX not worked out at all where it'd be thrown away (`bladeSheen`). */
+const MATTE_DIRECT = /* glsl */ `
+void RE_Direct_Blade( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal,
+  const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material,
+  inout ReflectedLight reflectedLight ) {
+  if ( uTuft < 1.5 ) {
+    RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal,
+      material, reflectedLight );
+    return;
+  }
+  float dotNL = saturate( dot( geometryNormal, directLight.direction ) );
+  vec3 irradiance = dotNL * directLight.color;
+  vec3 halfDir = normalize( directLight.direction + geometryViewDir );
+  float dotVH = saturate( dot( geometryViewDir, halfDir ) );
+  vec3 F = F_Schlick( material.specularColor, material.specularF90, dotVH );
+  reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Blade
+`;
+/** three's reflection of the environment, read for a blade alone: a tuft throws it away (`bladeSheen`) */
+const ENV_RADIANCE = 'vec3 iblRadiance = getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );';
+const ENV_RADIANCE_BLADE = 'vec3 iblRadiance = vec3( 0.0 );\n\tif ( uTuft < 1.5 ) iblRadiance = '
+  + 'getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );';
+if (!THREE.ShaderChunk.lights_fragment_maps.includes(ENV_RADIANCE)) {
+  console.error('meadow: three\'s lit shaders have changed: the tufts read the environment\'s reflection for nothing');
+}
+
 /** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass;
  *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
  *  after the shading for the first ring's dense blades too, which never cut). */
@@ -782,6 +811,9 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
         float bladeSheen = 1.0 - step( 1.5, uTuft );
         reflectedLight.directSpecular *= bladeSheen;
         reflectedLight.indirectSpecular *= bladeSheen;`)
+      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>' + MATTE_DIRECT)
+      .replace('#include <lights_fragment_maps>', THREE.ShaderChunk.lights_fragment_maps.replace(ENV_RADIANCE,
+        ENV_RADIANCE_BLADE))
       .replace('#include <normal_fragment_begin>',
         THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0')
           // (and the lit side is the one turned up, whichever way the card is wound: a tuft's cards were lit on one
