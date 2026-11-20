@@ -28,9 +28,10 @@
 .tr-buttons .btn { min-width: 140px; }
 /* (Accept refused, its reason on the line over it: it looks off, and shows no lit cursor) */
 .tr-buttons .btn:disabled { opacity: .45; filter: grayscale(.6); cursor: $cursor; }
-.coop-trade { margin-left: auto; padding: 3px 12px; font-size: 13px; }
+.coop-trade { flex: none; padding: 3px 12px; font-size: 13px; white-space: nowrap; }
 .coop-trade:disabled { opacity: .45; cursor: $cursor; }
 body.touch .coop-trade { min-height: calc(36px / var(--ui, 1)); }
+@media (max-height: 520px) { .coop-trade { padding: 2px 10px; font-size: 12px; } }
 body.touch .tr-buttons .btn { min-height: calc(44px / var(--ui, 1)); }
 
 /* a short screen: the stash beside the offers, the box as tall as the screen lets it be */
