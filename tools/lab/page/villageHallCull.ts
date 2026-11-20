@@ -1,8 +1,10 @@
 // `lab village`'s hall culled by its doorway: the hero in the hall of heroes turned to its door, the square beyond it,
 // and the frame drawn with what stands outside culled by the doorway (`world/hallPortal.ts`) and without, at midnight
 // and at noon: the scene's draws must fall and no pixel may change (from play, a perf report "looking at plaza from
-// hall": 555 draws, the village drawn behind the hall's walls). `canary` culls all outside, the doorway or not,
-// which must change the frame.
+// hall": 555 draws, the village drawn behind the hall's walls). Then walked in, turned to the dais, the camera
+// trailing him in the doorway's opening: the same (a perf report "village needs to be 144 fps": from there nothing
+// was culled, the grass behind the walls 35 ms of the 4080's scene pass at 20.7 Mpx). `canary` culls all outside,
+// the doorway or not, which must change the frame.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -16,8 +18,10 @@ import { drawFrame, type Canvas } from './light';
 import { grassVertices } from './grassCount';
 import type { LightsChecked } from './villageLights';
 
-/** how far in from the door the hero stands (m), the hours read, and the frames he's given to settle */
+/** how far in from the door the hero stands (m), looking out of it and walked in, turned to the dais (the camera
+ *  trailing him in the doorway), the hours read, and the frames he's given to settle */
 const IN_FROM = 7;
+const WALKED_IN = 4.6;
 const HOURS = [0, 12];
 const SETTLE = 30;
 /** the most presses of V to come round to a view (top, over the shoulder, through the eyes) */
@@ -85,6 +89,35 @@ async function inHallLookingOut(lab: Lab): Promise<void> {
   await lab.step(SETTLE);
 }
 
+/** The hero walked in, turned to the dais, the camera over his shoulder behind him in the doorway's opening, let
+ *  settle (where a perf report stood him: -1.7,-19.3 facing 181 degrees). */
+async function inHallFromDoorway(lab: Lab): Promise<void> {
+  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - WALKED_IN);
+  at.y = groundHeight(at.x, at.z);
+  G.player.walkTo = null;
+  G.player.place(at, Math.PI);
+  await viewBy(lab, 'third');
+  faceCamera(Math.PI);
+  await lab.step(SETTLE);
+}
+
+/** Whether the game's camera stands in the doorway's opening, through the front wall's thickness. */
+function cameraInDoorway(): boolean {
+  const eye = G.camera.position;
+  const across = Math.abs(eye.x - TERRACE.x) < HALL.doorHalf;
+  return across && eye.z > HALL.inFront && eye.z < HALL.door;
+}
+
+/** Where the hero stands for a reading: its name, how he's stood there, and whether the doorway shows grass (where
+ *  it doesn't, what's culled is the grass behind the walls: the parts out there are past the camera's view already,
+ *  and the grass is culled by its tiles, its draws as many). */
+interface Stand { name: string; place: (lab: Lab) => Promise<void>; seesGrass: boolean }
+
+const STANDS: Stand[] = [
+  { name: 'looking out of it', place: inHallLookingOut, seesGrass: true },
+  { name: 'walked in, the camera in the doorway', place: inHallFromDoorway, seesGrass: false },
+];
+
 /** The grass hidden from an eye within an occluder, as it was (a commit from before it has no such hold: an A/B's
  *  other side loads this module too, and a name it lacks would stop every command loading there). */
 function holdEyeWithinOccluders(held: boolean): void {
@@ -92,49 +125,72 @@ function holdEyeWithinOccluders(held: boolean): void {
   hold?.(held);
 }
 
-/** One hour's frames culled (or, the canary, culled whole) and not: their draws, and the share of pixels changed. */
+/** One hour's frames culled (or, the canary, culled whole) and not: their draws, the share of pixels changed, and
+ *  the grass's vertices drawn in each. */
 async function readHour(lab: Lab, hour: number, canary: boolean): Promise<{ culled: number; whole: number;
-  changed: number; grass: number }> {
+  changed: number; grass: number; grassWhole: number }> {
   holdHour(hour);
   await lab.step(SETTLE);
   setHallCull(canary ? 'all' : 'door');
   const culled = countedFrame(lab);
+  const grass = grassVertices();
   setHallCull('off');
   const whole = countedFrame(lab);
+  const grassWhole = grassVertices();
   setHallCull('door');
   const changed = changedShare(culled.canvas, whole.canvas);
-  return { culled: culled.draws, whole: whole.draws, changed, grass: grassVertices() };
+  return { culled: culled.draws, whole: whole.draws, changed, grass, grassWhole };
 }
 
-/** The frame out of the hall's door culled by the doorway against drawn whole, at midnight and noon. */
-export async function hallCulledByDoor(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  const view = viewMode();
-  await inHallLookingOut(lab);
+/** What one stand's readings found: its line, its problems, and whether the canary's plant showed. */
+interface StandRead { line: string; problems: string[]; changedAny: boolean; grassGone: boolean }
+
+/** One stand's frames culled by the doorway against drawn whole, at midnight and noon. */
+async function readStand(lab: Lab, stand: Stand, canary: boolean): Promise<StandRead> {
+  await stand.place(lab);
   const read: string[] = [];
   const problems: string[] = [];
   let changedAny = false;
   let grassGone = false;
+  const at = `hall culled by its door, ${stand.name}`;
+  // (walked in, the camera must be where the report had it, or this reads a frame the cull always took)
+  if (!stand.seesGrass && !cameraInDoorway()) problems.push(`${at}: the camera isn't in the doorway`);
+  for (const hour of HOURS) {
+    const { culled, whole, changed, grass, grassWhole } = await readHour(lab, hour, canary);
+    read.push(`${hour}:00 ${whole} -> ${culled} draws, ${(changed * 100).toFixed(3)}% of pixels changed, `
+      + `${grassWhole} -> ${grass} of the grass's vertices`);
+    if (grass === 0) grassGone = true;
+    if (changed > MOST_CHANGED) changedAny = true;
+    if (canary) continue;
+    if (stand.seesGrass && culled >= whole) problems.push(`${at}: at ${hour}:00 no draw was culled`);
+    // (half of it at least: the tiles meeting the hall's box are kept, as what's merged spans the village)
+    if (!stand.seesGrass && grass > grassWhole / 2) {
+      problems.push(`${at}: at ${hour}:00 the grass behind the hall's walls was drawn (${grass} of ${grassWhole})`);
+    }
+    if (changed > MOST_CHANGED) problems.push(`${at}: at ${hour}:00 the frame changed`);
+    // (from play, "grass is gone, from here, or anywhere in hall of heroes": the camera within the hall's own
+    // occluder, every tile of the meadow was hidden behind it)
+    if (stand.seesGrass && grass === 0) problems.push(`${at}: at ${hour}:00 no grass is drawn out of the door`);
+  }
+  const line = `${at} (the scene's draws whole -> culled): ${read.join('; ')}`;
+  return { line, problems, changedAny, grassGone };
+}
+
+/** The frame in the hall culled by the doorway against drawn whole, from each stand, at midnight and noon. */
+export async function hallCulledByDoor(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const view = viewMode();
+  const reads: StandRead[] = [];
   holdEyeWithinOccluders(canary);
   try {
-    for (const hour of HOURS) {
-      const { culled, whole, changed, grass } = await readHour(lab, hour, canary);
-      read.push(`${hour}:00 ${whole} -> ${culled} draws, ${(changed * 100).toFixed(3)}% of pixels changed, `
-        + `${grass} of the grass's vertices`);
-      if (grass === 0) grassGone = true;
-      if (changed > MOST_CHANGED) changedAny = true;
-      if (canary) continue;
-      if (culled >= whole) problems.push(`hall culled by its door: at ${hour}:00 no draw was culled`);
-      if (changed > MOST_CHANGED) problems.push(`hall culled by its door: at ${hour}:00 the frame changed`);
-      // (from play, "grass is gone, from here, or anywhere in hall of heroes": the camera within the hall's own
-      // occluder, every tile of the meadow was hidden behind it)
-      if (grass === 0) problems.push(`hall culled by its door: at ${hour}:00 no grass is drawn out of the door`);
-    }
+    for (const stand of STANDS) reads.push(await readStand(lab, stand, canary));
   } finally {
     holdEyeWithinOccluders(false);
     setHallCull('door');
     holdHour(null);
     await viewBy(lab, view);
   }
-  const line = `hall culled by its door (looking out of it, the scene's draws whole -> culled): ${read.join('; ')}`;
-  return { lines: [line], problems, caught: canary ? changedAny && grassGone : null, moments: [] };
+  const lines = reads.map((read) => read.line);
+  const problems = reads.flatMap((read) => read.problems);
+  const caught = canary ? reads[0].changedAny && reads[0].grassGone : null;
+  return { lines, problems, caught, moments: [] };
 }
