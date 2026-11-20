@@ -22,6 +22,9 @@ interface NeedState {
   waiting: number;
   /** whether something asked for it (`wanted` resolved): its warm-up goes on at once, not behind the lobby */
   asked: boolean;
+  /** resolved as the hero comes near where it's needed (`approach`): warmed while no frame is held */
+  resolveNear: () => void;
+  near: Promise<void>;
 }
 
 function needState(): NeedState {
@@ -33,6 +36,7 @@ function needState(): NeedState {
       resolve();
     };
   });
+  state.near = new Promise<void>((resolve) => { state.resolveNear = resolve; });
   return state;
 }
 
@@ -50,6 +54,10 @@ const changed = (): void => { for (const fn of listeners) fn(); };
 export const warmed = (need: Need): Promise<void> => needs[need].warmed;
 /** resolved once something waits for `need` (`whenWarm`), or `hurry` is called: compiled at once then */
 export const wanted = (need: Need): Promise<void> => needs[need].wanted;
+/** resolved once the hero comes near where `need` is needed (`approach`), or it's wanted */
+export const approached = (need: Need): Promise<void> => Promise.race([needs[need].near, needs[need].wanted]);
+/** Whether something asked for `need` (`want`, `whenWarm`): warmed at once, a held frame or not. */
+export const isAsked = (need: Need): boolean => needs[need].asked;
 /** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
 export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
@@ -117,6 +125,10 @@ export function warmingRuns(on: boolean): void { running += on ? 1 : -1; }
 export function hurry(): void { for (const need of NEEDS) needs[need].resolveWanted(); }
 /** `need` wanted now, nothing waiting on it (a first visit's hero selection, warmed under the loading screen). */
 export function want(need: Need): void { needs[need].resolveWanted(); }
+
+/** The hero comes near where `need` is needed (the hall of heroes, for its heroes): its warm-up begins, but behind the
+ *  lobby, given up at a frame held past `WARM_BEHIND.heldMost` until something asks for it (`want`). */
+export function approach(need: Need): void { needs[need].resolveNear(); }
 
 /** `need`'s warm-up has got `share` of the way. */
 export function warming(need: Need, share: number): void {
