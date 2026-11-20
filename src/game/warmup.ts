@@ -686,11 +686,24 @@ async function warmInTasks(need: Need, parts: Part[], progress: (share: number) 
   performance.measure(`warm the ${need} at once`, { start, duration: performance.now() - start });
 }
 
-/** The longest a frame of the lobby may be held while a part warms behind it (ms): held longer, the rest waits for
- *  what needs it, under its loading bar, as a first visit's does. A phone's return held its lobby 170 to 970 ms a
- *  part, its programs from the cache all the same (each linked in time: the part's own JS and the GPU's process took
- *  it), from play on an S25 Edge "still lagging hard" (15 s at 21 frames a second, its worst 5). */
-const HELD_MOST_MS = 120;
+/**
+ * Warming behind the lobby: the longest a frame of the lobby may be held while it runs (`heldMost`, ms), and the needs
+ * given up there (`givenUp`). Held longer, the part under way stops at its next step and every warm-up not yet warm
+ * waits for what needs it, under its loading bar, as a first visit's does: a device whose lobby one warm-up holds is
+ * held by the next. A phone's return held its lobby 170 to 970 ms a part, its programs from the cache all the same
+ * (each linked in time: the part's own JS and the GPU's process took it), from play on an S25 Edge "still lagging
+ * hard" (15 s at 21 frames a second, its worst 5). Given up a need at a time, and only between parts, an S25 Edge's
+ * village held frames of 333, 567 and 350 ms over its first 5 s (trace 5NBG-PJD9, "stutters at the start in
+ * village"): the fight's part went on to its end, and the heroes' warm-up began afresh after it. `npm run lab --
+ * lobbystart --held` sets `heldMost` to 0.
+ */
+export const WARM_BEHIND = { heldMost: 120, givenUp: new Set<Need>() };
+
+/** the warm-ups behind the lobby */
+const BEHIND_NEEDS: Need[] = ['fight', 'heroes', 'rooms'];
+
+/** what a step of a warm-up behind the lobby throws once a frame was held past `WARM_BEHIND.heldMost` */
+const GIVEN_UP = new Error('warmed behind the lobby no longer: a frame was held');
 
 /** The longest gap between the page's frames from now until it's stopped (ms), a hidden page's time left out. */
 function framesHeld(): { worst: () => number; stop: () => void } {
@@ -748,7 +761,7 @@ function timedSteps(need: Need): { part: string; wrap: (wait: () => Promise<void
 /**
  * `need`'s `parts` warmed: a part at a time behind the lobby, a step a frame, where `behind` says so once it's time
  * and while they come from a cache and hold no frame of the lobby long (a part found cold, or a frame held past
- * `HELD_MOST_MS`, leaves the rest for later), the rest at once when something needs them
+ * `WARM_BEHIND.heldMost` or another need given up, leaves the rest for later), the rest at once when something needs them
  * (game/warm.ts `wanted`; what's left of a part then goes on without waiting for frames); then what waited for them
  * goes ahead.
  */
@@ -757,22 +770,35 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
   let hurried = false;
   void wanted(need).then(() => { hurried = true; });
   const timed = timedSteps(need);
-  const step = timed.wrap(() => (hurried ? nextTask() : nextFrame()));
-  let cold = !(await behind());
-  let next = 0;
   const held = framesHeld();
+  const heldLong = (): boolean => held.worst() > WARM_BEHIND.heldMost || WARM_BEHIND.givenUp.size > 0;
+  const waitStep = timed.wrap(() => (hurried ? nextTask() : nextFrame()));
+  // (a part stopped at its next step once a frame was held: what it built stays its `built`, for its warm-up after)
+  const step = async (): Promise<void> => {
+    await waitStep();
+    if (!hurried && heldLong()) throw GIVEN_UP;
+  };
+  let cold = !(await behind()) || heldLong();
+  let next = 0;
   while (next < parts.length && !cold && !hurried) {
     timed.part = parts[next].name;
     const partCold = await inTurn(async () => {
       const cold = await warmPart(parts[next], step);
       if (!cold) await parts[next].ready?.(step);
       return cold;
+    }).catch((error: unknown) => {
+      if (error !== GIVEN_UP) throw error;
+      return true;
     });
     if (!partCold && need === 'heroes') heroWarming(parts[next].name, 1);
     if (!partCold) warming(need, ++next / parts.length);
-    cold = partCold || held.worst() > HELD_MOST_MS;
+    cold = partCold || heldLong();
   }
   held.stop();
+  // (and every warm-up not warm yet with it: each waits for what needs it)
+  if (next < parts.length && !hurried && heldLong()) {
+    for (const any of BEHIND_NEEDS) if (!isWarm(any)) WARM_BEHIND.givenUp.add(any);
+  }
   if (next < parts.length) {
     await wanted(need);
     const done = next / parts.length;

@@ -34,6 +34,7 @@ import { isReadying, readyingLabel } from '../../../src/game/warm';
 import { pressHeld } from './holdPress';
 import * as textures from '../../../src/core/textures';
 import * as anatomy from '../../../src/entities/models/anatomy';
+import * as shadowDetail from '../../../src/entities/models/shadowDetail';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
 import type { Area } from './pixels';
 
@@ -534,6 +535,9 @@ export class Lab {
       warn(...args);
     };
     window.__labClock.mode = 'manual';
+    // (the heroes' fewer triangles made on the page, a frame's slice at a time: in the game's worker they'd come in the
+    // browser's time, at another frame on each run; `lab lobbystart` hands them to the worker as a player's page does)
+    detailOnPage(true);
     // (one frame with the game held still, so its timer counts from a lab frame: the first frame after the reveal
     // was measured from the game's last frame in real time, a browser frame earlier on some boots, and each emitter's
     // accumulated time started that much apart, its bursts a frame early or late)
@@ -1586,6 +1590,12 @@ export async function mapsCome(): Promise<void> {
   await (textures as { everyMapCome?: () => Promise<void> }).everyMapCome?.();
   const fire = await import('../../../src/world/fire');
   await (fire as { flamesCome?: () => Promise<void> }).flamesCome?.();
+}
+
+/** The heroes' fewer triangles made on the page (`onPage`) or in the game's worker (src/entities/models/shadowDetail.ts
+ *  `detailOnPage`), where the tree has it: an A/B's other commit may make them on the page alone, which is the same. */
+export function detailOnPage(onPage: boolean): void {
+  (shadowDetail as { detailOnPage?: (onPage: boolean) => void }).detailOnPage?.(onPage);
 }
 
 /** The session's entry: the lab installed on this page. */
