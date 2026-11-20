@@ -3,6 +3,7 @@
 // skill (or tap, on touch) to bind; drag spellbook -> key to bind (duplicates allowed), key -> key to
 // swap, key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per
 // weapon style for a class whose skills depend on the gear held.
+import { emit } from '../events';
 import { G } from '../state';
 import { SKILL_KEYS, usableFirst } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
@@ -123,7 +124,7 @@ export function renderLoadoutEditor(): void {
     // so a second tap clears it
     el.addEventListener('click', () => {
       hideTooltip();
-      if (picked !== key) { picked = key; sfx.click(); openBook(true); }
+      if (picked !== key) { picked = key; sfx.click(); openBook(true); emit('skillKeyPicked'); }
       else if (isTouch()) { p.bind(key, null); picked = null; sfx.salvage(); }
       else { picked = null; sfx.click(); }
       commit();

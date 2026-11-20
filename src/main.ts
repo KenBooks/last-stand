@@ -1233,7 +1233,8 @@ function update(dt: number): void {
     if (revealed && villageActive()) prepareWalks(HERO_RADIUS);
     updateVillageMap(dt);
     const villageOut = villageActive() && !panelsOpen() && !villageCardOf() && !G.arena.room;
-    updateTrainingTracker(dt, villageOut);
+    // (a tutorial's station shows with the bag or the stash open too: its steps about items are taken there)
+    updateTrainingTracker(dt, villageOut, villageActive() && !villageCardOf() && !G.arena.room, !!panelsOpen(), panelsOpen() === 'chest');
     updateVillageMinimap(dt, villageOut);
     betaNoticeWhile(villageClear());
     updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());

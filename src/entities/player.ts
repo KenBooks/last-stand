@@ -483,6 +483,7 @@ export class Player {
     if (this.channel?.key === key) this.stopChannel();
     this.loadout[key] = skillId;
     saveLoadout(this.cls, this.gear, this.loadout);
+    if (this.local) emit('skillBound');
   }
 
   /** Back to the class's default bindings for the weapon style held. */
@@ -819,8 +820,10 @@ export class Player {
       this.casting = { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, key, drawT, nockT };
       if (!s.def.freeMove) this.faceTowards(target);
       actionSink?.({ t: 'cast', s: s.def.impl, dur: drawT, x: target.x, z: target.z, h: 1, ...n });
+      if (this.local) emit('skillUsed', s.def.impl);
       return true;
     }
+    if (this.local) emit('skillUsed', s.def.impl);
     if (dur <= 0) { this.fire(s, target); return true; }
     this.casting = { skill: s, t: 0, dur: nockT + dur, fireAt: nockT + dur * (s.def.fireAt ?? 0.55), fired: false, target, nockT };
     // the hero turns after the live aim, never snapping to each cast's: with fire held while the mouse
@@ -1067,6 +1070,7 @@ export class Player {
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
     this.queued = null;
     actionSink?.({ t: 'chs', s: s.def.impl, k: key, ...(this.bare ? { h: this.hands } : {}) });
+    if (this.local) emit('skillUsed', s.def.impl);
   }
 
   /** A held block comes back in the same update that a swing finishes, never during it or a dash. */
@@ -1568,6 +1572,19 @@ export class Player {
       countTaken(r.taken, r.blocked + r.absorbed);
     }
     if (this.life <= 0) this.die();
+    return r;
+  }
+
+  /** A sparring blow (the village's tutorial, game/tutorial.ts): the shield's part of a hit of `amount` worked out and
+   *  shown as a real one's, a broken guard too, with no health or ward lost. Null: the hero is down. */
+  spar(amount: number, from: THREE.Vector3 | null): HitResult | null {
+    if (!this.alive) return null;
+    const life = this.life, ward = this.ward?.amount;
+    const r = this.resolveHit(amount, from);
+    this.life = life;
+    if (this.ward && ward !== undefined) this.ward.amount = ward;
+    r.taken = r.absorbed = 0;
+    this.showHit(r);
     return r;
   }
 

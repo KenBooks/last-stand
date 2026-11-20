@@ -23,6 +23,20 @@ export interface GameEvents {
   dummyHit: [];
   /** the first visit's training moved on: a step done, finished or skipped (`game/training.ts`) */
   trainingChanged: [];
+  /** the village's tutorial moved on: a station begun or left, a step done (`game/tutorial.ts`) */
+  tutorialChanged: [];
+  /** the local player threw an item on the lobby's floor, took one off it, put one on from the stash */
+  itemThrown: [item: Item];
+  itemTaken: [item: Item];
+  itemEquipped: [item: Item];
+  /** a key picked on the loadout's bar, its book opened for a skill to put on it */
+  skillKeyPicked: [];
+  /** the local hero's skill put on a key or taken off one (the loadout's editor) */
+  skillBound: [];
+  /** a run's spoils banked into the stash (`loot/profile.ts` `bankItems`) */
+  spoilsBanked: [];
+  /** the local hero began a skill (a cast, a draw or a channel), by its behaviour (`SkillDef.impl`) */
+  skillUsed: [impl: string];
 }
 
 type Handler<K extends keyof GameEvents> = (...args: GameEvents[K]) => void;

@@ -20,6 +20,7 @@ import { drawText, measure, OUTLINE, roundRect, svgImage, type TextStyle } from 
 import { uiScales } from '../ui/scale';
 import type { Item } from '../types';
 import { hallOpen } from './hall';
+import { emit } from '../events';
 
 /** The floor is on show: in the lobby, and not while the hall of heroes stands in its place (a Greataxe thrown there
  *  showed its shaft and name among the heroes). */
@@ -160,6 +161,7 @@ export function throwItem(item: Item, at?: { x: number; z: number }): void {
   const d: GroundDrop = { id: `${TAG}.${seq++}`, item, x, z, fx: p.pos.x, fz: p.pos.z };
   addDrop(d);
   net?.dropped(d);
+  emit('itemThrown', item);
 }
 
 const ray = new THREE.Raycaster(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
@@ -224,6 +226,9 @@ function cardOf(d: Drop): TooltipContent {
   const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
   return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost when a run starts` };
 }
+
+/** Whether a drop's name is under a point of the page: a press there is the floor's (game/village.ts lets it by). */
+export const dropNameAt = (x: number, y: number): boolean => !!dropAt(x, y);
 
 /** The drop whose label is under a point of the page, in the lobby. */
 function dropAt(x: number, y: number): Drop | null {
@@ -299,7 +304,7 @@ export function removeDrop(id: string): GroundDrop | null {
 /** The host gave us a drop: into the stash, or back on the floor at our feet if it has filled up meanwhile. */
 export function receiveItem(item: Item): void {
   const it = { ...item, id: newItemId() };
-  if (picked(it)) { sfx.pickup(); return; }
+  if (picked(it)) { sfx.pickup(); emit('itemTaken', it); return; }
   floatText(G.player.pos.x, 2.6, G.player.pos.z, 'Stash full', 'info', '#ffcf70');
   throwItem(it);
 }
@@ -413,7 +418,8 @@ function pickUp(d: Drop): void {
   const g = removeDrop(d.id);
   if (!g) return;
   net?.taken(g.id);
-  if (picked({ ...g.item, id: newItemId() })) sfx.pickup();
+  const it = { ...g.item, id: newItemId() };
+  if (picked(it)) { sfx.pickup(); emit('itemTaken', it); }
 }
 
 /** Every frame: the drops' motion and labels. */

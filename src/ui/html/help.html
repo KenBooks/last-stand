@@ -1,5 +1,10 @@
   <div id="help" class="modal hidden"><div class="modal-box">
     <div class="sm-title">How to play</div>
+    <!-- the village's tutorial (game/tutorial.ts): its stations and how far each was walked (the notice board alone) -->
+    <div class="help-tour hidden" data-lobby="village">
+      <div class="ht-lead"><b class="gold">Tutorial</b> — a walk round the village, one thing at a time. Leave it whenever you like.</div>
+      <div class="ht-stations"></div>
+    </div>
     <div class="help-cols">
     <div class="controls-help"></div>
     <div class="help-text">
@@ -8,12 +13,14 @@
       <b class="gold">Continue</b> — face a harder wave with better loot.</p>
       <p>You only see the rarity of the loot you carry: what it is shows once you bank.</p>
       <p>If you die, <b class="red">all unbanked spoils are lost</b>. Every fifth wave, a boss comes.</p>
+      <p data-lobby="panels">A guided <b class="gold">tutorial</b> is in the village lobby: turn it on in the pause menu's Beta tab, and read its notice board.</p>
       <p><b class="gold">Play together</b> (in the lobby) opens a room for a friend. Each keeps their own spoils; a fallen hero can be raised by a teammate before bleeding out.</p>
     </div>
     </div>
     <div class="help-actions">
-      <button class="btn hidden" id="btn-help-restart">Restart training</button>
       <button class="btn" id="btn-help-guide">Open the guide</button>
+      <!-- the tutorial's one way in, the notice board's alone (ui/menus.ts renderTour): Start, Go on or Walk it again -->
+      <button class="btn hidden" id="btn-tour" data-lobby="village">Start the tutorial</button>
       <button class="btn primary" id="btn-help-close">Got it</button>
     </div>
   </div></div>

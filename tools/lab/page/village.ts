@@ -31,6 +31,7 @@ import { focusOf } from '../../../src/world/meadow';
 import { goTo, goUse, objectNear, villageObject } from '../../../src/game/village';
 import { routing } from '../../../src/world/walkPath';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
+import { leaveTutorial, tutorialStation } from '../../../src/game/tutorial';
 import { helpOpen, hideHelp, hideSummary, showHelp, showSummary } from '../../../src/ui/menus';
 import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
@@ -651,8 +652,9 @@ async function use(lab: Lab, o: VillageObject): Promise<void> {
 /** how far the training's middle drag goes (px) */
 const TRAINING_DRAG = 40;
 
-/** The notice board's Restart training, the training over (not clicked, with `canary`): under way afresh, every step
- *  to do, the tracker out and the board put away; and no such button on How to play from the pause menu. */
+/** The notice board's way to start over, the tutorial's (not clicked, with `canary`): a station under way and the
+ *  board put away, no second restart beside it (the training's Restart training was one: "why do we need 2 ways to
+ *  restart training?"), and none of it on How to play from the pause menu. */
 async function boardRestarts(lab: Lab, canary: boolean): Promise<{ problems: string[]; board: Pictured }> {
   const problems: string[] = [];
   // (he stays at it: walked off, the board is put away)
@@ -660,18 +662,20 @@ async function boardRestarts(lab: Lab, canary: boolean): Promise<{ problems: str
   await stand(lab, notice.stand);
   goUse(notice);
   await lab.step(SETTLE);
-  const restart = document.querySelector<HTMLElement>('#btn-help-restart')!;
-  if (!shownOnPage(restart)) problems.push('training: the notice board offers no restart');
-  const board = await lab.screen('the notice board, its Restart training', []);
-  if (!canary) await lab.clickOn(restart);
+  const second = document.querySelector<HTMLElement>('#btn-help-restart');
+  if (second && shownOnPage(second)) problems.push('training: the notice board offers a second restart beside the tutorial\'s');
+  const tour = document.querySelector<HTMLElement>('#btn-tour');
+  if (!tour || !shownOnPage(tour)) problems.push('training: the notice board offers no tutorial');
+  const board = await lab.screen('the notice board, its tutorial', []);
+  if (!canary && tour) await lab.clickOn(tour);
   await lab.step(SETTLE);
-  if (!trainingPending()) problems.push('training: the notice board\'s restart left it over');
-  if (TRAINING.some((t) => stepDone(t.id))) problems.push('training: restarted with steps ticked');
-  if (!canary && !shownOnPage(document.querySelector('#training')!)) problems.push('training: restarted, no tracker');
-  if (!canary && helpOpen()) problems.push('training: the notice board stayed up after its restart');
+  if (!tutorialStation()) problems.push('training: the notice board\'s tutorial began no station');
+  if (!canary && !shownOnPage(document.querySelector('#training')!)) problems.push('training: the tutorial began, no tracker');
+  if (!canary && helpOpen()) problems.push('training: the notice board stayed up after the tutorial began');
+  leaveTutorial();
   hideHelp();
   showHelp();
-  if (shownOnPage(restart)) problems.push('training: How to play offers a restart away from the notice board');
+  if (tour && shownOnPage(tour)) problems.push('training: How to play offers the tutorial away from the notice board');
   hideHelp();
   await stand(lab, [0, 4.5]);
   return { problems, board };

@@ -25,7 +25,50 @@
 /* (a finger's room round its words) */
 body.touch .tr-skip { padding: 10px 14px 10px 0; }
 
+/* the village's tutorial in it (game/tutorial.ts): the step to take now said in full, how it's done and the rule
+   behind it under its words; the steps after it wait their turn in fewer words */
+#training.tour { width: 300px; }
+#training.tour .tr-steps li:not(.now):not(.done) { color: #cfc5ad; font-size: 13px; }
+.tr-steps li.now::before { border-color: var(--highlight); }
+.tr-do, .tr-how, .tr-why { display: block; }
+.tr-do { font-weight: 700; color: #ffe7b0; }
+.tr-how { margin-top: 3px; }
+.tr-why { margin-top: 3px; font-size: 13px; font-style: italic; color: #e2d6ba; }
+/* with the bag or the stash open the minimap's column is put away, and it stands on the right at the top, beside the
+   panels (ui/training.ts moves it to the page's own box and places it: `afloat`, `placeAfloat`), scaled as the panels
+   are. The rest of the time it stays in its column under the minimap, as the first visit's checklist does */
+#training.afloat { position: fixed; z-index: 40; top: 12px; right: 12px; left: auto; margin: 0; zoom: var(--ui, 1);
+  max-width: calc(46vw / var(--ui, 1)); }
+/* a short screen (a phone held sideways): in its column beside the minimap, where the checklist stands there
+   (_responsive.scss), the step to take now alone and its rule left out, so it clears the skill buttons' arc; with the
+   bag open, whose panels fill the screen, a line along their foot at the right saying what to do and how */
+@media (max-height: 520px) {
+  #training.tour { width: 250px; padding: 4px 8px; }
+  #training.tour .tr-steps { margin: 4px 0; }
+  #training.tour .tr-steps li:not(.now), #training.tour .tr-why { display: none; }
+  #training.afloat.over-bag { top: auto; bottom: 1px; right: 8px; left: auto; width: max-content; max-width: 94vw;
+    padding: 2px 12px; background: rgba(12, 10, 8, .94); border: 1px solid rgba(#e8d9b4, .35); border-radius: 5px;
+    text-shadow: none; }
+  #training.over-bag :is(.tr-title, .tr-why, .tr-skip) { display: none; }
+  #training.over-bag .tr-steps { margin: 0; }
+  #training.over-bag .tr-steps li { padding-left: 0; font-size: 13px; }
+  #training.over-bag .tr-steps li::before { display: none; }
+  #training.over-bag :is(.tr-do, .tr-how) { display: inline; margin: 0 6px 0 0; }
+}
+
+/* the ring round the part of the page the tutorial's step points at (ui/training.ts `placeRing`): placed only as
+   that part moves, its pulse its opacity alone, slow (a breath every 2.8 s), still for reduced motion */
+#tut-ring { position: fixed; z-index: 45; left: 0; top: 0; width: 1px; height: 1px; box-sizing: border-box; pointer-events: none;
+  border: 2px solid var(--highlight); border-radius: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 0 10px rgba(255, 200, 90, .55);
+  opacity: 0; will-change: opacity; }
+#tut-ring.on { animation: tut-ring 1.4s ease-in-out infinite alternate; }
+@keyframes tut-ring { from { opacity: 1; } to { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { #tut-ring.on { animation: none; opacity: 1; } }
+
 /* a portal's card while the training is unfinished: its warning and its skip in Enter's place */
 .vc-training { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .vc-training.hidden { display: none; }
 .vc-training p { margin: 0; font-size: 14px; color: #f0c88a; }
+/* (its words take no click or tap: a thrown item's name under them is picked through them; its button alone does) */
+#training.tour { pointer-events: none; }
+#training.tour .tr-skip { pointer-events: auto; }
