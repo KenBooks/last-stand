@@ -49,7 +49,10 @@ export {
   coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
   coopSummaryDone, coopTagsSeen,
 } from './coopLobby';
-export { coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHouseSeen, coopLeaveHouse, coopVillageMap } from './coopHouses';
+export {
+  coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHousePartyState, coopHouseSeen, coopLeaveHouse,
+  coopPartyHost, coopPartyJoin, coopPartyLeave, coopVillageMap,
+} from './coopHouses';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
 export {
   coopBarBack, coopBarFit, coopBarScreens, coopCanvasCover, coopClick, coopDrag, coopDragEnd, coopFloor, coopHold,

@@ -17,6 +17,7 @@ import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { readying, role } from './role';
 import { VILLAGE } from '../core/beta';
 import { ownOffset, setHostOffset } from '../game/clock';
+import { clearPendingRoom, joinInRoom } from '../game/rooms';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { portraitOf, receivePortrait } from './portraits';
@@ -382,6 +383,7 @@ export async function joinRoom(code: string, tag: string, password = ''): Promis
 export function leaveRoom(): void {
   clearTimeout(joinTimer);
   clearInterval(cardTimer);
+  clearPendingRoom();
   if (link) { link.send('ctl', { t: 'bye' }); link.leave(); }
   link = null;
   // the lobby floor is the host's: a guest leaving it leaves what's there (the host keeps it)
@@ -532,7 +534,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     addPeer(from, slot, look, tag, colour);
     const welcome = {
       t: 'welcome', slot, col: colour, biome: G.arena.biome, wave: session.wave, training: session.training,
-      inRun: G.mode === 'run', tz: ownOffset(),
+      inRun: G.mode === 'run', tz: ownOffset(), rm: roomIndex(),
     };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
@@ -602,8 +604,15 @@ function onControl(from: string, m: Record<string, unknown>): void {
       // (the village lit by the host's clock: the party stands in the same light)
       if (typeof m.tz === 'number') setHostOffset(m.tz);
       placeSpawns();
-      // step over to our side of the spawn
-      if (G.mode === 'menu') G.player.place(G.player.spawn, G.player.facing);
+      // step over to our side of the spawn (or into the host's house, if the host stands in one)
+      if (G.mode === 'menu') {
+        const rm = typeof m.rm === 'number' && Number.isInteger(m.rm) ? m.rm : 0;
+        const hostRoom: RoomId | null = VILLAGE && rm > 0 && rm <= ROOM_IDS.length ? ROOM_IDS[rm - 1] : null;
+        const joinedCode = session.code;
+        if (VILLAGE) joinInRoom(hostRoom, G.player.slot, () => session.status === 'joined' && session.code === joinedCode);
+        else G.player.place(G.player.spawn, G.player.facing);
+        syncAway();
+      }
       send('hello', hello());   // our slot, to everyone
       // what we threw on the floor before joining is on the host's floor now
       for (const d of groundDrops()) send('ctl', { t: 'gdrop', d, still: 1 });

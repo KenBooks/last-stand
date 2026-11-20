@@ -86,3 +86,4 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `session.ts`: joining a party whose host stands inside a village house (`welcome.rm`, `party-room-1` in `protocol.ts`) puts the joiner inside that same house (`joinInRoom` in `game/rooms.ts`, spread by slot around `insideOf` and cleared of furniture, with the village still loaded and warmed at boot so leaving the house compiles nothing); a joiner already in that house stays put, one joining an outside host from inside a house steps back out to the village, and one welcomed while the hall of heroes is up enters once it closes. `npm run lab -- coop --scenarios houses` checks joining a host in the tavern (and leaving back to the village with zero late compiles) and joining an outside host from inside the tavern.

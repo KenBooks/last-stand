@@ -53,7 +53,7 @@ import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { showMerchant } from './ui/screens/merchant/merchant';
-import { enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
+import { clearPendingRoom, enterPendingRoom, enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
@@ -312,7 +312,7 @@ async function boot() {
     initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
     // (in or out of a house: what was open put away, the partners told and shown only where they stand)
     // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); syncAway(); });
+    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); });
     initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
     // (a player alone at the rack is walked to the campfire, where a party is gathered)
     initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
@@ -773,6 +773,8 @@ function beginRun(wave: number, seed: number, training = false, duel: DuelSetup 
     cameThrough = G.arena.biome;
     showVillageCard(null);
     closedFrom();
+    clearPendingRoom();
+    leaveRoom(true);
   }
   G.arena.showVillage(false);
   G.arena.rollProps(seed);
@@ -968,6 +970,7 @@ function heroSelectClosed() {
   restyleHero();
   spawnDummies();
   showMenu(true);
+  if (VILLAGE) enterPendingRoom();
 }
 
 /** Lobby save slot pick (or the slot in play erased): the slot's last hero, or in an empty slot a

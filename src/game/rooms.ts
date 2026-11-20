@@ -12,6 +12,8 @@ import { RARITIES } from '../data/items';
 import { peekProfile } from '../loot/profile';
 import { saveSlot } from '../loot/saveSlots';
 import { faceCamera, holdZoom, settleCamera } from '../core/renderer';
+import { HERO_RADIUS } from '../entities/player';
+import { resolveWorld } from '../world/collision';
 import { groundHeight } from '../world/ground';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
@@ -51,26 +53,89 @@ function placeHero(at: { x: number; z: number; facing: number }): void {
   settleCamera(p.pos);
 }
 
-/** The hero into house `id`'s room (its programs warmed first, under the loading bar if they aren't yet). */
-export const enterRoom = whenWarm(['rooms'], (id: RoomId): void => {
+/** offsets from a room's entry spot (`insideOf`) by guest slot (1..3), offset from `(0, 0)` so guests never stack
+ *  on a host at the doorway or on each other, compact enough for every house and kept clear by `resolveWorld` */
+const JOIN_SPOTS: readonly [number, number][] = [[-0.85, 0.25], [0.85, 0.25], [0, -0.85]];
+
+/** A house entry deferred while the hall of heroes is open (e.g. a first-visit invitee picking a hero): applied once
+ *  the hall closes (`enterPendingRoom`). */
+let pendingJoin: { id: RoomId; slot: number; still: () => boolean } | null = null;
+
+/** Put the hero inside house `id` immediately (`rooms` must already be warm). `slot`: party slot (0 for solo entry). */
+function goIntoRoom(id: RoomId, slot = 0): void {
   if (G.mode !== 'menu' || roomHere() === id) return;
   G.arena.showRoom(id);
   showFoes(false);
   if (id === 'records') writeRecords();
   holdZoom(ROOM_ZOOM);
-  placeHero(insideOf(id));
+  const at = insideOf(id);
+  if (slot > 0) {
+    const [ox, oz] = JOIN_SPOTS[(slot - 1) % JOIN_SPOTS.length];
+    const pos = { x: at.x + ox, z: at.z + oz };
+    resolveWorld(pos, HERO_RADIUS);
+    at.x = pos.x;
+    at.z = pos.z;
+  }
+  placeHero(at);
   doorPuff(0, HOUSES[id].half[1] - 0.4);
   told(id);
+}
+
+/** The hero into house `id`'s room (its programs warmed first, under the loading bar if they aren't yet). */
+export const enterRoom = whenWarm(['rooms'], (id: RoomId): void => {
+  pendingJoin = null;
+  goIntoRoom(id);
 }, (id: RoomId) => `Opening ${HOUSES[id].name}`);
 
-/** The hero out of the room he's in, before its cottage's door (`quiet`: nothing placed, a run's start takes him on). */
-export function leaveRoom(quiet = false): void {
+const enterJoined = whenWarm(['rooms'], (id: RoomId, slot: number, still: () => boolean): void => {
+  if (!still() || G.mode !== 'menu') return;
+  if (G.arena.hallShown) { pendingJoin = { id, slot, still }; return; }
+  pendingJoin = null;
+  goIntoRoom(id, slot);
+}, (id: RoomId) => `Opening ${HOUSES[id].name}`);
+
+/**
+ * A guest welcomed into a party whose host stands in house `id` (null: outside in the village): put in the same place
+ * so the party starts together (the entire village is already loaded and warmed at boot, so leaving the house after
+ * does not lag). Already in that house, stay where they stand; in another or outside, enter once `rooms` is warm (or
+ * once the hall of heroes closes if it's up). `still`: whether the guest is still in the same party.
+ */
+export function joinInRoom(id: RoomId | null, slot: number, still: () => boolean): void {
+  pendingJoin = null;
+  if (G.mode !== 'menu') return;
+  if (id) {
+    if (roomHere() === id) return;
+    if (G.arena.hallShown) { pendingJoin = { id, slot, still }; return; }
+    enterJoined(id, slot, still);
+    return;
+  }
+  const wasIn = roomHere();
+  if (wasIn) leaveRoom(true, true);
+  G.player.walkTo = null;
+  G.player.place(G.player.spawn, G.player.facing);
+  if (wasIn) settleCamera(G.player.pos);
+}
+
+/** Drop any deferred party house entry (leaving the room or starting a run). */
+export function clearPendingRoom(): void { pendingJoin = null; }
+
+/** If a guest joined a host inside a house while the hall of heroes was open, enter it now that the hall closed. */
+export function enterPendingRoom(): void {
+  const next = pendingJoin;
+  pendingJoin = null;
+  if (!next || !next.still() || G.mode !== 'menu' || G.arena.hallShown) return;
+  enterJoined(next.id, next.slot, next.still);
+}
+
+/** The hero out of the room he's in, before its cottage's door (`quiet`: nothing placed, a run's start or party spawn
+ *  places him; `giveBackZoom`: restore the outside zoom held when entering, true unless a run sets its own). */
+export function leaveRoom(quiet = false, giveBackZoom = !quiet): void {
   const id = roomHere();
   if (!id) return;
   G.arena.showRoom(null);
   showFoes(true);
   // (his own zoom given back as it was, but as a run takes him out: it sets its own)
-  holdZoom(null, !quiet);
+  holdZoom(null, giveBackZoom);
   if (!quiet) {
     const out = outsideOf(id);
     placeHero(out);
