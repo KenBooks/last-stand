@@ -330,7 +330,7 @@ function partyCardHtml(p: Player | null): string {
   const best = bestOf(look);
   const host = p.slot === 0 ? '<span class="coop-card-host" title="Host">Host</span>' : '';
   return `<li class="coop-card${p.local ? ' own' : ''}"><span class="coop-card-face">${portraitHtml(p)}</span>
-    <span class="coop-card-who"><b><span class="coop-dot"${dotColour(p)}></span>${esc(nameOf(p))}</b>
+    <span class="coop-card-who"><b><span class="coop-dot"${dotColour(p)}></span><span class="coop-card-name">${esc(nameOf(p))}</span></b>
       <small${accent ? ` style="color:${accent}"` : ''}>${esc(p.cls.name)}</small></span>
     <span class="coop-card-stats">${statHtml(String(gearLevel(look)), 'Gear level')}${statHtml(best === null ? '–' : String(best), 'Best wave')}</span>
     <span class="coop-card-mark">${host}${tradeButton(p)}</span></li>`;
