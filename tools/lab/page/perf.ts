@@ -30,6 +30,7 @@ import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { matrixWalks } from './matrixWalks';
 import { programSwitches } from './programSwitches';
+import { materialSwitches } from './materialSwitches';
 import { reportRead } from './perfReport';
 import { WEBGPU, gpuDone } from '../../../src/core/webgpu';
 import { inVillage, VILLAGE_SPOT } from './draws';
@@ -139,6 +140,8 @@ interface Timed {
   draws: number;
   /** the programs the frame switched between (`programSwitches.ts`) */
   switches: number;
+  /** the materials the frame's draws switched between (`materialSwitches.ts`) */
+  materials: number;
   /** the objects whose world matrices the frame walked (`matrixWalks.ts`) */
   walked: number;
   triangles: number;
@@ -208,9 +211,11 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
   const start = now();
   const switchesBefore = programSwitches();
+  const materialsBefore = materialSwitches();
   const walksBefore = matrixWalks();
   await lab.step(1, input);
   const switches = programSwitches() - switchesBefore;
+  const materials = materialSwitches() - materialsBefore;
   const walked = matrixWalks() - walksBefore;
   await waitForGpu();
   const frame = now() - start;
@@ -226,6 +231,7 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
     stages: { ...(timed?.stages ?? {}) },
     draws: drawn.calls,
     switches,
+    materials,
     walked,
     triangles: drawn.triangles,
     particles: particles.glow.count + particles.smoke.count,
@@ -288,6 +294,7 @@ function phaseLines(phase: Phase, device?: Device): string[] {
     ...(device ? [deviceLine(device, gpu.whole)] : []),
     `  draws ${Math.round(of((frame) => frame.draws).median)} (most ${most((frame) => frame.draws)}), programs `
       + `switched ${Math.round(of((frame) => frame.switches).median)} (most ${most((frame) => frame.switches)}), `
+      + `materials switched ${Math.round(of((frame) => frame.materials).median)}, `
       + `objects walked ${Math.round(of((frame) => frame.walked).median)}, `
       + `triangles ${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
   ];

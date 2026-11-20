@@ -4,7 +4,8 @@
 // point lights (and their lighting where they reach), their shadows, the sun's shadow, the environment, the lit
 // shading against a plain colour, what's see-through or cut out, the particles, the hero. A laptop's integrated GPU
 // spent 86% of its frame on the scene pass at 2864x1536 (10 frames a second on Medium): this says what of it a level
-// could do without. Its canary draws the scene twice, which must read as more.
+// could do without. Its canary draws the scene twice, which must read as more. In the lobby's village its own parts
+// too: the lamps (every lit pixel's list, `core/lamps.ts`), their shadows, its largest parts and the hall's heroes.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -19,9 +20,20 @@ import { castingAsOne } from '../../../src/entities/models/castAsOne';
 import { lightBounds } from '../../../src/core/lightBounds';
 import { frameCostInTurns, type FrameCost } from './frameTurns';
 import { hdrOutput } from './hdrOutput';
+import { inVillage, VILLAGE_SPOT } from './draws';
+import { holdHour } from '../../../src/game/clock';
+import { lampsHeldOut, setLampShadows, lampShadowsOn } from '../../../src/core/lamps';
 
 export interface SceneCostOptions {
-  biome: BiomeId;
+  /** a biome, or the lobby's village */
+  biome: BiomeId | 'village';
+  /** in the village, where he stands (the square by default) and the way he faces (the hall by default) */
+  at?: [number, number];
+  facing?: number;
+  /** in the village, the hour it's lit for */
+  hour?: number;
+  /** in the village, `--tune`'s values, set before the set-up (`meadowOrder.order=1`) */
+  tune?: Record<string, number[]>;
   view: renderer.ViewMode;
   level: QualityLevel;
   /** the rounds of turns, each with a side's renders */
@@ -157,6 +169,68 @@ function partsOfScene(): Part[] {
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints)),
     shownPart('the hero', [G.player.obj]),
     boundsPart(),
+  ];
+}
+
+/** the village's parts timed alone, the most triangles first */
+const VILLAGE_PARTS = 10;
+/** frames stepped in the village before it's timed: what it shows for where he stands (the hall's heroes, its
+ *  room, the meadow) is set by its frames */
+const VILLAGE_SETTLE = 30;
+
+/** The village's group in the scene. */
+const villageGroup = (): THREE.Object3D | undefined => G.scene.children.find((child) => child.name === 'village');
+
+/** The name a mesh of the village goes under: its outermost named part below the village's group, else its own. */
+function villagePartOf(mesh: THREE.Object3D, village: THREE.Object3D): string {
+  let named = mesh.name;
+  for (let at = mesh.parent; at && at !== village; at = at.parent) if (at.name) named = at.name;
+  return named || 'loose meshes';
+}
+
+/** The village's shown meshes by its parts, the parts of the most triangles first (`VILLAGE_PARTS` of them). */
+function villageMeshParts(): Part[] {
+  const village = villageGroup();
+  if (!village) return [];
+  const parts = new Map<string, THREE.Mesh[]>();
+  village.traverseVisible((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const name = villagePartOf(mesh, village);
+    parts.set(name, [...(parts.get(name) ?? []), mesh]);
+  });
+  const trianglesIn = (meshes: THREE.Mesh[]): number => meshes.reduce((sum, mesh) => sum + drawnTriangles(mesh), 0);
+  return [...parts]
+    .sort((a, b) => trianglesIn(b[1]) - trianglesIn(a[1]))
+    .slice(0, VILLAGE_PARTS)
+    .map(([name, meshes]) => ({
+      ...shownPart('', meshes),
+      name: `  ${name} (${meshes.length} meshes, ${Math.round(trianglesIn(meshes))} triangles)`,
+    }));
+}
+
+/** A mesh's triangles as drawn: an instanced mesh's each instance, a geometry's draw range. */
+function drawnTriangles(mesh: THREE.Mesh): number {
+  const geometry = mesh.geometry as THREE.BufferGeometry & { instanceCount?: number };
+  const whole = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+  const ranged = Math.min(whole, geometry.drawRange.count / 3);
+  const instanced = mesh as THREE.InstancedMesh;
+  const instances = instanced.isInstancedMesh ? instanced.count : geometry.instanceCount ?? 1;
+  return ranged * (Number.isFinite(instances) ? instances : 1);
+}
+
+/** The village's own parts: its lamps, their shadows, the hall's heroes standing on its dais, its largest parts. */
+function villageParts(): Part[] {
+  const shadowsWere = lampShadowsOn();
+  const heroes = G.scene.children.filter((child) => /^hero /.test(child.name) && child !== G.player.obj
+    && child.visible);
+  return [
+    { name: 'the lamps (every lit pixel\'s list)', change: (on) => lampsHeldOut(!on) },
+    { name: `the lamps' shadows (${shadowsWere ? 'read' : 'not read at this level or hour'})`,
+      change: (on) => setLampShadows(on ? shadowsWere : false) },
+    shownPart('the hall\'s heroes on its dais', heroes),
+    { name: 'the village\'s largest parts, each alone:', change: () => {} },
+    ...villageMeshParts(),
   ];
 }
 
@@ -433,12 +507,23 @@ function atFullPixels(level: QualityLevel): string {
     + 'settings';
 }
 
+/** The hero in the village where `command` stands him, at its hour, in its view, settled. */
+async function standInVillage(lab: Lab, command: SceneCostOptions): Promise<void> {
+  const facing = command.facing ?? Math.PI;
+  await lab.setup({ view: command.view, facing, tune: command.tune });
+  if (command.hour !== undefined) holdHour(command.hour);
+  await inVillage(lab, command.at ?? VILLAGE_SPOT, facing);
+  await lab.step(VILLAGE_SETTLE);
+}
+
 /** `lab scenecost`, one scenario: what each part of the scene pass takes of the GPU. */
 export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Report> {
   const { biome, view, level } = command;
   const name = `${biome} ${view}`;
   const settings = atFullPixels(level);
-  await standIn(lab, { biome, view, facing: 0 });
+  const village = biome === 'village';
+  if (village) await standInVillage(lab, command);
+  else await standIn(lab, { biome, view, facing: 0 });
   if (command.rarity) lab.glowAs(command.rarity);
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -448,7 +533,12 @@ export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Re
     const draw = drawScene(() => times);
     const lines = [`${name}: ${settings}`];
     const problems: string[] = [];
-    for (const part of partsOfScene()) {
+    for (const part of [...partsOfScene(), ...(village ? villageParts() : [])]) {
+      // (a heading alone: nothing to time)
+      if (part.name.endsWith(':')) {
+        lines.push(`  ${part.name}`);
+        continue;
+      }
       const cost = await costInTurns(G.renderer, part.change, draw, turns);
       if (!cost) return { text: `${name}: untimed (the browser has no GPU timer)`, problems: [] };
       lines.push(partLine(part, cost));
