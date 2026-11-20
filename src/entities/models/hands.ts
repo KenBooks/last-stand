@@ -426,6 +426,7 @@ export function handCapsules(h: Hand): [JointPoint, JointPoint, number][] {
 const THUMB_ROLL = -1.3;
 export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0, twitch = 0): void {
   shut(h, false);
+  if (h.build.fist) shadeShut(h, false);
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
   h.f.forEach((f, i) => {
@@ -695,6 +696,93 @@ export function wrapPoses(h: Hand): (() => void)[] {
   return [clenched, rest];
 }
 
+/** a fighter's fist's own shading (`shadeShut`): how far out from the skin its closing in is read (m), how near
+ *  another part of the skin must lie to a point out there to close it in (of that step), how much darker the skin is
+ *  where it closes in wholly, and its colour there, warmer as a fold's is */
+const SHUT_SHADE = { steps: [0.003, 0.006, 0.01], near: 0.62, dark: 0.55, warm: [1, 0.86, 0.82] };
+const _shadeM = new THREE.Matrix4(), _shadeP = new THREE.Vector3(), _shadeN = new THREE.Vector3();
+const _shadeB = new THREE.Vector3(), _shadeQ = new THREE.Vector3();
+
+/**
+ * A fighter's skin shaded for the pose it's in: its sculpt's own colours open (`handShape.ts` `shadeSkin`: where
+ * the open hand's skin closes in), and shut, darker and warmer too where the fist's does, between its curled fingers,
+ * under them against the palm and under the thumb. Shaded as the open hand alone, his fists were even all over, the
+ * fingers inflated tubes with no fold between them (an adversarial review; from play, "can you improve skin as
+ * well ?"). The shut colours are made once a sculpt, the first time a hand of it is shut, from the skin as its joints
+ * pose it then: each vertex moved out along its normal by each step, closed in where another part of the posed skin
+ * lies nearer that point than the vertex itself.
+ */
+function shadeShut(h: Hand, on: boolean): void {
+  const mesh = h.bareSkin ?? h.skin;
+  // (a hand still being built is posed to be sculpted before it has a skin)
+  if (!mesh) return;
+  const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: THREE.BufferAttribute };
+  kept.open ??= geometry.attributes.color as THREE.BufferAttribute;
+  if (!kept.open) return;
+  // (not from a hand drawn at no size, a hero hidden as he's built or warmed: its grid's cells would be nothing wide)
+  if (on && !kept.shut && mesh.getWorldScale(_shadeQ).x > 0.2) kept.shut = shutColours(mesh, kept.open);
+  const want = on && kept.shut ? kept.shut : kept.open;
+  if (geometry.attributes.color !== want) geometry.setAttribute('color', want);
+}
+
+/** `mesh`'s skin's colours as its bones pose it now (`shadeShut`), over `open`, its sculpt's. */
+function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THREE.BufferAttribute {
+  const geometry = mesh.geometry, position = geometry.attributes.position, normal = geometry.attributes.normal;
+  const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight, count = position.count;
+  const bones = mesh.skeleton.bones.map((bone, n) => {
+    bone.updateWorldMatrix(true, false);
+    return new THREE.Matrix4().multiplyMatrices(bone.matrixWorld, mesh.skeleton.boneInverses[n]);
+  });
+  // each vertex and its normal as posed (blended by its bones' shares, as the skin is drawn)
+  const at = new Float32Array(count * 3), out = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    _shadeB.fromBufferAttribute(position, i).applyMatrix4(mesh.bindMatrix);
+    _shadeP.set(0, 0, 0); _shadeN.set(0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const w = share.getComponent(i, k);
+      if (w <= 0) continue;
+      _shadeM.copy(bones[index.getComponent(i, k)]);
+      _shadeP.addScaledVector(_shadeQ.copy(_shadeB).applyMatrix4(_shadeM), w);
+      _shadeN.addScaledVector(_shadeQ.fromBufferAttribute(normal, i).transformDirection(_shadeM), w);
+    }
+    _shadeN.normalize();
+    at.set([_shadeP.x, _shadeP.y, _shadeP.z], i * 3); out.set([_shadeN.x, _shadeN.y, _shadeN.z], i * 3);
+  }
+  // (the posed vertices in a grid, a cell the furthest reach: a point's neighbours are in the 27 cells round it)
+  const scale = mesh.getWorldScale(_shadeQ).x, steps = SHUT_SHADE.steps.map((step) => step * scale);
+  const cell = steps[steps.length - 1], grid = new Map<string, number[]>();
+  const keyOf = (x: number, y: number, z: number) => `${Math.floor(x / cell)} ${Math.floor(y / cell)} ${Math.floor(z / cell)}`;
+  for (let i = 0; i < count; i++) {
+    const key = keyOf(at[i * 3], at[i * 3 + 1], at[i * 3 + 2]);
+    const list = grid.get(key);
+    if (list) list.push(i); else grid.set(key, [i]);
+  }
+  const closedIn = (x: number, y: number, z: number, within: number): boolean => {
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      const list = grid.get(keyOf(x + dx * cell, y + dy * cell, z + dz * cell));
+      if (!list) continue;
+      for (const n of list) {
+        const ex = at[n * 3] - x, ey = at[n * 3 + 1] - y, ez = at[n * 3 + 2] - z;
+        if (ex * ex + ey * ey + ez * ez < within * within) return true;
+      }
+    }
+    return false;
+  };
+  const colour = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    let shutIn = 0;
+    for (const step of steps) {
+      const x = at[i * 3] + out[i * 3] * step, y = at[i * 3 + 1] + out[i * 3 + 1] * step, z = at[i * 3 + 2] + out[i * 3 + 2] * step;
+      if (closedIn(x, y, z, step * SHUT_SHADE.near)) shutIn++;
+    }
+    const fold = shutIn / steps.length;
+    for (let c = 0; c < 3; c++) {
+      colour[i * 3 + c] = open.getComponent(i, c) * (1 - SHUT_SHADE.dark * fold) * (1 + (SHUT_SHADE.warm[c] - 1) * fold);
+    }
+  }
+  return new THREE.BufferAttribute(colour, 3);
+}
+
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
 export function closeFist(h: Hand, line: THREE.Vector3): void {
   shut(h, true);
@@ -724,6 +812,7 @@ export function closeFist(h: Hand, line: THREE.Vector3): void {
     const digit = i < h.f.length ? h.f[i] : h.thumb;
     for (let n = 0; n < digit.j.length; n++) digit.j[n].quaternion.copy(pose[i][n]);
   }
+  if (h.build.fist) shadeShut(h, true);
 }
 
 /** each finger's bends in a strained, spread hand (rad: the knuckle, the middle joint, the last), the index's first:
