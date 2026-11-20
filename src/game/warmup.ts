@@ -125,6 +125,15 @@ const otherBiomes = (): BiomeId[] => (VILLAGE ? BIOME_IDS : BIOME_IDS.filter((id
 
 /** what the lobby shows, which a warm-up hides to show another place: the village, or its biome */
 const lobbyGroup = (): THREE.Group => G.arena.groupOf(VILLAGE ? 'village' : G.arena.biome);
+/** What the lobby shows at this moment, read as a warm-up draws (`Swap.hide`'s getter): a house's room or the hall of
+ *  heroes may stand in the village's place by then (a part built, then compiled and drawn frames later behind the
+ *  lobby), and hidden in the village's stead, the room stayed lit beside what was drawn: as many lights again. */
+function shownNow(): THREE.Object3D {
+  const { room, rooms } = G.arena;
+  if (room && rooms) return rooms[room].group;
+  if (G.arena.hallShown) return G.arena.hallGroup;
+  return VILLAGE ? G.arena.groupOf(G.arena.place) : lobbyGroup();
+}
 
 /**
  * The lobby's village compiled as soon as it's built, the hero's lights in (built next, he takes them on: a program is
@@ -283,7 +292,7 @@ function biomePart(id: BiomeId): Part {
   return {
     name: id,
     build() {
-      const swap: Swap = { show: G.arena.groupOf(id), hide: lobbyGroup(), alone: VILLAGE ? lampsLetGo : undefined };
+      const swap: Swap = { show: G.arena.groupOf(id), get hide() { return shownNow(); }, alone: VILLAGE ? lampsLetGo : undefined };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
@@ -426,7 +435,7 @@ function hallPart(): Part {
   return {
     name: 'hall',
     build() {
-      const swap: Swap = VILLAGE ? { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.place), alone: lampsLetGo }
+      const swap: Swap = VILLAGE ? { show: G.arena.hallGroup, get hide() { return shownNow(); }, alone: lampsLetGo }
         : { show: G.arena.hallGroup, hide: lobbyGroup(), look: hallLook };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
@@ -439,7 +448,7 @@ function roomParts(): Part[] {
     name: `room ${room.id}`,
     build() {
       room.showAll();
-      const swap: Swap = { show: room.group, hide: G.arena.groupOf(G.arena.place), alone: lampsLetGo };
+      const swap: Swap = { show: room.group, get hide() { return shownNow(); }, alone: lampsLetGo };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   }));
