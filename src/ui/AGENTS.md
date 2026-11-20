@@ -84,5 +84,16 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
+- `crestBlow.ts`: the crest's first blow's context is made at the boot's start beside the loading screen's
+  (`prepareCrest`, `prepareCrestWind` in `logoWind.ts`), while the GPU's process is idle, and none where the level the
+  boot starts at fades it (Low and Very low, as the loading screen's exit does). Made as the crest was found, half way
+  through the boot, its `getContext` waited behind the lobby's compiles: a task of 3.7 s on a CPU slowed four times
+  (`npm run stalls -- --scenario boot --url "this?village=1" --cpu-slowdown 4 --js`), as an AMD Radeon laptop's boot
+  held 3.8 s and an Adreno 810's 7.4 (traces EP2G-9M10, 4NA2-KWVF). `npm run lab -- crest` blows it on the boot's
+  context, again at High, and at Very low, where it must fade.
+- `perfHud.ts`: the GPU's name and timer are read as the renderer is made (`readGpuAhead` from `main.ts`), before
+  anything compiles: each a round trip to the GPU's process, read in `initPerfHud` they waited 1.9 s behind the
+  lobby's compiles on the same slowed boot. Any read of WebGL's that waits on the GPU's process (`getParameter`, a
+  context made, a link's status) waits behind every compile queued before it: ask it at the boot's start.
 - `screens/`: a screen a folder of its own (`<id>/`: its module, its markup, its styles), found by the folder (`screens.ts`): its module registers itself at its end (`screen({ init, frame?, village? })`, `screenKit.ts`, which imports nothing, so no screen's import comes round to itself), `initScreens` calls each init where the trade's was, `frameScreens` each frame's; its `.html` files go in at `index.html`'s `<!-- screens -->` and its `_<id>.scss` at `styles/index.scss`'s `// screens`, in the folders' order (`vite.config.ts`; a screen's sheet `@use`s `theme` and the mixins as any other, the styles' folder on Sass's load path). Moved there: the merchant's, the talk's and the trade's.
 - `villageMap.ts`: the Training Yard's name points into the yard's back half (`YARD_NAMED_AT`): at its middle it stood in one row with the Weapons Rack's, set beside its swords at the fence, and on a 1920x1080 screen the two were pushed apart, the rack's 83 px off its place and still on the yard's (`lab ui --states villageMap`). On a phone held sideways (844x390) the map's lower row was crowded, on main too (17 problems): now clear (`layNames`'s lowering, the names smaller).
