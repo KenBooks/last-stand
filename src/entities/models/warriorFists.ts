@@ -126,11 +126,11 @@ const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.
 // slower cast it was a push, from play: "we need to speed up the actual attack.... like the strike itself... so it
 // looks natural like something with actual strike power")
 const JAB_OUT: Keys = [
-  [0, 0], [0.14, -0.05], [0.3, 0.03], [0.38, 0.18], [0.47, 0.94], [0.5, 1], [0.55, 1], [0.68, 0.6], [0.8, 0.25],
+  [0, 0], [0.2, -0.05], [0.38, -0.06], [0.47, 0.94], [0.5, 1], [0.55, 1], [0.68, 0.6], [0.8, 0.25],
   [0.9, 0.06], [0.96, 0], [1, 0],
 ];
 const CROSS_OUT: Keys = [
-  [0, 0], [0.16, -0.1], [0.31, 0], [0.39, 0.16], [0.48, 0.94], [0.51, 1], [0.57, 1], [0.7, 0.6], [0.82, 0.25],
+  [0, 0], [0.2, -0.08], [0.38, -0.1], [0.48, 0.94], [0.51, 1], [0.57, 1], [0.7, 0.6], [0.82, 0.25],
   [0.91, 0.06], [0.96, 0], [1, 0],
 ];
 const LEAD = { hips: 0.09, chest: 0.045 };
@@ -141,11 +141,13 @@ const LEAD = { hips: 0.09, chest: 0.045 };
 // back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
 // ring, from play: "held punch needs to pull back, not just draw a charge circle")
 const COIL = { jab: 0.3, cross: 0.42 };
-const BACK = tunable('punchBack', { eyes: [0.6, -1, 0.3], body: [0.12, -0.16, -0.34] });
+const BACK = tunable('punchBack', { eyes: [0.8, -0.7, 0.22], body: [0.12, -0.16, -0.34] });
 /** through the eyes, how far the fist is turned over from its guard through a punch's cast */
 // (both back by 0.8 of the cast, as the fist is: the next move takes the pose over from about 0.85, and what was
 // left of the turn and of the way back then, a quarter and a twentieth, went in one frame, the jerk seen from play)
-const TURN_OVER: Keys = [[0, 0], [0.3, 0], [0.47, 1], [0.57, 1], [0.92, 0], [1, 0]];
+// (nothing of it through the gather, which a held punch stays at: half turned over there, a charging fist was held
+// with its palm to the eye and its wrist cocked, from play: "this is not a valid angle to charge a strike")
+const TURN_OVER: Keys = [[0, 0], [0.38, 0], [0.48, 1], [0.57, 1], [0.92, 0], [1, 0]];
 /** third person, the fist that isn't punching: how far it's drawn back to the cheek and up as the other lands (m) */
 const FREE_IN = [0.13, 0.02];
 
@@ -200,7 +202,7 @@ const onScreen = (j: Joints, on: readonly number[], out: THREE.Vector3): THREE.V
 
 /** An arm reaching `at` (the body's frame) by `w` of the way from the pose's own, its elbow towards its pole (through
  *  the eyes down and out from the arms' shoulders under the view). */
-function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = false, flare = 0): void {
+function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = false, flare = 0, back = 0): void {
   if (w <= 0) return;
   const shoulder = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR;
   _sq.copy(shoulder.quaternion); _eq.copy(elbow.quaternion);
@@ -209,6 +211,9 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = fa
   if (eyes) _pole.x *= GUARD_EYES.pole / POLE_L.x;
   // (the elbow up and out as a punch's fist turns over: `flare`, 1 level with the fist)
   if (flare > 0) { _pole.x = lerp(_pole.x, left ? 1 : -1, flare); _pole.y = lerp(_pole.y, -0.15, flare); }
+  // (and behind him as a fist is drawn back to charge, `back`: the forearm lined up behind the knuckles, not stood
+  // up under them as a guard's is)
+  if (back > 0) _pole.set(lerp(_pole.x, (left ? 1 : -1) * 0.3, back), lerp(_pole.y, -0.3, back), lerp(_pole.z, -1, back));
   reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _at, _pole);
   // (each from the pose's own towards the reach: `slerpQuaternions` into one of its own ends copies over it first)
   if (w < 1) { shoulder.quaternion.copy(_sq.slerp(shoulder.quaternion, w)); elbow.quaternion.copy(_eq.slerp(elbow.quaternion, w)); }
@@ -381,14 +386,14 @@ export function fistPunch(
     const [aside, down, close] = BACK.eyes;
     if (pull > 0) _from.lerp(onScreen(j, [(lead ? -1 : 1) * aside, down, close], _mid), smooth(pull));
     const w = Math.max(smooth(pull), smooth(Math.min(1, Math.abs(out) * (out < 0 ? 10 : 3))));
-    place(j, lead, _from, w, true, seenAs.flare * over);
+    place(j, lead, _from, w, true, seenAs.flare * over, smooth(pull));
   } else {
     place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes, 0.6 * over);
     if (pull > 0) {
       const [aside, down, back] = BACK.body;
       guardAt(j, lead, false, 0, 0, _far);
       _far.x += (lead ? 1 : -1) * aside; _far.y += down; _far.z += back;
-      place(j, lead, _far, smooth(pull));
+      place(j, lead, _far, smooth(pull), false, 0, 1);
     }
   }
   const turned = smooth(Math.min(1, Math.max(0, out) * 1.4)), line = lead ? fistLine.L : fistLine.R;

@@ -39,7 +39,7 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
-      desc: 'Click to punch what stands close before you, or hold to pull the fist back and charge it for up to 2 seconds, then let go: a full charge lands four times as hard and stuns what it hits for half a second. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit, and a punch aimed at the head always is one. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
+      desc: 'Click to punch what stands close before you, or hold to pull the fist back and charge it for up to 2 seconds, then let go: a full charge lands four times as hard and stuns what it hits for half a second. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit, and a punch that lands on the head always is one. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
       // (half as often and twice as hard as first set, 0.24 s and 30, from play: "lets slow down the attacks, its too
       // fast... and increase damage to make up for it... I'd say 2x"; the Energy a blow doubled with it)
       // (and then held to charge: a click is a short punch, the gather 0.12 s and the blow and its way home 0.3;

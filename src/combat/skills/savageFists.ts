@@ -4,6 +4,7 @@
 // Frenzy every third blow was a two-fisted hammer, taken out: from play, "lets remove two handed strike under
 // freenzy, it makes no sense, practically".)
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).
+import * as THREE from 'three';
 import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
@@ -161,9 +162,20 @@ const skill: InstantSkill = {
   },
 };
 
-/** Whether his aim is on `e`'s head (`HEAD_SHOT`): a punch there is a critical hit, a training dummy's too. */
+const _fist = new THREE.Vector3();
+
+/**
+ * Whether the punch landing now lands on `e`'s head (`HEAD_SHOT`): the punching fist, where the model has it as it
+ * lands, at the height of the foe's head. Where the blow goes, not where the aim is (from play: "aim should not
+ * matter, where hit lands matters... because we have direction now"): through the eyes the fist lands on the
+ * crosshair, so looking up at a head sends it there; from outside it lands at his own shoulders' height, a head's
+ * on a foe about his size. A punch there is a critical hit, a training dummy's too.
+ */
 function toHead(player: Player, e: Enemy): boolean {
-  return player.aimFoe === e && player.aimFoeY >= e.height * HEAD_SHOT.from;
+  const j = player.model.joints;
+  if (!j) return false;
+  const up = (isJab(player) ? j.handL : j.handR).getWorldPosition(_fist).y - e.obj.position.y;
+  return up >= e.height * HEAD_SHOT.from && up <= e.height * HEAD_SHOT.to;
 }
 
 /** The punch lands, charged `charge` of the way past a click (0..1). */

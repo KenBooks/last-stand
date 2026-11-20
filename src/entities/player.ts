@@ -234,8 +234,6 @@ export class Player {
   readonly aim = new THREE.Vector3();
   /** the foe whose body the aim is on (the local hero's: the eye's ray met it, `input.foe`) */
   aimFoe: Enemy | null = null;
-  /** and how high up its body the aim is (m over its feet, `input.foeY`) */
-  aimFoeY = 0;
   readonly radius = HERO_RADIUS;
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
@@ -726,7 +724,6 @@ export class Player {
 
     this.aim.copy(input.ground);
     this.aimFoe = input.foe;
-    this.aimFoeY = input.foeY;
 
     // a channel ends when every key that casts it is released (the same skill on two keys is held by either)
     if (this.channel) {
