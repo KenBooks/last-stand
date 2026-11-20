@@ -127,13 +127,9 @@ const otherBiomes = (): BiomeId[] => (VILLAGE ? BIOME_IDS : BIOME_IDS.filter((id
 const lobbyGroup = (): THREE.Group => G.arena.groupOf(VILLAGE ? 'village' : G.arena.biome);
 /** What the lobby shows at this moment, read as a warm-up draws (`Swap.hide`'s getter): a house's room or the hall of
  *  heroes may stand in the village's place by then (a part built, then compiled and drawn frames later behind the
- *  lobby), and hidden in the village's stead, the room stayed lit beside what was drawn: as many lights again. */
-function shownNow(): THREE.Object3D {
-  const { room, rooms } = G.arena;
-  if (room && rooms) return rooms[room].group;
-  if (G.arena.hallShown) return G.arena.hallGroup;
-  return VILLAGE ? G.arena.groupOf(G.arena.place) : lobbyGroup();
-}
+ *  lobby), and hidden in the village's stead, the room stayed lit beside what was drawn: as many lights again. The
+ *  arena's own (`shownGroup`), never worked out again here. */
+const shownNow = (): THREE.Object3D => G.arena.shownGroup();
 
 /**
  * The lobby's village compiled as soon as it's built, the hero's lights in (built next, he takes them on: a program is
@@ -436,7 +432,7 @@ function hallPart(): Part {
     name: 'hall',
     build() {
       const swap: Swap = VILLAGE ? { show: G.arena.hallGroup, get hide() { return shownNow(); }, alone: lampsLetGo }
-        : { show: G.arena.hallGroup, hide: lobbyGroup(), look: hallLook };
+        : { show: G.arena.hallGroup, get hide() { return shownNow(); }, look: hallLook };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
@@ -452,6 +448,18 @@ function roomParts(): Part[] {
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   }));
+}
+
+/** A warm-up that draws a place in the shown one's stead, named, its swap as its part builds it. */
+export interface PlaceSwap {
+  name: string;
+  swap(): Swap | undefined;
+}
+/** Every warm-up part that draws a place in the shown one's stead, as the warm-ups build them: each biome built, the
+ *  hall of heroes' room, each house's room (the lab's `roomwarm` draws each with the hero in a room). */
+export function placeSwaps(): PlaceSwap[] {
+  const parts = [...BIOME_IDS.filter((id) => G.arena.biomeBuilt(id)).map(biomePart), hallPart(), ...roomParts()];
+  return parts.map((part) => ({ name: part.name, swap: () => part.build().swap }));
 }
 
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */

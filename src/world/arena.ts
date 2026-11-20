@@ -266,6 +266,31 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let room: RoomId | null = null;
   /** what's drawn now in the place's stead, or the place */
   const shownGroup = (): THREE.Group => (room ? rooms![room].group : hallShown ? hallGroup : placeOf(shown).group);
+  /** Every place's group built, the hall's room and the houses' rooms: what may stand where the player is. */
+  const everyPlace = (): THREE.Group[] => [
+    ...Object.values(places).map((place) => place!.group), hallGroup, ...Object.values(rooms ?? {}).map((r) => r.group),
+  ];
+  /**
+   * What's wrong with what the frame is about to draw where the player stands: every place but the one shown
+   * (`shownGroup`) hidden, and that one shown. A warm-up drawing another place in its stead put back what it never
+   * found (#746: the village drawn under Odo's shop, its fountain in the room, the shop's own furniture gone).
+   */
+  function placesWrong(): string[] {
+    const want = shownGroup();
+    const wrong = everyPlace().filter((group) => group.visible !== (group === want));
+    return wrong.map((group) => `${group.name || 'a room'} ${group.visible ? 'shown' : 'hidden'}`);
+  }
+  /** the last wrong state said (dev builds: each said once, as it comes) */
+  let saidWrong = '';
+  /** Dev builds: what the frame will draw checked to be the shown place alone, an error logged as it goes wrong (every
+   *  lab command fails on one, so each of them checks it). */
+  function checkPlaces(): void {
+    const wrong = placesWrong().join(', ');
+    if (wrong && wrong !== saidWrong) {
+      console.error(`arena: ${wrong} where ${shownGroup().name || 'a room'} alone should show (a place put back wrong)`);
+    }
+    saidWrong = wrong;
+  }
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
   const villageLook: BiomeLook | null = village ? { ...village.look } : null;
   let hour = FIRST_HOUR;
@@ -412,6 +437,10 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     setHour(h: number) { hour = h; },
     /** a place's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
     groupOf(id: PlaceId): THREE.Group { return placeOf(id).group; },
+    /** what stands where the player is now: a house's room, the hall of heroes' room or the place shown */
+    shownGroup,
+    /** what's wrong with which places are shown, read as the frame would draw them (none: the shown one alone) */
+    placesWrong,
     /** whether biome `id` is built (where the lobby is the village, a run's biome is built as a run first needs it) */
     biomeBuilt(id: BiomeId): boolean { return Boolean(places[id]); },
     buildBiome,
@@ -420,6 +449,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       for (const id of builtBiomes()) placeOf(id).b.setCalm(v);
     },
     update(dt: number, t: number) {
+      if (import.meta.env.DEV) checkPlaces();
       if (room) rooms![room].update(dt, t);
       else if (hallShown) hall.update(dt, t); else active.update(dt, t);
       if (!VILLAGE) {
