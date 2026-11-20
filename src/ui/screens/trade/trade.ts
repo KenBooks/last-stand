@@ -9,12 +9,13 @@ import { RUN, TRADE } from '../../../data/balance';
 import { byValue, rarityOf } from '../../../loot/items';
 import { offerProblem, tradeLocked, usableBy } from '../../../loot/trade';
 import {
-  answerTrade, cancelTrade, onTradeChange, setAccept, toggleOffer, tradeNote, tradeView, type TradeView,
+  answerTrade, cancelTrade, onTradeChange, onTradeMade, setAccept, toggleOffer, tradeNote, tradeView, type TradeView,
 } from '../../../net/trade';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML, type TooltipContent } from '../../tooltip';
 import { itemIconSVG } from '../../itemIcons';
 import { isTouch } from '../../touch';
 import { nameOf } from '../../coop';
+import { markNew, renderMenu } from '../../menus';
 import { sfx } from '../../../core/audio';
 import type { Item } from '../../../types';
 
@@ -31,6 +32,11 @@ dialog({ open: () => tradeOpen() });
 
 function initTrade(): void {
   onTradeChange(renderTrade);
+  // (the inventory drawn again with what the trade gave marked new, as an item picked up off the floor is)
+  onTradeMade((got) => {
+    markNew(got);
+    renderMenu();
+  });
   $('#trade-accept').onclick = () => {
     const v = tradeView();
     if (!v) return;

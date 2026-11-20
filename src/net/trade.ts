@@ -87,6 +87,7 @@ const accepts = new Map<string, Accept[]>();
 let asked = 0;
 let note: TradeNote | null = null;
 const listeners: (() => void)[] = [];
+const madeListeners: ((got: Item[]) => void)[] = [];
 const now = (): number => performance.now() / 1000;
 
 /** The host's record of a trade it rules on: both traders (each sender and the partner it names, kept when an
@@ -100,6 +101,10 @@ const rulings = new Map<string, Ruling>();
 /** Runs `fn` whenever the trade changes (the window draws it again). */
 export function onTradeChange(fn: () => void): void { listeners.push(fn); }
 function changed(): void { for (const fn of listeners) fn(); }
+
+/** Runs `fn` with the items got whenever a trade is made on the hero in play (the inventory draws his stash again:
+ *  drawn only as the trade window changed, it showed the stash as it was before the trade until clicked, #739). */
+export function onTradeMade(fn: (got: Item[]) => void): void { madeListeners.push(fn); }
 
 /** Sets how messages go out (null: the room is gone, and with it every trade: nothing moves). */
 export function setTradeNet(n: TradeNet | null): void {
@@ -368,6 +373,7 @@ function done(id: string, revs: unknown): void {
   lock();
   const got = added.length, gave = accept.give.length;
   note = { text: `Trade done: you gave ${gave} item${gave === 1 ? '' : 's'} and got ${got}.`, at: now(), done: true };
+  if (same) for (const fn of madeListeners) fn(added);
   changed();
 }
 
