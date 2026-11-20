@@ -9,13 +9,27 @@ export type BiomeId = 'crypt' | 'forest';
 export type BiomeSetting = BiomeId | 'random';
 
 /** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave;
- *  `twin`, a second boss rising with it and sharing its life (`EnemyDef.shares`: the Ossuary Twins). */
+ *  `twin`, a second boss rising with it and sharing its life (`EnemyDef.shares`: the Ossuary Twins); and its
+ *  guards, if it comes as an encounter: lesser bosses rising with it (`count` of `id`), each at the life and damage
+ *  its own `EnemyDef.asGuard` gives, warding it while they stand (`BossKitDef.ward`). */
 export interface BossRung {
   id: EnemyId;
   twin?: EnemyId;
   short: string;
   banner: string;
+  /** an encounter's guards: who and how many, and where each rises (x, z in m), the same every time where given */
+  guards?: { id: EnemyId; count: number; at?: [number, number][] };
 }
+
+/** Where the Ossuary Cantor's two guards rise: on the crypt's ring walk (18.5 m out, world/crypt.ts `ringWalk`), across
+ *  the arena from each other, 36 degrees off the nearest gates, where its props leave the most room round them (the
+ *  diagonals hold its spirit beacons, a guard there 0.6 m off one), the same every time (from play: "the bells should
+ *  spawn in the same spots, across from each other on the map, symmetrically, on a path"). */
+const GUARD_RING = 18.5, GUARD_ANGLE = 0.8 * Math.PI;
+const CANTOR_GUARDS: [number, number][] = [
+  [GUARD_RING * Math.cos(GUARD_ANGLE), GUARD_RING * Math.sin(GUARD_ANGLE)],
+  [-GUARD_RING * Math.cos(GUARD_ANGLE), -GUARD_RING * Math.sin(GUARD_ANGLE)],
+];
 
 export interface BiomeDef {
   /** short label for the lobby picker */
@@ -48,9 +62,10 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     // (the Colossus, the Bell-Warden, the Ossuary Twins, the Bell-Warden: the Twins at wave 15, 35, 55...)
     bosses: [
       { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
-      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+      // (the second rung is an encounter: the Ossuary Cantor and two Bell-Wardens, its choir and its guards)
+      { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2, at: CANTOR_GUARDS } },
       { id: 'twinslab', twin: 'twinreliquary', short: 'Ossuary Twins', banner: 'Two rise, bound in bone…' },
-      { id: 'bellwarden', short: 'Bell-Warden', banner: 'A bell tolls in the dark…' },
+      { id: 'cantor', short: 'Ossuary Cantor', banner: 'The choir of the dead assembles…', guards: { id: 'bellwarden', count: 2, at: CANTOR_GUARDS } },
     ],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
@@ -83,9 +98,10 @@ export function bossOfWave(biome: BiomeId, wave: number): BossRung | null {
   return ladder[(wave / WAVES.bossEvery - 1) % ladder.length];
 }
 
-/** Every boss a run in `biome` can meet (its ladder's, once each). */
-export const bossesOf = (biome: BiomeId): EnemyId[] =>
-  [...new Set(BIOMES[biome].bosses.flatMap((rung) => (rung.twin ? [rung.id, rung.twin] : [rung.id])))];
+/** Every boss a run in `biome` can meet (its ladder's, their twins and their guards, once each). */
+export const bossesOf = (biome: BiomeId): EnemyId[] => [...new Set(BIOMES[biome].bosses.flatMap((rung) => [
+  rung.id, ...(rung.twin ? [rung.twin] : []), ...(rung.guards ? [rung.guards.id] : []),
+]))];
 
 /** The boss a fight is counted under (records, trophies): a twin under the boss it rises with. */
 export function rungBoss(id: EnemyId): EnemyId {

@@ -99,6 +99,8 @@ export interface EnemyOpts {
   id?: number;
   name?: string;
   maxLife?: number;
+  /** a boss come as another's guard (data/biomes.ts `BossRung.guards`): its `EnemyDef.asGuard` life and damage */
+  guard?: boolean;
   /** a body that stands in for something else (a duel's rival for a hero, entities/rival.ts): its own definition and
    *  a body to be met by, drawn by nothing and in no crowd */
   standIn?: { def: EnemyDef; model: Model; reach: Reach };
@@ -120,6 +122,8 @@ export class Enemy {
   /** stands in for a hero in a duel (entities/rival.ts): no foe of the fight's, never reported as one */
   readonly standIn: boolean;
   readonly boss: boolean;
+  /** come as an encounter's guard (`EnemyOpts.guard`) */
+  readonly guard: boolean;
   readonly name: string;
   readonly maxLife: number;
   life: number;
@@ -209,6 +213,8 @@ export class Enemy {
   weak = 0;
   broken = 0;
   readonly partLife: number[] = [];
+  /** an encounter's main boss warded by its guards (`BossKitDef.ward`, told by enemyAI's `bossWard` fx) */
+  warded = false;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -238,7 +244,7 @@ export class Enemy {
   /** felled with its partner by the blow that killed it: it pays no spoils (the pair pays once) */
   noSpoils = false;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn }: EnemyOpts) {
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, guard = false, standIn }: EnemyOpts) {
     const def = standIn?.def ?? ENEMIES[typeId];
     this.standIn = !!standIn;
     this.type = typeId;
@@ -246,14 +252,18 @@ export class Enemy {
     this.hero = hero;
     this.training = training;
     this.boss = !!def.boss;
+    this.guard = guard && !!def.asGuard;
+    const asGuard = this.guard ? def.asGuard! : { life: 1, damage: 1, size: 1 };
+    // (a guard is a lesser body of its kind, scaled down whole: its crowd draws its joints' matrices as placed)
+    const size = (hero ? HERO.scale : 1) * asGuard.size;
     this.id = id ?? nextId++;
     this.lifeMult = lifeMult;
     this.name = name ?? (hero ? `${pick(HERO.prefixes)} ${def.name}` : def.name);
-    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult;
+    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult * asGuard.life;
     this.life = this.maxLife;
-    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1);
+    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1) * asGuard.damage;
     this.speed = def.speed * SCALING.speed(wave) * rand(0.92, 1.08);
-    this.radius = def.radius * (hero ? HERO.scale : 1);
+    this.radius = def.radius * size;
     this.mass = this.radius * this.radius * (this.boss ? 10 : 1);
     this.score = def.score + (hero ? HERO.score : 0);
 
@@ -266,10 +276,14 @@ export class Enemy {
       this.applyProjection();
       this.model.kit.u.uFrozen.value = 0.35;
     }
-    this.height = this.model.height * (hero ? HERO.scale : 1);
+    this.height = this.model.height * size;
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
-    if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
+    if (size !== 1) this.model.root.scale.multiplyScalar(size);
+    // (its model told it's a guard: the Bell-Warden's shows one ghost)
+    this.model.root.userData.guard = this.guard;
+    // (and that it stands where it rose: the Bell-Warden's then has no bearers)
+    this.model.root.userData.planted = this.guard && !!this.def.asGuard?.stands;
     this.reach = standIn?.reach ?? reachOf(this.model.root);
     if (!standIn) {
       applyShadowDetail(this.obj);
@@ -277,9 +291,10 @@ export class Enemy {
     }
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
-      this.auraMat = additive(c, 1.6, 0.8);
+      // (a guard's ring fainter and tighter: the encounter's boss is its main one)
+      this.auraMat = additive(c, this.guard ? 0.9 : 1.6, 0.8);
       this.aura = new THREE.Mesh(auraGeo, this.auraMat);
-      this.aura.scale.setScalar(this.radius * 1.6);
+      this.aura.scale.setScalar(this.radius * (this.guard ? 1.25 : 1.6));
       this.aura.position.y = 0.05;
       this.obj.add(this.aura);
       this.auraColor = c;
@@ -618,7 +633,7 @@ export class Enemy {
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
     this.meter?.update();
-    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
+    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = (0.5 + Math.sin(t * 4) * 0.2) * (this.guard ? 0.45 : 1); }
     weakLooks(this);
     if (this.def.bossKit && dt > 0) bossFrame(this, dt);
     return true;

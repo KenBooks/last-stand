@@ -14,7 +14,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `beta`: the village beta opted into and out of on a page of its own, by the browser's own clicks and loads (the pause menu's Beta tab saying what the page runs and offering Reload once switched, Reload loading the page with `?village=1`, the choice kept in its cookie, the notice shown as the game opens there, kept through the village's own frames and put away by a screen opened over it, the next visit without a parameter in the village too, its notice left alone gone by itself, the notice's Back to the old lobby and the visit after it; then a co-op room hosted by the command's page asked from the other lobby: refused, told which lobby the room is in, the switch offered in the dialog, clicked, the page loaded in the room's lobby as an invite to it and the room joined; `--panels` hosts the room in the lobby without the village; `--canary` keeps the notice by the pointer past its time, puts it away before it's read, loses the cookie before the next visit and forgets the lobby the room refused the game for)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
-- `boss`: the bosses' fights (each battleground's ladder sending the right boss on each boss wave, its banner and Continue name; the Bell-Warden's phases at their shares; its toll stunning a hero near, not one far off or behind a raised shield; its chains dropping the bell for its double-damage window and whole after; a boss walked into giving way a hair; its bell swinging as a pendulum about the yoke, no jolt, no spin, its frame turned slowly (`swing`); its ghosts seizing a hero near and dropping him for damage, not one far off; no program compiled in its fight; each hero's time to kill the Colossus at wave 5 and the Bell-Warden at 10; `--canary`)
+- `boss`: the bosses' fights (each battleground's ladder sending the right boss on each boss wave, its banner and Continue name; the Bell-Warden's phases at their shares; its toll stunning a hero near, not one far off or behind a raised shield; its chains dropping the bell for its double-damage window and whole after; a boss walked into giving way a hair; its bell swinging as a pendulum about the yoke, no jolt, no spin, its frame turned slowly (`swing`); its ghosts seizing a hero near and dropping him for damage, not one far off; the Ossuary Cantor's encounter: its guards rising at their two spots, small, standing, raising the dead, the Cantor warded while they stand, its casts ringed first, no two bosses' hits within its beat, its heart bared (`encounter`); no program compiled in its fight; each hero's time to kill the Colossus at wave 5 and the Cantor's encounter at 10; `--canary`)
 - `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5 and 15 shows the bar readying the Colossus and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
 - `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (each biome, each kind of prop, 0.25 and 0.5 m off it: the nocked arrow, the bow's tip and the hero must not turn back frame after frame; the point the pose aims from within 5 cm of the arrow drawn level; the aim preview stopped by the prop, never through it; `--canary` aims the pose from the arrow as posed, #317)
 - `carry`: measures the carried bow
@@ -914,11 +914,13 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   at most 45k (Slab 42k, Reliquary 44k), with each bone's. `--canary`: the Crypt's special wave taken out, the pair's
   `shares`, a chain whose reach is a kilometre, Slab's `hurt` hook, a mend that heals nothing, a program compiled.
   About a minute for the default parts.
-- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`), in parts
+- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`, `src/entities/bellWarden.ts`,
+  `src/entities/cantor.ts`), in parts
   (`--parts`, all by default). `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their
   countdown as the run sets one off (its wave and timer), the boss the run holds for it (`RunState.boss`) against its
-  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, Bell-Warden, Ossuary
-  Twins, Bell-Warden; the Thornwood's Thornheart), the banner's line and the Continue button's name. `phases`: a Bell-Warden
+  ladder's rung (`data/biomes.ts` `bosses`, round again past its end: the Crypt's Colossus, the Ossuary Cantor with
+  two Bell-Wardens, the Ossuary Twins, the Cantor again; the Thornwood's Thornheart), the rung's guards among the units it
+  holds, the banner's line and the Continue button's name. `phases`: a Bell-Warden
   held still, its life taken to a hundredth over and under each phase's share: in the phase before, then the next,
   and the next's banner shown. `toll`: a Bell-Warden left to think and toll at the hero 7 m off (he must be stunned,
   for its `stun` within 0.1 s, its ring reaching him no sooner than its warning's end after the bell began its swing),
@@ -934,13 +936,36 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   spun on the spot); pictured from its side through the toll and from above walking; its canary swings it four times
   as far and lets it turn at 20 rad/s. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `compiles`: its tolls, a shard, the
   chains broken and the bell dropped, drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
+  times the damage), it mustn't toll while down, and the chains are whole after. `stand`: the hero walks into a Bell-Warden held still for 3 s: it may give way 2 cm at most (none, its rounding aside), and he must reach its body and be held off it (from play, a boss was walked across the arena by a hero pressing into it). `grab`: the hero stood 3.7 m from a held Bell-Warden's middle, at its ghosts' ring, for up to 30 s: he must be seized, lifted near its `rise`, carried within 0.6 m of its `away`, hurt as he lands, and not seized again within his grace; stood 9 m off for 10 s, never seized. `encounter`: the Ossuary Cantor and two Bell-Wardens as its guards
+  risen round the hero at wave 10's strength, each guard at most half the Cantor's height (from play, whole ones were "almost
+  like main boss"), and left to fight him (kept whole) for 28 s: no stun from a guard's toll further than its `BELL_WARDEN.guard.stunsTo`
+  (the hero's body and 0.5 m over), no frame seized by a guard's ghost, a guard at 15% of its life still in its first phase, and neither guard moved
+  over 1 mm from where it rose, each raising the dead round it (its first group by `raise.first`, the next
+  `raise.every` apart, half a second's slack; none near it after it falls; never more foes up than the wave's
+  `maxAlive`: the lab keeps what the fight raises, `Lab.keepRisen`), each drawn with its four bearers at no size and its one ghost about it (`userData.bearers`,
+  the ghosts' `seen`). First the run's own wave 10 is set off twice (`page/bossGuardSpots.ts`): its guards
+  must rise at the same two spots both times, each within 5 cm of the other's mirror through the middle, on the
+  crypt's walks (a ray down meets them), 1.2 m of room past their bodies to any prop and 30 degrees off any gate; the
+  fight's guards then stand at those spots (from play: "They stay stationary"); the Cantor warded every
+  frame (2 frames' slack) and taking the ward's `taken` of the damage; then the guards killed and 24 s more: never
+  warded, at least one cast landed, its heart bared after one (`weak`); every one of the Cantor's hits landed 0.9 to
+  3 s after a ring of its own; the guards tolled, and no two bosses' warned hits (tolls, grave hands, dirges) landed
+  closer than `CANTOR.beat`, two frames' slack; its canary wards nothing and sends whole Bell-Wardens as guards that walk with their bearers, rising
+  at the gates and raising the dead every 3 s, their tolls a whole bell's. `compiles`: its tolls, a shard, the
+  chains broken and the bell dropped, the Cantor's grave hands, a dirge, a ring, its ward and its heart bared,
+  drawn: no program compiled. `ttk`: the hero's basic attack (LMB) held 8 s on a
   Colossus held still 3.6 m off, its damage a second, and from it the time the Colossus takes at wave 5 and the
-  Bell-Warden at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
-  its life is dealt (a best case: a hero who never circles it breaks one chain, not four). With the lab's starting
+  Bell-Warden alone at 10 (its life by `SCALING`), with its weak windows counted as opening each time its chains' share of
+  its life is dealt (a best case: a hero who never circles it breaks one chain, not four), and the Cantor's
+  encounter at 10: its two guards one after the other (each `asGuard.life` of a Bell-Warden's, their bells dropped
+  the same way), then the Cantor with its heart bared `bared` s of every `every` (its weak window's `taken`). With the lab's starting
   gear, the same gear for both, so it reads the step up between them, not the fight a geared hero meets. `--canary`
   plants a fault each part must catch (the Crypt's ladder turned round, the second phase's share moved, a toll that
-  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a program compiled, an attack that deals
-  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
+  stuns no one, a shield that stops nothing, chains that take no harm, a boss that yields as a small foe does, ghosts that seize no one, a ward that wards nothing, a program compiled, an attack that deals
+  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`. `pictures` (asked
+  for alone) the Bell-Warden at each stage of its fight, `encounterPictures` the Cantor's encounter at each of its moments, `cantorLook`
+  the Cantor alone from its front, back and sides and its skull close, its triangles held to 45k (`page/bossCantor.ts`;
+  `tools/lab/out/boss`).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

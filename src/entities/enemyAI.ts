@@ -183,6 +183,11 @@ const CORE_FX = {
     const e = G.enemies.find((x) => x.id === id);
     if (e) e.weak = seconds;
   },
+  /** boss `id` warded by its guards (`on` 1) or no longer (0) */
+  bossWard(id: number, on: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.warded = !!on;
+  },
   /** boss `id`'s breakable part `part` broken (`on` 1) or whole again (0) */
   bossPart(id: number, part: number, on: number) {
     const e = G.enemies.find((x) => x.id === id);

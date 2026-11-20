@@ -33,6 +33,9 @@ export const AI_NOTES: Record<string, string> = {
   slam: 'Slams the ground in front of it once in reach, a ring on the floor marking where first.',
   boss: 'Slams all round itself up close, looses volleys at range, and calls help.',
   bellWarden: 'Shuffles after you and tolls, a ring of sound rolling out that stuns; its ghosts snatch whoever comes too close.',
+  /** a Bell-Warden come as an encounter's guard that stands (`asGuard.stands`): read in place of its behaviour's */
+  bellWardenGuard: 'Stands where it rose and tolls from there, a short ring of sound that stuns whoever is close, raising the dead round it now and then.',
+  cantor: 'Floats at a distance and chants: bone hands rise under you, a dirge of rings marches out, its guards ward it.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

@@ -17,6 +17,11 @@ export const FOES: FoeFile = {
       // (its heavy frame turned slowly: at a small foe's quick turn the whole bell spun round on the spot as it followed
       // a hero, "rotates its axis")
       turn: 0.8,
+      // (as the Ossuary Cantor's guard: about a quarter of its life and three quarters of its damage, two of them at once)
+      // (as a guard: a lesser bell, about half its height, so its Cantor towers over it: from play, two full-size
+      // Bell-Wardens were "too big (almost like main boss)"); standing where it rises, tolling from there (from play:
+      // "They stay stationary")
+      asGuard: { life: 0.26, damage: 0.75, size: 0.55, stands: true },
       bossKit: {
         phases: [
           { below: 1 },
@@ -31,15 +36,15 @@ export const FOES: FoeFile = {
       },
     },
     note: {
-      role: 'Second boss of the Crypt',
-      does: 'A cracked bronze bell on a yoke, carried by four chained ghouls. It shuffles after you and tolls: a ring of sound rolls out across the floor and stuns whoever it reaches. Ghosts circle the bell and snatch up anyone who strays too close, carrying them off and dropping them hard.',
-      strengths: ['Its toll stuns you where you stand and hurts as it does.', 'Every second toll raises Hollow Husks from the ground around the arena.', 'Wounded, it tolls twice in a row, a fast ring then a slow one, and bronze shards break off it that burn the floor where they land.', 'Near death its bearers kneel and it tolls every few seconds.', 'Its ghosts grab you if you stand too close to the bell as one swoops low.'],
-      weaknesses: ['The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring unharmed.', 'The ring fades as it rolls: far enough away, it does not stun.', 'Each bearer\'s chain can be broken by hits from its side; with all four broken the bell drops and takes double damage until they rise again.', 'It cannot be shoved: it holds its ground, but it is slow.'],
-      beat: ['Keep at medium range, outside the ghosts\' circle, and step out of its ring\'s reach when the bell swings back.', 'Circle it to break its chains one side at a time, then pour everything in while the bell is down.', 'Clear the Hollow Husks quickly so they do not pin you when the next toll comes.', 'Never stand on the bronze shards.'],
+      role: 'The Ossuary Cantor\'s guard',
+      does: 'A cracked bronze bell hung in a wooden frame, a ghost about it: in the Crypt two of them come with the Ossuary Cantor as its guards, lesser bells half the size of a Bell-Warden of old, set down on the ground with no bearers to carry them. Each stands where it rises and tolls from there, a short ring of sound that stuns whoever is close. While either stands, the Cantor is warded.',
+      strengths: ['While either guard stands, the Cantor takes only a fraction of the damage.', 'While it stands it raises the dead round its frame now and then.', 'Its toll stuns you briefly if you are close to the bell when it rings.', 'Two of them at once, from two sides, as the Cantor casts.'],
+      weaknesses: ['A lesser bell: little Health, and a toll that only reaches those nearby.', 'It never moves from where it rises: fight the Cantor away from it and its toll cannot reach you.', 'The bell swings back and glows before every toll: that is your warning.', 'A raised shield facing the bell, a dash or a leap carries you through its ring.', 'Its ghost grabs no one, and it never grows stronger as it is hurt.', 'Its dead stop rising the moment it falls.', 'Its tolls never land together with the Cantor\'s casts.'],
+      beat: ['Kill the two guards first: the Cantor\'s ward falls with the last of them.', 'Keep a few steps off the bell when it swings back, then close in after the toll.', 'Break its chains from its sides to drop the bell and finish it quickly.'],
       vs: {
         warrior: 'Raise the shield towards the bell as it swings: the toll cannot stun you through it.',
-        mage: 'Blink through the ring as it reaches you, then punish the bell while it recovers.',
-        ranger: 'Shoot from beyond its ring and its ghosts; aim at a bearer\'s chain to bring the bell down.',
+        mage: 'Blink through the ring as it reaches you, then burn the bell down before turning on the Cantor.',
+        ranger: 'Shoot it from beyond its ring; it is the Cantor\'s ward you are breaking.',
       },
     },
     // (the Bell-Warden's crest: cracked bronze and its toll's pale light)
@@ -59,7 +64,10 @@ export const FOES: FoeFile = {
  * `lies` s, hurting `hurt` of its damage every `tick` s whoever stands within `radius` m. A ghost circling it seizes a
  * hero who comes within `grab.reach` m of it as it swoops under `grab.under` m: carried up `rise` m and `away` m out
  * from the bell over `carry` s, dropped from there (`fall` s) for `hurt` of its damage; that ghost seizes no one for
- * `every` s, and the hero isn't seized again for `grace` s.
+ * `every` s, and the hero isn't seized again for `grace` s. As an encounter's guard (`guard`) it's a lesser bell: its
+ * ring reaches `reach` m and stuns only within `stunsTo`, for `stun` s, hurting `hurt` of its damage; its light, shake
+ * and sound `soft` of a whole bell's, rung `pitch` higher; one ghost, which seizes no one; no phases, so no double
+ * toll, no shards and no last phase.
  */
 export const BELL_WARDEN = {
   toll: { speed: 9, reach: 24, stunsTo: 15, stun: 2, hurt: 0.45, band: 0.6, fast: 15, slow: 6.5, slowAfter: 0.25 },
@@ -71,4 +79,11 @@ export const BELL_WARDEN = {
   // its bell's toll as a pendulum's swing about the yoke (models/bellWarden.ts): `amp` its widest (rad), building over
   // the warning to its strike at the forward end, dying away over `after` of its swing after; `sway` walking (rad)
   swing: { amp: 0.34, after: 2.4, sway: 0.05 },
+  guard: {
+    reach: 10, stunsTo: 6, stun: 0.8, hurt: 0.3, soft: 0.4, pitch: 1.6,
+    // a standing guard raises `count` of the dead round its frame, `near` m out, every `every` s while it stands: at
+    // most `ownMost` of its own up, none past the wave's alive limit (from play: "make sure they spawn mobs once in
+    // a while")
+    raise: { first: 6, every: [15, 20] as [number, number], count: [2, 3] as [number, number], near: [3.5, 6] as [number, number], ownMost: 5 },
+  },
 };

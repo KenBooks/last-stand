@@ -9,9 +9,9 @@ import { blowAt, crack, drive, glide, grit, guard, iron, rumble, smash, swellAt,
 /** The bell's toll: struck (a whump of bronze and wood), its body ringing for seconds in a cluster of narrow bands at
  *  a cracked bell's inharmonic ratios to a strike drawn anew each time, the crack's buzz beating in it, the hall
  *  ringing on. `heavy` (0..1) the slow ring's weight, a double toll's fast ring lighter. */
-function bellToll(heavy: number): void {
+function bellToll(heavy: number, pitch = 1): void {
   const v = voice(0, 0.55);
-  const base = 150 + Math.random() * 60, k = 0.6 + 0.4 * heavy;
+  const base = (150 + Math.random() * 60) * pitch, k = 0.6 + 0.4 * heavy;
   whump(v, 0, 0.6 * k, 0.7);
   thump(v, 0, 1600, 90, 0.35 * k, 0.9, v.out, 3);
   crack(v, 0, 0.12 * k, v.out, 1800);
@@ -79,10 +79,10 @@ function shardBreak(): void {
   v.start(); v.stopAt(v.t + 0.7);
 }
 
-/** its toll (`heavy` the slow ring's weight), the bell swung back over `dur` s, a chain snapping, the bell dropped, a
+/** its toll (`heavy` the slow ring's weight, `pitch` how much higher it's rung: a guard's lesser bell), the bell swung back over `dur` s, a chain snapping, the bell dropped, a
  *  ghost seizing a hero, a shard breaking off */
 export const bellSounds = {
-  toll: guard((heavy: number = 1) => { if (throttle('bellToll', 120)) return; bellToll(heavy); }),
+  toll: guard((heavy: number = 1, pitch: number = 1) => { if (throttle('bellToll', 120)) return; bellToll(heavy, pitch); }),
   creak: guard((dur: number = 1) => { if (throttle('bellCreak', 300)) return; bellCreak(dur); }),
   chain: guard(() => { if (throttle('chainSnap', 80)) return; chainSnap(); }),
   drop: guard(() => { if (throttle('bellDrop', 500)) return; bellDrop(); }),

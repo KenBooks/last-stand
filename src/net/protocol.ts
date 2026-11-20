@@ -8,6 +8,7 @@
 const PARTS = [
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
   'bosses-1: a boss weak-spot window and parts (bossWeak, bossPart), the Bell-Warden fx (bellSwing, toll, shard, bellDown), the boss ladder',
+  'encounter-1: an encounter guard in its spawn (gd), its boss ward (bossWard), the Cantor fx (cantorChant, graveHands, dirge)',
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
 ];

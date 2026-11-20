@@ -123,13 +123,14 @@ const keepWhole = (): Record<string, never> => {
 // --- the waves ---------------------------------------------------------------------------------------------
 
 /** What wave `wave` of `biome` should send: the Twins on the Crypt's 15th and every 20th after, else its ladder's rung
- *  for the wave (data/biomes.ts `bosses`, round again past its end). */
+ *  for the wave (data/biomes.ts `bosses`, round again past its end) and that rung's guards. */
 function wantedOf(biome: BiomeId, wave: number): EnemyId[] {
   const twins = biome === 'crypt' && wave >= FIRST_WAVE && (wave - FIRST_WAVE) % EVERY === 0;
   if (twins) return ['twinslab', 'twinreliquary'];
   const ladder = BIOMES[biome].bosses.filter((rung) => !rung.twin);
   const rung = BIOMES[biome].bosses[(wave / WAVES.bossEvery - 1) % BIOMES[biome].bosses.length];
-  return [rung.twin ? ladder[0].id : rung.id];
+  if (rung.twin) return [ladder[0].id];
+  return [rung.id, ...Array.from({ length: rung.guards?.count ?? 0 }, () => rung.guards!.id)];
 }
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let

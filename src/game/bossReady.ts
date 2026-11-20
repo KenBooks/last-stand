@@ -12,11 +12,11 @@ import { foeWarm, warmFoes } from './warmup';
 import { readyingWhile } from './warm';
 import { READYING } from '../ui/readying';
 
-/** The foes wave `wave` of `biome` brings that are loaded at their wave: its boss and its twin. */
+/** The foes wave `wave` of `biome` brings that are loaded at their wave: its boss, its twin and its guards. */
 export function bossesOf(biome: BiomeId, wave: number): EnemyId[] {
   const boss = bossOfWave(biome, wave);
   if (!boss) return [];
-  return [boss.id, ...(boss.twin ? [boss.twin] : [])].filter(isLazyFoe);
+  return [boss.id, ...(boss.twin ? [boss.twin] : []), ...(boss.guards ? [boss.guards.id] : [])].filter(isLazyFoe);
 }
 
 /** Whether wave `wave` of `biome` can begin with nothing of its boss to load or warm. */

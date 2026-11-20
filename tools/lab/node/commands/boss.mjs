@@ -8,30 +8,39 @@ export default {
     + 'Continue name; the Bell-Warden\'s phases at their shares; its toll stunning a hero near, not one far off or '
     + 'behind a raised shield; its chains dropping the bell for its double-damage window and whole after; a boss walked '
     + 'into giving way a hair; its bell swinging as a pendulum about the yoke, no jolt, no spin, its frame turned slowly '
-    + '(`swing`); its ghosts seizing a hero near and dropping him for damage, not one far off; no program compiled in '
-    + 'its fight; each hero\'s time to kill the Colossus at wave 5 and the Bell-Warden at 10; `--canary`)',
+    + '(`swing`); its ghosts seizing a hero near and dropping him for damage, not one far off; the Ossuary Cantor\'s '
+    + 'encounter: its guards rising at their two spots, small, standing, raising the dead, the Cantor warded while '
+    + 'they stand, its casts ringed first, no two bosses\' hits within its beat, its heart bared (`encounter`); no '
+    + 'program compiled in its fight; each hero\'s time to kill the Colossus at wave 5 and the Cantor\'s encounter at '
+    + '10; `--canary`)',
   help: 'the bosses\' fights: each battleground\'s boss waves set off, the boss the run sends against its ladder\'s '
     + 'rung and the banner\'s line (ladder); the Bell-Warden\'s life taken over and under each phase\'s share '
     + '(phases); its toll at the hero near it (stunned for its time, after its warning), far off (faded) and with a '
     + 'shield raised (--class warrior --gear shield) (toll); each chain struck from its side, all four dropping the '
     + 'bell for its window and whole again after (chains); walked into, it gives way a hair (stand); its ghosts '
     + 'seizing a hero near and dropping him, not one far off (grab); its bell through a toll and a walk, swinging '
-    + 'about the yoke alone with no jolt and its body turned slowly (swing); its fight\'s effects drawn, no program '
-    + 'compiled (compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
+    + 'about the yoke alone with no jolt and its body turned slowly (swing); the Ossuary Cantor and its two guards: '
+    + 'the guards at their spots, small, standing and raising the dead, warded while a guard stands, its casts ringed '
+    + 'first, no two bosses\' hits within its beat, its heart bared (encounter); its fight\'s effects drawn, no '
+    + 'program compiled (compiles); the basic attack held on a boss, and the time each boss takes at its wave (ttk)',
   options: {
     parts: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'compiles', 'ttk', 'pictures'],
-      help: 'the parts (all but pictures by default): ladder, phases, toll, chains, stand, grab, swing, compiles, ttk, '
-        + 'pictures (the Bell-Warden in each of its moments, a sheet for the eye)',
+      choices: ['ladder', 'phases', 'toll', 'chains', 'stand', 'grab', 'swing', 'encounter', 'compiles', 'ttk', 'pictures',
+        'encounterPictures', 'cantorLook'],
+      help: 'the parts (all but the pictures by default): ladder, phases, toll, chains, stand, grab, swing, encounter, '
+        + 'compiles, ttk, pictures (the Bell-Warden in each of its moments, a sheet for the eye), encounterPictures '
+        + '(the Cantor\'s encounter in each of its moments), cantorLook (the Cantor alone from every side and its '
+        + 'skull close, its triangles held to 45k)',
     },
     canary: {
       kind: 'switch',
       help: 'plant a fault each part must catch: the Crypt\'s ladder turned round, a phase\'s share moved, a toll '
         + 'that stuns no one near, a shield that stops nothing, chains that take no harm, a boss that yields as a '
-        + 'small foe does, ghosts that seize no one, a bell swung as a catapult and let spin, a program compiled, an '
-        + 'attack that deals nothing',
+        + 'small foe does, ghosts that seize no one, a bell swung as a catapult and let spin, a ward that wards nothing '
+        + 'and whole Bell-Wardens as guards that walk with their bearers, rise at the gates and raise the dead every '
+        + '3 s, a program compiled, an attack that deals nothing',
     },
     ...SETUP_OPTIONS,
     ...COMMON_OPTIONS,
