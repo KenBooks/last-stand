@@ -1,0 +1,10 @@
+/* The short pages' look (note.html): the dashboard's colours, one card in the middle. */
+:root { color-scheme: dark; --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #dfe3ea; --dim: #8b93a3; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI",
+  Roboto, sans-serif; }
+.note { max-width: 520px; margin: 18vh auto 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 24px 28px; }
+h1 { font-size: 20px; margin: 0 0 10px; font-weight: 600; }
+p { color: var(--dim); margin: 0; }
+@media (max-width: 760px) { .note { margin: 14vh 12px 0; } }

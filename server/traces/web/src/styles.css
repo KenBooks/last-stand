@@ -1,0 +1,49 @@
+/* The dashboard's look across its sections: dark, one accent, tables that turn into cards on a phone. Each
+   component's own look is in its styles; what every table and card shares is here. */
+:root { color-scheme: dark; --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #dfe3ea; --dim: #8b93a3;
+  --accent: #e0a24a; --good: #6fbf73; --warn: #e07b4a; --chip: #1e222b; --head: #1a1e26; --button: #232834; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI",
+  Roboto, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { background: var(--button); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 16px; font: inherit; cursor: pointer; margin-top: 12px; }
+button:hover { border-color: var(--accent); }
+.sub { color: var(--dim); margin: 0 0 20px; }
+.dim { color: var(--dim); }
+.empty { color: var(--dim); padding: 24px; text-align: center; }
+.hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.card { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px;
+  min-width: 0; }
+
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  background: var(--head); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.code { font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+td.gpu { max-width: 260px; overflow-wrap: anywhere; color: var(--dim); }
+td.build > * + * { margin-left: 0.4em; }
+
+@media (max-width: 760px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+  .cards > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  table { background: none; border: 0; }
+  thead { display: none; }
+  tr { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px;
+    padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+  td { border: 0; padding: 0; text-align: left; }
+  td.num { text-align: left; }
+  td[data-k]::before { content: attr(data-k) " "; color: var(--dim); }
+  td.code { font-size: 15px; }
+  td.when { text-align: right; }
+  td.gpu { max-width: none; grid-column: 1 / -1; }
+  td.build, td.dl { grid-column: 1 / -1; }
+}

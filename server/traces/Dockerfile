@@ -1,5 +1,5 @@
 # The traces service (traces.mjs): one small Node process, no runtime packages; its traces on the volume at /data.
-# The page (web/) is built first by Vite into dist/, scripts and styles named by their content's hash.
+# The dashboard (web/, Angular) is built first into dist/, scripts and styles named by their content's hash.
 FROM node:24-alpine AS page
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
