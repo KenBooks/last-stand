@@ -11,7 +11,11 @@ Performance reports a slow game sends with its player's consent, for agents to r
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); the service they go to is `server/traces/AGENTS.md`.
 
 - `frameParts.ts`: a frame callback over 100 ms is marked with its parts over 5 ms (`slow frame callback 535 ms:
-  update 150, render 10`: the input and view, the music, the update, the guide and overlays, the render, the rest),
+  update 150, render 10`: the input and view, the music, the update, the guide and overlays, the render, the rest;
+  the render by its passes, `render: the scene and its shadows 152`, marked from `render()` in `core/renderer.ts`
+  through `markPassesWith`, as a phone's walk through the village had renders of 170 to 190 ms, JQ2E-3Y1K, and
+  another's of 380 to 440, T1MM-NGVG, the render one part; imported there, this module's imports came round to the
+  renderer before it was made, and the page stopped at boot),
   and a piece built behind the lobby over 50 ms by its build and piece (`behind the lobby: hall ranger's piece 49 took
   150 ms`, `game/behind.ts`). A phone's lobby had frames whose callback took 300 to 540 ms while its update and render
   took 12 to 19, and a stage `hall` of 138 to 323 ms in one frame, a single piece, and nothing said which (traces

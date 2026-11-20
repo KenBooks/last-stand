@@ -81,6 +81,7 @@ import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { startHeartbeat } from './stats/heartbeat';
 import { recorder } from './perf/recorder';
 import { framePart, framePartsBegin, framePartsEnd } from './perf/frameParts';
+import { markPassesWith } from './core/renderer';
 import { traceNow } from './perf/upload';
 import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
 import { initPerfHud, readGpuAhead, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
@@ -179,6 +180,8 @@ async function boot() {
   // by it)
   if (WEBGPU) setPlainLitOnWebGPU(plainLitAtBoot());
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
+  // (a slow frame's mark names the render's pass that held it: perf/frameParts.ts)
+  markPassesWith(framePart);
   // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
   if (!WEBGPU) {
     // (the GPU's name and timer asked before anything compiles: ui/perfHud.ts)

@@ -9,6 +9,8 @@ const SLOW_FRAME_MS = 100;
 /** the parts named: those this long (ms) */
 const NAMED_MS = 5;
 
+/** the most parts a frame keeps */
+const PARTS_MOST = 32;
 /** the parts timed this frame, in order */
 const parts: { name: string; ms: number }[] = [];
 let start = 0;
@@ -23,6 +25,8 @@ export function framePartsBegin(): void {
 
 /** What ran since the last part (or the frame's beginning) was `name`. */
 export function framePart(name: string): void {
+  // (a render outside the frame's callback, the profiler's or a warm-up's, marks parts too: kept to a frame's few)
+  if (parts.length >= PARTS_MOST) return;
   const now = perfClock.now();
   parts.push({ name, ms: now - last });
   last = now;

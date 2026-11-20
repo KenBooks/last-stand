@@ -1566,6 +1566,21 @@ function matricesOfShownOnly(scene: THREE.Scene): boolean {
   return true;
 }
 
+/** what marks each of the render's passes as a part of the frame (`markPassesWith`; none until the game sets it) */
+let framePart: (name: string) => void = () => {};
+
+/** Each of the render's passes marked by `mark` as a part of the frame callback's (`perf/frameParts.ts`, set from
+ *  main.ts: imported here, its module's imports came round to this one before it was made). */
+export function markPassesWith(mark: (name: string) => void): void {
+  framePart = mark;
+}
+
+/**
+ * The frame drawn. Its passes are each a part of the frame callback's (`perf/frameParts.ts`), so a slow frame's mark in
+ * the performance trace says which one held the page: from play, a phone's walk through the village had frames whose
+ * render took 170 to 190 ms (trace JQ2E-3Y1K) and another's 380 to 440 (T1MM-NGVG), the render one part, and nothing
+ * said where.
+ */
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
@@ -1590,8 +1605,10 @@ export function render(): void {
   u.uSceneTexel.value.set(1 / sceneRT.width, 1 / sceneRT.height);
   sunShadowInTurns();
   aimSight(G.camera);
+  framePart('render: its set-up');
   if (WEBGPU) {
     renderWebGPU();
+    framePart('render: drawn (WebGPU)');
     shotTaken();
     if (overlaysShown) overFrame.draw();
     return;
@@ -1604,15 +1621,18 @@ export function render(): void {
   // (the frame's matrices made once, before the ghosts' count and the scene: three made them all again for each
   // render, a walk of every object, a sixth of the village's render on the CPU, `lab perf --village`)
   const walked = VILLAGE && matricesOfShownOnly(G.scene);
+  framePart('render: matrices');
   if (ghosts) gpuMarks.mark('ghosts');
   G.scene.matrixWorldAutoUpdate = !walked;
   try {
     const counted = countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
+    framePart('render: ghosts counted');
     gl.setRenderTarget(sceneRT);
     gpuMarks.mark('scene');
     // (with no village, the ghosts' count never draws: three's own walk as the scene renders)
     if (counted) G.scene.matrixWorldAutoUpdate = false;
     gl.render(G.scene, G.camera);
+    framePart('render: the scene and its shadows');
   } finally {
     G.scene.matrixWorldAutoUpdate = true;
   }
@@ -1623,8 +1643,10 @@ export function render(): void {
     drawArmsOver();
   }
   composer.render();
+  framePart('render: the post chain');
   shotTaken();
   gpuMarks.mark('overlay');
   if (overlaysShown) overFrame.draw();
   presentHdr();
+  framePart('render: overlays');
 }
