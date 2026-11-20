@@ -1,6 +1,8 @@
 // The fight's loading bar from a portal's Start to the run, read every frame from the page alone, so any build takes
-// it: `--before @tools/stalls/walks/barClimb.js` with `--scenario boot --cold-return` (the village on, `?village=1`;
-// without `--cold-return` the boot has pressed Start before it, and the page is in a run). The training
+// it: `--before @tools/stalls/walks/barClimb.js` with `--scenario boot --cold-return --warm-behind` (the village on,
+// `?village=1`): the boot presses Start before the walk wherever it isn't told to stay in the lobby, and the page is
+// in a run there (`--cold-return` leaves the first visit in the lobby, `--warm-behind` the return; a walk that finds
+// a run says so). The training
 // skipped, the Crypt's portal picked on the map, Start pressed, and then each frame till the run shows: the fill's
 // width as drawn (its transform, the compositor's glide included) and as asked (`--p`), and the bar's words. It says
 // whether the fill ever went back (a bar begun again: from play, "the bar should not restart midway"), its largest
@@ -26,20 +28,47 @@
     for (let waited = 0; !shown(selector) && waited < most; waited += POLL_MS) await wait(POLL_MS);
     return shown(selector);
   };
+  /** The game's own state, where a dev build shows it (`window.__G`): its mode, the menu, the place. */
+  const gameState = () => {
+    const game = window.__G;
+    if (!game) return '';
+    return `; the game's mode ${game.mode}, menu ${game.menuOpen}, place ${game.arena.place}, `
+      + `room ${game.arena.room ?? 'none'}, paused ${game.paused}`;
+  };
+  /** The frames the page draws in `ms`. */
+  const framesIn = async (ms) => {
+    let frames = 0;
+    let counting = true;
+    const count = () => {
+      frames++;
+      if (counting) requestAnimationFrame(count);
+    };
+    requestAnimationFrame(count);
+    await wait(ms);
+    counting = false;
+    return frames;
+  };
   /** The key pressed and let go on the page, as the game hears it (the map's M). */
   const tap = (key, code) => {
     for (const type of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(type, { key, code, bubbles: true }));
   };
 
+  if (shown('#wavebadge')) {
+    return ['the page is in a run: the boot pressed Start before the walk (--cold-return keeps the first visit in the '
+      + 'lobby, --warm-behind the return)'];
+  }
   document.querySelector('.tr-skip')?.click();
   // (a slow first visit's report asked for over the map's names: Not now)
   document.querySelector('#perf-ask .pa-later')?.click();
   await wait(POLL_MS);
   tap('m', 'KeyM');
   if (!(await until('#vmap.flat:not(.ahead)', MAP_MOST_MS))) {
-    const ids = ['vmap', 'menu', 'pause', 'help', 'coop', 'vcard', 'heroes', 'perf-ask', 'readying'];
+    const ids = ['vmap', 'menu', 'pause', 'help', 'coop', 'vcard', 'heroes', 'perf-ask', 'readying', 'loading'];
     const open = ids.filter((id) => document.getElementById(id)?.checkVisibility());
-    return [`the map never opened (shown: ${open.join(', ') || 'none'})`];
+    const frames = await framesIn(POLL_MS * 4);
+    return [`the map never opened (shown: ${open.join(', ') || 'none'}; ${frames} frames in ${POLL_MS * 4} ms, `
+      + `${document.visibilityState}, focus ${document.hasFocus()}, body "${document.body.className}", `
+      + `vmap "${document.getElementById('vmap')?.className ?? 'none'}"${gameState()})`];
   }
   document.querySelector('.vm-name[data-use="portal"][data-biome="crypt"]').click();
   let waited = 0;
