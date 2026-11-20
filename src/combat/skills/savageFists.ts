@@ -4,6 +4,7 @@
 // Frenzy every third blow was a two-fisted hammer, taken out: from play, "lets remove two handed strike under
 // freenzy, it makes no sense, practically".)
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).
+import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
 import { addShake, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
@@ -25,6 +26,39 @@ const thrown = new WeakSet<object>();
 /** each cast's turn so far: the way he faced last frame, and how far he has turned through the wind-up (rad, + to
  *  his left) */
 const turns = new WeakMap<object, { last: number; sum: number }>();
+
+/** each player's turning through his punches: game time it was last read, the way he faced then, and how fast he
+ *  was turning (rad/s, + to his left) */
+const turning = new WeakMap<Player, { at: number; facing: number; rate: number }>();
+/** the hand each cast is thrown with, where his turning chose it (`handOf`) */
+const hands = new WeakMap<object, number | undefined>();
+
+/** His turning now, read once a frame of a punch (`dt` s). */
+function readTurning(player: Player, dt: number): void {
+  const was = turning.get(player);
+  if (!was || G.time - was.at > 0.2) { turning.set(player, { at: G.time, facing: player.facing, rate: 0 }); return; }
+  if (dt <= 0) return;
+  const by = player.facing - was.facing, now = Math.atan2(Math.sin(by), Math.cos(by)) / dt;
+  was.rate += (now - was.rate) * Math.min(1, dt * 10);
+  was.facing = player.facing;
+  was.at = G.time;
+}
+
+/**
+ * The hand his punch being cast is thrown with: the one his turning is behind as it starts (+1 the lead hand's jab
+ * as he turns to his right, -1 the rear hand's cross as he turns to his left: `PUNCH_DRIVE.lead`), so the same hand
+ * again and again while he keeps turning one way; nothing where he isn't turning, and each hand takes its turn.
+ */
+function handOf(player: Player): number | undefined {
+  const c = player.casting;
+  if (!c || player.gear.shield) return undefined;
+  if (hands.has(c)) return hands.get(c);
+  const now = turning.get(player);
+  const led = !!now && G.time - now.at < 0.2 && Math.abs(now.rate) >= PUNCH_DRIVE.lead;
+  const hand = led ? (now.rate > 0 ? -1 : 1) : undefined;
+  hands.set(c, hand);
+  return hand;
+}
 
 /** Whether this punch is the lead hand's jab (else the rear hand's cross, every punch with a shield on the arm). */
 const isJab = (player: Player): boolean => (player.model.swing ?? 1) > 0 && !player.gear.shield;
@@ -88,8 +122,14 @@ const skill: InstantSkill = {
       base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe),
     },
   ],
-  charging(player, _def, k) {
+  pose(player, _def, action) {
+    const hand = handOf(player);
+    if (hand !== undefined) action.hand = hand;
+  },
+  charging(player, _def, k, dt) {
     const c = player.casting;
+    handOf(player);
+    readTurning(player, dt);
     // (through his own eyes the view tips with his shoulders as they turn behind the blow, a cross's further than a
     // jab's: the frame held dead level, the arm went out from a body that never moved)
     if (player.local) rollView(((player.model.swing ?? 1) > 0 ? -ROLL.jab : ROLL.cross) * k * k);

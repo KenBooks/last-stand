@@ -13,7 +13,8 @@ import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { blastCorpses } from '../../entities/corpse';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
-import { FRENZY } from '../../data/balance';
+import { FRENZY, POUNCE } from '../../data/balance';
+import { leapSpeed } from './pounce';
 import { spendFrenzy } from '../frenzy';
 import { fistMark, heatOf } from './savageFists';
 import type { InstantSkill, Needs } from './types';
@@ -65,7 +66,8 @@ const skill: InstantSkill = {
     const def = rawDef as Def;
     const form = formOf(player), heat = player.frenzy;
     const stacks = Math.max(1, spendFrenzy(player));
-    const damage = def.damage + def.perStack * stacks;
+    // (harder with a leap's speed behind it: cast in a Pounce's air or as it lands)
+    const damage = (def.damage + def.perStack * stacks) * (1 + POUNCE.slam * leapSpeed(player));
     const facing = player.facing, dir = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     const p = player.pos, at = new THREE.Vector3(p.x + dir.x * LANDS, 0, p.z + dir.z * LANDS);
     const struck = new Set<Enemy>();

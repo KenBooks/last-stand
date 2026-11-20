@@ -14,6 +14,8 @@ import { rand } from '../../util';
 import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import { gainFrenzy } from '../frenzy';
 import { fistMark } from './savageFists';
+import { carrySpeed } from './pounce';
+import { POUNCE } from '../../data/balance';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 
@@ -22,6 +24,8 @@ type Def = Needs<'damage' | 'range' | 'speed'>;
 /** the push-off before it goes, and the stop after it (s): with its run (`range` / `speed`, 0.27 s) Bull Rush's shares
  *  of its whole, so the model's charge legs keyed to those carry it (models/warrior.ts `chargeLegs`) */
 const BRACE = 0.1, HOLD = 0.27;
+/** how much of a full Pounce's speed its dash puts behind a Wrath cast as it ends (`leapSpeed`) */
+const RUSH_SPEED = 0.6;
 /** it meets what comes within this of its middle, past the foe's size (m) */
 const REACH = 1.1;
 const DUST = 0x2a241c, BLOOD = 0xff3a1a;
@@ -116,7 +120,10 @@ const skill: InstantSkill = {
     const hit = new Set<Enemy>(), struck = new Set<Prop>();
     let built = 0, launched = false, dust = 0, stopped = false;
     sfx.bullRush(BRACE, run);
-    player.startDash(dir, def.range / dur, dur, { anim: 'bloodrush', hold: HOLD, pace: pace(BRACE / dur), step: () => {
+    // (open, and its speed behind Wrath cast as it ends, `RUSH_SPEED` of a full leap's: from play, "should be possible
+    // to do wrath at the end of bloodrush too")
+    carrySpeed(player, RUSH_SPEED, G.time + dur + HOLD + POUNCE.carry);
+    player.startDash(dir, def.range / dur, dur, { anim: 'bloodrush', hold: HOLD, open: true, pace: pace(BRACE / dur), step: () => {
       const p = player.pos, d = player.dash;
       if (d && player.local) rushView(d.t, d.dur, stopped);
       if (d && d.t > d.dur && !stopped) {

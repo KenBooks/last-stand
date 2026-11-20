@@ -2896,7 +2896,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     if ((ended || began) && alternates(lastName)) swingEnd = t;
     if (began && alternates(raw.name)) {
       inRow = t - swingEnd < SWING_HOLD;
-      side = inRow ? -side : 1;
+      // (a punch with the hand its skill chose, his turning behind it: else each in turn)
+      side = raw.hand ?? (inRow ? -side : 1);
       chain = t - swingEnd < 0.25;
     }
     // (a swing straight after a swing starts where that one ended: a short fade; out of an action back to the stance, a slow one)
@@ -3416,7 +3417,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     if (a?.under?.name === 'charge') { legOwn = Math.max(legOwn, chargeLegs(a.under.t)); ownL = ownR = 0; }
     // both hands empty: the fists up in their guard for a while after a move (standing or walking: at a run the arms
     // pump), let down to hang once the fight has left him
-    fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP ? 1 : 0, 6, dt) : 0;
+    // (and up while the player says so: foes on him, or hurt a moment ago, `Player.guarding`. Standing idle with foes
+    // striking him, his arms hung at his sides)
+    fistsUp = bare ? damp(fistsUp, t - fightT < FISTS_UP || st.guard ? 1 : 0, 6, dt) : 0;
     // (through the eyes the fists are always up in the view, as a brawler's in a first-person game: lower out of a
     // fight; let down out of the view, the screen showed no hands at all)
     if (bare && !a && st.dead < 0) {

@@ -159,7 +159,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       pounce: 'Aim at a foe up to 8 m off: you land on it with both fists from two sides and stagger it for a moment, free to strike again at once. Follow it with anything. Elites and bosses are not staggered.',
       rampage: 'Hold it and walk into the pack, punching all the way: the longer you hold it, the harder it hits and the more Energy it burns. Frenzy does not drain while you hold it.',
       bloodrush: 'Dash through a line of foes: each one you pass through is struck and adds a stack of Frenzy.',
-      wrath: 'Spend your Frenzy: the more you have, the harder it hits. From 5 it slams everything round you, at 10 it cracks the ground and throws them back.',
+      wrath: 'Spend your Frenzy: the more you have, the harder it hits. From 5 it slams everything round you, at 10 it cracks the ground and throws them back. Cast it in the air just before a Pounce lands, or as a Bloodrush ends, and it hits up to half as hard again with that speed behind it.',
       unchained: 'Use it at full Frenzy: for 8 s it cannot drain and can climb to 15, then finish with Wrath.',
     },
     loadouts: [

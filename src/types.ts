@@ -488,6 +488,8 @@ export interface ActionState {
    *  1 a slam, 2 a quake), and a flurry's blows so far with the share of the next thrown (Rampage's: 2.4 the third
    *  blow two fifths out) */
   form?: number; beat?: number;
+  /** a punch's hand where its skill chose it: +1 the lead hand's jab, -1 the rear hand's cross (else they take turns) */
+  hand?: number;
   /** a dash run under it (a skill cast as Bull Rush's charge runs): its own name and share, for its legs and the
    *  lean of its body posed under the action's arms */
   under?: { name: string; t: number };
@@ -505,6 +507,8 @@ export interface AnimState {
   hit: number;
   /** 1 at the moment a shield blocks a hit, fading out over a quarter second */
   blockHit?: number;
+  /** the warrior with both hands empty: his fists held up in their guard (foes on him, hurt or striking a moment ago) */
+  guard?: boolean;
   /** -1 = alive, otherwise 0..1 death progress */
   dead: number;
   /** a boss with a fight in phases (`EnemyDef.bossKit`): what its model shows of it */

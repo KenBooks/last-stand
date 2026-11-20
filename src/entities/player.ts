@@ -14,7 +14,7 @@ import { hairColour, type HeroLook } from '../data/heroLooks';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
-import { BLOCK, COOP, FRENZY, FULL_DRAW, PVP } from '../data/balance';
+import { BLOCK, COOP, FIST_GUARD, FRENZY, FULL_DRAW, PVP } from '../data/balance';
 import { tickFrenzy } from '../combat/frenzy';
 import { recorder } from '../perf/recorder';
 import { SCHOOLS } from '../data/schools';
@@ -267,6 +267,9 @@ export class Player {
   loadout!: Loadout;
   /** the weapon style the loadout belongs to */
   private style: HeldStyle | null = null;
+  /** his bare fists' guard (`guarding`): game time he last struck with them, and was last hurt */
+  private fistT = -9;
+  private hurtT = -9;
   /** the hands the channel held is cast from, for one cast with none full (`bare`): by its keys held here, as its
    *  own game reports them for a partner's copy */
   hands: CastHands = 'left';
@@ -1462,6 +1465,7 @@ export class Player {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
     this.model.root.rotation.set(0, this.facing, 0);
+    if (action && this.style === 'bare') this.fistT = G.time;
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
     this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
@@ -1480,6 +1484,7 @@ export class Player {
       this.model.animate({
         t, dt: owed, phase: this.phase, move, moveDir: dir, lean, action,
         hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
+        guard: this.guarding,
         charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
         nocked: this.nocked,
         strike: action?.name === 'chop' ? this.struckAhead() : null,
@@ -1582,8 +1587,24 @@ export class Player {
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns how it turned out (null: it didn't land,
    *  the hero down or guarded). */
+  /** Whether his bare fists are up in their guard and free (`FIST_GUARD`): he struck or was hurt a moment ago, or a
+   *  foe is on him, and he isn't striking, dashing or reeling now. */
+  get guarding(): boolean {
+    if (this.style !== 'bare' || this.casting || this.channel || this.dash || this.staggered) return false;
+    if (G.time - this.fistT < FIST_GUARD.after || G.time - this.hurtT < FIST_GUARD.after) return true;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawning) continue;
+      if (Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) < FIST_GUARD.near + e.radius) return true;
+    }
+    return false;
+  }
+
   takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): HitResult | null {
     if (!this.alive || G.time < this.guardUntil) return null;
+    // (his fists' guard takes a share off a blow from his front)
+    const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
+    if (front && this.guarding) amount *= 1 - FIST_GUARD.less;
+    this.hurtT = G.time;
     // (each stack of Frenzy, more of every blow: combat/frenzy.ts)
     const r = this.resolveHit(amount * (1 + this.frenzy * FRENZY.frail / 100), from);
     this.showHit(r);

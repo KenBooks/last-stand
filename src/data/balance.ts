@@ -237,11 +237,20 @@ export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
  *  should stack"): `step` more of its damage walking straight at the foe at his full pace, less by how far off that
  *  way or how much slower; `swipe` more with the aim swung `turn` rad or more through the wind-up the way the
  *  punching hand travels (a cross's from his right to his left, a jab's from his left to his right), less for a
- *  smaller swing. Added together, over a clean hit's. Each of the three also sharpens the punch (from play: "for LMB
+ *  smaller swing. Added together, over a clean hit's. A punch is thrown with the hand his turning is behind while
+ *  he turns `lead` rad/s or faster as it starts (from play: "warrior should choose to attack with the hand that is
+ *  most beneficial for the current momentum, automatically... so he might strike with same hand multiple times"),
+ *  else with each in turn. Each of the three also sharpens the punch (from play: "for LMB
  *  performing a technique should increase critical hit chance too"): `crit` points of a hundred more chance of a
  *  critical hit for a clean hit, a full step and a full swing, the step's and the swing's by their shares, added
  *  together. First takes, for tuning in play. */
-export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, crit: { clean: 10, step: 10, swipe: 15 } };
+export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, lead: 1.2, crit: { clean: 10, step: 10, swipe: 15 } };
+
+/** His bare fists' guard (from play: "leaving guard on (idle fists) should decrease damage from frontal arc while
+ *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are
+ *  attacking him"): up for `after` s after he last struck or was hurt, and while a foe is within `near` m of him;
+ *  while it's up and he isn't striking, a blow from his front (`BLOCK.arc`) does `less` less. */
+export const FIST_GUARD = { less: 0.3, after: 4, near: 4 };
 
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
@@ -254,4 +263,7 @@ export const FRENZY = {
  *  `top`. */
 // (the leap 0.4 s, where 0.3: up to 1.3 m up and down again in 0.3 s he was shot along a rail, from play: "we still
 // need to move the jump in 3rd person look more convincing")
-export const POUNCE = { leap: 0.4, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3 };
+// (`slam`: how much harder Wrath lands cast in the leap or within `carry` s of its landing, at a leap of its whole
+// reach, less for a shorter one, from play: "it should be possible to cast wrath just before landing after pounce,
+// which should increase its damage (from speed)")
+export const POUNCE = { leap: 0.4, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3, slam: 0.5, carry: 0.35 };

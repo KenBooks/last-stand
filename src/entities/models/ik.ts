@@ -126,6 +126,8 @@ const RUN_TOE_OFF = 0.42, RUN_TOE_SQUARE = 0.55, RUN_TOE_HOLD = 0.55, RUN_TOE_LE
 /** a stopping run's stride in the air lands by the time the body is down to this share of the speed it stopped from
  *  (a walk's as it stands) */
 const STOP_LAND = 0.2;
+/** a rooted body's feet stay where they stand until he faces this far from where he was rooted (rad) */
+const ROOT_TURN = 0.35;
 /** a standing body turning faster than this (rad/s, `yawRate`) is wheeling round on its feet: it steps quicker, and
  *  a step already in the air comes down this many times as quickly */
 const WHEEL_STEP = 2, WHEEL_HURRY = 2.5;
@@ -644,6 +646,9 @@ export class LegIK {
   private dropWanted = 0;
   /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
+  /** rooted (`rooted`): the way he faced as his feet were, and whether he was last frame */
+  private rootedYaw = 0;
+  private wasRooted = false;
   private yawRate = 0;
   /** how many times its own pace the walk cycle moves on for the way the body goes off the legs' line, and for a
    *  planted foot's reach (`cadence`) */
@@ -1614,7 +1619,17 @@ export class LegIK {
     // own, it went out of turn. Wheeling round on its feet, only slowly: turning round from a run, a foot landed out of
     // reach stepped again seven frames on, the other only just up)
     const wheels = this.yawRate >= 3 && g.speed < WHEEL_SPEED;
-    if ((this.moving && !wheels) || own || (this.rooted && !this.moving)) return;
+    // (rooted, a punch's: his trunk turns over his feet where they stand, but only while he still faces about where
+    // he was rooted. Turned to strike a foe on his other side, punch after punch, his feet never followed and his
+    // legs were left crossed under him, from play: "attacking to another side puts him in awkward pose like this, he
+    // would fall in real life". Past `ROOT_TURN` the feet step round after him, and he's rooted again where he then
+    // stands)
+    if (this.rooted && !this.wasRooted) this.rootedYaw = g.facing;
+    this.wasRooted = this.rooted;
+    const faced = Math.abs(turnBetween(this.rootedYaw, g.facing));
+    if (faced >= ROOT_TURN && this.yawRate < 0.5 && f.state === 'plant' && other.state === 'plant' && !goes) this.rootedYaw = g.facing;
+    const held = this.rooted && !this.moving && faced < ROOT_TURN;
+    if ((this.moving && !wheels) || own || held) return;
     // (moving, further than the stride's own early start: at a run a foot pushing off stays down till it is well
     // behind, and stepped here first, quickly, it left as a step rather than a stride, out of turn)
     const tooFar = this.moving ? this.farBehind(g) / 0.9 : this.standingSlack(f) * reach;

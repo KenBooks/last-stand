@@ -55,6 +55,19 @@ function leapView(k: number, landed: number, lift: number): void {
 
 const DUST = 0x2a241c, EARTH = 0xd8b890;
 
+/** each player's last leap: the share of a full one's length it went, and game time its speed is behind him until */
+const leaps = new WeakMap<Player, { share: number; until: number }>();
+
+/** How much of a full leap's speed is behind a blow of his now (0..1): in the air, and for `POUNCE.carry` s after
+ *  he lands. Wrath cast then lands harder by it (`POUNCE.slam`). */
+/** A dash of his whose speed is behind his next blow: `share` of a full leap's, until game time `until`. */
+export function carrySpeed(player: Player, share: number, until: number): void { leaps.set(player, { share, until }); }
+
+export function leapSpeed(player: Player): number {
+  const leap = leaps.get(player);
+  return leap && G.time <= leap.until ? leap.share : 0;
+}
+
 /** The spring off the ground, seen from outside: the floor kicked out behind him. */
 function springOff(at: THREE.Vector3, dir: THREE.Vector3): void {
   shockwave(at, { color: EARTH, intensity: 1, from: 0.15, to: 1.5, life: 0.25 });
@@ -133,8 +146,10 @@ const skill: InstantSkill = {
     sfx.bullLaunch(); sfx.grunt(player.frenzy / FRENZY.cap);
     const lift = Math.min(POUNCE.top, go * POUNCE.rise);
     springOff(p.clone(), dir);
+    carrySpeed(player, Math.min(1, go / def.range), G.time + dur + POUNCE.carry);
+    // (open: his other skills are cast in the air, Wrath above all)
     player.startDash(dir, go / dur, dur, {
-      anim: 'pounce', hold, lift,
+      anim: 'pounce', hold, lift, open: true,
       step: () => {
         const dash = player.dash;
         if (player.local && dash) leapView(Math.min(1, dash.t / dash.dur), dash.t - dash.dur, dash.lift);
