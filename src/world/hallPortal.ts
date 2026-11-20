@@ -82,7 +82,18 @@ function cullOf(part: THREE.Object3D): Culled {
 
 /** Whether the eye at `eye` stands inside the hall's walls, under its roof. */
 const eyeInside = (eye: THREE.Vector3): boolean =>
-  Math.abs(eye.x - TERRACE.x) < HALL.inHalf && eye.z > HALL.wall && eye.z < HALL.inFront;
+  (Math.abs(eye.x - TERRACE.x) < HALL.inHalf && eye.z > HALL.wall && eye.z < HALL.inFront) || inDoorway(eye);
+
+/** how far inside the door's face the eye must be for the cone through it to be taken (m): on its face, the cone's
+ *  sides are planes through the eye and the doorway's own edges, and say nothing */
+const DOORWAY_SPARE = 0.05;
+/** Whether the eye stands in the doorway's opening, through the front wall's thickness: walked in, the camera trails
+ *  him 4.5 m and stood there for his first steps, and with nothing culled the grass, the trees and the village behind
+ *  the hall's walls were drawn and lit unseen (the meadow 35 ms of the 4080's 63 at 20.7 Mpx, from a perf report
+ *  "village needs to be 144 fps"). From there too the village is seen through the door alone. */
+const inDoorway = (eye: THREE.Vector3): boolean =>
+  Math.abs(eye.x - TERRACE.x) < HALL.doorHalf && eye.y < TERRACE.high + HALL.doorHigh
+  && eye.z >= HALL.inFront && eye.z < HALL.door - DOORWAY_SPARE;
 
 /** The cone's sides set from `eye` through the doorway's edges, each facing the doorway's middle. */
 function coneFrom(eye: THREE.Vector3): void {
@@ -105,10 +116,12 @@ const seenThroughDoor = (sphere: THREE.Sphere): boolean =>
   mode !== 'all' && sides.every((side) => side.distanceToPoint(sphere.center) >= -sphere.radius);
 
 const _boxRound = new THREE.Sphere();
-/** Whether what `box` bounds outside the hall is out of this frame's sight, its doorway showing none of it (the
- *  meadow's tiles, culled as each is listed: `meadow.ts`). */
+/** Whether the grass `box` bounds is out of this frame's sight, its doorway showing none of it (the meadow's tiles,
+ *  culled as each is listed: `meadow.ts`). A tile meeting the hall's box is culled as any other: no grass grows in
+ *  the hall, so what of it the doorway doesn't show is behind the walls (kept as the merged parts are, the tiles
+ *  along its walls were a fifth of the grass of a frame looking in from the doorway, all of it unseen). */
 export function hiddenByHallDoor(box: THREE.Box3): boolean {
-  return coneSet && !box.intersectsBox(hallBox) && !seenThroughDoor(box.getBoundingSphere(_boxRound));
+  return coneSet && !seenThroughDoor(box.getBoundingSphere(_boxRound));
 }
 
 /** Whether the frame drawn by `camera` looks out of the hall through its doorway alone: the game's camera inside it,
