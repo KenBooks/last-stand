@@ -8,7 +8,7 @@ import { dazeEnemy, hitEnemy } from '../damage';
 import { schedule } from '../../core/timers';
 import { shockwave, decal } from '../../fx/effects';
 import { smokePuff, debris } from '../../fx/particles';
-import { addShake } from '../../core/renderer';
+import { addShake, kickFov, liftView, tipView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { gainFrenzy } from '../frenzy';
 import { FRENZY, POUNCE } from '../../data/balance';
@@ -26,6 +26,30 @@ const SHORT = 0.75;
 const NEAR_AIM = 2.5;
 /** his blows reach a foe this far from him past its size (m): one that slips further off is missed */
 const REACH = 1.6;
+/**
+ * The leap through his own eyes: the view rises and falls with it (`rise` of the leap's own height: the body's lift
+ * left the eyes on the ground, and the leap was a slide forward, from play: "1 skill is underwhelming in 1st person
+ * ... it really needs to feel like pounce"), widens with its speed (`fov`, degrees at its middle), tips down onto
+ * what he comes down on over its second half (`tip`, rad), and gives under the landing (`give`, m, and `giveFor`,
+ * s), the tip let go with it.
+ */
+const EYES = { rise: 1, fov: 9, tip: 0.2, give: 0.28, giveFor: 0.16 };
+
+/** His own view through the leap at `k` of it (0..1) and `landed` s after it came down (`EYES`). */
+function leapView(k: number, landed: number, lift: number): void {
+  if (landed <= 0) {
+    liftView(EYES.rise * lift * 4 * k * (1 - k));
+    kickFov(EYES.fov * Math.sin(Math.PI * k));
+    const down = Math.max(0, (k - 0.45) / 0.55);
+    tipView(EYES.tip * down * down * (3 - 2 * down));
+    return;
+  }
+  const settle = Math.exp(-landed / EYES.giveFor);
+  if (settle < 0.03) return;
+  // (down into his knees as his weight lands, and up out of them)
+  liftView(-EYES.give * settle * Math.min(1, landed / 0.03));
+  tipView(EYES.tip * settle);
+}
 
 /** The foe it would leap onto for the aim at `target`: the one the aim is on, else the nearest the aim's point, within
  *  `range` of him. */
@@ -77,6 +101,7 @@ const skill: InstantSkill = {
       anim: 'pounce', hold, lift: Math.min(POUNCE.top, go * POUNCE.rise),
       step: () => {
         const dash = player.dash;
+        if (player.local && dash) leapView(Math.min(1, dash.t / dash.dur), dash.t - dash.dur, dash.lift);
         if (!down && dash && dash.t < dash.dur && foe.alive) steer(dash, player, foe, dir);
         if (down || !dash || dash.t < dash.dur) return;
         // the landing: his weight on it, the dust thrown out round them, and the foe pinned under him
@@ -86,7 +111,7 @@ const skill: InstantSkill = {
         smokePuff(at, { count: 8, color: 0x2a241c, alpha: 0.5, size: 0.7, sizeEnd: 2, speed: 2.5 });
         debris({ x: at.x, y: 0, z: at.z }, { count: 6, speed: 4 });
         decal(at, { type: 'scorch', size: 0.9, life: 2.5, opacity: 0.4 });
-        if (player.local) addShake(0.18);
+        if (player.local) addShake(0.34);
         sfx.bullLand();
         if (foe.alive && !foe.hero && !foe.boss) dazeEnemy(foe, hold, player);
       },

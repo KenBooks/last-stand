@@ -241,4 +241,4 @@ export const FRENZY = {
  *  (entities/models/warriorFists): the leap, whatever its length; its first blow after the landing and each after
  *  that; how long he holds on after the last; and how many blows. How high a leap goes for each metre (m), at most
  *  `top`. */
-export const POUNCE = { leap: 0.3, first: 0.06, apart: 0.12, after: 0.16, blows: 4, rise: 0.11, top: 1 };
+export const POUNCE = { leap: 0.3, first: 0.06, apart: 0.12, after: 0.16, blows: 4, rise: 0.17, top: 1.3 };

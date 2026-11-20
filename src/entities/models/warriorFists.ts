@@ -386,6 +386,10 @@ export function fistRampage(j: Joints, beat: number, still: number, t: number, e
   if (!eyes) j.spine.rotation.x += 0.06;
 }
 
+/** Pounce's leap through the eyes: where each fist is on the screen (across towards its own side, up, metres ahead)
+ *  thrown up as he leaves the ground, and driven down as he lands */
+const POUNCE_EYES = tunable('pounceEyes', { thrown: [0.56, 0.5, 0.62], driven: [0.1, -0.3, 0.56] });
+
 /** Pounce's shares of its pose: the leap's, and each blow's middle after it (`POUNCE` in data/balance.ts) */
 const pounceShares = () => {
   const total = POUNCE.leap + POUNCE.first + POUNCE.apart * (POUNCE.blows - 1) + POUNCE.after;
@@ -428,11 +432,18 @@ export function fistPounce(j: Joints, k: number, t: number, eyes: boolean): numb
   fistGuard(j, 1, t, eyes);
   if (air > 0) {
     if (eyes) {
-      // (through the eyes: drawn down to spring, the lead fist thrown ahead into the view's middle and the rear one
-      // cocked at its side, then both come down into it)
-      const y = lerp(lerp(-0.45, -0.1, Math.max(launch, tuck)), -0.25, fall);
-      place(j, true, onScreen(j, [-0.12, y, 0.62], _far), air, eyes);
-      place(j, false, onScreen(j, [0.5, y - 0.15, 0.42], _far), air, eyes);
+      // (through the eyes: both fists drawn down out of the view to spring, thrown up and out to its top corners as
+      // he leaves the ground, as a man leaping onto something throws his arms up, then driven down together into
+      // its middle as he lands on it. The lead fist held out in the middle and the rear one at its side all the way,
+      // nothing in the view said he had left the ground, from play: "it really needs to feel like pounce")
+      const [across, up, ahead] = POUNCE_EYES.thrown, [inAcross, inUp, inAhead] = POUNCE_EYES.driven;
+      const fly = Math.max(launch, tuck);
+      const x = lerp(lerp(0.3, across, fly), inAcross, fall), y = lerp(lerp(-0.75, up, fly), inUp, fall);
+      const z = lerp(lerp(0.36, ahead, fly), inAhead, fall);
+      place(j, true, onScreen(j, [-x, y, z], _far), air, eyes);
+      place(j, false, onScreen(j, [x, y - 0.04, z], _far), air, eyes);
+      // (the knuckles over as they come down)
+      lineTo(fistLine.L, sided(LINE.punch, true), fall); lineTo(fistLine.R, LINE.punch, fall);
     } else {
       between(j, _mid);
       // (drawn back low by the hips to spring; in the air the lead fist reaching ahead at the shoulders' height and the
