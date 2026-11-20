@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Angular's build cache (the dashboard, server/traces/web): made again by each build
+.angular/
 *.log
 .playwriter-eval.js
 
