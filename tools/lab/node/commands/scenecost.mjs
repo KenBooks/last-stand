@@ -1,6 +1,6 @@
 // `npm run lab -- scenecost`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
 import { labError } from '../errors.mjs';
-import { asText, problemsIn } from '../commandKit.mjs';
+import { asText, fixtureFrom, problemsIn } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab scenecost`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -10,7 +10,9 @@ export default {
     + 'see-through, the particles, the hero, each taken out in turns, each row with how far it may be off and "within '
     + 'the noise" where it says nothing: run it with the GPU loaded, `--screen 2880x1800@2`, or a strong GPU reads '
     + 'its idle clock\'s wander; `--each` each see-through mesh alone; `--hero` the hero\'s parts and a change of '
-    + 'nothing; `--frame` the whole frame by the browser\'s clock, HDR\'s output and MSAA)',
+    + 'nothing; `--frame` the whole frame by the browser\'s clock, HDR\'s output and MSAA; `--biomes village` the '
+    + 'lobby\'s village where he stands, its own parts too: the lamps, their shadows, its largest parts, the hall\'s '
+    + 'heroes)',
   help: 'what each part of the scene pass takes of the GPU at the screen\'s own pixels and a level\'s other '
     + 'settings: the point lights, their shadows, the sun\'s, the environment, the lit shading, what\'s see-through, '
     + 'the particles, the hero, each taken out in turns within one page',
@@ -18,9 +20,10 @@ export default {
     biomes: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['crypt', 'forest'],
+      choices: ['crypt', 'forest', 'village'],
       default: 'crypt,forest',
-      help: 'the biomes: crypt, forest',
+      help: 'the biomes: crypt, forest, or village (the lobby\'s, where --at and --facing stand him: the square, '
+        + 'facing the hall, by default)',
     },
     views: {
       kind: 'list',
@@ -37,6 +40,14 @@ export default {
       help: 'the quality level whose settings the scene takes, its pixels all the screen\'s',
     },
     rarity: SETUP_OPTIONS.rarity,
+    at: SETUP_OPTIONS.at,
+    facing: SETUP_OPTIONS.facing,
+    tune: SETUP_OPTIONS.tune,
+    hour: {
+      kind: 'number',
+      usage: 'h',
+      help: 'in the village, the hour it\'s lit for (0 to 24: by night its lamps are lit, two casting shadows)',
+    },
     rounds: { kind: 'number', usage: 'n', default: '6', help: 'the rounds of turns, each of 6 renders a side' },
     canary: { kind: 'switch', help: 'draw the scene twice: it must read at least 1.6 times once' },
     each: { kind: 'switch', help: 'time each see-through or cut-out mesh alone too, the costliest listed' },
@@ -68,7 +79,8 @@ export default {
           frame: Boolean(frame),
           hero: Boolean(hero),
         };
-        const command = { biome, view, level, rounds, rarity: options.rarity, ...switches };
+        const place = { at: options.at, facing: options.facing, hour: options.hour, tune: fixtureFrom(options).tune };
+        const command = { biome, view, level, rounds, rarity: options.rarity, ...place, ...switches };
         reports.push(await side.command('sceneCost', command));
       }
     }
