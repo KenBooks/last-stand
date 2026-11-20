@@ -65,6 +65,10 @@ const PUNCH_AT = [0, -0.04, 1.2];
 const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
 
+/** through the eyes, the fist that isn't punching as the other lands: how far it sinks on the screen and how far it's
+ *  drawn back towards him (m) */
+const PUNCH_EYES = tunable('punchEyes', { otherDown: 0.06, otherBack: 0.04 });
+
 /** a punch over its cast: how far the fist is out (a hair drawn back first, out fast, held on the blow as the skill
  *  lands at 0.5, back to the guard), and the hips' and the chest's turn led a little ahead of it */
 const PUNCH_OUT: Keys = [[0, 0], [0.1, -0.06], [0.42, 0.96], [0.52, 1], [0.6, 0.97], [0.88, 0.08], [1, 0]];
@@ -92,6 +96,7 @@ const sided = (line: readonly number[], left: boolean): number[] => (left ? [-li
 
 const _mid = new THREE.Vector3(), _at = new THREE.Vector3(), _sh = new THREE.Vector3(), _far = new THREE.Vector3();
 const _cam = new THREE.Vector3(), _pole = new THREE.Vector3(), _near = new THREE.Vector3();
+const _from = new THREE.Vector3();
 const _sq = new THREE.Quaternion(), _eq = new THREE.Quaternion();
 
 /** The point between the shoulders in the body's frame, the trunk posed as it is. */
@@ -236,14 +241,23 @@ export function fistPunch(j: Joints, k: number, lead: boolean, still: number, t:
   trunkBehind(j, k, lead, still, eyes);
   fistGuard(j, 1, t, eyes, shielded);
   const out = curve(PUNCH_OUT, k);
-  place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes);
+  if (eyes) {
+    // (through the eyes the fist itself is driven along the line from its guard to where it lands, drawn back along
+    // it first: with the arm's joints eased from the guard's to the reach's, the fist swung out on whatever arc they
+    // made and back down it, a piston with no path of its own, from play: "punches are hilarious", "where is punch
+    // trajectory in 1st person? proper motion")
+    guardAt(j, lead, true, 0, 0, _from).lerp(punchAt(j, lead, true, _far), out);
+    place(j, lead, _from, smooth(Math.min(1, Math.abs(out) * 8)), true);
+  } else place(j, lead, punchAt(j, lead, eyes, _far), Math.max(0, out), eyes);
   lineTo(lead ? fistLine.L : fistLine.R, sided(LINE.punch, lead), smooth(Math.min(1, Math.max(0, out) * 1.4)));
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
   if (shielded) return;
   if (eyes) {
-    const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead;
-    place(j, !lead, onScreen(j, [on[0], on[1], on[2]], _far), 1, eyes);
+    // (and drawn back and down a little as the other goes out, the body's turn behind the blow: held dead still it
+    // was a prop in the view's corner)
+    const on = lead ? GUARD_EYES.rear : GUARD_EYES.lead, back = Math.max(0, out);
+    place(j, !lead, onScreen(j, [on[0], on[1] - PUNCH_EYES.otherDown * back, on[2] - PUNCH_EYES.otherBack * back], _far), 1, eyes);
   } else (lead ? j.elbowR : j.elbowL).rotation.x += -0.1 * out;
 }
 
