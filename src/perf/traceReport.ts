@@ -130,6 +130,11 @@ export function traceReport(trace: Trace, code = ''): string[] {
     cut.map((frames) => (frames.length ? fmt(f(frames), digits) : '-')).join(' ');
   lines.push(`FPS history (1 s) ${history((frames) => frames.length, 0)}`);
   lines.push(`Ours history (ms a frame: update + render) ${history((frames) => meanOver(c.cpu, frames))}`);
+  // (which side of ours grew: a phone's lobby went from 100 frames a second to 62 as ours rose 5.5 ms to 8.5)
+  lines.push(`Update history (ms a frame) ${history((frames) => meanOver(c.upd, frames))}`);
+  lines.push(`Render history (ms a frame) ${history((frames) => meanOver(c.rnd, frames))}`);
+  if (c.player) lines.push(`Player history (ms a frame, its update stage) ${history((frames) => meanOver(c.player, frames))}`);
+  lines.push(`Draws history ${history((frames) => meanOver(c.draws, frames), 0)}`);
   lines.push(`Late history (ms a frame started after its time) ${history((frames) => meanOver(c.late, frames))}`);
   lines.push(`GPU history (ms a frame, our draws) ${history((frames) => meanOver(c.gpu, frames))}`);
   // (each part's own, where they came with every frame's time: WebGPU's, `perf/webgpuPasses.ts`)

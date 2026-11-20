@@ -16,7 +16,7 @@ The performance traces slow games send with their player's consent (`src/perf/AG
   report reads (`src/perf/traceReport.ts`): why it was sent (the scene, the detector's verdict, or the boot's or a
   loading bar's time), the boot's steps and how long it waited on its files, the frame rate and frame times over its
   play, the CPU and GPU, draws, triangles and programs, the quality and screen, the GPU by pass, the device; the
-  histories a second at a time (frames, ours, late, GPU, the frames' states); the five worst seconds with the marks of
+  histories a second at a time (frames, ours and its two sides, the update and the render, the player's update stage, the draws, late, GPU, the frames' states: a phone's lobby fell from 100 frames a second to 62 with its draws the same and both sides of ours half as long again, its CPU clocked down, trace K9GV-VYD0); the five worst seconds with the marks of
   the 5 s before each (a scene changing, a wave, a hero built, a cast); the worst frames with their slowest stages;
   the long frames; the stages; the shaders compiled late; the marks; and the `perf` command that plays it again on
   its hero, biome, screen and quality (`--throttle 4` guessed for a phone). Runs in its own process, no browser.
