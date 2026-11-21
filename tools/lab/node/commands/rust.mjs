@@ -5,10 +5,11 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab rust`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
-  summary: 'the Rust engine\'s frame (`src/engine`, Bulwark) beside three\'s WebGPU frame of the same scene on '
-    + 'the same page: both pictured, each one\'s render timed by the browser\'s clock and the GPU\'s timestamps, '
-    + 'their draw calls and triangles, what the engine couldn\'t draw by its kind, and the engine\'s boot '
-    + '(`--village`, `--foes n`)',
+  summary: 'the frame of the Rust engine (`src/engine`, Bulwark) where the hero stands, pictured and timed: the walk '
+    + 'of the scene and the work of the engine by the clock of the browser, the GPU by its timestamps, its draw '
+    + 'calls and triangles, what it could not draw by its kind, its boot (`--village`, `--foes n`; `--three` the '
+    + 'same stand on the WebGPU renderer of three.js, the baseline; `--census` the shown materials by what they '
+    + 'ask of a renderer; `--tune rust.debug=1` the reach of the sun alone)',
   help: 'the Rust engine against three\'s WebGPU renderer, where the hero stands: pictures, frame times, draws, boot',
   options: {
     biome: {
