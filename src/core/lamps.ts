@@ -288,6 +288,10 @@ export function setLampShadows(on: boolean): void {
   list[SHADOWS_ON] = shadowsDrawn && shadowsAllowed ? 1 : 0;
 }
 
+/** Whether the quality level reads the lamps' shadows at all (`setLampQuality`): for a renderer with a map of its own
+ *  (src/engine), which read them at every level. */
+export const lampShadowsAllowed = (): boolean => shadowsAllowed;
+
 /** Whether the shadows' map is drawn and read. */
 export const lampShadowsOn = (): boolean => list[SHADOWS_ON] > 0;
 

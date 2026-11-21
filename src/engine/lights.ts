@@ -1,7 +1,7 @@
 // The frame's lights written to the engine's globals: the sky's and the flat light summed, the sun chosen, each point
 // light of the scene and of the shown place, and the village's lamps with the shelter they light their own side of.
 import * as THREE from 'three';
-import { lampList, LAMPS_MOST } from '../core/lamps';
+import { lampList, lampShadowsAllowed, LAMPS_MOST } from '../core/lamps';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE, type Lit } from './globals';
@@ -74,6 +74,7 @@ export class Lights implements Lit {
     // the sun it's under. From play: "top down view wall/roof thinning is broken")
     g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
     let lit = 0;
+    const shadowed = lampShadowsAllowed();
     for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
@@ -82,7 +83,11 @@ export class Lights implements Lit {
       g.set(lampList.subarray(light, light + 3), at + 4);
       // (a code: which side of the shelter it lights, 2 what's under it and 1 what isn't, and four times one
       // more than its place among the maps of the lamps' shadows, none while they aren't drawn)
-      g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (this.lampSlot(lamp) + 1));
+      // (none either where the quality level reads no lamp's shadow: read at every level, a phone at Very low went
+      // from 15 ms a frame on its GPU to 50 to 69 as he walked into the hall, its lamps' sixteen reads a pixel each;
+      // a report from play, DGAP-G8SJ)
+      const slot = shadowed ? this.lampSlot(lamp) : -1;
+      g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (slot + 1));
       this.points++;
       lit++;
     }
