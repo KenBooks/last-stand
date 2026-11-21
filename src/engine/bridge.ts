@@ -21,7 +21,7 @@ const RAW_INSTANCES = 7;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
-  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, floats: 336,
+  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, floats: 344,
 };
 const MAX_POINTS = 32;
 /** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
@@ -112,12 +112,17 @@ function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
     0, 0, 0, 1);
 }
 
-/** Narkowicz's ACES fit and the screen's encoding, as the engine's shader does them: for the cleared colour. */
-function toScreen(linear: number): number {
-  const x = linear * TUNE.exposure;
-  const mapped = Math.min(1, Math.max(0, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
-  return mapped ** (1 / 2.2);
+/** The game's grade as the engine's passes after the scene read it (`fs_grade` in the engine's post.wgsl). */
+export interface Grade {
+  /** the light the small and the large areas adapt to */
+  small: number; large: number;
+  /** the highlights' room over their knee */
+  cap: number;
+  vignette: number;
+  /** a blow taken, and how low the health is (0 to 1 each) */
+  hurt: number; low: number;
 }
+const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
 
 export class Bridge {
   readonly stats: FrameStats = {
@@ -521,6 +526,7 @@ export class Bridge {
     if (!material.visible) return;
     this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw);
   }
+  private grade: Grade = PLAIN_GRADE;
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.Camera | null = null;
@@ -629,7 +635,11 @@ export class Bridge {
       fog.color.toArray(g, GLOBALS.fogColor);
       clear ??= fog.color;
     }
-    return clear ? [toScreen(clear.r), toScreen(clear.g), toScreen(clear.b)] : [0, 0, 0];
+    const grade = this.grade;
+    g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
+    g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;
+    g[GLOBALS.grade + 6] = time % 1000; g[GLOBALS.grade + 7] = TUNE.exposure;
+    return clear ? [clear.r, clear.g, clear.b] : [0, 0, 0];
   }
 
   /** The particles' pools as the engine's sprites: those blended by their alpha, then those added. */
@@ -664,8 +674,10 @@ export class Bridge {
   }
 
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */
-  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: THREE.WebGLRenderer | null = null): void {
+  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: THREE.WebGLRenderer | null = null,
+    grade: Grade = PLAIN_GRADE): void {
     const began = perfClock.now();
+    this.grade = grade;
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;

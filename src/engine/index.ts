@@ -4,7 +4,7 @@
 // engine doesn't yet (warm-ups, portraits, the overlays); only the frame's scene is the engine's. An experiment:
 // nothing of it is loaded unless the address asks.
 import type * as THREE from 'three';
-import { Bridge, TUNE } from './bridge';
+import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 
 /** How the trial went, for the lab and the console (`window.__rust`). */
@@ -59,7 +59,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
 
 /** The frame's scene drawn by the engine at `width` by `height` pixels; false if three is to draw it. */
 export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, width: number, height: number,
-  renderer: THREE.WebGLRenderer): boolean {
+  renderer: THREE.WebGLRenderer, grade?: Grade): boolean {
   const bridge = RUST.bridge;
   if (!bridge || !canvas) return false;
   if (!RUST.on) return false;
@@ -72,7 +72,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
   type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
   if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
-  bridge.draw(scene, camera, time, renderer);
+  bridge.draw(scene, camera, time, renderer, grade);
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   return true;

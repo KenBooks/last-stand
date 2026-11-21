@@ -95,11 +95,12 @@ export interface InitOutput {
     readonly engine_set_sprites: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1546: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1571: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_458: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_458_25: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_458_26: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1585: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1610: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_483: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_483_26: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_483_27: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_485: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

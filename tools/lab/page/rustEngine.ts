@@ -154,6 +154,13 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const read = new Map<keyof FrameStats, number[]>(TIMED.map((name) => [name, []]));
   const renders: number[] = [];
   const handedOver = { meshes: 0, textures: 0, materials: 0 };
+  // (what the engine or the GPU says while it draws: a refused pipeline or pass draws nothing, and says so here)
+  const said: string[] = [];
+  const consoleError = console.error;
+  console.error = (...parts: unknown[]) => {
+    said.push(parts.map(String).join(' '));
+    consoleError(...parts);
+  };
   try {
     // (what's first met here is handed over before the frames timed)
     await lab.step(10);
@@ -170,6 +177,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   } finally {
     perfClock.now = pageClock;
     lab.drawing = drawing;
+    console.error = consoleError;
   }
   const pictured = await lab.screen('the Rust engine\'s frame');
   const of = (name: keyof FrameStats): number => median(read.get(name)!);
@@ -193,5 +201,6 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
+  for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
   return { text: lines.join('\n'), problems, moments: [pictured] };
 }
