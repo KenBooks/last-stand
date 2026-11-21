@@ -1,12 +1,12 @@
 // The berserker's headshots (tools/lab `headshots --class warrior`): every kind of foe, the bosses and the training
 // dummy among them, stood alone before the warrior with both hands empty and held still, punched with Savage Fists
 // once with the crosshair on the middle of its head and once on its chest. A punch whose fist's line meets a foe's
-// head is always a critical hit (`toHead` in skills/savageFists.ts, read off the part it meets by `onHead`, as an
-// arrow's is); here the hero's own chance of one is put to nothing and the foe stands where no technique adds to it
-// (past a clean hit's reach, `CLEAN_HIT`, his aim held still before the punch), so a critical hit is the game having
-// judged a headshot. Through the eyes each head punch must strike and crit, each chest punch strike and not; from
-// outside the fist's line is level at the chest, so none crits (the owner's rule: "aim should not matter, where hit
-// lands matters").
+// head through the eyes is always a critical hit (`toHead` in skills/savageFists.ts, read off the part it meets by
+// `onHead`, as an arrow's is); here the hero's own chance of one is put to nothing and the foe stands where no
+// technique adds to it (out of a clean hit's band, `CLEAN_HIT`, his aim held still before the punch), so a critical
+// hit is the game having judged a headshot. Through the eyes each head punch must strike and crit, each chest punch
+// strike and not; from outside the fist's line is level at the chest, so none crits, and each strikes the foe the
+// crosshair is on.
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -18,6 +18,7 @@ import { letGo } from './shots';
 import { aimMiss } from './onScreen';
 import { castSolid } from '../../../src/fx/stuckArrows';
 import type { HullHit } from '../../../src/entities/models/hulls';
+import * as savageFists from '../../../src/combat/skills/savageFists';
 import {
   chestPoint, headAim, jointName, kindsOf, plantHead, trunkJoint, turnFoe, type HeadshotsOptions,
 } from './headshots';
@@ -45,17 +46,14 @@ const STILL_FRAMES = 20;
 const CLICK_FRAMES = 6;
 /** a foe's life: past every punch */
 const LIVING = 1e6;
-/** the least share of a view from outside's punches that must strike, so its "none crits" is a measure: over the
- *  shoulder the line along his facing passes beside the thin foes (the husk, the witch, the sporecaller, the
- *  thornling: "nothing on its line" traced), 17 of 26 striking */
-const OUTSIDE_STRUCK = 0.5;
 /** how far short of the fist's reach a head must be to be punched (m) */
 const REACH_SLACK = 0.05;
 
-/** how far under the eye the fist's line runs through the eyes (m: `meetsBody`'s), so a head point met by that
- *  line is put that far under the crosshair: aimed with the crosshair on the husk's head's middle, its fist went
- *  under the chin */
-const FIST_UNDER_EYE = 0.1;
+/** The game's way over the shoulder from his middle to what the crosshair is on (`underCrosshair` in
+ *  skills/savageFists.ts), where the game has it: read by name, as an A/B copies this module into main's tree,
+ *  where a named import of an export it hasn't got stops the page loading. */
+type UnderCrosshair = (player: typeof G.player, foe: Enemy, way: THREE.Vector3) => boolean;
+const fists = savageFists as { underCrosshair?: UnderCrosshair };
 /** how far behind the hero the fist's line begins (m: `meetsBody`'s `LINE_BACK`) */
 const LINE_BACK = 0.6;
 
@@ -116,18 +114,20 @@ function reachOf(foe: Enemy): number {
   return (def?.range ?? 0) + foe.radius;
 }
 
-/** Where the fist's line begins and the way it goes, as `meetsBody` takes it: through the eyes the crosshair's,
- *  `FIST_UNDER_EYE` under it; from outside level along his facing at the foe's chest, his shoulders' at the most. */
+/** Where the fist's line begins and the way it goes, as `meetsBody` takes it: through the eyes the crosshair's;
+ *  from outside level at the foe's chest, his shoulders' at the most, towards what the crosshair is on where the
+ *  game has that (`underCrosshair`), else along his facing. */
 function fistLine(foe: Enemy): { from: THREE.Vector3; way: THREE.Vector3 } {
   const hero = G.player;
   if (hero.eyes) {
     const from = G.camera.getWorldPosition(new THREE.Vector3());
-    from.y -= FIST_UNDER_EYE;
     return { from, way: G.camera.getWorldDirection(new THREE.Vector3()) };
   }
   const height = foe.obj.position.y + Math.min(1.35, foe.height * 0.7);
   const from = new THREE.Vector3(hero.pos.x, height, hero.pos.z);
-  return { from, way: new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)) };
+  const way = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  fists.underCrosshair?.(hero, foe, way);
+  return { from, way };
 }
 
 /** What the fist's middle line meets of `foe` now, by the joint it rides, and how far along it (m) against its
@@ -137,24 +137,33 @@ function fistMet(foe: Enemy): string {
   const start = from.clone().addScaledVector(way, -LINE_BACK);
   const ray = new THREE.Raycaster(start, way, 0, LINE_BACK + reachOf(foe) + 1);
   const hit = castSolid(foe.obj, ray);
-  if (!hit) return 'nothing on its line';
+  const by = `, the line ${passedBy(foe, from, way).toFixed(2)} m from its middle, ${aimSaid(foe)}`;
+  if (!hit) return `nothing on its line${by}`;
   const piece = jointName(foe, (hit as Partial<HullHit>).joint ?? hit.object);
   const along = hit.distance - LINE_BACK;
-  return `its ${piece} at ${along.toFixed(2)} m of a reach of ${reachOf(foe).toFixed(2)}`;
+  return `its ${piece} at ${along.toFixed(2)} m of a reach of ${reachOf(foe).toFixed(2)}${by}`;
 }
 
-/** Where the crosshair goes for a head punch: a point of the head the fist's line, under the eye, meets first,
- *  lifted by as much. */
+/** How far across the fist's line, seen from above, `foe`'s middle stands from it (m, + to its left). */
+function passedBy(foe: Enemy, from: THREE.Vector3, way: THREE.Vector3): number {
+  const dx = foe.pos.x - from.x;
+  const dz = foe.pos.z - from.z;
+  const across = Math.hypot(way.x, way.z) || 1;
+  return (dx * way.z - dz * way.x) / across;
+}
+
+/** Where the game's own aim is, against `foe`: how far across from its middle, seen from above, and how high. */
+function aimSaid(foe: Enemy): string {
+  const aim = G.player.aim;
+  const off = Math.hypot(aim.x - foe.pos.x, aim.z - foe.pos.z);
+  return `the game's aim ${off.toFixed(2)} m from its middle at ${aim.y.toFixed(2)} m up`;
+}
+
+/** Where the crosshair goes for a head punch: a point inside the skull the eye's line meets on the head first, as
+ *  a player puts the crosshair on it. (Through the eyes the fist's line ran 10 cm under the crosshair, and with it
+ *  on the husk's head's middle the fist went under the chin: on main its head punch is a body's.) */
 function headPunchAim(foe: Enemy): THREE.Vector3 | null {
-  const fist = () => [G.camera.position.clone().setY(G.camera.position.y - FIST_UNDER_EYE)];
-  const point = headAim(foe, fist);
-  return point && point.setY(point.y + FIST_UNDER_EYE);
-}
-
-/** Where the crosshair goes for a chest punch: its chest, lifted as a head's point is so the fist's line meets it. */
-function chestPunchAim(foe: Enemy): THREE.Vector3 {
-  const point = chestPoint(foe);
-  return point.setY(point.y + FIST_UNDER_EYE);
+  return headAim(foe, () => [G.camera.position]);
 }
 
 /**
@@ -216,7 +225,7 @@ async function punchKind(lab: Lab, kind: EnemyId, canary: boolean): Promise<Pair
     // (planted after the head is aimed at: the root has no skull of its own to aim at)
     const whole = canaryJoint(foe);
     if (canary && whole) undo = plantHead(foe, whole);
-    const chest = await punchAt(lab, foe, spot, () => chestPunchAim(foe), punched);
+    const chest = await punchAt(lab, foe, spot, () => chestPoint(foe), punched);
     return { kind, boss: Boolean(foe.boss), head, chest, canary };
   } finally {
     undo?.();
@@ -235,14 +244,14 @@ function said(punched: Punched): string {
 
 /** What's wrong with a pair, if anything. Through the eyes: a head punch that missed or was no headshot, a chest
  *  punch that missed or was one, a common foe's head or chest out of a fist's reach (a boss's may tower over him,
- *  and a miss on its body says nothing of heads). From
- *  outside: a punch that crit; a miss there is the fist's level line passing a thin or stooped body (the husk's),
- *  which says nothing of heads, and the view's punches are held to have struck at all (`OUTSIDE_STRUCK`). */
+ *  and a miss on its body says nothing of heads). From outside: a punch that crit, or that missed a common foe (the
+ *  crosshair on it, the fist goes to it: along his facing it passed beside the thin foes, `underCrosshair`). */
 function faultsOf(pair: Pair, eyes: boolean): string[] {
   const faults: string[] = [];
   const { head, chest } = pair;
   if (!eyes) {
     if (head.crit || chest.crit) faults.push('a punch was a headshot from outside, where its line is at the chest');
+    if (!pair.boss && (!head.struck || !chest.struck)) faults.push('a punch missed it');
     return faults;
   }
   if (head.outOfReach !== undefined) {
@@ -290,9 +299,6 @@ async function punchesIn(lab: Lab, view: ViewMode, options: HeadshotsOptions, fi
   }
   const struck = thrown.filter((punched) => punched.struck).length;
   lines.push(`  ${struck} of ${thrown.length} punches struck`);
-  if (!eyes && struck < thrown.length * OUTSIDE_STRUCK) {
-    problems.push(`${view}: ${struck} of ${thrown.length} punches struck: too few to say none headshots`);
-  }
   return { text: lines.join('\n'), problems };
 }
 
