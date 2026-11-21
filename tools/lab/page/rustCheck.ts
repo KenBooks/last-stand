@@ -116,6 +116,27 @@ function quality(bridge: Bridge): Checked {
   return passed(`the engine draws as the quality level asks: ${samples} samples a pixel, a shadow map of ${shadowSize}`);
 }
 
+/** the frames the lamps' shadows are given to be drawn in, a lamp a frame (24 lamps at the most) */
+const LAMP_FRAMES = 40;
+
+/** The village's lamps each with a shadow of what stands round it: none, they shone through every wall and post
+ *  (from play: "and lights have no shadows"). */
+async function lampShadows(lab: Lab, bridge: Bridge): Promise<Checked> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    for (let frame = 0; frame < LAMP_FRAMES && bridge.lampShadowsNow().waiting > 0; frame++) await lab.step(1);
+  } finally {
+    lab.drawing = drawing;
+  }
+  const { drawn, waiting } = bridge.lampShadowsNow();
+  if (waiting) return failed(`the lamps' shadows: ${waiting} lamps still wait after ${LAMP_FRAMES} frames`);
+  if (drawn < LAMPS_SHADOWED_LEAST) return failed(`the lamps' shadows: ${drawn} lamps' drawn: they shine through walls`);
+  return passed(`the lamps' shadows drawn for ${drawn} lamps`);
+}
+/** the fewest lamps of the village with a shadow drawn (it has over twenty) */
+const LAMPS_SHADOWED_LEAST = 12;
+
 /** The hall's shelter as the engine has it: set in the village with its walls' height, none in a fight. */
 function shelter(bridge: Bridge, where: string, wanted: boolean): Checked {
   const [minX, minZ, maxX, , , top] = bridge.shelterNow();
@@ -273,6 +294,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(placedRight('the village'));
       checks.push(shelter(bridge, 'the village', true));
       checks.push(quality(bridge));
+      checks.push(await lampShadows(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));

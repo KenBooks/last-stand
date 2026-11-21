@@ -14,6 +14,7 @@ import { shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
+import { LampShadows } from './lampShadows';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Lights } from './lights';
 import { Maps } from './maps';
@@ -45,6 +46,7 @@ export class Bridge {
   private materials: Materials;
   private geometries: Geometries;
   private lit: Lights;
+  private lampShadows: LampShadows;
   private particles: Sprites;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
@@ -68,6 +70,8 @@ export class Bridge {
     this.materials = new Materials(core, this.maps, this.seeKinds);
     this.geometries = new Geometries(core);
     this.lit = new Lights(core);
+    this.lampShadows = new LampShadows(core);
+    this.lit.lampSlot = (lamp) => this.lampShadows.slot(lamp);
     this.particles = new Sprites(core);
     this.stats = core.stats;
     this.skipped = core.skipped;
@@ -236,6 +240,11 @@ export class Bridge {
   /** A harness's: the samples and the shadow map's side the engine draws with. */
   qualityNow(): { samples: number; shadowSize: number } { return { samples: this.samples, shadowSize: this.shadowSize }; }
 
+  /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
+  bakeLamps(casters: THREE.Mesh[], lamps: number): void { this.lampShadows.ask(casters, lamps); }
+  /** A harness's: how many lamps' shadows are drawn, and how many wait. */
+  lampShadowsNow(): { drawn: number; waiting: number } { return this.lampShadows.now(); }
+
   /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
    *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
    *  effect first met as it was cast compiled its pipeline in that frame, 2 to 4 s from play. */
@@ -311,6 +320,8 @@ export class Bridge {
     core.frame++;
     core.count = core.boneFloats = 0;
     this.lit.begin();
+    // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
+    this.lampShadows.step((mesh) => this.addMesh(mesh));
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = 0;
     if (scene.matrixWorldAutoUpdate) {

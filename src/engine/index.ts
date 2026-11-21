@@ -68,6 +68,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
     AHEAD.prepare = (objects) => bridge.prepare(objects);
+    AHEAD.bakeLamps = (casters, lamps) => bridge.bakeLamps(casters, lamps);
     watermark();
     resize = (width, height) => engine.resize(width, height);
     RUST.boot.wasmMs = loaded - began;

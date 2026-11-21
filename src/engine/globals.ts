@@ -47,7 +47,8 @@ const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), proje
 const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
 
 /** A perspective camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in. */
-function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4): THREE.Matrix4 {
+export function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4):
+  THREE.Matrix4 {
   const { near, far } = camera;
   if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
     const c = camera as THREE.PerspectiveCamera;

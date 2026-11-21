@@ -6,6 +6,7 @@
 // as the world is built (the merged caster the shadow maps alone draw, the instanced posts and trunks); a leaf card,
 // which casts by its picture's alpha, is left out (drawn whole, it would cast a square).
 import { RUNNING } from '../core/rendererChoice';
+import { AHEAD } from '../engine/pipelinesAside';
 import * as THREE from 'three';
 import { lampAtlasTexture, lampShadowMap, setLampShadows, SHADOW_COLUMNS, SHADOW_TILE, type LampPlace } from '../core/lamps';
 import { lampDistanceMaterial } from '../core/lampNodes';
@@ -171,8 +172,14 @@ function bakeOnWebGPU(renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamp
 
 /** Each of `lamps`' shadows of what stands still under `place` drawn into the lamps' map, and the map put to use. */
 export function bakeLampShadows(renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
-  // (the engine reads no lamp's shadows: nothing of three's to draw them into, `drawStillShadows` in props.ts)
-  if (RUNNING.rust) return;
+  // (the engine draws its own, of the same casters: src/engine/lampShadows.ts)
+  if (RUNNING.rust) {
+    place.updateMatrixWorld(true);
+    const casters: THREE.Mesh[] = [];
+    place.traverse((object) => { if (casts(object as THREE.Mesh)) casters.push(object as THREE.Mesh); });
+    AHEAD.bakeLamps?.(casters, lamps.length);
+    return;
+  }
   if (WEBGPU) {
     bakeOnWebGPU(renderer, place, lamps);
     return;

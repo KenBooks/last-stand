@@ -293,6 +293,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
       + `its first frame ${boot.firstFrameMs.toFixed(0)} ms`,
   ];
   lines.push(`  lit by: ${bridge.lights()}`);
+  const lamps = bridge.lampShadowsNow();
+  lines.push(`  the lamps' shadows: ${lamps.drawn} lamps' drawn, ${lamps.waiting} waiting`);
   if (command.census) lines.push(...census(G.scene, G.camera));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];

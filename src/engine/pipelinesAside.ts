@@ -14,6 +14,9 @@ import type * as THREE from 'three';
 export const AHEAD = {
   /** `objects` and all under them handed to the engine with the pipelines they'll draw with, shown or not */
   prepare: null as ((objects: readonly THREE.Object3D[]) => void) | null,
+  /** the first `lamps` lamps' shadows drawn of `casters`, which stand still (world/lampAtlas.ts asks, as it asks
+   *  three for its atlas; `lampShadows.ts` draws them) */
+  bakeLamps: null as ((casters: THREE.Mesh[], lamps: number) => void) | null,
 };
 
 /** the engine's scene pipelines: how many were asked for, and how many are still compiling */

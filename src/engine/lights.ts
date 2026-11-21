@@ -18,6 +18,9 @@ export class Lights implements Lit {
   /** the frame's sun: the strongest directional light met */
   sun: THREE.DirectionalLight | null = null;
 
+  /** a lamp's place among the maps of the lamps' shadows, -1 for none (`lampShadows.ts`; set by the bridge) */
+  lampSlot: (lamp: number) => number = () => -1;
+
   constructor(private core: Core) {}
 
   /** A new frame: no light met yet. */
@@ -54,7 +57,7 @@ export class Lights implements Lit {
   }
 
   /** The village's lamps (core/lamps.ts `lampList`: a place and a light each, after its shelter) as point lights,
-   *  soft close to as the game's are. They shine through walls here: the engine has none of their shadows. */
+   *  soft close to as the game's are, each with its place among the maps of their shadows once drawn. */
   addLamps(): void {
     const g = this.core.globals;
     // (the list's first entry: the shelter, the hall of heroes' inside)
@@ -77,8 +80,9 @@ export class Lights implements Lit {
       const at = GLOBALS.points + this.points * 8;
       g.set(lampList.subarray(place, place + 4), at);
       g.set(lampList.subarray(light, light + 3), at + 4);
-      // (which side of the shelter it lights: -2 what's under it, -1 what isn't)
-      g[at + 7] = lampList[light + 3] > 0 ? -2 : -1;
+      // (a code: which side of the shelter it lights, 2 what's under it and 1 what isn't, and four times one
+      // more than its place among the maps of the lamps' shadows, none while they aren't drawn)
+      g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (this.lampSlot(lamp) + 1));
       this.points++;
       lit++;
     }
