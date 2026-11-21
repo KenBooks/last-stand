@@ -226,12 +226,23 @@ export function lightTheLamps(): void {
   }
 }
 
-/** A lamp's place: where it burns, how far it reaches (m), and whether it lights the shelter's inside. */
-export interface LampPlace { at: THREE.Vector3; reach: number; inside: boolean }
+/** A lamp's place: where it burns, how far it reaches (m), and whether it lights the shelter's inside; and for a
+ *  renderer that bakes its light (src/engine/lightCache.ts) its colour times its intensity at its fullest, where
+ *  every lamp on its side of the shelter dims and brightens with it (the street's by the hour, the hall's torches). */
+export interface LampPlace { at: THREE.Vector3; reach: number; inside: boolean; full?: [number, number, number] }
 
 /** whether each lamp lights the shelter's inside, and how far it reaches (m), as placed */
 let insides: boolean[] = [];
 let reaches: number[] = [];
+/** each lamp's light at its fullest, where it was said (`LampPlace.full`) */
+let fulls: (LampPlace['full'])[] = [];
+
+/** Lamp `i`'s light at its fullest and its side of the shelter, if its place said its fullest: one whose light
+ *  may be baked. */
+export function lampStill(i: number): { full: [number, number, number]; inside: boolean } | null {
+  const full = fulls[i];
+  return full ? { full, inside: insides[i] } : null;
+}
 /** a quality's share of each lamp's reach, and whether it reads the shadows' map (`setLampQuality`); and whether the
  *  map is there to read (`setLampShadows`) */
 let reachBy = 1;
@@ -262,6 +273,7 @@ export function placeLamps(shelter: [number, number, number, number], places: re
   list[SHELTER_READ] = SHELTER_OFF;
   list.set(shelter, 0);
   insides = places.slice(0, LAMPS_MOST).map((place) => place.inside);
+  fulls = places.slice(0, LAMPS_MOST).map((place) => place.full);
   for (const [i, place] of places.slice(0, LAMPS_MOST).entries()) {
     list.set([place.at.x, place.at.y, place.at.z, place.reach * reachBy], placeOf(i));
   }

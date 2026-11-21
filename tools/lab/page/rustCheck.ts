@@ -152,6 +152,18 @@ async function lampShadows(lab: Lab, bridge: Bridge): Promise<Checked> {
   if (drawn < LAMPS_SHADOWED_LEAST) return failed(`the lamps' shadows: ${drawn} lamps' drawn: they shine through walls`);
   return passed(`the lamps' shadows drawn for ${drawn} lamps`);
 }
+/** The village's still lamps in the engine's light cache (`src/engine/lightCache.ts`): most of them baked, within
+ *  what its volume may take of the GPU's memory, and each left to the frame's own loop near itself alone. */
+function lightCache(bridge: Bridge): Checked {
+  const cache = bridge.lightCacheNow();
+  const megabytes = cache.cells * CACHE_CELL_BYTES / 1e6;
+  if (cache.lamps < LAMPS_SHADOWED_LEAST) return failed(`the light cache: ${cache.lamps} lamps baked`);
+  if (megabytes > CACHE_MOST_MB) return failed(`the light cache: ${megabytes.toFixed(1)} MB, ${CACHE_MOST_MB} at the most`);
+  return passed(`the light cache: ${cache.lamps} lamps baked in ${megabytes.toFixed(1)} MB (cells of ${cache.cell.toFixed(2)} m)`);
+}
+/** a cell of the light cache on the GPU, bytes, and the most its volume may take, MB */
+const CACHE_CELL_BYTES = 16;
+const CACHE_MOST_MB = 12;
 /** the fewest lamps of the village with a shadow drawn (it has over twenty) */
 const LAMPS_SHADOWED_LEAST = 12;
 
@@ -462,6 +474,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(quality(bridge));
       checks.push(viewOffsetKept());
       checks.push(await lampShadows(lab, bridge));
+      checks.push(lightCache(bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
       checks.push(await flamesAtFewerPixels(lab, bridge));

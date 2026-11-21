@@ -33,6 +33,11 @@ export class LampShadows {
   /** the lamps whose faces are drawn: their lights read them */
   private drawn = new Set<number>();
   private camera = new THREE.PerspectiveCamera(90, 1, LAMP_NEAR, 1);
+  /** how far a lamp reaches in the frame's own loop, which reads its faces that far (`lightCache.ts`; set by the
+   *  bridge) */
+  reachOf: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
+  /** how many lamps were last asked for */
+  private asked = 0;
 
   constructor(private core: Core) {}
 
@@ -40,7 +45,15 @@ export class LampShadows {
    *  drawn before keeps its maps in use until it's drawn again. */
   ask(casters: THREE.Mesh[], lamps: number): void {
     this.casters = casters;
-    this.waiting = Array.from({ length: Math.min(lamps, LAMPS_MOST) }, (_, lamp) => lamp);
+    this.asked = Math.min(lamps, LAMPS_MOST);
+    this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
+  }
+
+  /** Every lamp's faces to draw again, none read meanwhile: the lamps reach another distance in the frame's loop
+   *  now, and a face's depth is laid out by how far its lamp reaches. */
+  again(): void {
+    this.drawn.clear();
+    this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
   }
 
   /** A lamp's place among the maps (its own number), or -1 while its faces aren't drawn. */
@@ -64,7 +77,7 @@ export class LampShadows {
     const core = this.core, place = (1 + lamp * 2) * 4;
     at.fromArray(lampList, place);
     // (as far as its light is read: the lit shader takes the faces' far plane from the light's own reach)
-    const reach = lampList[place + 3];
+    const reach = this.reachOf(lamp, lampList[place + 3]);
     if (!(reach > LAMP_NEAR)) return;
     core.count = core.boneFloats = 0;
     for (const mesh of this.casters) {

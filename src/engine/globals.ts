@@ -10,7 +10,7 @@ export const GLOBALS = {
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
   seeHall: 352, seeKinds: 360, floats: 1000,
   // (past what the page clears each frame: the lights' grid, the engine's own, and the arms' view)
-  cells: 1000, armsView: 1004, all: 1020,
+  cells: 1000, armsView: 1004, lightCache: 1020, all: 1032,
 };
 /** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
@@ -29,6 +29,11 @@ export const TUNE = tunable('rust', {
    *  lamps' shadows, the bloom's passes */
   points: 1,
   lampShadows: 1,
+  /** the village's still lamps baked into the engine's light cache (`lightCache.ts`; 0: every lamp whole in the
+   *  frame's own loop, to compare) */
+  lightCache: 1,
+  /** the baked lamps hidden by what stands still (0: their light through every wall, a profile's) */
+  cacheShadows: 1,
   bloom: 1,
   /** what asks for it drawn at a share of the scene's pixels (0: with the scene, a profile's) */
   lowRes: 1,

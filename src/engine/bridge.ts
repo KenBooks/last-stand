@@ -16,6 +16,7 @@ import { casterGeometry } from '../entities/models/farDetail';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
 import { LampShadows } from './lampShadows';
+import { LightCache } from './lightCache';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Lights } from './lights';
 import { Maps } from './maps';
@@ -50,6 +51,7 @@ export class Bridge {
   private geometries: Geometries;
   private lit: Lights;
   private lampShadows: LampShadows;
+  private lightCache: LightCache;
   private particles: Sprites;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
@@ -75,6 +77,8 @@ export class Bridge {
     this.lit = new Lights(core);
     this.lampShadows = new LampShadows(core);
     this.lit.lampSlot = (lamp) => this.lampShadows.slot(lamp);
+    this.lightCache = new LightCache(core);
+    this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
     this.particles = new Sprites(core);
     this.stats = core.stats;
     this.skipped = core.skipped;
@@ -280,7 +284,12 @@ export class Bridge {
   }
 
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
-  bakeLamps(casters: THREE.Mesh[], lamps: number): void { this.lampShadows.ask(casters, lamps); }
+  bakeLamps(casters: THREE.Mesh[], lamps: number): void {
+    this.lampShadows.ask(casters, lamps);
+    this.lightCache.ask(casters);
+  }
+  /** A harness's: the lamps in the engine's light cache and its last bake (`lightCache.ts`). */
+  lightCacheNow(): ReturnType<LightCache['now']> { return this.lightCache.now(); }
   /** A harness's: how many lamps' shadows are drawn, and how many wait. */
   lampShadowsNow(): { drawn: number; waiting: number } { return this.lampShadows.now(); }
 
@@ -369,6 +378,7 @@ export class Bridge {
     core.count = core.boneFloats = 0;
     this.lit.begin();
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
+    if (this.lightCache.step((mesh) => this.addMesh(mesh))) this.lampShadows.again();
     this.lampShadows.step((mesh) => this.addMesh(mesh));
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
@@ -383,6 +393,7 @@ export class Bridge {
     this.walk(scene, camera);
     for (const light of shownPointLights()) this.lit.add(light);
     this.lit.addLamps();
+    this.lightCache.tell();
     this.seeKinds.write();
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
     this.quality(this.grade.samples ?? 4, shadowSizeOf(this.lit.sun));

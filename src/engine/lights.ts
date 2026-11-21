@@ -12,6 +12,18 @@ const v3 = new THREE.Vector3();
 /** how far into the hall's walls the shelter reaches past their inner faces (m; the walls are 0.6 thick) */
 export const SHELTER_INTO_WALLS = 0.3;
 
+/** The shelter as the engine reads it: the hall's box (its least x and z, its most) reaching `SHELTER_INTO_WALLS`
+ *  into its walls, and its walls' tops. */
+export function shelterBox(): [number, number, number, number, number] {
+  // (its box is the walls' inner faces: a pixel of a face fell inside it or out by the rounding of where it
+  // lies, lit row by row as the hall's inside and as the square, the back wall striped grey. From play: "hall
+  // walls are z-fighting or smth like that". It reaches half way into the walls)
+  // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
+  // the sun it's under. From play: "top down view wall/roof thinning is broken")
+  return [lampList[0] - SHELTER_INTO_WALLS, lampList[1] - SHELTER_INTO_WALLS, lampList[2] + SHELTER_INTO_WALLS,
+    lampList[3] + SHELTER_INTO_WALLS, TERRACE.high + HALL.wallHigh];
+}
+
 export class Lights implements Lit {
   /** the point lights written this frame */
   points = 0;
@@ -20,6 +32,9 @@ export class Lights implements Lit {
 
   /** a lamp's place among the maps of the lamps' shadows, -1 for none (`lampShadows.ts`; set by the bridge) */
   lampSlot: (lamp: number) => number = () => -1;
+  /** how far a lamp reaches in the frame's own loop: all its reach, or as near as its baked light leaves it
+   *  (`lightCache.ts`; set by the bridge) */
+  lampReach: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
 
   constructor(private core: Core) {}
 
@@ -62,18 +77,10 @@ export class Lights implements Lit {
   addLamps(): void {
     const g = this.core.globals;
     // (the list's first entry: the shelter, the hall of heroes' inside)
-    g.set(lampList.subarray(0, 4), GLOBALS.shelter);
-    // (its box is the walls' inner faces: a pixel of a face fell inside it or out by the rounding of where it
-    // lies, lit row by row as the hall's inside and as the square, the back wall striped grey. From play: "hall
-    // walls are z-fighting or smth like that". It reaches half way into the walls)
-    g[GLOBALS.shelter] -= SHELTER_INTO_WALLS;
-    g[GLOBALS.shelter + 1] -= SHELTER_INTO_WALLS;
-    g[GLOBALS.shelter + 2] += SHELTER_INTO_WALLS;
-    g[GLOBALS.shelter + 3] += SHELTER_INTO_WALLS;
+    const shelter = shelterBox();
+    g.set(shelter.slice(0, 4), GLOBALS.shelter);
     g[GLOBALS.shelter + 4] = TUNE.shelterSky;
-    // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
-    // the sun it's under. From play: "top down view wall/roof thinning is broken")
-    g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
+    g[GLOBALS.shelter + 5] = shelter[4];
     let lit = 0;
     const shadowed = lampShadowsAllowed() && TUNE.lampShadows > 0;
     for (let lamp = 0; TUNE.points && lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
@@ -81,6 +88,7 @@ export class Lights implements Lit {
       if (lampList[light + 3] === 0) continue;
       const at = GLOBALS.points + this.points * 8;
       g.set(lampList.subarray(place, place + 4), at);
+      g[at + 3] = this.lampReach(lamp, g[at + 3]);
       g.set(lampList.subarray(light, light + 3), at + 4);
       // (a code: which side of the shelter it lights, 2 what's under it and 1 what isn't, and four times one
       // more than its place among the maps of the lamps' shadows, none while they aren't drawn)

@@ -1037,8 +1037,15 @@ function lampLight(i: number): { intensity: number; reach: number } {
  *  shelter: the torches light it alone, the street lamps all but it. Returns their places. */
 function placeTheLamps(): LampPlace[] {
   const shelter: [number, number, number, number] = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront];
+  // (a street lamp's fullest is the night's, a torch's in the hall its own; the door's torches, steady among the
+  // street lamps on their side of the hall's walls, say none)
+  const street = G.arena.village.lanterns.length;
+  const fullest = (i: number): [number, number, number] | undefined => {
+    const by = i < street ? LAMPLIGHT.intensity : lampInside(i) ? lampLight(i).intensity : 0;
+    return by > 0 ? [LAMP_COLOR.r * by, LAMP_COLOR.g * by, LAMP_COLOR.b * by] : undefined;
+  };
   const places = allLamps().map((at, i) => ({
-    at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: lampInside(i),
+    at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: lampInside(i), full: fullest(i),
   }));
   placeLamps(shelter, places);
   return places;
