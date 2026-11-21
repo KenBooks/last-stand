@@ -60,7 +60,13 @@ export interface FrameStats {
   newMaterials: number;
 }
 
-interface MaterialEntry { id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number }
+interface MaterialEntry {
+  id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
+  /** how often its numbers moved, and whether the engine's material is its own by now */
+  changes: number; own: boolean;
+}
+/** how many times a material's numbers may move before it stops sharing the engine's materials */
+const SHARED_CHANGES = 8;
 interface GeometryEntry { id: number; version: number }
 interface TextureEntry { id: number; version: number }
 interface SetEntry { id: number; version: number; count: number }
@@ -71,7 +77,7 @@ type AnyMaterial = THREE.Material & Partial<{
   normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
   isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
   isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
-  positionNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
+  positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
 }>;
 
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
@@ -235,7 +241,9 @@ export class Bridge {
   private describe(material: AnyMaterial): number {
     if (!material.color || material.isShaderMaterial) return -1;
     // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
-    if (material.positionNode || material.fragmentNode || material.vertexNode) return -1;
+    // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
+    // which the engine leaves out: the Thornwood's grass stands still)
+    if ((material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode) return -1;
     const p = this.scratchParams, maps = this.scratchMaps;
     const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial);
     const map = material.map ?? null;
@@ -265,36 +273,65 @@ export class Bridge {
     return blend | (side << 2) | (material.depthWrite ? 16 : 0);
   }
 
-  /** A material's id, its numbers sent again if they moved since the last frame it was drawn in; 0: not drawn. */
+  /** The engine's material for the numbers, maps and key in the scratch arrays: one for every material alike. */
+  private sharedId(key: number): number {
+    const signature = `${key}|${this.scratchMaps.join(',')}|${this.scratchParams.join(',')}`;
+    let id = this.shared.get(signature);
+    if (id === undefined) {
+      id = this.engine.add_material(this.scratchParams, this.scratchMaps, key);
+      this.shared.set(signature, id);
+      this.held.materials++;
+      this.stats.newMaterials++;
+      this.freshViews();
+    }
+    return id;
+  }
+  /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
+   *  one draw call (each foe's pieces have materials of their own) */
+  private shared = new Map<string, number>();
+
+  /** A material's id, its numbers sent again if they moved since the last frame it was drawn in; 0: not drawn.
+   *  A material alike another shares its engine material; one whose numbers keep moving (a glow that pulses) is
+   *  given one of its own after `SHARED_CHANGES` moves, and written in place from then on. */
   private materialId(material: AnyMaterial): number {
     let entry = this.materials.get(material);
     if (entry && entry.seen === this.frame) return entry.id;
     const key = this.describe(material);
     if (key < 0) {
-      if (!entry) this.materials.set(material, entry = { id: 0, params: new Float32Array(0), maps: new Uint32Array(0), key: -1, seen: 0 });
+      if (!entry) {
+        entry = { id: 0, params: new Float32Array(0), maps: new Uint32Array(0), key: -1, seen: 0, changes: 0, own: false };
+        this.materials.set(material, entry);
+      }
       entry.seen = this.frame;
       return 0;
     }
     const p = this.scratchParams, maps = this.scratchMaps;
     if (!entry || !entry.id) {
-      const id = this.engine.add_material(p, maps, key);
-      entry = { id, params: p.slice(), maps: maps.slice(), key, seen: this.frame };
+      entry = { id: this.sharedId(key), params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: false };
       this.materials.set(material, entry);
-      this.held.materials++;
-      this.stats.newMaterials++;
-      this.freshViews();
-      return id;
+      return entry.id;
     }
     entry.seen = this.frame;
-    const sameMaps = entry.key === key && maps.every((map, slot) => map === entry.maps[slot]);
-    if (!sameMaps) {
-      this.engine.replace_material(entry.id, p, maps, key);
-      entry.maps.set(maps); entry.params.set(p); entry.key = key;
-    } else if (p.some((value, index) => value !== entry.params[index])) {
-      this.engine.set_material_params(entry.id, p);
-      entry.params.set(p);
+    const kept = entry;
+    const sameMaps = kept.key === key && maps.every((map, slot) => map === kept.maps[slot]);
+    if (sameMaps && !p.some((value, index) => value !== kept.params[index])) return kept.id;
+    kept.changes++;
+    if (!kept.own && kept.changes > SHARED_CHANGES) {
+      kept.own = true;
+      kept.id = this.engine.add_material(p, maps, key);
+      this.held.materials++;
+      this.freshViews();
+    } else if (!kept.own) {
+      kept.id = this.sharedId(key);
+    } else if (sameMaps) {
+      this.engine.set_material_params(kept.id, p);
+    } else {
+      this.engine.replace_material(kept.id, p, maps, key);
     }
-    return entry.id;
+    kept.maps.set(maps);
+    kept.params.set(p);
+    kept.key = key;
+    return kept.id;
   }
 
   /** An attribute's values as floats, whatever array holds them (interleaved, normalized bytes...). */
