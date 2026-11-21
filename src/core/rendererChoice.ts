@@ -3,7 +3,7 @@
 // page loads (the renderer is made once, before anything is built): `?renderer=`, `&meshlets=1`, `&lights=each`.
 
 /** a renderer the pause menu offers */
-export type RendererKind = 'webgl' | 'webgpu';
+export type RendererKind = 'webgl' | 'webgpu' | 'rust';
 
 /** what the address says of the renderer */
 const ADDRESS_PARAMS = ['renderer', 'meshlets', 'lights'];
@@ -19,6 +19,8 @@ export const RUNNING = {
   webgpu: asked === 'webgpu' || asked === 'webgpu-gl' || asked === 'rust',
   /** the frame's scene drawn by our Rust engine, over three's WebGPU renderer (`src/engine`, an experiment) */
   rust: asked === 'rust',
+  /** which of the pause menu's three this page runs */
+  kind: (asked === 'rust' ? 'rust' : asked === 'webgpu' || asked === 'webgpu-gl' ? 'webgpu' : 'webgl') as RendererKind,
   /** on WebGPURenderer's WebGL 2 backend */
   webgpuOnGl: asked === 'webgpu-gl',
   /** three's GPU-driven meshlets */

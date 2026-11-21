@@ -16,7 +16,11 @@ import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
 // (the Rust engine's trial draws each body on its own too: a crowd's rows are read by a shader of three's)
-const ON = typeof location === 'undefined' || !/[?&]crowd=0|[?&]renderer=rust/.test(location.search);
+// (this branch's plain address is the engine's: crowds only where the address asks for one of three's renderers. Read
+// as `renderer=rust` in the address alone, the preview's plain address drew every foe in a crowd the engine never
+// draws: from play, "in fight all enemies are hidden")
+const ON = typeof location === 'undefined'
+  || (/[?&]renderer=(webgl|webgpu)/.test(location.search) && !/[?&]crowd=0/.test(location.search));
 
 /** A body drawn in its kind's crowd. */
 export interface CrowdBody {

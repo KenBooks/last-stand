@@ -1323,7 +1323,9 @@ function renderVolumeOptions(): void {
 
 /** what the renderer's row says */
 const RENDERER_NOTES = {
-  trial: 'WebGPU is a trial, slower for now. It opens at its own address: the game\'s plain address stays on WebGL.',
+  // (this branch: the engine alone is offered. From the owner: "Rust renderer should remove WebGL And webGPU, we dont
+  // intend to support them"; three's two still load by the address, `?renderer=webgpu`, to compare a frame with)
+  trial: 'Bulwark, our own engine in Rust, draws the game. It needs WebGPU.',
   held: 'Switch renderer in the lobby, out of co-op: it loads the game again.',
   missing: 'This browser or graphics card has no WebGPU.',
 };
@@ -1337,8 +1339,8 @@ function initRendererOptions(): void {
 
 /** Leaves for `kind`'s address, unless it runs already or the machine has none to give. */
 async function switchRenderer(kind: RendererKind): Promise<void> {
-  if ((kind === 'webgpu') === RUNNING.webgpu) return;
-  if (kind === 'webgpu' && !await navigator.gpu?.requestAdapter().catch(() => null)) {
+  if (kind === RUNNING.kind) return;
+  if (kind !== 'webgl' && !await navigator.gpu?.requestAdapter().catch(() => null)) {
     $('.renderer-note').textContent = RENDERER_NOTES.missing;
     return;
   }
@@ -1349,7 +1351,7 @@ async function switchRenderer(kind: RendererKind): Promise<void> {
 function renderRendererOptions(): void {
   const held = G.mode === 'run' || isCoop();
   document.querySelectorAll<HTMLButtonElement>('#opt-renderer button').forEach((b) => {
-    b.classList.toggle('active', (b.dataset.r === 'webgpu') === RUNNING.webgpu);
+    b.classList.toggle('active', b.dataset.r === RUNNING.kind);
     b.disabled = held;
   });
   $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;

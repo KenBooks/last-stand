@@ -748,39 +748,26 @@ export class Bridge {
   }
 
   /**
-   * The scene's matrices made as three's `updateMatrixWorld` makes them, but only for what moved: an object's own
-   * matrix is composed again when its position, turn or scale differ from the last it was composed from, and its
-   * place in the world when it or something it stands in moved. (three composes and multiplies every object every
-   * frame: a third of the render's CPU with the engine drawing, most of it for props that never move.) A kind with
-   * an update of its own (a skinned mesh, a camera) is left to it.
+   * The scene's matrices made as three's `updateMatrixWorld` makes them, but for a whole place that isn't shown (a
+   * battleground the hero isn't in, the village left for a run: a hidden object within `HIDDEN_PLACES` levels of the
+   * scene), which is left as it stands until it's shown again and made whole then. Every biome is in the scene from
+   * the boot, and three walks them all each frame: a third of the render's CPU with the engine drawing. What's shown
+   * is three's own update, every object every frame: made only where a position, turn or scale had changed, a hero
+   * the game had placed by his matrices alone stood a pace off his own outline in the hall of heroes (from play:
+   * "bugs").
    */
-  private placeMoved(object: THREE.Object3D, moved: boolean, depth: number): void {
-    const kept = object as unknown as { placedFrom?: Float64Array; placedLate?: boolean };
-    // (a whole place that isn't shown, a battleground the hero isn't in or the village left for a run, is left as
-    // it stands until it's shown again: every biome is in the scene from the boot, and three walks them all)
-    if (!object.visible && depth > 0 && depth <= HIDDEN_PLACES) {
-      if (moved) kept.placedLate = true;
+  private placeShown(object: THREE.Object3D, moved: boolean, depth: number): void {
+    const kept = object as unknown as { placedLate?: boolean };
+    if (!object.visible && depth > 0) {
+      kept.placedLate = true;
       return;
     }
     if (kept.placedLate) {
       kept.placedLate = false;
       moved = true;
     }
-    if (object.updateMatrixWorld !== PLAIN_UPDATE) { object.updateMatrixWorld(moved); return; }
-    if (object.matrixAutoUpdate) {
-      const p = object.position, q = object.quaternion, s = object.scale;
-      let from = kept.placedFrom;
-      if (!from) {
-        from = kept.placedFrom = new Float64Array(10);
-        from[0] = NaN;
-      }
-      if (from[0] !== p.x || from[1] !== p.y || from[2] !== p.z || from[3] !== q.x || from[4] !== q.y || from[5] !== q.z
-        || from[6] !== q.w || from[7] !== s.x || from[8] !== s.y || from[9] !== s.z) {
-        from[0] = p.x; from[1] = p.y; from[2] = p.z; from[3] = q.x; from[4] = q.y; from[5] = q.z; from[6] = q.w;
-        from[7] = s.x; from[8] = s.y; from[9] = s.z;
-        object.updateMatrix();
-      }
-    }
+    if (depth === HIDDEN_PLACES || object.updateMatrixWorld !== PLAIN_UPDATE) { object.updateMatrixWorld(moved); return; }
+    if (object.matrixAutoUpdate) object.updateMatrix();
     if (object.matrixWorldNeedsUpdate || moved) {
       if (object.matrixWorldAutoUpdate) {
         if (object.parent) object.matrixWorld.multiplyMatrices(object.parent.matrixWorld, object.matrix);
@@ -790,7 +777,7 @@ export class Bridge {
       moved = true;
     }
     const children = object.children;
-    for (let i = 0; i < children.length; i++) this.placeMoved(children[i], moved, depth + 1);
+    for (let i = 0; i < children.length; i++) this.placeShown(children[i], moved, depth + 1);
   }
 
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
@@ -920,7 +907,7 @@ export class Bridge {
     this.skipped.clear();
     stats.newMeshes = stats.newTextures = stats.newMaterials = 0;
     if (scene.matrixWorldAutoUpdate) {
-      if (TUNE.still) this.placeMoved(scene, false, 0);
+      if (TUNE.still) this.placeShown(scene, false, 0);
       else scene.updateMatrixWorld();
     }
     if (!camera.parent && camera.matrixWorldAutoUpdate) camera.updateMatrixWorld();
