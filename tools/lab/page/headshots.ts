@@ -32,6 +32,8 @@ export interface HeadshotsOptions {
   trace?: boolean;
 }
 
+/** the views shot in by default: over the shoulder the head shots are headshots, top-down none */
+const SHOT_VIEWS: ViewMode[] = ['third', 'top'];
 /** the ranger's aimed shots, the ones that can headshot (Hailfletch's rain can't) */
 const AIMED = ['nockShot', 'fanShot', 'piercingShot'];
 /** where the hero stands (m), clear of the props, with room before him for a boss */
@@ -88,12 +90,12 @@ function headJoint(foe: Enemy): THREE.Object3D | null {
 
 /** The joint the trunk hangs from, the canary's stand-in for the head: the chest's, or the head's parent's parent
  *  (the dummy's sway, from which its sack hangs). */
-function trunkJoint(foe: Enemy): THREE.Object3D | null {
+export function trunkJoint(foe: Enemy): THREE.Object3D | null {
   return foe.model.joints?.chest ?? foe.model.head?.parent ?? null;
 }
 
 /** Sets which joint the model's head is (the canary); returns the undo. */
-function plantHead(foe: Enemy, joint: THREE.Object3D): () => void {
+export function plantHead(foe: Enemy, joint: THREE.Object3D): () => void {
   const model = foe.model;
   if (model.joints) {
     const was = model.joints.head;
@@ -165,13 +167,17 @@ const INSIDE = 0.5;
  *  the Rift Witch's small, bobbing head as her idle moved it, a shot in a run in three missing or meeting her hood */
 const HEAD_MARGIN = 0.04;
 
+/** Where a bow's head shot is seen from: the bow, and the camera the crosshair aims by. */
+const bowAndEye = (): THREE.Vector3[] => [G.player.castPoint, G.camera.position];
+
 /**
  * Where a head shot is aimed: inside `foe`'s skull, the point nearest its middle that the bow's line and the camera's
  * (the crosshair's, which the game aims by) both meet on its head before anything else of it. The middle alone: in
  * some frames of the Colossus's idle a piece of it stood before it, and the game rightly judged the shot a body's.
  * Null where it has no head; its middle where no point is met so (the shot is then likely to be judged a body's).
+ * `froms` are where the lines start (a punch's: the camera's alone, as its fist's line is the crosshair's).
  */
-function headAim(foe: Enemy): THREE.Vector3 | null {
+export function headAim(foe: Enemy, froms: () => THREE.Vector3[] = bowAndEye): THREE.Vector3 | null {
   const skull = skullOf(foe);
   if (!skull.length) return null;
   const middle = skull.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(skull.length);
@@ -179,7 +185,7 @@ function headAim(foe: Enemy): THREE.Vector3 | null {
   const tries = [middle];
   for (let i = 0; i < skull.length; i += step) tries.push(middle.clone().lerp(skull[i], INSIDE));
   tries.sort((a, b) => a.distanceToSquared(middle) - b.distanceToSquared(middle));
-  const seen = (point: THREE.Vector3) => [G.player.castPoint, G.camera.position].every(
+  const seen = (point: THREE.Vector3) => froms().every(
     (from) => metFrom(foe, from, point) === 'head',
   );
   const clear = (point: THREE.Vector3) => aroundOnScreen(point).every(seen);
@@ -195,14 +201,14 @@ function aroundOnScreen(point: THREE.Vector3): THREE.Vector3[] {
 }
 
 /** Turns `foe` to face the hero (`side` 0) or a quarter round from him (1), posed so for a few frames. */
-async function turnFoe(lab: Lab, foe: Enemy, side: number): Promise<void> {
+export async function turnFoe(lab: Lab, foe: Enemy, side: number): Promise<void> {
   foe.facing = G.player.facing + Math.PI + side * Math.PI / 2;
   foe.targetFacing = foe.facing;
   await lab.step(TURN_FRAMES);
 }
 
 /** Where its chest shot is aimed: its chest joint, or a share of its height over its middle. */
-function chestPoint(foe: Enemy): THREE.Vector3 {
+export function chestPoint(foe: Enemy): THREE.Vector3 {
   const chest = foe.model.joints?.chest;
   if (chest) return chest.getWorldPosition(new THREE.Vector3());
   return foe.pos.clone().setY(foe.obj.position.y + foe.height * CHEST_SHARE);
@@ -301,7 +307,7 @@ function gameAim(): THREE.Vector3 {
 const LOOK_BACK = 4;
 
 /** The name of the rig's joint (or the dummy's head) that a piece rides: the nearest named one up from it. */
-function jointName(foe: Enemy, piece: THREE.Object3D): string {
+export function jointName(foe: Enemy, piece: THREE.Object3D): string {
   const joints = Object.entries(foe.model.joints ?? {}) as [string, THREE.Object3D][];
   const named = new Map<THREE.Object3D, string>(joints.map(([name, joint]) => [joint, name]));
   if (foe.model.head) named.set(foe.model.head, 'head');
@@ -359,7 +365,7 @@ function faultsOf(pair: Pair, close: boolean): string[] {
 const TOP_STRUCK = 0.75;
 
 /** Every kind of foe a wave or the yard can bring, or those named. */
-function kindsOf(named: string[]): EnemyId[] {
+export function kindsOf(named: string[]): EnemyId[] {
   const all = Object.keys(ENEMIES) as EnemyId[];
   if (!named.length) return all;
   return all.filter((kind) => named.includes(kind));
@@ -442,13 +448,19 @@ async function shotsIn(lab: Lab, view: ViewMode, options: HeadshotsOptions, firs
 export async function headshots(lab: Lab, options: HeadshotsOptions): Promise<Report> {
   await lab.setup({ at: SPOT, ...options.fixture });
   const hero = G.player;
+  if (hero.cls.id === 'warrior') {
+    const { punchHeads } = await import('./punchHeads');
+    return punchHeads(lab, options);
+  }
   if (hero.cls.id !== 'ranger') {
-    const why = `headshots are the ranger's: run with --class ranger (the hero is the ${hero.cls.id})`;
+    const why = `headshots are the ranger's and the warrior's: run with --class ranger or warrior (the hero is the `
+      + `${hero.cls.id})`;
     return { text: why, problems: [why] };
   }
   const lines = ['headshots: each foe shot at the middle of its head and at its chest, the hero\'s own crit chance 0'];
   const problems: string[] = [];
-  for (const [v, view] of options.views.entries()) {
+  const views = options.views.length ? options.views : SHOT_VIEWS;
+  for (const [v, view] of views.entries()) {
     const crit = hero.stats.crit;
     try {
       const report = await shotsIn(lab, view, { ...options }, v === 0);

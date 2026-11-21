@@ -43,3 +43,34 @@ drawn: held, the husk's thin chest side on swayed off the line.
 The A/B against main (`--foes dummy,husk,colossus --skills nockShot --views third --ab`): on main every head shot
 is a body hit (and the dummy has no head joint), here every one a headshot. Over the shoulder every foe takes about
 3 min 20 s here, top-down 1 min 15 s.
+
+## The berserker's punches (`--class warrior`)
+
+`page/punchHeads.ts`: the warrior with both hands empty (`--gear bare` is set for him) punches each foe with a click
+of Savage Fists, once with the crosshair on its head and once, the foe turned side-on, on its chest. A punch that
+meets a foe's head is always a critical hit (`toHead` in `skills/savageFists.ts`, read off the part its fist's line
+meets by `onHead`, as an arrow's is); his own crit chance is put to nothing, his aim held still 20 frames before the
+punch (his turning, which adds to a punch's chance of a crit, is let go past 0.2 s) and the foe stood out of a clean
+hit's band (`CLEAN_HIT`, which adds to it too: 0.45 m from his middle to its edge through the eyes, 1.1 m from
+outside), so a crit is the game judging a headshot. Views are `first,third` by default.
+
+- **Through the eyes**: every head punch must strike and crit, every chest punch strike and not. The fist's line
+  runs 10 cm under the crosshair (`meetsBody`), so the point aimed at is one the line from there meets on the head
+  first, lifted by as much: with the crosshair on the husk's head's middle, its fist went under the chin. A point
+  past the fist's reach from the eye isn't punched: the Ossuary Twins' heads (3.6 and 3.8 m off), a fault for a
+  common foe alone, and a boss's chest punch that misses is let off (the slab Twin's middle is a cage of bones).
+- **From outside** (`third`, `top`): the fist's line is level at the foe's chest, so no punch may crit (the owner's
+  rule: "aim should not matter, where hit lands matters"). At least half of them must strike, or "none crits"
+  measured nothing: over the shoulder the line along his facing meets nothing of the thin foes (the husk, the witch,
+  the sporecaller, the thornling, the imp's chest), on main as here, 17 of 26 striking; not looked into, as the
+  punch's feel was left as the owner approved it.
+- `--canary`: the first foe's whole body (its rig's root, the dummy's sway) taken for its head, planted after its
+  head punch: its chest punch must be found a headshot.
+- `--trace`: what the fist's middle line met as the punch landed (by the joint it rides) and how far along it,
+  against its reach; for a miss, what it met as the button was let go. Read before the press, the Mossback's level
+  line met its head, and as it landed nothing of it.
+
+The A/B against main (`--class warrior --foes barkhulk,brute,dummy,husk,mossback --canary --ab`): on main, which
+read a head by a band of the height (0.8 to 1.15 of it), the Hulk's, the Brute's and the Mossback's head punches
+are body hits and the Mossback's side-on chest punch a headshot, and the canary goes unseen; here every head punch
+is a headshot and no chest punch. Every foe in both views takes about 40 s.

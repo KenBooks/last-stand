@@ -10,10 +10,10 @@ import { particles, col } from '../../fx/particles';
 import { addShake, liftView, rollView } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
 import { schedule } from '../../core/timers';
 import { dazeEnemy } from '../damage';
-import { strikesBody } from '../strikes';
+import { strikesBody, type Struck } from '../strikes';
 import type { SkillDef } from '../../types';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
@@ -186,11 +186,12 @@ const _from = new THREE.Vector3(), _way = new THREE.Vector3(), _a = new THREE.Ve
 /** how far behind where the punch starts its line is begun (m: a body he stands against is met from outside it),
  *  and the fist's half breadth, the lines either side of its middle (m) */
 const LINE_BACK = 0.6;
-/** where on each foe the punch landing now met its body: how high over its feet (m) */
-const landed = new WeakMap<Enemy, number>();
+/** the foes the punch landing now met on their heads (`meetsBody`), and what its line last met */
+const onHeads = new WeakSet<Enemy>();
+const _struck: Struck = { head: false };
 
 /**
- * Whether the punch landing now meets `e`'s body, and where (`landed`): the fist's line from his shoulder the way
+ * Whether the punch landing now meets `e`'s body, and whether on its head (`onHeads`): the fist's line from his shoulder the way
  * it's thrown, to the skill's reach, against the body as drawn (`strikesBody`, as an arrow's flight is), its middle
  * and either edge of the fist's breadth (`PUNCH_WIDE`). Through his own eyes the line is the crosshair's; from
  * outside it's level along his facing at the height of the foe's chest, his own shoulders' at the most. A foe whose
@@ -198,6 +199,7 @@ const landed = new WeakMap<Enemy, number>();
  * (from play: "this should be no hit ... and it crits somehow", "and this should be no hit").
  */
 function meetsBody(player: Player, def: Def, e: Enemy): boolean {
+  onHeads.delete(e);
   if (player.eyes) {
     G.camera.getWorldPosition(_from); G.camera.getWorldDirection(_way);
     _from.y -= 0.1;
@@ -210,21 +212,21 @@ function meetsBody(player: Player, def: Def, e: Enemy): boolean {
   for (const off of [0, PUNCH_WIDE, -PUNCH_WIDE]) {
     _a.copy(_from).addScaledVector(_way, -LINE_BACK); _a.x += sideX * off; _a.z += sideZ * off;
     _b.copy(_from).addScaledVector(_way, reach); _b.x += sideX * off; _b.z += sideZ * off;
-    const t = strikesBody(e, _a, _b);
+    const t = strikesBody(e, _a, _b, 0, _struck);
     if (t < 0 || t * (reach + LINE_BACK) < LINE_BACK - 0.15) continue;
-    landed.set(e, _a.y + (_b.y - _a.y) * t - e.obj.position.y);
+    if (_struck.head) onHeads.add(e);
     return true;
   }
   return false;
 }
 
-/** Whether the punch landing now met `e` on its head (`HEAD_SHOT`, `meetsBody`): a critical hit, a training
- *  dummy's too. Where the blow lands, not where the aim is (from play: "aim should not matter, where hit lands
- *  matters... because we have direction now"). */
-function toHead(e: Enemy): boolean {
-  const up = landed.get(e);
-  return up !== undefined && up >= e.height * HEAD_SHOT.from && up <= e.height * HEAD_SHOT.to;
-}
+/** Whether the punch landing now met `e` on its head: what its fist's line met on the body rides the model's head
+ *  joint (`onHead` in combat/strikes.ts, as an arrow's headshot is told), a critical hit, a training dummy's too.
+ *  Where the blow lands, not where the aim is (from play: "aim should not matter, where hit lands matters... because
+ *  we have direction now"); from outside the line is at the chest, so there is none. Read off the part, not a share
+ *  of the height: the Brute's, the Mossback's and the Hulks' heads hang low and forward under a hump or horns, and
+ *  the band of the height it was read by before (0.8 to 1.15 of it) missed them. */
+const toHead = (e: Enemy): boolean => onHeads.has(e);
 
 /** The punch lands, charged `charge` of the way past a click (0..1). */
 function land(player: Player, def: Def, charge: number): void {
