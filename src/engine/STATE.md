@@ -43,7 +43,7 @@ The engine outlives this game: "this game might fly, or it might not fly... but 
 
 6. **The scene's depth drawn first** (Bulwark `set_depth_first`, `TUNE.depthFirst`, on): what's opaque and stands still shaded once a pixel. Proved in the engine's own lab (`lab depth-first`: 128 walls, 17.1 ms a frame to 1.6); here, the hall at night at High on the lent 4080 as the phone, its part is 3.7 ms and the frame 18.2 to 17.9.
 
-**The architecture is Bulwark's `ARCHITECTURE.md`** (2026-11-21, from the owner: primitives whose cost content can't grow, each proved at scale in the engine's own lab before it's wired in here). Virtual geometry is next.
+**The architecture is Bulwark's `ARCHITECTURE.md`** (2026-11-21, from the owner: primitives whose cost content can't grow, each proved at scale in the engine's own lab before it's wired in here). Virtual geometry is built there and proved in its lab (`lab clusters`: 256 balls of 2 million triangles, 33 ms a frame as they are, 2.2 cut), with a first budget; none of it is in this game's frame yet: a record says nothing of clusters, the page's build has no builder, and materials that cut out, meshes that bend and clustered shadows aren't started. That wiring is next, then fields and occlusion.
 
 ## Left from before
 
