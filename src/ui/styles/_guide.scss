@@ -1,6 +1,7 @@
 // The guide (ui/guide/): its box over the pause menu, the sections' tabs, the entries' list beside the page (above it
 // on a narrow or short screen), and the page's parts: a foe's portrait and figures, a hero's skill cards, styles,
 // loadouts and combos. And the pause menu's Guide tab, its doors into each section.
+@use 'sass:math';
 @use 'theme' as *;
 @use 'mixins' as *;
 
@@ -81,8 +82,23 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 .gd-ic i { display: inline-grid; place-items: center; width: 24px; height: 24px; font-style: normal; font-size: 16px;
   background: center / cover no-repeat; }
 .gd-ic.big i { width: 52px; height: 52px; font-size: 32px; border: 1px solid rgba($frame, .5); background-color: rgba(0, 0, 0, .4); }
-.gd-key { display: inline-block; padding: 1px 6px; font: 700 11px var(--font-display); color: var(--accent); white-space: nowrap;
-  background: $well; border: 1px solid rgba($frame, .55); border-bottom-width: 2px; }
+// a key's cap, the guide's one way of showing a key: a raised gilt-rimmed cap, the mouse's keys a drawn mouse with its
+// button lit (a digit's width, where "Right click" was three times it). Its bevel is a shadow, not a border, so the
+// box round its letter is even and the letter sits in its middle (a 3 px bottom border set the digits high), trimmed
+// to the capitals' height. Its font set by parts, not the `font` shorthand, which would set its digits old-style again
+// (styles/AGENTS.md)
+.gd-key { display: inline-grid; place-items: center; box-sizing: border-box; min-width: 26px; height: 26px; padding: 0 7px;
+  font-family: var(--font-display); font-size: 14px; font-weight: 900; line-height: 1; color: var(--accent); white-space: nowrap;
+  text-box: trim-both cap alphabetic; border-radius: 5px; border: 1px solid rgba($frame, .8);
+  background: linear-gradient(#3d3228, #17120e);
+  box-shadow: 0 0 0 1px #000, 0 3px 0 #070504, 0 4px 6px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .18); }
+.gd-key.mouse { padding: 0; }
+// (its body dark and the pressed button solid gold, the split drawn: at a cap's size a lit wedge on an outline alone
+// left the two mice alike)
+.gd-mouse { display: block; width: 15px; height: 21px; }
+.gd-mouse-shell { fill: #0b0907; }
+.gd-mouse-lit { fill: #ffd25a; }
+.gd-mouse-line { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linejoin: round; }
 .gd-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--c, var(--ink)); }
 .gd-chip.none { color: var(--ink-dim); }
 .gd-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
@@ -93,10 +109,43 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 .gd-scard .tt-card { width: auto; max-width: none; min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; }
 .gd-scard .tt-desc { max-width: none; }
 .gd-tip { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba($frame, .25); color: var(--highlight); font-size: 14px; }
-.gd-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.gd-kslot { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; font-size: 14px; background: $well;
-  border: 1px solid rgba($frame, .3); }
-.gd-style, .gd-load, .gd-combo { margin: 12px 0; padding: 4px 0 4px 14px; border-left: 2px solid var(--c, rgba($frame, .6)); }
+// a loadout's keys as the game's skill bar: a tray of even slots, each the skill's icon framed as the hotbar frames it,
+// its key's cap on the icon's corner and its name under it in the skill's colour; on a narrow page the slots wrap onto
+// two rows of the same width, the shorter centred under the longer (4 and 3, 3 and 3), never a ragged row of chips each
+// its own width. Its columns are counted by its slots (`data-n`, heroes.ts `keysRow`) against the page's width: `auto-fit`
+// in a box sized to its slots counted two columns on an upright tablet, a tall narrow bar, and fixed columns ran a slot
+// out past the page there
+$key-slot: 100px;
+$key-gap: 4px;
+// (the tray's padding and frame either side)
+$key-tray: 24px;
+.gd-page { container-type: inline-size; }
+.gd-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px $key-gap; box-sizing: border-box;
+  width: min(100%, calc(var(--cols, 7) * #{$key-slot} + (var(--cols, 7) - 1) * #{$key-gap} + #{$key-tray}));
+  margin: 14px 0; padding: 10px; border-radius: 4px; background: $tray;
+  @include frame(rgba($frame, .4), 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .45)); }
+.gd-keys > .gd-kslot { flex: 0 0 calc((100% - (var(--cols, 7) - 1) * #{$key-gap}) / var(--cols, 7)); }
+@for $n from 1 through 8 {
+  .gd-keys[data-n="#{$n}"] { --cols: #{$n}; }
+  // (a row's room: its slots and gaps, the tray's padding and frame, the style's indent)
+  @container (max-width: #{$n * $key-slot + ($n - 1) * $key-gap + $key-tray + 18px}) {
+    .gd-keys[data-n="#{$n}"] { --cols: #{math.ceil(math.div($n, 2))}; }
+  }
+}
+// (the key's cap stands half off the icon's top, over its frame, not its art; 8 px out at its side, as much as a slot of
+// four in a row on an upright tablet has beside the icon)
+.gd-kslot { display: flex; flex-direction: column; align-items: center; gap: 8px; box-sizing: border-box; min-width: 0;
+  padding-top: 11px; text-align: center; }
+.gd-kart { position: relative; width: 52px; height: 52px; flex: none; border-radius: 3px; background: rgba(0, 0, 0, .45); }
+.gd-kart .gd-ic, .gd-kart .gd-ic i { width: 100%; height: 100%; }
+.gd-kart .gd-ic i { font-size: 30px; border-radius: 3px; }
+// (the hotbar's frame and shade drawn over the painted icon, as a slot draws them)
+.gd-kart::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba($frame, .7), inset 0 0 10px rgba(0, 0, 0, .8); }
+.gd-kart .gd-key { position: absolute; left: -8px; top: -11px; z-index: 1; }
+.gd-kname { font-size: 14px; line-height: 1.2; color: var(--c, var(--ink)); overflow-wrap: anywhere; text-shadow: 0 1px 2px #000; }
+.gd-kslot.none .gd-kname { color: var(--ink-dim); font-style: italic; }
+.gd-style, .gd-load { margin: 12px 0; padding: 4px 0 4px 14px; border-left: 2px solid var(--c, rgba($frame, .6)); }
 .gd-pros { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
 .gd-pros .gd-h { margin-top: 8px; font-size: 11px; }
 .gd-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
@@ -204,14 +253,25 @@ body.touch .pbg-key { display: none; }
 .gd-tl-call circle { fill: rgba(176, 112, 255, .35); stroke: #c79bff; stroke-width: 1.5px; }
 .gd-tl-call text { fill: var(--ink); font: 700 11px var(--font-display); }
 
-// a combo: the game's key caps in order, an arrow between
-.gd-seq { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 8px 0; }
-.gd-cap-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.gd-cap { min-width: 46px; padding: 7px 12px 5px; text-align: center; font: 700 14px var(--font-display); color: var(--accent);
-  white-space: nowrap; border-radius: 6px; border: 1px solid rgba($frame, .75); border-bottom: 4px solid #070504;
-  background: linear-gradient(#3a3026, #15110d); box-shadow: 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .15); }
-.gd-cap-skill { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--c, var(--ink)); }
-.gd-seq-arrow { width: 40px; height: 20px; flex: none; margin-bottom: 26px; fill: none; stroke: var(--accent); stroke-width: 2.5;
+// the combos: a card a row, its steps the skill bar's slots with an arrow between, centred on the icons, in a column of
+// their own at its left, its title and how it's done beside them, every card's text starting at one edge (a combo a
+// line down the page, its caps and names apart, left most of the page empty: "wasting lots whitespace here, lets
+// organize too"; cards two across, their steps over their text, left half of each card empty beside its steps). On a
+// narrow page the steps stand under the title, over the text
+.gd-combos { display: grid; gap: 8px; margin: 8px 0 4px; }
+.gd-combo { display: grid; grid-template-columns: 330px minmax(0, 1fr); grid-template-areas: "steps title" "steps how";
+  align-content: center; column-gap: 20px; min-width: 0; padding: 8px 16px 8px 12px; border-radius: 4px; background: $panel-raised;
+  border: 1px solid rgba($frame, .3); box-shadow: inset 0 1px 0 rgba(255, 230, 180, .05); }
+.gd-combo h4 { grid-area: title; align-self: end; margin: 0; }
+.gd-combo .gd-seq { grid-area: steps; align-self: center; }
+.gd-combo .gd-p { grid-area: how; align-self: start; margin: 4px 0 0; color: var(--ink); font-size: 14px; line-height: 1.4; }
+@container (max-width: 640px) {
+  .gd-combo { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "steps" "how"; padding: 10px 14px; }
+}
+.gd-seq { display: flex; align-items: flex-start; margin: 6px 0 4px; }
+.gd-seq > .gd-kslot { flex: 0 1 $key-slot; }
+// (half the icon's height down from its slot's top, past the cap's room above it)
+.gd-seq-arrow { width: 34px; height: 18px; flex: none; margin-top: 28px; fill: none; stroke: var(--accent); stroke-width: 2.5;
   stroke-linecap: round; stroke-linejoin: round; }
 
 // things side by side: the warrior's styles, the mage's staffs
@@ -223,9 +283,47 @@ body.touch .pbg-key { display: none; }
 .gd-compare tbody th { color: var(--ink-dim); font-weight: 400; white-space: nowrap; }
 .gd-compare tr.differs td { background: rgba($highlight, .06); }
 .gd-compare td { min-width: 110px; }
+// (a loadout's keys side by side: as wide a column each, the key's in its cap alone, each skill its icon large, framed
+// as the hotbar frames it, its name written over its foot on a shade, centred in its column, and a key with none an
+// empty frame of the same size. Laid by their content the styles' columns wrapped one name and not the same name
+// beside it, and an icon over its name, or beside it, left the art small; from the owner, of the two: "B: name over
+// icon")
+$cell-art: 92px;
+.gd-compare.keys table { table-layout: fixed; }
+.gd-compare.keys thead th { text-align: center; vertical-align: bottom; }
+.gd-compare.keys thead th:first-child { width: 46px; }
+.gd-compare.keys td { min-width: 0; padding: 9px 4px; text-align: center; }
+.gd-compare.keys tbody th { padding: 0 8px; text-align: center; }
+.gd-compare.keys .gd-chip { container-type: inline-size; position: relative; display: block; width: min(100%, #{$cell-art}); aspect-ratio: 1; margin: 0 auto;
+  border-radius: 3px; overflow: hidden; }
+.gd-compare.keys .gd-chip .gd-ic, .gd-compare.keys .gd-chip .gd-ic i { width: 100%; height: 100%; }
+.gd-compare.keys .gd-chip .gd-ic i { font-size: 44px; background-color: rgba(0, 0, 0, .45); }
+// (the hotbar's frame and shade over the art, as a slot draws them)
+.gd-compare.keys .gd-chip::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px rgba($frame, .6), inset 0 0 12px rgba(0, 0, 0, .7); pointer-events: none; }
+// (one line, every name of the table one size, its longest's fitted to the picture's width (`--len`, its letters: one
+// shrunk alone read as a patch), in its skill's colour as everywhere else (lightened, one skill read as two), on a shade that rises from its foot, outlined dark: a skill's colour on art
+// of its own colour, Thunder Crescent's blue on its lightning, read poorly, and a name of two lines climbed into the art)
+.gd-compare.keys .gd-cn { position: absolute; inset: auto 0 0; padding: 18px 3px 5px; font-size: min(13px, calc(190cqi / var(--len, 15)));
+  line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c, var(--ink));
+  background: linear-gradient(transparent, rgba(0, 0, 0, .72) 45%, rgba(0, 0, 0, .9));
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px #000; }
+// (a key with no skill: an empty slot's dashed frame over the row, None in it, so it reads as none on purpose; filled
+// dark as the others it read as a picture still to come)
+.gd-compare.keys .gd-chip.none { display: grid; place-items: center; background: none; }
+.gd-compare.keys .gd-chip.none::after { border: 1px dashed rgba($frame, .45); box-shadow: none; }
+.gd-compare.keys .gd-chip.none .gd-cn { position: static; padding: 0; background: none; color: var(--ink-dim); font-style: italic; }
+// (a page too narrow for six such pictures, an upright tablet's: the table keeps its pictures at a size their names fit
+// and scrolls across in its frame, as it did before; shared out among six columns there, they were 44 px, the headers
+// ran into each other and the names broke mid-word)
+@container (max-width: 640px) {
+  .gd-compare.keys table { width: max-content; table-layout: auto; }
+  .gd-compare.keys td { width: 88px; }
+  .gd-compare.keys .gd-chip { width: 80px; }
+}
 
 @media (prefers-reduced-motion: reduce) { .gd-track b { animation: none; } }
 @media (max-width: 760px), (max-height: 520px) {
   .gd-page { padding: 10px 12px 14px; }
-  .gd-seq-arrow { width: 26px; }
+  .gd-seq-arrow { width: 24px; }
 }
