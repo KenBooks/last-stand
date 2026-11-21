@@ -29,6 +29,12 @@ export default {
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero (none by default; not in the village)' },
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
+    room: {
+      kind: 'text',
+      usage: 'id',
+      help: 'with --village, inside a house (library, merchant...): its frame, and the longest frame of the page '
+        + 'going in, out and in again',
+    },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
     capture: {
@@ -54,6 +60,7 @@ export default {
       frames: Math.round(options.frames ?? 60),
       foes: Math.round(options.foes ?? 0),
       village: Boolean(options.village),
+      room: options.room,
       hour: options.hour,
       census: Boolean(options.census),
       three: Boolean(options.three),

@@ -13,6 +13,8 @@ import type { FrameStats } from '../../../src/engine/bridge';
 import { standAt } from './draws';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
+import { enterRoom, leaveRoom } from '../../../src/game/rooms';
+import type { RoomId } from '../../../src/data/houses';
 
 export interface RustCommand {
   biome: BiomeId;
@@ -22,6 +24,8 @@ export interface RustCommand {
   /** foes stood before the hero (not in the village) */
   foes: number;
   village: boolean;
+  /** a house's room he's stood in (the village's) */
+  room?: string;
   hour?: number;
   /** the scene's materials listed by their kind and what they ask of a renderer */
   census: boolean;
@@ -93,7 +97,40 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
     await foesAt(lab, spots, spots.map(() => 1));
   }
+  if (command.room) return `the ${command.room}'s room (${await inAndOut(lab, command.room as RoomId)})`;
   return command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
+}
+
+/** The longest of the next `frames` frames, by the browser's clock (ms). */
+async function longestFrame(lab: Lab, frames: number): Promise<number> {
+  const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
+  let longest = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    const began = clock.realNow();
+    await lab.step(1);
+    longest = Math.max(longest, clock.realNow() - began);
+  }
+  return longest;
+}
+
+/** The hero gone into `room`, out again and in once more, drawn each time: the longest frame of each change of
+ *  place (a first visit hands the room over; a way out or a second visit should hand over nothing). He's left
+ *  inside. From play: each took 20 s. */
+async function inAndOut(lab: Lab, room: RoomId): Promise<string> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const times: string[] = [];
+  try {
+    enterRoom(room);
+    times.push(`in ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+    leaveRoom();
+    times.push(`out ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+    enterRoom(room);
+    times.push(`in again ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+  } finally {
+    lab.drawing = drawing;
+  }
+  return `the longest frame going ${times.join(', ')}`;
 }
 
 /** The baseline: three's WebGPU frame of the same stand, timed the same way. */
