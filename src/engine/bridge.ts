@@ -272,10 +272,17 @@ export class Bridge {
     if (!texture) return 0;
     const entry = this.textures.get(texture);
     if (entry && entry.version === texture.version) return entry.id;
-    const pixels = this.pixelsOf(texture);
     if (entry?.id) { this.engine.drop_texture(entry.id); this.held.textures--; }
-    const id = pixels ? this.engine.add_texture(pixels.width, pixels.height, pixels.data, texture.colorSpace === THREE.SRGBColorSpace) : 0;
-    if (!pixels) this.skip('texture not readable');
+    const srgb = texture.colorSpace === THREE.SRGBColorSpace;
+    // (a picture of the page's is copied on the GPU, the engine making its smaller levels there: read back to bytes
+    // through a canvas, a house's maps were 9 s of the page's time as it was first walked into, 20 s in play. A
+    // frame written down as a tape needs the bytes)
+    let id = !this.tape && pictured(texture) ? this.engine.add_texture_from(texture.image as object, srgb, texture.flipY) : 0;
+    if (!id) {
+      const pixels = this.pixelsOf(texture);
+      id = pixels ? this.engine.add_texture(pixels.width, pixels.height, pixels.data, srgb) : 0;
+      if (!pixels) this.skip('texture not readable');
+    }
     if (id) { this.held.textures++; this.stats.newTextures++; }
     this.textures.set(texture, { id, version: texture.version });
     this.freshViews();
@@ -935,4 +942,14 @@ export class Bridge {
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
 const HIDDEN_PLACES = 2;
 const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
+/** Whether a map's image is a picture the GPU copies by itself: a canvas, a bitmap, an image (not bytes, nor a
+ *  compressed or a cube map). */
+function pictured(texture: THREE.Texture): boolean {
+  const image = texture.image as unknown;
+  if ((texture as THREE.DataTexture).isDataTexture || (texture as THREE.CompressedTexture).isCompressedTexture) return false;
+  if ((texture as THREE.CubeTexture).isCubeTexture) return false;
+  return image instanceof HTMLCanvasElement || image instanceof ImageBitmap || image instanceof HTMLImageElement
+    || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas);
+}
+
 const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);
