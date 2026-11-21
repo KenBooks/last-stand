@@ -12,12 +12,15 @@ import { lampList, LAMPS_MOST } from '../core/lamps';
 import { particles } from '../fx/particles';
 import { dazedDrawn } from '../fx/dazed';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
+import { kitLookOf } from './looks/kit';
 import { recording, Tape } from './tape';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
 /** a record's flags (plan.rs) */
 const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4;
+/** a material key's bit: its shader leaves its vertices where they are, so it casts (`CASTS_AS_PLACED` in plan.rs) */
+const CASTS_AS_PLACED = 32;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
@@ -315,7 +318,7 @@ export class Bridge {
     p[10] = material.normalScale?.x ?? 1;
     // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
     p[11] = material.seeThrough ? 1 : 0;
-    const placed = map ?? material.normalMap ?? null;
+    const placed = map ?? material.alphaMap ?? material.normalMap ?? null;
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
     const rough = material.roughnessMap ?? material.metalnessMap ?? null;
@@ -357,8 +360,8 @@ export class Bridge {
   private materialId(material: AnyMaterial): number {
     let entry = this.materials.get(material);
     if (entry && entry.seen === this.frame) return entry.id;
-    const look = lookOf(material);
-    if (look) return this.lookId(material, look, entry);
+    const look = lookOf(material) ?? kitLookOf(material);
+    if (look) return look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -431,11 +434,75 @@ export class Bridge {
     return id;
   }
 
+  /** The engine's material for a look's shader, the numbers, maps and key in the scratch arrays: made the first time
+   *  they're met, one for every material alike. */
+  private sharedLook(look: RustLook, key: number): number {
+    const numbers = this.scratchLook.subarray(0, look.shared);
+    const signature = `${look.shader.name}|${key}|${this.scratchMaps.join(',')}|${this.scratchParams.join(',')}|${numbers.join(',')}`;
+    let id = this.shared.get(signature);
+    if (id === undefined) {
+      this.scratchExtra.fill(0);
+      id = this.engine.add_custom_material(this.shaderId(look), this.scratchParams, this.scratchMaps, key, this.scratchLook, this.scratchExtra);
+      this.shared.set(signature, id);
+      this.held.materials++;
+      this.stats.newMaterials++;
+      this.freshViews();
+    }
+    return id;
+  }
+
+  /** A material whose look is shared (`RustLook.shared`): the engine's material for what it holds now, as a plain
+   *  material's is (`materialId`); one whose numbers keep moving (a foe dissolving) gets its own after
+   *  `SHARED_CHANGES` moves, written in place from then on. Such a look has no maps or volume of its own. */
+  private sharedLookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    const described = this.describe(material, look);
+    if (described < 0) return 0;
+    const key = described | (look.casts ? CASTS_AS_PLACED : 0);
+    const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
+    numbers.fill(0);
+    look.numbers(numbers);
+    if (!entry) {
+      entry = {
+        id: this.sharedLook(look, key), params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: false,
+        custom: numbers.slice(),
+      };
+      this.materials.set(material, entry);
+      return entry.id;
+    }
+    entry.seen = this.frame;
+    const kept = entry, sent = entry.custom!;
+    const sameMaps = kept.key === key && maps.every((map, slot) => map === kept.maps[slot]);
+    const sameParams = !p.some((value, index) => value !== kept.params[index]);
+    const sameNumbers = !numbers.some((value, index) => value !== sent[index]);
+    if (sameMaps && sameParams && sameNumbers) return kept.id;
+    kept.changes++;
+    if (!kept.own && kept.changes > SHARED_CHANGES && sameMaps) {
+      kept.own = true;
+      this.scratchExtra.fill(0);
+      kept.id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
+      this.held.materials++;
+      this.freshViews();
+    } else if (!kept.own || !sameMaps) {
+      kept.own = false;
+      kept.id = this.sharedLook(look, key);
+    } else {
+      if (!sameParams) this.engine.set_material_params(kept.id, p);
+      if (!sameNumbers) this.engine.set_material_custom(kept.id, numbers);
+    }
+    kept.maps.set(maps);
+    kept.params.set(p);
+    sent.set(numbers);
+    kept.key = key;
+    return kept.id;
+  }
+
   /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
   private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
-    const key = this.describe(material, look);
-    if (key < 0) return 0;
+    const described = this.describe(material, look);
+    if (described < 0) return 0;
+    const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
+    numbers.fill(0);
     look.numbers(numbers);
     const volume = this.volumeId(look.volume?.());
     // (a volume made anew, a loop baked since: the material made again round it)

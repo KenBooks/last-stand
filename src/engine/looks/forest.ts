@@ -69,7 +69,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** The floor's moss, over the material's own colour. */
-export const mossLook = (): RustLook => ({ shader: MOSS, numbers() {} });
+export const mossLook = (): RustLook => ({ shader: MOSS, casts: true, numbers() {} });
 
 /** The grass in the wind (`windInGrass`'s numbers); the engine's own clock is the game's. */
 export const grassWindLook = ({ rate, reach }: Sway): RustLook => ({

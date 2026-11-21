@@ -84,6 +84,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 /** A fire's bed and its charred logs: darkened to char and ash, glowing through their cracks. */
 export const emberLook = (looks: EmberLooks): RustLook => ({
   shader: emberShader(),
+  casts: true,
   numbers(out) {
     looks.centre.value.toArray(out, 0);
     out[3] = looks.radius.value; out[4] = looks.heat.value; out[5] = looks.time.value;

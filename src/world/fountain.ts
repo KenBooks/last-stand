@@ -8,6 +8,9 @@
 // that move, so nothing compiles after the village's warm-up. What of its light is the sky's (the caustics, the falling
 // water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
 import { WEBGPU } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { causticsLook, waterLook } from '../engine/looks/water';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import * as THREE from 'three';
@@ -357,6 +360,7 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
   const m = new THREE.MeshStandardMaterial({
     color: colour, roughness: 0.1, metalness: 0.1, transparent: true, depthWrite: false,
   });
+  if (RUNNING.rust) rustLook(m, waterLook(time));
   if (WEBGPU) {
     waterNodes(m, time);
     const sky = skyLight;
@@ -408,6 +412,7 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
  */
 function causticFloor(time: { value: number }, sunlit: { value: number }): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color: 0x8f9a92, roughness: 0.85 });
+  if (RUNNING.rust) rustLook(m, causticsLook(time, sunlit));
   if (WEBGPU) {
     causticNodes(m, time, sunlit);
     return seeThrough(m, 'propFoot');

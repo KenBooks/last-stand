@@ -79,6 +79,7 @@ function dim(out: Float32Array, amount: { value: number }, { from, to, most }: O
 /** What stands beyond the wall, darkened past it by `amount` (a `{ value }` eased 0 to 1). */
 export const outsideLook = (amount: { value: number }, outside: Outside): RustLook => ({
   shader: OUTSIDE,
+  casts: true,
   numbers(out) { dim(out, amount, outside); },
 });
 
@@ -87,6 +88,7 @@ export function dampLook(damp: Damp, amount: { value: number }, outside: Outside
   const maps: (THREE.Texture | null)[] = [damp.map, damp.soil.map, damp.soil.normalMap, damp.soil.roughnessMap];
   return {
     shader: DAMP,
+    casts: true,
     maps,
     numbers(out) {
       out[AT.span] = damp.span; out[AT.tile] = damp.tile; out[AT.ragged] = damp.ragged; out[AT.stones] = damp.stones;

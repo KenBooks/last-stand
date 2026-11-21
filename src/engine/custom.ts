@@ -21,6 +21,12 @@ export interface RustLook {
   volume?: () => THREE.Data3DTexture;
   /** the attribute its meshes hand over as their vertices' positions (the meadow's blades: `bv`) */
   position?: string;
+  /** its vertices stay where the mesh has them, so its meshes cast the sun's shadow as any (not one that places
+   *  or moves them: the shadow's pass knows nothing of a hook) */
+  casts?: boolean;
+  /** how many of its numbers tell two of its materials apart: with it, materials that look alike share one of the
+   *  engine's, and their meshes one draw call (each foe's pieces have materials of their own) */
+  shared?: number;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
 }

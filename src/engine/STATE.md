@@ -31,14 +31,14 @@ The engine's rows have the trees it lacked before, the looks and the whole post 
 
 ## Next, in the order they'd show
 
-1. The looks left: the crypt's damp floor (needs more than two maps a hook), the fountain's water and the ghost's shade, the embers' glow, points (the dazed stars), each membrane's and flame's fade as its prop dissolves. Look at the flames close to: only seen from above so far.
+1. The looks left are small: the kit's hair tint, item glow, hood shade and shine cap; the water's share of the sky and capped glints; the paving's unrepeated maps (the cobbles read browner than three's); membranes and flames fading as their prop dissolves. The ghost by the yard was only compared with three's on another kind of foe (it's picked at random a boot).
 2. The night: the village at midnight reads brighter than three's.
 3. First person: the hero's body hidden, the arms' own pass.
 4. The lamps' shadows; the point lights'.
 5. The walk of the scene is most of the CPU's part (2.5 to 2.9 ms of 3.5 to 4.3): records kept between frames for what didn't move, then the scene itself kept in the engine (from the owner: what's slow in TypeScript moves into the engine and stays there).
 6. Where a frame's CPU goes with the engine drawing (the game's update, the walk, the engine, the page): measured before any of the game is ported.
 7. About 170 meshes are handed over again in 60 frames standing still (a geometry rewritten each frame): find which, and send only what changed.
-8. A look's material casts no shadow (the grass, the meadow): the shadow's pass would need its vertex hook.
+8. A look that moves its vertices casts no shadow (the grass, the meadow): the shadow's pass would need its vertex hook. One that leaves them casts (`casts`).
 9. Play the preview in a visible browser and on a phone; time it on an idle GPU.
 
 ## Log
@@ -55,3 +55,4 @@ The engine's rows have the trees it lacked before, the looks and the whole post 
 - 07:55 the engine's core apart from its web shell; a frame's tape replayed natively in 2.5 s; a 2 s build for it.
 - 08:30 the skies, the portals, the forest's moss, grass wind and shafts; instanced meshes left whole (the forest had no trees); colour-off meshes shadow-only (the hall was under a white shell, the owner saw it).
 - 08:50 volumes, a clamped sampler and a premultiplied blend in the engine; the flames by the game's own WGSL.
+- Day 2, later: the crypt's floor, embers, dazed stars; the foes' kit look, shared so bodies batch (forest, 24 foes: 363 draws + 228 for the shadow, 4.4 ms CPU, 1.8 ms GPU); the fountain's water; looks that cast; an alpha map's repeat (the falls' streaks were 8 times too wide); a mark on the page while the engine draws.
