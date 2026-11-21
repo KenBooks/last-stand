@@ -45,6 +45,17 @@ The engine outlives this game: "this game might fly, or it might not fly... but 
 
 **The architecture is Bulwark's `ARCHITECTURE.md`** (2026-11-21, from the owner: primitives whose cost content can't grow, each proved at scale in the engine's own lab before it's wired in here). Virtual geometry is built there and proved in its lab (`lab clusters`: 256 balls of 2 million triangles, 33 ms a frame as they are, 2.2 cut), with a first budget; none of it is in this game's frame yet: a record says nothing of clusters, the page's build has no builder, and materials that cut out, meshes that bend and clustered shadows aren't started. That wiring is next, then fields and occlusion.
 
+**Virtual geometry and this game's frame (2026-11-21, evening).** Bulwark has since measured its graphs' errors
+again, ended them in one cluster and left out what's hidden (16,384 balls of 2 million triangles: 46 ms to 1.6;
+behind a wall 2.45 ms to 0.30: its `ARCHITECTURE.md`). Before wiring it in here the village's frame was counted
+(`lab rust --village --hour 12 --census`, which lists the meshes in view by their triangles now): 934 thousand
+triangles drawn, about 500 thousand of them the meadow's grass (moved by its look), 66 thousand the trees' leaves
+(cut out), the heroes skinned, and 231 thousand in 140 meshes that could be clusters, 167 thousand of those the
+trees' bark at 700 to 1,300 triangles a tree, each a handful of clusters already. Nothing here is a mesh finer
+than the screen: clusters would take a few percent of the triangles of a frame whose time is its lights (11 ms
+of 19 in the hall at night). Not wired in for that reason: what this game's frame wants of the architecture is
+the light cache and fields (the grass). Virtual geometry waits for content that needs it.
+
 ## Left from before
 
 - The looks left are small: the kit's hair tint, item glow, hood shade and shine cap; the water's share of the sky and capped glints; the paving's unrepeated maps; membranes and flames fading as their prop dissolves.
