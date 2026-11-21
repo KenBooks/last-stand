@@ -545,6 +545,11 @@ function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
   Object.defineProperty(m, 'seeThrough', { value, configurable: true });
 }
 
+/** The hole that keeps the hero in sight as it stands now, for a renderer of our own (src/engine): the point
+ *  nothing may hide, the props' hole (`Kind.k`) and the height nothing lower dissolves at. */
+export const holeNow = (): { focus: THREE.Vector3; k: THREE.Vector4; minY: number } =>
+  ({ focus: focus.value, k: PROP_K.value, minY: PROP_MIN_Y.value });
+
 /** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. A roof and
  *  what the hall thins whole blend (from play, "Yes, real blending": a pattern of dots over a roof reads as a screen door,
  *  and the fog, reading the depth, stippled it too), with their depth kept, for the fog to read them as what they are. */

@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
 import { tunable } from '../core/tuning';
+import { holeNow } from '../core/seeThrough';
+import { particles } from '../fx/particles';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
@@ -15,7 +17,7 @@ const CASTS_SHADOW = 1, NEVER_CULLED = 2;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
-  shadowView: 48, points: 64, floats: 320,
+  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, floats: 336,
 };
 const MAX_POINTS = 32;
 /** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
@@ -69,7 +71,7 @@ type AnyMaterial = THREE.Material & Partial<{
   normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
   isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
   isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
-  positionNode: unknown; fragmentNode: unknown; vertexNode: unknown;
+  positionNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
 }>;
 
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
@@ -244,7 +246,8 @@ export class Bridge {
     p[8] = material.roughness ?? (material.isMeshPhongMaterial ? 0.5 : 1);
     p[9] = material.metalness ?? 0;
     p[10] = material.normalScale?.x ?? 1;
-    p[11] = 0;
+    // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
+    p[11] = material.seeThrough ? 1 : 0;
     const placed = map ?? material.normalMap ?? null;
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
@@ -393,6 +396,8 @@ export class Bridge {
   }
 
   private addMesh(mesh: THREE.Mesh): void {
+    // (the particles' pools are handed over whole: `sprites`)
+    if (mesh.userData.particles) return;
     const geometry = mesh.geometry;
     const geometryId = this.geometryId(geometry);
     if (!geometryId) return;
@@ -475,6 +480,13 @@ export class Bridge {
     g[GLOBALS.misc + 2] = TUNE.environment;
     g[GLOBALS.misc + 3] = TUNE.debug;
     g[GLOBALS.fogColor + 3] = 0;
+    const e = camera.matrixWorld.elements;
+    g[GLOBALS.camRight] = e[0]; g[GLOBALS.camRight + 1] = e[1]; g[GLOBALS.camRight + 2] = e[2];
+    g[GLOBALS.camUp] = e[4]; g[GLOBALS.camUp + 1] = e[5]; g[GLOBALS.camUp + 2] = e[6];
+    const hole = holeNow();
+    hole.focus.toArray(g, GLOBALS.seeFocus);
+    g[GLOBALS.seeFocus + 3] = hole.minY;
+    hole.k.toArray(g, GLOBALS.seeHole);
     const sun = this.sun;
     if (sun) {
       v3.setFromMatrixPosition(sun.matrixWorld).sub(target3.setFromMatrixPosition(sun.target.matrixWorld)).normalize();
@@ -501,6 +513,27 @@ export class Bridge {
     return clear ? [toScreen(clear.r), toScreen(clear.g), toScreen(clear.b)] : [0, 0, 0];
   }
 
+  /** The particles' pools as the engine's sprites: those blended by their alpha, then those added. */
+  private sprites(): void {
+    const pools = [particles.smoke, particles.glow];
+    const runs = pools.map((pool, slot) => {
+      const count = pool?.count ?? 0;
+      if (this.spriteRuns[slot].length < count * 8) this.spriteRuns[slot] = new Float32Array(count * 16);
+      const run = this.spriteRuns[slot];
+      for (let i = 0; i < count; i++) {
+        const at = i * 8;
+        run[at] = pool.pos[i * 3]; run[at + 1] = pool.pos[i * 3 + 1]; run[at + 2] = pool.pos[i * 3 + 2];
+        run[at + 3] = pool.size[i];
+        run[at + 4] = pool.col[i * 4]; run[at + 5] = pool.col[i * 4 + 1]; run[at + 6] = pool.col[i * 4 + 2];
+        run[at + 7] = pool.col[i * 4 + 3];
+      }
+      return run.subarray(0, count * 8);
+    });
+    this.engine.set_sprites(runs[0], runs[1]);
+    this.freshViews();
+  }
+  private spriteRuns = [new Float32Array(0), new Float32Array(0)];
+
   /** The lights the last frame was drawn under, as the globals hold them: for a report. */
   lights(): string {
     const g = this.globals, three = (at: number): string => [g[at], g[at + 1], g[at + 2]].map((v) => v.toFixed(2)).join(' ');
@@ -526,6 +559,8 @@ export class Bridge {
     this.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.walk(scene, camera);
     const clear = this.writeGlobals(scene, camera, time);
+    this.sprites();
+    this.freshViews();
     const walked = perfClock.now();
     this.engine.render(this.count, this.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
