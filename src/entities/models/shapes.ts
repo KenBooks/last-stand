@@ -111,6 +111,69 @@ function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3
   return elbow.worldToLocal(_rayHit.copy(hits[hits.length - 1].point)).distanceTo(axis) / reach;
 }
 
+/** a skin as one pose draws it, for rays level in a forearm's frame: what a ray at height `y` there can meet */
+interface StillSkin {
+  slab(y: number): readonly THREE.Object3D[];
+  dispose(): void;
+}
+
+/** how thick a slab of a still skin is (m, up the forearm): a ray meets only its own slab's triangles */
+const STILL_SLAB = 0.004;
+const _still = new THREE.Vector3();
+
+/**
+ * `skin` as it's drawn now, for the rays a wrap's lay casts at it, which run level in `elbow`'s frame: a skinned
+ * mesh's every point where its bones put it (three's own, as its ray test poses them), kept in the world's frame, and
+ * its triangles sorted into slabs up the forearm, so a ray meets the few that cross its own height. Cast at the
+ * skinned mesh, each ray posed every vertex again; at one plain mesh of it all, each still met every triangle, and
+ * the two wrists' thousand rays were 1.2 s of a boot's task. A mesh that isn't skinned is met whole, as it was.
+ */
+function stillSkin(skin: THREE.Object3D, elbow: THREE.Object3D): StillSkin {
+  if (!(skin instanceof THREE.SkinnedMesh)) return { slab: () => [skin], dispose: () => {} };
+  const from = skin.geometry.attributes.position, count = from.count;
+  const at = new Float32Array(count * 3), heights = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    skin.getVertexPosition(i, _still).applyMatrix4(skin.matrixWorld);
+    at[i * 3] = _still.x;
+    at[i * 3 + 1] = _still.y;
+    at[i * 3 + 2] = _still.z;
+    heights[i] = elbow.worldToLocal(_still).y;
+  }
+  const corners = skin.geometry.index?.array;
+  const slabs = new Map<number, number[]>();
+  for (let n = 0; n + 2 < (corners ? corners.length : count); n += 3) {
+    const a = corners ? corners[n] : n, b = corners ? corners[n + 1] : n + 1, c = corners ? corners[n + 2] : n + 2;
+    const low = Math.floor(Math.min(heights[a], heights[b], heights[c]) / STILL_SLAB);
+    const high = Math.floor(Math.max(heights[a], heights[b], heights[c]) / STILL_SLAB);
+    for (let slab = low; slab <= high; slab++) {
+      const held = slabs.get(slab) ?? [];
+      held.push(a, b, c);
+      slabs.set(slab, held);
+    }
+  }
+  const points = new THREE.BufferAttribute(at, 3);
+  const meshes = new Map<number, THREE.Mesh>();
+  const none: readonly THREE.Object3D[] = [];
+  return {
+    slab(y) {
+      const slab = Math.floor(y / STILL_SLAB), held = slabs.get(slab);
+      if (!held) return none;
+      let mesh = meshes.get(slab);
+      if (!mesh) {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', points);
+        geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(held), 1));
+        mesh = new THREE.Mesh(geometry, skin.material);
+        meshes.set(slab, mesh);
+      }
+      return [mesh];
+    },
+    dispose() {
+      for (const mesh of meshes.values()) mesh.geometry.dispose();
+    },
+  };
+}
+
 /** the skin a wrap is laid over: its meshes, or what gives the meshes drawn in the hand's pose as it's posed */
 type SkinShown = readonly THREE.Object3D[] | (() => readonly THREE.Object3D[]);
 
@@ -196,14 +259,25 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       const [rx, rz] = radii(y, angle, z);
       axis.set(wrist.position.x, y + wrist.position.y, wrist.position.z);
       at.set(towardThumb * x * rx, y, z * rz).add(wrist.position);
-      const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, skinNow());
+      const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, under.flatMap((still) => still.slab(axis.y)));
       return out === 1 ? null : THREE.MathUtils.clamp(out + gap / reach, 0.6, 1.4);
     };
+    // (the skin as each pose draws it, posed once and kept for every ray of the lay, `stillSkin`. Cast at the skinned
+    // meshes themselves, each ray had three pose every vertex of the hand by its bones, and each of a row's six points
+    // put the hand in each pose again: about 500 such rays a wrist, one task of 48 s as the warrior's pieces were
+    // built on a first visit with the CPU slowed 4 times, `stalls --scenario boot --js`, and a frame of half a second
+    // behind the lobby on a phone)
+    elbow.updateWorldMatrix(true, false);
+    const stills = (poses.length ? poses : [() => {}]).map((pose) => {
+      pose();
+      palm.updateWorldMatrix(true, true);
+      return skinNow().map((shown) => stillSkin(shown, elbow));
+    });
+    let under: readonly StillSkin[] = [];
     const posed = (angle: number, y: number, gap: number): number | null => {
       let most: number | null = null;
-      for (const pose of poses.length ? poses : [() => {}]) {
-        pose();
-        palm.updateWorldMatrix(true, true);
+      for (const still of stills) {
+        under = still;
         const share = needed(angle, y, gap);
         if (share !== null) most = Math.max(most ?? 0, share);
       }
@@ -226,6 +300,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       });
     });
     if (skin.length) wrapShares.set(key, shares);
+    for (const still of stills.flat()) still.dispose();
   }
   const face = (a: number, b: number, c: number) => {
     if (towardThumb > 0) indices.push(a, b, c);

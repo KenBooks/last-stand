@@ -754,20 +754,34 @@ function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THRE
   }
   // (the posed vertices in a grid, a cell the furthest reach: a point's neighbours are in the 27 cells round it)
   const scale = mesh.getWorldScale(_shadeQ).x, steps = SHUT_SHADE.steps.map((step) => step * scale);
-  const cell = steps[steps.length - 1], grid = new Map<string, number[]>();
-  const keyOf = (x: number, y: number, z: number) => `${Math.floor(x / cell)} ${Math.floor(y / cell)} ${Math.floor(z / cell)}`;
+  // (its cells numbered, a list a cell: keyed by a string made for each of a point's 27 cells, 1.2 million a hand, the
+  // lookups were most of 190 ms of the build's task a hand, 770 ms with the CPU slowed 4 times: `stalls --scenario
+  // boot --js`, the wrap's lay shutting the fist for the first time)
+  const cell = steps[steps.length - 1];
+  const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < count * 3; i++) {
+    low[i % 3] = Math.min(low[i % 3], at[i]);
+    high[i % 3] = Math.max(high[i % 3], at[i]);
+  }
+  // (a cell of margin all round: a point moved out along its normal by a step lies within one cell of the skin)
+  const cellOf = (v: number, axis: number): number => Math.floor((v - low[axis]) / cell) + 1;
+  const nx = cellOf(high[0], 0) + 2, ny = cellOf(high[1], 1) + 2, nz = cellOf(high[2], 2) + 2;
+  const grid: (number[] | undefined)[] = new Array(nx * ny * nz);
   for (let i = 0; i < count; i++) {
-    const key = keyOf(at[i * 3], at[i * 3 + 1], at[i * 3 + 2]);
-    const list = grid.get(key);
-    if (list) list.push(i); else grid.set(key, [i]);
+    const key = cellOf(at[i * 3], 0) + nx * (cellOf(at[i * 3 + 1], 1) + ny * cellOf(at[i * 3 + 2], 2));
+    const list = grid[key];
+    if (list) list.push(i); else grid[key] = [i];
   }
   const closedIn = (x: number, y: number, z: number, within: number): boolean => {
+    const cx = cellOf(x, 0), cy = cellOf(y, 1), cz = cellOf(z, 2), near = within * within;
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-      const list = grid.get(keyOf(x + dx * cell, y + dy * cell, z + dz * cell));
+      const ix = cx + dx, iy = cy + dy, iz = cz + dz;
+      if (ix < 0 || iy < 0 || iz < 0 || ix >= nx || iy >= ny || iz >= nz) continue;
+      const list = grid[ix + nx * (iy + ny * iz)];
       if (!list) continue;
       for (const n of list) {
         const ex = at[n * 3] - x, ey = at[n * 3 + 1] - y, ez = at[n * 3 + 2] - z;
-        if (ex * ex + ey * ey + ez * ez < within * within) return true;
+        if (ex * ex + ey * ey + ez * ez < near) return true;
       }
     }
     return false;
