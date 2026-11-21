@@ -1163,7 +1163,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   change to a model with `--ab`. The studio, its camera and its pictures are `page/studio.ts`, which `hands` shares.
 - `hands`: the hero's right hand alone (`page/hands.ts`): a copy of it on a wrist of its own (`handLike` in
   `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed,
-  strained as a caster's (`strainHand`), in a fist and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
+  strained as a caster's (`strainHand`), in a fist, clenched as the warrior's bare fist (`closeFist`) and closed
+  round a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
   little finger's, the fingertips and three-quarters (`--views`), and close up when asked for: `cuffs`, the glove's
   cuffs over the fingers, `web`, the thumb's web (where a bent thumb once pressed the glove into the skin), and `joints`, the fingers'
   knuckles and the bones between them from the little finger's side. Said
@@ -1179,6 +1180,11 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   measured against the shafts either side of it on the flat hand (`knobsOf`): under 1.04 as broad the finger is an
   even tube, over 1.16 its joint is swollen (from play: "a hand of 90 year old, with bones problems", read 1.25),
   each a problem. It has no canary yet.
+  `--poses clenched` defaults to the warrior and shows his bare fist and the game's wrist wrap unless `--glove`
+  is set. The wrap is checked against its 400-triangle, one-mesh budget. The command also casts a
+  punch in game and measures both fists after they return to guard. Every fingertip must reach the palm within
+  6 mm, adjacent middle phalanges must come within 3 mm, the thumb must lie over the middle shaft within 12 mm,
+  and each wrist must bend less than 10 degrees. `--canary` applies the old `hold` + `clench` to the same guard.
 - `hood`: the mage's hood against its reference, by numbers: in full in [`commands/hood.md`](commands/hood.md).
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
@@ -1355,7 +1361,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   portal is drawn; the warrior's (`WARRIOR`): `cleave`, `cleaveGreat` and `cleaveDual`, Rending Cleave held with each
   weapon, three swings each biting; `fangs`; `crescent`; `shield`, raised, two blows caught and the guard broken;
   `tempest` and `tempestGreat`, held 3 s and let go; `bullRush`; `powerStrike` and `powerStrikeEarly`; `bellow`;
-  `draught`; the ranger's (`RANGER`): `nockshot`, held to full and let go three times; `nockshotQuick`, loosed at
+  `draught`; his fists' (#400), `fists`, six of Savage Fists' punches held, `fistsHot` the same at full Frenzy (two of them hammers, with a grunt), `wrath`, its slam, `unchained`, his roar, and `frenzyFull`, his heart; the ranger's (`RANGER`): `nockshot`, held to full and let go three times; `nockshotQuick`, loosed at
   its least draw into the ground, a foe, a log and off a stone; `nockshotHeld`, held at full for 4 s; `briar`;
   `lancewood` and `lancewoodShort`; `hail`, Hailfletch held for three volleys of 24; `rangerMany`, the loudest a
   ranger gets (two in co-op, a volley landing as a fan and a full Lancewood Shot are loosed); `quarry`, the mark and

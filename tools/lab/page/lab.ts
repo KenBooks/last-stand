@@ -1264,7 +1264,9 @@ export class Lab {
    * alone was read three ways).
    */
   private renderArmsFromOutside(): void {
-    const fov = this.model.armsFov?.() ?? null;
+    // (a model's arms at the world's lens are still drawn by their own camera: null from it is that lens)
+    const ownLens = this.model.armsFov?.();
+    const fov = ownLens === undefined ? null : ownLens ?? (G.camera as THREE.PerspectiveCamera).fov;
     const layers = G.camera.layers.mask;
     // (the arms' layer, as their own camera draws it)
     const arms = renderer.armsCamera().layers.mask;
@@ -1447,9 +1449,14 @@ function withinWindow(area: Clip, margin = 0): Clip {
 const schooled = (style: HeldStyle): style is School | 'bare' =>
   style === 'bare' || style === 'arcane' || style === 'fire' || style === 'lightning' || style === 'healing';
 
+/** nothing in either hand: no weapon, no shield */
+const EMPTY_HANDS = { weapon: null, twoHanded: false, shield: false, offWeapon: null } as Gear;
+
 /** What a hero of `cls` wearing `worn` holds with a weapon of `school` in hand (`base`, his first by default), or
  *  with none (`bare`). */
 function schoolGear(cls: ClassDef, worn: Gear, school: School | 'bare', base?: string): Gear {
+  // (a class whose skills go by the gear held has a style of its own for both hands empty)
+  if (!cls.schools && school === 'bare' && weaponStyle(cls, EMPTY_HANDS) === 'bare') return { ...worn, ...EMPTY_HANDS };
   if (!cls.schools) throw new Error(`lab: --gear ${school}: the ${cls.id}'s weapons have no schools`);
   const held = school === 'bare' ? null : base ?? basesFor('weapon', cls)[0];
   return { ...worn, weapon: held, school: school === 'bare' ? null : school };

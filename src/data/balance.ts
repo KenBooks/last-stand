@@ -215,3 +215,78 @@ export const CARRY = {
  *  wielder's basic attack cuts every 0.3 s; the fangs 0.36 s apart, at 0.27 and 0.63 s of 0.9, were the owner's "too
  *  slow": "both hits in a rapid succession", "faster than regular LMB" (`lab hits twinFangs --than cleave`). */
 export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };
+
+/** Frenzy, the warrior's with both hands empty (#400, combat/frenzy.ts): his fists' hits build it, up to `cap` stacks
+ *  (`unchained` under Unchained). Each stack quickens his attacks by `haste` % (his casting speed), heals back `leech`
+ *  % of the damage he deals and adds `frail` % to the damage he takes. `wait` s after his last hit landed it decays a
+ *  stack every `every` s. Wrath's slam takes from `slam` stacks, its quake from `quake`. First takes, for tuning in
+ *  play. */
+/** A punch's clean hit: a fist lands hardest at the end of its reach, the arm all but straight, so a foe whose edge is
+ *  `from` to `to` m from his middle takes `bonus` more of a punch (Savage Fists', Rampage's); one crowding him, the
+ *  arm still bent, or at the reach's edge takes it plain (from play: "we need to add punch damage bonus for optimal
+ *  distance") */
+/** Rampage building as it's held: `perSecond` more of its damage, and of the Energy it drains, for each second, up to
+ *  `most` more (from play: "lets also change rampage to deal 5% more damage every second and burning 5% more energy as
+ *  well, up to 50%") */
+export const RAMPAGE = { perSecond: 0.05, most: 0.5 };
+
+export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
+
+/** What his body puts behind a punch of Savage Fists (from play: "if moving towards target, punch should land
+ *  harder, also if swiping from the direction of attack with mouse (stationary) it should hit even harder, those 2
+ *  should stack"): `step` more of its damage walking straight at the foe at his full pace, less by how far off that
+ *  way or how much slower; `swipe` more with the aim swung `turn` rad or more through the wind-up the way the
+ *  punching hand travels (a cross's from his right to his left, a jab's from his left to his right), less for a
+ *  smaller swing. Added together, over a clean hit's. A punch is thrown with the hand his turning is behind while
+ *  he turns `lead` rad/s or faster as it starts (from play: "warrior should choose to attack with the hand that is
+ *  most beneficial for the current momentum, automatically... so he might strike with same hand multiple times"),
+ *  else with each in turn. Each of the three also sharpens the punch (from play: "for LMB
+ *  performing a technique should increase critical hit chance too"): `crit` points of a hundred more chance of a
+ *  critical hit for a clean hit, a full step and a full swing, the step's and the swing's by their shares, added
+ *  together. First takes, for tuning in play. */
+// (`swipe` 0.75, where 0.4 at first: from play, "lets increase bonus from direction swipe")
+export const PUNCH_DRIVE = { step: 0.25, swipe: 0.75, turn: 0.5, lead: 1.2, crit: { clean: 10, step: 10, swipe: 15 } };
+
+/** Savage Fists held (from play: "lets remove autoattack on LMB, hold mouse = charge strike (pull back) (2sec
+ *  charge), release = strike (should apply all modifiers previously discussed) 2sec charge is a separate modifier
+ *  ..... user should be able to keep clicking too, for short strikes", "2sec charged strike should give 0.5sec stun
+ *  on enemies"): a full charge lands `full` times a click's punch, less by how far it was charged, over every other
+ *  modifier; charged to the full it dazes what it hits for `stun` s (not an elite or a boss). `swing`: the time a
+ *  punch's swing of the aim is read over (s). First takes, for tuning in play. */
+export const PUNCH_CHARGE = { full: 4, stun: 0.5, swing: 0.25 };
+
+/** A punch to the head (from play: "hitting enemy into the head with punch should deal critical strike, always",
+ *  "should work on dummies too", "aim should not matter, where hit lands matters"): the punching fist as it lands
+ *  between `from` and `to` of a foe's height over its feet, and Savage Fists' punch on that foe is a critical hit. */
+export const HEAD_SHOT = { from: 0.8, to: 1.15 };
+/** Half the breadth of a Savage Fists punch (m): its line and one this far to either side are tried against a
+ *  foe's body as drawn. A punch strikes what its fist meets on the way it's thrown, not what stands in an arc before
+ *  him (from play, of a fist thrown past a dummy that stood beside it: "this should be no hit ... and it crits
+ *  somehow"). */
+export const PUNCH_WIDE = 0.07;
+
+/** His bare fists' guard (from play: "leaving guard on (idle fists) should decrease damage from frontal arc while
+ *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are
+ *  attacking him"): up for `after` s after he last struck or was hurt, and while a foe is within `near` m of him;
+ *  while it's up and he isn't striking, a blow from his front (`BLOCK.arc`) does `less` less. */
+// (`less` 0.5, where 0.3 at first, and `charging` while he holds a punch charged, one fist left in its guard: from
+// play, "increase damage block to 50% when fists are in guard mode.... from 30% and make it 25% when charging a
+// punch")
+export const FIST_GUARD = { less: 0.5, charging: 0.25, after: 4, near: 4 };
+
+export const FRENZY = {
+  cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,
+  slam: 5, quake: 10,
+};
+
+/** Pounce's timing (s), the skill's (combat/skills/pounce) and the warrior's pose keyed to it
+ *  (entities/models/warriorFists): the leap, whatever its length; how long the landing holds him after it, before
+ *  his next cast; and how long it staggers what he lands on. How high a leap goes for each metre (m), at most
+ *  `top`. */
+// (the leap 0.4 s, where 0.3: up to 1.3 m up and down again in 0.3 s he was shot along a rail, from play: "we still
+// need to move the jump in 3rd person look more convincing")
+// (`slam`: how much harder Wrath lands cast in the leap or within `carry` s of its landing, at a leap of its whole
+// reach, less for a shorter one, from play: "it should be possible to cast wrath just before landing after pounce,
+// which should increase its damage (from speed)")
+// (`leap` is its longest's time, a leap of its whole reach; a shorter one takes less, down to `least`)
+export const POUNCE = { leap: 0.4, least: 0.16, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3, slam: 0.5, carry: 0.35 };

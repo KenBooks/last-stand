@@ -41,6 +41,24 @@
 .gem-num { font-family: var(--font-display); font-size: 24px; font-weight: 900; color: var(--accent); line-height: 1; text-shadow: 0 0 8px rgba($accent-glow, .5); }
 #wavebadge { position: absolute; top: hud(10px); left: 50%; transform: translateX(-50%); width: 70px; height: 70px; }
 #wavebadge .gem-num { font-size: 28px; }
+/* the warrior's Frenzy (ui/hud.ts updateFrenzy): a row of pips over the skill bar, lit a pip a stack in its own colour
+   from orange to deep red; the five past the cap only while Unchained runs. Nothing animates: a lit pip's glow is a
+   still shadow, set as the stacks change */
+#frenzy { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 3;
+  display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 10px; background: rgba(10, 6, 6, .72);
+  box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba($frame, .45); }
+#frenzy.hidden { display: none; }
+#frenzy .fz-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255, 210, 170, .7);
+  text-shadow: 0 1px 2px #000; }
+#frenzy.full .fz-label { color: #ff8a5a; }
+#frenzy .fz-pips { display: flex; gap: 3px; }
+#frenzy i { display: none; width: 10px; height: 14px; transform: skewX(-14deg); border-radius: 2px;
+  background: rgba(40, 18, 14, .9); box-shadow: inset 0 0 0 1px rgba(255, 140, 90, .25); }
+#frenzy i.shown { display: block; }
+#frenzy i.extra { box-shadow: inset 0 0 0 1px rgba(255, 70, 40, .55); }
+#frenzy i.on { background: linear-gradient(180deg, #fff2c8 -40%, var(--c) 45%, color-mix(in srgb, var(--c) 55%, #000) 100%);
+  box-shadow: 0 0 6px var(--c), inset 0 0 0 1px rgba(0, 0, 0, .5); }
+#frenzy.unchained { box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba(255, 80, 40, .7), 0 0 10px rgba(255, 60, 30, .45); }
 #hotbar { display: flex; gap: 6px; padding: 7px 12px; position: relative; z-index: 3; background: $tray;
   @include frame(rgba($frame, .6), 0 0 0 1px #000, 0 6px 14px rgba(0,0,0,.8)); border-radius: 4px; }
 .slot { position: relative; width: 62px; height: 62px; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba($frame, .7), inset 0 0 12px rgba(0,0,0,.9);

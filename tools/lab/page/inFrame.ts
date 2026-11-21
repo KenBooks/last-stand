@@ -234,6 +234,8 @@ export function framed(lab: Lab): Framed | null {
   // (no weapon in hand, its meshes hidden: the mage with no staff, #402)
   if (!grip.visible) return null;
   const weapon = drawnUnder(grip);
+  // (nothing in the hand: the warrior's fists, #400)
+  if (!weapon.length) return null;
   const from = buttOf(grip, weapon);
   const to = tip.getWorldPosition(new THREE.Vector3());
   const seen: Place[] = [];

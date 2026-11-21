@@ -116,6 +116,34 @@ function drawnShare(context: CanvasRenderingContext2D, width: number, height: nu
   return drawn / (width * height);
 }
 
+/** The backdrop's colour as a picture shows it (0-255 a channel), and how far a pixel may be from it and still be it. */
+export function backdropDrawn(): { colour: number[]; slack: number } {
+  const shown = BACKDROP.clone().convertLinearToSRGB();
+  return { colour: [shown.r, shown.g, shown.b].map((channel) => channel * 255), slack: BACKDROP_SLACK };
+}
+
+/** `scene` drawn from `shot`'s camera as `shoot` draws it, read back as a tile's pixels (RGBA, its bottom row first). */
+export function drawnPixels(lab: Lab, scene: THREE.Scene, shot: Shot):
+  { pixels: Uint8Array; width: number; height: number } {
+  const renderer = G.renderer;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    if (scene.userData.lightWithCamera) lightFrom(scene, shot.camera);
+    renderer.setRenderTarget(null);
+    renderer.render(scene, shot.camera);
+    const gl = renderer.getContext();
+    const height = gl.drawingBufferHeight;
+    const width = Math.round(height * TILE_SHAPE);
+    const left = Math.round((gl.drawingBufferWidth - width) / 2);
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return { pixels, width, height };
+  } finally {
+    lab.drawing = drawing;
+  }
+}
+
 /** `scene` pictured with each of `shots`, and the least and the most of a picture drawn. */
 export function shoot(lab: Lab, scene: THREE.Scene, shots: Shot[]): { tiles: Tile[]; least: number; most: number } {
   const renderer = G.renderer;

@@ -175,6 +175,13 @@ async function clearSetup(lab: Lab, fixture: Fixture): Promise<Fixture> {
   return moved;
 }
 
+/** The Frenzy a cast is measured at (`combat/frenzy.ts`), held there through it: none, so a blow's pace is the one its
+ *  tooltip states (the stacks a cast built quickened it: Rampage's blows came every 0.133 s where it states 0.17), and
+ *  one for a skill that spends it (Wrath isn't cast without it). */
+function frenzyFor(skill: BoundSkill): number {
+  return skill.def.perStack ? 1 : 0;
+}
+
 /** `wanted` cast at its foes (each with `lives` of life) on a fresh set-up as `fixture` says, its key held as long as
  *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted), and
  *  for `lasting` s from the press at least (an effect that strikes on after it: a zone's ticks). */
@@ -200,7 +207,11 @@ export async function castAt(
   const cast: Cast = { skill, held: hold, foes, hits, blows: [], free: -1, planted: false };
   await lab.step(SETTLE, () => ({ aim }));
   let freeFor = 0;
-  for (; frame < MOST_FRAMES; frame++) {
+  const frenzy = frenzyFor(skill);
+  // (a key held longer than the frames looked at most is followed through and a little after)
+  const lastFrame = Math.max(MOST_FRAMES, holdFrames + AFTER * 6);
+  for (; frame < lastFrame; frame++) {
+    hero.frenzy = frenzy;
     await lab.step(1, () => pressing(skill.key, aim, frame < holdFrames));
     cast.planted ||= plant?.(frame, cast) ?? false;
     const busy = hero.casting || hero.channel || hero.dash || frame < holdFrames;

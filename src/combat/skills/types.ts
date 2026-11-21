@@ -50,6 +50,9 @@ export interface InstantSkill extends SkillBase {
   /** `SkillDef.aimed`: where it's cast for `target` as its key is let go, the point every game is given (Quarry
    *  Mark's: the middle of the foe its preview outlined, so each game marks that one); the aim itself if not given */
   settle?(player: Player, def: SkillDef, target: THREE.Vector3): THREE.Vector3;
+  /** fills in the pose's action each frame of its cast (which form of the move it is: Savage Fists' hammer, Wrath's
+   *  hook, slam or quake, `ActionState.form`) */
+  pose?(player: Player, def: SkillDef, action: ActionState): void;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */
@@ -60,6 +63,8 @@ export interface ChannelSkill<S = unknown> extends SkillBase {
   stop(player: Player, def: SkillDef, state: S): void;
   /** fills in the pose's action each frame (a bow's channel: its draw, its loose and where it aims, as a shot's) */
   pose?(player: Player, def: SkillDef, state: S, action: ActionState): void;
+  /** its drain's share of its `cost` a second now (Rampage's, growing as it's held); none: all of it */
+  drainScale?(state: S): number;
 }
 
 export type SkillImpl = InstantSkill | ChannelSkill<any>;

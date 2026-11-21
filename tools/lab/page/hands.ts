@@ -5,11 +5,17 @@
 // fingers were tubes with rounded ends round the grip.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
-import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
+import { backdropDrawn, cameraOn, countsOf, drawnPixels, shoot, studio, type Shot } from './studio';
+import { marked, seenThrough } from './seeThrough';
+import { canvasOf, opaqueRows } from './pixels';
 import { meshesOf, wearLook, type Look } from './looks';
 import * as handsCode from '../../../src/entities/models/hands';
-import { hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
+import { clench, closeFist, hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
+import { fistLine } from '../../../src/entities/models/warriorFists';
+import * as shapes from '../../../src/entities/models/shapes';
+import type { ArmBuild } from '../../../src/entities/models/build';
+import { fistContact, wristBend } from './fistContact';
 
 /** The game's hand code as far as it goes: `--ab` runs this on main's game, whose hands may not be sculpted yet. */
 const sculpting = handsCode as Partial<typeof handsCode>;
@@ -23,6 +29,8 @@ export interface HandsOptions {
   look?: Look;
   /** the hand in its glove, or bare (false); as the hero's is unless said */
   glove?: boolean;
+  /** the warrior's bare fist in its wrap, or without it (false), to set beside a reference of a bare fist */
+  wrap?: boolean;
   /** canaries: an empty studio, where nothing may be found drawn, and the hand built larger, which must measure so */
   canary?: boolean;
 }
@@ -111,6 +119,8 @@ const POSES: Record<string, Pose> = {
   // (the mage's free hand held into Void Lance's portal, half way into its kick)
   strained: (hand) => strainHand(hand, 0.75, 0.65),
   fist: (hand) => poseHand(hand, 1.45, 0),
+  // The warrior's bare fist, as the guard closes it.
+  clenched: clenchedFist,
   handle: closedRound,
 };
 
@@ -131,6 +141,10 @@ const LEAST_DRAWN = 0.001;
 const CANARY_SCALE = 1.1;
 /** how many times the sculpt is timed (the middle time is said) */
 const SCULPT_TIMES = 3;
+/** An isolated wrist has room for the same forearm winding as the warrior's 270 mm forearm. */
+const STUDIO_FOREARM = 0.27;
+/** The wrap costs one small skinned draw, including both the hand turn and the exposed edges. */
+const WRAP_TRIANGLES = 400;
 
 /** The hand closed round a handle across its palm, as a fist holds a sword's grip, the handle drawn through it. */
 function closedRound(hand: Hand, wrist: THREE.Object3D): void {
@@ -142,6 +156,65 @@ function closedRound(hand: Hand, wrist: THREE.Object3D): void {
   wrist.updateMatrixWorld(true);
   hold(hand, across, HANDLE_RADIUS);
   grip.add(new THREE.Mesh(new THREE.CylinderGeometry(HANDLE_RADIUS, HANDLE_RADIUS, HANDLE_LENGTH, 24), HANDLE));
+}
+
+function clenchedFist(hand: Hand, wrist: THREE.Object3D): void {
+  if (sculpting.closeFist) sculpting.closeFist(hand, new THREE.Vector3(-hand.s, 0, 0));
+  else handleFist(hand, wrist);
+}
+
+/** Canary from 0ffdabdfe. The phantom handle left the thumb beside the index and a hole inside the curl. */
+function handleFist(hand: Hand, wrist: THREE.Object3D, across = new THREE.Vector3(-hand.s, 0, 0)): void {
+  wrist.updateMatrixWorld(true);
+  hold(hand, across, 0.012);
+  clench(hand, [2.05, 1.6, 0.8], 0);
+}
+
+/** Canary for fused fingers: the fist's fingers each turned 9 degrees at the knuckle towards the middle finger. */
+function fuseFingers(hand: Hand): void {
+  const toMiddle = [1, 0, -1, -1];
+  hand.f.forEach((finger, i) => {
+    // (about the hand's length, as `closedFistPose` fans them)
+    const turn = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(9 * toMiddle[i] * -hand.s));
+    finger.j[0].quaternion.premultiply(turn);
+  });
+  hand.vis.updateWorldMatrix(true, true);
+}
+
+/** Check both hands in the guard the player actually gets after punching, with a real elbow to judge the wrist. */
+async function guardContact(lab: Lab, fixture: Fixture, canary?: boolean) {
+  await lab.setup({ ...fixture, view: 'third', gear: 'bare', weapon: undefined, wear: [] });
+  await lab.step(200);
+  const [punched] = await lab.step(1, () => ({ m0: true }), () => lab.player.casting?.skill.impl.anim === 'punch');
+  await lab.step(50);
+  const hands = lab.model.hands;
+  if (!punched || lab.player.casting || !hands || fistLine.R.lengthSq() === 0 || fistLine.L.lengthSq() === 0) {
+    throw new Error('hands: the warrior did not return to his bare guard after the punch');
+  }
+  const lines: string[] = [], problems: string[] = [];
+  for (const [side, wrist, elbow] of [['R', lab.joints.handR, lab.joints.elbowR],
+    ['L', lab.joints.handL, lab.joints.elbowL]] as const) {
+    const hand = hands[side];
+    if (!hand || hand.glove.visible) throw new Error(`hands: the warrior's ${side} hand was not bare`);
+    const reading = fistContact(hand, wristBend(hand, elbow));
+    lines.push(`guard ${side}: ${reading.line}`);
+    problems.push(...reading.problems.map((problem) => `guard ${side}: ${problem}`));
+    if (!canary) continue;
+    const up = UP.clone().transformDirection(wrist.matrixWorld);
+    const across = fistLine[side].clone().transformDirection(lab.joints.body.matrixWorld).projectOnPlane(up);
+    handleFist(hand, wrist, across.normalize());
+    const old = fistContact(hand, wristBend(hand, elbow));
+    lines.push(`old hold + clench ${side}: ${old.line} (${old.problems.join(', ')})`);
+    if (old.contacts.length === 0) problems.push(`guard ${side}: the old fist passed contact`);
+    closeFist(hand, fistLine[side].clone().transformDirection(lab.joints.body.matrixWorld));
+    fuseFingers(hand);
+    const fused = fistContact(hand, wristBend(hand, elbow));
+    lines.push(`fused ${side}: ${fused.line}`);
+    if (!fused.contacts.includes('fingers sunk into each other')) {
+      problems.push(`guard ${side}: the fused fingers passed contact`);
+    }
+  }
+  return { lines, problems };
 }
 
 /** A point of the hand's surface where it's drawn (the world), and the joint it moves with. */
@@ -318,14 +391,29 @@ function oldCopier(lab: Lab, glove?: boolean): Copier {
   };
 }
 
-/** A fresh copy of the hero's right hand on a wrist joint of its own, posed, in the studio. */
-function posedCopy(copier: Copier, pose: Pose, scale = 1): { hand: Hand; wrist: THREE.Group } {
+/** A fresh copy of the hero's right hand, with the game wrap when the studio shows his bare fist. */
+function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
   const wrist = new THREE.Group();
   const hand = copier(wrist);
+  let root = wrist;
+  let updateWrap: (() => void) | undefined;
+  if (wrap) {
+    const elbow = new THREE.Group();
+    elbow.position.y = STUDIO_FOREARM;
+    elbow.add(wrist);
+    wrist.position.y = -STUDIO_FOREARM;
+    const sculpt = new shapes.Sculpt();
+    const skin = () => [sculpting.drawnSkin?.(hand) ?? hand.bareSkin ?? hand.skin];
+    const poses = handsCode.wrapPoses?.(hand) ?? [];
+    updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, wrap, skin, poses);
+    sculpt.build();
+    root = elbow;
+  }
   hand.vis.scale.multiplyScalar(scale);
   pose(hand, wrist);
-  wrist.updateMatrixWorld(true);
-  return { hand, wrist };
+  updateWrap?.();
+  root.updateMatrixWorld(true);
+  return { hand, wrist, root };
 }
 
 /** `wrist` (a hand on it) pictured from `views` as `look` draws it, and the least and most of a picture drawn; the
@@ -350,8 +438,60 @@ function pictureOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, views: HandView[
   }
 }
 
+/** how much of a hand drawn, at most, may show through it from any of the studio's views: its skin seen from inside,
+ *  and the backdrop seen through a hole it closes round (a share of the pixels it covers) */
+const SEE_THROUGH = 0.001;
+
+/** What `hand` (on `wrist`) shows through it from each of the studio's views and its close-ups' sides (every one,
+ *  whatever is pictured, the hand framed whole with what's round it as drawn: under the little finger's curl the window
+ *  is closed by the wrap's edge), drawn in the `faces` look: its skin
+ *  seen from inside and the backdrop through a hole, each view's share of the hand's pixels, and a problem for each
+ *  view past `SEE_THROUGH`. */
+function seeThroughOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, name: string):
+  { line: string; problems: string[]; tiles: Tile[] } {
+  const scene = studio();
+  scene.add(wrist);
+  const box = new THREE.Box3().setFromObject(hand.vis, true);
+  const worn = wearLook('faces', meshesOf(hand.vis));
+  const backdrop = backdropDrawn();
+  const readings: string[] = [];
+  const problems: string[] = [];
+  const tiles: Tile[] = [];
+  try {
+    for (const view of [...VIEWS, ...CLOSE_UPS]) {
+      const camera = cameraOn(box, view.from(-hand.s), view.up);
+      const { pixels, width, height } = drawnPixels(lab, scene, { name: view.name, camera });
+      const seen = seenThrough(pixels, width, height, backdrop.colour, backdrop.slack);
+      const inside = seen.inside / Math.max(1, seen.drawn), holes = seen.holes / Math.max(1, seen.drawn);
+      readings.push(`${view.name} ${pct(inside)}/${pct(holes)}`);
+      if (inside > SEE_THROUGH) problems.push(`the ${name} hand's skin seen from inside from its ${view.name} side`);
+      if (holes > SEE_THROUGH) problems.push(`the ${name} hand seen through from its ${view.name} side`);
+      if (inside > SEE_THROUGH || holes > SEE_THROUGH) {
+        const painted = marked(pixels, width, height, backdrop.colour, backdrop.slack);
+        const png = canvasOf(opaqueRows(painted, width, height)).toDataURL('image/png');
+        tiles.push({ view: `${view.name}, seen through`, png, width, height });
+      }
+    }
+  } finally {
+    worn();
+    scene.remove(wrist);
+  }
+  const line = `${name}: seen through (inside/holes, % of the hand) ${readings.join(', ')}`;
+  return { line, problems, tiles };
+}
+
+/** A share as a percentage to two places. */
+const pct = (value: number) => (value * 100).toFixed(2);
+
 /** A copy's geometry freed, but what every hand of its side shares (`userData.shared`). */
 const freed = (wrist: THREE.Object3D) => disposeGeometries(wrist);
+
+/** A kept sculpt's side by its key (`1`, `-1 heavy`...): left or right, and its build where it has one. */
+function sideName(key: number | string): string {
+  const [side, build] = String(key).split(' ');
+  const name = side === '1' ? 'left' : 'right';
+  return build ? `${build} ${name}` : name;
+}
 
 /** How the hands were sculpted: how long a side takes afresh on the page (ms, the browser's own clock: the middle of
  *  a few times), and whether both were sculpted by workers as the game loaded (a problem if not: on the page they held
@@ -371,8 +511,9 @@ function sculptNotes(copier: Copier): { lines: string[]; problems: string[] } {
   }
   freed(wrist);
   const time = times.sort((a, b) => a - b)[Math.floor(SCULPT_TIMES / 2)];
-  const onPage = [1, -1].filter((s) => by.get(s) !== 'worker').map((s) => (s === 1 ? 'left' : 'right'));
-  const where = onPage.length ? `the ${onPage.join(' and ')} on the page` : 'both by workers as the game loaded';
+  // (kept by side, or by side and build where hands have builds: `handKey`)
+  const onPage = [...by.entries()].filter(([, how]) => how !== 'worker').map(([key]) => sideName(key));
+  const where = onPage.length ? `the ${onPage.join(' and ')} on the page` : 'every side by workers as the game loaded';
   const line = `a side sculpted in ${time.toFixed(0)} ms; ${where}`;
   return { lines: [line], problems: onPage.length ? [`hands: ${line}`] : [] };
 }
@@ -423,13 +564,34 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const problems = [...knobs.problems, ...sculpted.problems];
   const lines = [...sizeNotes(size, scale, lab.model.height), ...knobs.lines, ...sculpted.lines];
   for (const { name, pose } of poses) {
-    const { hand, wrist } = posedCopy(copier, pose);
-    const { tiles, least } = pictureOf(lab, hand, wrist, views, look);
-    const { triangles, meshes } = countsOf(hand.vis);
-    freed(wrist);
-    if (least < LEAST_DRAWN) problems.push(`the ${name} hand covers ${share(least)} of a picture: not drawn`);
+    const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
+    const wrapped = bareFist && options.wrap !== false ? lab.model.arm : undefined;
+    const { hand, root } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose, 1, wrapped);
+    const { tiles, least } = pictureOf(lab, hand, root, views, look);
+    if (bareFist) {
+      const seen = seeThroughOf(lab, hand, root, name);
+      lines.push(seen.line);
+      problems.push(...seen.problems);
+      if (seen.tiles.length) moments.push({ label: `${name}: seen through, holes magenta`, tiles: seen.tiles, notes: [] });
+    }
+    const handCounts = countsOf(hand.vis);
+    const { triangles, meshes } = wrapped ? countsOf(root) : handCounts;
     const notes = [`${triangles.toLocaleString('en')} triangles in ${meshes} meshes`];
+    if (wrapped) {
+      const strip = triangles - handCounts.triangles, draws = meshes - handCounts.meshes;
+      const line = `wrap: ${strip} triangles in ${draws} mesh`;
+      notes.push(line);
+      lines.push(line);
+      if (strip <= 0 || strip > WRAP_TRIANGLES || draws !== 1) problems.push(`hands: ${line} exceeds its budget`);
+    }
+    freed(root);
+    if (least < LEAST_DRAWN) problems.push(`the ${name} hand covers ${share(least)} of a picture: not drawn`);
     moments.push({ label: name, tiles, notes: name === 'flat' ? [...lines, ...notes] : notes });
+  }
+  if (lab.player.cls.id === 'warrior' && sculpting.closeFist && poses.some(({ name }) => name === 'clenched')) {
+    const contact = await guardContact(lab, options.fixture, options.canary);
+    lines.push(...contact.lines);
+    problems.push(...contact.problems);
   }
   if (options.canary) {
     const found = canaries(lab, copier, views, size);

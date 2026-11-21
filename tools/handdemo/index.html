@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hand demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #6f7378; color: #e8e8e8; font: 13px/1.35 system-ui, sans-serif; }
+    #view { position: fixed; inset: 0 300px 0 0; }
+    #view canvas { display: block; width: 100%; height: 100%; }
+    #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 300px; box-sizing: border-box; padding: 10px 12px;
+      overflow-y: auto; background: #23262b; scrollbar-width: thin; }
+    h2 { margin: 12px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #9fb4c8; }
+    h2:first-child { margin-top: 0; }
+    .row { display: grid; grid-template-columns: 74px 1fr 34px; align-items: center; gap: 6px; height: 22px; }
+    .row output { text-align: right; color: #aab; font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; margin: 0; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+    button { height: 26px; padding: 0 10px; border: 1px solid #4a5058; border-radius: 4px; background: #33383f;
+      color: inherit; font: inherit; cursor: pointer; }
+    button:hover { background: #414852; }
+    label.check { display: flex; align-items: center; gap: 6px; height: 24px; cursor: pointer; }
+    #note { margin-top: 10px; color: #99a; }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div id="panel"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "source": "https://sketchfab.com/3d-models/gypsum-fist-18edf463ee424903aa5d9fe3d54a9694",
+  "title": "Gypsum Fist",
+  "author": "Arkdirfe (https://sketchfab.com/Arkdirfe)",
+  "licence": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+  "what": "a plaster cast of a man's right fist, photographed into a mesh; about 14.7 of its units a metre",
+  "mirror": false,
+  "marks": {
+    "wrist": [-0.4626, -0.2394, 3.5094],
+    "index": [-0.0927, 0.3979, 5.3041],
+    "middle": [-0.0265, -0.112, 5.3449],
+    "little": [-0.2177, -0.7493, 4.886]
+  },
+  "inward": { "wrist": 0.33, "index": 0.15, "middle": 0.15, "little": 0.13 }
+}

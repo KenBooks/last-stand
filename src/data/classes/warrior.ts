@@ -32,12 +32,81 @@ const warrior: ClassDef = {
   // Right click raises the shield; with a two-hander instead it looses the crescent (Thunder Crescent), with a weapon in
   // each hand it strikes with both (Twin Fangs), and with a lone one-hander it is empty until the player
   // binds something. A key's default is the last skill listing it.
+  // With both hands empty (no weapon, no shield) he fights as a berserker, a style with a bar of its own (#400): the
+  // weapons' skills give way to the fists' on their keys (`fallback.bare`), and the fists' need empty hands. His blows
+  // build Frenzy (combat/frenzy.ts, `FRENZY` in data/balance.ts): each stack quicker and hungrier, and easier to hurt,
+  // spent all at once by Wrath. The numbers are first takes, the owner's to tune in play.
   skills: [
+    {
+      key: 'mouse0', impl: 'savageFists', name: 'Savage Fists',
+      desc: 'Click to punch what stands close before you, or hold to pull the fist back and charge it for up to 2 seconds, then let go: a full charge lands four times as hard and stuns what it hits for half a second. Each hit restores Energy and builds a stack of Frenzy. A punch lands harder as you walk into the foe, and harder still as you swing your aim the way the fist travels; each of those, and a hit at arm\'s length, also adds to its chance of a critical hit, and a punch that lands on the head always is one. With a shield and no weapon, your free hand punches alone, a little lighter, and builds no Frenzy.',
+      // (half as often and twice as hard as first set, 0.24 s and 30, from play: "lets slow down the attacks, its too
+      // fast... and increase damage to make up for it... I'd say 2x"; the Energy a blow doubled with it)
+      // (and then held to charge: a click is a short punch, the gather 0.12 s and the blow and its way home 0.3;
+      // held up to 2 s it's charged, `PUNCH_CHARGE`. Nothing repeats while the button is held)
+      tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.3, draw: 2, minDraw: 0.06,
+      // (range from his middle to a foe's edge: a fist lands about 0.75 m ahead of it, the arm and the step into it; at 2.4
+      // it struck a dummy from more than three arm's lengths off, from play: "this distance is too far for punch to hit")
+      damage: 60, range: 1.3, arc: 1.3, knock: 1.2, gain: 8, frenzy: 1,
+      // (a shield on the other arm: the right hand alone, each punch a cross, lighter; from play, "have it punch as
+      // well like if there was no sword, but not as much damage though")
+      styles: { shield: { damage: 44, gain: 6, frenzy: 0 } },
+      needs: 'fist',
+      color: 0xd8c8b0,
+      icon: { glyph: '✊︎', color: '#ff8a3a' },
+    },
+    {
+      key: '1', impl: 'pounce', name: 'Pounce',
+      desc: 'Leap onto the foe you aim at, up to 8 metres off, striking it with both fists from two sides as you land and staggering it for a moment. Elites and bosses are too strong to stagger. Builds a stack of Frenzy, and you are free to strike again the moment you land.',
+      // (cast over a punch held charged, which stays charged through the leap and is let go after it: from play, "it
+      // should be possible to charge a punch, then pounce then release it", "or bloodrush then release it")
+      tags: ['physical'], cost: 20, cooldown: 3, castTime: 0, overCast: true,
+      // (one blow; its four were 35 each, 140 together, and 200 is the owner's: "make it 200 base damage")
+      damage: 200, range: 8, frenzy: 1,
+      needs: 'bare',
+      color: 0xd8b890,
+      icon: { glyph: '⤵', color: '#3fd8c0' },
+    },
+    {
+      key: 'mouse2', impl: 'rampage', name: 'Rampage',
+      desc: 'Hold to throw a flurry of punches as you walk, striking every foe close before you. Each blow that lands builds Frenzy, and none decays while you hold it. Quicker with Frenzy, as all your attacks are. Each second held it hits 5% harder and drains 5% more Energy, up to 50%. Drains Energy while held.',
+      tags: ['physical'], cost: 25, cooldown: 0, castTime: 0, channel: true,
+      damage: 140, range: 1.4, arc: 1.6, knock: 0.8, moveMult: 0.75, frenzy: 1, frenzyHolds: true,
+      needs: 'bare',
+      icon: { glyph: '≋', color: '#b070ff' },
+    },
+    {
+      key: '2', impl: 'bloodrush', name: 'Bloodrush',
+      desc: 'Dash recklessly along your aim through a line of foes, striking each you pass. It carries none of them. Each foe struck builds a stack of Frenzy, up to 5.',
+      tags: ['physical'], cost: 22, cooldown: 6, castTime: 0, overCast: true,
+      damage: 80, range: 7, speed: 26, frenzy: 1, frenzyMost: 5,
+      needs: 'bare',
+      color: 0xff5a2a,
+      icon: { glyph: '➶', color: '#ff3048' },
+    },
+    {
+      key: '3', impl: 'wrath', name: 'Wrath',
+      desc: 'Spend all your Frenzy in one blow, harder for every stack. Under 5 stacks it is a single hook; from 5 a two-fisted slam that also strikes every foe round where it lands; at 10 or more it cracks the ground and throws them back. The damage you take goes back to normal. Cast in the air of a Pounce or as a Bloodrush ends, it lands up to half as hard again. Needs a stack of Frenzy.',
+      tags: ['physical'], cost: 15, cooldown: 4, castTime: 0.4, fireAt: 0.65,
+      damage: 60, perStack: 70, range: 1.5, arc: 1.2, radius: 3, knock: 8,
+      needs: 'bare',
+      color: 0xff6a30,
+      icon: { glyph: '✹', color: '#ffcc40' },
+    },
+    {
+      key: '4', impl: 'unchained', name: 'Unchained',
+      desc: 'Let your fury loose: for 8 seconds your Frenzy doesn\'t decay and can build to 15 stacks.',
+      tags: ['buff'], cost: 30, cooldown: 30, castTime: 0,
+      duration: 8,
+      needs: 'bare',
+      icon: { glyph: '⛓', color: '#5ab8ff' },
+    },
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
       desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.42,
       damage: 62, range: 3.3, arc: 2.2, knock: 2.2, gain: 4,
+      needs: 'weapon', fallback: { bare: 'savageFists' },
       // (each about as much damage and energy a second: a great weapon's weight in each blow, two blades' pace)
       styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 } },
       color: 0xffd9a0,
@@ -66,7 +135,7 @@ const warrior: ClassDef = {
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs' },
+      needs: 'shield', fallback: { twoHanded: 'crescent', dual: 'twinFangs', bare: 'rampage' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {
@@ -74,6 +143,7 @@ const warrior: ClassDef = {
       desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held. A two-handed weapon spins slower and hits harder.',
       tags: ['physical'], cost: 30, cooldown: 0, castTime: 0, channel: true,
       damage: 150, radius: 2.9, moveMult: 0.8, spin: 15,
+      needs: 'armed', fallback: { bare: 'pounce' },
       // (as Rending Cleave's swings: a great weapon's weight slows it as much, the same damage a second)
       styles: { twoHanded: { spin: 10.5 } },
       icon: { glyph: '✺', color: '#e8eef8' },
@@ -87,6 +157,7 @@ const warrior: ClassDef = {
       // `slow` of its speed, and at `most` it stops; gear's All Damage % lightens the load by `gear` of its share,
       // so the most it goes is the same whatever the gear. A boss is never carried: it stops the charge)
       push: { most: 6, slow: 0.07, gear: 0.5 },
+      needs: 'armed', fallback: { bare: 'bloodrush' },
       // (#560, the weight of the foes it met, a kill half: 5 common foes, two slammers, an elite slammer or a boss
       // stagger him for 0.4 s at its stop, up to 0.7 s at 9, a pack it was stopped by and the dead it ploughed)
       ram: { at: 5, full: 9, least: 0.4, most: 0.7, elite: 2, killed: 0.5 },
@@ -105,6 +176,7 @@ const warrior: ClassDef = {
       desc: 'Gather your strength for a moment and a half, then bring your weapon down in a crushing overhead blow.',
       tags: ['physical'], cost: 35, cooldown: 5, castTime: 1.5, fireAt: 0.9,
       damage: 520, range: 3.9, arc: 1.2, knock: 9,
+      needs: 'armed', fallback: { bare: 'wrath' },
       color: 0xffc070,
       icon: { glyph: '⚒', color: '#ffc070' },
     },
@@ -113,6 +185,7 @@ const warrior: ClassDef = {
       desc: 'A war cry that hurls back nearby foes and raises spectral shields round you for 6 seconds. They absorb the blows you take, up to 30% of your maximum Health.',
       tags: ['defense'], cost: 30, cooldown: 14, castTime: 0.65,
       damage: 40, radius: 6, knock: 8, absorbPct: 0.3, duration: 6,
+      needs: 'armed', fallback: { bare: 'unchained' },
       icon: { glyph: '⛨', color: '#ffd36a' },
     },
     {

@@ -5,6 +5,7 @@ import { NUMBER_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
 import { dealsDamage } from '../net/role';
 import { countDealt } from '../game/stats';
+import { landed } from './frenzy';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { HitResult, Player } from '../entities/player';
@@ -35,11 +36,12 @@ export function damageScale(s: DerivedStats, tags: readonly string[]): number {
   return 1 + (b.all + b.arcane + b.elemental) / 100;
 }
 
-/** Roll a player's outgoing damage for a skill with the given tags. */
-export function rollPlayerDamage(by: Player, base: number, tags: readonly string[]): { amount: number; crit: boolean } {
+/** Roll a player's outgoing damage for a skill with the given tags, `sharp` more chance of a critical hit (points
+ *  of a hundred) than his own. */
+export function rollPlayerDamage(by: Player, base: number, tags: readonly string[], sharp = 0): { amount: number; crit: boolean } {
   const s = by.stats;
   let amount = base * damageScale(s, tags) * rand(DAMAGE_ROLL.low, DAMAGE_ROLL.high);
-  const crit = Math.random() * 100 < s.crit;
+  const crit = Math.random() * 100 < s.crit + sharp;
   if (crit) amount *= 1 + s.critDmg / 100;
   return { amount, crit };
 }
@@ -50,6 +52,8 @@ export interface HitOpts {
   /** the skill the hit is from, as the battle log names it (from a dash's step, a timer or a channel's tick too, so
    *  it can't be told from what is being cast) */
   skill: SkillDef;
+  /** more chance of a critical hit for this hit than his own (points of a hundred: a punch thrown well) */
+  sharp?: number;
   tags?: readonly string[];
   type?: DamageType;
   knock?: number;
@@ -115,7 +119,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const type: DamageType = opts.type ?? 'arcane';
   const tags = opts.tags ?? [type];
   const by = opts.by;
-  const { amount: rolled, crit } = rollPlayerDamage(by, base, tags);
+  const { amount: rolled, crit } = rollPlayerDamage(by, base, tags, opts.sharp);
   // (a marked foe takes more from everyone: the largest of the marks on it)
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
@@ -127,6 +131,8 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   // everyone sees their own numbers (a rival's is the struck hero's own, as his game worked the hit out)
   if (!opts.unnumbered && (!opts.silent || crit) && !enemy.standIn) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
+  // (the warrior's Frenzy: its decay waits again, and its stacks heal back their share)
+  landed(by, dealt);
   return dealt;
 }
 

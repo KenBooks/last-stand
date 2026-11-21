@@ -5,7 +5,7 @@ import type { HeldStyle } from '../../../src/types';
 import { G } from '../../../src/state';
 
 /** every way of holding weapons, for a class whose skills follow how they're held */
-const STYLES: HeldStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded'];
+const STYLES: HeldStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded', 'bare'];
 
 /** The ways of holding weapons measured: the fixture's, or each one for a class whose skills follow how they're held
  *  (none: as he is); for a class whose weapons have schools, each school's and none held. */

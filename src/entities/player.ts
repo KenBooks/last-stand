@@ -14,7 +14,8 @@ import { hairColour, type HeroLook } from '../data/heroLooks';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
-import { BLOCK, COOP, FULL_DRAW, PVP } from '../data/balance';
+import { BLOCK, COOP, FIST_GUARD, FRENZY, FULL_DRAW, PVP } from '../data/balance';
+import { tickFrenzy } from '../combat/frenzy';
 import { recorder } from '../perf/recorder';
 import { SCHOOLS } from '../data/schools';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout } from '../loot/loadout';
@@ -266,6 +267,9 @@ export class Player {
   loadout!: Loadout;
   /** the weapon style the loadout belongs to */
   private style: HeldStyle | null = null;
+  /** his bare fists' guard (`guarding`): game time he last struck with them, and was last hurt */
+  private fistT = -9;
+  private hurtT = -9;
   /** the hands the channel held is cast from, for one cast with none full (`bare`): by its keys held here, as its
    *  own game reports them for a partner's copy */
   hands: CastHands = 'left';
@@ -310,6 +314,12 @@ export class Player {
   refused: Denial | null = null;
   /** the game time the last denied sound played (the lab's `denied` canary sets it back to break the throttle) */
   deniedAt = -99;
+  /** the warrior's Frenzy with both hands empty (combat/frenzy.ts): its stacks, when a hit of his last landed and the
+   *  decay's time owed since its wait (s, game time); and until when Unchained runs (game time) */
+  frenzy = 0;
+  frenzyAt = -Infinity;
+  frenzyDecay = 0;
+  unchainedUntil = -1;
 
   // co-op
   /** at 0 health (alive false) but waiting for a teammate: seconds left before bleeding out */
@@ -528,6 +538,8 @@ export class Player {
     if (this.loadout && style === this.style) return;
     if (this.channel) this.stopChannel();
     this.style = style;
+    this.frenzy = 0;
+    this.unchainedUntil = -1;
     this.loadout = loadLoadout(this.cls, this.gear);
     for (const def of this.cls.skills) {
       const known = this.known.get(def.impl);
@@ -571,6 +583,9 @@ export class Player {
     this.guardUntil = -1;
     this.knock.set(0, 0, 0);
     this.chilledUntil = this.heldUntil = this.holdRest = this.rootedUntil = -1;
+    this.frenzy = this.frenzyDecay = 0;
+    this.frenzyAt = -Infinity;
+    this.unchainedUntil = -1;
     this.model.kit.u.uFrozen.value = 0;
     this.pos.copy(this.spawn);
     this.sitting.clear();
@@ -638,6 +653,9 @@ export class Player {
     const k = Math.max(d, SHOT_NEAR) / d;
     return Math.atan2(this.pos.x + dx * k - from.x, this.pos.z + dz * k - from.z);
   }
+
+  /** How much quicker than their own time his casts and attacks go: his casting speed, and Frenzy's on it. */
+  get haste(): number { return 1 + (this.stats.castSpeed + this.frenzy * FRENZY.haste) / 100; }
 
   cooldownOf(def: SkillDef): number { return def.cooldown * (1 - this.stats.cdr / 100); }
   cooldownLeft(id: string): number { return this.cooldowns.get(id) ?? 0; }
@@ -810,13 +828,13 @@ export class Player {
     if (this.channel?.skill.def.block && !s.def.overCast) this.stopChannel();
     // (the house of records' favourite skill: the local hero's casts in a run)
     if (this.local) countCast(s.def.impl);
-    const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
+    const dur = s.def.castTime / this.haste;
     const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
     if (s.def.draw && key) {
       // drawn while the key is held, loosed when it's let go (update)
-      const drawT = s.def.draw / (1 + this.stats.castSpeed / 100);
+      const drawT = s.def.draw / this.haste;
       this.casting = { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, key, drawT, nockT };
       if (!s.def.freeMove) this.faceTowards(target);
       actionSink?.({ t: 'cast', s: s.def.impl, dur: drawT, x: target.x, z: target.z, h: 1, ...n });
@@ -877,7 +895,7 @@ export class Player {
   /** A drawn shot is loosed: what follows the release (the follow-through, the next arrow) is the cast's time. */
   private loose(c: CastState, power: number): void {
     c.fired = true; c.power = power; c.fireAt = c.t;
-    c.dur = c.t + c.skill.def.castTime / (1 + this.stats.castSpeed / 100);
+    c.dur = c.t + c.skill.def.castTime / this.haste;
   }
 
   /** A remote player's action, replayed as its owner reported it. */
@@ -885,7 +903,7 @@ export class Player {
    *  than it looses; 0 for any other. */
   nockTime(s: KnownSkill): number {
     const q = this.cls.quiver;
-    return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0;
+    return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / this.haste : 0;
   }
 
   replay(a: PlayerAction): void {
@@ -1182,7 +1200,9 @@ export class Player {
     if (this.channel) {
       const ch = this.channel;
       // (from both hands it drains as its `both` has it)
-      const perSecond = this.bothHands ? ch.skill.def.both?.cost ?? ch.skill.def.cost : ch.skill.def.cost;
+      const own = this.bothHands ? ch.skill.def.both?.cost ?? ch.skill.def.cost : ch.skill.def.cost;
+      // (a channel that drains more as it's held says by how much: Rampage)
+      const perSecond = own * ((ch.skill.impl as ChannelSkill).drainScale?.(ch.state) ?? 1);
       const cost = this.sandbox ? 0 : perSecond * dt;
       if (this.energy < cost) { this.lowEnergy(); this.stopChannel(); }
       else {
@@ -1231,6 +1251,7 @@ export class Player {
     if (!this.channel) this.energy = Math.min(this.stats.maxEnergy, this.energy + this.stats.energyRegen * dt);
     for (const [id, cd] of this.cooldowns) this.cooldowns.set(id, Math.max(0, cd - dt));
     this.tickVitals(dt);
+    tickFrenzy(this, dt);
     this.animateBody(dt, t, speed);
   }
 
@@ -1339,6 +1360,7 @@ export class Player {
     else if (this.casting) {
       const c = this.casting, impl = c.skill.impl;
       action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      if (!impl.channel) impl.pose?.(this, c.skill.def, action);
       if (impl.anim === 'bow' && !impl.channel) {
         // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
         const nk = c.nockT ?? 0, draw = c.fired ? (c.power ?? 1) : Math.min(1, Math.max(0, c.t - nk) / Math.max(1e-3, c.drawT ?? c.fireAt - nk));
@@ -1443,6 +1465,7 @@ export class Player {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
     this.model.root.rotation.set(0, this.facing, 0);
+    if (action && this.style === 'bare') this.fistT = G.time;
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
     this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
@@ -1461,6 +1484,7 @@ export class Player {
       this.model.animate({
         t, dt: owed, phase: this.phase, move, moveDir: dir, lean, action,
         hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
+        guard: this.guarding,
         charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
         nocked: this.nocked,
         strike: action?.name === 'chop' ? this.struckAhead() : null,
@@ -1497,7 +1521,7 @@ export class Player {
       this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
       // (hidden, as the hero selection screen hides him: it lights nothing)
       const shown = this.obj.visible ? 1 : 0;
-      this.staffLight.intensity = shown * (this.cls.schools && !this.gear.weapon ? 0 : 1) * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      this.staffLight.intensity = shown * (this.gear.weapon ? 1 : 0) * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
     // (the glowing hand lights what's round it, breathing as its glow does; off through the eyes, where a light by the
     // camera floods the view; held off the palm, `HAND_LIGHT`)
@@ -1563,9 +1587,33 @@ export class Player {
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns how it turned out (null: it didn't land,
    *  the hero down or guarded). */
+  /** Whether his bare fists are up in their guard and free (`FIST_GUARD`): he struck or was hurt a moment ago, or a
+   *  foe is on him, and he isn't striking, dashing or reeling now. */
+  get guarding(): boolean {
+    if (this.style !== 'bare' || this.casting || this.channel || this.dash || this.staggered) return false;
+    if (G.time - this.fistT < FIST_GUARD.after || G.time - this.hurtT < FIST_GUARD.after) return true;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawning) continue;
+      if (Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) < FIST_GUARD.near + e.radius) return true;
+    }
+    return false;
+  }
+
+  /** Whether he holds a punch charged with both hands empty: one fist chambered, the other left in its guard. */
+  get chargingPunch(): boolean {
+    const c = this.casting;
+    return this.style === 'bare' && !!c?.drawT && !c.fired && c.skill.impl.anim === 'punch' && !this.staggered;
+  }
+
   takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): HitResult | null {
     if (!this.alive || G.time < this.guardUntil) return null;
-    const r = this.resolveHit(amount, from);
+    // (his fists' guard takes a share off a blow from his front)
+    const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
+    if (front && this.guarding) amount *= 1 - FIST_GUARD.less;
+    else if (front && this.chargingPunch) amount *= 1 - FIST_GUARD.charging;
+    this.hurtT = G.time;
+    // (each stack of Frenzy, more of every blow: combat/frenzy.ts)
+    const r = this.resolveHit(amount * (1 + this.frenzy * FRENZY.frail / 100), from);
     this.showHit(r);
     if (this.local) {
       actionSink?.({ t: 'hurt', r: { taken: round2(r.taken), blocked: round2(r.blocked), broke: r.broke, absorbed: round2(r.absorbed) } });

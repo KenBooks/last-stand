@@ -21,6 +21,12 @@ import raiseShield from './raiseShield';
 import powerStrike from './powerStrike';
 import twinFangs from './twinFangs';
 import ironBellow from './ironBellow';
+import savageFists from './savageFists';
+import pounce from './pounce';
+import rampage from './rampage';
+import bloodrush from './bloodrush';
+import wrath from './wrath';
+import unchained from './unchained';
 import { bowShot, piercingShot } from './ranger';
 import arrowRain from './arrowRain';
 import quarryMark from './quarryMark';
@@ -31,5 +37,6 @@ import type { SkillImpl } from './types';
 export const SKILL_IMPLS: Record<string, SkillImpl> = {
   splinterBolt, cinderburst, stormcall, lifethread, starfall, voidLance, glacialNova, maelstrom, blink, potion,
   cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow, twinFangs,
+  savageFists, pounce, rampage, bloodrush, wrath, unchained,
   nockShot: bowShot, fanShot: bowShot, piercingShot, arrowRain, quarryMark, strawman,
 };
