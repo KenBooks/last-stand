@@ -21,24 +21,25 @@ The overnight run's state file (2026-11-20). Branch `experiment/rust-engine`, dr
 
 | Stand | Renderer | CPU | GPU | Draws |
 | --- | --- | --- | --- | --- |
-| Forest, 24 foes | three WebGPU | 6.5 ms | 5.3 ms | 142 |
-| Forest, 24 foes | engine | 4.0 ms | 1.1 ms | 886 + 205 |
-| Village, noon | three WebGPU | 9.8 ms | 1.7 ms | 260 |
-| Village, noon | engine | 3.1 ms | 1.7 ms | 228 + 326 |
-| Village, noon, replayed natively | engine | 0.7 ms (no walk) | 1.05 ms | 224 + 326 |
+| Forest, 24 foes | three WebGPU (day 1) | 6.5 ms | 5.3 ms | 142 |
+| Forest, 24 foes | engine | 4.3 ms | 1.6 ms | 932 + 218 |
+| Village, noon | three WebGPU (day 1) | 9.8 ms | 1.7 ms | 260 |
+| Village, noon | engine | 3.5 ms | 1.75 ms | 226 + 327 |
+| Forest over the shoulder, replayed natively | engine | 1.0 ms (no walk) | 1.2 ms | 340 + 227 |
 
-The engine's rows now have the meadow (1.09M triangles in the village) and the whole post chain; three's are the first day's. Still not like for like: flames, sky, portal glows, moss and wind aren't drawn, nor the lamps' shadows.
+The engine's rows have the trees it lacked before, the looks and the whole post chain. In the village nothing is left undrawn where the hero stands; in the forest one instanced geometry. Three's rows are the first day's.
 
 ## Next, in the order they'd show
 
-1. The looks left, each a file in `looks/`: flames (`world/fireNodes.ts`), the sky (`world/skyNodes.ts`), the portals' membranes, the ground's moss and damp, the Thornwood's grass in the wind, the fountain's water, the ghost's shade. `lab rust --census` lists them where the hero stands.
+1. The looks left: the crypt's damp floor (needs more than two maps a hook), the fountain's water and the ghost's shade, the embers' glow, points (the dazed stars), each membrane's and flame's fade as its prop dissolves. Look at the flames close to: only seen from above so far.
 2. The night: the village at midnight reads brighter than three's.
-3. First person: the hero's body hidden, the arms' own pass; a sky.
+3. First person: the hero's body hidden, the arms' own pass.
 4. The lamps' shadows; the point lights'.
-5. The walk of the scene is most of the CPU's part (2.3 to 2.8 ms of 3 to 4): records kept between frames for what didn't move, then the scene itself kept in the engine (from the owner: what's slow in TypeScript moves into the engine and stays there).
+5. The walk of the scene is most of the CPU's part (2.5 to 2.9 ms of 3.5 to 4.3): records kept between frames for what didn't move, then the scene itself kept in the engine (from the owner: what's slow in TypeScript moves into the engine and stays there).
 6. Where a frame's CPU goes with the engine drawing (the game's update, the walk, the engine, the page): measured before any of the game is ported.
 7. About 170 meshes are handed over again in 60 frames standing still (a geometry rewritten each frame): find which, and send only what changed.
-8. Play the preview in a visible browser and on a phone; time it on an idle GPU.
+8. A look's material casts no shadow (the grass, the meadow): the shadow's pass would need its vertex hook.
+9. Play the preview in a visible browser and on a phone; time it on an idle GPU.
 
 ## Log
 
@@ -52,3 +53,5 @@ The engine's rows now have the meadow (1.09M triangles in the village) and the w
 - Day 2, 07:25 a material's own look as WGSL hooks; the meadow drawn by it, matching three's frame at first sight.
 - 07:45 the post chain (an hour lost to a black frame: a timestamp asked of a pass with neither end set; `lab rust` reports what the GPU says now).
 - 07:55 the engine's core apart from its web shell; a frame's tape replayed natively in 2.5 s; a 2 s build for it.
+- 08:30 the skies, the portals, the forest's moss, grass wind and shafts; instanced meshes left whole (the forest had no trees); colour-off meshes shadow-only (the hall was under a white shell, the owner saw it).
+- 08:50 volumes, a clamped sampler and a premultiplied blend in the engine; the flames by the game's own WGSL.
