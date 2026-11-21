@@ -5,6 +5,7 @@
 // camera's view are packed to the front of its instances: one draw a mesh as before, of what is in view. (Split into
 // meshes of their own, a cell each, they cut as many triangles but drew 45 to 60 times more a frame.) What casts a
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
+import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { TAU } from '../util';
 import { WEBGPU } from '../core/webgpu';
@@ -87,6 +88,10 @@ function shadowCasterOf(mesh: THREE.InstancedMesh): THREE.InstancedMesh {
  * place (its instances outside the shadow map's box let go by `trimShadowCasters`).
  */
 export function cullInCells(mesh: THREE.InstancedMesh, cellOf: CellOf): THREE.InstancedMesh[] {
+  // (the Rust engine culls an instance at a time itself, in its own view and the sun's: the mesh is left whole, as
+  // built. Packed by cells here, its count stood wherever three's last render left it, as the engine runs none of
+  // what hangs on three's render: the Thornwood drew without its trees)
+  if (RUNNING.rust) return [mesh];
   const byCell = new Map<string | number, number[]>();
   for (let i = 0; i < mesh.count; i++) {
     mesh.getMatrixAt(i, _m);
