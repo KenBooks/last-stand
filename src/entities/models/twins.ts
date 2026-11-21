@@ -542,7 +542,7 @@ export function buildTwinSlab(): Model {
   }
 
   return {
-    root: b.root, kit, animate, height: 5.3,
+    root: b.root, kit, animate, head: b.skull, height: 5.3,
     reset() { burn = 0; },
     dispose() { kit.dispose(); chain.mesh.geometry.dispose(); (chain.mesh.material as THREE.Material).dispose(); },
   };
@@ -694,7 +694,7 @@ export function buildTwinReliquary(): Model {
   }
 
   return {
-    root: b.root, kit, animate, height: 5.7,
+    root: b.root, kit, animate, head: b.skull, height: 5.7,
     reset() { spin = burn = raised = 0; },
     dispose() { kit.dispose(); },
   };

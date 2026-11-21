@@ -196,5 +196,5 @@ export function buildDummy(): Model {
 
   shareGeometries(root);
   root.userData.crowdKind = 'dummy';
-  return { root, kit, animate, height: 1.95, dispose() { kit.dispose(); } };
+  return { root, kit, animate, head, height: 1.95, dispose() { kit.dispose(); } };
 }

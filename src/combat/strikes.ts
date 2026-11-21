@@ -1,12 +1,32 @@
 // Where a shot strikes a foe: its body as it's drawn, met along the shot's step (its rigid meshes and its skinned
 // limbs, fx/stuckArrows.ts `castSolid`). Struck only within its circle and under its height, an arrow aimed at a boss's
 // arms or crown flew on through it, and one aimed past a small foe's shoulder at the boss behind struck the small foe
-// it went by. (A column within its circle as well struck imps where nothing of them is drawn.)
+// it went by. (A column within its circle as well struck imps where nothing of them is drawn.) What it met tells a
+// headshot from a body's hit (`Struck`, `onHead`).
 import * as THREE from 'three';
 import type { Enemy } from '../entities/enemy';
+import type { HullHit } from '../entities/models/hulls';
 import { castSolid } from '../fx/stuckArrows';
 
 const ray = new THREE.Raycaster(), _dir = new THREE.Vector3();
+
+/** What a shot met of a body, filled in by `strikesBody` as it finds where: whether it was the head. */
+export interface Struck { head: boolean }
+
+/**
+ * Whether `hit`, met on `e`'s body, is on its head: what it met rides the model's head joint (its skull and all on
+ * it, a horn, a hood, a cap, a jaw), a rigid mesh under that joint or a skinned one's triangle that joint moves the
+ * most. Read off the part, not the height: the Brute's, the Mossback's and the Hulks' heads hang low and forward
+ * between their shoulders, under a hump or horns that a share of the height would have taken for one.
+ */
+export function onHead(e: Enemy, hit: THREE.Intersection): boolean {
+  const head = e.model.joints?.head ?? e.model.head;
+  if (!head) return false;
+  for (let o: THREE.Object3D | null = (hit as Partial<HullHit>).joint ?? hit.object; o && o !== e.obj; o = o.parent) {
+    if (o === head) return true;
+  }
+  return false;
+}
 
 /** Where along the step from (ax, az) by (dx, dz) it first comes within `r` of (cx, cz): 0..1, or -1 if it doesn't. */
 export function entry(ax: number, az: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
@@ -22,9 +42,11 @@ export function entry(ax: number, az: number, dx: number, dz: number, cx: number
 /**
  * Where along the step from `a` to `b` (0..1) a shot first meets `e`'s body, its meshes as drawn, or -1 if it doesn't.
  * They're met only when the step comes within the body's reach (`Enemy.reach`). A ducked foe is met within `around`
- * (m) of what's left of it (the shot's own size).
+ * (m) of what's left of it (the shot's own size). `struck` is told what it met: its head or not (a ducked foe's cap
+ * is no head).
  */
-export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around = 0): number {
+export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around = 0, struck?: Struck): number {
+  if (struck) struck.head = false;
   const top = e.duckedTop;
   if (top !== null) return strikesDucked(e, top, a, b, around);
   const dx = b.x - a.x, dz = b.z - a.z, base = e.obj.position.y;
@@ -35,7 +57,9 @@ export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around
   ray.set(a, _dir.subVectors(b, a).divideScalar(length));
   ray.far = length;
   const hit = castSolid(e.obj, ray);
-  return hit ? hit.distance / length : -1;
+  if (!hit) return -1;
+  if (struck) struck.head = onHead(e, hit);
+  return hit.distance / length;
 }
 
 /**

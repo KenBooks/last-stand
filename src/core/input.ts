@@ -7,6 +7,7 @@ import { CAMERA } from '../data/balance';
 import { tunable } from './tuning';
 import { GROUND_LEVELS, groundHeight } from '../world/ground';
 import { castSolid } from '../fx/stuckArrows';
+import { onHead } from '../combat/strikes';
 import type { Enemy } from '../entities/enemy';
 
 export const input = {
@@ -203,17 +204,21 @@ function aimAlong(far: number, offHero = false): void {
     if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits), null]);
   }
   near.sort((a, b) => a[0] - b[0]);
-  let on: Enemy | null = null;
+  let on: Enemy | null = null, met: THREE.Intersection | null = null;
   for (const [t, meet, foe] of near) {
     if (t >= best) break;
     ray.far = best; _hits.length = 0;
     meet();
-    for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; on = foe; }
+    for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; on = foe; met = h; }
   }
   // (a foe's point taken a little inside it, towards its middle: its surface alone, a crown seen from above, lay on the
   // top of the dome, and a shot flying near level to it grazed over it and struck nothing, `lab shots`; taken along the
   // eye's ray, a ray from above meeting a foe's side took it further aside, and the arrow passed it, `lab death`)
-  if (what === 'body' && on) {
+  // Through the crosshair a point on its head is taken in along the eye's ray, into the head: towards the body's
+  // middle, a small head's point went down to its neck, and a shot at the Rift Witch's head struck her hood or went by
+  // (no headshot, #750; `lab headshots`)
+  if (what === 'body' && on && offHero && met && onHead(on, met)) _best.addScaledVector(r.direction, AIM_INTO);
+  else if (what === 'body' && on) {
     _middle.set(on.pos.x, on.obj.position.y + on.height / 2, on.pos.z).sub(_best);
     _best.addScaledVector(_middle, Math.min(1, AIM_INTO / Math.max(_middle.length(), 1e-6)));
   }

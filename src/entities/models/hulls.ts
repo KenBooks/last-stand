@@ -14,7 +14,11 @@ import * as THREE from 'three';
  */
 interface Part { mid: THREE.Vector3; half: THREE.Vector3; bones: Uint16Array; tris: Uint32Array }
 /** the parts one bone moves the most of, and the box round them that way (met first: the ray meets a few of them) */
-interface Group { mid: THREE.Vector3; half: THREE.Vector3; bones: Uint16Array; parts: Part[] }
+interface Group { mid: THREE.Vector3; half: THREE.Vector3; bones: Uint16Array; parts: Part[]; /** that bone */ bone: number }
+
+/** A ray's meeting with a skinned mesh: what three's is, and the joint that moves what it met the most (the bone a
+ *  headshot reads, combat/strikes.ts `onHead`). */
+export interface HullHit extends THREE.Intersection { joint: THREE.Object3D }
 
 /** each geometry's parts, by the bone that moves them most: every body of a kind shares its geometry */
 const GROUPS = new WeakMap<THREE.BufferGeometry, Group[]>();
@@ -59,14 +63,14 @@ function groupsOf(g: THREE.BufferGeometry): Group[] {
   }
   const middle = (box: THREE.Box3) => box.getCenter(new THREE.Vector3());
   const halfOf = (box: THREE.Box3) => box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-  groups = [...made.values()].map((pieces) => {
+  groups = [...made.entries()].map(([bone, pieces]) => {
     const box = new THREE.Box3(), bones = new Set<number>();
     const parts = [...pieces.values()].map((part) => {
       box.union(part.box);
       for (const b of part.bones) bones.add(b);
       return { mid: middle(part.box), half: halfOf(part.box), bones: Uint16Array.from(part.bones), tris: Uint32Array.from(part.tris) };
     });
-    return { mid: middle(box), half: halfOf(box), bones: Uint16Array.from(bones), parts };
+    return { mid: middle(box), half: halfOf(box), bones: Uint16Array.from(bones), parts, bone };
   });
   GROUPS.set(g, groups);
   return groups;
@@ -193,10 +197,10 @@ function meetsPosed(ray: THREE.Ray, mid: THREE.Vector3, half: THREE.Vector3, bon
 const posing = new Posing();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _p = new THREE.Vector3();
 /** Where `by`'s ray first meets `mesh` as it's drawn now (within `by.near` to `by.far`), or null. */
-export function hullHit(mesh: THREE.SkinnedMesh, by: THREE.Raycaster): THREE.Intersection | null {
+export function hullHit(mesh: THREE.SkinnedMesh, by: THREE.Raycaster): HullHit | null {
   const ray = by.ray, mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
   const cull = mat.side === THREE.FrontSide;
-  let best: THREE.Intersection | null = null;
+  let best: HullHit | null = null;
   posing.start(mesh);
   for (const group of groupsOf(mesh.geometry)) {
     if (!meetsPosed(ray, group.mid, group.half, group.bones)) continue;
@@ -207,7 +211,7 @@ export function hullHit(mesh: THREE.SkinnedMesh, by: THREE.Raycaster): THREE.Int
         if (!hit) continue;
         const d = ray.origin.distanceTo(hit);
         if (d < by.near || d > by.far || (best && d >= best.distance)) continue;
-        best = { distance: d, point: hit.clone(), object: mesh };
+        best = { distance: d, point: hit.clone(), object: mesh, joint: mesh.skeleton.bones[group.bone] ?? mesh };
       }
     }
   }
