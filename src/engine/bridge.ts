@@ -11,6 +11,7 @@ import { holeNow } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import { particles } from '../fx/particles';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
+import { recording, Tape } from './tape';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
@@ -174,6 +175,43 @@ export class Bridge {
     if (this.records.buffer !== this.wasm.memory.buffer) this.takeViews(this.capacity, this.boneCapacity);
   }
 
+  /** the largest side a map is handed over at (a tape's maps are smaller: its file is mostly maps) */
+  private mostMap = MAX_MAP;
+  private tape: Tape | null = null;
+
+  /** What's kept of what was handed over forgotten: the next frame hands everything over again. */
+  private forget(): void {
+    this.geometries = new WeakMap();
+    this.textures = new WeakMap();
+    this.materials = new WeakMap();
+    this.sets = new WeakMap();
+    this.cutOuts = new Map();
+    this.shared = new Map();
+    this.shaders = new Map();
+  }
+
+  /**
+   * A frame drawn and written down as a tape (`tape.ts`): everything handed over anew, its maps no larger than
+   * `mostMap` a side, for the engine's own harness to draw with no browser. The engine keeps what was handed over
+   * before and for the tape too (a harness's page, not a player's: nothing is dropped).
+   */
+  capture(width: number, height: number, mostMap: number, ...frame: Parameters<Bridge['draw']>): Blob {
+    const engine = this.engine, tape = new Tape(width, height);
+    this.engine = recording(engine, tape);
+    this.tape = tape;
+    this.mostMap = mostMap;
+    this.forget();
+    try {
+      this.draw(...frame);
+    } finally {
+      this.engine = engine;
+      this.tape = null;
+      this.mostMap = MAX_MAP;
+      this.forget();
+    }
+    return tape.blob();
+  }
+
   private skip(kind: string): void {
     this.skipped.set(kind, (this.skipped.get(kind) ?? 0) + 1);
   }
@@ -194,7 +232,7 @@ export class Bridge {
     const fullWidth = (image as { naturalWidth?: number }).naturalWidth || (image as { videoWidth?: number }).videoWidth || image.width || 0;
     const fullHeight = (image as { naturalHeight?: number }).naturalHeight || (image as { videoHeight?: number }).videoHeight || image.height || 0;
     if (!fullWidth || !fullHeight) return null;
-    const scale = Math.min(1, MAX_MAP / Math.max(fullWidth, fullHeight));
+    const scale = Math.min(1, this.mostMap / Math.max(fullWidth, fullHeight));
     const width = Math.max(1, Math.round(fullWidth * scale)), height = Math.max(1, Math.round(fullHeight * scale));
     this.canvas2d ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
     const context = this.canvas2d;
@@ -697,6 +735,7 @@ export class Bridge {
     this.sprites();
     this.freshViews();
     const walked = perfClock.now();
+    this.tape?.frame(this.records.subarray(0, this.count * RECORD), this.bones.subarray(0, this.boneFloats), this.globals, clear);
     this.engine.render(this.count, this.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
     const [draws, shadowDraws, objects, culled, triangles, gpuMs] = this.engine.stats();

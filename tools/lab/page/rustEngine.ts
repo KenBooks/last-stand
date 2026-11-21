@@ -29,6 +29,8 @@ export interface RustCommand {
   tune: Record<string, number[]>;
   /** three's WebGPU renderer timed instead, on a page booted on it */
   three: boolean;
+  /** the frame written down as a tape for the engine's own harness, its maps no larger than this a side (0: none) */
+  capture: number;
 }
 
 /** what a material may carry that the engine doesn't read: three's nodes, a shader patched as it compiles */
@@ -200,6 +202,16 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   if (command.census) lines.push(...census(G.scene, G.camera));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];
+  if (command.capture) {
+    // (the frame written down for the engine's own harness: the node side fetches `__rustTape` and saves it)
+    RUST.captureNext = command.capture;
+    lab.drawing = true;
+    await lab.step(1);
+    lab.drawing = drawing;
+    (window as unknown as { __rustTape: Blob | null }).__rustTape = RUST.tape;
+    RUST.tape = null;
+    if (!(window as unknown as { __rustTape: Blob | null }).__rustTape) problems.push('no tape was written');
+  }
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
   for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
   return { text: lines.join('\n'), problems, moments: [pictured] };

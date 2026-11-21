@@ -2,6 +2,9 @@
 import { labError } from '../errors.mjs';
 import { picturePairs, asText, problemsIn, textWithPictureFiles, tunesFrom } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
+import { join } from 'node:path';
+import { saveTape } from '../rustTape.mjs';
+import { OUT } from '../paths.mjs';
 
 /** `lab rust`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
@@ -9,7 +12,9 @@ export default {
     + 'of the scene and the work of the engine by the clock of the browser, the GPU by its timestamps, its draw '
     + 'calls and triangles, what it could not draw by its kind, its boot (`--village`, `--foes n`; `--three` the '
     + 'same stand on the WebGPU renderer of three.js, the baseline; `--census` the shown materials by what they '
-    + 'ask of a renderer; `--tune rust.debug=1` the reach of the sun alone)',
+    + 'ask of a renderer; `--tune rust.debug=1` the reach of the sun alone; `--capture 512` the frame written '
+    + 'down as a tape, its maps no larger than that a side, which the `replay` of the engine draws, pictures '
+    + 'and times with no browser)',
   help: 'the Rust engine against three\'s WebGPU renderer, where the hero stands: pictures, frame times, draws, boot',
   options: {
     biome: {
@@ -26,11 +31,18 @@ export default {
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
+    capture: {
+      kind: 'number',
+      usage: 'side',
+      help: 'the frame written down as a tape for the engine\'s own harness, its maps no larger than this a side',
+    },
     tune: SETUP_OPTIONS.tune,
     ...COMMON_OPTIONS,
   },
   check(options) {
     if (options.frames !== undefined && !(options.frames >= 1)) throw labError('rust --frames: 1 or more');
+    if (options.capture !== undefined && !(options.capture >= 16)) throw labError('rust --capture: 16 or more');
+    if (options.capture && options.three) throw labError('rust --capture: the engine\'s frame, not --three\'s');
     // (the engine's page, or with --three a page of three's WebGPU renderer, the same stand timed the same way)
     options.renderer = options.three ? 'webgpu' : 'rust';
   },
@@ -45,9 +57,18 @@ export default {
       hour: options.hour,
       census: Boolean(options.census),
       three: Boolean(options.three),
+      capture: Math.round(options.capture ?? 0),
       tune: options.tune === undefined ? {} : tunesFrom(options.tune),
     };
-    return side.command('rustHere', command);
+    const report = await side.command('rustHere', command);
+    if (!command.capture) return report;
+    const stand = command.village ? 'village' : command.biome;
+    const file = join(OUT, 'rust-tapes', `${stand}-${command.view}.tape`);
+    const bytes = await saveTape(side.page, file);
+    const megabytes = (bytes / 1048576).toFixed(1);
+    const replay = `cargo run --release --bin replay -- ${file} --out ${file.replace(/\.tape$/, '.png')}`;
+    report.text += `\n  the frame's tape: ${file} (${megabytes} MB); in the engine's repository: ${replay}`;
+    return report;
   },
   finish(results, options, session) {
     return textWithPictureFiles(results, session.outFor('rust'));

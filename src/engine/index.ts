@@ -23,6 +23,9 @@ export const RUST = {
   /** the last frame's render, whoever drew it (core/renderer.ts `render`), ms */
   renderMs: 0,
   failed: '',
+  /** the next frame is written down as a tape, its maps no larger than this a side (0: none asked); and the tape */
+  captureNext: 0,
+  tape: null as Blob | null,
 };
 
 let canvas: HTMLCanvasElement | null = null;
@@ -72,7 +75,12 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
   type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
   if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
-  bridge.draw(scene, camera, time, renderer, grade);
+  if (RUST.captureNext) {
+    RUST.tape = bridge.capture(width, height, RUST.captureNext, scene, camera, time, renderer, grade);
+    RUST.captureNext = 0;
+  } else {
+    bridge.draw(scene, camera, time, renderer, grade);
+  }
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   return true;
