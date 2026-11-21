@@ -46,6 +46,8 @@ export const TUNE = tunable('rust', {
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
+  /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
+  see: 1,
 });
 
 /** What a frame handed over and drew. */
@@ -76,7 +78,9 @@ interface MaterialEntry {
 }
 /** how many times a material's numbers may move before it stops sharing the engine's materials */
 const SHARED_CHANGES = 8;
-interface GeometryEntry { id: number; version: number }
+/** (its attributes as handed over too: a geometry given others in their place, a hero's piece at another detail,
+ *  has their versions begin again, and drew with the buffers it had: the ranger's boots without their shafts) */
+interface GeometryEntry { id: number; version: number; position: unknown; index: unknown; draws: number }
 interface TextureEntry { id: number; version: number }
 interface SetEntry { id: number; version: number; count: number }
 
@@ -142,7 +146,6 @@ export class Bridge {
   private textures = new WeakMap<THREE.Texture, TextureEntry>();
   private materials = new WeakMap<THREE.Material, MaterialEntry>();
   private sets = new WeakMap<THREE.InstancedMesh, SetEntry>();
-  private skeletons = new WeakMap<THREE.Skeleton, number>();
   private frame = 0;
   private records!: Float32Array;
   private bones!: Float32Array;
@@ -492,7 +495,10 @@ export class Bridge {
     // (a geometry rewritten in place says so by its attributes' versions)
     const version = position.version + (index?.version ?? 0) * 4096 + ((geometry.attributes.color as THREE.BufferAttribute | undefined)?.version ?? 0) * 16777216;
     const entry = this.geometries.get(geometry);
-    if (entry && entry.version === version) return entry.id;
+    const draws = index ? index.count : position.count;
+    if (entry && entry.version === version && entry.position === position && entry.index === index && entry.draws === draws) {
+      return entry.id;
+    }
     if (entry?.id) { this.engine.drop_mesh(entry.id); this.held.meshes--; }
     const skinIndex = geometry.attributes.skinIndex as THREE.BufferAttribute | undefined;
     const joints = !skinIndex ? EMPTY_SHORTS : skinIndex.array instanceof Uint16Array ? skinIndex.array : Uint16Array.from(skinIndex.array);
@@ -501,7 +507,7 @@ export class Bridge {
     const id = this.engine.add_mesh(
       this.floatsOf(position), this.floatsOf(geometry.attributes.normal), this.floatsOf(geometry.attributes.uv),
       this.floatsOf(color), color?.itemSize ?? 3, indices, joints, this.floatsOf(geometry.attributes.skinWeight));
-    this.geometries.set(geometry, { id, version });
+    this.geometries.set(geometry, { id, version, position, index, draws });
     this.held.meshes++;
     this.stats.newMeshes++;
     this.freshViews();
@@ -527,13 +533,24 @@ export class Bridge {
     return id;
   }
 
-  /** A skinned mesh's bones written after the frame's others, and where they begin (in matrices). */
+  /**
+   * A skinned mesh's bones written after the frame's others, and where they begin (in matrices): each bone times
+   * the mesh's own bind matrix, so a skeleton's are written once for each way its meshes are bound. (A hero's pieces
+   * each hang on a joint of their own, bound where that joint stood: written once for them all by the first's, the
+   * ranger's boots drew without their shafts, skinned from the wrong place.)
+   */
   private bonesOf(mesh: THREE.SkinnedMesh): number {
     const skeleton = mesh.skeleton;
-    const kept = this.skeletons.get(skeleton);
-    // (a skeleton shared by several meshes is written once, if they're bound alike: the game's are)
-    if (kept !== undefined && kept >= 0 && this.skeletonFrame.get(skeleton) === this.frame) return kept;
-    skeleton.update();
+    let written = this.skeletonFrames.get(skeleton);
+    if (!written || written.frame !== this.frame) {
+      skeleton.update();
+      written = { frame: this.frame, binds: [] };
+      this.skeletonFrames.set(skeleton, written);
+    }
+    const bind = mesh.bindMatrix.elements;
+    for (const one of written.binds) {
+      if (one.bind.every((value, index) => value === bind[index])) return one.at;
+    }
     const from = this.boneFloats, floats = skeleton.boneMatrices?.length ?? skeleton.bones.length * 16;
     if (from + floats > this.boneCapacity) this.takeViews(this.capacity, (from + floats) * 2);
     const matrices = skeleton.boneMatrices as Float32Array;
@@ -545,11 +562,10 @@ export class Bridge {
       }
     }
     this.boneFloats = from + floats;
-    this.skeletons.set(skeleton, from / 16);
-    this.skeletonFrame.set(skeleton, this.frame);
+    written.binds.push({ bind: bind.slice(), at: from / 16 });
     return from / 16;
   }
-  private skeletonFrame = new WeakMap<THREE.Skeleton, number>();
+  private skeletonFrames = new WeakMap<THREE.Skeleton, { frame: number; binds: { bind: number[]; at: number }[] }>();
 
   private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number, bones: number, raw = 0): void {
     const materialId = this.materialId(material);
@@ -692,6 +708,7 @@ export class Bridge {
     hole.focus.toArray(g, GLOBALS.seeFocus);
     g[GLOBALS.seeFocus + 3] = hole.minY;
     hole.k.toArray(g, GLOBALS.seeHole);
+    if (!TUNE.see) g[GLOBALS.seeHole + 2] = 0;
     const sun = this.sun;
     if (sun) {
       v3.setFromMatrixPosition(sun.matrixWorld).sub(target3.setFromMatrixPosition(sun.target.matrixWorld)).normalize();
