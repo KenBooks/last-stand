@@ -17,7 +17,7 @@ import { SCHOLAR_DESK } from '../../data/houses/library';
 import { chairSeat } from '../seats';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
-  parchment, rug, stool, table, writing, type Build, type Furniture, type Mats, type Room,
+  parchment, rug, stool, table, writing, keepApart, type Build, type Furniture, type Mats, type Room,
 } from '../rooms';
 
 /** the library's light: as every room's, its sky's share warmer and fuller, for the books down every wall to read
@@ -427,6 +427,8 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
   d.position.set(x, 0, z);
   d.rotation.y = turn;
   g.add(d);
+  // (its things are read by name, `lab scholar`, and he sits in it)
+  keepApart(d);
   const temp: typeof b.obstacles = [];
   /** his table (in the desk's frame: its middle ahead of the chair, its size, its top's height), and where he sits */
   const TABLE = { z: 0.62, w: 1.2, d: 0.72, top: 0.76 }, SAT = -0.03;
