@@ -222,6 +222,15 @@ export class Bridge {
     this.aheadRest = AHEAD_REST;
   }
 
+  /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
+   *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
+   *  effect first met as it was cast compiled its pipeline in that frame, 2 to 4 s from play. */
+  prepare(objects: readonly THREE.Object3D[]): void {
+    for (const object of objects) {
+      object.traverse((part) => { if ((part as THREE.Mesh).isMesh) this.prepareMesh(part as THREE.Mesh); });
+    }
+  }
+
   /** A mesh's geometry, materials and pipelines made ready, as `addMesh` would meet them. */
   private prepareMesh(mesh: THREE.Mesh): void {
     if (mesh.userData.particles || mesh.name === 'dazed stars') return;

@@ -104,12 +104,15 @@ function placedRight(where: string): Checked {
 
 /** The hall's shelter as the engine has it: set in the village with its walls' height, none in a fight. */
 function shelter(bridge: Bridge, where: string, wanted: boolean): Checked {
-  const [minX, , maxX, , , top] = bridge.shelterNow();
+  const [minX, minZ, maxX, , , top] = bridge.shelterNow();
   const set = maxX > minX;
   if (set !== wanted) return failed(`${where}: the hall's shelter is ${set ? 'set' : 'not set'} (a sunless box on the floor)`);
   if (!wanted) return passed(`${where}: no shelter left over from the village`);
   const high = TERRACE.high + HALL.wallHigh;
   if (Math.abs(top - high) > 0.01) return failed(`${where}: the shelter reaches ${top.toFixed(1)} m up, over the hall's roof`);
+  // (its walls' inner faces well inside it: on its edge, a face was lit as the inside and as the square in stripes)
+  const clear = Math.min(TERRACE.x - HALL.inHalf - minX, maxX - (TERRACE.x + HALL.inHalf), HALL.wall - minZ);
+  if (clear < 0.1) return failed(`${where}: the hall's inner walls lie ${clear.toFixed(2)} m inside the shelter's edge: striped`);
   return passed(`${where}: the hall's inside sheltered up to its walls' tops (${high.toFixed(1)} m)`);
 }
 
@@ -214,6 +217,7 @@ async function casts(lab: Lab, bridge: Bridge): Promise<Checked[]> {
       const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
       const aim = hero.pos.clone().add(ahead);
       const undrawn = new Map<string, number>();
+      const made = RUST.pipelines.made;
       for (let frame = 0; frame < CAST_FRAMES; frame++) {
         hero.cooldowns.clear();
         hero.energy = hero.stats.maxEnergy;
@@ -223,8 +227,13 @@ async function casts(lab: Lab, bridge: Bridge): Promise<Checked[]> {
         for (const [kind, count] of bridge.skipped) undrawn.set(kind, Math.max(undrawn.get(kind) ?? 0, count));
       }
       const left = [...undrawn].map(([kind, count]) => `${kind} ${count}`).join(', ');
-      checked.push(left ? failed(`${hero.cls.id}'s ${def.name} (${key}): not drawn by the engine: ${left}`)
-        : passed(`${hero.cls.id}'s ${def.name} (${key}) drawn whole`));
+      // (a pipeline first asked for as a skill is cast was a hold of 2 to 4 s in play: all are to be made by
+      // the warm-ups, under a loading bar)
+      const late = RUST.pipelines.made - made;
+      const name = `${hero.cls.id}'s ${def.name} (${key})`;
+      if (left) checked.push(failed(`${name}: not drawn by the engine: ${left}`));
+      else if (late) checked.push(failed(`${name}: ${late} pipelines first asked for as it was cast, not warmed`));
+      else checked.push(passed(`${name} drawn whole, with pipelines made before it`));
       await lab.step(20, () => ({ aim }));
     }
   } finally {

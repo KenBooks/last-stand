@@ -4,6 +4,7 @@
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import { RUNNING } from './rendererChoice';
+import { AHEAD, pipelinesReady } from '../engine/pipelinesAside';
 import * as THREE from 'three';
 import { WEBGPU, clustersBack, compiled as webgpuCompiled, holdClusters } from './webgpu';
 import { G } from '../state';
@@ -885,10 +886,17 @@ function showHiddenByLevel(): () => void {
  * code does, the draw built them all again on the main thread (3.8 s on a return). The scene's walk is synchronous,
  * so it's all put back before the compile's first wait, which the lobby's frames may draw through.
  */
+/** the longest a warm-up waits for the engine's pipelines to compile (ms) */
+const PIPELINES_WAIT_MOST = 15000;
+
 async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, how: WarmUp): Promise<WarmedUp> {
   // (under the Rust engine nothing of the scene is three's to compile or draw: the engine's own pipelines are made as it
   // boots, and it takes each mesh as it's first shown, src/engine)
   if (RUNNING.rust) {
+    // (what the warm-up would draw handed to the engine, whose pipelines for it compile aside while the bar
+    // runs, and waited for: first met as a skill was cast, each was compiled in that frame)
+    AHEAD.prepare?.([...(how.drawn ?? []), ...(how.objects ?? []), ...(how.swap ? [how.swap.show] : [])]);
+    await pipelinesReady(PIPELINES_WAIT_MOST);
     // (left as a warm-up leaves it: what it shows to draw, hidden again)
     how.hide?.();
     how.progress?.(1);

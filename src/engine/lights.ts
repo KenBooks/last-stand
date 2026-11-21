@@ -9,6 +9,9 @@ import { GLOBALS, TUNE, type Lit } from './globals';
 const MAX_POINTS = 32;
 const v3 = new THREE.Vector3();
 
+/** how far into the hall's walls the shelter reaches past their inner faces (m; the walls are 0.6 thick) */
+export const SHELTER_INTO_WALLS = 0.3;
+
 export class Lights implements Lit {
   /** the point lights written this frame */
   points = 0;
@@ -56,6 +59,13 @@ export class Lights implements Lit {
     const g = this.core.globals;
     // (the list's first entry: the shelter, the hall of heroes' inside)
     g.set(lampList.subarray(0, 4), GLOBALS.shelter);
+    // (its box is the walls' inner faces: a pixel of a face fell inside it or out by the rounding of where it
+    // lies, lit row by row as the hall's inside and as the square, the back wall striped grey. From play: "hall
+    // walls are z-fighting or smth like that". It reaches half way into the walls)
+    g[GLOBALS.shelter] -= SHELTER_INTO_WALLS;
+    g[GLOBALS.shelter + 1] -= SHELTER_INTO_WALLS;
+    g[GLOBALS.shelter + 2] += SHELTER_INTO_WALLS;
+    g[GLOBALS.shelter + 3] += SHELTER_INTO_WALLS;
     g[GLOBALS.shelter + 4] = TUNE.shelterSky;
     // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
     // the sun it's under. From play: "top down view wall/roof thinning is broken")

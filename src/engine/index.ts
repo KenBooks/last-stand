@@ -6,6 +6,7 @@
 import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
+import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
 
 /** How the trial went, for the lab and the console (`window.__rust`). */
 export const RUST = {
@@ -26,6 +27,8 @@ export const RUST = {
   /** the last frame's render, whoever drew it (core/renderer.ts `render`), ms */
   renderMs: 0,
   failed: '',
+  /** the scene's pipelines: asked for, and still compiling aside (`pipelinesAside.ts`) */
+  pipelines: PIPELINES,
   /** the next frame is written down as a tape, its maps no larger than this a side (0: none asked); and the tape */
   captureNext: 0,
   tape: null as Blob | null,
@@ -60,8 +63,11 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     // (under three's canvas, which the engine's frames leave clear but for the world's overlays)
     under.style.position = 'relative';
     under.before(canvas);
-    const engine = await Engine.create(canvas);
-    RUST.bridge = new Bridge(engine, wasm);
+    const made = canvas;
+    const engine = await pipelinesAside(() => Engine.create(made));
+    const bridge = new Bridge(engine, wasm);
+    RUST.bridge = bridge;
+    AHEAD.prepare = (objects) => bridge.prepare(objects);
     watermark();
     resize = (width, height) => engine.resize(width, height);
     RUST.boot.wasmMs = loaded - began;

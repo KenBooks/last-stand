@@ -241,6 +241,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const handedOver = { meshes: 0, textures: 0, materials: 0 };
   // (what the engine or the GPU says while it draws: a refused pipeline or pass draws nothing, and says so here)
   const said: string[] = [];
+  let madeBefore = 0;
   const consoleError = console.error;
   console.error = (...parts: unknown[]) => {
     said.push(parts.map(String).join(' '));
@@ -249,6 +250,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   try {
     // (what's first met here is handed over before the frames timed)
     await lab.step(hold ? CAST_LEAD : 10, hold);
+    await pipelinesCompiled(lab);
+    madeBefore = RUST.pipelines.made;
     for (let frame = 0; frame < command.frames; frame++) {
       const began = clock.realNow();
       await lab.step(1, hold);
@@ -267,6 +270,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     lab.drawing = drawing;
     console.error = consoleError;
   }
+  await pipelinesCompiled(lab);
   const pictured = await lab.screen('the Rust engine\'s frame');
   const of = (name: keyof FrameStats): number => median(read.get(name)!);
   const skipped = [...undrawn].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
@@ -283,6 +287,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `
       + `handed over while timed: ${handedOver.meshes} meshes, ${handedOver.textures} maps, ${handedOver.materials} materials`,
     `  not drawn (a frame): ${skipped.join(', ') || 'nothing'}`,
+    `  pipelines: ${RUST.pipelines.made} made, ${RUST.pipelines.made - madeBefore} of them while timed `
+      + `(each compiled aside, its draws left out till it's ready)`,
     `  the engine's boot: the module ${boot.wasmMs.toFixed(0)} ms, the device and pipelines ${boot.deviceMs.toFixed(0)} ms, `
       + `its first frame ${boot.firstFrameMs.toFixed(0)} ms`,
   ];
@@ -305,4 +311,18 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   if (command.cast && skipped.length) problems.push(`${command.cast} cast: not drawn by the engine: ${skipped.join(', ')}`);
   for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
   return { text: lines.join('\n'), problems, moments: [pictured] };
+}
+
+/** the most real frames the lab waits for the engine's pipelines to compile aside */
+const COMPILE_FRAMES_MOST = 1200;
+
+/**
+ * Waits, on the browser's own time, until none of the engine's pipelines is compiling aside
+ * (`src/engine/pipelinesAside.ts`), then draws a frame with them: a picture taken before would lack what they draw.
+ */
+export async function pipelinesCompiled(lab: Lab): Promise<void> {
+  for (let frame = 0; frame < COMPILE_FRAMES_MOST && RUST.pipelines.compiling > 0; frame++) {
+    await window.__labClock.realFrame();
+  }
+  await lab.step(1);
 }
