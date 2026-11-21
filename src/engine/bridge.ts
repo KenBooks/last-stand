@@ -26,7 +26,8 @@ const RAW_INSTANCES = 7;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
-  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, floats: 344,
+  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
+  floats: 352,
 };
 const MAX_POINTS = 32;
 /** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
@@ -49,6 +50,8 @@ export const TUNE = tunable('rust', {
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
+  /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against three's frame */
+  shelterSky: 0.25,
   /** only what moved has its matrices made again, only a material that changed is described again (0: every
    *  object's and every material's each frame, to compare) */
   still: 1,
@@ -743,13 +746,17 @@ export class Bridge {
    *  soft close to as the game's are. They shine through walls here: the engine has none of their shadows. */
   private addLamps(): void {
     const g = this.globals;
+    // (the list's first entry: the shelter, the hall of heroes' inside)
+    g.set(lampList.subarray(0, 4), GLOBALS.shelter);
+    g[GLOBALS.shelter + 4] = TUNE.shelterSky;
     for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
       const at = GLOBALS.points + this.points * 8;
       g.set(lampList.subarray(place, place + 4), at);
       g.set(lampList.subarray(light, light + 3), at + 4);
-      g[at + 7] = -1;
+      // (which side of the shelter it lights: -2 what's under it, -1 what isn't)
+      g[at + 7] = lampList[light + 3] > 0 ? -2 : -1;
       this.points++;
     }
   }
