@@ -10,6 +10,9 @@
 // gather in tufts and patches, bend along an arc, turn a little to the camera seen edge on and sway in the wind.
 // Nothing here changes a program as the camera moves: the tiles, the grids' origins and the count are uniforms.
 import { WEBGPU } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { bladeLook, swardLook } from '../engine/looks/meadow';
 import { bladeNodes, swardColorNode } from './meadowNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
@@ -771,6 +774,11 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     // (a build of its own: sharing the first's, a ring drew with that ring's uniforms, its tiles listed for that ring's
     // view, whole tiles of the lawn bare)
     m.customProgramCacheKey = () => `meadow-blades-${ring}`;
+    if (RUNNING.rust) {
+      rustLook(m, bladeLook(u, combed, {
+        widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
+      }));
+    }
     return m;
   }
   if (combed) m.defines = { COMBED: '' };
@@ -1128,6 +1136,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
 export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: MaskUniforms): M {
   if (WEBGPU) {
     (m as M & { colorNode: unknown }).colorNode = swardColorNode(mask.uMeadow.value, mask.uMeadowHalf.value);
+    if (RUNNING.rust) rustLook(m, swardLook(mask.uMeadow.value, mask.uMeadowHalf.value));
     return m;
   }
   m.onBeforeCompile = (shader) => {

@@ -72,7 +72,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
   type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
   if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
-  bridge.draw(scene, camera, time);
+  bridge.draw(scene, camera, time, renderer);
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   return true;

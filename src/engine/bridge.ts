@@ -10,11 +10,14 @@ import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import { particles } from '../fx/particles';
+import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
 /** a record's flags (plan.rs) */
 const CASTS_SHADOW = 1, NEVER_CULLED = 2;
+/** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
+const RAW_INSTANCES = 7;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
@@ -65,6 +68,8 @@ interface MaterialEntry {
   id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
   /** how often its numbers moved, and whether the engine's material is its own by now */
   changes: number; own: boolean;
+  /** its own shader's numbers as last sent */
+  custom?: Float32Array;
 }
 /** how many times a material's numbers may move before it stops sharing the engine's materials */
 const SHARED_CHANGES = 8;
@@ -239,12 +244,13 @@ export class Bridge {
   private cutOuts = new Map<string, number>();
 
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
-  private describe(material: AnyMaterial): number {
+  private describe(material: AnyMaterial, look?: RustLook): number {
     if (!material.color || material.isShaderMaterial) return -1;
     // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
     // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
-    // which the engine leaves out: the Thornwood's grass stands still)
-    if ((material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode) return -1;
+    // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
+    // is drawn by that)
+    if (!look && ((material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode)) return -1;
     const p = this.scratchParams, maps = this.scratchMaps;
     const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial);
     const map = material.map ?? null;
@@ -297,6 +303,8 @@ export class Bridge {
   private materialId(material: AnyMaterial): number {
     let entry = this.materials.get(material);
     if (entry && entry.seen === this.frame) return entry.id;
+    const look = lookOf(material);
+    if (look) return this.lookId(material, look, entry);
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -335,6 +343,50 @@ export class Bridge {
     return kept.id;
   }
 
+  /** A shader of the page's by its name, handed over the first time it's asked for. */
+  private shaderId(look: RustLook): number {
+    let id = this.shaders.get(look.shader.name);
+    if (id === undefined) {
+      id = this.engine.add_shader(look.shader.hooks);
+      this.shaders.set(look.shader.name, id);
+      this.freshViews();
+    }
+    return id;
+  }
+  private shaders = new Map<string, number>();
+  private scratchLook = new Float32Array(LOOK_FLOATS);
+  private scratchExtra = new Uint32Array(2);
+
+  /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
+  private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    const key = this.describe(material, look);
+    if (key < 0) return 0;
+    const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
+    look.numbers(numbers);
+    if (!entry) {
+      this.scratchExtra[0] = this.textureId(look.maps?.[0]);
+      this.scratchExtra[1] = this.textureId(look.maps?.[1]);
+      const id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
+      entry = { id, params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: true, custom: numbers.slice() };
+      this.materials.set(material, entry);
+      this.held.materials++;
+      this.stats.newMaterials++;
+      this.freshViews();
+      return id;
+    }
+    entry.seen = this.frame;
+    const kept = entry, sent = entry.custom!;
+    if (p.some((value, index) => value !== kept.params[index])) {
+      this.engine.set_material_params(kept.id, p);
+      kept.params.set(p);
+    }
+    if (numbers.some((value, index) => value !== sent[index])) {
+      this.engine.set_material_custom(kept.id, numbers);
+      sent.set(numbers);
+    }
+    return kept.id;
+  }
+
   /** An attribute's values as floats, whatever array holds them (interleaved, normalized bytes...). */
   private floatsOf(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined): Float32Array {
     if (!attribute) return EMPTY_FLOATS;
@@ -350,8 +402,8 @@ export class Bridge {
     return out;
   }
 
-  private geometryId(geometry: THREE.BufferGeometry): number {
-    const position = geometry.attributes.position as THREE.BufferAttribute | undefined;
+  private geometryId(geometry: THREE.BufferGeometry, positions = 'position'): number {
+    const position = geometry.attributes[positions] as THREE.BufferAttribute | undefined;
     if (!position) return 0;
     const index = geometry.index;
     // (a geometry rewritten in place says so by its attributes' versions)
@@ -416,14 +468,14 @@ export class Bridge {
   }
   private skeletonFrame = new WeakMap<THREE.Skeleton, number>();
 
-  private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number, bones: number): void {
+  private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number, bones: number, raw = 0): void {
     const materialId = this.materialId(material);
     if (!materialId) { this.skip(material.type); return; }
     if (this.count === this.capacity) this.takeViews(this.capacity * 2, this.boneCapacity);
     const r = this.records, at = this.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
     r[at + 6] = (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow) ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED);
-    r[at + 7] = 0;
+    r[at + RAW_INSTANCES] = raw;
     if (bones >= 0) {
       const skinned = mesh as THREE.SkinnedMesh;
       scratchMatrix.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
@@ -437,7 +489,18 @@ export class Bridge {
     // (the particles' pools are handed over whole: `sprites`)
     if (mesh.userData.particles) return;
     const geometry = mesh.geometry;
-    const geometryId = this.geometryId(geometry);
+    const look = Array.isArray(mesh.material) ? undefined : lookOf(mesh.material);
+    if (look?.before && this.renderer) {
+      mesh.onBeforeRender(this.renderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material, null as unknown as THREE.Group);
+    }
+    // (a geometry of instances it counts itself: each placed by its material's look, from its index)
+    const counted = geometry as THREE.InstancedBufferGeometry;
+    const raw = counted.isInstancedBufferGeometry ? counted.instanceCount : 0;
+    if (counted.isInstancedBufferGeometry && (!look || !(raw > 0) || raw === Infinity)) {
+      if (!look) this.skip('instanced geometry');
+      return;
+    }
+    const geometryId = this.geometryId(geometry, look?.position);
     if (!geometryId) return;
     const instanced = mesh as unknown as THREE.InstancedMesh, skinned = mesh as THREE.SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
@@ -456,8 +519,11 @@ export class Bridge {
     }
     const material = mesh.material as AnyMaterial;
     if (!material.visible) return;
-    this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones);
+    this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw);
   }
+  private renderer: THREE.WebGLRenderer | null = null;
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.Camera | null = null;
 
   private addLight(light: THREE.Light): void {
     const g = this.globals, by = light.intensity, c = light.color;
@@ -598,8 +664,11 @@ export class Bridge {
   }
 
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */
-  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number): void {
+  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: THREE.WebGLRenderer | null = null): void {
     const began = perfClock.now();
+    this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
     const stats = this.stats;
     this.frame++;
     this.count = this.boneFloats = this.points = 0;

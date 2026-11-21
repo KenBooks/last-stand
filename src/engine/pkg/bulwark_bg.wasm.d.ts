@@ -2,8 +2,10 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_engine_free: (a: number, b: number) => void;
+export const engine_add_custom_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
 export const engine_add_material: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
 export const engine_add_mesh: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => number;
+export const engine_add_shader: (a: number, b: number, c: number) => number;
 export const engine_add_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
 export const engine_bones: (a: number, b: number) => number;
 export const engine_create: (a: any) => any;
@@ -17,15 +19,16 @@ export const engine_render: (a: number, b: number, c: number, d: number, e: numb
 export const engine_replace_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const engine_resize: (a: number, b: number, c: number) => void;
 export const engine_set_instances: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+export const engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
 export const engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
 export const engine_set_sprites: (a: number, b: number, c: number, d: number, e: number) => void;
 export const engine_stats: (a: number, b: number) => void;
 export const start: () => void;
-export const __wasm_bindgen_func_elem_1535: (a: number, b: number, c: number, d: any) => void;
-export const __wasm_bindgen_func_elem_1560: (a: number, b: number, c: any, d: any) => void;
-export const __wasm_bindgen_func_elem_447: (a: number, b: number, c: number, d: any) => void;
-export const __wasm_bindgen_func_elem_447_22: (a: number, b: number, c: number, d: any) => void;
-export const __wasm_bindgen_func_elem_447_23: (a: number, b: number, c: number, d: any) => void;
+export const __wasm_bindgen_func_elem_1546: (a: number, b: number, c: number, d: any) => void;
+export const __wasm_bindgen_func_elem_1571: (a: number, b: number, c: any, d: any) => void;
+export const __wasm_bindgen_func_elem_458: (a: number, b: number, c: number, d: any) => void;
+export const __wasm_bindgen_func_elem_458_25: (a: number, b: number, c: number, d: any) => void;
+export const __wasm_bindgen_func_elem_458_26: (a: number, b: number, c: number, d: any) => void;
 export const __wbindgen_export: (a: number, b: number) => number;
 export const __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_export3: (a: number, b: number, c: number) => void;
