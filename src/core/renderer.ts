@@ -1754,7 +1754,7 @@ export function markPassesWith(mark: (name: string) => void): void {
  * said where.
  */
 export function render(): void {
-  const renderBegan = RUNNING.rust ? perfClock.now() : 0;
+  const renderBegan = perfClock.now();
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
@@ -1793,7 +1793,7 @@ export function render(): void {
     framePart('render: drawn (WebGPU)');
     shotTaken();
     if (overlaysShown) overFrame.draw();
-    if (RUNNING.rust) RUST.renderMs = perfClock.now() - renderBegan;
+    RUST.renderMs = perfClock.now() - renderBegan;
     return;
   }
   // (its depth read back from above alone: in every other view no pixel reads it)

@@ -27,6 +27,8 @@ export interface RustCommand {
   census: boolean;
   /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
   tune: Record<string, number[]>;
+  /** three's WebGPU renderer timed instead, on a page booted on it */
+  three: boolean;
 }
 
 /** what a material may carry that the engine doesn't read: three's nodes, a shader patched as it compiles */
@@ -70,18 +72,79 @@ const TIMED: (keyof FrameStats)[] = [
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 
-export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report> {
-  const bridge = RUST.bridge;
-  if (!bridge) {
-    const why = RUST.failed || 'the page was not booted on it (--renderer rust)';
-    return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine isn\'t running'], moments: [] };
-  }
+/** The renderer as the baseline reads it: its frame's draws, and its timestamps (as `gpuPasses.ts` reads them). */
+interface Timed {
+  info: { render: { drawCalls: number; triangles: number } };
+  backend: { timestampQueryPool: { render: TimestampPool | null } };
+}
+
+interface TimestampPool {
+  timestamps: Map<string, number>;
+  resolveQueriesAsync(): Promise<number | undefined>;
+}
+
+/** The hero stood where the command asks, its foes before him. */
+async function stand(lab: Lab, command: RustCommand): Promise<string> {
   for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
   if (command.foes > 0 && !command.village) {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
     await foesAt(lab, spots, spots.map(() => 1));
   }
+  return command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
+}
+
+/** The baseline: three's WebGPU frame of the same stand, timed the same way. */
+async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
+  const where = await stand(lab, command);
+  const renderer = G.renderer as unknown as Timed;
+  const pool = renderer.backend.timestampQueryPool;
+  const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
+  const pageClock = perfClock.now;
+  perfClock.now = clock.realNow;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const renders: number[] = [];
+  const gpu: number[] = [];
+  const draws: number[] = [];
+  const triangles: number[] = [];
+  try {
+    await lab.step(10);
+    await pool.render?.resolveQueriesAsync();
+    for (let frame = 0; frame < command.frames; frame++) {
+      await lab.step(1);
+      renders.push(RUST.renderMs);
+      draws.push(renderer.info.render.drawCalls);
+      triangles.push(renderer.info.render.triangles);
+      await pool.render?.resolveQueriesAsync();
+      let frameMs = 0;
+      for (const ms of pool.render?.timestamps.values() ?? []) frameMs += ms;
+      gpu.push(frameMs);
+    }
+  } finally {
+    perfClock.now = pageClock;
+    lab.drawing = drawing;
+  }
+  const pictured = await lab.screen('the WebGPU frame of three.js');
+  const size = G.renderer.domElement;
+  const lines = [
+    `three.js WebGPU: ${where} ${command.view}, ${size.width}x${size.height} drawn, medians of ${command.frames} frames`,
+    `  the render: ${median(renders).toFixed(2)} ms on the CPU; the GPU ${median(gpu).toFixed(2)} ms `
+      + '(every pass: shadows, scene, post chain)',
+    `  ${median(draws)} draw calls, ${median(triangles)} triangles (every pass)`,
+    `  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}`,
+  ];
+  return { text: lines.join('\n'), problems: [], moments: [pictured] };
+}
+
+export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report> {
+  const bridge = RUST.bridge;
+  if (!bridge) {
+    if (command.three) return threeFrames(lab, command);
+    const why = RUST.failed || 'the page was not booted on it (--renderer rust)';
+    return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
+  }
+  const where = await stand(lab, command);
   const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
   const pageClock = perfClock.now;
   perfClock.now = clock.realNow;
@@ -108,7 +171,6 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const pictured = await lab.screen('the Rust engine\'s frame');
   const of = (name: keyof FrameStats): number => median(read.get(name)!);
   const skipped = [...bridge.skipped].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
-  const where = command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
   const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
   const lines = [

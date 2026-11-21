@@ -24,13 +24,14 @@ export default {
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
+    three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
     tune: SETUP_OPTIONS.tune,
     ...COMMON_OPTIONS,
   },
   check(options) {
     if (options.frames !== undefined && !(options.frames >= 1)) throw labError('rust --frames: 1 or more');
-    // (the engine's page: three's WebGPU frame is drawn on it too, the engine switched off)
-    options.renderer = 'rust';
+    // (the engine's page, or with --three a page of three's WebGPU renderer, the same stand timed the same way)
+    options.renderer = options.three ? 'webgpu' : 'rust';
   },
   async each(side, options) {
     const command = {
@@ -42,6 +43,7 @@ export default {
       village: Boolean(options.village),
       hour: options.hour,
       census: Boolean(options.census),
+      three: Boolean(options.three),
       tune: options.tune === undefined ? {} : tunesFrom(options.tune),
     };
     return side.command('rustHere', command);

@@ -87,7 +87,7 @@ export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false
 const VILLAGE_COOKIE = 'last-stand-beta-village';
 
 /** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
-const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1', rust: '?renderer=rust' };
+const RENDERER_QUERIES = { webgl: '?renderer=webgl', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1', rust: '?renderer=rust' };
 
 /** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`, `--panels`). */
 export function bootOf(options) {
