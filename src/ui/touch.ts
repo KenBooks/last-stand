@@ -19,6 +19,7 @@ import { additive } from '../core/materials';
 import { groundHeight } from '../world/ground';
 import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
+import { holdWithoutMenu } from './longPress';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
@@ -109,6 +110,8 @@ let villageShown = false, useSays = '';
 
 export function initTouch(v: TouchVillage): void {
   village = v;
+  // (a finger held on a control is play: never the browser's menu)
+  holdWithoutMenu();
   // (the village's row and the view's button are the village's: the panels' lobby's touch play stays top-down)
   if (VILLAGE) {
     const use = $('#touch-village .tv-use');
