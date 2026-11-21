@@ -789,7 +789,7 @@ function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THRE
 
 /** the flesh inside a fighter's shut fist (`fistCore`): its radius, and how far past the index's and the little
  *  finger's curls it runs (m, at the plain hand's size) */
-const FIST_CORE = tunable('fistCore', { r: 0.012, past: 0.006 });
+const FIST_CORE = tunable('fistCore', { r: 0.016, deep: 0.014, past: 0.005 });
 const CORE_SHAPE = new THREE.SphereGeometry(1, 14, 10);
 const CORES = new Map<string, { at: THREE.Vector3; turn: THREE.Quaternion; half: number }>();
 
@@ -828,10 +828,12 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
     };
     CORES.set(key, made);
   }
-  const r = FIST_CORE.r * h.build.digits;
+  // (deeper from the back of the hand to its palm than along the fingers, `deep`: the fingers' middle segments lie
+  // furthest that way, and round, it stopped short of the slits between them)
+  const r = FIST_CORE.r * h.build.digits, deep = FIST_CORE.deep * h.build.digits;
   core.position.copy(made.at);
   core.quaternion.copy(made.turn);
-  core.scale.set(made.half + FIST_CORE.past, r, r);
+  core.scale.set(made.half + FIST_CORE.past, r, deep);
 }
 
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
