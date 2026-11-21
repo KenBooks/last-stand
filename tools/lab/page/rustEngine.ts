@@ -113,6 +113,7 @@ async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
     await pool.render?.resolveQueriesAsync();
     for (let frame = 0; frame < command.frames; frame++) {
       await lab.step(1);
+      await window.__labClock.realFrame();
       renders.push(RUST.renderMs);
       draws.push(renderer.info.render.drawCalls);
       triangles.push(renderer.info.render.triangles);
@@ -158,6 +159,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     await lab.step(10);
     for (let frame = 0; frame < command.frames; frame++) {
       await lab.step(1);
+      // (the browser let go: the engine's timestamps come back on its own time, and a step never yields)
+      await window.__labClock.realFrame();
       for (const name of TIMED) read.get(name)!.push(bridge.stats[name]);
       renders.push(RUST.renderMs);
       handedOver.meshes += bridge.stats.newMeshes;
@@ -176,7 +179,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const lines = [
     `${where} ${command.view}, ${canvas.width}x${canvas.height} drawn, medians of ${command.frames} frames`,
     `  the render: ${median(renders).toFixed(2)} ms on the CPU (the scene walked ${of('walkMs').toFixed(2)}, `
-      + `the engine ${of('engineMs').toFixed(2)}); the GPU ${of('gpuMs').toFixed(2)} ms (shadow and scene passes)`,
+      + `the engine ${of('engineMs').toFixed(2)}); the GPU ${of('gpuMs').toFixed(2)} ms, at the least ${Math.min(...read.get('gpuMs')!).toFixed(2)} (shadow and scene passes)`,
     `  ${of('records')} records from the page, ${of('culled')} things out of view, ${of('objects')} objects drawn `
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles`,
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `

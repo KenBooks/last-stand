@@ -889,6 +889,8 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
   // (under the Rust engine nothing of the scene is three's to compile or draw: the engine's own pipelines are made as it
   // boots, and it takes each mesh as it's first shown, src/engine)
   if (RUNNING.rust) {
+    // (left as a warm-up leaves it: what it shows to draw, hidden again)
+    how.hide?.();
     how.progress?.(1);
     await how.step?.();
     return { compileMs: 0, compileStepMs: 0, mapsMs: 0, uploadsMs: 0, linksMs: 0, drawMs: 0, cold: false };

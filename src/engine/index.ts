@@ -17,6 +17,9 @@ export const RUST = {
    *  geometry, map and material handed over) */
   boot: { wasmMs: 0, deviceMs: 0, firstFrameMs: 0 },
   frames: 0,
+  /** whether what the game hangs on three's render of the scene is run (the world's culling by cells, the kept
+   *  shadow maps' draws): three's own work, which the engine has no use for */
+  hooks: false,
   /** the last frame's render, whoever drew it (core/renderer.ts `render`), ms */
   renderMs: 0,
   failed: '',
@@ -68,9 +71,9 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   const began = perfClock.now();
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
   type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
-  (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
+  if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
   bridge.draw(scene, camera, time);
-  (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
+  if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   return true;
 }
