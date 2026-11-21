@@ -35,7 +35,7 @@ function watermark(): void {
   const mark = document.createElement('div');
   mark.id = 'rust-mark';
   mark.textContent = 'BULWARK · Rust engine';
-  mark.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:9999;pointer-events:none;'
+  mark.style.cssText = 'position:fixed;left:6px;bottom:6px;z-index:9999;pointer-events:none;'
     + 'font:600 12px/1 monospace;letter-spacing:0.12em;color:#ffb347;background:rgba(0,0,0,0.55);padding:4px 8px;'
     + 'border:1px solid rgba(255,179,71,0.6);border-radius:3px';
   document.body.append(mark);

@@ -459,12 +459,14 @@ export class Bridge {
     if (described < 0) return 0;
     const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
-    numbers.fill(0);
+    // (only the numbers that tell two apart are written and read: a foe's every piece comes through here a frame)
+    const count = look.shared!;
+    numbers.fill(0, 0, count);
     look.numbers(numbers);
     if (!entry) {
       entry = {
         id: this.sharedLook(look, key), params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: false,
-        custom: numbers.slice(),
+        custom: numbers.slice(0, count),
       };
       this.materials.set(material, entry);
       return entry.id;
@@ -473,7 +475,10 @@ export class Bridge {
     const kept = entry, sent = entry.custom!;
     const sameMaps = kept.key === key && maps.every((map, slot) => map === kept.maps[slot]);
     const sameParams = !p.some((value, index) => value !== kept.params[index]);
-    const sameNumbers = !numbers.some((value, index) => value !== sent[index]);
+    let sameNumbers = true;
+    for (let index = 0; index < count; index++) {
+      if (numbers[index] !== sent[index]) { sameNumbers = false; break; }
+    }
     if (sameMaps && sameParams && sameNumbers) return kept.id;
     kept.changes++;
     if (!kept.own && kept.changes > SHARED_CHANGES && sameMaps) {
@@ -491,7 +496,7 @@ export class Bridge {
     }
     kept.maps.set(maps);
     kept.params.set(p);
-    sent.set(numbers);
+    sent.set(numbers.subarray(0, count));
     kept.key = key;
     return kept.id;
   }
