@@ -15,6 +15,7 @@ import {
 } from '../../../src/perf/profiler';
 import { standAt } from './draws';
 import { WEBGPU } from '../../../src/core/webgpu';
+import { RUNNING } from '../../../src/core/rendererChoice';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { packTrace, sendTrace } from '../../../src/perf/upload';
 import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
@@ -247,7 +248,8 @@ interface NodeFrame {
 
 /** The redraw's canary (`--canary`): with no node frame begun, the walk must read the scene's picture stuck. */
 async function redrawCanaryProblems(lab: Lab): Promise<string[]> {
-  if (!WEBGPU) return [];
+  // (three's node frame is no part of the Rust engine's frame)
+  if (!WEBGPU || RUNNING.rust) return [];
   const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['s'] })), true);
   const share = Math.round(redrawn * 100);
   if (redrawn < WALK_CHANGES) return [];

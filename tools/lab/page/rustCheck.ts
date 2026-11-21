@@ -10,7 +10,7 @@ import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import { RUNNING } from '../../../src/core/rendererChoice';
-import { sceneSamples } from '../../../src/core/renderer';
+import { sceneSamples, sceneSize } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
@@ -111,6 +111,12 @@ function quality(bridge: Bridge): Checked {
   const { samples, shadowSize } = bridge.qualityNow();
   const engineSamples = samples >= 4 ? 4 : 1;
   if (engineSamples !== asked) return failed(`the engine draws ${samples} samples a pixel, the level asks for ${sceneSamples()}`);
+  // (and at the level's pixels: sized by three's own target, it drew the screen's every pixel at every level)
+  const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
+  const wanted = sceneSize(new THREE.Vector2());
+  if (canvas.width !== wanted.x || canvas.height !== wanted.y) {
+    return failed(`the engine draws ${canvas.width}x${canvas.height}, the level's scene is ${wanted.x}x${wanted.y}`);
+  }
   const map = sun?.shadow.mapSize.x ?? shadowSize;
   if (shadowSize !== map) return failed(`the engine's shadow map is ${shadowSize} a side, the level's ${map}`);
   return passed(`the engine draws as the quality level asks: ${samples} samples a pixel, a shadow map of ${shadowSize}`);

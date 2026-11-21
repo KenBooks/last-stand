@@ -236,7 +236,16 @@ export class Bridge {
     this.core.freshViews();
   }
   private samples = 4;
+  private bloom = true;
   private shadowSize = 2048;
+  /** The GPU's clock asked, with no frame drawn: how many frames' times have come back, whether one is on its
+   *  way, and the last (ms). A profile of the frame waits on it between its frames (perf/profiler.ts). */
+  gpuClock(): { reads: number; busy: boolean; ms: number } {
+    this.core.engine.poll_clock();
+    const stats = this.core.engine.stats();
+    return { reads: stats[6], busy: stats[7] > 0, ms: stats[5] };
+  }
+
   /** A harness's: the samples and the shadow map's side the engine draws with. */
   qualityNow(): { samples: number; shadowSize: number } { return { samples: this.samples, shadowSize: this.shadowSize }; }
 
@@ -338,6 +347,7 @@ export class Bridge {
     this.seeKinds.write();
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
     this.quality(this.grade.samples ?? 4, shadowSizeOf(this.lit.sun));
+    if ((TUNE.bloom > 0) !== this.bloom) core.engine.set_bloom(this.bloom = TUNE.bloom > 0);
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();
@@ -345,9 +355,9 @@ export class Bridge {
       clear);
     core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
-    const [draws, shadowDraws, objects, culled, triangles, gpuMs] = core.engine.stats();
+    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy] = core.engine.stats();
     Object.assign(stats, {
-      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs,
+      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }

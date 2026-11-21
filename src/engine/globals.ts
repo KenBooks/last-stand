@@ -23,9 +23,15 @@ export const TUNE = tunable('rust', {
   /** the sky's light where three reads an environment map the engine doesn't have */
   skyFill: 0.35,
   shadows: 1,
+  /** what a profile of the frame takes out in turns (perf/sceneParts.ts): the point lights and the lamps, the
+   *  lamps' shadows, the bloom's passes */
+  points: 1,
+  lampShadows: 1,
+  bloom: 1,
   /** how far along its normal a surface is moved before the shadow map is read, world units */
   shadowBias: 0.06,
-  /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals */
+  /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals, 3 a plain colour in place of
+   *  the lit shading (a profile's: what the lighting costs) */
   debug: 0,
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */

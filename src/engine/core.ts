@@ -18,6 +18,10 @@ export interface FrameStats {
   culled: number;
   triangles: number;
   gpuMs: number;
+  /** how many frames' GPU times have come back so far, and whether one is on its way (a frame drawn meanwhile
+   *  isn't timed): a profile tells the frame it timed from the one before by them */
+  gpuReads: number;
+  gpuBusy: number;
   /** the walk of the scene, then the engine's own work, ms */
   /** the scene's matrices made */
   placeMs: number;
@@ -33,7 +37,7 @@ export interface FrameStats {
 
 export class Core {
   readonly stats: FrameStats = {
-    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, placeMs: 0, walkMs: 0,
+    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, placeMs: 0, walkMs: 0,
     engineMs: 0, newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */

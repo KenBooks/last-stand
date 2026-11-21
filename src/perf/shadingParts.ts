@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { WEBGPU, environmentWorkedOut } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
 import { SKY_ENVIRONMENT } from '../core/skyEnvironment';
 import type { ScenePart } from './sceneParts';
 
@@ -126,6 +127,8 @@ function surfaceMapsPart(): ScenePart {
 
 /** The lit shading's parts, each named as part of it; untimed on WebGL (`WEBGL_COMPILES`). */
 export function shadingParts(): ScenePart[] {
+  // (the Rust engine's shading has its own parts, among the frame's: `engineParts` in sceneParts.ts)
+  if (RUNNING.rust) return [];
   const parts = [environmentPart(), workedOutPart(), shadowsTakenPart(), fogPart(), surfaceMapsPart()];
   if (WEBGPU) return parts;
   return parts.map((part) => ({ ...part, untimed: WEBGL_COMPILES }));

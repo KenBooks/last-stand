@@ -43,6 +43,7 @@ export class Lights implements Lit {
       // (the strongest is the sun; the engine has one)
       if (!this.sun || by > this.sun.intensity) this.sun = light as THREE.DirectionalLight;
     } else if ((light as THREE.PointLight).isPointLight) {
+      if (!TUNE.points) return;
       if (this.points === MAX_POINTS) { this.core.skip('point light past 32'); return; }
       const point = light as THREE.PointLight, at = GLOBALS.points + this.points * 8;
       // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
@@ -74,8 +75,8 @@ export class Lights implements Lit {
     // the sun it's under. From play: "top down view wall/roof thinning is broken")
     g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
     let lit = 0;
-    const shadowed = lampShadowsAllowed();
-    for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
+    const shadowed = lampShadowsAllowed() && TUNE.lampShadows > 0;
+    for (let lamp = 0; TUNE.points && lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
       const at = GLOBALS.points + this.points * 8;

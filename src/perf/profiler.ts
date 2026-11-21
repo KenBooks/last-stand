@@ -11,6 +11,7 @@ import { G } from '../state';
 import { holdFrames } from '../core/frameLoop';
 import { render } from '../core/renderer';
 import { RUNNING } from '../core/rendererChoice';
+import { RUST } from '../engine';
 import { WEBGPU, gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 import { shadingParts } from './shadingParts';
@@ -124,13 +125,17 @@ async function waitForGpu(): Promise<void> {
 
 /** The renderer drawing the game, as a profile names it. */
 function rendererName(): string {
+  if (RUNNING.rust) return 'the Rust engine (Bulwark)';
   if (!WEBGPU) return 'WebGL';
   if (RUNNING.webgpuOnGl) return 'WebGPU (its WebGL 2 backend)';
   return RUNNING.meshlets ? 'WebGPU (meshlets)' : 'WebGPU';
 }
 
 /** The programs this renderer has compiled so far: WebGL's programs, WebGPU's pipelines. */
-const compiledSoFar = (): number => (WEBGPU ? pipelinesMade().made : G.renderer.info.programs?.length ?? 0);
+const compiledSoFar = (): number => {
+  if (RUNNING.rust) return RUST.pipelines.made;
+  return WEBGPU ? pipelinesMade().made : G.renderer.info.programs?.length ?? 0;
+};
 
 /** The browser's next frame: one timed frame each, so the page paints, answers touches and shows the progress
  * between them (drawn back to back, a phone's GPU had no time to show the page, and Chrome offered to kill it). */
@@ -176,6 +181,37 @@ function timing(draw: Draw, options: ProfileOptions, counted: () => void, reader
     await draw();
     await waitForGpu();
     const took = clock() - start;
+    counted();
+    return took;
+  };
+}
+
+/** the most of the browser's frames a frame's time is waited for from the Rust engine's clock */
+const ENGINE_WAIT_FRAMES = 240;
+
+/**
+ * `draw` as a frame of the Rust engine's, timed by the engine's own GPU clock (its timestamps round the whole
+ * frame: the shadow's pass, the scene, the passes after it). The engine times one frame at a time, its stamps
+ * read back a few of the browser's frames later, and a frame drawn meanwhile isn't timed: so the clock is waited
+ * free, the frame drawn, and its time waited for. three's own timestamps, which timed the frames before, read
+ * nothing of the engine's: every part of a profile read 0.0 ms (a phone's, report H37Q-PEYK).
+ */
+function engineTiming(draw: () => void, draws: () => number, options: ProfileOptions, counted: () => void): TimedDraw {
+  const nextFrame = options.nextFrame ?? browserFrame;
+  const clock = () => RUST.bridge!.gpuClock();
+  return async () => {
+    await nextFrame();
+    if (options.cancelled?.()) throw new ProfileCancelled();
+    // (the canary's two draws each timed and added: its second, drawn while the first's time was on its way, wasn't
+    // timed at all, and the frame drawn twice read 1.08 times once)
+    let took = 0;
+    for (let drawn = 0; drawn < draws(); drawn++) {
+      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().busy; waited++) await nextFrame();
+      const before = clock().reads;
+      draw();
+      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().reads === before; waited++) await nextFrame();
+      took += clock().ms;
+    }
     counted();
     return took;
   };
@@ -255,9 +291,12 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     progress.done += 1;
     options.onProgress?.(progress);
   };
-  const gpuTimed = WEBGPU && timesPasses(G.renderer);
-  const reader = gpuTimed ? new PassReader(G.renderer) : null;
-  const timedFrame = timing(draw, options, counted, reader);
+  // (the Rust engine's frames by its own clock, where the browser gives it one: a first time has come back)
+  const engineTimed = RUNNING.rust && !!RUST.bridge && RUST.bridge.gpuClock().reads > 0;
+  const passesTimed = !RUNNING.rust && WEBGPU && timesPasses(G.renderer);
+  const gpuTimed = engineTimed || passesTimed;
+  const reader = passesTimed ? new PassReader(G.renderer) : null;
+  const timedFrame = engineTimed ? engineTiming(once, () => (twice ? 2 : 1), options, counted) : timing(draw, options, counted, reader);
   const now = options.clock ?? (() => performance.now());
   const started = now();
   const programs = compiledSoFar();
@@ -265,7 +304,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   holdFrames(true);
   if (WEBGPU) holdPipelines(G.renderer, true);
   // (the overlay's reads of the timestamps held: a read takes every pass in three's pool; the passes before let go)
-  if (gpuTimed) {
+  if (passesTimed) {
     holdWebGpuTimes(true);
     await reader!.drain();
   }
@@ -293,7 +332,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const found = { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
     return { ...found, gpuTimed };
   } finally {
-    if (gpuTimed) holdWebGpuTimes(false);
+    if (passesTimed) holdWebGpuTimes(false);
     if (WEBGPU) holdPipelines(G.renderer, false);
     holdFrames(false);
   }
@@ -336,7 +375,7 @@ function partLine(part: PartCost, frame: number, onWebGPU = false): string {
 export function profileLines(found: Profile): string[] {
   const fps = found.frame > 0 ? Math.round(1000 / found.frame) : 0;
   // (WebGL's lines as they were, the traces before WebGPU's read alike; WebGPU's says so, and counts its pipelines)
-  const onWebGPU = found.renderer.startsWith('WebGPU');
+  const onWebGPU = found.renderer.startsWith('WebGPU') || found.renderer.startsWith('the Rust engine');
   const made = onWebGPU
     ? `${found.compiled} pipelines made (${found.compiledAtDraw ?? 0} at a draw), on ${found.renderer}`
     : `${found.compiled} programs compiled`;

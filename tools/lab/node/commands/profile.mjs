@@ -82,7 +82,7 @@ export default {
       const result = await checkProfileSent(await side.command('profileHere', command), service);
       // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)
       const onWebGPU = (options.renderer ?? 'webgl') !== 'webgl';
-      if (!onWebGPU || /, on WebGPU/.test(result.text)) return result;
+      if (!onWebGPU || /, on (WebGPU|the Rust engine)/.test(result.text)) return result;
       return { ...result, problems: [...result.problems, `booted on ${options.renderer}, profiled on WebGL`] };
     } finally {
       await service.close();

@@ -12,6 +12,7 @@ import { qualityBudget, qualityLevel } from '../core/quality';
 import { holdSunShadow, scenePixels, setRenderQuality } from '../core/renderer';
 import { WEBGPU, drawnFrom } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
+import { RUST } from '../engine';
 
 /** A part of a frame's work, put in (`on`) or taken out; `change` may resize a target, settled by frames drawn. */
 export interface ScenePart {
@@ -134,6 +135,28 @@ function pixelsPart(): ScenePart {
   };
 }
 
+/** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
+function tunedPart(name: string, key: 'points' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug', off: number,
+  on = RUST.tune[key]): ScenePart {
+  return { name, change: (put) => { RUST.tune[key] = put ? on : off; } };
+}
+
+/**
+ * The Rust engine's own parts (src/engine): three's lights, shadow maps and materials are none of its frame, and
+ * switched as three's they changed nothing, every part read 0.0 ms (a phone's profile, report H37Q-PEYK). Each is
+ * a number the engine's frame reads, no pipeline made anew.
+ */
+function engineParts(): ScenePart[] {
+  return [
+    tunedPart('the point lights and the lamps', 'points', 0),
+    tunedPart('the lamps\' shadows read', 'lampShadows', 0),
+    tunedPart('the sun\'s shadow: its map drawn and read', 'shadows', 0),
+    tunedPart('the lit shading, against a plain colour', 'debug', 3, 0),
+    tunedPart('what hides the hero seen through', 'see', 0),
+    tunedPart('the bloom\'s passes', 'bloom', 0),
+  ];
+}
+
 /**
  * The parts the profiler times in the whole frame, each changed with the scene's programs kept (a uniform, what's
  * shown, the shadow maps' drawing, the pixels): a part that changed a program's key (a light hidden, a shadow taken
@@ -141,6 +164,7 @@ function pixelsPart(): ScenePart {
  * programs are compiled once, by its first frame.
  */
 export function frameParts(): ScenePart[] {
+  if (RUNNING.rust) return [pixelsPart(), ...engineParts(), ...shownParts()];
   const lights = shownWhere((object) => (object as THREE.Light).isLight) as THREE.Light[];
   const points = lights.filter((light) => (light as THREE.PointLight).isPointLight) as THREE.PointLight[];
   const plain = new THREE.MeshBasicMaterial({ color: 0x808080 });
@@ -154,6 +178,13 @@ export function frameParts(): ScenePart[] {
         G.scene.overrideMaterial = on ? null : plain;
       },
     },
+    ...shownParts(),
+  ];
+}
+
+/** What's shown or hidden to time it, whoever draws the frame. */
+function shownParts(): ScenePart[] {
+  return [
     // (a particle pool: WebGL's points, WebGPU's quads, `fx/particles.ts`)
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints || object.userData.particles)),
     shownPart('the hero', [G.player.obj]),

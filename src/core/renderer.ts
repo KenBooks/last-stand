@@ -1781,7 +1781,10 @@ export function render(): void {
   aimSight(G.camera);
   framePart('render: its set-up');
   if (RUNNING.rust) {
-    const pixels = sceneTarget();
+    // (the scene's size as the quality level and Auto's budget have it now: three's own target, read here before,
+    // is sized inside three's frame, which the engine's replaces, so the engine drew the screen's every pixel at
+    // every level: a phone at Very low 3120 by 1440, reports H37Q-PEYK and DGAP-G8SJ)
+    const pixels = { width: sceneSize(_size).x, height: _size.y };
     const graded = {
       small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
       hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
