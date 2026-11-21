@@ -83,6 +83,8 @@ export interface FrameStats {
   engineMs: number;
   /** handed over this frame */
   newMeshes: number;
+  /** meshes whose vertices moved, written into the buffers they had */
+  movedMeshes: number;
   newTextures: number;
   newMaterials: number;
 }
@@ -99,7 +101,7 @@ interface MaterialEntry {
 const SHARED_CHANGES = 8;
 /** (its attributes as handed over too: a geometry given others in their place, a hero's piece at another detail,
  *  has their versions begin again, and drew with the buffers it had: the ranger's boots without their shafts) */
-interface GeometryEntry { id: number; version: number; position: unknown; index: unknown; draws: number }
+interface GeometryEntry { id: number; version: number; position: unknown; index: unknown; draws: number; indexVersion: number }
 interface TextureEntry { id: number; version: number }
 interface SetEntry { id: number; version: number; count: number }
 
@@ -154,7 +156,7 @@ const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hur
 export class Bridge {
   readonly stats: FrameStats = {
     records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, placeMs: 0, walkMs: 0, engineMs: 0,
-    newMeshes: 0, newTextures: 0, newMaterials: 0,
+    newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */
   readonly skipped = new Map<string, number>();
@@ -598,15 +600,28 @@ export class Bridge {
     if (entry && entry.version === version && entry.position === position && entry.index === index && entry.draws === draws) {
       return entry.id;
     }
+    const color = geometry.attributes.color;
+    // (the same vertices moved, none added or taken: written into the buffer it has. Made anew, the hero's cloth and a
+    // blade's trail were three meshes made and dropped every frame)
+    if (entry?.id && entry.position === position && entry.index === index && entry.draws === draws
+      && entry.indexVersion === (index?.version ?? 0) && !this.tape) {
+      const set = this.engine.set_mesh_vertices(entry.id, this.floatsOf(position), this.floatsOf(geometry.attributes.normal),
+        this.floatsOf(geometry.attributes.uv), this.floatsOf(color), color?.itemSize ?? 3);
+      this.freshViews();
+      if (set) {
+        entry.version = version;
+        this.stats.movedMeshes++;
+        return entry.id;
+      }
+    }
     if (entry?.id) { this.engine.drop_mesh(entry.id); this.held.meshes--; }
     const skinIndex = geometry.attributes.skinIndex as THREE.BufferAttribute | undefined;
     const joints = !skinIndex ? EMPTY_SHORTS : skinIndex.array instanceof Uint16Array ? skinIndex.array : Uint16Array.from(skinIndex.array);
     const indices = !index ? EMPTY_INDICES : index.array instanceof Uint32Array ? index.array : Uint32Array.from(index.array);
-    const color = geometry.attributes.color;
     const id = this.engine.add_mesh(
       this.floatsOf(position), this.floatsOf(geometry.attributes.normal), this.floatsOf(geometry.attributes.uv),
       this.floatsOf(color), color?.itemSize ?? 3, indices, joints, this.floatsOf(geometry.attributes.skinWeight));
-    this.geometries.set(geometry, { id, version, position, index, draws });
+    this.geometries.set(geometry, { id, version, position, index, draws, indexVersion: index?.version ?? 0 });
     this.held.meshes++;
     this.stats.newMeshes++;
     this.freshViews();
@@ -1029,7 +1044,7 @@ export class Bridge {
     this.count = this.boneFloats = this.points = 0;
     this.sun = null;
     this.skipped.clear();
-    stats.newMeshes = stats.newTextures = stats.newMaterials = 0;
+    stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = 0;
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
       else scene.updateMatrixWorld();
