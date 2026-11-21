@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
+import { tunable } from '../core/tuning';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
@@ -23,16 +24,21 @@ const SHADOW_SIZE = 2048;
 const MAX_MAP = 2048;
 
 /** What's tuned by hand against three's picture (`window.__rust.tune`). */
-export const TUNE = {
+export const TUNE = tunable('rust', {
   exposure: 1.05,
   /** how strongly the sky is mirrored by smooth surfaces */
   environment: 1,
   /** the sky's light where three reads an environment map the engine doesn't have */
   skyFill: 0.35,
-  shadows: true,
+  shadows: 1,
   /** how far along its normal a surface is moved before the shadow map is read, world units */
   shadowBias: 0.06,
-};
+  /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals */
+  debug: 0,
+  /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
+   *  village's still things are in maps three keeps, which the engine doesn't have) */
+  castAll: 1,
+});
 
 /** What a frame handed over and drew. */
 export interface FrameStats {
@@ -62,7 +68,8 @@ type AnyMaterial = THREE.Material & Partial<{
   emissiveIntensity: number; emissiveMap: THREE.Texture | null; normalMap: THREE.Texture | null;
   normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
   isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
-  isMeshPhongMaterial: boolean;
+  isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
+  positionNode: unknown; fragmentNode: unknown; vertexNode: unknown;
 }>;
 
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
@@ -203,9 +210,30 @@ export class Bridge {
     return id;
   }
 
+  /** A base map with an alpha map's green as its alpha (three reads the two apart; the engine has one base map). */
+  private cutOutId(map: THREE.Texture | null, alpha: THREE.Texture): number {
+    const key = `${map?.id ?? 0}:${map?.version ?? 0}:${alpha.id}:${alpha.version}`;
+    const kept = this.cutOuts.get(key);
+    if (kept !== undefined) return kept;
+    const cut = this.pixelsOf(alpha);
+    if (!cut) { this.skip('alpha map not readable'); return this.textureId(map); }
+    const data = new Uint8Array(cut.data.length).fill(255);
+    const base = map ? this.pixelsOf(map) : null;
+    if (base && base.width === cut.width && base.height === cut.height) data.set(base.data);
+    for (let i = 0; i < data.length; i += 4) data[i + 3] = cut.data[i + 1];
+    const id = this.engine.add_texture(cut.width, cut.height, data, map?.colorSpace === THREE.SRGBColorSpace);
+    this.cutOuts.set(key, id);
+    this.held.textures++;
+    this.freshViews();
+    return id;
+  }
+  private cutOuts = new Map<string, number>();
+
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
   private describe(material: AnyMaterial): number {
     if (!material.color || material.isShaderMaterial) return -1;
+    // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
+    if (material.positionNode || material.fragmentNode || material.vertexNode) return -1;
     const p = this.scratchParams, maps = this.scratchMaps;
     const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial);
     const map = material.map ?? null;
@@ -221,7 +249,7 @@ export class Bridge {
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
     const rough = material.roughnessMap ?? material.metalnessMap ?? null;
-    maps[0] = this.textureId(map);
+    maps[0] = material.alphaMap ? this.cutOutId(map, material.alphaMap) : this.textureId(map);
     maps[1] = this.textureId(material.normalMap);
     maps[2] = this.textureId(rough);
     maps[3] = this.textureId(material.emissiveMap);
@@ -353,7 +381,7 @@ export class Bridge {
     if (this.count === this.capacity) this.takeViews(this.capacity * 2, this.boneCapacity);
     const r = this.records, at = this.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
-    r[at + 6] = (mesh.castShadow ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED);
+    r[at + 6] = (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow) ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED);
     r[at + 7] = 0;
     if (bones >= 0) {
       const skinned = mesh as THREE.SkinnedMesh;
@@ -445,6 +473,7 @@ export class Bridge {
     g[GLOBALS.misc] = 1 / SHADOW_SIZE;
     g[GLOBALS.misc + 1] = TUNE.shadowBias;
     g[GLOBALS.misc + 2] = TUNE.environment;
+    g[GLOBALS.misc + 3] = TUNE.debug;
     g[GLOBALS.fogColor + 3] = 0;
     const sun = this.sun;
     if (sun) {
@@ -470,6 +499,16 @@ export class Bridge {
       clear ??= fog.color;
     }
     return clear ? [toScreen(clear.r), toScreen(clear.g), toScreen(clear.b)] : [0, 0, 0];
+  }
+
+  /** The lights the last frame was drawn under, as the globals hold them: for a report. */
+  lights(): string {
+    const g = this.globals, three = (at: number): string => [g[at], g[at + 1], g[at + 2]].map((v) => v.toFixed(2)).join(' ');
+    const shadow = this.sun?.shadow.camera;
+    const box = shadow ? `; the sun's view ${shadow.left}..${shadow.right} by ${shadow.bottom}..${shadow.top}, ${shadow.near}..${shadow.far}, zoom ${shadow.zoom}, from ${shadow.position.toArray().map((v) => v.toFixed(1)).join(' ')}, map ${this.sun!.shadow.mapSize.x}, auto ${this.sun!.shadow.autoUpdate}` : '';
+    return box + `sun from ${three(GLOBALS.sunDir)} colour ${three(GLOBALS.sunColor)}${g[GLOBALS.fogColor + 3] ? ', shadowed' : ''}; `
+      + `flat ${three(GLOBALS.ambient)}; sky ${three(GLOBALS.hemiSky)} over ground ${three(GLOBALS.hemiGround)}; `
+      + `${g[GLOBALS.sunDir + 3]} point lights; fog ${g[GLOBALS.ambient + 3]} (${g[GLOBALS.hemiSky + 3].toFixed(4)}, ${g[GLOBALS.hemiGround + 3].toFixed(1)}) colour ${three(GLOBALS.fogColor)}`;
   }
 
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */

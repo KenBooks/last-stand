@@ -1,6 +1,6 @@
 // `npm run lab -- rust`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
 import { labError } from '../errors.mjs';
-import { picturePairs, asText, problemsIn, textWithPictureFiles } from '../commandKit.mjs';
+import { picturePairs, asText, problemsIn, textWithPictureFiles, tunesFrom } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab rust`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -23,6 +23,8 @@ export default {
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero (none by default; not in the village)' },
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
+    census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
+    tune: SETUP_OPTIONS.tune,
     ...COMMON_OPTIONS,
   },
   check(options) {
@@ -39,6 +41,8 @@ export default {
       foes: Math.round(options.foes ?? 0),
       village: Boolean(options.village),
       hour: options.hour,
+      census: Boolean(options.census),
+      tune: options.tune === undefined ? {} : tunesFrom(options.tune),
     };
     return side.command('rustHere', command);
   },

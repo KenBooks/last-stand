@@ -23,6 +23,44 @@ export interface RustCommand {
   foes: number;
   village: boolean;
   hour?: number;
+  /** the scene's materials listed by their kind and what they ask of a renderer */
+  census: boolean;
+  /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
+  tune: Record<string, number[]>;
+}
+
+/** what a material may carry that the engine doesn't read: three's nodes, a shader patched as it compiles */
+const BEYOND = [
+  'colorNode', 'opacityNode', 'positionNode', 'normalNode', 'emissiveNode', 'roughnessNode', 'fragmentNode',
+  'outputNode', 'alphaTestNode', 'maskNode', 'vertexNode', 'alphaMap', 'aoMap', 'lightMap', 'envMap',
+];
+
+/** The shown meshes' materials by kind and by what they carry beyond the engine's reach, the most first. */
+function census(scene: THREE.Object3D, camera: THREE.Camera): string[] {
+  const kinds = new Map<string, { meshes: number; names: Set<string> }>();
+  const visit = (object: THREE.Object3D): void => {
+    if (!object.visible) return;
+    const mesh = object as THREE.Mesh;
+    if ((mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Sprite).isSprite) && object.layers.test(camera.layers)) {
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        const carried = BEYOND.filter((name) => (material as unknown as Record<string, unknown>)[name]);
+        const patched = Object.hasOwn(material, 'onBeforeCompile') ? ['onBeforeCompile'] : [];
+        const blends = material.transparent ? [`transparent${material.blending === 2 ? ' additive' : ''}`] : [];
+        const kind = `${object.type} ${material.type} [${[...blends, ...patched, ...carried].join(', ')}]`;
+        const entry = kinds.get(kind) ?? { meshes: 0, names: new Set<string>() };
+        entry.meshes++;
+        if (entry.names.size < 4) entry.names.add(material.name || object.name || object.parent?.name || '?');
+        kinds.set(kind, entry);
+      }
+    }
+    object.children.forEach(visit);
+  };
+  visit(scene);
+  const rows = [...kinds].sort((a, b) => b[1].meshes - a[1].meshes);
+  const row = ([kind, entry]: (typeof rows)[number]): string =>
+    `    ${entry.meshes} x ${kind} (${[...entry.names].join(', ')})`;
+  return ['  the materials of the meshes shown:', ...rows.map(row)];
 }
 
 /** what's read of each frame, and averaged */
@@ -38,6 +76,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     const why = RUST.failed || 'the page was not booted on it (--renderer rust)';
     return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine isn\'t running'], moments: [] };
   }
+  for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
   if (command.foes > 0 && !command.village) {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
@@ -84,6 +123,9 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     `  the engine's boot: the module ${boot.wasmMs.toFixed(0)} ms, the device and pipelines ${boot.deviceMs.toFixed(0)} ms, `
       + `its first frame ${boot.firstFrameMs.toFixed(0)} ms`,
   ];
+  lines.push(`  lit by: ${bridge.lights()}`);
+  if (command.census) lines.push(...census(G.scene, G.camera));
+  lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
   return { text: lines.join('\n'), problems, moments: [pictured] };
