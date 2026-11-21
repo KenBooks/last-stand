@@ -17,7 +17,7 @@ import { tunable } from '../../core/tuning';
  * and how softly two ends run into each other (`blend`, m).
  */
 const FIST_BONES = tunable('fistBones', {
-  heads: [1.3, 1.36, 1.24, 1.12], mids: [1.14, 1.16, 1.12, 1.08], proud: 0.3, band: 0.008, pull: 0.85, blend: 0.0025,
+  heads: [1.34, 1.4, 1.3, 1.18], mids: [1.14, 1.16, 1.12, 1.08], proud: 0.3, band: 0.009, pull: 0.85, blend: 0.004,
 });
 
 /** a skin as its bones pose it, in a frame of its own: each point, its normal, and the turn and move that took it */

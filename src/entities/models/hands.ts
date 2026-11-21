@@ -869,7 +869,23 @@ const WEB_SHAPE = new THREE.SphereGeometry(1, 10, 6);
  *  fingers' fronts towards the palm (a share of that radius) */
 // (`plug`: the flesh closing the index's and the little finger's curls at the fist's two sides: how far out from the
 // curl's middle it lies, how thick it is that way and how wide across the curl, shares of the finger's radius)
-const FIST_WEB = tunable('fistWeb', { r: 0.8, past: 0.25, in: 0.15, plug: [0.4, 0.5, 1.3] });
+// (`fold`: how dark the skin between two fingers is, a fold's; `rim`: a side pad's at its edge, where it meets the
+// fingers round it in a crease)
+const FIST_WEB = tunable('fistWeb', { r: 0.92, past: 0.3, in: 0.05, plug: [0.85, 0.4, 1.75], fold: 0.35, rim: 0.45, thenar: 0.85 });
+/** a fold's skin's colour, warmer as it's darker (over the skin's own) */
+const FOLD_WARM = [1, 0.86, 0.82];
+
+/** `shape` (a ball of `WEB_SHAPE`'s) placed, with a colour a point: `shade` its darkness (0 the skin's own, 1
+ *  black) by how far out from its middle the point lies across its first axis (0 to 1). */
+function fleshOf(placed: THREE.Matrix4, shade: (out: number) => number): THREE.BufferGeometry {
+  const flesh = WEB_SHAPE.clone(), at = flesh.attributes.position, colour = new Float32Array(at.count * 3);
+  for (let i = 0; i < at.count; i++) {
+    const light = 1 - shade(Math.min(1, Math.hypot(at.getY(i), at.getZ(i))));
+    for (let c = 0; c < 3; c++) colour[i * 3 + c] = light * (1 + (FOLD_WARM[c] - 1) * (1 - light));
+  }
+  flesh.setAttribute('color', new THREE.BufferAttribute(colour, 3));
+  return flesh.applyMatrix4(placed);
+}
 
 /**
  * The skin pressed between each two neighbouring fingers of a shut fist, `pose` its closed pose: a rounded bar along
@@ -885,7 +901,9 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
   const webs: THREE.BufferGeometry[] = [];
   const placed = new THREE.Matrix4();
   for (let i = 0; i + 1 < h.f.length; i++) {
-    for (const n of [1, 2]) {
+    // (between their first segments too: from the front the fingers stood as four columns with the dark of the fist
+    // between them, where a fist's lie side by side with a crease between each two, an adversarial review)
+    for (const n of [0, 1, 2]) {
       const [a, b] = [chains[i], chains[i + 1]];
       const from = a.points[n].clone().add(b.points[n]).multiplyScalar(0.5);
       const to = a.points[n + 1].clone().add(b.points[n + 1]).multiplyScalar(0.5);
@@ -895,7 +913,7 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
       const at = from.clone().add(to).multiplyScalar(0.5).addScaledVector(front, -FIST_WEB.in * r);
       const size = new THREE.Vector3(along.length() * (0.5 + FIST_WEB.past), r, r);
       const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize());
-      webs.push(WEB_SHAPE.clone().applyMatrix4(placed.compose(at, turn, size)));
+      webs.push(fleshOf(placed.compose(at, turn, size), () => FIST_WEB.fold));
     }
   }
   // (and the flesh closing the outer fingers' curls: seen from the fist's sides each was a rolled-up hose with the
@@ -906,11 +924,31 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
     const at = middle(chains[i]), away = at.clone().sub(middle(chains[next])).normalize();
     const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), away);
     at.addScaledVector(away, out);
-    webs.push(WEB_SHAPE.clone().applyMatrix4(placed.compose(at, turn, new THREE.Vector3(thick, wide, wide))));
+    // (a pad, the skin's own colour in its middle and a fold's at its edge: one even colour, it was a flat disc)
+    const rim = (out: number) => FIST_WEB.rim * Math.max(0, (out - 0.45) / 0.55) ** 2;
+    webs.push(fleshOf(placed.compose(at, turn, new THREE.Vector3(thick, wide, wide)), rim));
   }
+  // (and the flesh under the thumb, between it and the index finger's curl: the thumb crosses the fingers' front
+  // corner, and under it a notch stood open down to the index's side, an adversarial review's "the thumb hangs off
+  // the fist")
+  const thumb = chainOf(h.thumb.j[0].position, h.thumb.len, pose[h.f.length]);
+  const under = thumb.points[1].clone().add(thumb.points[2]).multiplyScalar(0.5);
+  const curl = middle(chains[0]), fill = h.thumb.r * FIST_WEB.thenar;
+  const across = under.clone().sub(curl);
+  const lies = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), across.clone().normalize());
+  const half = new THREE.Vector3(across.length() * 0.5, fill, fill);
+  webs.push(fleshOf(placed.compose(under.clone().add(curl).multiplyScalar(0.5), lies, half), () => FIST_WEB.fold * 0.5));
   const merged = mergeGeometries(webs)!;
   for (const web of webs) web.dispose();
   merged.computeVertexNormals();
+  // (skinned as the hand's skin is, all of it the palm's: drawn in the skin's own material and program, its colours
+  // read as the skin's are; the bones' numbers as floats, as `skinnedNet`'s)
+  const count = merged.attributes.position.count, shares = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) shares[i * 4] = 1;
+  merged.setAttribute('skinIndex', new THREE.BufferAttribute(new Float32Array(count * 4), 4));
+  merged.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));
+  merged.deleteAttribute('uv');
+  merged.computeBoundingSphere();
   merged.userData.shared = true;
   return merged;
 }
@@ -933,18 +971,11 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
     core.scale.setScalar(1e-4);
     h.vis.add(core);
     h.vis.userData.core = core;
-    // (the webs between its fingers, `fistWebs`: beside it in the hand's frame, their shape set as the fist first shuts)
-    // (a shape of its own until then: a mesh of no points breaks what reads every mesh's)
-    const webs = new THREE.Mesh(WEB_SHAPE, core.material);
-    webs.castShadow = false;
-    webs.scale.setScalar(1e-4);
-    h.vis.add(webs);
-    core.userData.webs = webs;
   }
-  const webs = core.userData.webs as THREE.Mesh;
+  const fills = core.userData.webs as THREE.SkinnedMesh | undefined;
   if (!pose) {
     core.scale.setScalar(1e-4);
-    webs.scale.setScalar(1e-4);
+    if (fills) fills.visible = false;
     return;
   }
   const key = handKey(h.s, h.build);
@@ -969,8 +1000,20 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
   core.position.copy(made.at);
   core.quaternion.copy(made.turn);
   core.scale.set(made.half + FIST_CORE.past, r, deep);
-  webs.geometry = made.webs;
-  webs.scale.setScalar(1);
+  // (the skin between and beside its fingers, `fistWebs`: a mesh of the hand's own skin's material and bones, made
+  // as the fist first shuts, which is as the hero is built, his wrap laid over his fist)
+  const skin = h.bareSkin ?? h.skin;
+  const webs = fills ?? new THREE.SkinnedMesh(made.webs, skin.material);
+  if (!fills) {
+    webs.castShadow = false;
+    webs.frustumCulled = false;
+    webs.boundingSphere = made.webs.boundingSphere!.clone();
+    webs.userData.drawsAlone = true;
+    h.vis.add(webs);
+    webs.bind(skin.skeleton, skin.bindMatrix);
+    core.userData.webs = webs;
+  }
+  webs.visible = skin.visible;
 }
 
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
