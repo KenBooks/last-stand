@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { HOUSES, type RoomId } from '../../data/houses';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
-  writing, type Build, type Mats, type Room,
+  writing, keepApart, type Build, type Mats, type Room,
 } from '../rooms';
 import { G } from '../../state';
 import { blockGeometry, bookShape, pageHeight, printGeometry } from '../../entities/models/book';
@@ -365,6 +365,8 @@ function thing(g: THREE.Object3D, obj: THREE.Object3D, pos: THREE.Vector3, turn:
   obj.position.copy(pos);
   obj.quaternion.copy(turn);
   g.add(obj);
+  // (it moves in his hands)
+  keepApart(obj);
   return { obj, home: { pos: pos.clone(), turn: turn.clone() }, at: { pos: pos.clone(), turn: turn.clone() }, grip, laid, curl, held: null };
 }
 

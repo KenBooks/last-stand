@@ -28,7 +28,7 @@ import { villageSteps, VILLAGE_ENV, type Village } from './village';
 import { builtInSlices } from '../entities/models/steps';
 import { buildHeroHall } from './heroHall';
 import { buildRooms } from './houses';
-import type { Room } from './rooms';
+import { mergeRoom, type Room } from './rooms';
 import type { RoomId } from '../data/houses';
 import { restoreProps, state as propState } from './destructible';
 import { emit } from '../events';
@@ -215,6 +215,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     await painted();
     bakeStaticShadows(r.group);
     trimShadowCasters(r.group, shadowCameraFor(moon, r.look));
+    mergeRoom(r.group);
     r.group.visible = false;
     r.group.matrixAutoUpdate = false;
     r.group.updateMatrixWorld(true);

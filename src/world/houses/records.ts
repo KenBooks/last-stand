@@ -7,7 +7,7 @@ import { HOUSES, TROPHIES, type RoomId, type TrophyDef } from '../../data/houses
 import type { EnemyId } from '../../data/enemies';
 import { granite, pbrMaterialMaps, wood } from '../../core/textures';
 import {
-  banner, begin, type Board, BODY, bookcase, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
+  banner, begin, keepApart, type Board, BODY, bookcase, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
   framed, hearth, inkedPage, lantern, LANTERN, type Mats, onWall, parchment, type RecordsShown, RIDGE_UNDER, type Room, rug,
   stool, stoolSeatOf, table, type Writing, writing,
 } from '../rooms';
@@ -283,6 +283,7 @@ function trophies(g: THREE.Group, M: Mats, from: number, to: number, y: number):
     trophy.position.set(x, y + 0.02, 0.16);
     TROPHY_LOOKS[def.look](trophy, def, M);
     g.add(trophy);
+    keepApart(trophy, true);
     const plaque = writing(M, 384, 128, 0.62, 0.21);
     (plaque.mesh.material as THREE.MeshStandardMaterial).metalness = 0.6;
     (plaque.mesh.material as THREE.MeshStandardMaterial).roughness = 0.45;

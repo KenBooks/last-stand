@@ -19,7 +19,7 @@ import { particles, col } from '../fx/particles';
 import { mulberry, rand } from '../util';
 import { bannerGeo, CRYPT_ENV } from './crypt';
 import { buildFire, emberMat, type FireLog } from './fire';
-import { boxWithUV, staticShadow, type BiomeLook, type Updater } from './props';
+import { boxWithUV, mergeStill, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
 import { buildDoor, type Door } from './door';
 import type { Relief } from './ground';
@@ -68,6 +68,34 @@ export interface Room {
   seats: Seat[];
   /** the merchant's Odo, once seated (tools/lab `odo`) */
   odo?(): Odo | undefined;
+}
+
+/**
+ * `object` and all under it kept out of its room's merge (`mergeRoom`): what moves (the things Odo handles), what a seat
+ * outlines and sits on, what the lab reads by name. `within`: it stands still but is shown and hidden as one (a cut
+ * away wall, a trophy), so it's merged within itself and kept apart.
+ */
+export function keepApart(object: THREE.Object3D, within = false): void {
+  object.traverse((part) => { part.userData.noMerge = true; });
+  if (within) object.userData.mergeWithin = true;
+}
+
+/**
+ * The room's still parts drawn as one a material, as the village's are (`mergeStill`), once its static shadows are
+ * baked: built a mesh a part, the merchant's shop drew 853 times from above and the library 717, more than any stand
+ * outside (`lab village --only sweepWithinBudgets`). Frozen first (`matrixAutoUpdate` off, which the merge takes as
+ * standing still), but for what's kept apart (`keepApart`) and not merged within.
+ */
+export function mergeRoom(group: THREE.Group): void {
+  group.updateMatrixWorld(true);
+  const freeze = (object: THREE.Object3D, inWhole: boolean): void => {
+    const whole = inWhole || !!object.userData.mergeWithin;
+    if (object.userData.noMerge && !whole) return;
+    if ((object as THREE.Mesh).isMesh) object.matrixAutoUpdate = false;
+    for (const child of object.children) freeze(child, whole);
+  };
+  freeze(group, false);
+  mergeStill(group);
 }
 
 /** A room's light: warm, from the fires, the windows' night faint. */
@@ -207,6 +235,7 @@ export function chandelier(room: THREE.Object3D, M: Mats, x: number, high: numbe
   const g = new THREE.Group();
   g.name = 'chandelier';
   room.add(g);
+  keepApart(g, true);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
   ring.position.set(x, y, z);
   g.add(ring);
@@ -668,6 +697,12 @@ export function begin(id: RoomId, group: THREE.Group, seed: number): Build {
 /** A room as built, its walls sealed. */
 export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
   b.wall.seal();
+  // (kept out of the room's merge, `mergeRoom`: the walls cut away by the camera, and each seat, outlined and sat on)
+  for (const side of b.sides) keepApart(side.group, true);
+  for (const seat of b.seats) {
+    for (const target of seat.outline) keepApart(target.root);
+    for (const mesh of seat.meshes) keepApart(mesh);
+  }
   const [hx, hz] = HOUSES[id].half;
   // (motes of dust drifting in the firelight)
   let due = 0;

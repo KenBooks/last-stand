@@ -945,6 +945,8 @@ export function bakeStaticShadows(group: THREE.Group): void {
 function mergeable(mesh: THREE.Mesh, kept = false): boolean {
   if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
   if (Array.isArray(mesh.material) || (mesh.userData.noMerge && !kept)) return false;
+  // (a mesh with parts of its own stays: merged, it went from the scene and they with it, the library's books' pages)
+  if (mesh.children.length) return false;
   if (Object.keys(mesh.geometry.morphAttributes).length) return false;
   return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender;
 }
@@ -980,9 +982,41 @@ export function mergeStill(root: THREE.Object3D): void {
   for (const part of within) mergeUnder(part, true);
 }
 
+/**
+ * A copy of `geometry` moved by `matrix`, its faces' winding kept: a mirrored part (a scale of -1, the tavern's axe head
+ * on its shield) drawn by three as it is turns its winding round, which a merge's identity matrix doesn't, and its
+ * faces were culled as backs.
+ */
+function placedPart(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THREE.BufferGeometry {
+  const part = geometry.clone().applyMatrix4(matrix);
+  if (matrix.determinant() >= 0) return part;
+  if (part.index) {
+    const index = part.index;
+    for (let i = 0; i + 2 < index.count; i += 3) {
+      const second = index.getX(i + 1);
+      index.setX(i + 1, index.getX(i + 2));
+      index.setX(i + 2, second);
+    }
+    return part;
+  }
+  for (const attribute of Object.values(part.attributes) as THREE.BufferAttribute[]) {
+    const size = attribute.itemSize;
+    const array = attribute.array;
+    for (let vertex = 0; vertex + 2 < attribute.count; vertex += 3) {
+      for (let k = 0; k < size; k++) {
+        const second = array[(vertex + 1) * size + k];
+        array[(vertex + 1) * size + k] = array[(vertex + 2) * size + k];
+        array[(vertex + 2) * size + k] = second;
+      }
+    }
+  }
+  return part;
+}
+
 /** The mergeable meshes under `root` drawn as one a material, the merged ones added to it; `kept`: those kept out
  *  of the place's merge (`noMerge`), merged among themselves and kept out still. */
 function mergeUnder(root: THREE.Object3D, kept: boolean): void {
+  const fromWorld = root.matrixWorld.clone().invert(), toRoot = new THREE.Matrix4();
   const groups = new Map<string, THREE.Mesh[]>();
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -993,7 +1027,8 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
   });
   for (const meshes of groups.values()) {
     if (meshes.length < 2) continue;
-    const parts = meshes.map((mesh) => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+    // (in `root`'s own frame: a room's wall is turned to its side, a trophy set on its mount)
+    const parts = meshes.map((mesh) => placedPart(mesh.geometry, toRoot.multiplyMatrices(fromWorld, mesh.matrixWorld)));
     const merged = mergeGeometries(parts);
     for (const part of parts) part.dispose();
     if (!merged) continue;
@@ -1032,7 +1067,7 @@ export function mergeChildren(parent: THREE.Object3D): void {
     if (meshes.length < 2) continue;
     const parts = meshes.map((mesh) => {
       mesh.updateMatrix();
-      return mesh.geometry.clone().applyMatrix4(mesh.matrix);
+      return placedPart(mesh.geometry, mesh.matrix);
     });
     const merged = mergeGeometries(parts);
     for (const part of parts) part.dispose();
