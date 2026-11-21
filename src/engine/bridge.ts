@@ -258,6 +258,9 @@ export class Bridge {
   /** the mesh being recorded is the hero's arms through his eyes */
   private armsNow = false;
   private bloom = true;
+  private bloomShare = 1;
+  /** whether the game left the sun's shadow out of the frame last drawn (a harness reads it) */
+  shadowHeld = false;
   private shadowSize = 2048;
   /** The GPU's clock asked, with no frame drawn: how many frames' times have come back, whether one is on its
    *  way, and the last (ms). A profile of the frame waits on it between its frames (perf/profiler.ts). */
@@ -268,7 +271,9 @@ export class Bridge {
   }
 
   /** A harness's: the samples and the shadow map's side the engine draws with. */
-  qualityNow(): { samples: number; shadowSize: number } { return { samples: this.samples, shadowSize: this.shadowSize }; }
+  qualityNow(): { samples: number; shadowSize: number; bloomShare: number } {
+    return { samples: this.samples, shadowSize: this.shadowSize, bloomShare: this.bloomShare };
+  }
 
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
   bakeLamps(casters: THREE.Mesh[], lamps: number): void { this.lampShadows.ask(casters, lamps); }
@@ -378,6 +383,10 @@ export class Bridge {
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
     this.quality(this.grade.samples ?? 4, shadowSizeOf(this.lit.sun));
     if ((TUNE.bloom > 0) !== this.bloom) core.engine.set_bloom(this.bloom = TUNE.bloom > 0);
+    this.shadowHeld = !!grade.shadowHeld;
+    core.engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
+    const share = grade.bloomShare ?? 1;
+    if (share !== this.bloomShare) core.engine.set_bloom_share(this.bloomShare = share);
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();
@@ -385,10 +394,10 @@ export class Bridge {
       clear);
     core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
-    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles]
+    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept]
       = core.engine.stats();
     Object.assign(stats, {
-      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles,
+      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }

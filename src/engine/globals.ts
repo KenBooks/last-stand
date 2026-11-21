@@ -30,6 +30,8 @@ export const TUNE = tunable('rust', {
   points: 1,
   lampShadows: 1,
   bloom: 1,
+  /** the sun's shadow kept on the frames the game leaves it out of (0: drawn every frame, a profile's) */
+  shadowTurns: 1,
   /** what's see-through drawn solid, with what's opaque, while its kind thins nothing (`Materials.solidNow`) */
   solidSee: 1,
   /** what's opaque drawn nearest first, what the camera stands inside last (the engine's plan.rs) */
@@ -91,7 +93,12 @@ export interface Grade {
   /** the camera the hero's arms are drawn through while he's seen through his eyes (core/renderer.ts
    *  `drawArms`: narrower than the world's), none while the world's draws them */
   arms?: THREE.PerspectiveCamera | null;
-  /** a level that lights by the point lights' diffuse alone (Low and Very low, as their flames are lite) */
+  /** whether this frame leaves the sun's shadow as it was last drawn (the game draws it in turns:
+   *  core/renderer.ts `sunShadowInTurns`) */
+  shadowHeld?: boolean;
+  /** the share of the scene's pixels each way the bloom draws at (the level's `bloomShare`: 0 none at all) */
+  bloomShare?: number;
+  /** a level of plain lit shading (the game's `plainLit`: Low and Very low) */
   lite?: boolean;
 }
 export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
@@ -159,7 +166,9 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
     scratchMatrix.multiplyMatrices(projectionOf(grade.arms, projection), grade.arms.matrixWorldInverse)
       .toArray(g, GLOBALS.armsView);
   }
-  g[GLOBALS.shelter + 6] = grade.lite || !TUNE.shine ? 1 : 0;
+  // (2: a plain level, its point lights' diffuse alone, no surface map read, the sun's shadow in one read, as
+  // the game's `plainLit`; 1: the lights' shine alone left out, a profile's)
+  g[GLOBALS.shelter + 6] = grade.lite ? 2 : !TUNE.shine ? 1 : 0;
   g[GLOBALS.shelter + 7] = TUNE.nearFirst;
   g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
   g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;

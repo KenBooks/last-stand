@@ -8,7 +8,7 @@ import { G } from '../../state';
 import { frameRect, overFrame } from '../../core/renderer';
 import { WEBGPU, drawOverFrame, labelsMaterial } from '../../core/webgpu';
 import { uiScales } from '../scale';
-import { drawOutline } from './outline';
+import { drawOutline, outlineShown } from './outline';
 import {
   atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
 } from './atlas';
@@ -273,6 +273,8 @@ overFrame.draw = () => {
   drawOutline();
   drawLabels();
 };
+// (nothing to draw once the labels' program is warmed: no label shown, nothing outlined)
+overFrame.empty = () => warmed && drawn.length === 0 && !outlineShown();
 
 /** The labels' scene, its mesh made: compiled with the post chain, as the frame's last draws (core/renderer.ts
  *  `compilePasses`). */

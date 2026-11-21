@@ -348,6 +348,11 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   gl.autoClear = autoClear;
 }
 
+/** Whether anything is outlined now: `drawOutline` draws. */
+export function outlineShown(): boolean {
+  return !!current && !current.targets.some((target) => !target.root.parent);
+}
+
 /** Draws the outline over the finished frame, if anything is outlined (under the world's labels, `layer.ts`). */
 export function drawOutline(): void {
   const look = current;
@@ -363,11 +368,18 @@ export function drawOutline(): void {
  * its meshes unculled, and the edge drawn once, at no strength, unless `edge` is false (its program is the lobby's:
  * behind it, a part's outline draws its masks alone, as the edge's pass is the whole canvas's).
  */
-export function warmOutline(roots: readonly Outlinable[], { edge = true } = {}): void {
+export async function warmOutline(roots: readonly Outlinable[],
+  { edge = true, pause, sliceMs = 24 }: { edge?: boolean; pause?: () => Promise<void>; sliceMs?: number } = {}): Promise<void> {
   const gl = G.renderer;
   let target: THREE.WebGLRenderTarget | null = null;
   const targets = roots.map(targetOf);
+  let since = performance.now();
   for (const each of targets) {
+    // (the page let go once a slice has gone, `pause`: a fight's foes' masks drawn in one task were 100 to 150 ms)
+    if (pause && performance.now() - since >= sliceMs) {
+      await pause();
+      since = performance.now();
+    }
     const culled: THREE.Object3D[] = [];
     each.root.traverse((object) => {
       if (!object.frustumCulled) return;
@@ -376,6 +388,9 @@ export function warmOutline(roots: readonly Outlinable[], { edge = true } = {}):
     });
     target = drawMask(gl, [each]);
     for (const object of culled) object.frustumCulled = true;
+    // (its box read now, which makes its skinned meshes' own, kept from then on: all first read in the edge's draw
+    // below, a fight's foes' were 57 ms of its task)
+    if (edge) boxOf([each]);
   }
   if (!edge || !target || !targets[0]) return;
   const look = { targets, given: targets, color: new THREE.Color(), strength: 0 };

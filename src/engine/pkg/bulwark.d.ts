@@ -50,6 +50,10 @@ export class Engine {
      */
     globals(): number;
     /**
+     * Whether the next frame leaves the sun's shadow as it was last drawn: the page draws it in turns.
+     */
+    hold_shadow(held: boolean): void;
+    /**
      * The frame's time read if it has come back, with no frame drawn (`stats` says when it has).
      */
     poll_clock(): void;
@@ -73,6 +77,10 @@ export class Engine {
      * The bloom's passes drawn or left out, for a profile of the frame.
      */
     set_bloom(on: boolean): void;
+    /**
+     * The bloom at the quality level's share of the scene's pixels each way: 1, 0.5, or 0 for none.
+     */
+    set_bloom_share(share: number): void;
     /**
      * A set of instances: each one's matrix (16 floats) and, if `tints` has them, its colour (4 floats). `id` 0
      * makes a set, another replaces that one's instances. Its id.
@@ -124,6 +132,7 @@ export interface InitOutput {
     readonly engine_drop_mesh: (a: number, b: number) => void;
     readonly engine_drop_texture: (a: number, b: number) => void;
     readonly engine_globals: (a: number) => number;
+    readonly engine_hold_shadow: (a: number, b: number) => void;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
     readonly engine_records: (a: number, b: number) => number;
@@ -131,6 +140,7 @@ export interface InitOutput {
     readonly engine_replace_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly engine_resize: (a: number, b: number, c: number) => void;
     readonly engine_set_bloom: (a: number, b: number) => void;
+    readonly engine_set_bloom_share: (a: number, b: number) => void;
     readonly engine_set_instances: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
@@ -140,12 +150,12 @@ export interface InitOutput {
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1649: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1674: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_535: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_535_35: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_535_36: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_537: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1652: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1677: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_538: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_538_37: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_538_38: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_540: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

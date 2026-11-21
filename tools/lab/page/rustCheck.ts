@@ -10,7 +10,11 @@ import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import { RUNNING } from '../../../src/core/rendererChoice';
-import { sceneSamples, sceneSize } from '../../../src/core/renderer';
+import {
+  bloomShareNow, overCanvasLeftOut, sceneSamples, sceneSize, setShadowInTurns, shadowInTurnsNow, showOverlays,
+} from '../../../src/core/renderer';
+import { drawnLabels } from '../../../src/ui/overlay/layer';
+import { outlineShown } from '../../../src/ui/overlay/outline';
 import { projectionOf } from '../../../src/engine/globals';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
@@ -111,7 +115,12 @@ function placedRight(where: string): Checked {
 function quality(bridge: Bridge): Checked {
   const asked = sceneSamples() >= 4 ? 4 : 1;
   const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined;
-  const { samples, shadowSize } = bridge.qualityNow();
+  const { samples, shadowSize, bloomShare } = bridge.qualityNow();
+  // (and its bloom at the level's share of the pixels: whole at every level, Very low drew a bloom the game
+  // draws none of, 4 ms of a phone's 47 ms frame)
+  if (bloomShare !== bloomShareNow()) {
+    return failed(`the engine's bloom is at ${bloomShare} of the pixels each way, the level's at ${bloomShareNow()}`);
+  }
   const engineSamples = samples >= 4 ? 4 : 1;
   if (engineSamples !== asked) return failed(`the engine draws ${samples} samples a pixel, the level asks for ${sceneSamples()}`);
   // (and at the level's pixels: sized by three's own target, it drew the screen's every pixel at every level)
@@ -221,6 +230,78 @@ async function solidAndCoarse(lab: Lab, bridge: Bridge): Promise<Checked> {
   if (blended) return failed(`with the switch off ${blended} see-through records are still drawn solid`);
   if (!casters) return failed('no piece of a hero\'s casts from fewer triangles: every triangle in the shadow');
   return passed(`${solid} see-through records drawn solid, ${casters} of the heroes' pieces cast from fewer triangles`);
+}
+
+/**
+ * three's canvas lies over the engine's for the world's labels and the outline alone: with none to draw it's left
+ * out of the page's frame (no opacity: the browser lays no second canvas of the screen's pixels over the first),
+ * and it's back the frame one is. The overlays hidden, as the profiler hides them, stand for none to draw.
+ */
+async function overCanvas(lab: Lab): Promise<Checked> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(3);
+    const none = drawnLabels().length === 0 && !outlineShown();
+    const shown = `${drawnLabels().length} labels${outlineShown() ? ' and an outline' : ''}`;
+    if (overCanvasLeftOut() !== none) {
+      return failed(`with ${shown} to draw, three's canvas is ${overCanvasLeftOut() ? 'left out' : 'laid over the frame'}`);
+    }
+    showOverlays(false);
+    await lab.step(2);
+    const hidden = overCanvasLeftOut() && G.renderer.domElement.style.opacity === '0';
+    showOverlays(true);
+    await lab.step(2);
+    if (!hidden) return failed('with no overlay to draw three\'s canvas is still laid over the engine\'s each frame');
+    if (overCanvasLeftOut() !== none) return failed('three\'s canvas didn\'t come back as the overlays did');
+    return passed(`three's canvas left out of the page's frame with no overlay to draw, back with one (${shown} now)`);
+  } finally {
+    showOverlays(true);
+    lab.drawing = drawing;
+  }
+}
+
+/** the frames the sun's shadow is watched over, drawn in turns, and those of its canary */
+const TURN_FRAMES = 40, TURN_CANARY_FRAMES = 12;
+
+/** How many of `frames` frames the game left the sun's shadow out of, and in how many of those the engine drew
+ *  its map all the same. */
+async function shadowTurns(lab: Lab, bridge: Bridge, frames: number): Promise<{ held: number; drawn: number }> {
+  let held = 0;
+  let drawn = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    await lab.step(1);
+    if (!bridge.shadowHeld) continue;
+    held++;
+    if (bridge.stats.shadowDraws > 0) drawn++;
+  }
+  return { held, drawn };
+}
+
+/**
+ * The sun's shadow drawn in turns (Very low's every other frame, `shadowInTurns`): on the frames the game leaves
+ * it out of, the engine keeps its map and draws no caster again (it drew them every frame at every level). The
+ * canary: with the switch off it draws on those frames too.
+ */
+async function sunShadowInTurns(lab: Lab, bridge: Bridge): Promise<Checked> {
+  const drawing = lab.drawing;
+  const asked = shadowInTurnsNow();
+  lab.drawing = true;
+  setShadowInTurns(true);
+  try {
+    await lab.step(4);
+    const turns = await shadowTurns(lab, bridge, TURN_FRAMES);
+    RUST.tune.shadowTurns = 0;
+    const every = await shadowTurns(lab, bridge, TURN_CANARY_FRAMES);
+    if (!turns.held) return failed('drawn in turns, the game left the sun\'s shadow out of no frame');
+    if (turns.drawn) return failed(`the sun's shadow was drawn again in ${turns.drawn} of the ${turns.held} frames left out`);
+    if (every.held && !every.drawn) return failed('with the switch off the sun\'s shadow is still kept in its turns');
+    return passed(`in turns, the sun's shadow kept in ${turns.held} of ${TURN_FRAMES} frames, no caster drawn in them`);
+  } finally {
+    RUST.tune.shadowTurns = 1;
+    setShadowInTurns(asked);
+    lab.drawing = drawing;
+  }
 }
 
 /** A house walked into, out of and into again: no frame held, three drawing no scene of its own, and inside it
@@ -359,6 +440,8 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await lampShadows(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
+      checks.push(await sunShadowInTurns(lab, bridge));
+      checks.push(await overCanvas(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });

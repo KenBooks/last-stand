@@ -653,6 +653,9 @@ let shadowDrawnLast = false;
 let shadowInTurns = false;
 /** The sun's shadow drawn every other frame (`on`, a quality level's), or as the frame rate has it. */
 export function setShadowInTurns(on: boolean): void { shadowInTurns = on; }
+/** For a harness: whether the level draws the sun's shadow in turns, and the bloom's share of the pixels. */
+export const shadowInTurnsNow = (): boolean => shadowInTurns;
+export const bloomShareNow = (): number => bloomShare;
 
 let sunShadowHeld = false;
 /** The sun's shadow kept as it is (`held`) or drawn as `sunShadowInTurns` has it: the profiler's shadow maps' part
@@ -1168,12 +1171,12 @@ function fitSceneTarget(): void {
   sceneRT.setSize(_size.x, _size.y);
 }
 
-/** whether the level in use is a lite one (Low and Very low: `flameLite`), for the Rust engine's lighting */
+/** whether the level in use has the plain lit shading (Low and Very low: `plainLit`), for the Rust engine's */
 let liteLevel = false;
 /** Apply the render-cost settings of a quality preset, live, the scene rendering `budget` pixels at most (Auto's).
  *  None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
-  liteLevel = p.flameLite;
+  liteLevel = p.plainLit;
   pixelCap = p.pixels;
   pixelBudget = budget;
   // (the canvas keeps the screen's pixels: the scene alone renders fewer)
@@ -1697,7 +1700,24 @@ const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THRE
 /** Where the perf overlay's GPU timing moves on to the next part of the frame (a no-op unless it's on). */
 export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
-export const overFrame = { draw: (): void => {} };
+export const overFrame = { draw: (): void => {}, empty: (): boolean => false };
+/** whether three's canvas is left out of the page's frame under the Rust engine: nothing is drawn over the
+ *  engine's (`leaveOverOut`) */
+let overLeftOut = false;
+/**
+ * Under the Rust engine three's canvas lies over the engine's for the world's overlays alone (the labels, the
+ * outline). Cleared and shown every frame, the browser laid a second canvas of the screen's every pixel over the
+ * first each frame, whatever was on it: on a phone 4.5 million pixels blended for nothing in most of the
+ * village's frames. With nothing to draw it's left as it is and given no opacity, which the browser's
+ * compositor leaves out, and still takes the pointer; `out` false: drawn again from this frame on.
+ */
+function leaveOverOut(out: boolean): void {
+  if (out === overLeftOut) return;
+  overLeftOut = out;
+  gl.domElement.style.opacity = out ? '0' : '';
+}
+/** For a harness: whether three's canvas is left out of the page's frame now. */
+export const overCanvasLeftOut = (): boolean => overLeftOut;
 /** whether the world's overlays are drawn over the frame (photo mode leaves them out: `showOverlays`) */
 let overlaysShown = true;
 /** The world's overlays (labels, names, bars, damage numbers) drawn over the frame, or left out (photo mode). */
@@ -1794,13 +1814,19 @@ export function render(): void {
       hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
       arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
       lite: liteLevel,
+      bloomShare,
+      shadowHeld: !shadowDrawnLast,
     };
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
-      // (three's canvas over the engine's: clear, but for the world's overlays)
-      gl.setRenderTarget(null);
-      gl.setClearColor(0x000000, 0);
-      gl.clear(true, true, false);
-      if (overlaysShown) overFrame.draw();
+      // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
+      const none = !overlaysShown || overFrame.empty();
+      leaveOverOut(none);
+      if (!none) {
+        gl.setRenderTarget(null);
+        gl.setClearColor(0x000000, 0);
+        gl.clear(true, true, false);
+        overFrame.draw();
+      }
       framePart('render: drawn (Rust)');
       RUST.renderMs = perfClock.now() - renderBegan;
       return;

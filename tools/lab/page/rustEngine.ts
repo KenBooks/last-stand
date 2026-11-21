@@ -77,7 +77,7 @@ function census(scene: THREE.Object3D, camera: THREE.Camera): string[] {
 
 /** what's read of each frame, and averaged */
 const TIMED: (keyof FrameStats)[] = [
-  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'objects', 'culled', 'triangles',
+  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'shadowsKept', 'objects', 'culled', 'triangles',
 ];
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
@@ -171,6 +171,11 @@ async function inAndOut(lab: Lab, room: RoomId): Promise<string> {
     lab.drawing = drawing;
   }
   return `the longest frame going ${times.join(', ')}`;
+}
+
+/** How many of `kept` (each frame's count of frames in a row that kept the sun's shadow map) drew it. */
+function shadowFrames(kept: number[]): string {
+  return `${kept.filter((frames) => frames === 0).length} of ${kept.length}`;
 }
 
 /** The baseline: three's WebGPU frame of the same stand, timed the same way. */
@@ -284,6 +289,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
       + `${(median(frames) - median(renders)).toFixed(2)} of it`,
     `  ${of('records')} records from the page, ${of('culled')} things out of view, ${of('objects')} objects drawn `
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles (+${of('shadowTriangles')})`,
+    `  the sun's shadow drawn in ${shadowFrames(read.get('shadowsKept')!)} frames timed, kept as it was in the rest`,
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `
       + `handed over while timed: ${handedOver.meshes} meshes, ${handedOver.textures} maps, ${handedOver.materials} materials`,
     `  not drawn (a frame): ${skipped.join(', ') || 'nothing'}`,
