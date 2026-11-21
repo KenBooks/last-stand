@@ -157,7 +157,7 @@ function engineParts(): ScenePart[] {
     tunedPart('the lit shading, against a plain colour', 'debug', 3, 0),
     tunedPart('what hides the hero seen through', 'see', 0),
     tunedPart('the bloom\'s passes', 'bloom', 0),
-    tunedPart('what\'s opaque drawn nearest first', 'nearFirst', 0),
+    tunedPart('what the camera stands inside drawn last', 'nearFirst', 0),
     tunedPart('the point lights\' shine (their diffuse light kept)', 'shine', 0),
     tunedPart('what\'s see-through drawn solid while nothing thins it', 'solidSee', 0),
     tunedPart('the sun\'s shadow kept on the frames between its turns', 'shadowTurns', 0),

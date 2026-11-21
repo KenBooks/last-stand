@@ -34,7 +34,7 @@ export const TUNE = tunable('rust', {
   shadowTurns: 1,
   /** what's see-through drawn solid, with what's opaque, while its kind thins nothing (`Materials.solidNow`) */
   solidSee: 1,
-  /** what's opaque drawn nearest first, what the camera stands inside last (the engine's plan.rs) */
+  /** what the camera stands inside (the ground, the sky) drawn after the rest of what's opaque (the engine's plan.rs) */
   nearFirst: 1,
   /** the point lights' shine: 0 leaves it out at every level (a profile's), as the lite levels do (`Grade.lite`) */
   shine: 1,
