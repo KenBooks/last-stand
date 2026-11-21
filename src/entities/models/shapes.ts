@@ -82,8 +82,11 @@ const WRAP_GAP = 0.0045;
  *  through, and at the hand's gap it stood 15 mm broader than the wrist, 0.85 of the fist across to a wrist's 0.67 */
 const FOREARM_GAP = 0.0015;
 /** how far over the resting skin a strip's edges lie (m): a wrap pulled tight is drawn into the skin at its edges, and
- *  at the middle's gap the backdrop was seen through the slit under an edge (`lab hands`' seen through) */
-const EDGE_GAP = 0.003;
+ *  at the middle's gap the backdrop was seen through the slit under an edge (`lab hands`' seen through). On the skin:
+ *  at 3 mm the strip's edge still stood off a shut fist, daylight under it from the cuff's side (0.14% of the hand,
+ *  now 0.02) and the little finger's (0.41, now 0.23); its middle kept at `WRAP_GAP`, as at 3 mm the fist's skin
+ *  showed through it in spots */
+const EDGE_GAP = 0;
 /** where across a wrap's strip its section's points lie (0 one edge, 1 the other): each laid on the skin under it */
 const ACROSS = [0, 0.53, 1];
 const _ray = new THREE.Raycaster(), _rayFrom = new THREE.Vector3(), _rayAxis = new THREE.Vector3();
