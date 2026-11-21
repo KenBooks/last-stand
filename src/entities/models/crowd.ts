@@ -15,7 +15,8 @@ import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
 import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
-const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
+// (the Rust engine's trial draws each body on its own too: a crowd's rows are read by a shader of three's)
+const ON = typeof location === 'undefined' || !/[?&]crowd=0|[?&]renderer=rust/.test(location.search);
 
 /** A body drawn in its kind's crowd. */
 export interface CrowdBody {

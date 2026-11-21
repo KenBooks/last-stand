@@ -14,7 +14,9 @@ const params = new URLSearchParams(location.search);
 const asked = params.get('renderer');
 export const RUNNING = {
   /** three's WebGPURenderer draws it */
-  webgpu: asked === 'webgpu' || asked === 'webgpu-gl',
+  webgpu: asked === 'webgpu' || asked === 'webgpu-gl' || asked === 'rust',
+  /** the frame's scene drawn by our Rust engine, over three's WebGPU renderer (`src/engine`, an experiment) */
+  rust: asked === 'rust',
   /** on WebGPURenderer's WebGL 2 backend */
   webgpuOnGl: asked === 'webgpu-gl',
   /** three's GPU-driven meshlets */

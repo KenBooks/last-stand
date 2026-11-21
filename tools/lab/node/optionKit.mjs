@@ -109,7 +109,7 @@ export const COMMON_OPTIONS = {
   },
   renderer: {
     kind: 'choice',
-    choices: ['webgl', 'webgpu', 'meshlets'],
+    choices: ['webgl', 'webgpu', 'meshlets', 'rust'],
     usage: 'webgl|webgpu|meshlets',
     help: 'the page booted on this renderer, as the pause menu\'s switch opens it: WebGL (the default), WebGPU '
       + '(?renderer=webgpu), or WebGPU with its GPU-driven drawing (?renderer=webgpu&meshlets=1)',

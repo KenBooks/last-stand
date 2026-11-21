@@ -17,6 +17,9 @@ import {
   setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
 } from './webgpu';
 import { G } from '../state';
+import { RUNNING } from './rendererChoice';
+import { bootRust, drawRust, RUST } from '../engine';
+import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
 import { groundHeight } from '../world/ground';
@@ -889,6 +892,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   if (!WEBGPU && !/[?&]programSort=0/.test(location.search)) opaqueByProgram(renderer as THREE.WebGLRenderer);
   if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
+  if (RUNNING.rust) await bootRust(renderer.domElement);
   if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
   fenceFrames(renderer);
 
@@ -1750,6 +1754,7 @@ export function markPassesWith(mark: (name: string) => void): void {
  * said where.
  */
 export function render(): void {
+  const renderBegan = RUNNING.rust ? perfClock.now() : 0;
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
@@ -1775,11 +1780,20 @@ export function render(): void {
   sunShadowInTurns();
   aimSight(G.camera);
   framePart('render: its set-up');
+  if (RUNNING.rust) {
+    const pixels = sceneTarget();
+    if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl)) {
+      framePart('render: drawn (Rust)');
+      RUST.renderMs = perfClock.now() - renderBegan;
+      return;
+    }
+  }
   if (WEBGPU) {
     renderWebGPU();
     framePart('render: drawn (WebGPU)');
     shotTaken();
     if (overlaysShown) overFrame.draw();
+    if (RUNNING.rust) RUST.renderMs = perfClock.now() - renderBegan;
     return;
   }
   // (its depth read back from above alone: in every other view no pixel reads it)
