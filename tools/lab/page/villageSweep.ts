@@ -1,6 +1,7 @@
 // `lab village`'s sweep: the village's frame read from stands laid out from its data (the square looking every way,
-// before each cottage's door, at each way out, in the hall of heroes and before it), over the shoulder and from above,
-// at midnight and noon. Each reading's draws, triangles and the materials and programs it switched between are held
+// before each cottage's door, at each way out, in the hall of heroes and before it, in each house's room), over the
+// shoulder and from above, at midnight and noon, at the boot's level and at Very low (switched live, as a player
+// switches it, the heroes' detail held at the boot's: what's made at boot for a level stays the boot's). Each reading's draws, triangles and the materials and programs it switched between are held
 // to a budget (`villageBudgets.ts`), and its pixels with every cull registered (`world/culls.ts`) to those with none.
 // From the owner, after the hall's culls each had a check of their own: "every future change to the village will need
 // to rework everything, its not sustainable". A change that adds draws anywhere, or a cull that hides what's seen,
@@ -16,6 +17,11 @@ import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer'
 import { COTTAGES, ENTRANCES, HALL, TERRACE, exitPlace, portalPlace } from '../../../src/data/village';
 import { setHallCull } from '../../../src/world/hallPortal';
 import { cullNames, holdCullsOff } from '../../../src/world/culls';
+import { qualityLevel, useQuality } from '../../../src/core/quality';
+import { heroDetail, setHeroDetail } from '../../../src/entities/models/detail';
+import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
+import { ROOM_IDS, insideOf, type RoomId } from '../../../src/data/houses';
+import type { QualityLevel } from '../../../src/data/quality';
 import { VILLAGE_SPOT } from './draws';
 import { changedShare, countedFrame, viewBy, type Counted } from './villageHallCull';
 import { materialSwitches } from './materialSwitches';
@@ -28,21 +34,32 @@ import type { BiomeId } from '../../../src/data/biomes';
  *  heroes held still are merged a slice a frame) */
 const HOURS = [0, 12];
 const SETTLE = 20;
+/** the levels read besides the boot's: the one most players with a slow device settle on */
+const LOW_LEVEL: QualityLevel = 'verylow';
+/** the most frames a room's door may take to open (its warm-up's bar) */
+const DOOR_FRAMES = 600;
+/** how many times a moment is read for one that stands still before the sweep gives up */
+const STILL_TRIES = 5;
 /** the square's headings, a turn split into this many */
 const HEADINGS = 8;
 /** how far before a cottage's door he stands (m, past its size), and how far in from the hall's door */
 const BEFORE_DOOR = 5;
 const IN_HALL = 7;
-/** how far over its budget a count may read (a share): the yard's foes and the wind move between boots */
-const OVER = 0.02;
+/** how far over its budget each count may read (draws, triangles, materials switched, programs switched): a share of
+ *  it, and at least a few. The yard's foes and the wind move between boots, and a small count's 2% is under one (Very
+ *  low's programs switched read 50 of 49 on a second boot); the switches move more with the night's lamps than the
+ *  draws do (the square facing 0 at midnight read 55 to 58 programs switched from boot to boot) */
+const OVER = [0.02, 0.02, 0.05, 0.05];
+const OVER_LEAST = [2, 2, 4, 4];
 /** how far under its budget a count reads before the line says to lower it (a share) */
 const UNDER = 0.1;
 /** the most of the frame's pixels the culls may change: one of the dais's heroes culled whole is 0.013% */
 const MOST_CHANGED = 0.00002;
 
 /** Where the hero stands for a reading: its name, the spot, the way he and the camera face (rad about y: 0 faces
- *  +z), and whether it's read from above too (from above, the way he faces changes little). */
-interface Stand { name: string; at: readonly [number, number]; facing: number; above: boolean }
+ *  +z), whether it's read from above too (from above, the way he faces changes little), and the house whose room
+ *  it's in (none: the village). */
+interface Stand { name: string; at: readonly [number, number]; facing: number; above: boolean; room?: RoomId }
 
 /** The way from (x, z) to (tx, tz), as a facing. */
 const toward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
@@ -70,6 +87,12 @@ export function stands(): Stand[] {
   const inHall: readonly [number, number] = [TERRACE.x, HALL.door - IN_HALL];
   list.push({ name: 'in the hall facing out', at: inHall, facing: 0, above: false });
   list.push({ name: 'in the hall facing the dais', at: inHall, facing: Math.PI, above: false });
+  for (const room of ROOM_IDS) {
+    const entry = insideOf(room);
+    const at: readonly [number, number] = [entry.x, entry.z];
+    list.push({ name: `in the ${room} facing in`, at, facing: entry.facing, above: true, room });
+    list.push({ name: `in the ${room} facing its door`, at, facing: entry.facing + Math.PI, above: false, room });
+  }
   return list;
 }
 
@@ -86,8 +109,19 @@ function readFrame(lab: Lab): { frame: Counted; counts: Budget } {
   return { frame, counts };
 }
 
+/** The hero taken into `room` as the door's E takes him (out of the one he's in first), or out to the village. */
+async function goInto(lab: Lab, room: RoomId | undefined): Promise<void> {
+  if ((roomHere() ?? undefined) === room) return;
+  if (roomHere()) leaveRoom();
+  if (!room) return;
+  enterRoom(room);
+  for (let frame = 0; frame < DOOR_FRAMES && roomHere() !== room; frame++) await lab.step(1);
+  if (roomHere() !== room) throw new Error(`lab: village: sweep: the ${room}'s door never opened`);
+}
+
 /** The hero put on `stand`, the camera behind him, let settle. */
 async function standOn(lab: Lab, stand: Stand): Promise<void> {
+  await goInto(lab, stand.room);
   const [x, z] = stand.at;
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), stand.facing);
@@ -104,7 +138,7 @@ function againstBudget(counts: Budget, budget: Budget | undefined): { over: stri
   const under: string[] = [];
   if (!budget) return { over, under };
   counts.forEach((count, k) => {
-    if (count > budget[k] * (1 + OVER)) over.push(`${COUNTS[k]} ${count} of ${budget[k]}`);
+    if (count > budget[k] + Math.max(budget[k] * OVER[k], OVER_LEAST[k])) over.push(`${COUNTS[k]} ${count} of ${budget[k]}`);
     else if (count < budget[k] * (1 - UNDER)) under.push(`${COUNTS[k]} ${count} of ${budget[k]}`);
   });
   return { over, under };
@@ -114,19 +148,41 @@ function againstBudget(counts: Budget, budget: Budget | undefined): { over: stri
  *  all it may), counted against its budget. */
 interface Read { key: string; counts: Budget; changed: number; over: string[]; under: string[] }
 
-async function readHour(lab: Lab, key: string, canary: boolean): Promise<Read> {
+/** One moment's frames: culled twice, then drawn whole. The second culled frame is the one counted: a moment's first
+ *  frame does what's owed of the moment before it as well (a shadow map drawn again, a light's uniforms set), which
+ *  varies with what ran before (run after other checks in the suite, Very low's first stand read 60 programs switched
+ *  where alone it read 45). */
+interface Moment { culled: ReturnType<typeof readFrame>; whole: ReturnType<typeof readFrame>; still: boolean }
+
+function readMoment(lab: Lab, canary: boolean): Moment {
   if (canary) setHallCull('all');
+  const first = readFrame(lab);
   const culled = readFrame(lab);
   holdCullsOff(true);
   const whole = readFrame(lab);
   holdCullsOff(false);
-  const counts = canary ? whole.counts : culled.counts;
-  const changed = changedShare(culled.frame.canvas, whole.frame.canvas);
+  const still = changedShare(first.frame.canvas, culled.frame.canvas) <= MOST_CHANGED;
+  return { culled, whole, still };
+}
+
+/** One hour's reading, once its moment is still: a frame drawn twice the same, culled both times (by night, a lamp's
+ *  shadow handed on as he's put on a stand draws a face a frame and fades in, and the first stand at Very low read
+ *  0.33% changed between its culled frame and the whole one after it, with no cull to blame). */
+async function readHour(lab: Lab, key: string, canary: boolean): Promise<Read> {
+  let moment = readMoment(lab, canary);
+  for (let tries = 1; tries < STILL_TRIES && !moment.still; tries++) {
+    await lab.step(SETTLE);
+    moment = readMoment(lab, canary);
+  }
+  if (!moment.still) throw new Error(`lab: village: sweep: ${key} never stood still`);
+  const counts = canary ? moment.whole.counts : moment.culled.counts;
+  const changed = changedShare(moment.culled.frame.canvas, moment.whole.frame.canvas);
   return { key, counts, changed, ...againstBudget(counts, BUDGETS[key]) };
 }
 
-/** Every stand read in `view` at each hour. */
+/** Every stand read in `view` at each hour, at the level drawn now. */
 async function readView(lab: Lab, view: ViewMode, canary: boolean): Promise<Read[]> {
+  const level = qualityLevel();
   await viewBy(lab, view);
   const reads: Read[] = [];
   for (const stand of stands()) {
@@ -135,7 +191,7 @@ async function readView(lab: Lab, view: ViewMode, canary: boolean): Promise<Read
     for (const hour of HOURS) {
       holdHour(hour);
       await lab.step(SETTLE);
-      reads.push(await readHour(lab, `${view} ${stand.name} ${hour}:00`, canary));
+      reads.push(await readHour(lab, `${level} ${view} ${stand.name} ${hour}:00`, canary));
     }
   }
   return reads;
@@ -156,10 +212,22 @@ const byKey = (a: Read, b: Read): number => {
 /** The village swept: every stand's counts held to its budget, and its culled frame to its frame drawn whole. */
 export async function sweepWithinBudgets(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const view = viewMode();
+  const booted = qualityLevel();
+  const bootDetail = heroDetail();
+  const levels = booted === LOW_LEVEL ? [booted] : [booted, LOW_LEVEL];
   const reads: Read[] = [];
   try {
-    for (const each of ['third', 'top'] as ViewMode[]) reads.push(...await readView(lab, each, canary));
+    for (const level of levels) {
+      useQuality(level);
+      // (the heroes held at the boot's detail: switched, the hall's were built again on the lab's page, where the
+      // game builds their pieces in its worker, and the next check's hero built whole in the suite took a frame of
+      // 189 to 683 ms against 75; what the village draws is what's read here)
+      setHeroDetail(bootDetail);
+      for (const each of ['third', 'top'] as ViewMode[]) reads.push(...await readView(lab, each, canary));
+    }
   } finally {
+    await goInto(lab, undefined);
+    useQuality(booted);
     holdCullsOff(false);
     setHallCull('door');
     holdHour(null);
