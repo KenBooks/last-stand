@@ -28,12 +28,12 @@ const RAW_INSTANCES = 7;
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
-  seeHall: 352, seeKinds: 360, floats: 680,
+  seeHall: 352, seeKinds: 360, floats: 1000,
 };
 const MAX_POINTS = 32;
 /** the kinds of see-through the engine holds, the floats of each (`SeeKind` in its common.wgsl), and how far under
  *  the hero's floor is still clear of his hole (`FLOOR_CLEAR` in core/seeThrough.ts) */
-const SEE_KINDS_MOST = 16, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
+const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
 /** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
 /** the largest side a map is handed over at */
@@ -862,7 +862,7 @@ export class Bridge {
     if (!see || !TUNE.see) return 0;
     let slot = this.seeKinds.indexOf(see);
     if (slot < 0) {
-      if (this.seeKinds.length === SEE_KINDS_MOST) { this.skip('see-through kind past 16'); return 0; }
+      if (this.seeKinds.length === SEE_KINDS_MOST) { this.skip('see-through kind past 32'); return 0; }
       slot = this.seeKinds.push(see) - 1;
     }
     return slot + 1;
@@ -888,6 +888,13 @@ export class Bridge {
       g[at + 14] = room ? room.z : 1e5; g[at + 15] = room ? room.w : 1e5;
       g[at + 16] = door ? door.x : 0; g[at + 17] = door ? door.y : 0; g[at + 18] = door ? door.z : 0; g[at + 19] = door ? door.w : 0;
     }
+  }
+
+  /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
+   *  hole, a share of the whole, a door open). */
+  seeKindsNow(): { held: number; thinning: number } {
+    const thinning = this.seeKinds.filter((see) => see.k.value.z > 0 || see.whole.value > 0 || (see.doorOn?.value ?? 0) !== 0);
+    return { held: this.seeKinds.length, thinning: thinning.length };
   }
 
   /** A harness's: the meshes handed to the engine since it was set (`lab rustcheck`: every foe of a fight drawn). */

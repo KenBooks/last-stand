@@ -111,6 +111,17 @@ function shelter(bridge: Bridge, where: string, wanted: boolean): Checked {
   return passed(`${where}: the hall's inside sheltered up to its walls' tops (${high.toFixed(1)} m)`);
 }
 
+/** Stood inside the hall, seen from above: what stands over him thins, by the game's own kinds, none left out. */
+async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> {
+  G.player.place(new THREE.Vector3(TERRACE.x, TERRACE.high, HALL.columnZ[1]), Math.PI);
+  await lab.step(90);
+  const { held, thinning } = bridge.seeKindsNow();
+  const past = [...bridge.skipped].filter(([kind]) => kind.startsWith('see-through'));
+  if (past.length) return failed(`in the hall from above: ${past[0][1]} things of a see-through kind the engine has no room for`);
+  if (!thinning) return failed(`in the hall from above nothing thins over him (${held} kinds held): its roof hides him`);
+  return passed(`in the hall from above ${thinning} of the engine's ${held} kinds of see-through thin over him`);
+}
+
 /** A house walked into, out of and into again: no frame held, and three drawing no scene of its own. */
 async function house(lab: Lab, room: RoomId): Promise<Checked> {
   const drawing = lab.drawing;
@@ -231,6 +242,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       await lab.step(5);
       checks.push(placedRight('the village'));
       checks.push(shelter(bridge, 'the village', true));
+      checks.push(await hallFromAbove(lab, bridge));
       checks.push(await house(lab, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
