@@ -10,7 +10,7 @@ import { G } from '../state';
 import { VILLAGE } from '../core/beta';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
-import { wasPressed } from '../core/input';
+import { spendPress, wasPressed } from '../core/input';
 import { sfx } from '../core/audio';
 import { outline } from './overlay/outline';
 import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen, hallShot } from '../game/hall';
@@ -423,11 +423,19 @@ function tapAt(x: number, y: number): void {
   if (best >= 0 && best !== hallFocus()) { sfx.click(); focusOn(best); }
 }
 
+/** the lab's: false leaves the E that left the screen for the village to hear too, as it was (`lab village --only
+ *  objectsUsedAgain --canary`) */
+let spendsE = true;
+export function heroSelectSpendsE(on: boolean): void { spendsE = on; }
+
 /** The screen's selection keys while open and unpaused; main.ts handles Escape above it. */
 export function heroSelectKeys(): void {
   // (E leaves the village's hall as Back does, from play, "in hall of heroes pressing E should cancel back, same
-  // like other E interactions"; a first visit has nothing to go back to)
+  // like other E interactions"; a first visit has nothing to go back to. The press is spent: the village's update
+  // comes later in the frame, and hearing it at the dais it used the hall again, the screen back up a moment after it
+  // left, from play, "E in choose hero should cancel hero choosing like all other interactions in the village")
   if (VILLAGE && !first && wasPressed('e')) {
+    if (spendsE) spendPress('e');
     sfx.click();
     closeHeroSelect();
     return;
