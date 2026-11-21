@@ -21,7 +21,8 @@ import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
 import { castHeroesOverLamps } from './lampShadows';
 import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
-import { cullOutsideHall } from './hallPortal';
+import { hallDoorway } from './hallPortal';
+import { addDoorway, cullByDoorways } from './doorways';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { villageSteps, VILLAGE_ENV, type Village } from './village';
@@ -196,7 +197,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     villageGroup.visible = false;
     villageGroup.matrixAutoUpdate = false;
     scene.add(villageGroup);
-    cullOutsideHall(scene, villageGroup, village.hallCutaway);
+    addDoorway(hallDoorway(village.hallCutaway));
+    cullByDoorways(scene, villageGroup);
     places.village = { group: villageGroup, b: village };
   }
   // (the hall of heroes' room, shown in the village's place while the hero selection screen is up: `showHall`)

@@ -133,7 +133,7 @@ five items as empty); the chest's draws (`chestDrawsFew`: at most 40, its parts 
 12 parts of their own to its box); how to play closed by Esc with the pointer locked, the browser's letting go of the lock as Esc is
 let go played by the page (`escClosesHelp`: no pause menu; `--canary` asks for the lock with Esc still down); from inside the hall of
 heroes over the shoulder, turned to its door (V pressed: the village's top view is its panels'), the frame drawn
-with what stands outside culled by the doorway (`world/hallPortal.ts`) and drawn whole, at midnight and noon:
+with what stands outside culled by the doorway (`world/doorways.ts`) and drawn whole, at midnight and noon:
 the scene's draws must fall and at most 0.05% of the pixels change (`page/villageHallCull.ts`: 425 draws to
 297, none changed; `--canary` culls all outside the hall, the doorway or not: 0.74% changed); the terrace's
 stair walked up, the body's height on its top (`obj.position.y`:

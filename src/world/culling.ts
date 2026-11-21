@@ -255,7 +255,7 @@ const twinSeen = (mesh: THREE.InstancedMesh, camera: THREE.Camera): boolean => m
   (child as THREE.InstancedMesh).instanceMatrix === mesh.instanceMatrix && camera.layers.test(child.layers));
 
 /** What else hides a cell from the scene's camera this frame, by its sphere in the world (the hall of heroes' doorway,
- *  `hallPortal.ts`, registered here as it imports this module) */
+ *  `doorways.ts`, registered here as it imports this module) */
 let cellHidden: ((sphere: THREE.Sphere) => boolean) | null = null;
 /** Cells whose sphere `test` says is hidden left out of the scene's draw too, as the frustum's are. */
 export function hideCellsWhere(test: (sphere: THREE.Sphere) => boolean): void {
