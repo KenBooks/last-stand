@@ -39,12 +39,8 @@ export function partyBars(lives: number[]): string {
 
 // --- combos ---------------------------------------------------------------------------------------------------------
 
-/** A step of a combo: its key cap's face (markup: `keyFace` in parts.ts) and the key's name, the skill's icon and
- *  name, its colour. */
-export interface Step { key: string; label: string; icon: string; name: string; colour: string }
-
-/** A combo as the game's key caps in order, an arrow between each, each cap's skill under it. */
-export function keySequence(steps: Step[]): string {
-  return `<div class="gd-seq">${steps.map((s, i) => `${i ? '<svg class="gd-seq-arrow" viewBox="0 0 40 20" aria-hidden="true"><path d="M2 10H32M24 3L34 10L24 17"/></svg>' : ''}`
-    + `<div class="gd-cap-step" style="--c:${s.colour}"><kbd class="gd-cap" title="${esc(s.label)}" aria-label="${esc(s.label)}">${s.key}</kbd><span class="gd-cap-skill"><span class="gd-ic">${s.icon}</span>${esc(s.name)}</span></div>`).join('')}</div>`;
+/** A combo as the skill bar's slots in order (`keySlot` in parts.ts), an arrow between each. */
+export function keySequence(slots: string[]): string {
+  const arrow = '<svg class="gd-seq-arrow" viewBox="0 0 40 20" aria-hidden="true"><path d="M2 10H32M24 3L34 10L24 17"/></svg>';
+  return `<div class="gd-seq">${slots.join(arrow)}</div>`;
 }

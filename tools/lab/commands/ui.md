@@ -21,7 +21,7 @@ label shows through, which must be caught.
 
 `sitHint`: the hint to sit, E Sit (`src/ui/sitHint.ts`; from play: "when pointing at object to sit on, we need to display a hint like E Sit"). The mouse is put on the lobby's seat nearest the hero that shows on the screen: the seat outlined at once, the prompt (the village's objects' own, drawn over the world) shown and within the window; then on the floor beside him, and the prompt gone (`uiSitHint.ts`). `--canary` makes the shown prompt clear, which must be caught.
 
-`ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
+`ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,guideKeys,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,sitHint,logLobby,perfAsk,pauseLobby,betaNotice,coop,coopRename,bugReport,panelLinks,skillTipsTouch,sheetTouch,litTouch,coopTouch,panelLinksTouch,autoFull,
 run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,pauseBeta,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,

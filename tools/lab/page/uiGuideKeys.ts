@@ -38,7 +38,8 @@ function scrollTo(selector: string): void {
   const page = document.querySelector<HTMLElement>('#guide .gd-page');
   const target = page?.querySelector<HTMLElement>(selector);
   if (!page || !target) return;
-  page.scrollTop += target.getBoundingClientRect().top - page.getBoundingClientRect().top;
+  // (by the browser: the box is zoomed by --ui, so a rect's px on the screen aren't its scroll's)
+  target.scrollIntoView({ block: 'start', behavior: 'instant' });
 }
 
 /** Whether `inner` lies inside `outer`, give or take the slack. */
@@ -101,9 +102,12 @@ export function guideKeysShown(canary: boolean): Found {
   return { lines: all.map(legendLine), problems };
 }
 
-/** The guide as the player sees it at the weapon styles and at the loadouts, and a legend close up. */
+/** The guide as the player sees it at the styles' table, the weapon styles and the loadouts (with the combos under
+ *  them), and a legend close up. */
 export async function guideKeysPictures(lab: Lab): Promise<Pictured[]> {
   const pictures: Pictured[] = [];
+  scrollTo('.gd-compare');
+  pictures.push(await lab.screen('guide-table', [], '#guide .gd-box'));
   scrollTo('.gd-style');
   pictures.push(await lab.screen('guide-styles', [], '#guide .gd-box'));
   pictures.push(await lab.screen('guide-legend', [], '#guide .gd-style'));

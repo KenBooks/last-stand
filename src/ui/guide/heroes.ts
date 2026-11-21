@@ -12,7 +12,7 @@ import { skillTooltip } from '../tooltip';
 import { skillIconHTML } from '../skillArt';
 import { itemIconSVG } from '../itemIcons';
 import type { ClassDef, Item, Profile, SkillDef, SkillKey } from '../../types';
-import { esc, head, pic, keyCap, keyFace, keyName, num, para, points, secs, whole } from './parts';
+import { esc, head, pic, keyCap, keySlot, num, para, points, secs, whole } from './parts';
 import { bars, keySequence } from './diagrams';
 import { skillHits } from '../skillDamage';
 import { CLASSES } from '../../data/classes/index';
@@ -32,15 +32,6 @@ const played = (cls: ClassDef): boolean => G.player?.cls.id === cls.id;
 function chip(def: SkillDef | undefined): string {
   if (!def) return '<span class="gd-chip none">—</span>';
   return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span>${def.name}</span>`;
-}
-
-/** A key's slot of a loadout's bar: the skill's icon framed as the hotbar frames it, the key's cap on its corner, its
- *  name under it in the skill's colour (none bound: an empty frame). */
-function keySlot(k: SkillKey, def: SkillDef | undefined): string {
-  const icon = def ? `<span class="gd-ic">${skillIconHTML(def)}</span>` : '';
-  const colour = def ? ` style="--c:${def.icon.color}"` : '';
-  return `<div class="gd-kslot${def ? '' : ' none'}"${colour}><span class="gd-kart">${icon}${keyCap(k)}</span>`
-    + `<span class="gd-kname">${def?.name ?? 'Empty'}</span></div>`;
 }
 
 /** A loadout as the game's skill bar: a slot a key, each with its skill, laid on even columns. */
@@ -136,7 +127,7 @@ function styles(cls: ClassDef): string {
       + `<div class="gd-pros">${points('Strengths', note?.strengths ?? [], 'good')}${points('Weaknesses', note?.weaknesses ?? [], 'bad')}</div></div>`);
   }
   return out.length ? head('Weapon styles') + para('What you hold changes some of your skills. Equip a different weapon or off-hand and those keys change with it; each style keeps its own loadout.')
-    + compare(cols.map((c) => c.name), SKILL_KEYS.map((k) => ({ label: keyCap(k), cells: cols.map((c) => chip(skillOf(cls, c.l[k] ?? null))), differs: new Set(cols.map((c) => c.l[k])).size > 1 })))
+    + compare(cols.map((c) => c.name), SKILL_KEYS.map((k) => ({ label: keyCap(k), cells: cols.map((c) => chip(skillOf(cls, c.l[k] ?? null))), differs: new Set(cols.map((c) => c.l[k])).size > 1 })), true)
     + out.join('') : '';
 }
 
@@ -191,9 +182,10 @@ function schoolTable(cols: { title: string; colour: string; spell?: SkillDef }[]
   ]);
 }
 
-/** A table of things side by side: a column each, a row each, the rows that differ marked. */
-function compare(titles: string[], rows: { label: string; cells: string[]; differs?: boolean }[]): string {
-  return `<div class="gd-compare"><table><thead><tr><th></th>${titles.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>`
+/** A table of things side by side: a column each, a row each, the rows that differ marked; `keys` when its rows are a
+ *  loadout's keys (equal columns, the skills larger). */
+function compare(titles: string[], rows: { label: string; cells: string[]; differs?: boolean }[], keys = false): string {
+  return `<div class="gd-compare${keys ? ' keys' : ''}"><table><thead><tr><th></th>${titles.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>`
     + rows.map((r) => `<tr${r.differs ? ' class="differs"' : ''}><th>${r.label}</th>${r.cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
     + '</tbody></table></div>';
 }
@@ -218,12 +210,14 @@ function loadouts(cls: ClassDef, note: ClassNote): string {
     + ok.map((l) => `<div class="gd-load"><h4>${l.name}</h4>${keysRow(cls, l.keys as Partial<Loadout>)}${para(l.why)}</div>`).join('');
 }
 
-/** The combos of the notes whose every skill the class has, each step by the key it's on by default. */
+/** The combos of the notes whose every skill the class has: a card each, laid two or three across, its steps the
+ *  skill bar's slots by the key each is on by default, an arrow between. */
 function combos(cls: ClassDef, note: ClassNote): string {
   const ok = note.combos.filter((c) => c.steps.every((impl) => skillOf(cls, impl)));
   if (!ok.length) return '';
-  const step = (impl: string) => { const def = skillOf(cls, impl)!; return { key: keyFace(def.key as SkillKey), label: keyName(def.key as SkillKey), icon: skillIconHTML(def), name: def.name, colour: def.icon.color }; };
-  return head('Combos') + ok.map((c) => `<div class="gd-combo"><h4>${c.name}</h4>${keySequence(c.steps.map(step))}${para(c.how)}</div>`).join('');
+  const step = (impl: string): string => { const def = skillOf(cls, impl)!; return keySlot(def.key as SkillKey, def); };
+  const cards = ok.map((c) => `<div class="gd-combo"><h4>${c.name}</h4>${keySequence(c.steps.map(step))}${para(c.how)}</div>`);
+  return head('Combos') + `<div class="gd-combos">${cards.join('')}</div>`;
 }
 
 /** A class's page. */
