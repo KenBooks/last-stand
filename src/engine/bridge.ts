@@ -3,220 +3,82 @@
 // it's met (and again when its version moves on), and writes a record a mesh straight into the engine's memory, with
 // the skinned meshes' bones and the frame's globals (camera, sun and its shadow's view, sky, point lights, fog).
 // What it can't hand over is counted by its kind (`skipped`): shader materials, sprites, points, lines.
+// Its parts, each a module beside it: what they share (`core.ts`), the maps (`maps.ts`), the materials
+// (`materials.ts`), the geometry and bones (`geometry.ts`), the lights (`lights.ts`), the kinds of see-through
+// (`seeKinds.ts`), the particles (`sprites.ts`) and the frame's globals (`globals.ts`). Here: the scene's matrices,
+// the walk, a record a mesh, what's handed over ahead, and a frame drawn or written down.
 import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
-import { tunable } from '../core/tuning';
-import { holeNow, type SeeThrough } from '../core/seeThrough';
-import { lampList, LAMPS_MOST } from '../core/lamps';
 import { shownPointLights } from '../core/webgpu';
-import { HALL, TERRACE } from '../data/village';
-import { particles } from '../fx/particles';
-import { dazedDrawn } from '../fx/dazed';
-import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
-import { kitLookOf } from './looks/kit';
+import { Core, MAX_MAP, RECORD } from './core';
+import { lookOf } from './custom';
+import { Geometries } from './geometry';
+import { GLOBALS, PLAIN_GRADE, TUNE, writeGlobals, type Grade } from './globals';
+import { Lights } from './lights';
+import { Maps } from './maps';
+import { Materials, type AnyMaterial } from './materials';
+import { SeeKinds } from './seeKinds';
+import { Sprites } from './sprites';
 import { recording, Tape } from './tape';
 
-/** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
-const RECORD = 24;
+export { TUNE, type Grade } from './globals';
+export type { FrameStats } from './core';
+
 /** a record's flags (plan.rs) */
 const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4;
-/** a material key's bit: its shader leaves its vertices where they are, so it casts (`CASTS_AS_PLACED` in plan.rs) */
-const CASTS_AS_PLACED = 32;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
-/** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
-const GLOBALS = {
-  viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
-  shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
-  seeHall: 352, seeKinds: 360, floats: 1000,
-};
-const MAX_POINTS = 32;
-/** the kinds of see-through the engine holds, the floats of each (`SeeKind` in its common.wgsl), and how far under
- *  the hero's floor is still clear of his hole (`FLOOR_CLEAR` in core/seeThrough.ts) */
-const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
-/** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
-const SHADOW_SIZE = 2048;
-/** the largest side a map is handed over at */
-const MAX_MAP = 2048;
+/** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
+const HIDDEN_PLACES = 2;
+/** the frames `prepareAhead` rests after a walk of the whole scene before it looks again */
+const AHEAD_REST = 600;
+/** three's own update of an object's matrices: a kind with another is left to its own */
+const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 
-/** What's tuned by hand against three's picture (`window.__rust.tune`). */
-export const TUNE = tunable('rust', {
-  exposure: 1.05,
-  /** how strongly the sky is mirrored by smooth surfaces */
-  environment: 1,
-  /** the sky's light where three reads an environment map the engine doesn't have */
-  skyFill: 0.35,
-  shadows: 1,
-  /** how far along its normal a surface is moved before the shadow map is read, world units */
-  shadowBias: 0.06,
-  /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals */
-  debug: 0,
-  /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
-   *  village's still things are in maps three keeps, which the engine doesn't have) */
-  castAll: 1,
-  /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against three's frame */
-  shelterSky: 0.25,
-  /** ms a frame spent handing over what isn't shown yet (`prepareAhead`), under the loading screen and after it
-   *  (0: nothing ahead, each place handed over as it's first shown) */
-  aheadLoading: 30,
-  ahead: 2,
-  /** only what moved has its matrices made again, only a material that changed is described again (0: every
-   *  object's and every material's each frame, to compare) */
-  still: 1,
-  /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
-  see: 1,
-});
-
-/** What a frame handed over and drew. */
-export interface FrameStats {
-  records: number;
-  draws: number;
-  shadowDraws: number;
-  objects: number;
-  culled: number;
-  triangles: number;
-  gpuMs: number;
-  /** the walk of the scene, then the engine's own work, ms */
-  /** the scene's matrices made */
-  placeMs: number;
-  walkMs: number;
-  engineMs: number;
-  /** handed over this frame */
-  newMeshes: number;
-  /** meshes whose vertices moved, written into the buffers they had */
-  movedMeshes: number;
-  newTextures: number;
-  newMaterials: number;
-}
-
-interface MaterialEntry {
-  id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
-  /** how often its numbers moved, and whether the engine's material is its own by now */
-  changes: number; own: boolean;
-  /** its own shader's numbers as last sent, and its volume */
-  custom?: Float32Array;
-  volume?: number;
-}
-/** how many times a material's numbers may move before it stops sharing the engine's materials */
-const SHARED_CHANGES = 8;
-/** (its attributes as handed over too: a geometry given others in their place, a hero's piece at another detail,
- *  has their versions begin again, and drew with the buffers it had: the ranger's boots without their shafts) */
-interface GeometryEntry { id: number; version: number; position: unknown; index: unknown; draws: number; indexVersion: number }
-interface TextureEntry { id: number; version: number }
-interface SetEntry { id: number; version: number; count: number }
-
-type AnyMaterial = THREE.Material & Partial<{
-  color: THREE.Color; map: THREE.Texture | null; roughness: number; metalness: number; emissive: THREE.Color;
-  emissiveIntensity: number; emissiveMap: THREE.Texture | null; normalMap: THREE.Texture | null;
-  normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
-  isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
-  isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
-  positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
-}>;
-
-const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
-const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
-const IDENTITY = new THREE.Matrix4();
-const WHITE = new THREE.Color(1, 1, 1);
-
-/** A perspective camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in. */
-function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4): THREE.Matrix4 {
-  const { near, far } = camera;
-  if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-    const c = camera as THREE.PerspectiveCamera;
-    const f = 1 / Math.tan(THREE.MathUtils.degToRad(c.fov) / 2) * c.zoom;
-    return out.set(
-      f / c.aspect, 0, 0, 0,
-      0, f, 0, 0,
-      0, 0, far / (near - far), near * far / (near - far),
-      0, 0, -1, 0);
-  }
-  const c = camera as THREE.OrthographicCamera;
-  const w = (c.right - c.left) / c.zoom, h = (c.top - c.bottom) / c.zoom;
-  const cx = (c.right + c.left) / 2, cy = (c.top + c.bottom) / 2;
-  return out.set(
-    2 / w, 0, 0, -2 * cx / w,
-    0, 2 / h, 0, -2 * cy / h,
-    0, 0, 1 / (near - far), near / (near - far),
-    0, 0, 0, 1);
-}
-
-/** The game's grade as the engine's passes after the scene read it (`fs_grade` in the engine's post.wgsl). */
-export interface Grade {
-  /** the light the small and the large areas adapt to */
-  small: number; large: number;
-  /** the highlights' room over their knee */
-  cap: number;
-  vignette: number;
-  /** a blow taken, and how low the health is (0 to 1 each) */
-  hurt: number; low: number;
-}
-const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
+const scratchMatrix = new THREE.Matrix4();
 
 export class Bridge {
-  readonly stats: FrameStats = {
-    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, placeMs: 0, walkMs: 0, engineMs: 0,
-    newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
-  };
+  private core: Core;
+  private maps: Maps;
+  private seeKinds: SeeKinds;
+  private materials: Materials;
+  private geometries: Geometries;
+  private lit: Lights;
+  private particles: Sprites;
+  /** what a frame handed over and drew */
+  readonly stats: Core['stats'];
   /** what wasn't handed over, by its kind, on the last frame */
-  readonly skipped = new Map<string, number>();
+  readonly skipped: Core['skipped'];
   /** how many of each the engine holds */
-  readonly held = { meshes: 0, textures: 0, materials: 0, sets: 0 };
+  readonly held: Core['held'];
 
-  private geometries = new WeakMap<THREE.BufferGeometry, GeometryEntry>();
-  private textures = new WeakMap<THREE.Texture, TextureEntry>();
-  private materials = new WeakMap<THREE.Material, MaterialEntry>();
-  private sets = new WeakMap<THREE.InstancedMesh, SetEntry>();
-  private frame = 0;
-  private records!: Float32Array;
-  private bones!: Float32Array;
-  private globals!: Float32Array;
-  private capacity = 0;
-  private boneCapacity = 0;
-  private count = 0;
-  private boneFloats = 0;
-  private points = 0;
-  private sun: THREE.DirectionalLight | null = null;
   private stack: THREE.Object3D[] = [];
-  private scratchParams = new Float32Array(20);
-  private scratchMaps = new Uint32Array(4);
-  private canvas2d: CanvasRenderingContext2D | null = null;
+  private ahead: THREE.Object3D[] = [];
+  private aheadRest = 0;
+  private grade: Grade = PLAIN_GRADE;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.Camera | null = null;
 
-  constructor(private engine: Engine, private wasm: InitOutput) {
-    this.takeViews(4096, 16 * 256);
+  constructor(engine: Engine, wasm: InitOutput) {
+    const core = this.core = new Core(engine, wasm);
+    this.maps = new Maps(core);
+    this.seeKinds = new SeeKinds(core);
+    this.materials = new Materials(core, this.maps, this.seeKinds);
+    this.geometries = new Geometries(core);
+    this.lit = new Lights(core);
+    this.particles = new Sprites(core);
+    this.stats = core.stats;
+    this.skipped = core.skipped;
+    this.held = core.held;
   }
-
-  /** The engine's memory viewed again, with room for `records` and `boneFloats`: growing either moves it. */
-  private takeViews(records: number, boneFloats: number): void {
-    const recordsAt = this.engine.records(records), bonesAt = this.engine.bones(boneFloats);
-    const globalsAt = this.engine.globals(), memory = this.wasm.memory.buffer;
-    this.records = new Float32Array(memory, recordsAt, records * RECORD);
-    this.bones = new Float32Array(memory, bonesAt, boneFloats);
-    this.globals = new Float32Array(memory, globalsAt, GLOBALS.floats);
-    this.capacity = records;
-    this.boneCapacity = boneFloats;
-  }
-
-  /** The views taken again if a call into the engine grew its memory under them. */
-  private freshViews(): void {
-    if (this.records.buffer !== this.wasm.memory.buffer) this.takeViews(this.capacity, this.boneCapacity);
-  }
-
-  /** the largest side a map is handed over at (a tape's maps are smaller: its file is mostly maps) */
-  private mostMap = MAX_MAP;
-  private tape: Tape | null = null;
 
   /** What's kept of what was handed over forgotten: the next frame hands everything over again. */
   private forget(): void {
-    this.geometries = new WeakMap();
-    this.textures = new WeakMap();
-    this.materials = new WeakMap();
-    this.sets = new WeakMap();
-    this.cutOuts = new Map();
-    this.shared = new Map();
-    this.shaders = new Map();
-    this.volumes = new WeakMap();
+    this.geometries.forget();
+    this.maps.forget();
+    this.materials.forget();
   }
 
   /**
@@ -225,476 +87,34 @@ export class Bridge {
    * before and for the tape too (a harness's page, not a player's: nothing is dropped).
    */
   capture(width: number, height: number, mostMap: number, ...frame: Parameters<Bridge['draw']>): Blob {
-    const engine = this.engine, tape = new Tape(width, height);
-    this.engine = recording(engine, tape);
-    this.tape = tape;
-    this.mostMap = mostMap;
+    const core = this.core, engine = core.engine, tape = new Tape(width, height);
+    core.engine = recording(engine, tape);
+    core.tape = tape;
+    core.mostMap = mostMap;
     this.forget();
     try {
       this.draw(...frame);
     } finally {
-      this.engine = engine;
-      this.tape = null;
-      this.mostMap = MAX_MAP;
+      core.engine = engine;
+      core.tape = null;
+      core.mostMap = MAX_MAP;
       this.forget();
     }
     return tape.blob();
   }
 
-  private skip(kind: string): void {
-    this.skipped.set(kind, (this.skipped.get(kind) ?? 0) + 1);
-  }
-
-  /** A map's RGBA bytes, row 0 where v is 0, no larger than `MAX_MAP` a side. */
-  private pixelsOf(texture: THREE.Texture): { width: number; height: number; data: Uint8Array } | null {
-    const image = texture.image as {
-      data?: ArrayBufferView | null; width?: number; height?: number;
-    } & CanvasImageSource | null;
-    if (!image) return null;
-    if ((texture as THREE.DataTexture).isDataTexture) {
-      const { data, width = 0, height = 0 } = image;
-      if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return null;
-      if (texture.format !== THREE.RGBAFormat || data.length !== width * height * 4) return null;
-      return { width, height, data: data instanceof Uint8Array ? data : new Uint8Array(data.buffer, data.byteOffset, data.length) };
-    }
-    if ((texture as THREE.CompressedTexture).isCompressedTexture || (texture as THREE.CubeTexture).isCubeTexture) return null;
-    const fullWidth = (image as { naturalWidth?: number }).naturalWidth || (image as { videoWidth?: number }).videoWidth || image.width || 0;
-    const fullHeight = (image as { naturalHeight?: number }).naturalHeight || (image as { videoHeight?: number }).videoHeight || image.height || 0;
-    if (!fullWidth || !fullHeight) return null;
-    const scale = Math.min(1, this.mostMap / Math.max(fullWidth, fullHeight));
-    const width = Math.max(1, Math.round(fullWidth * scale)), height = Math.max(1, Math.round(fullHeight * scale));
-    this.canvas2d ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-    const context = this.canvas2d;
-    if (!context) return null;
-    context.canvas.width = width;
-    context.canvas.height = height;
-    context.save();
-    // (three's `flipY` puts the picture's foot at v 0)
-    if (texture.flipY) { context.translate(0, height); context.scale(1, -1); }
-    try {
-      context.drawImage(image as CanvasImageSource, 0, 0, width, height);
-    } catch {
-      context.restore();
-      return null;
-    }
-    context.restore();
-    const { data } = context.getImageData(0, 0, width, height);
-    return { width, height, data: new Uint8Array(data.buffer) };
-  }
-
-  private textureId(texture: THREE.Texture | null | undefined): number {
-    if (!texture) return 0;
-    const entry = this.textures.get(texture);
-    if (entry && entry.version === texture.version) return entry.id;
-    if (entry?.id) { this.engine.drop_texture(entry.id); this.held.textures--; }
-    const srgb = texture.colorSpace === THREE.SRGBColorSpace;
-    // (a picture of the page's is copied on the GPU, the engine making its smaller levels there: read back to bytes
-    // through a canvas, a house's maps were 9 s of the page's time as it was first walked into, 20 s in play. A
-    // frame written down as a tape needs the bytes)
-    let id = !this.tape && pictured(texture) ? this.engine.add_texture_from(texture.image as object, srgb, texture.flipY) : 0;
-    if (!id) {
-      const pixels = this.pixelsOf(texture);
-      id = pixels ? this.engine.add_texture(pixels.width, pixels.height, pixels.data, srgb) : 0;
-      if (!pixels) this.skip('texture not readable');
-    }
-    if (id) { this.held.textures++; this.stats.newTextures++; }
-    this.textures.set(texture, { id, version: texture.version });
-    this.freshViews();
-    return id;
-  }
-
-  /** A base map with an alpha map's green as its alpha (three reads the two apart; the engine has one base map). */
-  private cutOutId(map: THREE.Texture | null, alpha: THREE.Texture): number {
-    const key = `${map?.id ?? 0}:${map?.version ?? 0}:${alpha.id}:${alpha.version}`;
-    const kept = this.cutOuts.get(key);
-    if (kept !== undefined) return kept;
-    const cut = this.pixelsOf(alpha);
-    if (!cut) { this.skip('alpha map not readable'); return this.textureId(map); }
-    const data = new Uint8Array(cut.data.length).fill(255);
-    const base = map ? this.pixelsOf(map) : null;
-    if (base && base.width === cut.width && base.height === cut.height) data.set(base.data);
-    for (let i = 0; i < data.length; i += 4) data[i + 3] = cut.data[i + 1];
-    const id = this.engine.add_texture(cut.width, cut.height, data, map?.colorSpace === THREE.SRGBColorSpace);
-    this.cutOuts.set(key, id);
-    this.held.textures++;
-    this.freshViews();
-    return id;
-  }
-  private cutOuts = new Map<string, number>();
-
-  /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
-  private describe(material: AnyMaterial, look?: RustLook): number {
-    // (a shader material is drawn by its look alone: unlit, white under whatever its look writes)
-    if (!look && (!material.color || material.isShaderMaterial)) return -1;
-    // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
-    // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
-    // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
-    // is drawn by that)
-    if (!look && ((material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode)) return -1;
-    const p = this.scratchParams, maps = this.scratchMaps;
-    const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial || material.isShaderMaterial);
-    const map = material.map ?? null;
-    const tint = material.color ?? WHITE;
-    p[0] = tint.r; p[1] = tint.g; p[2] = tint.b; p[3] = material.opacity;
-    const glow = material.emissive, glowBy = material.emissiveIntensity ?? 1;
-    p[4] = glow ? glow.r * glowBy : 0; p[5] = glow ? glow.g * glowBy : 0; p[6] = glow ? glow.b * glowBy : 0;
-    p[7] = material.alphaTest;
-    p[8] = material.roughness ?? (material.isMeshPhongMaterial ? 0.5 : 1);
-    p[9] = material.metalness ?? 0;
-    p[10] = material.normalScale?.x ?? 1;
-    // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
-    p[11] = this.seeKind(material.seeThrough as SeeThrough | undefined);
-    const placed = map ?? material.alphaMap ?? material.normalMap ?? null;
-    p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
-    p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
-    const rough = material.roughnessMap ?? material.metalnessMap ?? null;
-    // (an alpha map alone is handed over as it is and read as one by the shader, `flags.w`: every one the game
-    // has. With a base map the two are joined on the page, their bytes read back, `cutOutId`)
-    const alphaAlone = !!material.alphaMap && !map;
-    if (alphaAlone) maps[0] = this.textureId(material.alphaMap);
-    else maps[0] = material.alphaMap ? this.cutOutId(map, material.alphaMap) : this.textureId(map);
-    maps[1] = this.textureId(material.normalMap);
-    maps[2] = this.textureId(rough);
-    maps[3] = this.textureId(material.emissiveMap);
-    p[16] = unlit ? 1 : 0;
-    p[17] = material.vertexColors ? 1 : 0;
-    p[18] = maps[1] ? 1 : 0;
-    p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
-    // (3: its colour already multiplied by its alpha, the flames' light over what they hide)
-    const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
-    const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
-    const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
-    return blend | (side << 2) | (material.depthWrite ? 16 : 0);
-  }
-
-  /** The engine's material for the numbers, maps and key in the scratch arrays: one for every material alike. */
-  private sharedId(key: number): number {
-    const signature = `${key}|${this.scratchMaps.join(',')}|${this.scratchParams.join(',')}`;
-    let id = this.shared.get(signature);
-    if (id === undefined) {
-      id = this.engine.add_material(this.scratchParams, this.scratchMaps, key);
-      this.shared.set(signature, id);
-      this.held.materials++;
-      this.stats.newMaterials++;
-      this.freshViews();
-    }
-    return id;
-  }
-  /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
-   *  one draw call (each foe's pieces have materials of their own) */
-  private shared = new Map<string, number>();
-
-  /** A material's id, its numbers sent again if they moved since the last frame it was drawn in; 0: not drawn.
-   *  A material alike another shares its engine material; one whose numbers keep moving (a glow that pulses) is
-   *  given one of its own after `SHARED_CHANGES` moves, and written in place from then on. */
-  private materialId(material: AnyMaterial): number {
-    let entry = this.materials.get(material);
-    if (entry && entry.seen === this.frame) return entry.id;
-    const look = lookOf(material) ?? kitLookOf(material);
-    if (TUNE.still && look?.moved && entry?.id && !look.moved()) {
-      entry.seen = this.frame;
-      return entry.id;
-    }
-    if (look) return look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
-    const key = this.describe(material);
-    if (key < 0) {
-      if (!entry) {
-        entry = { id: 0, params: new Float32Array(0), maps: new Uint32Array(0), key: -1, seen: 0, changes: 0, own: false };
-        this.materials.set(material, entry);
-      }
-      entry.seen = this.frame;
-      return 0;
-    }
-    const p = this.scratchParams, maps = this.scratchMaps;
-    if (!entry || !entry.id) {
-      entry = { id: this.sharedId(key), params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: false };
-      this.materials.set(material, entry);
-      return entry.id;
-    }
-    entry.seen = this.frame;
-    const kept = entry;
-    const sameMaps = kept.key === key && maps.every((map, slot) => map === kept.maps[slot]);
-    if (sameMaps && !p.some((value, index) => value !== kept.params[index])) return kept.id;
-    kept.changes++;
-    if (!kept.own && kept.changes > SHARED_CHANGES) {
-      kept.own = true;
-      kept.id = this.engine.add_material(p, maps, key);
-      this.held.materials++;
-      this.freshViews();
-    } else if (!kept.own) {
-      kept.id = this.sharedId(key);
-    } else if (sameMaps) {
-      this.engine.set_material_params(kept.id, p);
-    } else {
-      this.engine.replace_material(kept.id, p, maps, key);
-    }
-    kept.maps.set(maps);
-    kept.params.set(p);
-    kept.key = key;
-    return kept.id;
-  }
-
-  /** A shader of the page's by its name, handed over the first time it's asked for. */
-  private shaderId(look: RustLook): number {
-    let id = this.shaders.get(look.shader.name);
-    if (id === undefined) {
-      id = this.engine.add_shader(look.shader.hooks);
-      this.shaders.set(look.shader.name, id);
-      this.freshViews();
-    }
-    return id;
-  }
-  private shaders = new Map<string, number>();
-  private scratchLook = new Float32Array(LOOK_FLOATS);
-  /** a look's two maps, then its volume */
-  private scratchExtra = new Uint32Array(5);
-  private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
-
-  /** A volume's id, its cells sent again as its version moves on (a new one made when its size does). */
-  private volumeId(volume: THREE.Data3DTexture | undefined): number {
-    if (!volume) return 0;
-    const { data, width, height, depth } = volume.image as { data: Uint8Array; width: number; height: number; depth: number };
-    const entry = this.volumes.get(volume);
-    if (entry && entry.version === volume.version) return entry.id;
-    if (!(data instanceof Uint8Array) || data.length !== width * height * depth) return 0;
-    if (entry && entry.cells === data.length) {
-      this.engine.set_volume(entry.id, data);
-      entry.version = volume.version;
-      return entry.id;
-    }
-    const id = this.engine.add_volume(width, height, depth, data);
-    this.volumes.set(volume, { id, version: volume.version, cells: data.length });
-    this.freshViews();
-    return id;
-  }
-
-  /** The engine's material for a look's shader, the numbers, maps and key in the scratch arrays: made the first time
-   *  they're met, one for every material alike. */
-  private sharedLook(look: RustLook, key: number): number {
-    const numbers = this.scratchLook.subarray(0, look.shared);
-    const signature = `${look.shader.name}|${key}|${this.scratchMaps.join(',')}|${this.scratchParams.join(',')}|${numbers.join(',')}`;
-    let id = this.shared.get(signature);
-    if (id === undefined) {
-      this.scratchExtra.fill(0);
-      id = this.engine.add_custom_material(this.shaderId(look), this.scratchParams, this.scratchMaps, key, this.scratchLook, this.scratchExtra);
-      this.shared.set(signature, id);
-      this.held.materials++;
-      this.stats.newMaterials++;
-      this.freshViews();
-    }
-    return id;
-  }
-
-  /** A material whose look is shared (`RustLook.shared`): the engine's material for what it holds now, as a plain
-   *  material's is (`materialId`); one whose numbers keep moving (a foe dissolving) gets its own after
-   *  `SHARED_CHANGES` moves, written in place from then on. Such a look has no maps or volume of its own. */
-  private sharedLookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
-    const described = this.describe(material, look);
-    if (described < 0) return 0;
-    const key = described | (look.casts ? CASTS_AS_PLACED : 0);
-    const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
-    // (only the numbers that tell two apart are written and read: a foe's every piece comes through here a frame)
-    const count = look.shared!;
-    numbers.fill(0, 0, count);
-    look.numbers(numbers);
-    if (!entry) {
-      entry = {
-        id: this.sharedLook(look, key), params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: false,
-        custom: numbers.slice(0, count),
-      };
-      this.materials.set(material, entry);
-      return entry.id;
-    }
-    entry.seen = this.frame;
-    const kept = entry, sent = entry.custom!;
-    const sameMaps = kept.key === key && maps.every((map, slot) => map === kept.maps[slot]);
-    const sameParams = !p.some((value, index) => value !== kept.params[index]);
-    let sameNumbers = true;
-    for (let index = 0; index < count; index++) {
-      if (numbers[index] !== sent[index]) { sameNumbers = false; break; }
-    }
-    if (sameMaps && sameParams && sameNumbers) return kept.id;
-    kept.changes++;
-    if (!kept.own && kept.changes > SHARED_CHANGES && sameMaps) {
-      kept.own = true;
-      this.scratchExtra.fill(0);
-      kept.id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
-      this.held.materials++;
-      this.freshViews();
-    } else if (!kept.own || !sameMaps) {
-      kept.own = false;
-      kept.id = this.sharedLook(look, key);
-    } else {
-      if (!sameParams) this.engine.set_material_params(kept.id, p);
-      if (!sameNumbers) this.engine.set_material_custom(kept.id, numbers);
-    }
-    kept.maps.set(maps);
-    kept.params.set(p);
-    sent.set(numbers.subarray(0, count));
-    kept.key = key;
-    return kept.id;
-  }
-
-  /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
-  private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
-    const described = this.describe(material, look);
-    if (described < 0) return 0;
-    const key = described | (look.casts ? CASTS_AS_PLACED : 0);
-    const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
-    numbers.fill(0);
-    look.numbers(numbers);
-    const volume = this.volumeId(look.volume?.());
-    // (a volume made anew, a loop baked since: the material made again round it)
-    if (entry && entry.volume !== volume) {
-      this.engine.drop_material(entry.id);
-      this.held.materials--;
-      entry = undefined;
-    }
-    if (!entry) {
-      this.scratchExtra[0] = this.textureId(look.maps?.[0]);
-      this.scratchExtra[1] = this.textureId(look.maps?.[1]);
-      this.scratchExtra[2] = volume;
-      this.scratchExtra[3] = this.textureId(look.maps?.[2]);
-      this.scratchExtra[4] = this.textureId(look.maps?.[3]);
-      const id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
-      entry = {
-        id, params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: true, custom: numbers.slice(), volume,
-      };
-      this.materials.set(material, entry);
-      this.held.materials++;
-      this.stats.newMaterials++;
-      this.freshViews();
-      return id;
-    }
-    entry.seen = this.frame;
-    const kept = entry, sent = entry.custom!;
-    if (p.some((value, index) => value !== kept.params[index])) {
-      this.engine.set_material_params(kept.id, p);
-      kept.params.set(p);
-    }
-    if (numbers.some((value, index) => value !== sent[index])) {
-      this.engine.set_material_custom(kept.id, numbers);
-      sent.set(numbers);
-    }
-    return kept.id;
-  }
-
-  /** An attribute's values as floats, whatever array holds them (interleaved, normalized bytes...). */
-  private floatsOf(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined): Float32Array {
-    if (!attribute) return EMPTY_FLOATS;
-    const plain = attribute as THREE.BufferAttribute;
-    if (!(attribute as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute && plain.array instanceof Float32Array) {
-      return plain.array.length === attribute.count * attribute.itemSize ? plain.array
-        : plain.array.subarray(0, attribute.count * attribute.itemSize);
-    }
-    const size = attribute.itemSize, out = new Float32Array(attribute.count * size);
-    for (let i = 0; i < attribute.count; i++) {
-      for (let c = 0; c < size; c++) out[i * size + c] = attribute.getComponent(i, c);
-    }
-    return out;
-  }
-
-  private geometryId(geometry: THREE.BufferGeometry, positions = 'position'): number {
-    const position = geometry.attributes[positions] as THREE.BufferAttribute | undefined;
-    if (!position) return 0;
-    const index = geometry.index;
-    // (a geometry rewritten in place says so by its attributes' versions)
-    const version = position.version + (index?.version ?? 0) * 4096 + ((geometry.attributes.color as THREE.BufferAttribute | undefined)?.version ?? 0) * 16777216;
-    const entry = this.geometries.get(geometry);
-    const draws = index ? index.count : position.count;
-    if (entry && entry.version === version && entry.position === position && entry.index === index && entry.draws === draws) {
-      return entry.id;
-    }
-    const color = geometry.attributes.color;
-    // (the same vertices moved, none added or taken: written into the buffer it has. Made anew, the hero's cloth and a
-    // blade's trail were three meshes made and dropped every frame)
-    if (entry?.id && entry.position === position && entry.index === index && entry.draws === draws
-      && entry.indexVersion === (index?.version ?? 0) && !this.tape) {
-      const set = this.engine.set_mesh_vertices(entry.id, this.floatsOf(position), this.floatsOf(geometry.attributes.normal),
-        this.floatsOf(geometry.attributes.uv), this.floatsOf(color), color?.itemSize ?? 3);
-      this.freshViews();
-      if (set) {
-        entry.version = version;
-        this.stats.movedMeshes++;
-        return entry.id;
-      }
-    }
-    if (entry?.id) { this.engine.drop_mesh(entry.id); this.held.meshes--; }
-    const skinIndex = geometry.attributes.skinIndex as THREE.BufferAttribute | undefined;
-    const joints = !skinIndex ? EMPTY_SHORTS : skinIndex.array instanceof Uint16Array ? skinIndex.array : Uint16Array.from(skinIndex.array);
-    const indices = !index ? EMPTY_INDICES : index.array instanceof Uint32Array ? index.array : Uint32Array.from(index.array);
-    const id = this.engine.add_mesh(
-      this.floatsOf(position), this.floatsOf(geometry.attributes.normal), this.floatsOf(geometry.attributes.uv),
-      this.floatsOf(color), color?.itemSize ?? 3, indices, joints, this.floatsOf(geometry.attributes.skinWeight));
-    this.geometries.set(geometry, { id, version, position, index, draws, indexVersion: index?.version ?? 0 });
-    this.held.meshes++;
-    this.stats.newMeshes++;
-    this.freshViews();
-    return id;
-  }
-
-  private setId(mesh: THREE.InstancedMesh): number {
-    const matrices = mesh.instanceMatrix, tints = mesh.instanceColor;
-    const version = matrices.version + (tints?.version ?? 0) * 65536;
-    const entry = this.sets.get(mesh);
-    if (entry && entry.version === version && entry.count === mesh.count) return entry.id;
-    let colours = EMPTY_FLOATS;
-    if (tints) {
-      colours = new Float32Array(mesh.count * 4);
-      for (let i = 0; i < mesh.count; i++) {
-        colours[i * 4] = tints.getX(i); colours[i * 4 + 1] = tints.getY(i); colours[i * 4 + 2] = tints.getZ(i); colours[i * 4 + 3] = 1;
-      }
-    }
-    const id = this.engine.set_instances(entry?.id ?? 0, (matrices.array as Float32Array).subarray(0, mesh.count * 16), colours);
-    if (!entry) this.held.sets++;
-    this.sets.set(mesh, { id, version, count: mesh.count });
-    this.freshViews();
-    return id;
-  }
-
-  /**
-   * A skinned mesh's bones written after the frame's others, and where they begin (in matrices): each bone times
-   * the mesh's own bind matrix, so a skeleton's are written once for each way its meshes are bound. (A hero's pieces
-   * each hang on a joint of their own, bound where that joint stood: written once for them all by the first's, the
-   * ranger's boots drew without their shafts, skinned from the wrong place.)
-   */
-  private bonesOf(mesh: THREE.SkinnedMesh): number {
-    const skeleton = mesh.skeleton;
-    let written = this.skeletonFrames.get(skeleton);
-    if (!written || written.frame !== this.frame) {
-      skeleton.update();
-      written = { frame: this.frame, binds: [] };
-      this.skeletonFrames.set(skeleton, written);
-    }
-    const bind = mesh.bindMatrix.elements;
-    for (const one of written.binds) {
-      if (one.bind.every((value, index) => value === bind[index])) return one.at;
-    }
-    const from = this.boneFloats, floats = skeleton.boneMatrices?.length ?? skeleton.bones.length * 16;
-    if (from + floats > this.boneCapacity) this.takeViews(this.capacity, (from + floats) * 2);
-    const matrices = skeleton.boneMatrices as Float32Array;
-    if (mesh.bindMatrix.equals(IDENTITY)) {
-      this.bones.set(matrices, from);
-    } else {
-      for (let bone = 0; bone < floats; bone += 16) {
-        scratchMatrix.fromArray(matrices, bone).multiply(mesh.bindMatrix).toArray(this.bones, from + bone);
-      }
-    }
-    this.boneFloats = from + floats;
-    written.binds.push({ bind: bind.slice(), at: from / 16 });
-    return from / 16;
-  }
-  private skeletonFrames = new WeakMap<THREE.Skeleton, { frame: number; binds: { bind: number[]; at: number }[] }>();
-
-  private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number, bones: number, raw = 0): void {
-    const materialId = this.materialId(material);
-    if (!materialId) { this.skip(material.type); return; }
+  private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
+    bones: number, raw = 0): void {
+    const core = this.core;
+    const materialId = this.materials.materialId(material);
+    if (!materialId) { core.skip(material.type); return; }
     this.watched?.add(mesh);
-    if (this.count === this.capacity) this.takeViews(this.capacity * 2, this.boneCapacity);
-    const r = this.records, at = this.count * RECORD;
+    if (core.count === core.capacity) core.takeViews(core.capacity * 2, core.boneCapacity);
+    const r = core.records, at = core.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
     // (a material that writes no colour is in the frame for its shadow or its depth alone: the game's merged casters)
-    r[at + 6] = (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow) ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
+    const casts = mesh.castShadow || (TUNE.castAll && mesh.receiveShadow);
+    r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
       | (material.colorWrite === false ? SHADOW_ONLY : 0);
     r[at + RAW_INSTANCES] = raw;
     if (bones >= 0) {
@@ -703,30 +123,31 @@ export class Bridge {
     } else {
       r.set(mesh.matrixWorld.elements, at + 8);
     }
-    this.count++;
+    core.count++;
   }
 
   private addMesh(mesh: THREE.Mesh): void {
-    // (the particles' pools are handed over whole: `sprites`)
+    // (the particles' pools are handed over whole: `sprites.ts`)
     if (mesh.userData.particles || mesh.name === 'dazed stars') return;
     const geometry = mesh.geometry;
     const look = Array.isArray(mesh.material) ? undefined : lookOf(mesh.material);
     if (look?.before && this.renderer) {
-      mesh.onBeforeRender(this.renderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material, null as unknown as THREE.Group);
+      mesh.onBeforeRender(this.renderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material,
+        null as unknown as THREE.Group);
     }
     // (a geometry of instances it counts itself: each placed by its material's look, from its index)
     const counted = geometry as THREE.InstancedBufferGeometry;
     const raw = counted.isInstancedBufferGeometry ? counted.instanceCount : 0;
     if (counted.isInstancedBufferGeometry && (!look || !(raw > 0) || raw === Infinity)) {
-      if (!look) this.skip('instanced geometry');
+      if (!look) this.core.skip('instanced geometry');
       return;
     }
-    const geometryId = this.geometryId(geometry, look?.position);
+    const geometryId = this.geometries.geometryId(geometry, look?.position);
     if (!geometryId) return;
     const instanced = mesh as unknown as THREE.InstancedMesh, skinned = mesh as THREE.SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
-    const set = instanced.isInstancedMesh ? this.setId(instanced) : 0;
-    const bones = skinned.isSkinnedMesh && skinned.skeleton ? this.bonesOf(skinned) : -1;
+    const set = instanced.isInstancedMesh ? this.geometries.setId(instanced) : 0;
+    const bones = skinned.isSkinnedMesh && skinned.skeleton ? this.geometries.bonesOf(skinned) : -1;
     const range = geometry.drawRange;
     const from = range.start, to = range.count === Infinity ? Infinity : range.start + range.count;
     if (Array.isArray(mesh.material)) {
@@ -741,63 +162,6 @@ export class Bridge {
     const material = mesh.material as AnyMaterial;
     if (!material.visible) return;
     this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw);
-  }
-  private grade: Grade = PLAIN_GRADE;
-  private renderer: THREE.WebGLRenderer | null = null;
-  private scene: THREE.Scene | null = null;
-  private camera: THREE.Camera | null = null;
-
-  private addLight(light: THREE.Light): void {
-    const g = this.globals, by = light.intensity, c = light.color;
-    if (by <= 0) return;
-    if ((light as THREE.AmbientLight).isAmbientLight) {
-      g[GLOBALS.ambient] += c.r * by; g[GLOBALS.ambient + 1] += c.g * by; g[GLOBALS.ambient + 2] += c.b * by;
-    } else if ((light as THREE.HemisphereLight).isHemisphereLight) {
-      const ground = (light as THREE.HemisphereLight).groundColor;
-      g[GLOBALS.hemiSky] += c.r * by; g[GLOBALS.hemiSky + 1] += c.g * by; g[GLOBALS.hemiSky + 2] += c.b * by;
-      g[GLOBALS.hemiGround] += ground.r * by; g[GLOBALS.hemiGround + 1] += ground.g * by; g[GLOBALS.hemiGround + 2] += ground.b * by;
-    } else if ((light as THREE.DirectionalLight).isDirectionalLight) {
-      // (the strongest is the sun; the engine has one)
-      if (!this.sun || by > this.sun.intensity) this.sun = light as THREE.DirectionalLight;
-    } else if ((light as THREE.PointLight).isPointLight) {
-      if (this.points === MAX_POINTS) { this.skip('point light past 32'); return; }
-      const point = light as THREE.PointLight, at = GLOBALS.points + this.points * 8;
-      // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
-      // they stood when it was hidden)
-      point.getWorldPosition(v3);
-      g[at] = v3.x; g[at + 1] = v3.y; g[at + 2] = v3.z; g[at + 3] = point.distance;
-      g[at + 4] = c.r * by; g[at + 5] = c.g * by; g[at + 6] = c.b * by; g[at + 7] = point.decay;
-      this.points++;
-    } else {
-      this.skip(light.type);
-    }
-  }
-
-  /** The village's lamps (core/lamps.ts `lampList`: a place and a light each, after its shelter) as point lights,
-   *  soft close to as the game's are. They shine through walls here: the engine has none of their shadows. */
-  private addLamps(): void {
-    const g = this.globals;
-    // (the list's first entry: the shelter, the hall of heroes' inside)
-    g.set(lampList.subarray(0, 4), GLOBALS.shelter);
-    g[GLOBALS.shelter + 4] = TUNE.shelterSky;
-    // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
-    // the sun it's under. From play: "top down view wall/roof thinning is broken")
-    g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
-    let lit = 0;
-    for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
-      const place = (1 + lamp * 2) * 4, light = place + 4;
-      if (lampList[light + 3] === 0) continue;
-      const at = GLOBALS.points + this.points * 8;
-      g.set(lampList.subarray(place, place + 4), at);
-      g.set(lampList.subarray(light, light + 3), at + 4);
-      // (which side of the shelter it lights: -2 what's under it, -1 what isn't)
-      g[at + 7] = lampList[light + 3] > 0 ? -2 : -1;
-      this.points++;
-      lit++;
-    }
-    // (the village's lamps are lit while it's shown and out in a run: left set there, the hall's box of ground lay
-    // sunless on the battleground's floor, a dark rectangle. From play: "also weird shadow")
-    if (!lit) g.fill(0, GLOBALS.shelter, GLOBALS.shelter + 4);
   }
 
   /**
@@ -857,8 +221,6 @@ export class Bridge {
     }
     this.aheadRest = AHEAD_REST;
   }
-  private ahead: THREE.Object3D[] = [];
-  private aheadRest = 0;
 
   /** A mesh's geometry, materials and pipelines made ready, as `addMesh` would meet them. */
   private prepareMesh(mesh: THREE.Mesh): void {
@@ -868,65 +230,31 @@ export class Bridge {
     const look = single ? lookOf(single) : undefined;
     const counted = (geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry;
     if (counted && !look) return;
-    if (!this.geometryId(geometry, look?.position)) return;
+    if (!this.geometries.geometryId(geometry, look?.position)) return;
     const skinned = !!(mesh as THREE.SkinnedMesh).isSkinnedMesh;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const material of materials) {
       if (!material) continue;
-      const id = this.materialId(material as AnyMaterial);
-      if (id) this.engine.ready_material(id, skinned, counted);
-    }
-  }
-
-  /** A material's kind of see-through as the engine has it: 0 for none, else its place among the kinds and one
-   *  (`core/seeThrough.ts`: every material of a kind holds the one object of its numbers). */
-  private seeKind(see: SeeThrough | undefined): number {
-    if (!see || !TUNE.see) return 0;
-    let slot = this.seeKinds.indexOf(see);
-    if (slot < 0) {
-      if (this.seeKinds.length === SEE_KINDS_MOST) { this.skip('see-through kind past 32'); return 0; }
-      slot = this.seeKinds.push(see) - 1;
-    }
-    return slot + 1;
-  }
-  private seeKinds: SeeThrough[] = [];
-
-  /** Each kind's numbers as the game has them this frame (`seeFadeAt`'s uniforms), and the hall its doors open into. */
-  private writeSeeKinds(): void {
-    const g = this.globals;
-    g[GLOBALS.seeHall] = TERRACE.x; g[GLOBALS.seeHall + 1] = TERRACE.high + HALL.wallHigh;
-    g[GLOBALS.seeHall + 2] = TERRACE.high + HALL.doorHigh; g[GLOBALS.seeHall + 3] = HALL.half;
-    g[GLOBALS.seeHall + 4] = HALL.doorHalf; g[GLOBALS.seeHall + 5] = HALL.wallHigh; g[GLOBALS.seeHall + 6] = SEE_FLOOR_CLEAR;
-    for (let slot = 0; slot < this.seeKinds.length; slot++) {
-      const see = this.seeKinds[slot], at = GLOBALS.seeKinds + slot * SEE_KIND_FLOATS;
-      see.k.value.toArray(g, at);
-      g[at + 4] = see.minY.value; g[at + 5] = see.across.value; g[at + 6] = see.whole.value; g[at + 7] = see.ramp.value;
-      const reach = see.reach?.value;
-      g[at + 8] = reach ? reach.x : 1e5; g[at + 9] = reach ? reach.y : 1e6;
-      g[at + 10] = see.doorOn?.value ?? 0;
-      g[at + 11] = see.blended ? (see.pale ? 2 : 1) : 0;
-      const room = see.room?.value, door = see.door?.value;
-      g[at + 12] = room ? room.x : -1e5; g[at + 13] = room ? room.y : -1e5;
-      g[at + 14] = room ? room.z : 1e5; g[at + 15] = room ? room.w : 1e5;
-      g[at + 16] = door ? door.x : 0; g[at + 17] = door ? door.y : 0; g[at + 18] = door ? door.z : 0; g[at + 19] = door ? door.w : 0;
+      const id = this.materials.materialId(material as AnyMaterial);
+      if (id) this.core.engine.ready_material(id, skinned, counted);
     }
   }
 
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
-  seeKindsNow(): { held: number; thinning: number } {
-    const thinning = this.seeKinds.filter((see) => see.k.value.z > 0 || see.whole.value > 0 || (see.doorOn?.value ?? 0) !== 0);
-    return { held: this.seeKinds.length, thinning: thinning.length };
-  }
+  seeKindsNow(): { held: number; thinning: number } { return this.seeKinds.now(); }
 
   /** A harness's: the meshes handed to the engine since it was set (`lab rustcheck`: every foe of a fight drawn). */
   watched: Set<THREE.Object3D> | null = null;
   /** A harness's: how many point lights the last frame was lit by (a place's own, the effects', the lamps'). */
-  pointsNow(): number { return this.points; }
+  pointsNow(): number { return this.lit.points; }
 
   /** A harness's: the shelter as the last frame had it (its box's least x and z and its most, the sky's share under
    *  it, its walls' tops). */
-  shelterNow(): number[] { return Array.from(this.globals.subarray(GLOBALS.shelter, GLOBALS.shelter + 6)); }
+  shelterNow(): number[] { return this.lit.shelterNow(); }
+
+  /** The lights the last frame was drawn under, as the globals hold them: for a report. */
+  lights(): string { return this.lit.report(); }
 
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
     const stack = this.stack;
@@ -939,122 +267,28 @@ export class Bridge {
         if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
       } else if ((object as THREE.Light).isLight) {
         // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
-        if (!object.userData.rigged) this.addLight(object as THREE.Light);
+        if (!object.userData.rigged) this.lit.add(object as THREE.Light);
       } else if ((object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite) {
-        if (object.layers.test(camera.layers)) this.skip(object.type);
+        if (object.layers.test(camera.layers)) this.core.skip(object.type);
       }
       const children = object.children;
       for (let i = 0; i < children.length; i++) stack.push(children[i]);
     }
   }
 
-  private writeGlobals(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number): [number, number, number] {
-    const g = this.globals;
-    viewProj.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse).toArray(g, GLOBALS.viewProj);
-    v3.setFromMatrixPosition(camera.matrixWorld).toArray(g, GLOBALS.camPos);
-    g[GLOBALS.camPos + 3] = time;
-    g[GLOBALS.sunDir + 3] = this.points;
-    g[GLOBALS.sunColor + 3] = TUNE.exposure;
-    // (three lights a surface by an environment map too; the engine has the sky's two halves alone)
-    g[GLOBALS.hemiSky] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
-    g[GLOBALS.hemiSky + 1] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
-    g[GLOBALS.hemiSky + 2] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
-    g[GLOBALS.misc] = 1 / SHADOW_SIZE;
-    g[GLOBALS.misc + 1] = TUNE.shadowBias;
-    g[GLOBALS.misc + 2] = TUNE.environment;
-    g[GLOBALS.misc + 3] = TUNE.debug;
-    g[GLOBALS.fogColor + 3] = 0;
-    const e = camera.matrixWorld.elements;
-    g[GLOBALS.camRight] = e[0]; g[GLOBALS.camRight + 1] = e[1]; g[GLOBALS.camRight + 2] = e[2];
-    g[GLOBALS.camUp] = e[4]; g[GLOBALS.camUp + 1] = e[5]; g[GLOBALS.camUp + 2] = e[6];
-    this.writeSeeKinds();
-    const hole = holeNow();
-    hole.focus.toArray(g, GLOBALS.seeFocus);
-    g[GLOBALS.seeFocus + 3] = hole.minY;
-    hole.k.toArray(g, GLOBALS.seeHole);
-    if (!TUNE.see) g[GLOBALS.seeHole + 2] = 0;
-    const sun = this.sun;
-    if (sun) {
-      v3.setFromMatrixPosition(sun.matrixWorld).sub(target3.setFromMatrixPosition(sun.target.matrixWorld)).normalize();
-      v3.toArray(g, GLOBALS.sunDir);
-      g[GLOBALS.sunColor] = sun.color.r * sun.intensity; g[GLOBALS.sunColor + 1] = sun.color.g * sun.intensity;
-      g[GLOBALS.sunColor + 2] = sun.color.b * sun.intensity;
-      if (sun.castShadow && TUNE.shadows) {
-        const shadowCamera = sun.shadow.camera;
-        sun.shadow.updateMatrices(sun);
-        scratchMatrix.multiplyMatrices(projectionOf(shadowCamera, projection), shadowCamera.matrixWorldInverse)
-          .toArray(g, GLOBALS.shadowView);
-        g[GLOBALS.fogColor + 3] = 1;
-      }
-    }
-    const fog = scene.fog as (THREE.Fog & THREE.FogExp2) | null;
-    let clear: THREE.Color | null = (scene.background as THREE.Color | null)?.isColor ? scene.background as THREE.Color : null;
-    if (fog) {
-      g[GLOBALS.ambient + 3] = fog.isFogExp2 ? 2 : 1;
-      g[GLOBALS.hemiSky + 3] = fog.isFogExp2 ? fog.density : fog.near;
-      g[GLOBALS.hemiGround + 3] = fog.isFogExp2 ? 0 : fog.far;
-      fog.color.toArray(g, GLOBALS.fogColor);
-      clear ??= fog.color;
-    }
-    const grade = this.grade;
-    g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
-    g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;
-    g[GLOBALS.grade + 6] = time % 1000; g[GLOBALS.grade + 7] = TUNE.exposure;
-    return clear ? [clear.r, clear.g, clear.b] : [0, 0, 0];
-  }
-
-  /** The particles' pools as the engine's sprites: those blended by their alpha, then those added. */
-  private sprites(): void {
-    const pools = [particles.smoke, particles.glow];
-    // (the dazed foes' stars with those blended: a sprite of a width below 0 is a star)
-    const stars = dazedDrawn();
-    const runs = pools.map((pool, slot) => {
-      const count = pool?.count ?? 0, extra = slot === 0 ? stars.count : 0;
-      if (this.spriteRuns[slot].length < (count + extra) * 8) this.spriteRuns[slot] = new Float32Array((count + extra) * 16);
-      const run = this.spriteRuns[slot];
-      for (let star = 0; star < extra; star++) {
-        const at = (count + star) * 8;
-        run[at] = stars.pos[star * 3]; run[at + 1] = stars.pos[star * 3 + 1]; run[at + 2] = stars.pos[star * 3 + 2];
-        run[at + 3] = -stars.size[star];
-        run[at + 4] = stars.fill.r; run[at + 5] = stars.fill.g; run[at + 6] = stars.fill.b; run[at + 7] = stars.alpha[star];
-      }
-      for (let i = 0; i < count; i++) {
-        const at = i * 8;
-        run[at] = pool.pos[i * 3]; run[at + 1] = pool.pos[i * 3 + 1]; run[at + 2] = pool.pos[i * 3 + 2];
-        run[at + 3] = pool.size[i];
-        run[at + 4] = pool.col[i * 4]; run[at + 5] = pool.col[i * 4 + 1]; run[at + 6] = pool.col[i * 4 + 2];
-        run[at + 7] = pool.col[i * 4 + 3];
-      }
-      return run.subarray(0, (count + extra) * 8);
-    });
-    this.engine.set_sprites(runs[0], runs[1]);
-    this.freshViews();
-  }
-  private spriteRuns = [new Float32Array(0), new Float32Array(0)];
-
-  /** The lights the last frame was drawn under, as the globals hold them: for a report. */
-  lights(): string {
-    const g = this.globals, three = (at: number): string => [g[at], g[at + 1], g[at + 2]].map((v) => v.toFixed(2)).join(' ');
-    const shadow = this.sun?.shadow.camera;
-    const box = shadow ? `; the sun's view ${shadow.left}..${shadow.right} by ${shadow.bottom}..${shadow.top}, ${shadow.near}..${shadow.far}, zoom ${shadow.zoom}, from ${shadow.position.toArray().map((v) => v.toFixed(1)).join(' ')}, map ${this.sun!.shadow.mapSize.x}, auto ${this.sun!.shadow.autoUpdate}` : '';
-    return box + `sun from ${three(GLOBALS.sunDir)} colour ${three(GLOBALS.sunColor)}${g[GLOBALS.fogColor + 3] ? ', shadowed' : ''}; `
-      + `flat ${three(GLOBALS.ambient)}; sky ${three(GLOBALS.hemiSky)} over ground ${three(GLOBALS.hemiGround)}; `
-      + `${g[GLOBALS.sunDir + 3]} point lights; fog ${g[GLOBALS.ambient + 3]} (${g[GLOBALS.hemiSky + 3].toFixed(4)}, ${g[GLOBALS.hemiGround + 3].toFixed(1)}) colour ${three(GLOBALS.fogColor)}`;
-  }
-
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */
   draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: THREE.WebGLRenderer | null = null,
     grade: Grade = PLAIN_GRADE): void {
     const began = perfClock.now();
+    const core = this.core, stats = core.stats;
     this.grade = grade;
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
-    const stats = this.stats;
-    this.frame++;
-    this.count = this.boneFloats = this.points = 0;
-    this.sun = null;
-    this.skipped.clear();
+    core.frame++;
+    core.count = core.boneFloats = 0;
+    this.lit.begin();
+    core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = 0;
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
@@ -1062,48 +296,24 @@ export class Bridge {
     }
     if (!camera.parent && camera.matrixWorldAutoUpdate) camera.updateMatrixWorld();
     const placed = perfClock.now();
-    this.freshViews();
-    this.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
+    core.freshViews();
+    core.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.walk(scene, camera);
-    for (const light of shownPointLights()) this.addLight(light);
-    this.addLamps();
-    const clear = this.writeGlobals(scene, camera, time);
-    this.sprites();
-    this.freshViews();
+    for (const light of shownPointLights()) this.lit.add(light);
+    this.lit.addLamps();
+    this.seeKinds.write();
+    const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
+    this.particles.send();
+    core.freshViews();
     const walked = perfClock.now();
-    this.tape?.frame(this.records.subarray(0, this.count * RECORD), this.bones.subarray(0, this.boneFloats), this.globals, clear);
-    this.engine.render(this.count, this.boneFloats, clear[0], clear[1], clear[2]);
+    core.tape?.frame(core.records.subarray(0, core.count * RECORD), core.bones.subarray(0, core.boneFloats), core.globals,
+      clear);
+    core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
-    const [draws, shadowDraws, objects, culled, triangles, gpuMs] = this.engine.stats();
+    const [draws, shadowDraws, objects, culled, triangles, gpuMs] = core.engine.stats();
     Object.assign(stats, {
-      records: this.count, draws, shadowDraws, objects, culled, triangles, gpuMs,
+      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }
 }
-
-/** three's own update of an object's matrices: a kind with another is left to its own */
-/** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
-const HIDDEN_PLACES = 2;
-/** the frames `prepareAhead` rests after a walk of the whole scene before it looks again */
-const AHEAD_REST = 600;
-const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
-/** Whether a map's image is a picture the GPU copies by itself: a canvas, a bitmap, an image (not bytes, nor a
- *  compressed or a cube map). */
-function pictured(texture: THREE.Texture): boolean {
-  const image = texture.image as unknown;
-  if ((texture as THREE.DataTexture).isDataTexture || (texture as THREE.CompressedTexture).isCompressedTexture) return false;
-  if ((texture as THREE.CubeTexture).isCubeTexture) return false;
-  if (image instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas)) {
-    // (a canvas nothing has drawn on yet has no context, and the GPU's copy of one is an error the engine's wgpu
-    // doesn't survive: every call after it threw, the game stopped. Asking for its context gives it one; null is a
-    // canvas with a context of another kind, which copies too)
-    if (!image.width || !image.height) return false;
-    (image as HTMLCanvasElement).getContext('2d');
-    return true;
-  }
-  if (image instanceof ImageBitmap) return image.width > 0 && image.height > 0;
-  return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
-}
-
-const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);
