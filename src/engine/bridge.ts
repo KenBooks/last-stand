@@ -757,6 +757,7 @@ export class Bridge {
     // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
     // the sun it's under. From play: "top down view wall/roof thinning is broken")
     g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
+    let lit = 0;
     for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
@@ -766,7 +767,11 @@ export class Bridge {
       // (which side of the shelter it lights: -2 what's under it, -1 what isn't)
       g[at + 7] = lampList[light + 3] > 0 ? -2 : -1;
       this.points++;
+      lit++;
     }
+    // (the village's lamps are lit while it's shown and out in a run: left set there, the hall's box of ground lay
+    // sunless on the battleground's floor, a dark rectangle. From play: "also weird shadow")
+    if (!lit) g.fill(0, GLOBALS.shelter, GLOBALS.shelter + 4);
   }
 
   /**
