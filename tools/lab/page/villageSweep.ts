@@ -15,7 +15,7 @@ import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { COTTAGES, ENTRANCES, HALL, TERRACE, exitPlace, portalPlace } from '../../../src/data/village';
-import { setHallCull } from '../../../src/world/hallPortal';
+import { setDoorCull } from '../../../src/world/doorways';
 import { cullNames, holdCullsOff } from '../../../src/world/culls';
 import { qualityLevel, useQuality } from '../../../src/core/quality';
 import { heroDetail, setHeroDetail } from '../../../src/entities/models/detail';
@@ -155,7 +155,7 @@ interface Read { key: string; counts: Budget; changed: number; over: string[]; u
 interface Moment { culled: ReturnType<typeof readFrame>; whole: ReturnType<typeof readFrame>; still: boolean }
 
 function readMoment(lab: Lab, canary: boolean): Moment {
-  if (canary) setHallCull('all');
+  if (canary) setDoorCull('all');
   const first = readFrame(lab);
   const culled = readFrame(lab);
   holdCullsOff(true);
@@ -229,7 +229,7 @@ export async function sweepWithinBudgets(lab: Lab, canary: boolean): Promise<Lig
     await goInto(lab, undefined);
     useQuality(booted);
     holdCullsOff(false);
-    setHallCull('door');
+    setDoorCull('door');
     holdHour(null);
     await viewBy(lab, view);
   }

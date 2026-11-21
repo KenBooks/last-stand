@@ -14,7 +14,7 @@ import { bladeNodes, swardColorNode } from './meadowNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import { asGrass, type Updater } from './props';
-import { hiddenByHallDoor } from './hallPortal';
+import { hiddenByDoorway } from './doorways';
 import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
 
@@ -1090,7 +1090,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
             for (let tx = bx; tx < bx + block; tx++) {
               if (!mayShow(tx, ty, 1)) continue;
               // (from inside the hall of heroes, only what its doorway shows)
-              if (hiddenByHallDoor(_box)) continue;
+              if (hiddenByDoorway(_box)) continue;
               // (nor behind a cottage: over the shoulder and through the eyes, where what's built never thins)
               if (!above && hiddenBehind(_box, camera.position)) continue;
               const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;

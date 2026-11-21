@@ -1,5 +1,5 @@
 // `lab village`'s hall culled by its doorway: the hero in the hall of heroes turned to its door, the square beyond it,
-// and the frame drawn with what stands outside culled by the doorway (`world/hallPortal.ts`) and without, at midnight
+// and the frame drawn with what stands outside culled by the doorway (`world/doorways.ts`) and without, at midnight
 // and at noon: the scene's draws must fall and no pixel may change (from play, a perf report "looking at plaza from
 // hall": 555 draws, the village drawn behind the hall's walls). Then walked in, turned to the dais, the camera
 // trailing him in the doorway's opening: the same (a perf report "village needs to be 144 fps": from there nothing
@@ -14,7 +14,8 @@ import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
-import { setHallCull } from '../../../src/world/hallPortal';
+import { fadedWhole } from '../../../src/core/seeThrough';
+import { doorwayReport, setDoorCull } from '../../../src/world/doorways';
 import * as meadow from '../../../src/world/meadow';
 import { drawFrame, type Canvas } from './light';
 import { grassVertices } from './grassCount';
@@ -29,6 +30,10 @@ const WALKED_IN = 4.6;
 const TREES_CULLED = 20_000;
 const HOURS = [0, 12];
 const SETTLE = 30;
+/** how many frames a stand waits at most for the hall's roof and front to fade back whole: thinned to a ghost from
+ *  above (a check before this one read the hall from above), they come back over a moment, and the cull holds off
+ *  while they're thinned, as what's past them shows */
+const FADE_FRAMES = 300;
 /** the most presses of V to come round to a view (top, over the shoulder, through the eyes) */
 const VIEWS = 3;
 /** how far a channel may move and still be the same (a byte's step: the frames are drawn alike) */
@@ -174,13 +179,17 @@ async function readHour(lab: Lab, hour: number, canary: boolean): Promise<{ cull
   changed: number; grass: number; grassWhole: number; triangles: number; trianglesWhole: number }> {
   holdHour(hour);
   await lab.step(SETTLE);
-  setHallCull(canary ? 'all' : 'door');
+  // (after a check from above, the roof was still a ghost at midnight's reading here, and nothing was culled)
+  for (let frame = 0; frame < FADE_FRAMES && (fadedWhole('hallRoof') || fadedWhole('hallFront')); frame++) {
+    await lab.step(1);
+  }
+  setDoorCull(canary ? 'all' : 'door');
   const culled = countedFrame(lab);
   const grass = grassVertices();
-  setHallCull('off');
+  setDoorCull('off');
   const whole = countedFrame(lab);
   const grassWhole = grassVertices();
-  setHallCull('door');
+  setDoorCull('door');
   const changed = changedShare(culled.canvas, whole.canvas);
   return {
     culled: culled.draws, whole: whole.draws, changed, grass, grassWhole,
@@ -214,7 +223,11 @@ async function readStand(lab: Lab, stand: Stand, canary: boolean): Promise<Stand
     const most = stand.outside ? MOST_CHANGED_OUTSIDE : MOST_CHANGED;
     if (changed > most) changedAny = true;
     if (canary) continue;
-    if (stand.seesGrass && culled >= whole) problems.push(`${at}: at ${hour}:00 no draw was culled`);
+    if (stand.seesGrass && culled >= whole) {
+      // (with why: each condition the cull takes, as it stands now)
+      const village = G.scene.getObjectByName('village')!;
+      problems.push(`${at}: at ${hour}:00 no draw was culled (${doorwayReport(G.camera, village)})`);
+    }
     if (stand.outside && whole - culled < INSIDE_CULLED) {
       problems.push(`${at}: at ${hour}:00 ${whole - culled} draws of the hall's inside were culled, not ${INSIDE_CULLED}`);
     }
@@ -245,7 +258,7 @@ export async function hallCulledByDoor(lab: Lab, canary: boolean): Promise<Light
     for (const stand of STANDS) reads.push(await readStand(lab, stand, canary));
   } finally {
     holdEyeWithinOccluders(false);
-    setHallCull('door');
+    setDoorCull('door');
     holdHour(null);
     await viewBy(lab, view);
   }

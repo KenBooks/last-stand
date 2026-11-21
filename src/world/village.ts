@@ -1574,7 +1574,7 @@ function windowsAlong(): number[] {
  *  the sun and the moon light the hall through them (from play, "windows need to be real, and let sun/moonlight
  *  through": a pane's picture on a whole wall, they let none in). Each pane is leaded glass, lit from within by night
  *  outside and by the sky inside: clear, the hall would show the village through them, where it draws outside only
- *  what its doorway shows (`hallPortal.ts`). */
+ *  what its doorway shows (`doorways.ts`, its doorway `hallPortal.ts`). */
 function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
   back: number, face: number): void {
   const y0 = TERRACE.high, { sill, high, wide } = WINDOWS, top = sill + high;
