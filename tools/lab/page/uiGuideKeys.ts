@@ -129,8 +129,8 @@ export function guideKeysShown(canary: boolean): Found {
   return { lines: [...all.map(legendLine), ...table.lines], problems: [...problems, ...table.problems] };
 }
 
-/** The guide as the player sees it at the styles' table, the weapon styles and the loadouts (with the combos under
- *  them), and a legend close up. */
+/** The guide as the player sees it at the styles' table, the weapon styles, the loadouts and the combos, and a legend
+ *  close up. */
 export async function guideKeysPictures(lab: Lab): Promise<Pictured[]> {
   const pictures: Pictured[] = [];
   scrollTo('.gd-compare');
@@ -140,6 +140,8 @@ export async function guideKeysPictures(lab: Lab): Promise<Pictured[]> {
   pictures.push(await lab.screen('guide-legend', [], '#guide .gd-style'));
   scrollTo('.gd-load');
   pictures.push(await lab.screen('guide-loadouts', [], '#guide .gd-box'));
+  scrollTo('.gd-combos');
+  pictures.push(await lab.screen('guide-combos', [], '#guide .gd-box'));
   scrollTo('.gd-style');
   return pictures;
 }

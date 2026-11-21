@@ -88,7 +88,7 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 // to the capitals' height. Its font set by parts, not the `font` shorthand, which would set its digits old-style again
 // (styles/AGENTS.md)
 .gd-key { display: inline-grid; place-items: center; box-sizing: border-box; min-width: 26px; height: 26px; padding: 0 7px;
-  font-family: var(--font-display); font-size: 14px; font-weight: 700; line-height: 1; color: var(--accent); white-space: nowrap;
+  font-family: var(--font-display); font-size: 14px; font-weight: 900; line-height: 1; color: var(--accent); white-space: nowrap;
   text-box: trim-both cap alphabetic; border-radius: 5px; border: 1px solid rgba($frame, .8);
   background: linear-gradient(#3d3228, #17120e);
   box-shadow: 0 0 0 1px #000, 0 3px 0 #070504, 0 4px 6px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .18); }
@@ -98,6 +98,7 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 .gd-mouse { display: block; width: 15px; height: 21px; }
 .gd-mouse-shell { fill: #0b0907; }
 .gd-mouse-lit { fill: #ffd25a; }
+.gd-mouse-side { fill: rgba(255, 210, 90, .38); }
 .gd-mouse-line { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linejoin: round; }
 .gd-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--c, var(--ink)); }
 .gd-chip.none { color: var(--ink-dim); }
@@ -127,11 +128,9 @@ $key-tray: 24px;
 .gd-keys > .gd-kslot { flex: 0 0 calc((100% - (var(--cols, 7) - 1) * #{$key-gap}) / var(--cols, 7)); }
 @for $n from 1 through 8 {
   .gd-keys[data-n="#{$n}"] { --cols: #{$n}; }
-  // (a row's room: its slots and gaps, the tray's padding and frame, the style's indent; in two rows a name has two
-  // lines' room, so a wrapped one moves no row)
+  // (a row's room: its slots and gaps, the tray's padding and frame, the style's indent)
   @container (max-width: #{$n * $key-slot + ($n - 1) * $key-gap + $key-tray + 18px}) {
     .gd-keys[data-n="#{$n}"] { --cols: #{math.ceil(math.div($n, 2))}; }
-    .gd-keys[data-n="#{$n}"] .gd-kname { min-height: 2.4em; }
   }
 }
 // (the key's cap stands half off the icon's top, over its frame, not its art; 8 px out at its side, as much as a slot of
@@ -287,19 +286,24 @@ $cell-art: 92px;
 .gd-compare.keys table { table-layout: fixed; }
 .gd-compare.keys thead th { text-align: center; vertical-align: bottom; }
 .gd-compare.keys thead th:first-child { width: 46px; }
-.gd-compare.keys td { min-width: 0; padding: 5px 4px; text-align: center; }
+.gd-compare.keys td { min-width: 0; padding: 9px 4px; text-align: center; }
 .gd-compare.keys tbody th { padding: 0 8px; text-align: center; }
-.gd-compare.keys .gd-chip { position: relative; display: block; width: min(100%, #{$cell-art}); aspect-ratio: 1; margin: 0 auto;
+.gd-compare.keys .gd-chip { container-type: inline-size; position: relative; display: block; width: min(100%, #{$cell-art}); aspect-ratio: 1; margin: 0 auto;
   border-radius: 3px; overflow: hidden; }
 .gd-compare.keys .gd-chip .gd-ic, .gd-compare.keys .gd-chip .gd-ic i { width: 100%; height: 100%; }
 .gd-compare.keys .gd-chip .gd-ic i { font-size: 44px; background-color: rgba(0, 0, 0, .45); }
 // (the hotbar's frame and shade over the art, as a slot draws them)
 .gd-compare.keys .gd-chip::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000;
   box-shadow: inset 0 0 0 1px rgba($frame, .6), inset 0 0 12px rgba(0, 0, 0, .7); pointer-events: none; }
-.gd-compare.keys .gd-cn { position: absolute; inset: auto 0 0; padding: 16px 4px 5px; font-size: 13px; line-height: 1.1;
-  background: linear-gradient(transparent, rgba(0, 0, 0, .85) 55%); text-shadow: 0 1px 2px #000, 0 0 4px #000; }
-.gd-compare.keys .gd-chip.none { display: grid; place-items: center; background: rgba(0, 0, 0, .3); font-size: 18px; }
-.gd-compare.keys .gd-chip.none::after { border-color: transparent; box-shadow: inset 0 0 0 1px rgba($frame, .25); }
+// (one line, shrunk as far as its own length needs to fit the picture's width (`--len`, its letters), on a shade that rises from its foot, outlined dark: a skill's colour on art
+// of its own colour, Thunder Crescent's blue on its lightning, read poorly, and a name of two lines climbed into the art)
+.gd-compare.keys .gd-cn { position: absolute; inset: auto 0 0; padding: 18px 3px 5px; font-size: min(13px, calc(190cqi / var(--len, 15)));
+  line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .72) 45%, rgba(0, 0, 0, .9));
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px #000; }
+// (a key with no skill: the same frame, sunk and empty, so it reads as none, not a picture still to come)
+.gd-compare.keys .gd-chip.none { display: grid; place-items: center; background: rgba(0, 0, 0, .55); font-size: 18px;
+  box-shadow: inset 0 3px 10px rgba(0, 0, 0, .9); }
 // (a page too narrow for six such pictures, an upright tablet's: the table keeps its pictures at a size their names fit
 // and scrolls across in its frame, as it did before; shared out among six columns there, they were 44 px, the headers
 // ran into each other and the names broke mid-word)
