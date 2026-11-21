@@ -137,8 +137,8 @@ function descended(at: Float32Array, palmShare: (i: number) => number, fingers: 
  * fist's corner a head faces, the hand's frame (`out`).
  */
 const FIST_RELIEF = tunable('fistRelief', {
-  heads: [0.0022, 0.0026, 0.0019, 0.0015], head: 0.0075, valley: 0.0016, between: 0.0045,
-  tendon: [0.0011, 0.0004], cord: 0.0028, gathers: 0.45, mid: 0.0005, corner: 0.0055, out: [0, -0.35, 0.94],
+  heads: [0.0018, 0.0022, 0.0015, 0.0011], head: 0.0075, valley: 0.0008, between: 0.004,
+  tendon: [0.0004, 0.0001], cord: 0.004, gathers: 0.45, mid: 0.0005, corner: 0.0055, out: [0, -0.35, 0.94],
 });
 
 /** how far (x, y) lies from the line from (ax, ay) to (bx, by), and how far along it (0 to 1) */
@@ -191,12 +191,96 @@ function relief(at: Float32Array, out: Float32Array, fingers: readonly FistFinge
 }
 
 /**
+ * A shut fist's back closed over: how wide a band down the hand its outline across is read in (`band`, m), how far
+ * past the knuckle joints, down the fingers, the closing has eased out to nothing (`over`, m), how high a point
+ * must stand, as a share of the outline's height over it, to be raised to it (`stands`, from none to all of the
+ * way), and how far under the outline the skin is left (`under`, m).
+ */
+const FIST_CLOSED = tunable('fistClosed', { band: 0.003, over: 0.011, stands: [0.1, 0.4], under: 0.0003 });
+
+/** the upper outline of points (x, z), sorted by x: the corners of the hull over them, left to right */
+function outlineOver(points: [number, number][]): [number, number][] {
+  const hull: [number, number][] = [];
+  for (const point of points) {
+    while (hull.length >= 2) {
+      const [ax, az] = hull[hull.length - 2], [bx, bz] = hull[hull.length - 1];
+      // (the last corner lies under the line from the one before it to this point: not of the outline)
+      if ((bx - ax) * (point[1] - az) - (bz - az) * (point[0] - ax) < 0) break;
+      hull.pop();
+    }
+    hull.push(point);
+  }
+  return hull;
+}
+
+/** an outline's height at `x` (the end's beyond it) */
+function outlineAt(hull: [number, number][], x: number): number {
+  if (!hull.length) return -Infinity;
+  if (x <= hull[0][0]) return hull[0][1];
+  for (let n = 1; n < hull.length; n++) {
+    if (x > hull[n][0]) continue;
+    const share = (x - hull[n - 1][0]) / (hull[n][0] - hull[n - 1][0] || 1);
+    return hull[n - 1][1] + (hull[n][1] - hull[n - 1][1]) * share;
+  }
+  return hull[hull.length - 1][1];
+}
+
+/**
+ * A shut fist's back closed over, `at` its points as posed, changed in place: from the wrist to its knuckles the
+ * back of the hand is one surface, each point raised to the outline across the hand over it. The hand's sculpt
+ * stands a long rounded ridge up the back from each finger's knuckle, with a groove between each two that begins
+ * 4 to 5 cm above the knuckle joints: an open hand's knuckles and tendons, but in a fist, seen from behind, each
+ * ridge's end read as a finger's segment above the knuckle, the back of the hand, a lobe, then the finger (from play,
+ * with photographs of his own fist: "human finger only has 2 bones, you drew 3 here", "we need to fix an extra finger
+ * segment", "if you see 1st finger segment from fist side... then its not a fist at all"). A fist's back is smooth to
+ * its knuckles, and its fingers part only below them: the closing eases out over the knuckles (`over`). How much
+ * each point is of the closed back is given back (0 to 1): the sculpt's own shading, dark in its grooves and over
+ * its knuckles' ridges, comes off there (`hands.ts` `shutSkin`). Left on, the grooves were still painted on the
+ * smooth back; taken off only where a point was raised, the ridges' ends kept theirs and stood as a darker block
+ * across the hand, still a segment above the knuckles.
+ */
+function closedBack(at: Float32Array, backOf: (i: number) => boolean, knuckleY: number): Float32Array {
+  const { band, over, stands, under } = FIST_CLOSED;
+  const count = at.length / 3, to = knuckleY - over, closed = new Float32Array(count);
+  let from = -Infinity;
+  for (let i = 0; i < count; i++) if (backOf(i)) from = Math.max(from, at[i * 3 + 1]);
+  const bands = Math.max(1, Math.ceil((from - to) / band));
+  const across: [number, number][][] = Array.from({ length: bands }, () => []);
+  for (let i = 0; i < count; i++) {
+    const y = at[i * 3 + 1];
+    if (!backOf(i) || y < to || at[i * 3 + 2] <= 0) continue;
+    across[Math.min(bands - 1, Math.floor((from - y) / band))].push([at[i * 3], at[i * 3 + 2]]);
+  }
+  const outlines = across.map((points) => outlineOver(points.sort((a, b) => a[0] - b[0])));
+  for (let i = 0; i < count; i++) {
+    const y = at[i * 3 + 1], z = at[i * 3 + 2];
+    if (!backOf(i) || y < to || z <= 0) continue;
+    // (its band's outline eased to the next band's by its place between their middles)
+    const along = Math.min(bands - 1, Math.max(0, (from - y) / band - 0.5));
+    const low = Math.floor(along), next = Math.min(bands - 1, low + 1);
+    const a = outlineAt(outlines[low], at[i * 3]), b = outlineAt(outlines[next], at[i * 3]);
+    const height = (b === -Infinity ? a : a === -Infinity ? b : a + (b - a) * (along - low)) - under;
+    if (height === -Infinity) continue;
+    const standing = Math.min(1, Math.max(0, (z / height - stands[0]) / (stands[1] - stands[0])));
+    const past = Math.min(1, Math.max(0, (knuckleY - y) / over));
+    const share = (1 - past * past * (3 - 2 * past)) * standing * standing * (3 - 2 * standing);
+    closed[i] = share;
+    if (height > z) at[i * 3 + 2] += (height - z) * share;
+  }
+  return closed;
+}
+
+/**
  * The back of a shut fist's hand: how wide a band down the hand its height is read in (`band`, m), how far above the
  * knuckle joints its straight line ends (`short`, m), how much higher than at the wrist it may end at the knuckles
  * (`rise`, m), how high a point must stand, as a share of its band's height, to be raised with it (`stands`, from
- * none to all of the way), and how far past the line's end, over the knuckles, the raise eases out (`over`, m).
+ * none to all of the way), how far past the line's end, over the knuckles, the raise eases out (`over`, m), and how
+ * near the knuckle joints what stands over the line is left standing (`heads`: from all of it left, m above the
+ * joints, to none).
  */
-const FIST_BACK = tunable('fistBack', { band: 0.004, short: 0.004, rise: 0.0015, stands: [0.1, 0.75], over: 0.014 });
+const FIST_BACK = tunable('fistBack', {
+  band: 0.004, short: 0.004, rise: 0.0015, stands: [0.1, 0.75], over: 0.014, heads: [0.001, 0.012],
+});
 
 /**
  * A shut fist's back laid straight, `at` its points as posed (the hand's frame: y down the hand from the wrist, z out
@@ -209,7 +293,7 @@ const FIST_BACK = tunable('fistBack', { band: 0.004, short: 0.004, rise: 0.0015,
  */
 function straightBack(at: Float32Array, posed: PosedSkin, palmOf: (i: number) => boolean,
   backOf: (i: number) => boolean, knuckleY: number): void {
-  const { band, short, rise, stands, over } = FIST_BACK;
+  const { band, short, rise, stands, over, heads } = FIST_BACK;
   const count = at.length / 3, to = knuckleY + short;
   let from = -Infinity;
   for (let i = 0; i < count; i++) if (palmOf(i)) from = Math.max(from, at[i * 3 + 1]);
@@ -248,6 +332,13 @@ function straightBack(at: Float32Array, posed: PosedSkin, palmOf: (i: number) =>
     const share = Math.min(1, Math.max(0, standing));
     const lacks = Math.max(0, lineAt(y) - height);
     at[i * 3 + 2] += lacks * eased * share * share * (3 - 2 * share);
+    // (and what stands over the line brought down to it, but for the knuckles' heads at its end: the sculpt's ridge
+    // up the back from each knuckle swelled the last 3 cm of the hand out of its back, and that swell, lit along its
+    // top, was a block across the hand above the fingers: the extra segment, from play)
+    const above = (at[i * 3 + 1] - knuckleY - heads[0]) / (heads[1] - heads[0]);
+    const flat = Math.min(1, Math.max(0, above));
+    const proud = at[i * 3 + 2] - lineAt(y);
+    if (proud > 0) at[i * 3 + 2] -= proud * flat * flat * (3 - 2 * flat);
   }
 }
 
@@ -265,7 +356,7 @@ function mainBone(index: THREE.BufferAttribute | THREE.InterleavedBufferAttribut
  * fist's relief added; each point then taken back through its own blend.
  */
 export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: readonly FistFinger[], palm: number,
-  drop: FistDrop): { position: THREE.BufferAttribute; normal: THREE.BufferAttribute } {
+  drop: FistDrop): { position: THREE.BufferAttribute; normal: THREE.BufferAttribute; closed: Float32Array } {
   const geometry = mesh.geometry, count = geometry.attributes.position.count;
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight;
   const at = posed.at.slice();
@@ -278,6 +369,7 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
     return palms;
   };
   descended(at, palmShare, fingers, drop);
+  const closed = closedBack(at, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
   let wristY = -Infinity;
   for (let i = 0; i < count; i++) if (main[i] === palm) wristY = Math.max(wristY, at[i * 3 + 1]);
   straightBack(at, posed, (i) => main[i] === palm, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
@@ -297,7 +389,7 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
     position.set([_p.x, _p.y, _p.z], i * 3);
     normal.set([_n.x, _n.y, _n.z], i * 3);
   }
-  return { position: new THREE.BufferAttribute(position, 3), normal: new THREE.BufferAttribute(normal, 3) };
+  return { position: new THREE.BufferAttribute(position, 3), normal: new THREE.BufferAttribute(normal, 3), closed };
 }
 
 /** how far a point of a shut fist's skin must have been moved to be smoothed with its neighbours (m), how many times

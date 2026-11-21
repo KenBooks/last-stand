@@ -836,7 +836,14 @@ function shutSkin(h: Hand, mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute)
   shaped.setAttribute('position', shape.position);
   shaped.setAttribute('normal', shape.normal);
   const laid = posedSkin(mesh, shaped, placed);
-  return { colour: shutColours(laid.at, laid.out, open), shape };
+  // (the sculpt's own shading taken off the fist's closed back, `closedBack`: the grooves between its knuckles'
+  // ridges were still painted on the smooth back, their ends finger segments above the knuckles)
+  const plain = new Float32Array(open.count * 3);
+  for (let i = 0; i < open.count; i++) {
+    const off = shape.closed[i];
+    for (let c = 0; c < 3; c++) plain[i * 3 + c] = open.getComponent(i, c) + (1 - open.getComponent(i, c)) * off;
+  }
+  return { colour: shutColours(laid.at, laid.out, new THREE.BufferAttribute(plain, 3)), shape };
 }
 
 /** `bone`'s place in `root`'s frame, by its own and its parents' turns alone (null: it isn't under `root`). */
