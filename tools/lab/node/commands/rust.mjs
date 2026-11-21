@@ -35,6 +35,12 @@ export default {
       help: 'with --village, inside a house (library, merchant...): its frame, and the longest frame of the page '
         + 'going in, out and in again',
     },
+    cast: {
+      kind: 'text',
+      usage: 'skill',
+      help: 'a skill of the hero\'s held through the frames timed and pictured (its key, behaviour or name; '
+        + '--class whose): what it leaves undrawn is a problem',
+    },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
     capture: {
@@ -61,6 +67,7 @@ export default {
       foes: Math.round(options.foes ?? 0),
       village: Boolean(options.village),
       room: options.room,
+      cast: options.cast,
       hour: options.hour,
       census: Boolean(options.census),
       three: Boolean(options.three),

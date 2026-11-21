@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader, wgslNoise } from '../../core/shaderPorts';
+import { effectLook, num, rgb } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -123,7 +124,7 @@ const portalGeo = new THREE.PlaneGeometry(2, 2);
 const RIM = 0.85;
 
 function beamMaterial(core: boolean): THREE.ShaderMaterial {
-  return portShader(nearGlow(new THREE.ShaderMaterial({
+  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uLen: { value: 10 }, uColor: { value: COLOR.clone() }, uCore: { value: core ? 1 : 0 }, uFade: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -216,8 +217,57 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         len: u.uLen, color: u.uColor, core: u.uCore, fade: u.uFade,
       }),
     };
+  }), 'lance-beam', BEAM_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uTime'); out[1] = num(u, 'uLen'); out[2] = num(u, 'uCore'); out[3] = num(u, 'uFade');
+      rgb(u, 'uColor', out, 4);
+    },
   });
 }
+
+/** the beam for the Rust engine (src/engine/effects.ts): the port's WGSL above, its lance's axis from the vertex */
+const BEAM_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f(normalize((*v).axis_y), 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].x;
+  let len = m.c[0].y;
+  let core = m.c[0].z;
+  let fade = m.c[0].w;
+  let color = m.c[1].rgb;
+  // (how far across the tube this point is, seen from the camera: \`lanceFres\`)
+  let axis = normalize(in.c0.xyz);
+  let v = normalize(g.cam_pos.xyz - in.world);
+  let across = v - axis * dot(v, axis);
+  let l = length(across);
+  let nn = normalize(in.normal);
+  let around = nn - axis * dot(nn, axis);
+  let lr = length(around);
+  var fres = 1.0;
+  if (l > 1e-3 && lr > 1e-3) { fres = abs(dot(around / lr, across / l)); }
+  let uv = in.uv;
+  let along = uv.y * len;
+  let flow = fx_noise2(vec2f(uv.x * 10.0, along * 1.4 - time * 14.0)) * 0.6
+    + fx_noise2(vec2f(uv.x * 22.0, along * 3.0 - time * 22.0)) * 0.4;
+  let ends = smoothstep(0.0, select(0.06, 0.03, core > 0.5), uv.y) * (1.0 - smoothstep(0.97, 1.0, uv.y));
+  let body = pow(fres, select(1.2, 2.5, core > 0.5));
+  let wind = fract(uv.x * 2.0 + along * 0.4 - time * 0.5);
+  let ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
+  let wind2 = fract(-uv.x * 3.0 + along * 0.55 - time * 0.35);
+  let thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
+  let rings = pow(0.5 + 0.5 * sin(along * 1.6 - time * 9.0), 10.0);
+  let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.4;
+  let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.0),
+    hot * (1.0 + rings * 0.2), core > 0.5);
+  let shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
+  let a = body * ends * select(shell, 1.0, core > 0.5) * fade;
+  (*s).base = vec4f(c * a * fx_near(in.depth), a);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /**
  * The portal, in the quad's -1..1 space: a crackling rim of sparks that a bright head traces round
@@ -225,7 +275,7 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
  * fading in (0.4..1). Added light, no depth write.
  */
 function portalMaterial(): THREE.ShaderMaterial {
-  return portShader(nearGlow(new THREE.ShaderMaterial({
+  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uFade: { value: 1 }, uColor: { value: COLOR.clone() } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -316,8 +366,65 @@ function portalMaterial(): THREE.ShaderMaterial {
         p: varying(positionGeometry.xy), time: u.uTime, open: u.uOpen, fade: u.uFade, color: u.uColor,
       }),
     };
+  }), 'lance-portal', PORTAL_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uTime'); out[1] = num(u, 'uOpen'); out[2] = num(u, 'uFade');
+      rgb(u, 'uColor', out, 4);
+    },
   });
 }
+
+/** the portal for the Rust engine: the port's WGSL above */
+const PORTAL_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).rest.xy, 0.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].x;
+  let open = m.c[0].y;
+  let fade = m.c[0].z;
+  let color = m.c[1].rgb;
+  let p = in.c0.xy;
+  let TAU = 6.2831853;
+  let R = ${RIM.toFixed(2)};
+  let r = length(p);
+  if (r > 1.0) { return false; }
+  var a = 0.0;
+  if (r >= 1e-4) { a = atan2(p.x, p.y); }
+  let u = fract(a / TAU + 1.0);
+  let trace = clamp(open / 0.7, 0.0, 1.0);
+  let behind = trace - u;
+  let drawn = select(step(0.0, behind), 1.0, trace >= 1.0);
+  let head = select(exp(-max(behind, 0.0) * 18.0) * drawn, 0.0, trace >= 1.0);
+  let crackle = fx_noise2(vec2f(u * 90.0 - time * 30.0, time * 9.0)) * 0.7
+    + fx_noise2(vec2f(u * 260.0 + time * 55.0, 3.0)) * 0.6;
+  let d1 = (r - R) / (0.018 + 0.02 * crackle);
+  let d2 = (r - R) / 0.09;
+  let d3 = (r - R) / 0.06;
+  let band = exp(-d1 * d1);
+  let halo = exp(-d2 * d2) * 0.25;
+  let rim = (band * (0.6 + crackle) + halo) * drawn + head * (exp(-d3 * d3) * 3.0);
+  let k2 = smoothstep(0.4, 1.0, open);
+  let cell1 = floor(u * 48.0 + time * 0.8);
+  let len1 = 0.012 + 0.03 * fx_hash2(vec2f(cell1, 1.0));
+  let ring1 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.72 * R) - len1);
+  let ticks1 = step(0.72, fract(u * 48.0 + time * 0.8)) * step(0.15, fract(u * 6.0 + time * 0.13));
+  let ring2 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.56 * R) - 0.014);
+  let ticks2 = step(0.62, fract(u * 30.0 - time * 0.9));
+  let lines = (1.0 - smoothstep(0.0, 0.01, abs(r - 0.8 * R) - 0.004))
+    + (1.0 - smoothstep(0.0, 0.01, abs(r - 0.64 * R) - 0.003));
+  let spokes = exp(-abs(sin((a + time * 0.25) * 4.0)) * 30.0) * step(0.3 * R, r) * step(r, 0.56 * R);
+  let runes = (ring1 * ticks1 + ring2 * ticks2 * 0.8 + lines * 0.6 + spokes * 0.5) * k2;
+  let sw = fx_noise2(vec2f(u * 6.0 + r * 5.0 - time * 1.5, r * 7.0 - time * 2.0));
+  let inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * (1.0 - smoothstep(0.3, R, r));
+  let spark = mix(color, vec3f(1.0, 0.98, 0.85), 0.25);
+  let c = spark * rim * 1.4 + color * runes * 1.8 + color * inner * 1.0;
+  (*s).base = vec4f(c * fade * fx_near(in.depth), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _toFocus = new THREE.Vector3();
 const _tips = Array.from({ length: 10 }, () => new THREE.Vector3());

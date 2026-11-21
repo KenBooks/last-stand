@@ -2,7 +2,6 @@
 // the scene and the engine's own work by the browser's clock, the GPU's time by the engine's timestamps, its draw
 // calls, objects and triangles, what it couldn't draw by its kind, and its boot. three's figures for the same stand
 // come from a tree on main (`lab passes --renderer webgpu`, `lab draws`).
-import type * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -13,6 +12,9 @@ import type { FrameStats } from '../../../src/engine/bridge';
 import { standAt } from './draws';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
+import * as THREE from 'three';
+import { bindKnown, pressing, skillNamed } from './cast';
+import type { Frame } from './lab';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
 
@@ -26,6 +28,8 @@ export interface RustCommand {
   village: boolean;
   /** a house's room he's stood in (the village's) */
   room?: string;
+  /** a skill of his held through the frames timed and pictured */
+  cast?: string;
   hour?: number;
   /** the scene's materials listed by their kind and what they ask of a renderer */
   census: boolean;
@@ -101,6 +105,26 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
   return command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
 }
 
+/** how far ahead of the hero a held skill is aimed (m), and how long it's held before the frames are timed (frames) */
+const CAST_AHEAD = 8;
+const CAST_LEAD = 45;
+
+/** The frame's input holding the command's skill over a point ahead of the hero, his Energy and its cooldown kept
+ *  full; none with no skill asked. */
+function castHeld(command: RustCommand): ((frame: number) => Frame) | undefined {
+  if (!command.cast) return undefined;
+  const hero = G.player;
+  bindKnown(command.cast);
+  const { key } = skillNamed(command.cast);
+  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
+  const aim = hero.pos.clone().add(ahead);
+  return () => {
+    hero.cooldowns.clear();
+    hero.energy = hero.stats.maxEnergy;
+    return pressing(key, aim, true);
+  };
+}
+
 /** The longest of the next `frames` frames, by the browser's clock (ms). */
 async function longestFrame(lab: Lab, frames: number): Promise<number> {
   const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
@@ -152,6 +176,7 @@ async function inAndOut(lab: Lab, room: RoomId): Promise<string> {
 /** The baseline: three's WebGPU frame of the same stand, timed the same way. */
 async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
   const where = await stand(lab, command);
+  const hold = castHeld(command);
   const renderer = G.renderer as unknown as Timed;
   const pool = renderer.backend.timestampQueryPool;
   const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
@@ -164,10 +189,10 @@ async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
   const draws: number[] = [];
   const triangles: number[] = [];
   try {
-    await lab.step(10);
+    await lab.step(hold ? CAST_LEAD : 10, hold);
     await pool.render?.resolveQueriesAsync();
     for (let frame = 0; frame < command.frames; frame++) {
-      await lab.step(1);
+      await lab.step(1, hold);
       await window.__labClock.realFrame();
       renders.push(RUST.renderMs);
       draws.push(renderer.info.render.drawCalls);
@@ -201,6 +226,9 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
   }
   const where = await stand(lab, command);
+  const hold = castHeld(command);
+  /** what a frame timed left undrawn, by its kind: the most of any frame */
+  const undrawn = new Map<string, number>();
   const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
   const pageClock = perfClock.now;
   perfClock.now = clock.realNow;
@@ -220,10 +248,11 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   };
   try {
     // (what's first met here is handed over before the frames timed)
-    await lab.step(10);
+    await lab.step(hold ? CAST_LEAD : 10, hold);
     for (let frame = 0; frame < command.frames; frame++) {
       const began = clock.realNow();
-      await lab.step(1);
+      await lab.step(1, hold);
+      for (const [kind, count] of bridge.skipped) undrawn.set(kind, Math.max(undrawn.get(kind) ?? 0, count));
       frames.push(clock.realNow() - began);
       // (the browser let go: the engine's timestamps come back on its own time, and a step never yields)
       await window.__labClock.realFrame();
@@ -240,7 +269,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   }
   const pictured = await lab.screen('the Rust engine\'s frame');
   const of = (name: keyof FrameStats): number => median(read.get(name)!);
-  const skipped = [...bridge.skipped].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
+  const skipped = [...undrawn].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
   const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
   const lines = [
@@ -272,6 +301,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     if (!(window as unknown as { __rustTape: Blob | null }).__rustTape) problems.push('no tape was written');
   }
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
+  // (a skill's own look left out: from play, "no mage visual effects on spells when casting them")
+  if (command.cast && skipped.length) problems.push(`${command.cast} cast: not drawn by the engine: ${skipped.join(', ')}`);
   for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
   return { text: lines.join('\n'), problems, moments: [pictured] };
 }
