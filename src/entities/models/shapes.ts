@@ -111,6 +111,9 @@ function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3
 /** the skin a wrap is laid over: its meshes, or what gives the meshes drawn in the hand's pose as it's posed */
 type SkinShown = readonly THREE.Object3D[] | (() => readonly THREE.Object3D[]);
 
+/** how a wrap takes up its hand's turn (m up the forearm from the wrist): from `from`, the wrist's bend by `bend` and
+ *  the forearm's roll by `roll`, through `bones` joints between the elbow's and the hand's */
+const WRAP_TURN = { from: 0.010, bend: 0.065, roll: 0.13, bones: 8 };
 /** each wrap's rows laid on its hand's skin (`skinShare`), kept by the hand's size and side: made once a hand */
 const wrapShares = new Map<string, number[][]>();
 
@@ -235,7 +238,9 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
         y + wrist.position.y, z * (rz * share + above) + wrist.position.z);
       uvs.push((angle + 1) * 2 / tau, across * wide / 0.10);
       // The hand's sculpt extends past the crease. Start bending the strip on the forearm above that extent.
-      weights.push(1 - smooth(y, 0.010, 0.065));
+      // (its share of the hand's turn eased up the whole strip, `WRAP_TURN`: the roll's; the wrist's bend is taken
+      // within the first of it, by the bones' own shares below)
+      weights.push(1 - smooth(y, WRAP_TURN.from, WRAP_TURN.roll));
     }
   });
   const stride = section.length;
@@ -255,17 +260,40 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   // Take up the turn in small steps around the wrist. Blending straight across the wrist pinched the strip flat.
-  const twists = Array.from({ length: 4 }, () => {
+  // (the hand's turn is two turns, and a forearm takes them up in two places: its roll about the arm's length along
+  // the whole forearm, the two bones turning round each other, and its bend at the wrist. All of it taken up within
+  // 5 cm of the wrist, a fist turned a quarter round on its forearm, the guard's palm to his own face, wrung the
+  // strip there: a fist seen broadside on a wrist seen edge on, from play, "also the wrist")
+  const twists = Array.from({ length: WRAP_TURN.bones }, () => {
     const bone = new THREE.Group();
     bone.position.copy(wrist.position);
     elbow.add(bone);
     return bone;
   });
+  // (each bone's share of the roll is its place along the chain, as the strip's points are weighted; of the bend, what
+  // the strip had there before: by how far up the forearm that place is)
+  const bendShares = twists.map((_, i) => {
+    const share = (i + 1) / (twists.length + 1);
+    let low = WRAP_TURN.from, high = WRAP_TURN.roll;
+    for (let step = 0; step < 24; step++) {
+      const mid = (low + high) / 2;
+      if (1 - smooth(mid, WRAP_TURN.from, WRAP_TURN.roll) > share) low = mid; else high = mid;
+    }
+    return 1 - smooth((low + high) / 2, WRAP_TURN.from, WRAP_TURN.bend);
+  });
   sculpt.skinChain(geometry, leather, elbow, [elbow, ...twists, palm]);
   const turn = new THREE.Quaternion(), rest = new THREE.Quaternion();
+  const roll = new THREE.Quaternion(), bend = new THREE.Quaternion(), part = new THREE.Quaternion();
   return () => {
     turn.multiplyQuaternions(wrist.quaternion, palm.quaternion);
-    twists.forEach((bone, i) => bone.quaternion.slerpQuaternions(rest, turn, (i + 1) / (twists.length + 1)));
+    // (the turn's roll about the forearm's length, its y, and the bend that's left of it)
+    roll.set(0, turn.y, 0, turn.w);
+    if (roll.lengthSq() < 1e-8) roll.identity(); else roll.normalize();
+    bend.copy(roll).invert().premultiply(turn);
+    twists.forEach((bone, i) => {
+      const share = (i + 1) / (twists.length + 1);
+      bone.quaternion.slerpQuaternions(rest, bend, bendShares[i]).multiply(part.slerpQuaternions(rest, roll, share));
+    });
   };
 }
 
