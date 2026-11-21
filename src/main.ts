@@ -256,11 +256,21 @@ async function boot() {
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
   await Promise.all([heads, engraving]);
+  // (each piece below a task of its own, a frame painted before it: run on in the workers' reply, the embroidery, the
+  // folk and his build's first slice were one task of 2.7 s on a phone, its loading screen still: trace 6XTD-NVBS)
+  await painted();
   // (the mage's embroidery painted now, whoever's shown: painted in his build behind the lobby, it held a frame)
   coatPanels();
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
-  if (VILLAGE) for (const room of Object.values(G.arena.rooms ?? {})) room.seatFolk?.();
+  if (VILLAGE) {
+    for (const room of Object.values(G.arena.rooms ?? {})) {
+      if (!room.seatFolk) continue;
+      await painted();
+      room.seatFolk();
+    }
+  }
+  await painted();
   G.profile = loadProfile(savedClass());
   G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped, true, profileLook(G.profile)),
     () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
