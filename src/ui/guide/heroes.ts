@@ -30,8 +30,8 @@ const played = (cls: ClassDef): boolean => G.player?.cls.id === cls.id;
 
 /** A skill's chip: its icon and name (laid over the icon's foot in a loadout's table). */
 function chip(def: SkillDef | undefined): string {
-  if (!def) return '<span class="gd-chip none">—</span>';
-  return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span><span class="gd-cn" style="--len:${def.name.length}">${def.name}</span></span>`;
+  if (!def) return '<span class="gd-chip none"><span class="gd-cn">None</span></span>';
+  return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span><span class="gd-cn">${def.name}</span></span>`;
 }
 
 /** A loadout as the game's skill bar: a slot a key, each with its skill, laid on even columns. */
@@ -185,7 +185,11 @@ function schoolTable(cols: { title: string; colour: string; spell?: SkillDef }[]
 /** A table of things side by side: a column each, a row each, the rows that differ marked; `keys` when its rows are a
  *  loadout's keys (equal columns, the skills larger). */
 function compare(titles: string[], rows: { label: string; cells: string[]; differs?: boolean }[], keys = false): string {
-  return `<div class="gd-compare${keys ? ' keys' : ''}"><table><thead><tr><th></th>${titles.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>`
+  // (a keys table's names one size, its longest's in letters (`--len`), and its headers never broken at a hyphen)
+  const longest = Math.max(0, ...rows.flatMap((r) => r.cells.map((c) => c.replace(/<[^>]*>/g, '').length)));
+  const heads = keys ? titles.map((t) => t.replace(/-/g, '\u2011')) : titles;
+  const style = keys ? ` style="--len:${longest}"` : '';
+  return `<div class="gd-compare${keys ? ' keys' : ''}"${style}><table><thead><tr><th></th>${heads.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>`
     + rows.map((r) => `<tr${r.differs ? ' class="differs"' : ''}><th>${r.label}</th>${r.cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
     + '</tbody></table></div>';
 }

@@ -47,23 +47,18 @@ export function keyName(k: SkillKey): string {
 
 /** A mouse's outline, its buttons' split and the line under them. */
 const MOUSE_SHELL = 'M7 1.2C3.5 1.2 1.2 3.7 1.2 7.1v5.8c0 3.5 2.3 5.9 5.8 5.9s5.8-2.4 5.8-5.9V7.1C12.8 3.7 10.5 1.2 7 1.2Z';
-const MOUSE_LINES = `${MOUSE_SHELL}M1.2 9.6h11.6M7 1.2v8.4`;
+const MOUSE_LINES = `${MOUSE_SHELL}M1.2 10.6h11.6M7 1.2v9.4`;
 const MOUSE_BUTTON = {
-  left: 'M7 1.2C3.5 1.2 1.2 3.7 1.2 7.1V9.6H7Z',
-  right: 'M7 1.2C10.5 1.2 12.8 3.7 12.8 7.1V9.6H7Z',
-};
-/** the body under each button, tinted on the pressed side so the side reads at a cap's size */
-const MOUSE_SIDE = {
-  left: 'M1.2 9.6v3.3c0 3.5 2.3 5.9 5.8 5.9V9.6Z',
-  right: 'M12.8 9.6v3.3c0 3.5-2.3 5.9-5.8 5.9V9.6Z',
+  left: 'M7 1.2C3.5 1.2 1.2 3.7 1.2 7.1V10.6H7Z',
+  right: 'M7 1.2C10.5 1.2 12.8 3.7 12.8 7.1V10.6H7Z',
 };
 
 /** The button a mouse key presses, lit on a drawn mouse: one cap's width as a digit's, where the words were three. Its
- *  body dark, the pressed button solid gold and the split drawn: at a cap's size a lit wedge on an outline alone left
- *  the two mice alike. */
+ *  body dark, the pressed button solid gold over half its height, the other empty, the split drawn: at a cap's size a
+ *  lit wedge on an outline left the two mice alike, and the pressed side tinted down the body too read as both lit. */
 function mouseGlyph(side: 'left' | 'right'): string {
   return '<svg class="gd-mouse" viewBox="0 0 14 20" aria-hidden="true">'
-    + `<path class="gd-mouse-shell" d="${MOUSE_SHELL}"/><path class="gd-mouse-side" d="${MOUSE_SIDE[side]}"/>`
+    + `<path class="gd-mouse-shell" d="${MOUSE_SHELL}"/>`
     + `<path class="gd-mouse-lit" d="${MOUSE_BUTTON[side]}"/>`
     + `<path class="gd-mouse-line" d="${MOUSE_LINES}"/></svg>`;
 }
