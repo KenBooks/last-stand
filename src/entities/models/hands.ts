@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { joint } from './rig';
+import { onBones, posedSkin, type FistFinger } from './fistBones';
 import { dualQuaternionSkinned } from './dualQuaternion';
 import { triplanar } from './triplanar';
 import { handNodes } from './handNodes';
@@ -167,6 +168,17 @@ const GRAIN_TILE = 0.12;
  *  meshes one) */
 const HAND_DEPTH = dualQuaternionSkinned(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }));
 
+/** A geometry of its own over `shared`'s buffers: its attributes may be swapped without `shared`'s changing. Kept
+ *  from a model's dispose as `shared` is: disposed, it would take the buffers they share off the GPU. */
+function ownShell(shared: THREE.BufferGeometry): THREE.BufferGeometry {
+  const shell = new THREE.BufferGeometry();
+  for (const [name, attribute] of Object.entries(shared.attributes)) shell.setAttribute(name, attribute);
+  shell.setIndex(shared.index);
+  shell.boundingSphere = shared.boundingSphere?.clone() ?? null;
+  shell.userData.shared = true;
+  return shell;
+}
+
 /** `geometry` in a copy of `material`, on `vis`, skinned to `skeleton`. */
 function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material,
   skeleton: THREE.Skeleton, shadow: boolean): THREE.SkinnedMesh {
@@ -316,7 +328,9 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   const bones = [vis, ...f.flatMap((d) => d.j), ...thumb.j] as unknown as THREE.Bone[];
   const skeleton = new THREE.Skeleton(bones);
   h.skin = skinnedOn(vis, shape.tips, skin, skeleton, true);
-  h.bareSkin = bareSkin ? skinnedOn(vis, shape.skin, bareSkin, skeleton, true) : null;
+  // (a fighter's bare skin a geometry of its own over the sculpt's buffers: its fist swaps its points, normals and
+  // colours for the shut ones, `shadeShut`, and on the one geometry every fighter's hand of that side took them with it)
+  h.bareSkin = bareSkin ? skinnedOn(vis, build.fist ? ownShell(shape.skin) : shape.skin, bareSkin, skeleton, true) : null;
   h.glove = skinnedOn(vis, shape.glove, glove, skeleton, true);
   // (the skin shaded by the colours its sculpt gave it, `shadeSkin`: each mesh's own copy of the material, which other
   // skin without them shares)
@@ -705,9 +719,7 @@ export function wrapPoses(h: Hand): (() => void)[] {
  *  another part of the skin must lie to a point out there to close it in (of that step), how much darker the skin is
  *  where it closes in wholly, and its colour there, warmer as a fold's is */
 const SHUT_SHADE = { steps: [0.003, 0.006, 0.01], near: 0.62, dark: 0.55, warm: [1, 0.86, 0.82] };
-const SHUT_COLOURS = new Map<string, THREE.BufferAttribute>();
-const _shadeM = new THREE.Matrix4(), _shadeP = new THREE.Vector3(), _shadeN = new THREE.Vector3();
-const _shadeB = new THREE.Vector3(), _shadeQ = new THREE.Vector3();
+const SHUT_COLOURS = new Map<string, ShutSkin>();
 
 /**
  * A fighter's skin shaded for the pose it's in: its sculpt's own colours open (`handShape.ts` `shadeSkin`: where
@@ -722,9 +734,10 @@ function shadeShut(h: Hand, on: boolean): void {
   const mesh = h.bareSkin ?? h.skin;
   // (a hand still being built is posed to be sculpted before it has a skin)
   if (!mesh) return;
-  const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: THREE.BufferAttribute };
+  const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: ShutSkin; shape?: OpenShape };
   kept.open ??= geometry.attributes.color as THREE.BufferAttribute;
   if (!kept.open) return;
+  kept.shape ??= { position: geometry.attributes.position, normal: geometry.attributes.normal };
   // (in the hand's own frame, whatever size the hero is drawn at: read in the world's, a hero hidden at no size as
   // he's built or warmed had no cells to his grid, so his fist was shaded at his first punch instead, 40 to 50 ms of
   // that frame: `lab range --gear bare --skill mouse0`, the pose's time at frame 0 of Savage Fists)
@@ -735,13 +748,49 @@ function shadeShut(h: Hand, on: boolean): void {
     const key = `${handKey(h.s, h.build)} ${kept.open.count}`;
     let shut = SHUT_COLOURS.get(key);
     if (!shut) {
-      shut = shutColours(mesh, kept.open, h.vis);
+      shut = shutSkin(h, mesh, kept.open);
       SHUT_COLOURS.set(key, shut);
     }
     kept.shut = shut;
   }
-  const want = on && kept.shut ? kept.shut : kept.open;
+  const want = on && kept.shut ? kept.shut.colour : kept.open;
   if (geometry.attributes.color !== want) geometry.setAttribute('color', want);
+  // (and its points and normals laid on the bones under it, `fistBones.ts`: a geometry of this hand's own alone)
+  if (mesh !== h.bareSkin) return;
+  const shape = on && kept.shut?.shape ? kept.shut.shape : kept.shape;
+  if (geometry.attributes.position === shape.position) return;
+  geometry.setAttribute('position', shape.position);
+  geometry.setAttribute('normal', shape.normal);
+}
+
+type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+/** a skin's points and normals as its sculpt made them */
+type OpenShape = { position: Attribute; normal: Attribute };
+/** a shut fist's skin: its colours, and its points and normals laid on its bones (none: a skin other hands share) */
+type ShutSkin = { colour: THREE.BufferAttribute; shape?: { position: THREE.BufferAttribute; normal: THREE.BufferAttribute } };
+
+/** `mesh`, `h`'s skin, as its fist is shut now: its colours over `open`, its sculpt's, and, a skin of its own, its
+ *  points and normals laid on the bones under it. */
+function shutSkin(h: Hand, mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): ShutSkin {
+  const placed = mesh.skeleton.bones.map((bone) => {
+    const place = placeIn(bone, h.vis);
+    if (!place) throw new Error('hands: a bone of the fist is not in its hand');
+    return place;
+  });
+  const posed = posedSkin(mesh, mesh.geometry, placed);
+  if (mesh !== h.bareSkin) return { colour: shutColours(posed.at, posed.out, open) };
+  const bones = mesh.skeleton.bones as unknown[];
+  const fingers: FistFinger[] = h.f.map((digit) => ({
+    joints: digit.j.map((j) => new THREE.Vector3().setFromMatrixPosition(placeIn(j, h.vis)!)),
+    r: digit.r, bones: digit.j.map((j) => bones.indexOf(j)),
+  }));
+  const shape = onBones(mesh, posed, fingers, bones.indexOf(h.vis));
+  // (shaded as it lies on them)
+  const shaped = ownShell(mesh.geometry);
+  shaped.setAttribute('position', shape.position);
+  shaped.setAttribute('normal', shape.normal);
+  const laid = posedSkin(mesh, shaped, placed);
+  return { colour: shutColours(laid.at, laid.out, open), shape };
 }
 
 /** `bone`'s place in `root`'s frame, by its own and its parents' turns alone (null: it isn't under `root`). */
@@ -755,31 +804,10 @@ function placeIn(bone: THREE.Object3D, root: THREE.Object3D): THREE.Matrix4 | nu
   return placed;
 }
 
-/** `mesh`'s skin's colours as its bones pose it now (`shadeShut`), over `open`, its sculpt's; read in `root`'s frame,
- *  the hand's own. */
-function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute, root: THREE.Object3D): THREE.BufferAttribute {
-  const geometry = mesh.geometry, position = geometry.attributes.position, normal = geometry.attributes.normal;
-  const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight, count = position.count;
-  const bones = mesh.skeleton.bones.map((bone, n) => {
-    const placed = placeIn(bone, root);
-    if (!placed) throw new Error('hands: a bone of the fist is not in its hand');
-    return placed.multiply(mesh.skeleton.boneInverses[n]);
-  });
-  // each vertex and its normal as posed (blended by its bones' shares, as the skin is drawn)
-  const at = new Float32Array(count * 3), out = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    _shadeB.fromBufferAttribute(position, i).applyMatrix4(mesh.bindMatrix);
-    _shadeP.set(0, 0, 0); _shadeN.set(0, 0, 0);
-    for (let k = 0; k < 4; k++) {
-      const w = share.getComponent(i, k);
-      if (w <= 0) continue;
-      _shadeM.copy(bones[index.getComponent(i, k)]);
-      _shadeP.addScaledVector(_shadeQ.copy(_shadeB).applyMatrix4(_shadeM), w);
-      _shadeN.addScaledVector(_shadeQ.fromBufferAttribute(normal, i).transformDirection(_shadeM), w);
-    }
-    _shadeN.normalize();
-    at.set([_shadeP.x, _shadeP.y, _shadeP.z], i * 3); out.set([_shadeN.x, _shadeN.y, _shadeN.z], i * 3);
-  }
+/** A skin's colours as its bones pose it (`shadeShut`): `at` its points and `out` their normals so posed, in the
+ *  hand's own frame (`posedSkin`), over `open`, its sculpt's. */
+function shutColours(at: Float32Array, out: Float32Array, open: THREE.BufferAttribute): THREE.BufferAttribute {
+  const count = open.count;
   // (the posed vertices in a grid, a cell the furthest reach: a point's neighbours are in the 27 cells round it)
   const steps = SHUT_SHADE.steps;
   // (its cells numbered, a list a cell: keyed by a string made for each of a point's 27 cells, 1.2 million a hand, the
@@ -839,7 +867,9 @@ const WEB_SHAPE = new THREE.SphereGeometry(1, 10, 6);
 /** the skin pressed between a shut fist's neighbouring fingers (`fistWebs`): its radius as a share of the thinner
  *  finger's, how far past a segment's ends it runs (a share of the segment), and how far it lies in from the
  *  fingers' fronts towards the palm (a share of that radius) */
-const FIST_WEB = tunable('fistWeb', { r: 0.62, past: 0.25, in: 0.3 });
+// (`plug`: the flesh closing the index's and the little finger's curls at the fist's two sides: how far out from the
+// curl's middle it lies, how thick it is that way and how wide across the curl, shares of the finger's radius)
+const FIST_WEB = tunable('fistWeb', { r: 0.8, past: 0.25, in: 0.15, plug: [0.4, 0.5, 1.3] });
 
 /**
  * The skin pressed between each two neighbouring fingers of a shut fist, `pose` its closed pose: a rounded bar along
@@ -867,6 +897,16 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
       const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize());
       webs.push(WEB_SHAPE.clone().applyMatrix4(placed.compose(at, turn, size)));
     }
+  }
+  // (and the flesh closing the outer fingers' curls: seen from the fist's sides each was a rolled-up hose with the
+  // hollow of its roll open, where a fist's side is closed flesh with creases, the photographs beside it)
+  const middle = (chain: Chain) => chain.points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(0.25);
+  for (const [i, next] of [[0, 1], [h.f.length - 1, h.f.length - 2]]) {
+    const [out, thick, wide] = FIST_WEB.plug.map((share) => share * h.f[i].r);
+    const at = middle(chains[i]), away = at.clone().sub(middle(chains[next])).normalize();
+    const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), away);
+    at.addScaledVector(away, out);
+    webs.push(WEB_SHAPE.clone().applyMatrix4(placed.compose(at, turn, new THREE.Vector3(thick, wide, wide))));
   }
   const merged = mergeGeometries(webs)!;
   for (const web of webs) web.dispose();
