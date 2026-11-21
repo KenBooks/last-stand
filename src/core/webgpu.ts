@@ -364,6 +364,9 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   // they were made at each material's first draw, on the main thread (the loading screen froze 10-15 s); waited for
   // by `compiled`. (Nothing listed as made: no WebGL programs to link.)
   stand('compile', (scene: THREE.Object3D, camera: THREE.Camera, target?: THREE.Scene | null) => {
+    // (under the Rust engine three draws the overlays and a few targets alone: nothing of the scene is compiled
+    // for it ahead, src/engine)
+    if (RUNNING.rust) return new Set<THREE.Material>();
     compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.error('WebGPU compile:', e)));
     return new Set<THREE.Material>();
   });
