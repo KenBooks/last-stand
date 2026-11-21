@@ -271,6 +271,46 @@ function closedBack(at: Float32Array, backOf: (i: number) => boolean, knuckleY: 
 }
 
 /**
+ * A shut fist's back closed along the hand too, `at` its points, changed in place: in each strip down the hand, from
+ * the wrist to the knuckles, each point is raised to the outline along the hand over it. Closed across the hand
+ * alone (`closedBack`, band by band), nothing evened the back from one band to the next, and where the sculpt's ridges
+ * begin, 3 cm above the knuckles, the back dipped 1 to 2 mm and rose again to the knuckles: a groove across the hand,
+ * lit along its edge (from play: "why is there a groove still ?"; read along each finger's line: the middle finger's
+ * 21.3 mm, 20.1, then up to 23.4 at its knuckle, the ring finger's 18.1 to 16.0 in one step).
+ */
+function closedAlong(at: Float32Array, backOf: (i: number) => boolean, knuckleY: number): void {
+  const { band, stands, under } = FIST_CLOSED;
+  const count = at.length / 3;
+  let left = Infinity, right = -Infinity;
+  for (let i = 0; i < count; i++) {
+    if (!backOf(i) || at[i * 3 + 1] < knuckleY || at[i * 3 + 2] <= 0) continue;
+    left = Math.min(left, at[i * 3]);
+    right = Math.max(right, at[i * 3]);
+  }
+  if (!(right > left)) return;
+  const strips = Math.max(1, Math.ceil((right - left) / band));
+  const down: [number, number][][] = Array.from({ length: strips }, () => []);
+  const stripOf = (x: number): number => Math.min(strips - 1, Math.max(0, Math.floor((x - left) / band)));
+  for (let i = 0; i < count; i++) {
+    if (!backOf(i) || at[i * 3 + 1] < knuckleY || at[i * 3 + 2] <= 0) continue;
+    down[stripOf(at[i * 3])].push([at[i * 3 + 1], at[i * 3 + 2]]);
+  }
+  const outlines = down.map((points) => outlineOver(points.sort((a, b) => a[0] - b[0])));
+  for (let i = 0; i < count; i++) {
+    const y = at[i * 3 + 1], z = at[i * 3 + 2];
+    if (!backOf(i) || y < knuckleY || z <= 0) continue;
+    // (its strip's outline eased to the next strip's by its place between their middles)
+    const across = Math.min(strips - 1, Math.max(0, (at[i * 3] - left) / band - 0.5));
+    const low = Math.floor(across), next = Math.min(strips - 1, low + 1);
+    const a = outlineAt(outlines[low], y), b = outlineAt(outlines[next], y);
+    const height = (b === -Infinity ? a : a === -Infinity ? b : a + (b - a) * (across - low)) - under;
+    if (!(height > z)) continue;
+    const standing = Math.min(1, Math.max(0, (z / height - stands[0]) / (stands[1] - stands[0])));
+    at[i * 3 + 2] += (height - z) * standing * standing * (3 - 2 * standing);
+  }
+}
+
+/**
  * The back of a shut fist's hand: how wide a band down the hand its height is read in (`band`, m), how far above the
  * knuckle joints its straight line ends (`short`, m), how much higher than at the wrist it may end at the knuckles
  * (`rise`, m), how high a point must stand, as a share of its band's height, to be raised with it (`stands`, from
@@ -373,6 +413,7 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
   let wristY = -Infinity;
   for (let i = 0; i < count; i++) if (main[i] === palm) wristY = Math.max(wristY, at[i * 3 + 1]);
   straightBack(at, posed, (i) => main[i] === palm, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
+  closedAlong(at, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
   smoothed(at, posed.at, geometry.index);
   relief(
     at, normalsOf(at, geometry.index, posed.out), fingers, wristY,
