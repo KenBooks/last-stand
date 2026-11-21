@@ -51,7 +51,7 @@ import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
-import { standGhost, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
+import { standGhost, standGhostInSteps, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { showMerchant } from './ui/screens/merchant/merchant';
 import { clearPendingRoom, enterPendingRoom, enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
@@ -397,7 +397,8 @@ async function boot() {
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
 
   await loadingStep('Conjuring spells', 0.55);
-  enterMenu();
+  enterMenu(false, true);
+  await spawnDummiesInSteps();
   // a first visit opens on the hero selection screen, no hero chosen yet: the logo's exit gathers into its logo
   const firstVisit = !hasSavedClass();
   if (VILLAGE) initTraining(firstVisit);
@@ -528,7 +529,9 @@ let fromDuel = false;
 const EXIT_APART = 1.2;
 
 /** The lobby. `keepSummary`: a co-op run's summary shown as it ended stays over it until closed (`checkRunOver`). */
-function enterMenu(keepSummary = false) {
+/** The lobby entered; its dummies stood up after, by the caller, where `dummiesLater` (the boot's,
+ *  `spawnDummiesInSteps`). */
+function enterMenu(keepSummary = false, dummiesLater = false) {
   G.mode = 'menu';
   G.paused = G.menuOpen = G.player.idle = false;
   releaseInput();
@@ -568,7 +571,7 @@ function enterMenu(keepSummary = false) {
   G.player.sandbox = true;   // lobby: try skills freely in the yard while a panel is up
   practising = false;
   setZoom(CAMERA.lobbyZoom);
-  spawnDummies();
+  if (!dummiesLater) spawnDummies();
   renderCoop();
   buildNextRunAhead();
 }
@@ -576,12 +579,20 @@ function enterMenu(keepSummary = false) {
 /** The training yard's dummies (the lobby's only foes), and the ghost by its gate (built once, with the village). */
 function spawnDummies() {
   clearEnemies();
-  if (!VILLAGE) {
-    for (const [x, z] of LOBBY.dummies) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
-    return;
-  }
-  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
-  standGhost(G.arena.groupOf('village'));
+  for (const [x, z] of dummySpots()) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  if (VILLAGE) standGhost(G.arena.groupOf('village'));
+}
+
+/** where the lobby's dummies stand: the village's yard, or the panels' lobby */
+const dummySpots = (): readonly (readonly [number, number])[] => (VILLAGE ? YARD_DUMMIES : LOBBY.dummies);
+
+/** `spawnDummies` with the ghosts a task each, a frame painted before each, as the boot enters the lobby: at once,
+ *  they were one task of 0.9 s in a first visit's boot with the CPU 4 times slower (the ghosts 0.55 s of it). The
+ *  dummies stand up in this task, their random numbers drawn as `spawnDummies` draws them. */
+async function spawnDummiesInSteps(): Promise<void> {
+  clearEnemies();
+  for (const [x, z] of dummySpots()) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  if (VILLAGE) await standGhostInSteps(G.arena.groupOf('village'), painted);
 }
 
 // --- the village ------------------------------------------------------------------
