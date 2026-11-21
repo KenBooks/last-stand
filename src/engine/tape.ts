@@ -6,7 +6,7 @@ type TapeArg = number | boolean | string | Float32Array | Uint32Array | Uint16Ar
 
 /** the engine's calls a tape keeps, by their op (tape.rs) */
 const OPS: Record<string, number> = {
-  add_mesh: 1, add_texture: 2, add_material: 3, add_shader: 4, add_custom_material: 5, set_instances: 6, set_sprites: 7,
+  add_mesh: 1, add_texture: 2, add_material: 3, add_shader: 4, add_custom_material: 5, set_instances: 6, set_sprites: 7, add_volume: 9,
 };
 const FRAME = 8;
 const KIND = { number: 0, floats: 1, words: 2, shorts: 3, bytes: 4, text: 5 };

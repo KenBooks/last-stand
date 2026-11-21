@@ -69,8 +69,9 @@ interface MaterialEntry {
   id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
   /** how often its numbers moved, and whether the engine's material is its own by now */
   changes: number; own: boolean;
-  /** its own shader's numbers as last sent */
+  /** its own shader's numbers as last sent, and its volume */
   custom?: Float32Array;
+  volume?: number;
 }
 /** how many times a material's numbers may move before it stops sharing the engine's materials */
 const SHARED_CHANGES = 8;
@@ -188,6 +189,7 @@ export class Bridge {
     this.cutOuts = new Map();
     this.shared = new Map();
     this.shaders = new Map();
+    this.volumes = new WeakMap();
   }
 
   /**
@@ -318,7 +320,9 @@ export class Bridge {
     p[17] = material.vertexColors ? 1 : 0;
     p[18] = maps[1] ? 1 : 0;
     p[19] = maps[2] ? 1 : 0;
-    const blend = material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
+    // (3: its colour already multiplied by its alpha, the flames' light over what they hide)
+    const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
+    const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
     const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
     return blend | (side << 2) | (material.depthWrite ? 16 : 0);
   }
@@ -398,7 +402,27 @@ export class Bridge {
   }
   private shaders = new Map<string, number>();
   private scratchLook = new Float32Array(LOOK_FLOATS);
-  private scratchExtra = new Uint32Array(2);
+  /** a look's two maps, then its volume */
+  private scratchExtra = new Uint32Array(3);
+  private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
+
+  /** A volume's id, its cells sent again as its version moves on (a new one made when its size does). */
+  private volumeId(volume: THREE.Data3DTexture | undefined): number {
+    if (!volume) return 0;
+    const { data, width, height, depth } = volume.image as { data: Uint8Array; width: number; height: number; depth: number };
+    const entry = this.volumes.get(volume);
+    if (entry && entry.version === volume.version) return entry.id;
+    if (!(data instanceof Uint8Array) || data.length !== width * height * depth) return 0;
+    if (entry && entry.cells === data.length) {
+      this.engine.set_volume(entry.id, data);
+      entry.version = volume.version;
+      return entry.id;
+    }
+    const id = this.engine.add_volume(width, height, depth, data);
+    this.volumes.set(volume, { id, version: volume.version, cells: data.length });
+    this.freshViews();
+    return id;
+  }
 
   /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
   private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
@@ -406,11 +430,21 @@ export class Bridge {
     if (key < 0) return 0;
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
     look.numbers(numbers);
+    const volume = this.volumeId(look.volume?.());
+    // (a volume made anew, a loop baked since: the material made again round it)
+    if (entry && entry.volume !== volume) {
+      this.engine.drop_material(entry.id);
+      this.held.materials--;
+      entry = undefined;
+    }
     if (!entry) {
       this.scratchExtra[0] = this.textureId(look.maps?.[0]);
       this.scratchExtra[1] = this.textureId(look.maps?.[1]);
+      this.scratchExtra[2] = volume;
       const id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
-      entry = { id, params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: true, custom: numbers.slice() };
+      entry = {
+        id, params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: true, custom: numbers.slice(), volume,
+      };
       this.materials.set(material, entry);
       this.held.materials++;
       this.stats.newMaterials++;

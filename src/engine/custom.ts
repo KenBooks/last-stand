@@ -16,6 +16,8 @@ export interface RustLook {
   numbers(out: Float32Array): void;
   /** the shader's two maps (`t_extra0`, `t_extra1`) */
   maps?: readonly (THREE.Texture | null)[];
+  /** the shader's volume (`t_volume`, read by `samp_clamp`), as it is now: a 3D map of a byte a cell */
+  volume?: () => THREE.Data3DTexture;
   /** the attribute its meshes hand over as their vertices' positions (the meadow's blades: `bv`) */
   position?: string;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */

@@ -7,6 +7,9 @@
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
 import { seeFade, seeUniforms, type SeeNodes } from '../core/shaderPorts';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { flameLook } from '../engine/looks/fire';
 import type { FLAME_LOOK, KEPT, KEPT_SIZE } from './fireBake';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -161,11 +164,26 @@ export function emberNodes(node: N): void {
 /** `value` written into WGSL as a float */
 const f = (value: number): string => value.toFixed(4);
 
+/** the march's functions' WGSL, in the order they're made: each before what calls it */
+const sources: string[] = [];
+const kept = (source: string): string => {
+  sources.push(source);
+  return source;
+};
+
+/** The march's WGSL whole (`fireLog`, `fireLight` and what they call), for a renderer that takes it as source: the
+ *  Rust engine's look of the flames (`engine/looks/fire.ts`). */
+export function flameWgsl(shape: FlameShape): string {
+  logFn();
+  marchFor(shape);
+  return sources.join('\n');
+}
+
 /** Where a ray first meets a log (as fire.ts's `logAt`), made once. */
 let log: N = null;
 function logFn(): N {
   const { wgslFn } = tsl as any;
-  log ??= wgslFn(`fn fireLog(eye: vec3f, dir: vec3f, a: vec4f, b: vec4f) -> f32 {
+  log ??= wgslFn(kept(`fn fireLog(eye: vec3f, dir: vec3f, a: vec4f, b: vec4f) -> f32 {
     let ba = b.xyz - a.xyz;
     let baba = dot(ba, ba);
     if (a.w <= 0.0 || baba < 1e-8) {
@@ -202,7 +220,7 @@ function logFn(): N {
       return tc;
     }
     return 1e9;
-  }`);
+  }`));
   return log;
 }
 
@@ -217,12 +235,12 @@ function marchFor(shape: FlameShape): N {
     return `if (life <= ${f(at)}) { return mix(vec3f(${f(r0)}, ${f(g0)}, ${f(b0)}) * ${f(bright0)}, `
       + `vec3f(${f(r)}, ${f(g)}, ${f(b)}) * ${f(bright)}, (life - ${f(before)}) / ${f(at - before)}); }`;
   }).join('\n    ');
-  const colour = wgslFn(`fn fireColour(life: f32) -> vec3f {
+  const colour = wgslFn(kept(`fn fireColour(life: f32) -> vec3f {
     ${stops}
     return vec3f(1.0);
-  }`);
+  }`));
   // the loop at one frame's tile (as fire.ts's `flameTile`)
-  const tile = wgslFn(`fn fireTile(q: vec3f, frame: f32, noise: texture_3d<f32>, noiseAt: sampler) -> f32 {
+  const tile = wgslFn(kept(`fn fireTile(q: vec3f, frame: f32, noise: texture_3d<f32>, noiseAt: sampler) -> f32 {
     let row = floor(frame / ${f(shape.tiles.across)});
     let at = vec2f(frame - row * ${f(shape.tiles.across)}, row - floor(row / ${f(shape.tiles.down)}) * ${f(shape.tiles.down)});
     let size = vec2f(${f(shape.keptSize.x)}, ${f(shape.keptSize.y)});
@@ -230,9 +248,9 @@ function marchFor(shape: FlameShape): N {
     let cell = (at * size + clamp(inBox, vec2f(0.5), size - 0.5)) / (size * vec2f(${f(shape.tiles.across)}, ${f(shape.tiles.down)}));
     let deep = (q.z * ${f(shape.cells.nz)} - ${f(shape.kept.z[0])}) / ${f(shape.keptSize.z)};
     return textureSampleLevel(noise, noiseAt, vec3f(cell, deep), 0.0).r;
-  }`);
+  }`));
   // a flame's life at p (as fire.ts's `flameLife`)
-  const life = wgslFn(`fn fireLife(p: vec3f, noise: texture_3d<f32>, noiseAt: sampler, top: f32, reach: f32, frame: f32,
+  const life = wgslFn(kept(`fn fireLife(p: vec3f, noise: texture_3d<f32>, noiseAt: sampler, top: f32, reach: f32, frame: f32,
     turn: vec2f, lite: f32) -> f32 {
     let across = vec2f(p.x * turn.x - p.z * turn.y, p.x * turn.y + p.z * turn.x) / reach;
     let q = vec3f(across.x * 0.5 + 0.5, p.y / top, across.y * 0.5 + 0.5);
@@ -262,9 +280,9 @@ function marchFor(shape: FlameShape): N {
     let sideFrom = mix(${f(look.sideFadeFoot)}, ${f(look.sideFade)}, smoothstep(0.0, ${f(look.footNarrows)}, q.y));
     let side = 1.0 - smoothstep(sideFrom, sideFrom + 0.3, length(across));
     return life * (1.0 - ${f(look.strandsTake)} * (1.0 - strands)) * side * smoothstep(0.0, ${f(look.footFade)}, q.y);
-  }`, [tile]);
+  }`), [tile]);
   // where a ray from eye along dir is among the flames: a cylinder `reach` round, `top` high
-  const span = wgslFn(`fn fireSpan(eye: vec3f, dir: vec3f, top: f32, reach: f32) -> vec2f {
+  const span = wgslFn(kept(`fn fireSpan(eye: vec3f, dir: vec3f, top: f32, reach: f32) -> vec2f {
     var up = dir.y;
     if (abs(up) < 1e-5) {
       up = 1e-5;
@@ -290,9 +308,9 @@ function marchFor(shape: FlameShape): N {
     let root = sqrt(meets);
     span = vec2f(max(span.x, (-b - root) / a), min(span.y, (-b + root) / a));
     return vec2f(max(span.x, 0.0), span.y);
-  }`);
+  }`));
   // where a ray first meets the side of a cone frustum round the bed's middle (each end a height and a radius)
-  const side = wgslFn(`fn fireSide(eye: vec3f, dir: vec3f, foot: vec2f, upper: vec2f) -> f32 {
+  const side = wgslFn(kept(`fn fireSide(eye: vec3f, dir: vec3f, foot: vec2f, upper: vec2f) -> f32 {
     let k = (upper.y - foot.y) / (upper.x - foot.x);
     let q = foot.y + (eye.y - foot.x) * k;
     let along = dir.y * k;
@@ -317,9 +335,9 @@ function marchFor(shape: FlameShape): N {
       }
     }
     return hit;
-  }`);
+  }`));
   // where a ray first meets a disc round the bed's middle at height y, radius r
-  const disc = wgslFn(`fn fireDisc(eye: vec3f, dir: vec3f, y: f32, r: f32) -> f32 {
+  const disc = wgslFn(kept(`fn fireDisc(eye: vec3f, dir: vec3f, y: f32, r: f32) -> f32 {
     if (abs(dir.y) < 1e-5) {
       return 1e9;
     }
@@ -329,9 +347,9 @@ function marchFor(shape: FlameShape): N {
       return t;
     }
     return 1e9;
-  }`);
+  }`));
   // where a ray first meets the bowl under the flames (its foot, belly and rim), far off with none
-  const bowl = wgslFn(`fn fireBowl(eye: vec3f, dir: vec3f, foot: vec2f, belly: vec2f, rim: vec2f) -> f32 {
+  const bowl = wgslFn(kept(`fn fireBowl(eye: vec3f, dir: vec3f, foot: vec2f, belly: vec2f, rim: vec2f) -> f32 {
     if (rim.x <= foot.x) {
       return 1e9;
     }
@@ -346,8 +364,8 @@ function marchFor(shape: FlameShape): N {
     }
     let bed = mix(low.y, high.y, clamp(-low.x / (high.x - low.x), 0.0, 1.0));
     return min(hit, fireDisc(eye, dir, 0.0, bed));
-  }`, [side, disc]);
-  march = wgslFn(`fn fireLight(world: vec3f, eyeWorld: vec3f, centre: vec3f, pixel: vec2f, noise: texture_3d<f32>,
+  }`), [side, disc]);
+  march = wgslFn(kept(`fn fireLight(world: vec3f, eyeWorld: vec3f, centre: vec3f, pixel: vec2f, noise: texture_3d<f32>,
     noiseAt: sampler, top: f32, reach: f32, frame: f32, turn: vec2f, glow: f32, foot: vec2f,
     belly: vec2f, rim: vec2f, logs: f32, stepShare: f32, lite: f32) -> vec4f {
     let eye = eyeWorld - centre;
@@ -382,7 +400,7 @@ function marchFor(shape: FlameShape): N {
       }
     }
     return vec4f(light * ${f(look.glow)} * glow, 1.0 - through);
-  }`, [colour, life, span, bowl]);
+  }`), [colour, life, span, bowl]);
   return march;
 }
 
@@ -440,5 +458,6 @@ export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE
   // along the view through their middle, as fire.ts has it)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
   material.fragmentNode = see.uSeeK ? light.mul(evenFade(seeUniforms(see), read)) : light;
+  if (RUNNING.rust) rustLook(material, flameLook(uniforms, shape));
   return material;
 }
