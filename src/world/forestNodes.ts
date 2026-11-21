@@ -4,6 +4,9 @@
 // own. The floor's relief is core/parallax.ts's `reliefContext`.
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { shaftsLook } from '../engine/looks/forest';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -71,5 +74,6 @@ export function shaftsMaterial(time: { value: number }, color: THREE.Color): THR
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
   });
   material.fragmentNode = vec4(reference('value', 'color', { value: color }).mul(shine), 1);
+  if (RUNNING.rust) rustLook(material, shaftsLook(time, color));
   return material;
 }

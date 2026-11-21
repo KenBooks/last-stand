@@ -23,6 +23,9 @@ import { buildFire, emberMat, type FireLog, type FireSpec } from './fire';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { grassWindLook, mossLook } from '../engine/looks/forest';
 import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
@@ -98,6 +101,7 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
     const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
     updaters.push((_dt, t) => { clock.value = t; });
     m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
+    if (RUNNING.rust) rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
     stillNodes.add(m);
     return m;
   }
@@ -127,6 +131,7 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
 function mossyGround<M extends THREE.Material>(m: M): M {
   if (WEBGPU) {
     (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+    if (RUNNING.rust) rustLook(m, mossLook());
     reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
     return m;
   }
