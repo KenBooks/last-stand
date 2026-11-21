@@ -14,7 +14,7 @@ import { shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
-import { GLOBALS, PLAIN_GRADE, TUNE, writeGlobals, type Grade } from './globals';
+import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Lights } from './lights';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
@@ -222,6 +222,20 @@ export class Bridge {
     this.aheadRest = AHEAD_REST;
   }
 
+  /** The engine told the quality level's samples and shadow map, when they change: it drew 4 samples a pixel
+   *  and a map of 2048 at every level, a phone's Very low among them (26 ms a frame on its GPU, from play). */
+  private quality(samples: number, shadowSize: number): void {
+    if (samples === this.samples && shadowSize === this.shadowSize) return;
+    this.samples = samples;
+    this.shadowSize = shadowSize;
+    this.core.engine.set_quality(samples, shadowSize);
+    this.core.freshViews();
+  }
+  private samples = 4;
+  private shadowSize = 2048;
+  /** A harness's: the samples and the shadow map's side the engine draws with. */
+  qualityNow(): { samples: number; shadowSize: number } { return { samples: this.samples, shadowSize: this.shadowSize }; }
+
   /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
    *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
    *  effect first met as it was cast compiled its pipeline in that frame, 2 to 4 s from play. */
@@ -312,6 +326,7 @@ export class Bridge {
     this.lit.addLamps();
     this.seeKinds.write();
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
+    this.quality(this.grade.samples ?? 4, shadowSizeOf(this.lit.sun));
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();

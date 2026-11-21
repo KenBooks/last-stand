@@ -10,6 +10,7 @@ import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import { RUNNING } from '../../../src/core/rendererChoice';
+import { sceneSamples } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
@@ -100,6 +101,19 @@ function placedRight(where: string): Checked {
   visit(G.scene);
   if (off.length) return failed(`${where}: ${off.length} of ${checked} shown objects off their place: ${off.slice(0, 4).join(', ')}`);
   return passed(`${where}: all ${checked} shown objects where their positions put them`);
+}
+
+/** The engine drawing with the samples and the sun's shadow map the game's quality level asks for: at its own 4
+ *  samples and 2048 whatever the level, a phone at Very low held 35 to 40 frames a second (from play). */
+function quality(bridge: Bridge): Checked {
+  const asked = sceneSamples() >= 4 ? 4 : 1;
+  const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined;
+  const { samples, shadowSize } = bridge.qualityNow();
+  const engineSamples = samples >= 4 ? 4 : 1;
+  if (engineSamples !== asked) return failed(`the engine draws ${samples} samples a pixel, the level asks for ${sceneSamples()}`);
+  const map = sun?.shadow.mapSize.x ?? shadowSize;
+  if (shadowSize !== map) return failed(`the engine's shadow map is ${shadowSize} a side, the level's ${map}`);
+  return passed(`the engine draws as the quality level asks: ${samples} samples a pixel, a shadow map of ${shadowSize}`);
 }
 
 /** The hall's shelter as the engine has it: set in the village with its walls' height, none in a fight. */
@@ -258,6 +272,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       await lab.step(5);
       checks.push(placedRight('the village'));
       checks.push(shelter(bridge, 'the village', true));
+      checks.push(quality(bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));

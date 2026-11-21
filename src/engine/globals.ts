@@ -10,8 +10,10 @@ export const GLOBALS = {
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
   seeHall: 352, seeKinds: 360, floats: 1000,
 };
-/** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
+/** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
+/** The sun's shadow map's side as the game's quality level has it (core/quality.ts sets the sun's own). */
+export const shadowSizeOf = (sun: THREE.DirectionalLight | null): number => sun?.shadow.mapSize.x || SHADOW_SIZE;
 
 /** What's tuned by hand against three's picture (`window.__rust.tune`). */
 export const TUNE = tunable('rust', {
@@ -75,6 +77,8 @@ export interface Grade {
   vignette: number;
   /** a blow taken, and how low the health is (0 to 1 each) */
   hurt: number; low: number;
+  /** the scene's MSAA samples the quality level asks for on this screen (core/renderer.ts `sceneSamples`) */
+  samples?: number;
 }
 export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
 
@@ -100,7 +104,7 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
   g[GLOBALS.hemiSky] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
   g[GLOBALS.hemiSky + 1] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
   g[GLOBALS.hemiSky + 2] += TUNE.skyFill * (scene.environmentIntensity ?? 1) * (scene.environment ? 1 : 0);
-  g[GLOBALS.misc] = 1 / SHADOW_SIZE;
+  g[GLOBALS.misc] = 1 / shadowSizeOf(lit.sun);
   g[GLOBALS.misc + 1] = TUNE.shadowBias;
   g[GLOBALS.misc + 2] = TUNE.environment;
   g[GLOBALS.misc + 3] = TUNE.debug;

@@ -1784,7 +1784,7 @@ export function render(): void {
     const pixels = sceneTarget();
     const graded = {
       small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
-      hurt: u.uHurt.value as number, low: u.uLow.value as number,
+      hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
     };
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
       // (three's canvas over the engine's: clear, but for the world's overlays)
