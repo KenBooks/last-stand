@@ -244,7 +244,8 @@ export const CLEAN_HIT = { from: 0.5, to: 1.0, bonus: 0.3 };
  *  performing a technique should increase critical hit chance too"): `crit` points of a hundred more chance of a
  *  critical hit for a clean hit, a full step and a full swing, the step's and the swing's by their shares, added
  *  together. First takes, for tuning in play. */
-export const PUNCH_DRIVE = { step: 0.25, swipe: 0.4, turn: 0.5, lead: 1.2, crit: { clean: 10, step: 10, swipe: 15 } };
+// (`swipe` 0.75, where 0.4 at first: from play, "lets increase bonus from direction swipe")
+export const PUNCH_DRIVE = { step: 0.25, swipe: 0.75, turn: 0.5, lead: 1.2, crit: { clean: 10, step: 10, swipe: 15 } };
 
 /** Savage Fists held (from play: "lets remove autoattack on LMB, hold mouse = charge strike (pull back) (2sec
  *  charge), release = strike (should apply all modifiers previously discussed) 2sec charge is a separate modifier
@@ -287,4 +288,5 @@ export const FRENZY = {
 // (`slam`: how much harder Wrath lands cast in the leap or within `carry` s of its landing, at a leap of its whole
 // reach, less for a shorter one, from play: "it should be possible to cast wrath just before landing after pounce,
 // which should increase its damage (from speed)")
-export const POUNCE = { leap: 0.4, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3, slam: 0.5, carry: 0.35 };
+// (`leap` is its longest's time, a leap of its whole reach; a shorter one takes less, down to `least`)
+export const POUNCE = { leap: 0.4, least: 0.16, after: 0.16, pin: 0.5, rise: 0.17, top: 1.3, slam: 0.5, carry: 0.35 };

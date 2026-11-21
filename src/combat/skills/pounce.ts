@@ -141,7 +141,11 @@ const skill: InstantSkill = {
     const dx = foe.pos.x - p.x, dz = foe.pos.z - p.z, d = Math.hypot(dx, dz);
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
     const go = Math.max(0, d - foe.radius - player.radius - SHORT);
-    const dur = POUNCE.leap, hold = POUNCE.after;
+    // (a short leap takes less time than a long one, `least` s at no way at all up to `leap` at its whole reach: every
+    // leap took the long one's time, and a hop onto a foe a step off hung in the air, from play: "pounce time should
+    // be shorter if distance is shorter". The landing's hold with it, so the pose's shares of the two stay the same)
+    const far = Math.min(1, go / def.range);
+    const dur = POUNCE.least + (POUNCE.leap - POUNCE.least) * far, hold = POUNCE.after * dur / POUNCE.leap;
     let down = false;
     sfx.bullLaunch(); sfx.grunt(player.frenzy / FRENZY.cap);
     const lift = Math.min(POUNCE.top, go * POUNCE.rise);
