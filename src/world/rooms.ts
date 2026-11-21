@@ -119,6 +119,8 @@ const HEARTH = { color: 0xff9448, intensity: 40, reach: 12, soft: 6 };
 const CHANDELIER = { color: 0xffc27a, intensity: 30, reach: 11 };
 export const CANDLE = { color: 0xffb060, intensity: 2.4, reach: 3.6 };
 export const LANTERN = { color: 0xffa860, intensity: 6.5, reach: 6.5 };
+/** how far out from its flame a lantern's light is (m, along the way it hangs off its wall) */
+const LANTERN_OUT = 0.75;
 
 /** what a room's materials are */
 export interface Mats {
@@ -212,7 +214,9 @@ export function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: num
   }
   candle(g, M, at.x, at.y + 0.01, at.z, 0.1);
   const l = new THREE.PointLight(lit.color, lit.intensity, lit.reach, 2 + LAMP_SOFT * 0.5);
-  l.position.set(at.x + dx * 0.15, at.y + 0.18, at.z + dz * 0.15);
+  // (well out from its wall: 0.47 m off it, its light fell on the plaster at some 30 times the room's and blew out
+  // to a flat orange disc round every lantern, from play "we need to fix the overglow"; the room's light is the same)
+  l.position.set(at.x + dx * LANTERN_OUT, at.y + 0.18, at.z + dz * LANTERN_OUT);
   g.add(l);
 }
 
