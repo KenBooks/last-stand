@@ -214,6 +214,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
     overview: 'The ranger kills from the furthest away and moves the fastest. Every shot is drawn: hold to draw, let go to loose, and a fuller draw flies faster and hits harder. Mark the biggest threat, keep the pack busy with your Strawman, and never let foes reach you.',
     tips: [
       'Draw fully when you can: a full draw is faster and harder.',
+      'Aim for the head: over the shoulder or through the eyes, an aimed shot that strikes a foe\'s head is always a critical hit (not Hailfletch\'s rain), bosses and dummies too.',
       'Quarry Mark the toughest foe: everyone hits it harder, and if it dies marked your cooldowns come back.',
       'Strawman pulls the common foes off you for a few seconds: shoot them while they gather round it.',
       'Hailfletch roots you while you shoot: use it from a safe spot or behind a Strawman.',

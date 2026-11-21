@@ -9,10 +9,12 @@ import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { ViewMode } from '../../../src/core/renderer';
+import type { SkillKey } from '../../../src/types';
 import { G } from '../../../src/state';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { groundHeight } from '../../../src/world/ground';
 import { bossWithSmall } from './heldBoss';
+import { pressing } from './cast';
 import { aimMiss, aimOnScreen, foeDrawnAt, foeMetAlong, insideFoe, pointsOver, type Over } from './onScreen';
 
 export interface ShotsOptions {
@@ -67,8 +69,10 @@ function nearestTo(flight: THREE.Vector3[], point: THREE.Vector3): number {
   return nearest;
 }
 
-/** The input holding the basic attack (the left button) over `point`, the crosshair turned onto it. */
-const holding = (point: THREE.Vector3): Frame => ({ m0: true, aim: point, sight: point });
+/** The input holding `key` (the basic attack's left button by default) over `point`, the crosshair turned onto it. */
+function holding(point: THREE.Vector3, key: SkillKey = 'mouse0'): Frame {
+  return { ...pressing(key, point, true), sight: point };
+}
 /** The input with the button let go, the aim still on `point`. */
 export const letGo = (point: THREE.Vector3): Frame => ({ aim: point, sight: point });
 
@@ -112,8 +116,8 @@ function aimInside(over: Over, foes: Enemy[]): boolean {
   return drawn?.foe === over.foe && insideFoe(drawn, foes);
 }
 
-/** The hero's basic attack drawn or cast over `point` until it's loosed or fired. */
-export async function drawAt(lab: Lab, point: THREE.Vector3): Promise<void> {
+/** The hero's basic attack (or the skill on `key`) drawn or cast over `point` until it's loosed or fired. */
+export async function drawAt(lab: Lab, point: THREE.Vector3, key: SkillKey = 'mouse0'): Promise<void> {
   for (let f = 0; f < SIGHT_FRAMES && aimMiss(point) > SIGHT_NEAR; f++) await lab.step(1, () => letGo(point));
   const ready = () => {
     const cast = G.player.casting;
@@ -121,7 +125,7 @@ export async function drawAt(lab: Lab, point: THREE.Vector3): Promise<void> {
     if (cast.drawT) return cast.t - (cast.nockT ?? 0) >= cast.drawT;
     return cast.fired;
   };
-  await lab.until(ready, DRAW_FRAMES, 'the shot was never drawn', () => holding(point));
+  await lab.until(ready, DRAW_FRAMES, 'the shot was never drawn', () => holding(point, key));
 }
 
 /**

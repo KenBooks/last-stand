@@ -41,6 +41,8 @@ export interface LogEntry {
   type: DamageType;
   crit: boolean;
   kill: boolean;
+  /** it struck the foe's head (a headshot, #750) */
+  head: boolean;
   /** what of a blow on the hero didn't get through: his armor's or resistance's share, his shield's, his ward's */
   armor: number;
   blocked: number;
@@ -147,14 +149,14 @@ function entryOf(hit: LoggedHit): LogEntry {
     const { foe } = hit;
     return {
       at, dealt: true, by: YOU, how: hit.skill.name, to: foe.name, foe: foe.id, amount: hit.amount, type: hit.type,
-      crit: hit.crit, kill: hit.kill, armor: 0, blocked: 0, absorbed: 0, broke: false,
+      crit: hit.crit, kill: hit.kill, head: hit.head, armor: 0, blocked: 0, absorbed: 0, broke: false,
     };
   }
   const foe = hit.by?.foe ?? null;
   const { r } = hit;
   return {
     at, dealt: false, by: foe?.name ?? SOMEONE, how: hit.by?.attack ?? 'blow', to: YOU, foe: foe?.id ?? -1,
-    amount: r.taken, type: hit.type, crit: false, kill: false, armor: hit.armor, blocked: r.blocked,
+    amount: r.taken, type: hit.type, crit: false, kill: false, head: false, armor: hit.armor, blocked: r.blocked,
     absorbed: r.absorbed, broke: r.broke,
   };
 }
@@ -283,7 +285,7 @@ export function drawBattleLog(): void {
 
 /** A hit as a line of text, for a report. */
 function hitText(hit: LogEntry): string {
-  const notes = [hit.crit ? 'crit' : '', hit.kill ? 'kill' : ''];
+  const notes = [hit.head ? 'headshot' : '', hit.crit ? 'crit' : '', hit.kill ? 'kill' : ''];
   notes.push(...stoppedNotes(hit.type, hit.armor, hit.blocked, hit.absorbed), hit.broke ? 'guard broken' : '');
   const more = notes.filter(Boolean);
   return `${clock(hit.at)} ${hit.by} ${hit.how} > ${hit.to}: ${whole(hit.amount)} ${hit.type}`

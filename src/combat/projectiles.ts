@@ -9,7 +9,7 @@ import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
-import { entry, strikesBody } from './strikes';
+import { entry, strikesBody, type Struck } from './strikes';
 import { evades, SEEN_AHEAD, type Threat } from '../entities/evade';
 import { cutVineAlong } from '../entities/throws';
 
@@ -101,6 +101,7 @@ export interface ProjectileOpts {
 }
 
 const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
+const _heads: boolean[] = [], _struck: Struck = { head: false };
 const _ahead = new THREE.Vector3(), _stepFrom = new THREE.Vector3(), _stepTo = new THREE.Vector3();
 
 export class Projectile {
@@ -117,6 +118,9 @@ export class Projectile {
   readonly pierce: boolean;
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
+  /** whether the foe `onHit` is told of now was met on its head (`strikesBody`'s `onHead`: a headshot); never for one
+   *  struck within its circle alone, nor for a player */
+  onHead = false;
   readonly tick?: ProjectileOpts['tick'];
   /** its own mesh (not a glowing core): it may come close to the lens */
   readonly ownMesh: boolean;
@@ -268,11 +272,11 @@ export class Projectile {
   /** The foes this frame's step from `from` strikes, struck: the first alone (true: it's gone), or going on through
    *  them each, in the order the step meets them. */
   private strikeFoes(from: THREE.Vector3): boolean {
-    _hits.length = 0; _along.length = 0;
+    _hits.length = 0; _along.length = 0; _heads.length = 0;
     for (const e of G.enemies) {
       if (!e.alive || e.invulnerable || this.ignore.has(e) || !e.struckBy(this.by)) continue;
       const t = this.strikes(e, from);
-      if (t >= 0) { _hits.push(e); _along.push(t); }
+      if (t >= 0) { _hits.push(e); _along.push(t); _heads.push(_struck.head); }
     }
     if (!_hits.length) return false;
     _order.length = 0;
@@ -280,11 +284,18 @@ export class Projectile {
     _order.sort((i, j) => _along[i] - _along[j]);
     if (!this.pierce) {
       this.pos.lerpVectors(from, this.pos, _along[_order[0]]);
+      this.onHead = _heads[_order[0]];
       this.onHit?.(_hits[_order[0]], this);
+      this.onHead = false;
       this.kill();
       return true;
     }
-    for (const i of _order) { this.ignore.add(_hits[i]); this.onHit?.(_hits[i], this); }
+    for (const i of _order) {
+      this.ignore.add(_hits[i]);
+      this.onHead = _heads[i];
+      this.onHit?.(_hits[i], this);
+    }
+    this.onHead = false;
     return false;
   }
 
@@ -295,13 +306,25 @@ export class Projectile {
    */
   private strikes(e: Enemy, from: THREE.Vector3): number {
     const ahead = _ahead.copy(this.vel).setLength(this.point);
-    const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead), this.radius * 0.5);
+    const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead), this.radius * 0.5, _struck);
     if (this.level) return body;
     const dx = this.pos.x - from.x, dz = this.pos.z - from.z, r = e.radius + this.radius;
     const circle = this.swept ? entry(from.x, from.z, dx, dz, e.pos.x, e.pos.z, r) : (this.distanceSq(e.pos.x, e.pos.z, from.x, from.z) < r * r ? 1 : -1);
     // (ducked, it's struck only where what's left of it stands over the ground: entities/evade.ts)
     if (circle < 0 || e.ducked > 0) return body;
+    // (struck in its circle before its body is met this step, where its line goes on through the body says whether
+    // it's a headshot: Lancewood Shot, which strikes by its circle, struck no head)
+    if (body < 0) this.headOnAhead(e);
     return body < 0 ? circle : Math.min(body, circle);
+  }
+
+  /** Whether its line on from here meets `e`'s head before the rest of its body, across the whole of the foe's reach
+   *  (into `_struck`): none if the line goes by its body. */
+  private headOnAhead(e: Enemy): void {
+    const across = 2 * (Math.max(e.radius, e.reach.out) + this.radius) + this.point;
+    _stepTo.copy(this.vel).setLength(across).add(_stepFrom.copy(this.pos));
+    _stepFrom.copy(this.vel).setLength(-across).add(this.pos);
+    if (strikesBody(e, _stepFrom, _stepTo, this.radius * 0.5, _struck) < 0) _struck.head = false;
   }
 
   findTarget(): Enemy | null {

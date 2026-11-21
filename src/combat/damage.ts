@@ -19,6 +19,9 @@ export const DAMAGE_TYPES: DamageType[] = ['arcane', 'cold', 'fire', 'lightning'
 
 /** A hit's spread about its damage: rolled between these shares of it. */
 export const DAMAGE_ROLL = { low: 0.9, high: 1.1 };
+/** a headshot's more chance of a critical hit (points of a hundred): every one is (#750, the owner's choice: as the
+ *  berserker's punch to the head) */
+const HEADSHOT_SHARP = 100;
 
 /** What a player's modifiers add to a hit with these tags (%): all damage, and arcane's or elemental's where its tags
  *  are (a skill's tooltip spells them out, `ui/skillDamage.ts`). */
@@ -54,6 +57,9 @@ export interface HitOpts {
   skill: SkillDef;
   /** more chance of a critical hit for this hit than his own (points of a hundred: a punch thrown well) */
   sharp?: number;
+  /** it struck the foe's head (combat/strikes.ts `onHead`: an arrow, #750): always a critical hit, its number
+   *  labelled a headshot */
+  head?: boolean;
   tags?: readonly string[];
   type?: DamageType;
   knock?: number;
@@ -95,7 +101,7 @@ export interface Attacker { foe: Enemy | null; attack: EnemyAttack }
 
 /** A hit as the battle log lists it (ui/battleLog): one the local hero dealt a foe, or one he took. */
 export type LoggedHit =
-  | { dealt: true; skill: SkillDef; foe: Enemy; amount: number; type: DamageType; crit: boolean; kill: boolean }
+  | { dealt: true; skill: SkillDef; foe: Enemy; amount: number; type: DamageType; crit: boolean; kill: boolean; head: boolean }
   | { dealt: false; by: Attacker | null; type: DamageType; armor: number; r: HitResult };
 let logSink: ((hit: LoggedHit) => void) | null = null;
 /** Where the hits go for the battle log (null while it's off: nothing is made for it). */
@@ -106,10 +112,10 @@ let sparSink: ((p: Player, from: THREE.Vector3 | null, foe: Enemy | null) => voi
  *  game/tutorial.ts). */
 export function setSparSink(fn: typeof sparSink): void { sparSink = fn; }
 
-/** A damage number over an enemy. */
-export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType): void {
-  const p = enemy.pos;
-  floatText(p.x, enemy.height * 0.9 + 0.3, p.z, Math.round(amount), crit ? 'crit' : 'dmg', NUMBER_COLORS[type]);
+/** A damage number over an enemy (a headshot's larger, labelled so). */
+export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType, head = false): void {
+  const p = enemy.pos, kind = head ? 'head' : crit ? 'crit' : 'dmg';
+  floatText(p.x, enemy.height * 0.9 + 0.3, p.z, Math.round(amount), kind, NUMBER_COLORS[type]);
 }
 
 /** Hit an enemy with a skill. Returns damage dealt (0 for a partner's skill, which its own game deals). On a co-op
@@ -119,17 +125,18 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const type: DamageType = opts.type ?? 'arcane';
   const tags = opts.tags ?? [type];
   const by = opts.by;
-  const { amount: rolled, crit } = rollPlayerDamage(by, base, tags, opts.sharp);
+  // (a headshot is always a critical hit, whatever his chance)
+  const { amount: rolled, crit } = rollPlayerDamage(by, base, tags, opts.head ? HEADSHOT_SHARP : opts.sharp);
   // (a marked foe takes more from everyone: the largest of the marks on it)
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
   // (a duel's rival is no foe of the host's: its hits go to the hero it stands for, entities/rival.ts)
   if (!enemy.standIn) dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });
-  logSink?.({ dealt: true, skill: opts.skill, foe: enemy, amount: dealt, type, crit, kill: !enemy.alive });
+  logSink?.({ dealt: true, skill: opts.skill, foe: enemy, amount: dealt, type, crit, kill: !enemy.alive, head: !!opts.head });
   countDealt(dealt, !enemy.alive);
   // everyone sees their own numbers (a rival's is the struck hero's own, as his game worked the hit out)
-  if (!opts.unnumbered && (!opts.silent || crit) && !enemy.standIn) damageNumber(enemy, dealt, crit, type);
+  if (!opts.unnumbered && (!opts.silent || crit) && !enemy.standIn) damageNumber(enemy, dealt, crit, type, opts.head);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
   // (the warrior's Frenzy: its decay waits again, and its stacks heal back their share)
   landed(by, dealt);

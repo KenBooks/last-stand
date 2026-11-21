@@ -9,7 +9,7 @@ import { groundHeight } from '../world/ground';
 import type { Player } from '../entities/player';
 
 type WorldPos = { x: number; y: number; z: number };
-export type FloatKind = 'dmg' | 'crit' | 'heal' | 'player' | 'info';
+export type FloatKind = 'dmg' | 'crit' | 'head' | 'heal' | 'player' | 'info';
 
 interface Floater { label: Label; x: number; y: number; z: number; t: number; life: number; vx: number }
 interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean; hides: boolean; underHeroes: boolean }
@@ -57,6 +57,7 @@ const FLOAT_SHADOWS: Shadow[] = [
 const FLOAT_STYLE: Record<FloatKind, Omit<TextStyle, 'color'>> = {
   dmg: { face: 'display', weight: 700, size: 17, shadows: FLOAT_SHADOWS },
   crit: { face: 'display', weight: 700, size: 26, shadows: FLOAT_SHADOWS },
+  head: { face: 'display', weight: 700, size: 32, shadows: FLOAT_SHADOWS },
   player: { face: 'display', weight: 700, size: 20, shadows: FLOAT_SHADOWS },
   heal: { face: 'display', weight: 700, size: 18, shadows: FLOAT_SHADOWS },
   info: { face: 'body', weight: 500, size: 16, shadows: FLOAT_SHADOWS },
@@ -66,6 +67,32 @@ const FLOAT_STYLE: Record<FloatKind, Omit<TextStyle, 'color'>> = {
 export function textArt(text: string, s: TextStyle): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
   const t = measure(text, s), pad = Math.ceil(Math.max(...(s.shadows ?? []).map((sh) => sh.blur + Math.abs(sh.y)), 0));
   return { w: t.w + pad * 2, h: t.h + pad * 2, paint: (c, scale) => drawText(c, t, pad, pad, s, scale) };
+}
+
+/** a headshot's label over its number: small capitals in a pale gold, whatever the damage's colour, with the
+ *  numbers' weight and shadows (#750); about half the number's digits' height, so it reads on a phone too */
+const HEADSHOT_LABEL: TextStyle = { face: 'display', weight: 700, size: 17, shadows: FLOAT_SHADOWS, color: '#ffe08a' };
+/** the display face's capitals' and digits' height, as a share of its size: the label's ink is set on the number's */
+const CAPS = 0.7;
+/** the clear space between the label's ink and the number's, as a share of the label's size */
+const HEADSHOT_GAP = 0.35;
+
+/** Art for a headshot's number in style `s` (a crit's, larger) with HEADSHOT over it, both centred, the label's ink
+ *  set a little over the number's (each line's box holds the font's whole ascent, and boxes stacked left a gap
+ *  larger than the label: an adversarial review's FAIL). Drawn once as the number appears, as every number is:
+ *  nothing flashes. The canvas is already scaled to its ratio, so every place here is px of the art. */
+function headshotArt(text: string, s: TextStyle): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
+  const top = measure('HEADSHOT', HEADSHOT_LABEL), number = measure(text, s);
+  const pad = Math.ceil(Math.max(...FLOAT_SHADOWS.map((sh) => sh.blur + Math.abs(sh.y))));
+  const w = Math.max(top.w, number.w) + pad * 2;
+  const labelBase = pad + 2 + HEADSHOT_LABEL.size * CAPS;
+  const numberBase = labelBase + HEADSHOT_LABEL.size * HEADSHOT_GAP + s.size * CAPS;
+  const h = numberBase + (number.h - number.ascent) + pad;
+  const paint = (c: CanvasRenderingContext2D, scale: number): void => {
+    drawText(c, top, (w - top.w) / 2, labelBase - top.ascent, HEADSHOT_LABEL, scale);
+    drawText(c, number, (w - number.w) / 2, numberBase - number.ascent, s, scale);
+  };
+  return { w, h, paint };
 }
 
 /** a prompt's plate (px): round its words, its key's square, and the room left round it for its drop shadow */
@@ -115,10 +142,12 @@ export function promptArt(key: string, text: string, s: TextStyle, fill?: number
 export function floatText(x: number, y: number, z: number, text: string | number, kind: FloatKind = 'dmg', color: number | string = 0xffffff): void {
   const col = typeof color === 'number' ? '#' + new THREE.Color(color).getHexString() : color;
   const label = new Label(ORDER.float);
-  label.show(textArt(kind === 'crit' ? `${text}!` : String(text), { ...FLOAT_STYLE[kind], color: col }));
+  const style = { ...FLOAT_STYLE[kind], color: col };
+  label.show(kind === 'head' ? headshotArt(`${text}!`, style) : textArt(kind === 'crit' ? `${text}!` : String(text), style));
   label.ax = label.ay = 0.5;
   if (floats.length >= MAX_FLOATS) floats.shift()!.label.remove();
-  floats.push({ label, x: x + (Math.random() - 0.5) * 0.6, y, z: z + (Math.random() - 0.5) * 0.6, t: 0, life: kind === 'crit' ? 1.1 : 0.85, vx: (Math.random() - 0.5) * 40 });
+  const life = kind === 'head' ? 1.3 : kind === 'crit' ? 1.1 : 0.85;
+  floats.push({ label, x: x + (Math.random() - 0.5) * 0.6, y, z: z + (Math.random() - 0.5) * 0.6, t: 0, life, vx: (Math.random() - 0.5) * 40 });
 }
 
 /** how far a clamped label keeps from the screen's edges (px of the UI's reference layout, at the HUD's scale) */

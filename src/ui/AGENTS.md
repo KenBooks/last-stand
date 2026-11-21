@@ -91,6 +91,7 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   (`npm run stalls -- --scenario boot --url "this?village=1" --cpu-slowdown 4 --js`), as an AMD Radeon laptop's boot
   held 3.8 s and an Adreno 810's 7.4 (traces EP2G-9M10, 4NA2-KWVF). `npm run lab -- crest` blows it on the boot's
   context, again at High, and at Very low, where it must fade.
+- `floaters.ts`: a headshot's number (#750, `damageNumber`'s `head`) is a crit's, larger (32 against 26), with HEADSHOT in pale gold over it (17 px, about half the digits' height, its ink set a third of its size over theirs: stacked as two lines' boxes, the gap between them was larger than the label, and an adversarial review read them as two things; its offsets are px of the art, the canvas already scaled to its ratio, and scaled again they split the two at a phone's ratio 3), drawn once as it appears and gone a little later (1.3 s), as every number: nothing flashes or pulses (the owner's choice of its feedback: no hit marker or sound).
 - `perfHud.ts`: the GPU's name and timer are read as the renderer is made (`readGpuAhead` from `main.ts`), before
   anything compiles: each a round trip to the GPU's process, read in `initPerfHud` they waited 1.9 s behind the
   lobby's compiles on the same slowed boot. Any read of WebGL's that waits on the GPU's process (`getParameter`, a

@@ -581,6 +581,9 @@ export interface Model {
   arrowHead?: THREE.Object3D;
   /** skeleton, for humanoid models */
   joints?: Joints;
+  /** the joint its head and all on it ride, where it has no `joints` (the training dummy): a hit on what rides it is
+   *  a headshot (combat/strikes.ts `onHead`; with `joints`, theirs) */
+  head?: THREE.Object3D;
   /** a hero's hands (models/hands.ts: the lab's `hands` builds one alone from them) */
   readonly hands?: { L: Hand; R: Hand };
   /** its arms' build, where what dresses its forearms is sized on it (models/build.ts) */
