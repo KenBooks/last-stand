@@ -261,6 +261,30 @@ async function overCanvas(lab: Lab): Promise<Checked> {
   }
 }
 
+/**
+ * In the hall, its braziers' flames in view: drawn by the engine's pass at a quarter of the scene's pixels
+ * (what costs by its pixels, a volume marched at each: 7 ms of a phone's frame at full size). The canary: with
+ * the switch off they're drawn with the scene.
+ */
+async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
+  if (bridge.qualityNow().samples >= 4) return passed('at four samples a pixel the flames are drawn with the scene');
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(3);
+    const low = bridge.stats.lowDraws;
+    RUST.tune.lowRes = 0;
+    await lab.step(2);
+    const whole = bridge.stats.lowDraws;
+    if (!low) return failed('no flame is drawn at fewer pixels: each marched at every pixel of the scene\'s it covers');
+    if (whole) return failed(`with the switch off ${whole} draws are still at fewer pixels`);
+    return passed(`${low} draws of the flames at a quarter of the scene's pixels, laid over it`);
+  } finally {
+    RUST.tune.lowRes = 1;
+    lab.drawing = drawing;
+  }
+}
+
 /** the frames the sun's shadow is watched over, drawn in turns, and those of its canary */
 const TURN_FRAMES = 40, TURN_CANARY_FRAMES = 12;
 
@@ -440,6 +464,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await lampShadows(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
+      checks.push(await flamesAtFewerPixels(lab, bridge));
       checks.push(await sunShadowInTurns(lab, bridge));
       checks.push(await overCanvas(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));

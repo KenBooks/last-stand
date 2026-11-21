@@ -29,17 +29,24 @@ The overnight run's state file (2026-11-20). Branch `experiment/rust-engine`, dr
 
 The engine's rows have the trees it lacked before, the looks and the whole post chain. In the village nothing is left undrawn where the hero stands; in the forest one instanced geometry. Three's rows are the first day's.
 
-## Next, in the order they'd show
+## Direction (from the owner, 2026-11-21)
 
-1. The looks left are small: the kit's hair tint, item glow, hood shade and shine cap; the water's share of the sky and capped glints; the paving's unrepeated maps (the cobbles read browner than three's); membranes and flames fading as their prop dissolves. The ghost by the yard was only compared with three's on another kind of foe (it's picked at random a boot).
-2. The night: the village at midnight reads brighter than three's.
-3. First person: the hero's body hidden, the arms' own pass.
-4. The lamps' shadows; the point lights'.
-5. The walk of the scene is most of the CPU's part (2.5 to 2.9 ms of 3.5 to 4.3): records kept between frames for what didn't move, then the scene itself kept in the engine (from the owner: what's slow in TypeScript moves into the engine and stays there).
-6. Where a frame's CPU goes with the engine drawing (the game's update, the walk, the engine, the page): measured before any of the game is ported.
-7. About 170 meshes are handed over again in 60 frames standing still (a geometry rewritten each frame): find which, and send only what changed.
-8. A look that moves its vertices casts no shadow (the grass, the meadow): the shadow's pass would need its vertex hook. One that leaves them casts (`casts`).
-9. Play the preview in a visible browser and on a phone; time it on an idle GPU.
+The engine outlives this game: "this game might fly, or it might not fly... but the engine will stay to make other games". So a change is judged by what any game on Bulwark gets from it, and by whether its cost stops growing with content ("if we focus on optimizing the game in its current state... when we add new content, it will become slow again"). A day of making this village's frame 5 to 30% cheaper a part at a time was the wrong direction: "I was hoping you'd extract some pieces into our engine, this way improving performance 5-10 TIMES (not 5-10%)". The targets: the screen's own pixels everywhere ("pixelated is not the way"), a phone at a stable 60 at High, 4K on integrated graphics at 60.
+
+## Next: pieces the engine takes over
+
+1. **Lights that never move, baked by the engine.** A lamp or a torch is worked out at every pixel every frame, up to eight a pixel with a shadow read each: 11 ms of a 19 ms frame in the hall at night at High (the lent 4080 as the phone), 16 to 20 ms on the phone itself. The game marks a light as still; the engine bakes its light and shadow once into a volume and a pixel reads it in one lookup, however many lamps a game has. Light leaking through thin walls is the thing to get right.
+2. **A scene the engine keeps.** The page walks three's scene every frame and writes a record for every mesh (`bridge.ts` `walk`): 1 ms on a desktop, 3 to 5 on a phone, and the game's own culling for three on top (6 to 8 ms of update walking the village on the phone). What stands still is handed over once and culled in Rust; a frame reports what moved.
+3. **The sun's shadow by layers.** The still world's map kept, what moves drawn over it: the map is kept whole only while nothing that casts has moved (`Plan::shadow_mark`), and a hero's idle breath moves him every frame.
+4. **The pass at a share of the scene's pixels** (`gpu/low.rs`, a record's `LOW_RES`, a mesh's `userData.lowRes`) takes the fires' flames. The owner's rule is the screen's own pixels: he was told it draws soft volumes alone at a quarter of them, blended back over a scene at full size, and that it's one switch (`TUNE.lowRes`). Smoke and glows could ask for it; nothing with an edge should.
+5. Not looked at: the scene's two samples a pixel at High and Medium are drawn as one (WebGPU has 1 or 4), so the engine's frame has no antialiasing there.
+
+## Left from before
+
+- The looks left are small: the kit's hair tint, item glow, hood shade and shine cap; the water's share of the sky and capped glints; the paving's unrepeated maps; membranes and flames fading as their prop dissolves.
+- The village at midnight reads brighter than three's.
+- A look that moves its vertices casts no shadow (the grass, the meadow).
+- `bridge.ts` is at 408 lines: split before more is added (the records' flags and casting are one job).
 
 ## Log
 

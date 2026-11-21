@@ -30,7 +30,7 @@ export type { FrameStats } from './core';
 /** a record's flags (plan.rs) */
 /** how a record casts: as its mesh says, not at all (another record casts for it), or in the shadow alone */
 type Cast = 'own' | 'none' | 'only';
-const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16;
+const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16, LOW_RES = 32;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
@@ -123,7 +123,9 @@ export class Bridge {
     const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow));
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
       | (material.colorWrite === false || cast === 'only' ? SHADOW_ONLY : 0)
-      | (this.materials.solidNow(material) ? SOLID : 0);
+      | (this.materials.solidNow(material) ? SOLID : 0)
+      // (what a game marks as costing by its pixels, `userData.lowRes`, and the fires' flames: at a share of them)
+      | (TUNE.lowRes && (mesh.userData.lowRes || mesh.userData.fireFlames) ? LOW_RES : 0);
     if (r[at + 6] & SOLID) core.stats.solid++;
     if (cast === 'only') core.stats.casters++;
     // (his arms through his eyes: by their own view, never culled by the world's, casting nothing)
@@ -394,10 +396,12 @@ export class Bridge {
       clear);
     core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
-    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept]
+    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
+      lowDraws]
       = core.engine.stats();
     Object.assign(stats, {
       records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
+      lowDraws,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }

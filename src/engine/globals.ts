@@ -30,6 +30,8 @@ export const TUNE = tunable('rust', {
   points: 1,
   lampShadows: 1,
   bloom: 1,
+  /** what asks for it drawn at a share of the scene's pixels (0: with the scene, a profile's) */
+  lowRes: 1,
   /** the sun's shadow kept on the frames the game leaves it out of (0: drawn every frame, a profile's) */
   shadowTurns: 1,
   /** what's see-through drawn solid, with what's opaque, while its kind thins nothing (`Materials.solidNow`) */
