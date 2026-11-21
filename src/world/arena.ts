@@ -24,7 +24,8 @@ import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
 import { cullOutsideHall } from './hallPortal';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
-import { buildVillage, VILLAGE_ENV, type Village } from './village';
+import { villageSteps, VILLAGE_ENV, type Village } from './village';
+import { builtInSlices } from '../entities/models/steps';
 import { buildHeroHall } from './heroHall';
 import { buildRooms } from './houses';
 import type { Room } from './rooms';
@@ -86,6 +87,9 @@ export const painted = (): Promise<void> => new Promise((resolve) => {
     setTimeout(resolve);
   });
 });
+
+/** the most of the village's build run in one task before the boot paints a frame (ms) */
+const VILLAGE_SLICE_MS = 40;
 
 export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
   const hemi = new THREE.HemisphereLight();
@@ -170,8 +174,16 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     const villageGroup = new THREE.Group();
     villageGroup.name = 'village';
     const villageAt = performance.now();
-    village = buildVillage(villageGroup);
-    villageBuildMs = performance.now() - villageAt;
+    // (its pieces in tasks of their own, a frame painted between once a slice has gone: `villageSteps`; its build's
+    // time the pieces' alone, the guess at a biome's built from it, `guessMs`)
+    let paused = 0;
+    const pause = async (): Promise<void> => {
+      const from = performance.now();
+      await painted();
+      paused += performance.now() - from;
+    };
+    village = await builtInSlices(villageSteps(villageGroup), pause, VILLAGE_SLICE_MS);
+    villageBuildMs = performance.now() - villageAt - paused;
     performance.measure('arena village build', { start: villageAt });
     await painted();
     village.wall.seal();
@@ -198,7 +210,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   hallGroup.matrixAutoUpdate = false;
   scene.add(hallGroup);
   // (the village's houses walked into, each a room shown in its place: `showRoom`)
-  const rooms = VILLAGE ? buildRooms() : null;
+  const rooms = VILLAGE ? await buildRooms(painted) : null;
   for (const r of Object.values(rooms ?? {}) as Room[]) {
     await painted();
     bakeStaticShadows(r.group);
