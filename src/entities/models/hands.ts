@@ -867,11 +867,12 @@ const WEB_SHAPE = new THREE.SphereGeometry(1, 10, 6);
 /** the skin pressed between a shut fist's neighbouring fingers (`fistWebs`): its radius as a share of the thinner
  *  finger's, how far past a segment's ends it runs (a share of the segment), and how far it lies in from the
  *  fingers' fronts towards the palm (a share of that radius) */
-// (`plug`: the flesh closing the index's and the little finger's curls at the fist's two sides: how far out from the
-// curl's middle it lies, how thick it is that way and how wide across the curl, shares of the finger's radius)
-// (`fold`: how dark the skin between two fingers is, a fold's; `rim`: a side pad's at its edge, where it meets the
-// fingers round it in a crease)
-const FIST_WEB = tunable('fistWeb', { r: 0.92, past: 0.3, in: 0.05, plug: [0.85, 0.4, 1.75], fold: 0.35, rim: 0.45, thenar: 0.85 });
+// (`fold`: how dark the skin between two fingers is, a fold's. Pads closing the outer fingers' curls at the fist's
+// sides, flesh between the first segments and under the thumb, and the bars fuller and nearer the fingers' fronts,
+// were tried against an adversarial review and taken out: through his own eyes, which look into the fist's thumb
+// side, they stood between and beside the fingers as lumps, from play: "this got worse since last time", and of the
+// fist's faults, "curve and knuckles only")
+const FIST_WEB = tunable('fistWeb', { r: 0.62, past: 0.25, in: 0.3, fold: 0.5 });
 /** a fold's skin's colour, warmer as it's darker (over the skin's own) */
 const FOLD_WARM = [1, 0.86, 0.82];
 
@@ -901,9 +902,7 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
   const webs: THREE.BufferGeometry[] = [];
   const placed = new THREE.Matrix4();
   for (let i = 0; i + 1 < h.f.length; i++) {
-    // (between their first segments too: from the front the fingers stood as four columns with the dark of the fist
-    // between them, where a fist's lie side by side with a crease between each two, an adversarial review)
-    for (const n of [0, 1, 2]) {
+    for (const n of [1, 2]) {
       const [a, b] = [chains[i], chains[i + 1]];
       const from = a.points[n].clone().add(b.points[n]).multiplyScalar(0.5);
       const to = a.points[n + 1].clone().add(b.points[n + 1]).multiplyScalar(0.5);
@@ -916,28 +915,6 @@ function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
       webs.push(fleshOf(placed.compose(at, turn, size), () => FIST_WEB.fold));
     }
   }
-  // (and the flesh closing the outer fingers' curls: seen from the fist's sides each was a rolled-up hose with the
-  // hollow of its roll open, where a fist's side is closed flesh with creases, the photographs beside it)
-  const middle = (chain: Chain) => chain.points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(0.25);
-  for (const [i, next] of [[0, 1], [h.f.length - 1, h.f.length - 2]]) {
-    const [out, thick, wide] = FIST_WEB.plug.map((share) => share * h.f[i].r);
-    const at = middle(chains[i]), away = at.clone().sub(middle(chains[next])).normalize();
-    const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), away);
-    at.addScaledVector(away, out);
-    // (a pad, the skin's own colour in its middle and a fold's at its edge: one even colour, it was a flat disc)
-    const rim = (out: number) => FIST_WEB.rim * Math.max(0, (out - 0.45) / 0.55) ** 2;
-    webs.push(fleshOf(placed.compose(at, turn, new THREE.Vector3(thick, wide, wide)), rim));
-  }
-  // (and the flesh under the thumb, between it and the index finger's curl: the thumb crosses the fingers' front
-  // corner, and under it a notch stood open down to the index's side, an adversarial review's "the thumb hangs off
-  // the fist")
-  const thumb = chainOf(h.thumb.j[0].position, h.thumb.len, pose[h.f.length]);
-  const under = thumb.points[1].clone().add(thumb.points[2]).multiplyScalar(0.5);
-  const curl = middle(chains[0]), fill = h.thumb.r * FIST_WEB.thenar;
-  const across = under.clone().sub(curl);
-  const lies = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), across.clone().normalize());
-  const half = new THREE.Vector3(across.length() * 0.5, fill, fill);
-  webs.push(fleshOf(placed.compose(under.clone().add(curl).multiplyScalar(0.5), lies, half), () => FIST_WEB.fold * 0.5));
   const merged = mergeGeometries(webs)!;
   for (const web of webs) web.dispose();
   merged.computeVertexNormals();

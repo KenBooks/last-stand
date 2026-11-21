@@ -128,6 +128,67 @@ function boneEnds(fingers: readonly FistFinger[], palm: number): BoneEnd[] {
   return ends;
 }
 
+/**
+ * The back of a shut fist's hand: how wide a band down the hand its height is read in (`band`, m), how far above the
+ * knuckle joints its straight line ends (`short`, m), how much higher than at the wrist it may end at the knuckles
+ * (`rise`, m), how high a point must stand, as a share of its band's height, to be raised with it (`stands`, from
+ * none to all of the way), and how far past the line's end, over the knuckles, the raise eases out (`over`, m).
+ */
+const FIST_BACK = tunable('fistBack', { band: 0.004, short: 0.004, rise: 0.0015, stands: [0.1, 0.75], over: 0.014 });
+
+/**
+ * A shut fist's back laid straight, `at` its points as posed (the hand's frame: y down the hand from the wrist, z out
+ * of its back), changed in place. The hand's sculpt has a waist between its wrist and its knuckle row: its back
+ * stands 21 to 22 mm off the hand's middle at the wrist, 12 to 16 mm across the middle of the back and 24 mm at the
+ * knuckles, so a fist seen from its side ran down from the forearm in a dip and then a bump (from play, of that
+ * outline: "this should be a straight line, why is it not ?"), where a fist's back runs straight on from the forearm
+ * to the knuckles, the skin drawn taut over the bones. Each point of the back is raised by what its band's highest
+ * point lacks of the line from the wrist's height to the knuckles', so the tendons' relief across it is kept.
+ */
+function straightBack(at: Float32Array, posed: PosedSkin, palmOf: (i: number) => boolean,
+  backOf: (i: number) => boolean, knuckleY: number): void {
+  const { band, short, rise, stands, over } = FIST_BACK;
+  const count = at.length / 3, to = knuckleY + short;
+  let from = -Infinity;
+  for (let i = 0; i < count; i++) if (palmOf(i)) from = Math.max(from, at[i * 3 + 1]);
+  const bands = Math.max(1, Math.ceil((from - to) / band));
+  const bandOf = (y: number): number => Math.min(bands - 1, Math.max(0, Math.floor((from - y) / band)));
+  const high = new Float32Array(bands).fill(-Infinity);
+  for (let i = 0; i < count; i++) {
+    const y = at[i * 3 + 1];
+    if (!palmOf(i) || y < to || posed.out[i * 3 + 2] < 0.6) continue;
+    high[bandOf(y)] = Math.max(high[bandOf(y)], at[i * 3 + 2]);
+  }
+  // (a band with no point of the back in it takes its neighbour's height)
+  for (let n = 1; n < bands; n++) if (high[n] === -Infinity) high[n] = high[n - 1];
+  // (and the bands' heights eased into each other, twice: read band by band, the back was raised in ripples)
+  for (let pass = 0; pass < 2; pass++) {
+    const was = high.slice();
+    for (let n = 1; n + 1 < bands; n++) high[n] = (was[n - 1] + 2 * was[n] + was[n + 1]) / 4;
+  }
+  const wrist = high[0], knuckles = Math.min(high[bands - 1], wrist + rise);
+  const lineAt = (y: number): number => wrist + (knuckles - wrist) * Math.min(1, Math.max(0, (from - y) / (from - to)));
+  // each band's height read at its middle, eased to the next: by bands alone, the back was raised in steps
+  const heightAt = (y: number): number => {
+    const along = Math.min(bands - 1, Math.max(0, (from - y) / band - 0.5));
+    const low = Math.floor(along), next = Math.min(bands - 1, low + 1);
+    return high[low] + (high[next] - high[low]) * (along - low);
+  };
+  for (let i = 0; i < count; i++) {
+    // (eased out over the knuckles, the palm's skin and the fingers' roots' alike: stopped at the line's end, the
+    // raised back met the knuckles in a step, a lumpy band across the hand)
+    const y = Math.max(to, at[i * 3 + 1]), past = (to - at[i * 3 + 1]) / over;
+    if (!backOf(i) || past >= 1) continue;
+    const eased = past <= 0 ? 1 : 1 - past * past * (3 - 2 * past);
+    // (by how high it stands, not by which way it faces: by its normal, which the skin's wrinkles turn, the back's
+    // edges were raised in blotches)
+    const height = heightAt(y), standing = (at[i * 3 + 2] / height - stands[0]) / (stands[1] - stands[0]);
+    const share = Math.min(1, Math.max(0, standing));
+    const lacks = Math.max(0, lineAt(y) - height);
+    at[i * 3 + 2] += lacks * eased * share * share * (3 - 2 * share);
+  }
+}
+
 /** the bone a point of the skin keeps to most */
 function mainBone(index: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
   share: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number): number {
@@ -146,9 +207,13 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight;
   const ends = boneEnds(fingers, palm), { band, pull, blend } = FIST_BONES;
   const at = posed.at.slice();
+  const knuckleY = Math.max(...fingers.slice(0, 2).map((finger) => finger.joints[0].y));
+  const knuckles = new Set(fingers.map((finger) => finger.bones[0]));
+  const main = Array.from({ length: count }, (_, i) => mainBone(index, share, i));
+  straightBack(at, posed, (i) => main[i] === palm, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
   for (let i = 0; i < count; i++) {
     const bone = mainBone(index, share, i);
-    _p.fromArray(posed.at, i * 3);
+    _p.fromArray(at, i * 3);
     // the nearest two ends that shape this point's skin: how far outside each it lies (m, under 0 inside)
     let near = Infinity, next = Infinity, nearest: BoneEnd | null = null;
     for (const end of ends) {
@@ -166,6 +231,7 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
     _p.addScaledVector(_n, -off * weight);
     at.set([_p.x, _p.y, _p.z], i * 3);
   }
+  smoothed(at, posed.at, geometry.index);
   const out = normalsOf(at, geometry.index, posed.out);
   // back through each point's own blend, to where it's bound
   const position = new Float32Array(count * 3), normal = new Float32Array(count * 3);
@@ -177,6 +243,42 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
     normal.set([_n.x, _n.y, _n.z], i * 3);
   }
   return { position: new THREE.BufferAttribute(position, 3), normal: new THREE.BufferAttribute(normal, 3) };
+}
+
+/** how far a point of a shut fist's skin must have been moved to be smoothed with its neighbours (m), how many times
+ *  over, and how far towards their middle each time */
+const FIST_SMOOTH = tunable('fistSmooth', { moved: 0.0003, passes: 4, share: 0.5 });
+
+/**
+ * The skin smoothed where it was moved: each point `was` moved from, and each one joined to such a point, drawn
+ * towards the middle of the points it's joined to, `passes` times. Laid on its bones and its back raised, each by
+ * a rule of its own, the skin over the knuckles was left in small lumps where the two met the sculpt's own knuckles
+ * (from play, of the straightened fist: "just need to clean up the geometry a little").
+ */
+function smoothed(at: Float32Array, was: Float32Array, index: THREE.BufferAttribute | null): void {
+  if (!index) return;
+  const count = at.length / 3, joined: number[][] = Array.from({ length: count }, () => []);
+  for (let n = 0; n + 2 < index.count; n += 3) {
+    const corners = [index.getX(n), index.getX(n + 1), index.getX(n + 2)];
+    for (const a of corners) for (const b of corners) if (a !== b && !joined[a].includes(b)) joined[a].push(b);
+  }
+  const moved = (i: number): boolean => Math.hypot(
+    at[i * 3] - was[i * 3], at[i * 3 + 1] - was[i * 3 + 1], at[i * 3 + 2] - was[i * 3 + 2]) > FIST_SMOOTH.moved;
+  const own = new Uint8Array(count);
+  for (let i = 0; i < count; i++) if (moved(i)) own[i] = 1;
+  const eased: number[] = [];
+  for (let i = 0; i < count; i++) if (own[i] || joined[i].some((other) => own[other])) eased.push(i);
+  for (let pass = 0; pass < FIST_SMOOTH.passes; pass++) {
+    const from = at.slice();
+    for (const i of eased) {
+      if (!joined[i].length) continue;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (const other of joined[i]) sum += from[other * 3 + c];
+        at[i * 3 + c] += (sum / joined[i].length - from[i * 3 + c]) * FIST_SMOOTH.share;
+      }
+    }
+  }
 }
 
 /** each point's normal from the faces round it (`index` the faces' corners; `was` kept where a point has none) */
