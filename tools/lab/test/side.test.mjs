@@ -41,10 +41,11 @@ test('another button pressed, and moved while held', () => {
   assert.deepEqual(buttonFields('mouseReleased', 'right', 0), { button: 'right', buttons: 0, clickCount: 1 });
 });
 
-test('a boot on WebGL by default, its address the plain one', () => {
+// (on this branch the plain address loads the Rust engine, so WebGL is asked for by name: src/engine)
+test('a boot on WebGL by default, asked for by name', () => {
   const boot = bootOf({});
   assert.equal(boot.renderer, 'webgl');
-  assert.equal(bootAddress('http://localhost:5173/', boot), 'http://localhost:5173/');
+  assert.equal(bootAddress('http://localhost:5173/', boot), 'http://localhost:5173/?renderer=webgl');
   assert.equal(bootText(boot), '');
 });
 
