@@ -142,7 +142,7 @@ const LEAD = { hips: 0.09, chest: 0.045 };
 // charging he brings his fist to his face")
 // back a share of its own line it moved a hand's breadth towards the eye, and nothing showed but the charge's
 // ring, from play: "held punch needs to pull back, not just draw a charge circle")
-const COIL = { jab: 0.5, cross: 0.55 };
+const COIL = tunable('punchCoil', { jab: 0.9, cross: 0.75, upright: 0.7, look: 0.6 });
 // (and then chambered by his ribs, the owner's choice of three after six poses held up by the jaw or at the view's
 // edge each failed an adversarial review as a second guard fist: a boxer doesn't draw a hand back to load a straight,
 // he loads his legs and hips, so a hand drawn back is a karateka's chamber. From its guard: out a little, down to the
@@ -152,7 +152,7 @@ const COIL = { jab: 0.5, cross: 0.55 };
 // arm hangs back from the shoulder and the forearm lies about level, the elbow straight behind the fist. Placed from
 // the guard's fist, behind his chest's front, the arm reached it only with the elbow swung out at the shoulder's
 // height, and he stood holding his belly: three adversarial reviews)
-const BACK = tunable('punchBack', { body: [0.06, -0.3, 0], elbow: 1 });
+const BACK = tunable('punchBack', { body: [0.03, -0.22, 0.02], elbow: 1, line: [0, 1, 0], guard: [0.06, -0.005] });
 
 /** Where a chambered fist is (the body's frame), into `out`: off its own shoulder as it stands now (`BACK.body`). */
 function chamberAt(j: Joints, lead: boolean, out: THREE.Vector3): THREE.Vector3 {
@@ -391,6 +391,10 @@ export function fistPunch(
   if (!eyes && pull > 0) {
     j.chest.rotation.y += (lead ? COIL.jab : -COIL.cross) * pull;
     j.spine.rotation.y += 0.4 * (lead ? COIL.jab : -COIL.cross) * pull;
+    j.spine.rotation.x -= BOX.lean * COIL.upright * pull;
+    // (his eyes stay on what he means to hit: the neck and head turn back by what the trunk wound away)
+    const wound = 1.4 * (lead ? COIL.jab : -COIL.cross) * pull * COIL.look;
+    j.neck.rotation.y -= 0.5 * wound; j.head.rotation.y -= 0.5 * wound;
   }
   fistGuard(j, 1, t, eyes, shielded);
   const out = curve(lead ? JAB_OUT : CROSS_OUT, k), seenAs = lead ? PUNCH_EYES.jab : PUNCH_EYES.cross;
@@ -430,7 +434,7 @@ export function fistPunch(
     lineTo(line, sided(LINE.punch, lead), turned);
     // (chambered, its knuckles' row upright, the thumb on top, in line with a level forearm: on the guard's slanted
     // line it hung at the wrist)
-    lineTo(line, [0, 1, 0], smooth(pull));
+    lineTo(line, sided(BACK.line, lead), smooth(pull));
   }
   // (the other fist kept in its guard as this one goes, drawn in tight to the jaw; through the eyes where it was: drawn
   // down, out and 8 cm in there, it dropped from the guard and filled a quarter of the view)
@@ -449,6 +453,9 @@ export function fistPunch(
     // (drawn in to the cheek, its elbow under it: left out in its guard it floated before the jaw, the same review)
     guardAt(j, !lead, false, 0, 0, _far);
     _far.z -= FREE_IN[0] * back; _far.y += FREE_IN[1] * back;
+    // (and, the other chambered, in under the cheekbone: the chest wound back carries its shoulder out and up, and
+    // the fist rode beside the eye, wide of the jaw, an adversarial review)
+    _far.x += (lead ? 1 : -1) * BACK.guard[0] * smooth(pull); _far.y += BACK.guard[1] * smooth(pull);
     place(j, !lead, _far, back);
   }
 }
