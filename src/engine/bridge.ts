@@ -8,6 +8,7 @@ import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
 import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
+import { lampList, LAMPS_MOST } from '../core/lamps';
 import { particles } from '../fx/particles';
 
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
@@ -482,6 +483,21 @@ export class Bridge {
     }
   }
 
+  /** The village's lamps (core/lamps.ts `lampList`: a place and a light each, after its shelter) as point lights,
+   *  soft close to as the game's are. They shine through walls here: the engine has none of their shadows. */
+  private addLamps(): void {
+    const g = this.globals;
+    for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
+      const place = (1 + lamp * 2) * 4, light = place + 4;
+      if (lampList[light + 3] === 0) continue;
+      const at = GLOBALS.points + this.points * 8;
+      g.set(lampList.subarray(place, place + 4), at);
+      g.set(lampList.subarray(light, light + 3), at + 4);
+      g[at + 7] = -1;
+      this.points++;
+    }
+  }
+
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
     const stack = this.stack;
     stack.length = 0;
@@ -595,6 +611,7 @@ export class Bridge {
     this.freshViews();
     this.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.walk(scene, camera);
+    this.addLamps();
     const clear = this.writeGlobals(scene, camera, time);
     this.sprites();
     this.freshViews();
