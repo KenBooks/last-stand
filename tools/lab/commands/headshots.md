@@ -43,3 +43,38 @@ drawn: held, the husk's thin chest side on swayed off the line.
 The A/B against main (`--foes dummy,husk,colossus --skills nockShot --views third --ab`): on main every head shot
 is a body hit (and the dummy has no head joint), here every one a headshot. Over the shoulder every foe takes about
 3 min 20 s here, top-down 1 min 15 s.
+
+## The berserker's punches (`--class warrior`)
+
+`page/punchHeads.ts`: the warrior with both hands empty (`--gear bare` is set for him) punches each foe with a click
+of Savage Fists, once with the crosshair on its head and once, the foe turned side-on, on its chest. A punch that
+meets a foe's head is always a critical hit (`toHead` in `skills/savageFists.ts`, read off the part its fist's line
+meets by `onHead`, as an arrow's is); his own crit chance is put to nothing, his aim held still 20 frames before the
+punch (his turning, which adds to a punch's chance of a crit, is let go past 0.2 s) and the foe stood out of a clean
+hit's band (`CLEAN_HIT`, which adds to it too: 0.45 m from his middle to its edge through the eyes, 1.1 m from
+outside), so a crit is the game judging a headshot. Views are `first,third` by default.
+
+- **Through the eyes**: every head punch must strike and crit, every chest punch strike and not. The crosshair is
+  put on a point inside the skull the eye's line meets on the head first. A point past the fist's reach from the
+  eye isn't punched: the Ossuary Twins' heads (3.5 and 3.7 m off; a tall foe's head may be out of a fist's reach,
+  the owner's "its okay to miss tall foes"), a fault for a common foe alone, and a boss's chest punch that misses
+  is let off.
+- **From outside** (`third`, `top`): the fist's line is level at the foe's chest and no punch may crit (the owner's
+  rule; a short foe's head is at that height, the Sporecaller's cap, so a head counts through the eyes alone). Every
+  punch at a common foe must strike: the crosshair on it, the fist goes to it (`underCrosshair`).
+- `--canary`: the first foe's whole body (its rig's root, the dummy's sway) taken for its head, planted after its
+  head punch: its chest punch must be found a headshot.
+- `--trace`: what the fist's middle line met as the punch landed (by the joint it rides) and how far along it,
+  against its reach, how far across the line passed the foe's middle, and where the game's own aim was; for a miss,
+  what it met as the button was let go. Read before the press, the Mossback's level line met its head, and as it
+  landed nothing of it.
+
+What it found on main, fixed here: a head was read by a band of the height (0.8 to 1.15 of it), which missed the
+Brute's, the Mossback's, the Colossus's, the Thornheart's and the Sporecaller's heads and took the Thornling's chest
+for one; through the eyes the fist's line ran 10 cm under the crosshair; over the shoulder the fist went along his
+facing, turned to his aim, which on a foe within 5 m is carried on along the crosshair's ray to 5 m off him
+(`clearOfHero` in `core/input.ts`): the trace had the line 0.3 to 0.6 m beside the foe's middle, the game's aim 3 to
+3.5 m past it, and the husk, the witch, the sporecaller and the thornling were missed outright (17 of 26 punches
+struck; 25 here, the one missed the reliquary Twin's head).
+
+`--class warrior --canary --ab`, every foe in both views: about 80 s for both sides.

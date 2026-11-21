@@ -7,13 +7,13 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
-import { addShake, liftView, rollView } from '../../core/renderer';
+import { addShake, liftView, rollView, viewMode } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { CLEAN_HIT, FRENZY, HEAD_SHOT, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
+import { CLEAN_HIT, FRENZY, PUNCH_CHARGE, PUNCH_DRIVE, PUNCH_WIDE } from '../../data/balance';
 import { schedule } from '../../core/timers';
 import { dazeEnemy } from '../damage';
-import { strikesBody } from '../strikes';
+import { strikesBody, type Struck } from '../strikes';
 import type { SkillDef } from '../../types';
 import { gainFrenzy } from '../frenzy';
 import { sweep } from './cleave';
@@ -186,45 +186,76 @@ const _from = new THREE.Vector3(), _way = new THREE.Vector3(), _a = new THREE.Ve
 /** how far behind where the punch starts its line is begun (m: a body he stands against is met from outside it),
  *  and the fist's half breadth, the lines either side of its middle (m) */
 const LINE_BACK = 0.6;
-/** where on each foe the punch landing now met its body: how high over its feet (m) */
-const landed = new WeakMap<Enemy, number>();
+const _eye = new THREE.Vector3(), _look = new THREE.Vector3();
 
 /**
- * Whether the punch landing now meets `e`'s body, and where (`landed`): the fist's line from his shoulder the way
+ * Over the shoulder, the way (level, into `way`) from his middle to where the crosshair's ray is as far from him
+ * across the floor as `e`'s middle: what the crosshair is on at a fist's distance. False elsewhere (top-down, a
+ * partner's copy, a ray that never comes that far from him). His facing turns to his aim, which on a foe within 5 m
+ * is carried on along the crosshair's ray to 5 m off him (`clearOfHero` in core/input.ts, #482), and the camera
+ * stands 0.55 m to his side: along his facing the fist passed 0.3 to 0.6 m beside the foe the crosshair was on, and
+ * missed the husk, the witch, the sporecaller and the thornling outright (`lab headshots --class warrior --trace`).
+ */
+export function underCrosshair(player: Player, e: Enemy, way: THREE.Vector3): boolean {
+  if (!player.local || viewMode() !== 'third') return false;
+  G.camera.getWorldPosition(_eye);
+  G.camera.getWorldDirection(_look);
+  const reach = Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z);
+  const fx = _eye.x - player.pos.x, fz = _eye.z - player.pos.z;
+  const a = _look.x * _look.x + _look.z * _look.z, b = 2 * (fx * _look.x + fz * _look.z);
+  const disc = b * b - 4 * a * (fx * fx + fz * fz - reach * reach);
+  if (a < 1e-9 || disc < 0) return false;
+  const t = (-b + Math.sqrt(disc)) / (2 * a);
+  const x = fx + _look.x * t, z = fz + _look.z * t, length = Math.hypot(x, z);
+  if (t <= 0 || length < 1e-6) return false;
+  way.set(x / length, 0, z / length);
+  return true;
+}
+
+/** the foes the punch landing now met on their heads (`meetsBody`), and what its line last met */
+const onHeads = new WeakSet<Enemy>();
+const _struck: Struck = { head: false };
+
+/**
+ * Whether the punch landing now meets `e`'s body, and whether on its head (`onHeads`): the fist's line from his shoulder the way
  * it's thrown, to the skill's reach, against the body as drawn (`strikesBody`, as an arrow's flight is), its middle
- * and either edge of the fist's breadth (`PUNCH_WIDE`). Through his own eyes the line is the crosshair's; from
- * outside it's level along his facing at the height of the foe's chest, his own shoulders' at the most. A foe whose
- * middle the line passed within its size of was struck, and a fist thrown past a dummy he stood against struck it
- * (from play: "this should be no hit ... and it crits somehow", "and this should be no hit").
+ * and either edge of the fist's breadth (`PUNCH_WIDE`). Through his own eyes the line is the crosshair's (begun 10
+ * cm under it, the crosshair on a small head's middle, the husk's, sent the fist under its chin); from outside it's
+ * level at the height of the foe's chest, his own shoulders' at the most, along his facing, or over the shoulder
+ * towards the crosshair (`underCrosshair`). A foe whose middle the line passed within its size of was struck, and a
+ * fist thrown past a dummy he stood against struck it (from play: "this should be no hit ... and it crits
+ * somehow", "and this should be no hit").
  */
 function meetsBody(player: Player, def: Def, e: Enemy): boolean {
+  onHeads.delete(e);
   if (player.eyes) {
     G.camera.getWorldPosition(_from); G.camera.getWorldDirection(_way);
-    _from.y -= 0.1;
   } else {
     const base = e.obj.position.y;
     _from.set(player.pos.x, base + Math.min(1.35, e.height * 0.7), player.pos.z);
-    _way.set(Math.sin(player.facing), 0, Math.cos(player.facing));
+    if (!underCrosshair(player, e, _way)) _way.set(Math.sin(player.facing), 0, Math.cos(player.facing));
   }
   const reach = def.range + e.radius, sideX = _way.z, sideZ = -_way.x;
   for (const off of [0, PUNCH_WIDE, -PUNCH_WIDE]) {
     _a.copy(_from).addScaledVector(_way, -LINE_BACK); _a.x += sideX * off; _a.z += sideZ * off;
     _b.copy(_from).addScaledVector(_way, reach); _b.x += sideX * off; _b.z += sideZ * off;
-    const t = strikesBody(e, _a, _b);
+    const t = strikesBody(e, _a, _b, 0, _struck);
     if (t < 0 || t * (reach + LINE_BACK) < LINE_BACK - 0.15) continue;
-    landed.set(e, _a.y + (_b.y - _a.y) * t - e.obj.position.y);
+    // (from outside there is none: its level line at the chest of a short foe, the Sporecaller, meets its cap)
+    if (_struck.head && player.eyes) onHeads.add(e);
     return true;
   }
   return false;
 }
 
-/** Whether the punch landing now met `e` on its head (`HEAD_SHOT`, `meetsBody`): a critical hit, a training
- *  dummy's too. Where the blow lands, not where the aim is (from play: "aim should not matter, where hit lands
- *  matters... because we have direction now"). */
-function toHead(e: Enemy): boolean {
-  const up = landed.get(e);
-  return up !== undefined && up >= e.height * HEAD_SHOT.from && up <= e.height * HEAD_SHOT.to;
-}
+/** Whether the punch landing now met `e` on its head: what its fist's line met on the body rides the model's head
+ *  joint (`onHead` in combat/strikes.ts, as an arrow's headshot is told), a critical hit, a training dummy's too.
+ *  Where the blow lands, not where the aim is (from play: "aim should not matter, where hit lands matters... because
+ *  we have direction now"); from outside the line is at the chest, so there is none (through the eyes alone: a short
+ *  foe's head, the Sporecaller's cap, is at the chest's height). Read off the part, not a share
+ *  of the height: the Brute's, the Mossback's and the Hulks' heads hang low and forward under a hump or horns, and
+ *  the band of the height it was read by before (0.8 to 1.15 of it) missed them. */
+const toHead = (e: Enemy): boolean => onHeads.has(e);
 
 /** The punch lands, charged `charge` of the way past a click (0..1). */
 function land(player: Player, def: Def, charge: number): void {
