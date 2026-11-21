@@ -129,18 +129,21 @@ export function fistMark(e: Enemy, frenzy = 0, n = 5): void {
   }
 }
 
+/** a clean punch charged to the full, over a plain click's */
+const CHARGED = (1 + CLEAN_HIT.bonus) * PUNCH_CHARGE.full;
+
 const skill: InstantSkill = {
   anim: 'punch',
   hits: (def) => [
     { per: 'foe', base: (def as Def).damage, type: 'physical' },
     { per: 'clean hit', base: (def as Def).damage * (1 + CLEAN_HIT.bonus), type: 'physical', note: 'at arm\'s length' },
+    // (a charged punch from a plain click's up, `least`, to a clean one held to the full: what a punch thrown standing
+    // lands, which `lab tooltips --gear bare` holds every hit to and asks one at its full figure of. His step and his
+    // swing add to any of the three, up to `PUNCH_DRIVE`'s shares more: said in the skill's own words, not as a line
+    // of figures no punch thrown standing reaches)
     {
-      per: 'driven hit', type: 'physical', note: 'clean, stepping in, the aim swung with the fist',
-      base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe),
-    },
-    {
-      per: 'charged hit', type: 'physical', note: `held ${def.draw ?? 2} s, all of the above with it`,
-      base: (def as Def).damage * (1 + CLEAN_HIT.bonus) * (1 + PUNCH_DRIVE.step + PUNCH_DRIVE.swipe) * PUNCH_CHARGE.full,
+      per: 'charged hit', type: 'physical', note: `held up to ${def.draw ?? 2} s, at arm's length`,
+      base: (def as Def).damage * CHARGED, least: 1 / CHARGED,
     },
   ],
   pose(player, def, action) {
