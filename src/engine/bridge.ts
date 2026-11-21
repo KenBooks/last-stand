@@ -9,6 +9,7 @@ import { perfClock } from '../core/perfClock';
 import { tunable } from '../core/tuning';
 import { holeNow, type SeeThrough } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
+import { shownPointLights } from '../core/webgpu';
 import { HALL, TERRACE } from '../data/village';
 import { particles } from '../fx/particles';
 import { dazedDrawn } from '../fx/dazed';
@@ -347,14 +348,18 @@ export class Bridge {
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
     const rough = material.roughnessMap ?? material.metalnessMap ?? null;
-    maps[0] = material.alphaMap ? this.cutOutId(map, material.alphaMap) : this.textureId(map);
+    // (an alpha map alone is handed over as it is and read as one by the shader, `flags.w`: every one the game
+    // has. With a base map the two are joined on the page, their bytes read back, `cutOutId`)
+    const alphaAlone = !!material.alphaMap && !map;
+    if (alphaAlone) maps[0] = this.textureId(material.alphaMap);
+    else maps[0] = material.alphaMap ? this.cutOutId(map, material.alphaMap) : this.textureId(map);
     maps[1] = this.textureId(material.normalMap);
     maps[2] = this.textureId(rough);
     maps[3] = this.textureId(material.emissiveMap);
     p[16] = unlit ? 1 : 0;
     p[17] = material.vertexColors ? 1 : 0;
     p[18] = maps[1] ? 1 : 0;
-    p[19] = maps[2] ? 1 : 0;
+    p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
     // (3: its colour already multiplied by its alpha, the flames' light over what they hide)
     const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
     const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
@@ -757,7 +762,9 @@ export class Bridge {
     } else if ((light as THREE.PointLight).isPointLight) {
       if (this.points === MAX_POINTS) { this.skip('point light past 32'); return; }
       const point = light as THREE.PointLight, at = GLOBALS.points + this.points * 8;
-      v3.setFromMatrixPosition(point.matrixWorld);
+      // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
+      // they stood when it was hidden)
+      point.getWorldPosition(v3);
       g[at] = v3.x; g[at + 1] = v3.y; g[at + 2] = v3.z; g[at + 3] = point.distance;
       g[at + 4] = c.r * by; g[at + 5] = c.g * by; g[at + 6] = c.b * by; g[at + 7] = point.decay;
       this.points++;
@@ -914,6 +921,9 @@ export class Bridge {
 
   /** A harness's: the meshes handed to the engine since it was set (`lab rustcheck`: every foe of a fight drawn). */
   watched: Set<THREE.Object3D> | null = null;
+  /** A harness's: how many point lights the last frame was lit by (a place's own, the effects', the lamps'). */
+  pointsNow(): number { return this.points; }
+
   /** A harness's: the shelter as the last frame had it (its box's least x and z and its most, the sky's share under
    *  it, its walls' tops). */
   shelterNow(): number[] { return Array.from(this.globals.subarray(GLOBALS.shelter, GLOBALS.shelter + 6)); }
@@ -928,7 +938,8 @@ export class Bridge {
       if ((object as THREE.Mesh).isMesh) {
         if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
       } else if ((object as THREE.Light).isLight) {
-        this.addLight(object as THREE.Light);
+        // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
+        if (!object.userData.rigged) this.addLight(object as THREE.Light);
       } else if ((object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite) {
         if (object.layers.test(camera.layers)) this.skip(object.type);
       }
@@ -1054,6 +1065,7 @@ export class Bridge {
     this.freshViews();
     this.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.walk(scene, camera);
+    for (const light of shownPointLights()) this.addLight(light);
     this.addLamps();
     const clear = this.writeGlobals(scene, camera, time);
     this.sprites();

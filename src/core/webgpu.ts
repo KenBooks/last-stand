@@ -1761,6 +1761,7 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   groups = rigPlaces.groups;
   const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
   const rig = Array.from({ length: most }, () => new THREE.PointLight(0xffffff, 0));
+  for (const rigged of rig) rigged.userData.rigged = true;
   [...lightsOf.values()][0].forEach((light, i) => {
     rig[i].castShadow = light.castShadow;
     rig[i].shadow.autoUpdate = light.shadow.autoUpdate;
@@ -1783,6 +1784,18 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
     before.apply(scene, args);
   };
 }
+
+/**
+ * The shown place's own point lights, which the rig copies (`rigPointLights`) and three never sees: for a renderer
+ * that isn't three's (src/engine), which runs none of the hooks the rig is set in. It walked the scene for its
+ * lights and found the rig's alone, as the last hook left them: a house's candles, hearth and chandelier lit
+ * nothing (`lab rust --village --room library`: "0 point lights").
+ */
+export function shownPointLights(): readonly THREE.PointLight[] {
+  const shown = rigPlaces.groups.find((group) => group.visible);
+  return (shown && rigPlaces.lightsOf.get(shown)) || NO_LIGHTS;
+}
+const NO_LIGHTS: readonly THREE.PointLight[] = [];
 
 /** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
 const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Object3D, THREE.PointLight[]>() };

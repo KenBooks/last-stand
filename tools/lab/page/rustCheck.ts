@@ -40,6 +40,8 @@ const PLACE_CHANGE_MOST = 1500;
 const THREE_DRAWS_MOST = 40;
 /** how far a shown object's place in the world may be from where its own position puts it (m) */
 const PLACED_WITHIN = 1e-3;
+/** the fewest point lights a house is lit by inside (each has ten: its candles, lanterns, hearth, chandelier) */
+const ROOM_LIGHTS_LEAST = 4;
 /** how long each skill is held (frames), and how far ahead it's aimed (m) */
 const CAST_FRAMES = 50;
 const CAST_AHEAD = 8;
@@ -122,13 +124,16 @@ async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> {
   return passed(`in the hall from above ${thinning} of the engine's ${held} kinds of see-through thin over him`);
 }
 
-/** A house walked into, out of and into again: no frame held, and three drawing no scene of its own. */
-async function house(lab: Lab, room: RoomId): Promise<Checked> {
+/** A house walked into, out of and into again: no frame held, three drawing no scene of its own, and inside it
+ *  lit by its own lights (its candles, hearth and chandelier: from play, "loads this (broken)", a room in the
+ *  dark). */
+async function house(lab: Lab, bridge: Bridge, room: RoomId): Promise<Checked> {
   const drawing = lab.drawing;
   lab.drawing = true;
   const steps: [string, () => void][] = [['in', () => enterRoom(room)], ['out', () => leaveRoom()], ['in again', () => enterRoom(room)]];
   const took: string[] = [];
   const wrong: string[] = [];
+  let lights = 0;
   try {
     for (const [name, change] of steps) {
       change();
@@ -138,12 +143,14 @@ async function house(lab: Lab, room: RoomId): Promise<Checked> {
       if (three > THREE_DRAWS_MOST) wrong.push(`going ${name}, three drew ${three} things of its own in a frame`);
     }
     if (roomHere() !== room) wrong.push(`he never went into the ${room}`);
+    lights = bridge.pointsNow();
+    if (lights < ROOM_LIGHTS_LEAST) wrong.push(`inside, the engine is lit by ${lights} point lights: its own are missing`);
   } finally {
     leaveRoom();
     lab.drawing = drawing;
   }
   if (wrong.length) return failed(`the ${room}: ${wrong.join('; ')}`);
-  return passed(`the ${room}: the longest frame going ${took.join(', ')}`);
+  return passed(`the ${room}: the longest frame going ${took.join(', ')}; lit by ${lights} point lights inside`);
 }
 
 /** A canvas nothing has drawn on, shown as a map: the engine draws on after it. */
@@ -243,7 +250,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(placedRight('the village'));
       checks.push(shelter(bridge, 'the village', true));
       checks.push(await hallFromAbove(lab, bridge));
-      checks.push(await house(lab, command.room as RoomId));
+      checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
       lab.drawing = true;

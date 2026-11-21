@@ -7,8 +7,9 @@ export default {
   summary: 'what the first play of the preview of the Rust engine found wrong, each held as a check on the page a '
     + 'player gets (the plain address): the engine drawing and offered alone, every shown object where its '
     + 'position puts it, the shelter of the hall set in the village and gone in a fight, a house walked into, out '
-    + 'of and into again with no frame held and three drawing nothing of its own, a canvas nothing has drawn on '
-    + 'taken as a map, every foe of a fight drawn, and each skill on the keys of the hero held with nothing of it '
+    + 'of and into again with no frame held, three drawing nothing of its own and its own lights lighting '
+    + 'it, a canvas nothing has drawn on taken as a map, every foe of a fight drawn, and each skill on the keys '
+    + 'of the hero held with nothing of it '
     + 'left undrawn (`--class` whose; run it for each)',
   help: 'the Rust engine held to what the first play of its preview found wrong',
   options: {
