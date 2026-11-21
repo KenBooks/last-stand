@@ -37,7 +37,9 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     canvas.width = under.width;
     canvas.height = under.height;
     canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
-    under.after(canvas);
+    // (under three's canvas, which the engine's frames leave clear but for the world's overlays)
+    under.style.position = 'relative';
+    under.before(canvas);
     const engine = await Engine.create(canvas);
     RUST.bridge = new Bridge(engine, wasm);
     resize = (width, height) => engine.resize(width, height);
@@ -57,7 +59,6 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   renderer: THREE.WebGLRenderer): boolean {
   const bridge = RUST.bridge;
   if (!bridge || !canvas) return false;
-  canvas.style.display = RUST.on ? 'block' : 'none';
   if (!RUST.on) return false;
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;

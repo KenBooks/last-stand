@@ -1783,6 +1783,11 @@ export function render(): void {
   if (RUNNING.rust) {
     const pixels = sceneTarget();
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl)) {
+      // (three's canvas over the engine's: clear, but for the world's overlays)
+      gl.setRenderTarget(null);
+      gl.setClearColor(0x000000, 0);
+      gl.clear(true, true, false);
+      if (overlaysShown) overFrame.draw();
       framePart('render: drawn (Rust)');
       RUST.renderMs = perfClock.now() - renderBegan;
       return;
