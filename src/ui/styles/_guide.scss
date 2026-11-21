@@ -1,6 +1,7 @@
 // The guide (ui/guide/): its box over the pause menu, the sections' tabs, the entries' list beside the page (above it
 // on a narrow or short screen), and the page's parts: a foe's portrait and figures, a hero's skill cards, styles,
 // loadouts and combos. And the pause menu's Guide tab, its doors into each section.
+@use 'sass:math';
 @use 'theme' as *;
 @use 'mixins' as *;
 
@@ -81,8 +82,19 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 .gd-ic i { display: inline-grid; place-items: center; width: 24px; height: 24px; font-style: normal; font-size: 16px;
   background: center / cover no-repeat; }
 .gd-ic.big i { width: 52px; height: 52px; font-size: 32px; border: 1px solid rgba($frame, .5); background-color: rgba(0, 0, 0, .4); }
-.gd-key { display: inline-block; padding: 1px 6px; font: 700 11px var(--font-display); color: var(--accent); white-space: nowrap;
-  background: $well; border: 1px solid rgba($frame, .55); border-bottom-width: 2px; }
+// a key's cap, the guide's one way of showing a key: a raised gilt-rimmed cap, the mouse's keys a drawn mouse with its
+// button lit (a digit's width, where "Right click" was three times it). Its font set by parts, not the `font`
+// shorthand, which would set its digits old-style again (styles/AGENTS.md)
+.gd-key { display: inline-grid; place-items: center; box-sizing: border-box; min-width: 24px; height: 24px; padding: 0 6px 1px;
+  font-family: var(--font-display); font-size: 13px; font-weight: 700; line-height: 1; color: var(--accent); white-space: nowrap;
+  border-radius: 4px; border: 1px solid rgba($frame, .8); border-bottom: 3px solid #070504;
+  background: linear-gradient(#3a3026, #15110d);
+  box-shadow: 0 0 0 1px #000, 0 2px 5px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .16); }
+.gd-key.mouse { padding: 0; }
+// (the mouse drawn dim and its button lit bright, so left and right tell apart at a glance)
+.gd-mouse { display: block; width: 12px; height: 17px; }
+.gd-mouse-body { fill: none; stroke: var(--ink-dim); stroke-width: 1.4; stroke-linejoin: round; }
+.gd-mouse-lit { fill: #ffd25a; }
 .gd-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--c, var(--ink)); }
 .gd-chip.none { color: var(--ink-dim); }
 .gd-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
@@ -93,9 +105,35 @@ h4 { margin: 0 0 4px; font: 700 16px var(--font-display); color: var(--accent); 
 .gd-scard .tt-card { width: auto; max-width: none; min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; }
 .gd-scard .tt-desc { max-width: none; }
 .gd-tip { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba($frame, .25); color: var(--highlight); font-size: 14px; }
-.gd-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.gd-kslot { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; font-size: 14px; background: $well;
-  border: 1px solid rgba($frame, .3); }
+// a loadout's keys as the game's skill bar: a tray of even slots, each the skill's icon framed as the hotbar frames it,
+// its key's cap on the icon's corner and its name under it in the skill's colour; on a narrow page the slots wrap onto
+// two even rows of the same columns (4 and 3, 3 and 3), never a ragged row of chips each its own width. Its columns are
+// counted by its slots (`data-n`, heroes.ts `keysRow`) against the page's width: `auto-fit` in a box sized to its
+// slots counted two columns on an upright tablet, a tall narrow bar
+$key-slot: 100px;
+$key-gap: 4px;
+.gd-page { container-type: inline-size; }
+.gd-keys { display: grid; grid-template-columns: repeat(var(--cols, 7), minmax(0, $key-slot)); gap: 12px $key-gap; box-sizing: border-box;
+  width: fit-content; max-width: 100%; margin: 10px 0; padding: 12px 10px 10px; border-radius: 4px; background: $tray;
+  @include frame(rgba($frame, .45), 0 0 0 1px #000, 0 6px 14px rgba(0, 0, 0, .55)); }
+@for $n from 1 through 8 {
+  .gd-keys[data-n="#{$n}"] { --cols: #{$n}; }
+  // (a row's room: its slots and gaps, the tray's padding and frame, the style's indent)
+  @container (max-width: #{$n * $key-slot + ($n - 1) * $key-gap + 42px}) {
+    .gd-keys[data-n="#{$n}"] { --cols: #{math.ceil(math.div($n, 2))}; }
+  }
+}
+.gd-kslot { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; padding-top: 6px; text-align: center; }
+.gd-kart { position: relative; width: 52px; height: 52px; flex: none; border-radius: 3px; background: rgba(0, 0, 0, .45); }
+.gd-kart .gd-ic, .gd-kart .gd-ic i { width: 100%; height: 100%; }
+.gd-kart .gd-ic i { font-size: 30px; border-radius: 3px; }
+// (the hotbar's frame and shade drawn over the painted icon, as a slot draws them)
+.gd-kart::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba($frame, .7), inset 0 0 10px rgba(0, 0, 0, .8); }
+.gd-kart .gd-key { position: absolute; left: -6px; top: -6px; z-index: 1; }
+.gd-kname { font-size: 13px; line-height: 1.2; color: var(--c, var(--ink)); overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px #000; }
+.gd-kslot.none .gd-kname { color: var(--ink-dim); font-style: italic; }
 .gd-style, .gd-load, .gd-combo { margin: 12px 0; padding: 4px 0 4px 14px; border-left: 2px solid var(--c, rgba($frame, .6)); }
 .gd-pros { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
 .gd-pros .gd-h { margin-top: 8px; font-size: 11px; }
@@ -207,9 +245,11 @@ body.touch .pbg-key { display: none; }
 // a combo: the game's key caps in order, an arrow between
 .gd-seq { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 8px 0; }
 .gd-cap-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.gd-cap { min-width: 46px; padding: 7px 12px 5px; text-align: center; font: 700 14px var(--font-display); color: var(--accent);
+.gd-cap { display: grid; place-items: center; box-sizing: border-box; min-width: 46px; height: 40px; padding: 0 12px;
+  font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent);
   white-space: nowrap; border-radius: 6px; border: 1px solid rgba($frame, .75); border-bottom: 4px solid #070504;
   background: linear-gradient(#3a3026, #15110d); box-shadow: 0 0 0 1px #000, 0 4px 10px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 230, 180, .15); }
+.gd-cap .gd-mouse { width: 15px; height: 22px; }
 .gd-cap-skill { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--c, var(--ink)); }
 .gd-seq-arrow { width: 40px; height: 20px; flex: none; margin-bottom: 26px; fill: none; stroke: var(--accent); stroke-width: 2.5;
   stroke-linecap: round; stroke-linejoin: round; }

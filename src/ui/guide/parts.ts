@@ -44,5 +44,18 @@ export function keyName(k: SkillKey): string {
   return k === 'mouse0' ? 'Left click' : k === 'mouse2' ? 'Right click' : k.toUpperCase();
 }
 
-/** A key's cap, small, for a combo's or a loadout's row. */
-export const keyCap = (k: SkillKey): string => `<kbd class="gd-key">${keyName(k)}</kbd>`;
+/** The button a mouse key presses, lit on a drawn mouse: one cap's width as a digit's, where the words were three. */
+function mouseGlyph(side: 'left' | 'right'): string {
+  const lit = side === 'left' ? 'M7 1.5C3.7 1.5 1.5 3.9 1.5 7.2V8H7Z' : 'M7 1.5C10.3 1.5 12.5 3.9 12.5 7.2V8H7Z';
+  return '<svg class="gd-mouse" viewBox="0 0 14 20" aria-hidden="true">'
+    + `<path class="gd-mouse-lit" d="${lit}"/>`
+    + '<path class="gd-mouse-body" d="M7 1.5C3.7 1.5 1.5 3.9 1.5 7.2v5.6c0 3.3 2.2 5.7 5.5 5.7s5.5-2.4 5.5-5.7V7.2C12.5 3.9 10.3 1.5 7 1.5ZM1.5 8h11M7 1.5V8"/></svg>';
+}
+
+/** What a key's cap shows: the mouse with its button lit, or the key's letter. */
+export const keyFace = (k: SkillKey): string =>
+  k === 'mouse0' ? mouseGlyph('left') : k === 'mouse2' ? mouseGlyph('right') : esc(keyName(k));
+
+/** A key's cap, small, for a loadout's row, a skill's card and a table's: the guide's one way of showing a key. */
+export const keyCap = (k: SkillKey): string =>
+  `<kbd class="gd-key${k.startsWith('mouse') ? ' mouse' : ''}" title="${keyName(k)}" aria-label="${keyName(k)}">${keyFace(k)}</kbd>`;

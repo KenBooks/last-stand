@@ -12,7 +12,7 @@ import { skillTooltip } from '../tooltip';
 import { skillIconHTML } from '../skillArt';
 import { itemIconSVG } from '../itemIcons';
 import type { ClassDef, Item, Profile, SkillDef, SkillKey } from '../../types';
-import { esc, head, pic, keyCap, keyName, num, para, points, secs, whole } from './parts';
+import { esc, head, pic, keyCap, keyFace, keyName, num, para, points, secs, whole } from './parts';
 import { bars, keySequence } from './diagrams';
 import { skillHits } from '../skillDamage';
 import { CLASSES } from '../../data/classes/index';
@@ -34,9 +34,20 @@ function chip(def: SkillDef | undefined): string {
   return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span>${def.name}</span>`;
 }
 
-/** A loadout as a row of keys, each with its skill. */
+/** A key's slot of a loadout's bar: the skill's icon framed as the hotbar frames it, the key's cap on its corner, its
+ *  name under it in the skill's colour (none bound: an empty frame). */
+function keySlot(k: SkillKey, def: SkillDef | undefined): string {
+  const icon = def ? `<span class="gd-ic">${skillIconHTML(def)}</span>` : '';
+  const colour = def ? ` style="--c:${def.icon.color}"` : '';
+  return `<div class="gd-kslot${def ? '' : ' none'}"${colour}><span class="gd-kart">${icon}${keyCap(k)}</span>`
+    + `<span class="gd-kname">${def?.name ?? 'Empty'}</span></div>`;
+}
+
+/** A loadout as the game's skill bar: a slot a key, each with its skill, laid on even columns. */
 function keysRow(cls: ClassDef, l: Partial<Loadout>): string {
-  return `<div class="gd-keys">${SKILL_KEYS.filter((k) => k in l).map((k) => `<div class="gd-kslot">${keyCap(k)}${chip(skillOf(cls, l[k] ?? null))}</div>`).join('')}</div>`;
+  const keys = SKILL_KEYS.filter((k) => k in l);
+  // (its count lays its columns out: one row while the page has room for it, else two even rows, styles/_guide.scss)
+  return `<div class="gd-keys" data-n="${keys.length}">${keys.map((k) => keySlot(k, skillOf(cls, l[k] ?? null))).join('')}</div>`;
 }
 
 /** The class's own figures, each a bar against the largest of every hero's. */
@@ -211,7 +222,7 @@ function loadouts(cls: ClassDef, note: ClassNote): string {
 function combos(cls: ClassDef, note: ClassNote): string {
   const ok = note.combos.filter((c) => c.steps.every((impl) => skillOf(cls, impl)));
   if (!ok.length) return '';
-  const step = (impl: string) => { const def = skillOf(cls, impl)!; return { key: keyName(def.key as SkillKey), icon: skillIconHTML(def), name: def.name, colour: def.icon.color }; };
+  const step = (impl: string) => { const def = skillOf(cls, impl)!; return { key: keyFace(def.key as SkillKey), label: keyName(def.key as SkillKey), icon: skillIconHTML(def), name: def.name, colour: def.icon.color }; };
   return head('Combos') + ok.map((c) => `<div class="gd-combo"><h4>${c.name}</h4>${keySequence(c.steps.map(step))}${para(c.how)}</div>`).join('');
 }
 
