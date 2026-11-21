@@ -31,10 +31,15 @@ let warmed = false;
 /** The foes a first wave brings in `biome` (its `pool(1)`). */
 export const firstWaveFoes = (biome: BiomeId): EnemyId[] => BIOMES[biome].pool(1).map(([id]) => id);
 
-/** A ghost of a first wave's foe of `biome`, at random, in the projection's look, stood by the yard's gate. */
-function makeGhost(biome: BiomeId): Ghost {
+/** A first wave's foe of `biome`, at random. */
+function ghostKind(biome: BiomeId): EnemyId {
   const foes = firstWaveFoes(biome);
-  const kind = foes[Math.floor(Math.random() * foes.length)];
+  return foes[Math.floor(Math.random() * foes.length)];
+}
+
+/** A ghost of a first wave's foe of `biome` (`kind`, else one at random), in the projection's look, stood by the
+ *  yard's gate. */
+function makeGhost(biome: BiomeId, kind = ghostKind(biome)): Ghost {
   const model = buildModel(ENEMIES[kind].model);
   const u = model.kit.u;
   u.uDissolve.value = PROJECTION.dissolve;
@@ -58,6 +63,22 @@ export function standGhost(village: THREE.Object3D): void {
     village.add(ghost.root);
   }
   updateGhost(0, 0);
+}
+
+/** `standGhost` a ghost a task, `pause` awaited before each, as the boot enters the lobby (`spawnDummiesInSteps` in
+ *  main.ts): built with the dummies at once, they were one task of 0.9 s in a first visit's boot with the CPU 4 times
+ *  slower. Each joins its crowd as it's stood, as `standGhost`'s do at its end. */
+export async function standGhostInSteps(village: THREE.Object3D, pause: () => Promise<void>): Promise<void> {
+  // (every ghost's kind drawn before the first pause: the frames painted meanwhile draw random numbers of their own, as
+  // many as there are frames, and the lab's seeded sequence gave the yard another ghost from one boot to the next)
+  const kinds = BIOME_IDS.filter((biome) => !ghosts.has(biome)).map((biome) => [biome, ghostKind(biome)] as const);
+  for (const [biome, kind] of kinds) {
+    await pause();
+    const ghost = makeGhost(biome, kind);
+    ghosts.set(biome, ghost);
+    village.add(ghost.root);
+    updateGhost(0, 0);
+  }
 }
 
 /** The lobby's warm-up has compiled both: from now on only the hour's is drawn. */

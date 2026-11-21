@@ -69,7 +69,7 @@ backticks (`` `merchant.ts`: ... ``), in its alphabetical place, never at the en
 end touch the same lines and conflict (`npm run check:sorted` holds the order; the root's Workflow).
 
 <!-- sorted -->
-- `ghost.ts`: the ghost is drawn in its kind's crowd while shown (`drawnInCrowd`), out of it while hidden (the other hour's, the village left): a crowd draws a body whatever its meshes' visibility. Drawn on its own a thornling was 46 of the village's draws (`lab draws --village`'s parts).
+- `ghost.ts`: the ghost is drawn in its kind's crowd while shown (`drawnInCrowd`), out of it while hidden (the other hour's, the village left): a crowd draws a body whatever its meshes' visibility. Drawn on its own a thornling was 46 of the village's draws (`lab draws --village`'s parts). The boot stands the ghosts a task each, a frame painted before each (`standGhostInSteps`, from `spawnDummiesInSteps` in `main.ts`): stood with the dummies in one task, they held a first visit's boot 0.9 s with the CPU 4 times slower, now 0.25 s at most. Their kinds are all drawn before the first pause: the frames painted between draw random numbers of their own, and the lab's seeded boots stood other ghosts from one run to the next (`lab programs --first --ab`).
 - `warm.ts`, `warmup.ts`: the other heroes are approached as he nears the village's hall (`approach`, from
   `game/village.ts`, within 22 m of its door), not wanted: their warm-up begins there behind the lobby, a hero
   a step a frame, and is given up at a frame held past `WARM_BEHIND.heldMost` (or one given up before) until
