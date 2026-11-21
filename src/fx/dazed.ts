@@ -100,6 +100,13 @@ export function dazedStars(x: number, y: number, z: number, t: number, left: num
   }
 }
 
+/** The stars as this frame draws them (each its place, size and how much of it is seen) and their colour: for a
+ *  renderer that draws them itself (the Rust engine's sprites, `engine/bridge.ts`). */
+export function dazedDrawn(): { pos: Float32Array; size: Float32Array; alpha: Float32Array; count: number; fill: THREE.Color } {
+  const drawn = geo.drawRange.count;
+  return { pos, size, alpha, count: Number.isFinite(drawn) ? drawn : 0, fill: mat.uniforms.uFill.value };
+}
+
 /** The dazed foes' stars, drawn among the particles (`fx/particles.ts`): put in the scene, drawn as each frame set
  *  them, and none. */
 export const dazedField = {

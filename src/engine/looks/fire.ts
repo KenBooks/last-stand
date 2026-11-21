@@ -2,7 +2,7 @@
 // the engine's surface hook; the baked loop is the look's volume. (Not ported: the flames fading as the prop under
 // them dissolves, and the embers' own look on the bed and the logs.)
 import type * as THREE from 'three';
-import { flameWgsl, type FlameShape, type FlameUniforms } from '../../world/fireNodes';
+import { emberWgsl, flameWgsl, type EmberLooks, type FlameShape, type FlameUniforms } from '../../world/fireNodes';
 import type { RustLook, RustShader } from '../custom';
 
 /** the logs a fire's flames know at most, each two ends (`LOGS_MOST` in world/fire.ts) */
@@ -54,3 +54,38 @@ export function flameLook(uniforms: FlameUniforms, shape: FlameShape): RustLook 
     },
   };
 }
+
+/** how much of a standard material's sheen char keeps (world/fire.ts's `CHAR_SHEEN`) */
+const CHAR_SHEEN = 0.2;
+
+/** the embers' shader, made once */
+let embers: RustShader | null = null;
+function emberShader(): RustShader {
+  embers ??= {
+    name: 'fire-embers',
+    hooks: emberWgsl() + /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let centre = m.c[0].xyz;
+  let radius = m.c[0].w;
+  let heat = m.c[1].x;
+  (*s).base = vec4f((*s).base.rgb * emberChar(in.world, centre, radius, heat), (*s).base.a);
+  (*s).emissive += emberGlow(in.world, normalize(in.normal).y, m.c[1].y, centre, radius, heat);
+  // (char is matte)
+  (*s).specular = ${CHAR_SHEEN};
+  return true;
+}
+`,
+  };
+  return embers;
+}
+
+/** A fire's bed and its charred logs: darkened to char and ash, glowing through their cracks. */
+export const emberLook = (looks: EmberLooks): RustLook => ({
+  shader: emberShader(),
+  numbers(out) {
+    looks.centre.value.toArray(out, 0);
+    out[3] = looks.radius.value; out[4] = looks.heat.value; out[5] = looks.time.value;
+  },
+});

@@ -2,6 +2,9 @@
 // spawn gates, lancet window niches and banners; a raised central dais with obelisks,
 // flagstone paths from the gates and a ring walk, spirit beacons and braziers. Broken columns,
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { beaconLook, dampLook, outsideLook } from '../engine/looks/crypt';
 import * as THREE from 'three';
 import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
 import { WEBGPU } from '../core/webgpu';
@@ -90,6 +93,7 @@ const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
 function outsideDim<M extends THREE.Material>(m: M): M {
   if (WEBGPU) {
     (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
+    if (RUNNING.rust) rustLook(m, outsideLook(outside, OUTSIDE));
     return m;
   }
   m.onBeforeCompile = dimOutside;
@@ -160,10 +164,12 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vec
   const damp = { value: dampMap() };
   const litter = pbrMaterialMaps(soil(), 1);
   if (WEBGPU) {
-    const nodes = dampNodes(m, {
+    const laid = {
       map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
       tile: EARTH.tile, soil: litter,
-    });
+    };
+    const nodes = dampNodes(m, laid);
+    if (RUNNING.rust) rustLook(m, dampLook(laid, outside, OUTSIDE));
     Object.assign(m, {
       colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
       outputNode: outsideOutputNode(outside, OUTSIDE),
@@ -1237,6 +1243,7 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
     };
   });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
+  if (RUNNING.rust) rustLook(mat, beaconLook(mat.uniforms.uTime));
   return mat;
 }
 

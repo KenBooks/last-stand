@@ -5,6 +5,9 @@
 // camera goes round them (sheets turned to the camera turned with it); a bed of coal lumps glowing
 // through cracks in their char; embers drifting up and smoke over it. One swell of the flames' height and the light's (a fire a metre across puffs about
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { emberLook } from '../engine/looks/fire';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { particles, col } from '../fx/particles';
@@ -560,6 +563,7 @@ export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE
         #include <aomap_fragment>`);
   };
   mat.customProgramCacheKey = () => 'fire-ember';
+  if (RUNNING.rust) rustLook(mat, emberLook({ time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue }));
   // (on WebGPU, its look as nodes: world/fireNodes.ts; its own values a property of its own, read off it as drawn)
   const looks: EmberLooks = { time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue };
   Object.defineProperty(mat, 'emberLooks', { value: looks, configurable: true });

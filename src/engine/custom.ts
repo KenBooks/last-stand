@@ -14,7 +14,8 @@ export interface RustLook {
   shader: RustShader;
   /** the shader's numbers (`m.c`), written each frame its material is drawn in */
   numbers(out: Float32Array): void;
-  /** the shader's two maps (`t_extra0`, `t_extra1`) */
+  /** the shader's maps: two read in either stage (`t_extra0`, `t_extra1`), two more as it's shaded (`t_extra2`,
+   *  `t_extra3`) */
   maps?: readonly (THREE.Texture | null)[];
   /** the shader's volume (`t_volume`, read by `samp_clamp`), as it is now: a 3D map of a byte a cell */
   volume?: () => THREE.Data3DTexture;

@@ -10,6 +10,7 @@ import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import { particles } from '../fx/particles';
+import { dazedDrawn } from '../fx/dazed';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
 import { recording, Tape } from './tape';
 
@@ -91,6 +92,7 @@ type AnyMaterial = THREE.Material & Partial<{
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
 const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
 const IDENTITY = new THREE.Matrix4();
+const WHITE = new THREE.Color(1, 1, 1);
 
 /** A perspective camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in. */
 function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4): THREE.Matrix4 {
@@ -290,16 +292,18 @@ export class Bridge {
 
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
   private describe(material: AnyMaterial, look?: RustLook): number {
-    if (!material.color || material.isShaderMaterial) return -1;
+    // (a shader material is drawn by its look alone: unlit, white under whatever its look writes)
+    if (!look && (!material.color || material.isShaderMaterial)) return -1;
     // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
     // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
     // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
     // is drawn by that)
     if (!look && ((material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode)) return -1;
     const p = this.scratchParams, maps = this.scratchMaps;
-    const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial);
+    const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial || material.isShaderMaterial);
     const map = material.map ?? null;
-    p[0] = material.color.r; p[1] = material.color.g; p[2] = material.color.b; p[3] = material.opacity;
+    const tint = material.color ?? WHITE;
+    p[0] = tint.r; p[1] = tint.g; p[2] = tint.b; p[3] = material.opacity;
     const glow = material.emissive, glowBy = material.emissiveIntensity ?? 1;
     p[4] = glow ? glow.r * glowBy : 0; p[5] = glow ? glow.g * glowBy : 0; p[6] = glow ? glow.b * glowBy : 0;
     p[7] = material.alphaTest;
@@ -403,7 +407,7 @@ export class Bridge {
   private shaders = new Map<string, number>();
   private scratchLook = new Float32Array(LOOK_FLOATS);
   /** a look's two maps, then its volume */
-  private scratchExtra = new Uint32Array(3);
+  private scratchExtra = new Uint32Array(5);
   private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
 
   /** A volume's id, its cells sent again as its version moves on (a new one made when its size does). */
@@ -441,6 +445,8 @@ export class Bridge {
       this.scratchExtra[0] = this.textureId(look.maps?.[0]);
       this.scratchExtra[1] = this.textureId(look.maps?.[1]);
       this.scratchExtra[2] = volume;
+      this.scratchExtra[3] = this.textureId(look.maps?.[2]);
+      this.scratchExtra[4] = this.textureId(look.maps?.[3]);
       const id = this.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, this.scratchExtra);
       entry = {
         id, params: p.slice(), maps: maps.slice(), key, seen: this.frame, changes: 0, own: true, custom: numbers.slice(), volume,
@@ -566,7 +572,7 @@ export class Bridge {
 
   private addMesh(mesh: THREE.Mesh): void {
     // (the particles' pools are handed over whole: `sprites`)
-    if (mesh.userData.particles) return;
+    if (mesh.userData.particles || mesh.name === 'dazed stars') return;
     const geometry = mesh.geometry;
     const look = Array.isArray(mesh.material) ? undefined : lookOf(mesh.material);
     if (look?.before && this.renderer) {
@@ -719,10 +725,18 @@ export class Bridge {
   /** The particles' pools as the engine's sprites: those blended by their alpha, then those added. */
   private sprites(): void {
     const pools = [particles.smoke, particles.glow];
+    // (the dazed foes' stars with those blended: a sprite of a width below 0 is a star)
+    const stars = dazedDrawn();
     const runs = pools.map((pool, slot) => {
-      const count = pool?.count ?? 0;
-      if (this.spriteRuns[slot].length < count * 8) this.spriteRuns[slot] = new Float32Array(count * 16);
+      const count = pool?.count ?? 0, extra = slot === 0 ? stars.count : 0;
+      if (this.spriteRuns[slot].length < (count + extra) * 8) this.spriteRuns[slot] = new Float32Array((count + extra) * 16);
       const run = this.spriteRuns[slot];
+      for (let star = 0; star < extra; star++) {
+        const at = (count + star) * 8;
+        run[at] = stars.pos[star * 3]; run[at + 1] = stars.pos[star * 3 + 1]; run[at + 2] = stars.pos[star * 3 + 2];
+        run[at + 3] = -stars.size[star];
+        run[at + 4] = stars.fill.r; run[at + 5] = stars.fill.g; run[at + 6] = stars.fill.b; run[at + 7] = stars.alpha[star];
+      }
       for (let i = 0; i < count; i++) {
         const at = i * 8;
         run[at] = pool.pos[i * 3]; run[at + 1] = pool.pos[i * 3 + 1]; run[at + 2] = pool.pos[i * 3 + 2];
@@ -730,7 +744,7 @@ export class Bridge {
         run[at + 4] = pool.col[i * 4]; run[at + 5] = pool.col[i * 4 + 1]; run[at + 6] = pool.col[i * 4 + 2];
         run[at + 7] = pool.col[i * 4 + 3];
       }
-      return run.subarray(0, count * 8);
+      return run.subarray(0, (count + extra) * 8);
     });
     this.engine.set_sprites(runs[0], runs[1]);
     this.freshViews();

@@ -62,22 +62,36 @@ export interface EmberLooks {
 /** how much of a standard material's sheen char keeps (fire.ts's `CHAR_SHEEN`) */
 const CHAR_SHEEN = 0.2;
 
+/** the embers' functions' WGSL, in the order they're made: each before what calls it */
+const emberSources: string[] = [];
+const keptEmber = (source: string): string => {
+  emberSources.push(source);
+  return source;
+};
+
+/** The embers' WGSL whole (`emberChar`, `emberGlow` and what they call), for a renderer that takes it as source: the
+ *  Rust engine's look of a fire's bed (`engine/looks/fire.ts`). */
+export function emberWgsl(): string {
+  emberFns();
+  return emberSources.join('\n');
+}
+
 /** The char's and the embers' functions, fire.ts's `EMBER_COMMON` as WGSL (made once). */
 let embers: { char: N; glow: N } | null = null;
 function emberFns(): { char: N; glow: N } {
   const { wgslFn } = tsl as any;
   if (embers) return embers;
-  const hash = wgslFn(`fn emberHash(p: vec2f) -> f32 {
+  const hash = wgslFn(keptEmber(`fn emberHash(p: vec2f) -> f32 {
     return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
-  }`);
-  const noise = wgslFn(`fn emberNoise(p: vec2f) -> f32 {
+  }`));
+  const noise = wgslFn(keptEmber(`fn emberNoise(p: vec2f) -> f32 {
     let i = floor(p);
     var f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(emberHash(i), emberHash(i + vec2f(1.0, 0.0)), f.x),
       mix(emberHash(i + vec2f(0.0, 1.0)), emberHash(i + vec2f(1.0, 1.0)), f.x), f.y);
-  }`, [hash]);
-  const fbm = wgslFn(`fn emberFbm(start: vec2f) -> f32 {
+  }`), [hash]);
+  const fbm = wgslFn(keptEmber(`fn emberFbm(start: vec2f) -> f32 {
     var p = start;
     var v = 0.0;
     var a = 0.5;
@@ -87,14 +101,14 @@ function emberFns(): { char: N; glow: N } {
       a *= 0.5;
     }
     return v;
-  }`, [noise]);
-  const hash3 = wgslFn(`fn emberHash3(q: vec3f) -> vec3f {
+  }`), [noise]);
+  const hash3 = wgslFn(keptEmber(`fn emberHash3(q: vec3f) -> vec3f {
     let p = vec3f(dot(q, vec3f(127.1, 311.7, 74.7)), dot(q, vec3f(269.5, 183.3, 246.1)),
       dot(q, vec3f(113.5, 271.9, 124.6)));
     return fract(sin(p) * 43758.5453);
-  }`);
+  }`));
   // how far a point is from the edge between the nearest two cells (0 on it)
-  const cellEdge = wgslFn(`fn emberCellEdge(p: vec3f) -> f32 {
+  const cellEdge = wgslFn(keptEmber(`fn emberCellEdge(p: vec3f) -> f32 {
     let i = floor(p);
     let f = fract(p);
     var nearest = 8.0;
@@ -114,16 +128,16 @@ function emberFns(): { char: N; glow: N } {
       }
     }
     return next - nearest;
-  }`, [hash3]);
-  const hot = wgslFn(`fn emberHot(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> f32 {
+  }`), [hash3]);
+  const hot = wgslFn(keptEmber(`fn emberHot(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> f32 {
     return clamp((1.0 - smoothstep(0.2, 1.05, length(p - centre) / radius)) * heat, 0.0, 1.0);
-  }`);
-  const char = wgslFn(`fn emberChar(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> vec3f {
+  }`));
+  const char = wgslFn(keptEmber(`fn emberChar(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> vec3f {
     let ash = smoothstep(0.7, 0.84, emberFbm(p.xz * 9.0 + p.y * 7.0 + 3.0))
       * (0.25 + 0.75 * (1.0 - emberHot(p, centre, radius, heat)));
     return mix(vec3f(0.01, 0.009, 0.008), vec3f(0.1, 0.097, 0.094), ash);
-  }`, [fbm, hot]);
-  const glow = wgslFn(`fn emberGlow(p: vec3f, up: f32, time: f32, centre: vec3f, radius: f32, heat: f32) -> vec3f {
+  }`), [fbm, hot]);
+  const glow = wgslFn(keptEmber(`fn emberGlow(p: vec3f, up: f32, time: f32, centre: vec3f, radius: f32, heat: f32) -> vec3f {
     let hotHere = emberHot(p, centre, radius, heat);
     let crack = (1.0 - smoothstep(0.0, 0.06, emberCellEdge(p * 22.0)))
       * smoothstep(0.4, 0.62, emberFbm(p.xz * 4.0 + p.y * 3.0));
@@ -133,7 +147,7 @@ function emberFns(): { char: N; glow: N } {
     let faces = max(heat - 1.0, 0.0) * hotHere * sides * (0.3 + 0.7 * emberNoise(p.xz * 14.0 + p.y * 9.0));
     let g = clamp((crack * (0.03 + hotHere * hotHere) + hotPatch * hotHere * hotHere + faces) * breathe, 0.0, 1.0);
     return mix(vec3f(0.8, 0.08, 0.01), vec3f(1.0, 0.42, 0.07), g) * (0.6 + g * 2.4) * g;
-  }`, [hot, cellEdge, fbm, noise]);
+  }`), [hot, cellEdge, fbm, noise]);
   embers = { char, glow };
   return embers;
 }
