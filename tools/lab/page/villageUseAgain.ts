@@ -4,13 +4,18 @@
 // notice board as open until he walked off it; the campfire's Close the same, left out here: its dialog asks the relay
 // server how it is, which the lab's page can't reach). `canary` leaves the second press out for the first object,
 // which must then be found closed. And each put away by E itself ("lets add option to dismiss with E as well"), and
-// opened by E after that; its canary leaves that press out for the first, which must be found open.
+// opened by E after that; its canary leaves that press out for the first, which must be found open. Put away by E it
+// must stay away ("E in choose hero should cancel hero choosing like all other interactions in the village": the press
+// that left the hall's screen was heard by the village's update in the same frame, which used the hall again, and the
+// screen came back by the page's own time, after a check counting frames alone had read it gone); the canary leaves
+// that press unspent, and the hall must be found opened again.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { untilInRealTime } from './villageWaits';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { villageObject } from '../../../src/game/village';
+import * as heroSelect from '../../../src/ui/heroSelect';
 import type { LightsChecked } from './villageLights';
 
 /** frames left after a press or a click for the page to follow it */
@@ -32,6 +37,12 @@ const shown = (selector: string): boolean => !document.querySelector(selector)?.
 /** the frames what E opens is given to show (the hall's screen comes once its heroes are prepared, by the page's own
  *  time) */
 const OPEN_FRAMES = 600;
+
+/** the frames, each with real time after it, that what E put away is watched to stay away */
+const STAY_FRAMES = 120;
+
+/** what's said of an object the press that put it away opened again */
+const REOPENED = 'put away by E, the same press opened it again';
 
 /** E pressed, and the frames after it; with `shows`, until what it opens shows (`villageWaits.ts`). */
 async function pressE(lab: Lab, shows?: string): Promise<void> {
@@ -72,6 +83,13 @@ async function putAwayByE(lab: Lab, o: Opened, skipPress: boolean): Promise<stri
   if (!shown(o.shows)) return `${o.id}: E never opened it`;
   if (!skipPress) await pressE(lab);
   const left = shown(o.shows);
+  // (and it stays away: the hall's screen comes back by the page's own time, if the same press opened it again)
+  const back = !left && await untilInRealTime(lab, () => shown(o.shows), STAY_FRAMES);
+  if (back) {
+    (document.querySelector(o.close) as HTMLElement | null)?.click();
+    await lab.step(SETTLE);
+    return `${o.id}: ${REOPENED}`;
+  }
   await pressE(lab, o.shows);
   const again = shown(o.shows);
   (document.querySelector(o.close) as HTMLElement | null)?.click();
@@ -90,12 +108,22 @@ export async function objectsUsedAgain(lab: Lab, canary: boolean): Promise<Light
   // (the hall's screen too, from play, "in hall of heroes pressing E should cancel back, same like other E
   // interactions")
   const dismissed = OPENED;
-  for (const [i, o] of dismissed.entries()) {
-    const failure = await putAwayByE(lab, o, canary && i === 0);
-    if (failure) failed.push(failure);
+  // (asked of the module whole: an A/B runs this file in main's tree, whose screen may have no such switch)
+  const spendsE: ((on: boolean) => void) | undefined = heroSelect.heroSelectSpendsE;
+  spendsE?.(!canary);
+  try {
+    for (const [i, o] of dismissed.entries()) {
+      const failure = await putAwayByE(lab, o, canary && i === 0);
+      if (failure) failed.push(failure);
+    }
+  } finally {
+    spendsE?.(true);
   }
   const all = OPENED.length + dismissed.length;
-  const line = `used again: ${all - failed.length} of ${all}: opened by E after their own button, put away by E`;
-  if (canary) return { lines: [line], problems: [], caught: failed.length > 0, moments: [] };
+  const line = `used again: ${all - failed.length} of ${all}: opened by E after their own button, put away by E `
+    + 'and staying away';
+  // (the canary's three plants each found: the second press left out, the putting away left out, the press unspent)
+  const reopened = failed.some((failure) => failure.endsWith(REOPENED));
+  if (canary) return { lines: [line], problems: [], caught: failed.length >= 3 && reopened, moments: [] };
   return { lines: [line], problems: failed.map((f) => `used again: ${f}`), caught: null, moments: [] };
 }

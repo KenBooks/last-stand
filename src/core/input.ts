@@ -335,6 +335,9 @@ export function endInputFrame(): void {
 export const isDown = (k: string): boolean =>
   input.down.has(k) || input.touch.has(k) || (k === 'mouse0' && input.mouse.left) || (k === 'mouse2' && input.mouse.right);
 export const wasPressed = (k: string): boolean => input.pressed.has(k);
+/** A press taken by what it did: nothing later in the frame hears it too (the E that left the hall of heroes' screen
+ *  was heard by the village's update in the same frame, which opened the hall again). */
+export function spendPress(k: string): void { input.pressed.delete(k); }
 
 /**
  * Whether an Esc pressed now is the one that lost the pointer lock, which already did what Esc does (paused): a
