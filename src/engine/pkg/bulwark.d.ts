@@ -6,7 +6,8 @@ export class Engine {
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * A material drawn by a shader of the page's, with up to 192 floats of that shader's own and its two maps.
+     * A material drawn by a shader of the page's, with up to 192 floats of that shader's own, its two maps and
+     * (the third of `extra`) its volume.
      */
     add_custom_material(shader: number, params: Float32Array | number[], maps: Uint32Array | number[], key: number, custom: Float32Array | number[], extra: Uint32Array | number[]): number;
     add_material(params: Float32Array | number[], maps: Uint32Array | number[], key: number): number;
@@ -19,6 +20,10 @@ export class Engine {
      * A map from its RGBA bytes; 0 if they don't fit its size.
      */
     add_texture(width: number, height: number, pixels: Uint8Array | number[], srgb: boolean): number;
+    /**
+     * A volume (a 3D map), a byte a cell; 0 if they don't fit its size.
+     */
+    add_volume(width: number, height: number, depth: number, cells: Uint8Array | number[]): number;
     /**
      * Where the page writes the skinned meshes' bones, 16 floats each, with room for `floats`.
      */
@@ -59,6 +64,7 @@ export class Engine {
      * and those added. Kept until set again.
      */
     set_sprites(blended: Float32Array | number[], added: Float32Array | number[]): void;
+    set_volume(id: number, cells: Uint8Array | number[]): void;
     /**
      * What the last frame drew: draw calls, the shadow's draw calls, objects, things out of view, triangles, and
      * the GPU's time for its passes (ms; 0 where the browser doesn't time them).
@@ -78,6 +84,7 @@ export interface InitOutput {
     readonly engine_add_mesh: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => number;
     readonly engine_add_shader: (a: number, b: number, c: number) => number;
     readonly engine_add_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly engine_add_volume: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_bones: (a: number, b: number) => number;
     readonly engine_create: (a: any) => any;
     readonly engine_drop_instances: (a: number, b: number) => void;
@@ -93,14 +100,15 @@ export interface InitOutput {
     readonly engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_sprites: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1575: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1600: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_473: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_473_26: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_473_27: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_475: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1582: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1607: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_480: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_480_28: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_480_29: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_482: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

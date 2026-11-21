@@ -16,7 +16,7 @@ import { recording, Tape } from './tape';
 /** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
 const RECORD = 24;
 /** a record's flags (plan.rs) */
-const CASTS_SHADOW = 1, NEVER_CULLED = 2;
+const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** where the globals' parts begin, in floats (`Globals` in the engine's common.wgsl) */
@@ -517,7 +517,9 @@ export class Bridge {
     if (this.count === this.capacity) this.takeViews(this.capacity * 2, this.boneCapacity);
     const r = this.records, at = this.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
-    r[at + 6] = (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow) ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED);
+    // (a material that writes no colour is in the frame for its shadow or its depth alone: the game's merged casters)
+    r[at + 6] = (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow) ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
+      | (material.colorWrite === false ? SHADOW_ONLY : 0);
     r[at + RAW_INSTANCES] = raw;
     if (bones >= 0) {
       const skinned = mesh as THREE.SkinnedMesh;
