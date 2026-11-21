@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { portShader, wgslNoise, type Tsl } from '../core/shaderPorts';
 import { NEAR_GLOW } from '../core/materials';
+import { effectLook, num, rgb } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 import { floorPatch, lay } from './floorPatch';
 import { particles, col } from './particles';
@@ -142,7 +143,7 @@ interface Ribbons {
 }
 
 function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
-  return portShader(new THREE.ShaderMaterial({
+  return effectLook(portShader(new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 }, uFade: { value: 0 }, uBands: { value: 3 }, uTwist: { value: 1 }, uSpeed: { value: 1 },
       uHeat: { value: 1 }, uSeed: { value: 0 },
@@ -223,11 +224,92 @@ function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
         heatK: u.uHeat, seed: u.uSeed,
       }),
     };
+  }), 'storm-ribbon', RIBBON_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uTime'); out[1] = num(u, 'uFade'); out[2] = num(u, 'uBands'); out[3] = num(u, 'uTwist');
+      out[4] = num(u, 'uSpeed'); out[5] = num(u, 'uHeat'); out[6] = num(u, 'uSeed');
+    },
   });
 }
 
+/** the storm for the Rust engine (src/engine/effects.ts), shared by its three looks: the noise's octaves (the port's
+ *  fsFbm), the funnel swaying and snaking (its funnelPosition), and how squarely a wall faces the camera (the GLSL's
+ *  vFacing, in the world) */
+const STORM_WGSL = /* wgsl */ `
+fn storm_fbm(start: vec3f) -> f32 {
+  var p = start;
+  var s = 0.0;
+  var a = 0.5;
+  for (var i = 0; i < 3; i++) {
+    s += a * fx_noise3(p);
+    p *= 2.03;
+    a *= 0.5;
+  }
+  return s;
+}
+
+fn storm_funnel(pos: vec3f, uv: vec2f, time: f32) -> vec3f {
+  var p = pos;
+  p.x += (sin(time * 2.3 + p.y * 2.0) * 0.06 + sin(time * 1.1 + p.y * 4.3) * 0.03) * p.y;
+  p.z += (cos(time * 1.9 + p.y * 1.7) * 0.06 + cos(time * 1.3 + p.y * 3.7) * 0.03) * p.y;
+  let ang = uv.x * 6.2831853;
+  let bulge = fx_noise3(vec3f(cos(ang) * 1.5, p.y * 3.0 - time * 0.8, sin(ang) * 1.5));
+  let k = 1.0 + (bulge - 0.5) * 0.22;
+  return vec3f(p.x * k, p.y, p.z * k);
+}
+
+fn storm_facing(in: VertexOut) -> f32 {
+  return abs(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)));
+}
+`;
+
+/** the ribbons for the Rust engine: the port's WGSL above (fsRibbon), premultiplied as the GLSL writes it */
+const RIBBON_HOOKS = STORM_WGSL + /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).position = storm_funnel((*v).position, (*v).uv, m.c[0].x);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].x;
+  let fade = m.c[0].y;
+  let bands = m.c[0].z;
+  let twist = m.c[0].w;
+  let speed = m.c[1].x;
+  let heatK = m.c[1].y;
+  let seed = m.c[1].z;
+  let uv = in.uv;
+  let depth = in.depth;
+  let facing = storm_facing(in);
+  let ang = uv.x * 6.2831853;
+  let v = uv.y;
+  let around = vec3f(cos(ang), 0.0, sin(ang));
+  let warp = storm_fbm(around * 1.6 + vec3f(0.0, v * 3.0 - time * 0.7, 0.0) + seed);
+  let churn = fx_noise3(around * 3.4 + vec3f(0.0, v * 6.0 - time * 1.4, 0.0) + seed * 2.0);
+  let f = fract(uv.x * bands + v * twist - time * speed + (warp - 0.5) * 1.1 + (churn - 0.5) * 0.35);
+  let band = smoothstep(0.0, 0.04, f) * pow(1.0 - f, 2.6);
+  let edge = smoothstep(0.0, 0.02, f) * (1.0 - smoothstep(0.02, 0.09, f));
+  let streak = smoothstep(0.35, 0.75,
+    storm_fbm(around * 0.8 + vec3f(f * 9.0, v * 1.6 - time * 1.5, f * 9.0) + seed * 3.0));
+  let tear = storm_fbm(around * 2.4 + vec3f(f * 2.5, v * 3.5 - time * 1.1, 0.0) + seed * 5.0);
+  let whole = mix(0.25, 1.0, smoothstep(0.28, 0.58, tear));
+  let heat = band * (0.4 + 0.8 * streak) * whole;
+  let puff = storm_fbm(around * 2.0 + vec3f(0.0, v * 2.5 - time * 0.9, 0.0) + seed * 7.0);
+  let haze = 0.16 * smoothstep(0.42, 0.8, puff);
+  let ends = smoothstep(0.03, 0.2, v) * (1.0 - smoothstep(0.86, 1.0, v));
+  let thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(max(1.0 - facing, 0.0), 1.5));
+  let a = clamp(heat * 1.5 + edge * 0.7 * whole + haze, 0.0, 0.85) * thick * ends * fade
+    * smoothstep(1.5, 7.0, depth);
+  var c = mix(vec3f(0.55, 0.04, 0.0), vec3f(0.95, 0.28, 0.02), smoothstep(0.05, 0.35, heat));
+  c = mix(c, vec3f(1.0, 0.72, 0.3), smoothstep(0.45, 0.85, heat + edge * 0.6));
+  let cover = a * mix(0.45, 0.9, smoothstep(0.2, 0.7, heat + edge * 0.4));
+  (*s).base = vec4f(c * mix(1.0, heatK, fx_near(depth)) * a, cover);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
+
 function smokeMaterial(): THREE.ShaderMaterial {
-  return portShader(new THREE.ShaderMaterial({
+  return effectLook(portShader(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uColor: { value: new THREE.Color(SMOKE) } },
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: FUNNEL_VERTEX,
@@ -263,11 +345,45 @@ function smokeMaterial(): THREE.ShaderMaterial {
         * smoothstep(1.5, 7.0, depth);
       return vec4f(color, a);
     }`, [stormNodes(t).fbm])({ ...funnelVaryings(t), time: u.uTime, fade: u.uFade, color: u.uColor }),
-  }));
+  })), 'storm-smoke', SMOKE_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uTime'); out[1] = num(u, 'uFade');
+      rgb(u, 'uColor', out, 4);
+    },
+  });
 }
 
+/** the ash for the Rust engine: the port's WGSL above (fsSmoke) */
+const SMOKE_HOOKS = STORM_WGSL + /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).position = storm_funnel((*v).position, (*v).uv, m.c[0].x);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].x;
+  let fade = m.c[0].y;
+  let color = m.c[1].rgb;
+  let uv = in.uv;
+  let facing = storm_facing(in);
+  let ang = uv.x * 6.2831853;
+  let v = uv.y;
+  let around = vec3f(cos(ang), 0.0, sin(ang));
+  let warp = storm_fbm(around * 1.3 + vec3f(0.0, v * 2.2 - time * 0.5, 0.0) + 11.0);
+  let wind = fract(uv.x * 5.0 + v * 2.4 - time * 0.3 + warp * 0.8);
+  let streak = smoothstep(0.0, 0.25, wind) * (1.0 - smoothstep(0.35, 0.9, wind));
+  let n = storm_fbm(around * 2.0 + vec3f(wind * 3.0, v * 3.0 - time * 0.9, 0.0) + 17.0);
+  let ends = smoothstep(0.05, 0.3, v) * (1.0 - smoothstep(0.8, 1.0, v));
+  let thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(max(1.0 - facing, 0.0), 1.5));
+  let a = smoothstep(0.3, 0.7, n) * (0.35 + 0.65 * streak) * 0.7 * thick * ends * fade
+    * smoothstep(1.5, 7.0, in.depth);
+  (*s).base = vec4f(color, a);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
+
 function floorMaterial(): THREE.ShaderMaterial {
-  return portShader(new THREE.ShaderMaterial({
+  return effectLook(portShader(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uReach: { value: 1 } },
     transparent: true, depthWrite: false, ...OVER,
     vertexShader: /* glsl */`
@@ -318,8 +434,40 @@ function floorMaterial(): THREE.ShaderMaterial {
         fade: u.uFade, reach: u.uReach,
       }),
     };
+  }), 'storm-floor', FLOOR_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uTime'); out[1] = num(u, 'uFade'); out[2] = num(u, 'uReach');
+    },
   });
 }
+
+/** the swirl on the floor for the Rust engine: the port's WGSL above (fsFloor), its place on the patch (the GLSL's
+ *  vAt) from the vertex */
+const FLOOR_HOOKS = STORM_WGSL + /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).position.xz, 0.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].x;
+  let fade = m.c[0].y;
+  let reach = m.c[0].z;
+  let at = in.c0.xy;
+  let r = length(at) / reach;
+  let ang = atan2(at.y, at.x + 1e-5);
+  let n = storm_fbm(vec3f(at * 1.3, time * 0.5));
+  let arms = fract(ang / 6.2831853 * 3.0 + r * 1.6 + time * 0.9 + n * 0.5);
+  let arm = smoothstep(0.0, 0.1, arms) * pow(1.0 - arms, 3.0);
+  let inside = 1.0 - smoothstep(0.15, 1.0, r);
+  let glow = arm * inside * (0.5 + n);
+  let scorch = 0.45 * inside * (0.6 + 0.4 * n);
+  let c = mix(vec3f(0.5, 0.05, 0.0), vec3f(1.0, 0.42, 0.08), smoothstep(0.2, 0.8, glow));
+  let a = clamp(scorch + glow, 0.0, 0.9) * fade;
+  (*s).base = vec4f(c * glow * mix(1.0, 1.5, fx_near(in.depth)) * fade, a);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /** The meshes of one of each material, for the warm-up (core/shaders.ts: every program compiled at load). */
 export function warmFirestorm(): THREE.Mesh[] {

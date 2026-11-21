@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
 import { tunable } from '../core/tuning';
-import { holeNow } from '../core/seeThrough';
+import { holeNow, type SeeThrough } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import { HALL, TERRACE } from '../data/village';
 import { particles } from '../fx/particles';
@@ -28,9 +28,12 @@ const RAW_INSTANCES = 7;
 const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
-  floats: 352,
+  seeHall: 352, seeKinds: 360, floats: 680,
 };
 const MAX_POINTS = 32;
+/** the kinds of see-through the engine holds, the floats of each (`SeeKind` in its common.wgsl), and how far under
+ *  the hero's floor is still clear of his hole (`FLOOR_CLEAR` in core/seeThrough.ts) */
+const SEE_KINDS_MOST = 16, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
 /** the sun's shadow map, a side (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
 /** the largest side a map is handed over at */
@@ -337,7 +340,7 @@ export class Bridge {
     p[9] = material.metalness ?? 0;
     p[10] = material.normalScale?.x ?? 1;
     // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
-    p[11] = material.seeThrough ? 1 : 0;
+    p[11] = this.seeKind(material.seeThrough as SeeThrough | undefined);
     const placed = map ?? material.alphaMap ?? material.normalMap ?? null;
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
@@ -666,6 +669,7 @@ export class Bridge {
   private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number, bones: number, raw = 0): void {
     const materialId = this.materialId(material);
     if (!materialId) { this.skip(material.type); return; }
+    this.watched?.add(mesh);
     if (this.count === this.capacity) this.takeViews(this.capacity * 2, this.boneCapacity);
     const r = this.records, at = this.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
@@ -852,6 +856,46 @@ export class Bridge {
     }
   }
 
+  /** A material's kind of see-through as the engine has it: 0 for none, else its place among the kinds and one
+   *  (`core/seeThrough.ts`: every material of a kind holds the one object of its numbers). */
+  private seeKind(see: SeeThrough | undefined): number {
+    if (!see || !TUNE.see) return 0;
+    let slot = this.seeKinds.indexOf(see);
+    if (slot < 0) {
+      if (this.seeKinds.length === SEE_KINDS_MOST) { this.skip('see-through kind past 16'); return 0; }
+      slot = this.seeKinds.push(see) - 1;
+    }
+    return slot + 1;
+  }
+  private seeKinds: SeeThrough[] = [];
+
+  /** Each kind's numbers as the game has them this frame (`seeFadeAt`'s uniforms), and the hall its doors open into. */
+  private writeSeeKinds(): void {
+    const g = this.globals;
+    g[GLOBALS.seeHall] = TERRACE.x; g[GLOBALS.seeHall + 1] = TERRACE.high + HALL.wallHigh;
+    g[GLOBALS.seeHall + 2] = TERRACE.high + HALL.doorHigh; g[GLOBALS.seeHall + 3] = HALL.half;
+    g[GLOBALS.seeHall + 4] = HALL.doorHalf; g[GLOBALS.seeHall + 5] = HALL.wallHigh; g[GLOBALS.seeHall + 6] = SEE_FLOOR_CLEAR;
+    for (let slot = 0; slot < this.seeKinds.length; slot++) {
+      const see = this.seeKinds[slot], at = GLOBALS.seeKinds + slot * SEE_KIND_FLOATS;
+      see.k.value.toArray(g, at);
+      g[at + 4] = see.minY.value; g[at + 5] = see.across.value; g[at + 6] = see.whole.value; g[at + 7] = see.ramp.value;
+      const reach = see.reach?.value;
+      g[at + 8] = reach ? reach.x : 1e5; g[at + 9] = reach ? reach.y : 1e6;
+      g[at + 10] = see.doorOn?.value ?? 0;
+      g[at + 11] = see.blended ? (see.pale ? 2 : 1) : 0;
+      const room = see.room?.value, door = see.door?.value;
+      g[at + 12] = room ? room.x : -1e5; g[at + 13] = room ? room.y : -1e5;
+      g[at + 14] = room ? room.z : 1e5; g[at + 15] = room ? room.w : 1e5;
+      g[at + 16] = door ? door.x : 0; g[at + 17] = door ? door.y : 0; g[at + 18] = door ? door.z : 0; g[at + 19] = door ? door.w : 0;
+    }
+  }
+
+  /** A harness's: the meshes handed to the engine since it was set (`lab rustcheck`: every foe of a fight drawn). */
+  watched: Set<THREE.Object3D> | null = null;
+  /** A harness's: the shelter as the last frame had it (its box's least x and z and its most, the sky's share under
+   *  it, its walls' tops). */
+  shelterNow(): number[] { return Array.from(this.globals.subarray(GLOBALS.shelter, GLOBALS.shelter + 6)); }
+
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
     const stack = this.stack;
     stack.length = 0;
@@ -890,6 +934,7 @@ export class Bridge {
     const e = camera.matrixWorld.elements;
     g[GLOBALS.camRight] = e[0]; g[GLOBALS.camRight + 1] = e[1]; g[GLOBALS.camRight + 2] = e[2];
     g[GLOBALS.camUp] = e[4]; g[GLOBALS.camUp + 1] = e[5]; g[GLOBALS.camUp + 2] = e[6];
+    this.writeSeeKinds();
     const hole = holeNow();
     hole.focus.toArray(g, GLOBALS.seeFocus);
     g[GLOBALS.seeFocus + 3] = hole.minY;

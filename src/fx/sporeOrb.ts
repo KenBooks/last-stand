@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { particles, col } from './particles';
 import { portShader, wgslNoise } from '../core/shaderPorts';
+import { effectLook, num, rgb } from '../engine/effects';
 
 const geo = new THREE.SphereGeometry(1, 20, 14);
 /** one per colour (same program); their time moves together */
@@ -37,7 +38,7 @@ function material(color: number): THREE.ShaderMaterial {
       }`,
     transparent: true, depthWrite: false,
   }));
-  portShader(m, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying }, u) => ({
+  effectLook(portShader(m, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying }, u) => ({
     fragment: wgslFn(`fn sporeOrb(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f, time: f32) -> vec4f {
       let p = pos * 2.2;
       let w = vec3f(fbm3(p + vec3f(0.0, time * 0.9, 0.0)), fbm3(p + vec3f(5.2, 0.0, time * 0.7)),
@@ -51,9 +52,38 @@ function material(color: number): THREE.ShaderMaterial {
     }`, [wgslNoise().fbm3])({
       pos: varying(positionGeometry), nrm: normalView, v: positionViewDirection, color: u.uColor, time: u.uTime,
     }),
-  }));
+  })), 'spore-orb', SPORE_HOOKS, {
+    numbers(u, out) {
+      rgb(u, 'uColor', out, 0);
+      out[3] = num(u, 'uTime');
+    },
+  });
   return m;
 }
+
+/** the orb for the Rust engine (src/engine/effects.ts): the port's WGSL above, the vertex's own place handed on */
+const SPORE_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).position, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let time = m.c[0].w;
+  let pos = in.c0.xyz;
+  let p = pos * 2.2;
+  let w = vec3f(fx_fbm3(p + vec3f(0.0, time * 0.9, 0.0)), fx_fbm3(p + vec3f(5.2, 0.0, time * 0.7)),
+    fx_fbm3(p - vec3f(time * 0.8, 1.3, 0.0)));
+  let n = fx_fbm3(p + w * 2.5 + time * 0.4);
+  let vein = pow(max(0.0, 1.0 - abs(n - 0.5) * 7.0), 3.0);
+  let dense = smoothstep(0.3, 0.75, n);
+  let c = mix(color * 0.1, color * 0.75, dense) + color * 1.4 * vein;
+  let f = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  (*s).base = vec4f(c, smoothstep(0.0, 0.6, f) * min(1.0, 0.2 + 0.75 * dense + vein));
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /** An orb of radius `size` in the thrower's spore colour. */
 export function sporeOrb(color: number, size: number): THREE.Mesh {

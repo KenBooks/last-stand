@@ -8,6 +8,8 @@
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
 import * as THREE from 'three';
 import { portShader, type Port, type Tsl } from '../core/shaderPorts';
+import { RUNNING } from '../core/rendererChoice';
+import { effectLook, num, rgb } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 
 /** the braid: its middle over the floor, each strand's radius and how far it winds from the middle (m), how fast it
@@ -111,6 +113,69 @@ function vinePort({ wgslFn, attribute, positionGeometry, normalLocal, modelWorld
   };
 }
 
+// The vine for the Rust engine (src/engine/effects.ts): the port's WGSL above. The engine hands a hook a vertex's
+// place, normal, uv and colour and no attribute of the vine's own, so under it a piece's geometry carries them in
+// those two (`Parts.packed`): its colour the strand's winding (`aFan`) and how far along it is with what it's part of
+// (`aAlong` + `PACK.kind` * `aKind`), its uv the swelling (`aOff`), two of its numbers in one float.
+/** how the vine's own attributes ride in uv and colour: a kind's step in the colour's alpha (over any piece's
+ *  length, m), and the swelling's x and y as two whole numbers of `steps` over +-`reach` m in one float */
+const PACK = { kind: 256, steps: 4094, reach: 0.5 };
+
+const VINE_HOOKS = /* wgsl */ `
+fn vine_off(uv: vec2f) -> vec3f {
+  let hi = floor(uv.x / 4096.0);
+  let lo = uv.x - hi * 4096.0;
+  return vec3f((vec2f(hi, lo) / ${PACK.steps.toFixed(1)} - 0.5) * ${(2 * PACK.reach).toFixed(1)}, uv.y);
+}
+
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  let grow = m.c[0].x;
+  let wither = m.c[0].y;
+  let time = m.c[0].z;
+  let rise = m.c[0].w;
+  let headK = m.c[1].x;
+  let side = m.c[2].xyz;
+  let fan = (*v).color.xyz;
+  let kind = floor((*v).color.w / ${PACK.kind.toFixed(1)});
+  let along = (*v).color.w - kind * ${PACK.kind.toFixed(1)};
+  let off = vine_off((*v).uv);
+  let h = 1.0 - clamp((grow - along) / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
+  let head = h * h * headK;
+  let k = clamp((grow - along) / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - wither);
+  var p = (*v).position + fan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + off * sqrt(k);
+  p.y += rise * head * ${HEAD.rise.toFixed(2)};
+  p += side * rise * head * sin(time * 9.0 - along * 5.0) * ${HEAD.weave.toFixed(2)};
+  (*v).position = p;
+  (*v).color = vec4f(1.0);
+  (*v).c0 = vec4f(along, kind, head, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let time = m.c[0].z;
+  let bark = m.c[3].rgb;
+  let sap = m.c[4].rgb;
+  let along = in.c0.x;
+  let kind = in.c0.y;
+  let head = in.c0.z;
+  let n = normalize(in.normal);
+  let facing = dot(n, normalize(vec3f(0.3, 0.9, 0.2)));
+  let isLeaf = kind > 0.5 && kind < 1.5;
+  let lit = 0.3 + 0.7 * select(max(facing, 0.0), abs(facing), isLeaf);
+  let pulse = 0.6 + 0.4 * sin(along * 2.2 - time * 6.0);
+  (*s).fog = 0.0;
+  if (isLeaf) {
+    let leaf = mix(vec3f(0.025, 0.06, 0.012), vec3f(0.07, 0.16, 0.03), lit);
+    (*s).base = vec4f(leaf * (0.5 + 0.5 * lit) + sap * 0.04, 1.0);
+    return true;
+  }
+  let groove = 0.5 + 0.5 * sin(along * 23.0 + n.x * 3.0 + n.z * 2.0);
+  let c = bark * lit * (0.7 + 0.4 * groove) * select(1.0, 1.2, kind > 1.5);
+  let vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
+  (*s).base = vec4f(c + sap * (0.02 + vein * pulse * 0.8 + head * 0.45), 1.0);
+  return true;
+}
+`;
+
 /** One piece of vine: its mesh, grown to `grow` metres and withered by `wither` (0 to 1) each frame. */
 export interface Vine {
   mesh: THREE.Mesh;
@@ -155,11 +220,29 @@ class Parts {
     geo.setAttribute('aFan', new THREE.Float32BufferAttribute(this.fan, 3));
     geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(this.along, 1));
     geo.setAttribute('aKind', new THREE.Float32BufferAttribute(this.kind, 1));
+    if (RUNNING.rust) this.packed(geo);
     geo.setIndex(this.index);
     geo.computeBoundingSphere();
     // (bound by its growth's places alone: out by its girth, its splay and its reared head)
     geo.boundingSphere!.radius += BRAID.out * (1 + HEAD.splay) + BRAID.strand + HEAD.rise + LEAF.length;
     return geo;
+  }
+
+  /** The vine's own attributes again in `geo`'s uv and colour, where the Rust engine's hooks read them (`PACK`). */
+  private packed(geo: THREE.BufferGeometry): void {
+    const count = this.count, uv = new Float32Array(count * 2), colour = new Float32Array(count * 4);
+    const step = (v: number): number => {
+      const share = THREE.MathUtils.clamp(v / (2 * PACK.reach) + 0.5, 0, 1);
+      return Math.round(share * PACK.steps);
+    };
+    for (let i = 0; i < count; i++) {
+      uv[i * 2] = step(this.off[i * 3]) * 4096 + step(this.off[i * 3 + 1]);
+      uv[i * 2 + 1] = this.off[i * 3 + 2];
+      colour.set([this.fan[i * 3], this.fan[i * 3 + 1], this.fan[i * 3 + 2]], i * 4);
+      colour[i * 4 + 3] = this.along[i] + PACK.kind * this.kind[i];
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setAttribute('color', new THREE.BufferAttribute(colour, 4));
   }
 }
 
@@ -224,8 +307,18 @@ function material(bark: number, sap: number, rise: number, side: THREE.Vector3) 
     uGrow: { value: 0 }, uWither: { value: 0 }, uTime: { value: 0 }, uRise: { value: rise }, uHead: { value: 1 },
     uSide: { value: side.clone() }, uBark: { value: new THREE.Color(bark) }, uSap: { value: new THREE.Color(sap) },
   };
-  const mat = portShader(new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide }),
-    vinePort);
+  const mat = effectLook(
+    portShader(new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide }),
+      vinePort),
+    'vine', VINE_HOOKS, {
+      numbers(u, out) {
+        out[0] = num(u, 'uGrow'); out[1] = num(u, 'uWither'); out[2] = num(u, 'uTime'); out[3] = num(u, 'uRise');
+        out[4] = num(u, 'uHead');
+        rgb(u, 'uSide', out, 8);
+        rgb(u, 'uBark', out, 12);
+        rgb(u, 'uSap', out, 16);
+      },
+    });
   return { mat, uniforms };
 }
 

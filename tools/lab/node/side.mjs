@@ -87,7 +87,15 @@ export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false
 const VILLAGE_COOKIE = 'last-stand-beta-village';
 
 /** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
-const RENDERER_QUERIES = { webgl: '?renderer=webgl', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1', rust: '?renderer=rust' };
+// (the Rust engine's is the plain address, as a player's is on this branch: booted at `?renderer=rust`, the lab never
+// met what read the address itself, and crowds stayed on in the preview, every foe drawn by a shader the engine never
+// runs: from play, "in fight all enemies are hidden")
+const RENDERER_QUERIES = {
+  webgl: '?renderer=webgl',
+  webgpu: '?renderer=webgpu',
+  meshlets: '?renderer=webgpu&meshlets=1',
+  rust: '',
+};
 
 /** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`, `--panels`). */
 export function bootOf(options) {

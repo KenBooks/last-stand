@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';
+import { effectLook, num, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
 import { particles, col, burst, smokePuff, debris } from './particles';
 import { shockwave, decal } from './effects';
 import { flashFree } from './lights';
@@ -81,7 +82,13 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Ma
         gl_FragColor = vec4(uColor * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
       }`,
   }));
-  portShader(m as THREE.ShaderMaterial, (t, u) => riftPort(t, u, kind, look));
+  const name = kind === 'orb' ? `rift-${look}` : `rift-${kind}`;
+  effectLook(portShader(m as THREE.ShaderMaterial, (t, u) => riftPort(t, u, kind, look)), name, RIFT_HOOKS[name], {
+    numbers(u, out) {
+      rgb(u, 'uColor', out, 0);
+      out[3] = num(u, 'uTime');
+    },
+  });
   mats.set(key, m);
   return m;
 }
@@ -125,6 +132,75 @@ function riftPort(t: Tsl, u: Tsl, kind: 'orb' | 'halo' | 'tail', look: Look): Po
     return vec4f(color * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
   }`, [fbm])(at) };
 }
+
+/** the vertex's own place handed on, as the GLSL's vP */
+const RIFT_VERTEX = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).position, 0.0);
+}
+`;
+/** each bolt's material for the Rust engine (src/engine/effects.ts): `riftPort`'s WGSL above, the view taken in the
+ *  world; the halo and the tail are the ones `nearGlow` wraps */
+const RIFT_HOOKS: Record<string, string> = {
+  'rift-void': RIFT_VERTEX + /* wgsl */ `
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let time = m.c[0].w;
+  let pos = in.c0.xyz;
+  let f = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  let rim = 1.0 - f;
+  let p = pos * 2.6;
+  let n = fx_fbm3(p + vec3f(fx_fbm3(p + time * 1.3), fx_fbm3(p - time * 1.1), 0.0) * 2.0 - time * 0.6);
+  let band = pow(max(0.0, 1.0 - abs(n - 0.5) * 5.0), 2.0);
+  let c = color * 0.05 + color * (1.6 * rim * rim + 1.3 * band * rim) + vec3f(1.0, 0.85, 1.0) * pow(rim, 5.0) * 1.2;
+  (*s).base = vec4f(c, 0.92);
+  (*s).fog = 0.0;
+  return true;
+}
+`,
+  'rift-magma': RIFT_VERTEX + /* wgsl */ `
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let time = m.c[0].w;
+  let pos = in.c0.xyz;
+  let n = fx_fbm3(pos * 2.3 + 1.7);
+  let crack = pow(max(0.0, 1.0 - abs(n - 0.5) * 9.0), 1.5);
+  let pulse = 0.8 + 0.2 * sin(time * 9.0 + pos.x * 6.0);
+  let f = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  let rock = vec3f(0.07, 0.05, 0.045) * (0.4 + 0.8 * f) + vec3f(0.12, 0.06, 0.03) * fx_noise3(pos * 8.0);
+  let lava = mix(color, vec3f(1.0, 0.85, 0.45), crack) * 2.6 * pulse;
+  (*s).base = vec4f(mix(rock, lava, crack) + color * pow(1.0 - f, 3.0) * 0.8, 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`,
+  'rift-halo': FX_PLAIN_VERTEX + /* wgsl */ `
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let f = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  (*s).base = vec4f(color * f * f * (1.0 - smoothstep(0.7, 0.86, f)) * 1.2 * fx_near(in.depth), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`,
+  'rift-tail': RIFT_VERTEX + /* wgsl */ `
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let time = m.c[0].w;
+  let pos = in.c0.xyz;
+  let along = -pos.z;
+  var a = 0.0;
+  if (length(pos.xy) > 1e-5) { a = atan2(pos.y, pos.x); }
+  let streaks = fx_fbm3(vec3f(cos(a) * 1.6, sin(a) * 1.6, along * 3.0 + time * 7.0));
+  let fade = pow(max(1.0 - along, 0.0), 1.6) * smoothstep(0.0, 0.08, along);
+  let edge = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  let c = color * (0.35 + 2.2 * smoothstep(0.45, 0.8, streaks)) * fade * sqrt(edge) * 2.0;
+  (*s).base = vec4f(c * fx_near(in.depth), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`,
+};
 
 /** The bolt's mesh, radius `size`: the orb, a soft halo round it and (void) a tail behind. */
 export function riftBolt(look: Look, color: number, size: number): THREE.Mesh {

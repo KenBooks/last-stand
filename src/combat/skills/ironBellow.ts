@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
+import { effectLook, num, rgb } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, groundFlash, crackDecal } from '../../fx/effects';
@@ -45,7 +46,7 @@ const rimGeo = new THREE.ShapeGeometry(rimShape, 12);
 const emblemGeo = new THREE.ShapeGeometry(kite(0.34), 8);
 
 function faceMaterial(): THREE.ShaderMaterial {
-  return portShader(nearGlow(new THREE.ShaderMaterial({
+  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: { uColor: { value: new THREE.Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -72,8 +73,37 @@ function faceMaterial(): THREE.ShaderMaterial {
       let i = (0.12 + edge * 0.35 + scan * 0.35) * lines + flash * 0.35;
       return vec4f(mix(color, vec3f(1.0), flash * 0.3) * i * fade, i * fade);
     }`)({ p: varying(positionGeometry.xy), color: u.uColor, fade: u.uFade, flash: u.uFlash, time: u.uTime }),
-  }));
+  })), 'bellow-face', FACE_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uFade'); out[1] = num(u, 'uFlash'); out[2] = num(u, 'uTime');
+      rgb(u, 'uColor', out, 4);
+    },
+  });
 }
+
+/** a shield's face for the Rust engine (src/engine/effects.ts): the port's WGSL above, the kite's own plane from the
+ *  vertex */
+const FACE_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).rest.xy, 0.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let fade = m.c[0].x;
+  let flash = m.c[0].y;
+  let time = m.c[0].z;
+  let color = m.c[1].rgb;
+  let p = in.c0.xy;
+  let edge = smoothstep(0.1, 0.4, length(p * vec2f(1.0, 0.85)));
+  let scanAt = fract(p.y * 1.2 - time * 0.9) - 0.5;
+  let scan = exp(-scanAt * scanAt * 60.0);
+  let lines = 0.75 + 0.25 * sin(p.y * 120.0 + time * 4.0);
+  let i = (0.12 + edge * 0.35 + scan * 0.35) * lines + flash * 0.35;
+  (*s).base = vec4f(mix(color, vec3f(1.0), flash * 0.3) * i * fade * fx_near(in.depth), i * fade);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 function shieldMaterials() {
   const m = (c: number, k: number) => nearGlow(new THREE.MeshBasicMaterial({

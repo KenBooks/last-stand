@@ -8,6 +8,7 @@ import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
 import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
+import { effectLook, rgb } from '../engine/effects';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { ALL_STILL, drawingStill, inShadowsOnly, type StillDrawn } from './culling';
@@ -894,7 +895,7 @@ function disposeScene(root: THREE.Object3D): void {
 // Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
 function envScene({ sky, panel }: EnvColours): THREE.Scene {
   const envScene = new THREE.Scene();
-  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), portShader(new THREE.ShaderMaterial({
+  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), effectLook(portShader(new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: { uSky: { value: new THREE.Vector3(...sky) } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -905,13 +906,28 @@ function envScene({ sky, panel }: EnvColours): THREE.Scene {
     fragment: wgslFn(`fn envSky(p: vec3f, sky: vec3f) -> vec4f {
       return vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(p).y)), 1.0);
     }`)({ p: varying(positionGeometry), sky: u.uSky }),
-  })));
+  })), 'env-sky', ENV_SKY_HOOKS, { numbers(u, out) { rgb(u, 'uSky', out, 0); } }));
   envScene.add(skyMesh);
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
   envScene.add(panelMesh);
   return envScene;
 }
+
+/** the environment's sky for the Rust engine (src/engine/effects.ts): the port's WGSL above, the vertex's own place
+ *  handed on */
+const ENV_SKY_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).position, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let sky = m.c[0].rgb;
+  (*s).base = vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(in.c0.xyz).y)), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
