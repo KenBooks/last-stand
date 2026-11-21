@@ -18,7 +18,7 @@ export const AREAS = [
   {
     name: 'the fog',
     files: /^src\/core\/sight\.ts$/,
-    checks: /fog|sight|seen|leaves|fires|roofShows|doorCone|doorLine|hallEntry|hallWallsOne|freeCam/i,
+    checks: /fog|sight|seen|leaves|fires|roofShows|doorCone|doorLine|hallDoor|hallEntry|hallWallsOne|freeCam/i,
   },
   {
     name: 'what thins',

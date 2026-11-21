@@ -217,6 +217,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     ghostsOverHim: () => ghostsOverHim(lab, options.canary),
     doorConeOpens: () => doorConeOpens(lab, options.canary),
     doorConeFromStair: () => doorConeFromStair(lab, options.canary),
+    hallDoorSight: async () => (await import('./villageHallDoor')).hallDoorSight(lab, options.canary),
     heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
     hallWallsOneByOne: () => hallWallsOneByOne(lab, options.canary),
     heroLitInHall: () => heroLitInHall(lab, options.canary),
