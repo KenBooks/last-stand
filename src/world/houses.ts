@@ -15,10 +15,12 @@ function builderOf(id: RoomId): (group: THREE.Group) => Room {
   return build;
 }
 
-/** Every house's room built, each into a group of its own (hidden till shown). */
-export function buildRooms(): Record<RoomId, Room> {
+/** Every house's room built, each into a group of its own (hidden till shown), `pause` awaited before each. */
+export async function buildRooms(pause: () => Promise<void>): Promise<Record<RoomId, Room>> {
   const rooms = {} as Record<RoomId, Room>;
   for (const id of ROOM_IDS) {
+    // (a room a task: built at once, the four were one task of 1.4 s in a boot with the CPU 4 times slower)
+    await pause();
     const group = new THREE.Group();
     group.name = `room ${id}`;
     rooms[id] = builderOf(id)(group);

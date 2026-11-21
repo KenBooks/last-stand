@@ -718,7 +718,13 @@ function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; 
 
 // --- the builder ----------------------------------------------------------------------------------------------------
 
-export function buildVillage(scene: THREE.Group): Village {
+/**
+ * The village built into `scene` a piece at a time: it yields between its pieces (the ground, the meadow, the square,
+ * the hall, the cottages, the trees...), so the boot lets the page go between them (`builtInSlices` in `arena.ts`).
+ * Built at once, it was one task of 2.2 s in a boot with the CPU 4 times slower, the loading screen still. Nothing
+ * between two yields reads what a later piece builds; the pieces draw their random numbers in the same order.
+ */
+export function* villageSteps(scene: THREE.Group): Generator<void, Village, undefined> {
   const rng = mulberry(9001);
   const obstacles: Obstacle[] = [];
   const updaters: Updater[] = [];
@@ -736,6 +742,7 @@ export function buildVillage(scene: THREE.Group): Village {
   const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
   // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
   stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
+  yield;
   const meadow = buildMeadow(mask, maskTexture, updaters);
   // (no grass drawn behind a cottage's walls: a hair inside them, and under their plate, the roof left out)
   // (nor behind the terrace's block from below it, nor the hall on it: its door shows its room, its panes nothing)
@@ -755,8 +762,11 @@ export function buildVillage(scene: THREE.Group): Village {
     },
   ]);
   scene.add(meadow);
+  yield;
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
+  yield;
   stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
+  yield;
   // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
   // hidden over the hero inside, are kept out of the merge)
   const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
@@ -764,23 +774,29 @@ export function buildVillage(scene: THREE.Group): Village {
     part.traverse((object) => { object.userData.noMerge = true; });
     part.userData.mergeWithin = true;
   }
+  yield;
   const lid = buildChest(scene, M, obstacles);
   // (drawn over the sun's kept map each frame: each frame of its swing, redrawn whole, was 8 million triangles and 8 to 12
   // ms of the page, and the first turn of the view by the chest fell to 70 a second)
   movesInShadows(lid);
   const pile = lid.parent!.getObjectByName('chest-hoard')!;
   stillBuilt(scene, () => buildLectern(scene, M, obstacles));
+  yield;
   const candle = candleFlame(scene, torchLook(), lights);
   stillBuilt(scene, () => buildPalisade(scene, wall, M, rng));
   const portals: Portal[] = stillBuilt(scene, () => [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)]);
+  yield;
   const exits = {} as Village['exits'];
   for (const id of BIOME_IDS) {
     const p = exitPlace(id);
     exits[id] = { at: new THREE.Vector3(p.x, 0, p.z), facing: p.facing };
   }
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
+  yield;
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
+  yield;
   buildYard(scene, wall, M);
+  yield;
   // (in a group of its own, which the outline of its seat draws: sat round on the floor, as a bonfire is)
   const campfireGroup = new THREE.Group();
   campfireGroup.name = 'campfire';
@@ -790,14 +806,17 @@ export function buildVillage(scene: THREE.Group): Village {
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   const seats = [fireSeat(obstacles[obstacles.length - 1], [{ root: campfireGroup }])];
   seats.push(...stillBuilt(scene, () => buildBenches(scene, M, obstacles)));
+  yield;
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
   // (the places of their own, world/places/: the weapons rack; before the lamps, which keep off what stands)
   stillBuilt(scene, () => buildPlaces({ scene, wall, M, obstacles, updaters }));
+  yield;
   const stair = [-1, 1].map((s) => buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
   for (const { light } of stair) lights.push(light);
   // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim
   // and never casting, the hero by one cast "no shadows FROM LIGHT, only from moon")
   const lanterns = [...stair.map(({ lantern }) => lantern), ...stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles))];
+  yield;
   // (after the lamps, which keep off what stands: placed first, the posts moved lamps every lit check reads)
   const signArms = stillBuilt(scene, () => buildSignposts(scene,
     { post: M.freeTimber, board: M.freePlanks, foot: M.freeAshlar, face: M.propFace }, obstacles));
