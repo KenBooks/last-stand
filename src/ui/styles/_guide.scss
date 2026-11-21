@@ -253,14 +253,21 @@ body.touch .pbg-key { display: none; }
 .gd-tl-call circle { fill: rgba(176, 112, 255, .35); stroke: #c79bff; stroke-width: 1.5px; }
 .gd-tl-call text { fill: var(--ink); font: 700 11px var(--font-display); }
 
-// the combos: cards laid two or three across, each its steps as the skill bar's slots with an arrow between, centred on
-// the icons and set under the title's edge, and how it's done under them (a combo a line down the page, its caps and names apart, left most of the page
-// empty: "wasting lots whitespace here, lets organize too")
-.gd-combos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; margin: 8px 0 4px; }
-.gd-combo { display: flex; flex-direction: column; min-width: 0; padding: 10px 14px 6px; border-radius: 4px; background: $panel-raised;
+// the combos: a card a row, its steps the skill bar's slots with an arrow between, centred on the icons, in a column of
+// their own at its left, its title and how it's done beside them, every card's text starting at one edge (a combo a
+// line down the page, its caps and names apart, left most of the page empty: "wasting lots whitespace here, lets
+// organize too"; cards two across, their steps over their text, left half of each card empty beside its steps). On a
+// narrow page the steps stand under the title, over the text
+.gd-combos { display: grid; gap: 8px; margin: 8px 0 4px; }
+.gd-combo { display: grid; grid-template-columns: 330px minmax(0, 1fr); grid-template-areas: "steps title" "steps how";
+  align-content: center; column-gap: 20px; min-width: 0; padding: 8px 16px 8px 12px; border-radius: 4px; background: $panel-raised;
   border: 1px solid rgba($frame, .3); box-shadow: inset 0 1px 0 rgba(255, 230, 180, .05); }
-.gd-combo h4 { margin: 0; }
-.gd-combo .gd-p { margin: 4px 0; color: var(--ink); font-size: 14px; line-height: 1.4; }
+.gd-combo h4 { grid-area: title; align-self: end; margin: 0; }
+.gd-combo .gd-seq { grid-area: steps; align-self: center; }
+.gd-combo .gd-p { grid-area: how; align-self: start; margin: 4px 0 0; color: var(--ink); font-size: 14px; line-height: 1.4; }
+@container (max-width: 640px) {
+  .gd-combo { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "steps" "how"; padding: 10px 14px; }
+}
 .gd-seq { display: flex; align-items: flex-start; margin: 6px 0 4px; }
 .gd-seq > .gd-kslot { flex: 0 1 $key-slot; }
 // (half the icon's height down from its slot's top, past the cap's room above it)
@@ -295,16 +302,17 @@ $cell-art: 92px;
 .gd-compare.keys .gd-chip::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000;
   box-shadow: inset 0 0 0 1px rgba($frame, .6), inset 0 0 12px rgba(0, 0, 0, .7); pointer-events: none; }
 // (one line, every name of the table one size, its longest's fitted to the picture's width (`--len`, its letters: one
-// shrunk alone read as a patch), its colour lightened over art of its own colour, on a shade that rises from its foot, outlined dark: a skill's colour on art
+// shrunk alone read as a patch), in its skill's colour as everywhere else (lightened, one skill read as two), on a shade that rises from its foot, outlined dark: a skill's colour on art
 // of its own colour, Thunder Crescent's blue on its lightning, read poorly, and a name of two lines climbed into the art)
 .gd-compare.keys .gd-cn { position: absolute; inset: auto 0 0; padding: 18px 3px 5px; font-size: min(13px, calc(190cqi / var(--len, 15)));
-  line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--c, var(--ink)), #fff 30%);
+  line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c, var(--ink));
   background: linear-gradient(transparent, rgba(0, 0, 0, .72) 45%, rgba(0, 0, 0, .9));
   text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px #000; }
-// (a key with no skill: the same frame, sunk and empty, None where a name stands, so it reads as an empty slot, not a
-// picture still to come)
-.gd-compare.keys .gd-chip.none { background: rgba(0, 0, 0, .55); box-shadow: inset 0 3px 10px rgba(0, 0, 0, .9); }
-.gd-compare.keys .gd-chip.none .gd-cn { background: none; color: var(--ink-dim); font-style: italic; }
+// (a key with no skill: an empty slot's dashed frame over the row, None in it, so it reads as none on purpose; filled
+// dark as the others it read as a picture still to come)
+.gd-compare.keys .gd-chip.none { display: grid; place-items: center; background: none; }
+.gd-compare.keys .gd-chip.none::after { border: 1px dashed rgba($frame, .45); box-shadow: none; }
+.gd-compare.keys .gd-chip.none .gd-cn { position: static; padding: 0; background: none; color: var(--ink-dim); font-style: italic; }
 // (a page too narrow for six such pictures, an upright tablet's: the table keeps its pictures at a size their names fit
 // and scrolls across in its frame, as it did before; shared out among six columns there, they were 44 px, the headers
 // ran into each other and the names broke mid-word)
