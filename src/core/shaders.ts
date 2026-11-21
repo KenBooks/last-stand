@@ -8,6 +8,7 @@ import { WEBGPU, clustersBack, compiled as webgpuCompiled, holdClusters } from '
 import { G } from '../state';
 import { CROWD_LAYER, WARM_LAYER } from './layers';
 import { drawnInShadowsOnly } from '../world/culling';
+import { perfClock } from './perfClock';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
@@ -379,11 +380,14 @@ function onlyThese<T>(root: THREE.Object3D, lot: THREE.Object3D[], run: () => T)
 function withoutUndrawn(root: THREE.Object3D, compile: () => Compiled): Compiled {
   const out: THREE.Object3D[] = [];
   root.traverse((o) => {
-    const undrawn = o.layers.mask === 1 << CROWD_LAYER || drawnInShadowsOnly(o as THREE.Mesh);
-    if (undrawn && o.parent) out.push(o);
+    if (undrawn(o) && o.parent) out.push(o);
   });
   return without(out, compile);
 }
+
+/** Whether no pass draws `o` with its own material (`withoutUndrawn`): a crowd's body's own mesh, or a caster the
+ *  shadow map alone draws. */
+const undrawn = (o: THREE.Object3D): boolean => o.layers.mask === 1 << CROWD_LAYER || drawnInShadowsOnly(o as THREE.Mesh);
 
 /** The textures `materials` draw with (a render target's left out: drawn into, not uploaded). */
 function texturesOf(materials: Compiled): Set<THREE.Texture> {
@@ -624,24 +628,97 @@ function drawnAlone(scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebG
   }
 }
 
+/** A mesh (or line, or points) of a scene a stepped compile makes the programs of: lit where a pass draws it with its
+ *  own material, its shadows' wherever it is. */
+interface ToCompile {
+  object: THREE.Object3D;
+  lit: boolean;
+}
+
+/** What of `root` has a material (`leaveOut` and all under it passed over), each lit unless it or what it's under
+ *  is drawn by no pass with its own (`undrawn`, as `withoutUndrawn` leaves it out). */
+function toCompile(root: THREE.Object3D, leaveOut: Set<THREE.Object3D>, lit = true, into: ToCompile[] = []): ToCompile[] {
+  if (leaveOut.has(root)) return into;
+  const drawn = lit && !undrawn(root);
+  if ((root as THREE.Mesh).material) into.push({ object: root, lit: drawn });
+  for (const child of root.children) toCompile(child, leaveOut, drawn, into);
+  return into;
+}
+
+/** `objects` as three's compile walks what it's handed: each alone (what's under it is in the list itself), and no
+ *  light counted (three counts the lights of what it's handed on top of the scene's, which are counted from the scene
+ *  itself, as for a whole scene's compile). A plain object, not a three.js one: each of those draws random numbers. */
+function asLot(objects: THREE.Object3D[]): THREE.Object3D {
+  const lot = {
+    traverse: (visit: (o: THREE.Object3D) => void): void => {
+      for (const o of objects) visit(o);
+    },
+    traverseVisible: (): void => {},
+  };
+  return lot as unknown as THREE.Object3D;
+}
+
+/** the most of a stepped compile run in one task (ms, by `perfClock`), and its first lot's objects: a lot under a
+ *  quarter of the slice doubles the next, one over the slice halves it. Each lot walks the whole scene for its lights
+ *  (three's compile), so where the programs come from a cache (a return) lots of a fixed two dozen were 1 s more of a
+ *  boot with the CPU 4 times slower; where they're compiled afresh one object may take tens of ms. */
+const COMPILE_SLICE_MS = 40;
+const COMPILE_FIRST_LOT = 16;
+
+/** The next lot's size after one of `size` objects took `took` ms. */
+function nextLot(size: number, took: number): number {
+  if (took < COMPILE_SLICE_MS / 4) return size * 2;
+  if (took > COMPILE_SLICE_MS) return Math.max(1, Math.floor(size / 2));
+  return size;
+}
+
 /**
  * `scene`'s programs (`leaveOut` left out) compiled now for `target`, ahead of the warm-up that will draw them, and
  * those of `objects` (out of the scene) as the scene lights them: the GPU's threads link them meanwhile, and the
- * warm-up's compile finds them made. The whole scene, as three counts a light twice that is both in the scene and in
- * what's compiled with it.
+ * warm-up's compile finds them made. A few dozen of the scene's objects a lot, lit by the scene's lights alone, as the
+ * whole scene's compile lit them (`asLot`), the page let go between lots once `COMPILE_SLICE_MS` has gone: compiled
+ * at once, the village's and the lobby's made one task of 3.2 and 2.4 s each in a first visit's boot with the CPU 4
+ * times slower (`npm run stalls -- --scenario boot --cpu-slowdown 4 --js --url "this?village=1"`), and a phone's
+ * loading screen stood still as long. Each of `objects` is compiled whole, its own lights counted with the scene's.
  */
-export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[], objects: THREE.Object3D[] = []): void {
-  const prev = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
-  without(leaveOut, () => {
-    withoutUndrawn(scene, () => renderer.compile(scene, camera));
-    compileShadows(renderer, scene, camera, scene);
-  });
-  for (const root of objects) {
-    withoutUndrawn(root, () => renderer.compile(root, camera, scene));
-    compileShadows(renderer, root, camera, scene);
+export async function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[], objects: THREE.Object3D[] = []): Promise<void> {
+  const all = toCompile(scene, new Set(leaveOut));
+  let since = perfClock.now();
+  /** `run` with the target and `leaveOut` out of the scene, as a compile of it was; the page let go after it once the
+   *  slice has gone; the time (ms) `run` took */
+  const step = async (run: () => void): Promise<number> => {
+    const start = perfClock.now();
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(target);
+    try {
+      without(leaveOut, run);
+    } finally {
+      renderer.setRenderTarget(prev);
+    }
+    const end = perfClock.now();
+    if (end - since >= COMPILE_SLICE_MS) {
+      await nextTask();
+      since = perfClock.now();
+    }
+    return end - start;
+  };
+  let size = COMPILE_FIRST_LOT;
+  for (let i = 0; i < all.length;) {
+    const lot = all.slice(i, i + size);
+    i += lot.length;
+    const lit = lot.filter((o) => o.lit).map((o) => o.object);
+    const took = await step(() => {
+      if (lit.length > 0) renderer.compile(asLot(lit), camera, scene);
+      compileShadows(renderer, asLot(lot.map((o) => o.object)), camera, scene);
+    });
+    size = nextLot(size, took);
   }
-  renderer.setRenderTarget(prev);
+  for (const root of objects) {
+    await step(() => {
+      withoutUndrawn(root, () => renderer.compile(root, camera, scene));
+      compileShadows(renderer, root, camera, scene);
+    });
+  }
 }
 
 /**

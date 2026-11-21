@@ -140,10 +140,10 @@ const shownNow = (): THREE.Object3D => G.arena.shownGroup();
  * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on). The
  * post chain's and the overlay's too, which the lobby's first full frame linked one after another.
  */
-export function compileTheBiome(): void {
+export async function compileTheBiome(): Promise<void> {
   const { staff, hand } = heroLights();
   G.scene.add(staff, hand);
-  compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
+  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
   compilePasses([labelsScene()]);
 }
 
@@ -178,7 +178,7 @@ let lobbyExtras: THREE.Object3D[] = [];
  * paint builds Skia's programs on the GPU process's main thread one after another (a first visit's 88, 1.1 s), and
  * the lobby's warm-up, compiled after it, had its links begin 0.6 s after it asked.
  */
-export function compileTheLobby(): void {
+export async function compileTheLobby(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
   const effects: [string, () => unknown][] = [
     ['shockwave', () => shockwave(p)], ['ground flash', () => groundFlash(p)], ['scorch', () => decal(p)],
@@ -195,7 +195,7 @@ export function compileTheLobby(): void {
     ...skillSamples(G.player.cls.model), ...named('ping', pingSamples()),
   ];
   lobbyExtras = extra;
-  compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
+  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
   // (the outline's edge: the dummies' masks are the lobby's warm-up's, as they spawn when the lobby is entered)
   compileOutline([]);
 }

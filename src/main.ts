@@ -239,7 +239,7 @@ async function boot() {
   // the village shown (or, with no village, the lobby's biome), and its programs compiled while the hero is built
   // (game/warmup.ts)
   if (!VILLAGE) initBiome();
-  compileTheBiome();
+  await compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   // (the loading screen seen through by a thousandth while the lobby's UI is rehearsed under it: opaque, Chrome
   // rastered and drew none of what it covered, ui/loading.ts)
@@ -282,7 +282,7 @@ async function boot() {
     slideMenuAhead(true);
   }
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
-  compileTheLobby();
+  await compileTheLobby();
   if (VILLAGE) {
     await painted();
     slideMenuAhead(false);
