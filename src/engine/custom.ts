@@ -27,6 +27,10 @@ export interface RustLook {
   /** how many of its numbers tell two of its materials apart: with it, materials that look alike share one of the
    *  engine's, and their meshes one draw call (each foe's pieces have materials of their own) */
   shared?: number;
+  /** whether anything its material shows by has changed since this was last asked (its numbers, its colour,
+   *  its glow): with it, a material that hasn't is drawn as it was, not described again (a fight's foes are a
+   *  thousand materials a frame) */
+  moved?(): boolean;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
 }

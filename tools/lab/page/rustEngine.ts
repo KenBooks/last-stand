@@ -69,7 +69,7 @@ function census(scene: THREE.Object3D, camera: THREE.Camera): string[] {
 
 /** what's read of each frame, and averaged */
 const TIMED: (keyof FrameStats)[] = [
-  'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'objects', 'culled', 'triangles',
+  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'objects', 'culled', 'triangles',
 ];
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
@@ -155,6 +155,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   lab.drawing = true;
   const read = new Map<keyof FrameStats, number[]>(TIMED.map((name) => [name, []]));
   const renders: number[] = [];
+  // (a whole frame of the game by the browser's clock: its update and its render)
+  const frames: number[] = [];
   const handedOver = { meshes: 0, textures: 0, materials: 0 };
   // (what the engine or the GPU says while it draws: a refused pipeline or pass draws nothing, and says so here)
   const said: string[] = [];
@@ -167,7 +169,9 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     // (what's first met here is handed over before the frames timed)
     await lab.step(10);
     for (let frame = 0; frame < command.frames; frame++) {
+      const began = clock.realNow();
       await lab.step(1);
+      frames.push(clock.realNow() - began);
       // (the browser let go: the engine's timestamps come back on its own time, and a step never yields)
       await window.__labClock.realFrame();
       for (const name of TIMED) read.get(name)!.push(bridge.stats[name]);
@@ -188,8 +192,10 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
   const lines = [
     `${where} ${command.view}, ${canvas.width}x${canvas.height} drawn, medians of ${command.frames} frames`,
-    `  the render: ${median(renders).toFixed(2)} ms on the CPU (the scene walked ${of('walkMs').toFixed(2)}, `
+    `  the render: ${median(renders).toFixed(2)} ms on the CPU (its matrices ${of('placeMs').toFixed(2)}, the scene walked ${of('walkMs').toFixed(2)}, `
       + `the engine ${of('engineMs').toFixed(2)}); the GPU ${of('gpuMs').toFixed(2)} ms, at the least ${Math.min(...read.get('gpuMs')!).toFixed(2)} (shadow and scene passes)`,
+    `  a whole frame: ${median(frames).toFixed(2)} ms on the CPU, the game's update and the lab's step `
+      + `${(median(frames) - median(renders)).toFixed(2)} of it`,
     `  ${of('records')} records from the page, ${of('culled')} things out of view, ${of('objects')} objects drawn `
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles`,
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `

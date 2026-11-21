@@ -49,6 +49,9 @@ export const TUNE = tunable('rust', {
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
+  /** only what moved has its matrices made again, only a material that changed is described again (0: every
+   *  object's and every material's each frame, to compare) */
+  still: 1,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
 });
@@ -63,6 +66,8 @@ export interface FrameStats {
   triangles: number;
   gpuMs: number;
   /** the walk of the scene, then the engine's own work, ms */
+  /** the scene's matrices made */
+  placeMs: number;
   walkMs: number;
   engineMs: number;
   /** handed over this frame */
@@ -137,7 +142,7 @@ const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hur
 
 export class Bridge {
   readonly stats: FrameStats = {
-    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, walkMs: 0, engineMs: 0,
+    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, placeMs: 0, walkMs: 0, engineMs: 0,
     newMeshes: 0, newTextures: 0, newMaterials: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */
@@ -361,6 +366,10 @@ export class Bridge {
     let entry = this.materials.get(material);
     if (entry && entry.seen === this.frame) return entry.id;
     const look = lookOf(material) ?? kitLookOf(material);
+    if (TUNE.still && look?.moved && entry?.id && !look.moved()) {
+      entry.seen = this.frame;
+      return entry.id;
+    }
     if (look) return look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
     const key = this.describe(material);
     if (key < 0) {
@@ -738,6 +747,52 @@ export class Bridge {
     }
   }
 
+  /**
+   * The scene's matrices made as three's `updateMatrixWorld` makes them, but only for what moved: an object's own
+   * matrix is composed again when its position, turn or scale differ from the last it was composed from, and its
+   * place in the world when it or something it stands in moved. (three composes and multiplies every object every
+   * frame: a third of the render's CPU with the engine drawing, most of it for props that never move.) A kind with
+   * an update of its own (a skinned mesh, a camera) is left to it.
+   */
+  private placeMoved(object: THREE.Object3D, moved: boolean, depth: number): void {
+    const kept = object as unknown as { placedFrom?: Float64Array; placedLate?: boolean };
+    // (a whole place that isn't shown, a battleground the hero isn't in or the village left for a run, is left as
+    // it stands until it's shown again: every biome is in the scene from the boot, and three walks them all)
+    if (!object.visible && depth > 0 && depth <= HIDDEN_PLACES) {
+      if (moved) kept.placedLate = true;
+      return;
+    }
+    if (kept.placedLate) {
+      kept.placedLate = false;
+      moved = true;
+    }
+    if (object.updateMatrixWorld !== PLAIN_UPDATE) { object.updateMatrixWorld(moved); return; }
+    if (object.matrixAutoUpdate) {
+      const p = object.position, q = object.quaternion, s = object.scale;
+      let from = kept.placedFrom;
+      if (!from) {
+        from = kept.placedFrom = new Float64Array(10);
+        from[0] = NaN;
+      }
+      if (from[0] !== p.x || from[1] !== p.y || from[2] !== p.z || from[3] !== q.x || from[4] !== q.y || from[5] !== q.z
+        || from[6] !== q.w || from[7] !== s.x || from[8] !== s.y || from[9] !== s.z) {
+        from[0] = p.x; from[1] = p.y; from[2] = p.z; from[3] = q.x; from[4] = q.y; from[5] = q.z; from[6] = q.w;
+        from[7] = s.x; from[8] = s.y; from[9] = s.z;
+        object.updateMatrix();
+      }
+    }
+    if (object.matrixWorldNeedsUpdate || moved) {
+      if (object.matrixWorldAutoUpdate) {
+        if (object.parent) object.matrixWorld.multiplyMatrices(object.parent.matrixWorld, object.matrix);
+        else object.matrixWorld.copy(object.matrix);
+      }
+      object.matrixWorldNeedsUpdate = false;
+      moved = true;
+    }
+    const children = object.children;
+    for (let i = 0; i < children.length; i++) this.placeMoved(children[i], moved, depth + 1);
+  }
+
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
     const stack = this.stack;
     stack.length = 0;
@@ -864,8 +919,12 @@ export class Bridge {
     this.sun = null;
     this.skipped.clear();
     stats.newMeshes = stats.newTextures = stats.newMaterials = 0;
-    if (scene.matrixWorldAutoUpdate) scene.updateMatrixWorld();
+    if (scene.matrixWorldAutoUpdate) {
+      if (TUNE.still) this.placeMoved(scene, false, 0);
+      else scene.updateMatrixWorld();
+    }
     if (!camera.parent && camera.matrixWorldAutoUpdate) camera.updateMatrixWorld();
+    const placed = perfClock.now();
     this.freshViews();
     this.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.walk(scene, camera);
@@ -880,9 +939,13 @@ export class Bridge {
     const [draws, shadowDraws, objects, culled, triangles, gpuMs] = this.engine.stats();
     Object.assign(stats, {
       records: this.count, draws, shadowDraws, objects, culled, triangles, gpuMs,
-      walkMs: walked - began, engineMs: drawn - walked,
+      placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }
 }
 
+/** three's own update of an object's matrices: a kind with another is left to its own */
+/** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
+const HIDDEN_PLACES = 2;
+const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);

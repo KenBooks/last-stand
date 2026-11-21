@@ -57,11 +57,30 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 };
 
-function kitLook(kit: KitLooks): RustLook {
+function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook {
+  // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a
+  // foe's material itself)
+  const was = new Float64Array(18).fill(NaN);
+  const now = new Float64Array(18);
   return {
     shader: KIT,
     casts: true,
     shared: NUMBERS,
+    moved() {
+      const u = kit.u, edge = u.uEdge.value;
+      now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
+      now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
+      now[7] = material.emissiveIntensity; now[8] = material.opacity; now[9] = material.version;
+      now[10] = (material.transparent ? 1 : 0) + (material.depthWrite ? 2 : 0) + (material.visible ? 4 : 0);
+      now[11] = kit.near.value;
+      const tint = material.color, glow = material.emissive;
+      now[12] = tint.r; now[13] = tint.g; now[14] = tint.b; now[15] = glow.r; now[16] = glow.g; now[17] = glow.b;
+      let moved = false;
+      for (let at = 0; at < 18; at++) {
+        if (now[at] !== was[at]) { was[at] = now[at]; moved = true; }
+      }
+      return moved;
+    },
     numbers(out) {
       const u = kit.u;
       out[0] = u.uDissolve.value; out[1] = u.uFrozen.value; out[2] = u.uChar.value; out[3] = u.uHit.value;
@@ -76,7 +95,7 @@ function kitLook(kit: KitLooks): RustLook {
 export function kitLookOf(material: THREE.Material): RustLook | undefined {
   const kit = (material as { kitLooks?: KitLooks }).kitLooks;
   if (!kit) return undefined;
-  const look = kitLook(kit);
+  const look = kitLook(kit, material as THREE.MeshStandardMaterial);
   rustLook(material, look);
   return look;
 }
