@@ -17,6 +17,9 @@ export const RUST = {
    *  geometry, map and material handed over) */
   boot: { wasmMs: 0, deviceMs: 0, firstFrameMs: 0 },
   frames: 0,
+  /** whether the loading screen has left (set by ui/perfHud.ts, which knows: this module can't import the page's
+   *  UI, a cycle through the renderer): under it a frame may take long, handing the places over ahead */
+  loaded: false,
   /** whether what the game hangs on three's render of the scene is run (the world's culling by cells, the kept
    *  shadow maps' draws): three's own work, which the engine has no use for */
   hooks: false,
@@ -92,6 +95,8 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
     RUST.captureNext = 0;
   } else {
     bridge.draw(scene, camera, time, renderer, grade);
+    const budget = RUST.loaded ? TUNE.ahead : TUNE.aheadLoading;
+    if (budget > 0) bridge.prepareAhead(scene, budget);
   }
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;

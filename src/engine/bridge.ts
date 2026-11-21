@@ -9,6 +9,7 @@ import { perfClock } from '../core/perfClock';
 import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
 import { lampList, LAMPS_MOST } from '../core/lamps';
+import { HALL, TERRACE } from '../data/village';
 import { particles } from '../fx/particles';
 import { dazedDrawn } from '../fx/dazed';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
@@ -52,6 +53,10 @@ export const TUNE = tunable('rust', {
   castAll: 1,
   /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against three's frame */
   shelterSky: 0.25,
+  /** ms a frame spent handing over what isn't shown yet (`prepareAhead`), under the loading screen and after it
+   *  (0: nothing ahead, each place handed over as it's first shown) */
+  aheadLoading: 30,
+  ahead: 2,
   /** only what moved has its matrices made again, only a material that changed is described again (0: every
    *  object's and every material's each frame, to compare) */
   still: 1,
@@ -749,6 +754,9 @@ export class Bridge {
     // (the list's first entry: the shelter, the hall of heroes' inside)
     g.set(lampList.subarray(0, 4), GLOBALS.shelter);
     g[GLOBALS.shelter + 4] = TUNE.shelterSky;
+    // (its walls' tops: over them is the hall's roof from outside, which stood black from above, sheltered from
+    // the sun it's under. From play: "top down view wall/roof thinning is broken")
+    g[GLOBALS.shelter + 5] = TERRACE.high + HALL.wallHigh;
     for (let lamp = 0; lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
@@ -792,6 +800,51 @@ export class Bridge {
     }
     const children = object.children;
     for (let i = 0; i < children.length; i++) this.placeShown(children[i], moved, depth + 1);
+  }
+
+  /**
+   * What the scene holds that the engine hasn't met handed over ahead of its first frame, hidden or not, for up to
+   * `budget` ms a call: each mesh's geometry, its materials with their maps, and the pipeline each will draw with.
+   * A place first shown handed everything over in its first frame, and the browser compiled each pipeline as it was
+   * first drawn with: the village's first frame after the hero was picked waited 1.3 s on the GPU with no script
+   * running, and the loading screen 5.7 s (a report from play, Q8CV-74H0). Walks the whole scene a part a call, then
+   * rests `AHEAD_REST` frames before looking again (the battlegrounds are built later, at Start).
+   */
+  prepareAhead(scene: THREE.Scene, budget: number): void {
+    if (this.aheadRest > 0) { this.aheadRest--; return; }
+    const stack = this.ahead;
+    if (!stack.length) stack.push(scene);
+    const until = perfClock.now() + budget;
+    let visited = 0;
+    while (stack.length) {
+      // (the clock read once every few objects: most are met already, and cost less than reading it)
+      if (++visited % 16 === 0 && perfClock.now() >= until) return;
+      const object = stack.pop()!;
+      if ((object as THREE.Mesh).isMesh) this.prepareMesh(object as THREE.Mesh);
+      const children = object.children;
+      for (let i = 0; i < children.length; i++) stack.push(children[i]);
+    }
+    this.aheadRest = AHEAD_REST;
+  }
+  private ahead: THREE.Object3D[] = [];
+  private aheadRest = 0;
+
+  /** A mesh's geometry, materials and pipelines made ready, as `addMesh` would meet them. */
+  private prepareMesh(mesh: THREE.Mesh): void {
+    if (mesh.userData.particles || mesh.name === 'dazed stars') return;
+    const geometry = mesh.geometry;
+    const single = Array.isArray(mesh.material) ? undefined : mesh.material;
+    const look = single ? lookOf(single) : undefined;
+    const counted = (geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry;
+    if (counted && !look) return;
+    if (!this.geometryId(geometry, look?.position)) return;
+    const skinned = !!(mesh as THREE.SkinnedMesh).isSkinnedMesh;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      if (!material) continue;
+      const id = this.materialId(material as AnyMaterial);
+      if (id) this.engine.ready_material(id, skinned, counted);
+    }
   }
 
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
@@ -948,6 +1001,8 @@ export class Bridge {
 /** three's own update of an object's matrices: a kind with another is left to its own */
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
 const HIDDEN_PLACES = 2;
+/** the frames `prepareAhead` rests after a walk of the whole scene before it looks again */
+const AHEAD_REST = 600;
 const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 /** Whether a map's image is a picture the GPU copies by itself: a canvas, a bitmap, an image (not bytes, nor a
  *  compressed or a cube map). */
@@ -955,8 +1010,16 @@ function pictured(texture: THREE.Texture): boolean {
   const image = texture.image as unknown;
   if ((texture as THREE.DataTexture).isDataTexture || (texture as THREE.CompressedTexture).isCompressedTexture) return false;
   if ((texture as THREE.CubeTexture).isCubeTexture) return false;
-  return image instanceof HTMLCanvasElement || image instanceof ImageBitmap || image instanceof HTMLImageElement
-    || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas);
+  if (image instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas)) {
+    // (a canvas nothing has drawn on yet has no context, and the GPU's copy of one is an error the engine's wgpu
+    // doesn't survive: every call after it threw, the game stopped. Asking for its context gives it one; null is a
+    // canvas with a context of another kind, which copies too)
+    if (!image.width || !image.height) return false;
+    (image as HTMLCanvasElement).getContext('2d');
+    return true;
+  }
+  if (image instanceof ImageBitmap) return image.width > 0 && image.height > 0;
+  return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
 }
 
 const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);

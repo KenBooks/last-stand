@@ -6,6 +6,8 @@ import { framesUncapped } from '../core/frameLoop';
 import * as THREE from 'three';
 import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
+import { RUST } from '../engine';
+import type { FrameStats } from '../engine/bridge';
 import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
@@ -101,7 +103,10 @@ const bootFrames: LongFrame[] = [];
 let bootLeft = Infinity;
 function watchBootFrames(): void {
   if (!longFramesSeen()) return;
-  void loadingLeft.then(() => { bootLeft = performance.now(); });
+  void loadingLeft.then(() => {
+    bootLeft = performance.now();
+    RUST.loaded = true;
+  });
   new PerformanceObserver((list) => {
     for (const e of list.getEntries()) {
       if (e.startTime < bootLeft) bootFrames.push(e as unknown as LongFrame);
@@ -238,7 +243,13 @@ export function perfLap(stage?: string): void {
   lapT = now;
 }
 // (WebGPU's `calls` counts its renders since the page started; the frame's draws are its `drawCalls`)
-const frameDraws = (): number => (WEBGPU ? (renderer.info.render as unknown as { drawCalls: number }).drawCalls : renderer.info.render.calls);
+// (under the Rust engine the scene's draws are the engine's: three's own were the overlays' one, "Draws 1")
+const engineStats = (): FrameStats | null => (RUNNING.rust ? RUST.bridge?.stats ?? null : null);
+function frameDraws(): number {
+  const engine = engineStats();
+  if (engine) return engine.draws + engine.shadowDraws;
+  return WEBGPU ? (renderer.info.render as unknown as { drawCalls: number }).drawCalls : renderer.info.render.calls;
+}
 // (a warm-up behind the lobby said: a phone's lobby stalled 150 to 300 ms at a time with our own work at 10 ms, and
 // the report couldn't tell whether the fight's programs were being made then)
 const frameContext = (): string => `${G.mode}${isWarming() ? ' (warming)' : ''}, ${G.enemies.length} foes, `
@@ -250,7 +261,7 @@ export function perfEndFrame(): void {
   callsBefore = frameCalls;
   trisBefore = frameTris;
   frameCalls = frameDraws();
-  frameTris = renderer.info.render.triangles;
+  frameTris = engineStats()?.triangles ?? renderer.info.render.triangles;
   recorder.end(end - cpuStart, split.upd, split.rnd, frameCalls, frameTris, renderer.info.programs?.length ?? 0,
     G.enemies.length, particles.glow.count + particles.smoke.count);
   takeWebGpuTime();
@@ -305,7 +316,8 @@ function takeWebGpuTime(): void {
   const gpuTimer = renderer as unknown as WebGpuTimes;
   void Promise.all([gpuTimer.resolveTimestampsAsync('render'), gpuTimer.resolveTimestampsAsync('compute')])
     .then(([render, compute]) => {
-      const ms = (render ?? 0) + (compute ?? 0);
+      // (the engine's passes are timed by its own timestamps: three's alone read 0.07 ms, from play "is GPU time real?")
+      const ms = (render ?? 0) + (compute ?? 0) + (engineStats()?.gpuMs ?? 0);
       if (ms <= 0) return;
       const parts = lastFrameParts(renderer);
       recorder.gpu(at, ms, parts);

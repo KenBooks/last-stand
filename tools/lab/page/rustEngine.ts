@@ -13,7 +13,7 @@ import type { FrameStats } from '../../../src/engine/bridge';
 import { standAt } from './draws';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
-import { enterRoom, leaveRoom } from '../../../src/game/rooms';
+import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
 
 export interface RustCommand {
@@ -113,6 +113,19 @@ async function longestFrame(lab: Lab, frames: number): Promise<number> {
   return longest;
 }
 
+/** Frames stepped until the hero is in `room` (the game's own wait for its rooms, at most a minute): how long it
+ *  took by the browser's clock (ms; 0 if he was in already). */
+async function untilInside(lab: Lab, room: RoomId): Promise<number> {
+  const clock = (window as unknown as { __labClock: { realNow: () => number; realFrame: () => Promise<void> } }).__labClock;
+  const began = clock.realNow();
+  if (roomHere() === room) return 0;
+  while (roomHere() !== room && clock.realNow() - began < 60000) {
+    await lab.step(1);
+    await clock.realFrame();
+  }
+  return clock.realNow() - began;
+}
+
 /** The hero gone into `room`, out again and in once more, drawn each time: the longest frame of each change of
  *  place (a first visit hands the room over; a way out or a second visit should hand over nothing). He's left
  *  inside. From play: each took 20 s. */
@@ -123,6 +136,9 @@ async function inAndOut(lab: Lab, room: RoomId): Promise<string> {
   try {
     enterRoom(room);
     times.push(`in ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+    // (on a page booted --cold the rooms aren't ready: the game shows its bar and goes in when they are)
+    const waited = await untilInside(lab, room);
+    if (waited > 0) times.push(`after ${(waited / 1000).toFixed(1)} s under the game's Opening bar`);
     leaveRoom();
     times.push(`out ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
     enterRoom(room);
