@@ -92,14 +92,41 @@ function legendLine(legend: HTMLElement, index: number): string {
   return `  legend ${index + 1}: ${boxes.length} slots in ${rows} row(s), ${width.toFixed(0)} px each`;
 }
 
-/** Every legend on the hero's page checked; with the canary, its plant first. */
+/** The styles' table (a loadout's keys side by side, `compare` in heroes.ts): every skill's picture the same size,
+ *  its name inside its place, and none past its cell (a key with no skill left out). */
+function tableProblems(): { lines: string[]; problems: string[] } {
+  const chips = [...document.querySelectorAll<HTMLElement>('#guide .gd-compare.keys td .gd-chip:not(.none)')];
+  const boxes = chips.map((chip) => chip.getBoundingClientRect());
+  const problems: string[] = [];
+  // (the pictures' sizes: on a narrow page a name stands under its icon, and one of two lines makes a taller chip)
+  const pictures = chips.map((chip) => chip.querySelector('.gd-ic')!.getBoundingClientRect());
+  const widths = pictures.map((box) => box.width);
+  const heights = pictures.map((box) => box.height);
+  const spread = (values: number[]): number => Math.max(...values) - Math.min(...values);
+  if (chips.length && (spread(widths) > SLACK || spread(heights) > SLACK)) {
+    problems.push('guide keys: uneven slots in the styles\' table');
+  }
+  chips.forEach((chip, at) => {
+    const cell = chip.closest('td')!.getBoundingClientRect();
+    const name = chip.querySelector('.gd-cn');
+    const outside = !inside(boxes[at], cell) || (name && !inside(name.getBoundingClientRect(), boxes[at]));
+    if (outside) problems.push(`guide keys: the styles' table's skill ${at + 1} spills out of its place`);
+  });
+  if (!chips.length) problems.push(`guide keys: no styles' table on the ${HERO}'s page`);
+  const size = `${(widths[0] ?? 0).toFixed(0)}x${(heights[0] ?? 0).toFixed(0)} px`;
+  return { lines: [`  the styles' table: ${chips.length} skills, ${size} each`], problems };
+}
+
+/** Every legend on the hero's page checked, and the styles' table; with the canary, its plant first. */
 export function guideKeysShown(canary: boolean): Found {
   const all = legends();
-  if (canary && all[0]) slotsOf(all[0])[0]?.style.setProperty('width', '260px');
+  // (its basis, not its width: the slots are a flex row's, each its share of the tray's)
+  if (canary && all[0]) slotsOf(all[0])[0]?.style.setProperty('flex', '0 0 260px');
   const page = document.querySelector<HTMLElement>('#guide .gd-page')!.getBoundingClientRect();
   const problems = all.flatMap((legend, index) => legendProblems(legend, index, page));
   if (!all.length) problems.push(`guide keys: no legend on the ${HERO}'s page`);
-  return { lines: all.map(legendLine), problems };
+  const table = tableProblems();
+  return { lines: [...all.map(legendLine), ...table.lines], problems: [...problems, ...table.problems] };
 }
 
 /** The guide as the player sees it at the styles' table, the weapon styles and the loadouts (with the combos under

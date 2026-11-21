@@ -278,17 +278,36 @@ body.touch .pbg-key { display: none; }
 .gd-compare tbody th { color: var(--ink-dim); font-weight: 400; white-space: nowrap; }
 .gd-compare tr.differs td { background: rgba($highlight, .06); }
 .gd-compare td { min-width: 110px; }
-// (a loadout's keys side by side: as wide a column each, the key's in its cap alone, each skill its icon over its
-// name as the skill bar shows it, centred in its column: laid by their content the styles' columns wrapped one name and
-// not the same name beside it, and a larger icon beside its name wrapped most of them)
+// (a loadout's keys side by side: as wide a column each, the key's in its cap alone, each skill its icon large, framed
+// as the hotbar frames it, its name written over its foot on a shade, centred in its column, and a key with none an
+// empty frame of the same size. Laid by their content the styles' columns wrapped one name and not the same name
+// beside it, and an icon over its name, or beside it, left the art small; from the owner, of the two: "B: name over
+// icon")
+$cell-art: 92px;
 .gd-compare.keys table { table-layout: fixed; }
 .gd-compare.keys thead th { text-align: center; vertical-align: bottom; }
 .gd-compare.keys thead th:first-child { width: 46px; }
-.gd-compare.keys td { min-width: 0; padding: 8px 4px 7px; text-align: center; }
+.gd-compare.keys td { min-width: 0; padding: 5px 4px; text-align: center; }
 .gd-compare.keys tbody th { padding: 0 8px; text-align: center; }
-.gd-compare.keys .gd-chip { flex-direction: column; gap: 5px; font-size: 13px; line-height: 1.15; }
-.gd-compare.keys .gd-chip .gd-ic i { width: 38px; height: 38px; font-size: 24px; border: 1px solid #000; border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba($frame, .45); }
+.gd-compare.keys .gd-chip { position: relative; display: block; width: min(100%, #{$cell-art}); aspect-ratio: 1; margin: 0 auto;
+  border-radius: 3px; overflow: hidden; }
+.gd-compare.keys .gd-chip .gd-ic, .gd-compare.keys .gd-chip .gd-ic i { width: 100%; height: 100%; }
+.gd-compare.keys .gd-chip .gd-ic i { font-size: 44px; background-color: rgba(0, 0, 0, .45); }
+// (the hotbar's frame and shade over the art, as a slot draws them)
+.gd-compare.keys .gd-chip::after { content: ''; position: absolute; inset: 0; border-radius: 3px; border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px rgba($frame, .6), inset 0 0 12px rgba(0, 0, 0, .7); pointer-events: none; }
+.gd-compare.keys .gd-cn { position: absolute; inset: auto 0 0; padding: 16px 4px 5px; font-size: 13px; line-height: 1.1;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .85) 55%); text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.gd-compare.keys .gd-chip.none { display: grid; place-items: center; background: rgba(0, 0, 0, .3); font-size: 18px; }
+.gd-compare.keys .gd-chip.none::after { border-color: transparent; box-shadow: inset 0 0 0 1px rgba($frame, .25); }
+// (a page too narrow for six such pictures, an upright tablet's: the table keeps its pictures at a size their names fit
+// and scrolls across in its frame, as it did before; shared out among six columns there, they were 44 px, the headers
+// ran into each other and the names broke mid-word)
+@container (max-width: 640px) {
+  .gd-compare.keys table { width: max-content; table-layout: auto; }
+  .gd-compare.keys td { width: 88px; }
+  .gd-compare.keys .gd-chip { width: 80px; }
+}
 
 @media (prefers-reduced-motion: reduce) { .gd-track b { animation: none; } }
 @media (max-width: 760px), (max-height: 520px) {

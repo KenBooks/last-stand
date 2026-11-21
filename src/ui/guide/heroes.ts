@@ -28,10 +28,10 @@ const skillOf = (cls: ClassDef, impl: string | null): SkillDef | undefined => (i
 /** whether the page is of the hero being played: his own figures then */
 const played = (cls: ClassDef): boolean => G.player?.cls.id === cls.id;
 
-/** A skill's chip: its icon and name. */
+/** A skill's chip: its icon and name (laid over the icon's foot in a loadout's table). */
 function chip(def: SkillDef | undefined): string {
   if (!def) return '<span class="gd-chip none">—</span>';
-  return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span>${def.name}</span>`;
+  return `<span class="gd-chip" style="--c:${def.icon.color}"><span class="gd-ic">${skillIconHTML(def)}</span><span class="gd-cn">${def.name}</span></span>`;
 }
 
 /** A loadout as the game's skill bar: a slot a key, each with its skill, laid on even columns. */
