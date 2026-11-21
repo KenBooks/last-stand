@@ -75,6 +75,12 @@ body.touch .hs-key { font-size: 0; }
 .hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
   font-size: ui(15px); padding: ui(9px) ui(16px); }
 #heroes.first .hs-back { display: none; }
+/* its key in the village, where E leaves the screen as it leaves what every other object opens (from play: "lets add
+   (E) to back to lobby button, so users know about it"); none on touch, which has no keys */
+.hs-back-key { display: inline-block; margin-left: ui(9px); padding: ui(1px) ui(6px); border: 1px solid rgba($highlight, .5);
+  border-radius: ui(3px); background: rgba($highlight, .08); color: var(--ink);
+  font: 700 ui(12px) / 1.3 var(--font-display); letter-spacing: 0; vertical-align: 0.08em; }
+body.touch .hs-back-key { display: none; }
 
 /* ---------- the panel: the hero in focus's card, and the choice ---------- */
 .hs-panel { position: absolute; top: var(--gut); right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: var(--gut); width: var(--pw);
