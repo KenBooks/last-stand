@@ -4,6 +4,7 @@
 // stays on its wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
 // it is held at, and wraps its fingers round the handle's actual radius (`hold`).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { joint } from './rig';
 import { dualQuaternionSkinned } from './dualQuaternion';
 import { triplanar } from './triplanar';
@@ -704,6 +705,7 @@ export function wrapPoses(h: Hand): (() => void)[] {
  *  another part of the skin must lie to a point out there to close it in (of that step), how much darker the skin is
  *  where it closes in wholly, and its colour there, warmer as a fold's is */
 const SHUT_SHADE = { steps: [0.003, 0.006, 0.01], near: 0.62, dark: 0.55, warm: [1, 0.86, 0.82] };
+const SHUT_COLOURS = new Map<string, THREE.BufferAttribute>();
 const _shadeM = new THREE.Matrix4(), _shadeP = new THREE.Vector3(), _shadeN = new THREE.Vector3();
 const _shadeB = new THREE.Vector3(), _shadeQ = new THREE.Vector3();
 
@@ -723,19 +725,45 @@ function shadeShut(h: Hand, on: boolean): void {
   const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: THREE.BufferAttribute };
   kept.open ??= geometry.attributes.color as THREE.BufferAttribute;
   if (!kept.open) return;
-  // (not from a hand drawn at no size, a hero hidden as he's built or warmed: its grid's cells would be nothing wide)
-  if (on && !kept.shut && mesh.getWorldScale(_shadeQ).x > 0.2) kept.shut = shutColours(mesh, kept.open);
+  // (in the hand's own frame, whatever size the hero is drawn at: read in the world's, a hero hidden at no size as
+  // he's built or warmed had no cells to his grid, so his fist was shaded at his first punch instead, 40 to 50 ms of
+  // that frame: `lab range --gear bare --skill mouse0`, the pose's time at frame 0 of Savage Fists)
+  // (and once a side, build and detail, whichever hero's hand is shut first: kept on the geometry alone, every hero
+  // built after the first shaded his own again at his first punch, the wrap's lay, which shuts the fist as he's
+  // built, being made once too)
+  if (on && !kept.shut) {
+    const key = `${handKey(h.s, h.build)} ${kept.open.count}`;
+    let shut = SHUT_COLOURS.get(key);
+    if (!shut) {
+      shut = shutColours(mesh, kept.open, h.vis);
+      SHUT_COLOURS.set(key, shut);
+    }
+    kept.shut = shut;
+  }
   const want = on && kept.shut ? kept.shut : kept.open;
   if (geometry.attributes.color !== want) geometry.setAttribute('color', want);
 }
 
-/** `mesh`'s skin's colours as its bones pose it now (`shadeShut`), over `open`, its sculpt's. */
-function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THREE.BufferAttribute {
+/** `bone`'s place in `root`'s frame, by its own and its parents' turns alone (null: it isn't under `root`). */
+function placeIn(bone: THREE.Object3D, root: THREE.Object3D): THREE.Matrix4 | null {
+  const placed = new THREE.Matrix4();
+  for (let at: THREE.Object3D | null = bone; at !== root; at = at.parent) {
+    if (!at) return null;
+    at.updateMatrix();
+    placed.premultiply(at.matrix);
+  }
+  return placed;
+}
+
+/** `mesh`'s skin's colours as its bones pose it now (`shadeShut`), over `open`, its sculpt's; read in `root`'s frame,
+ *  the hand's own. */
+function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute, root: THREE.Object3D): THREE.BufferAttribute {
   const geometry = mesh.geometry, position = geometry.attributes.position, normal = geometry.attributes.normal;
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight, count = position.count;
   const bones = mesh.skeleton.bones.map((bone, n) => {
-    bone.updateWorldMatrix(true, false);
-    return new THREE.Matrix4().multiplyMatrices(bone.matrixWorld, mesh.skeleton.boneInverses[n]);
+    const placed = placeIn(bone, root);
+    if (!placed) throw new Error('hands: a bone of the fist is not in its hand');
+    return placed.multiply(mesh.skeleton.boneInverses[n]);
   });
   // each vertex and its normal as posed (blended by its bones' shares, as the skin is drawn)
   const at = new Float32Array(count * 3), out = new Float32Array(count * 3);
@@ -753,7 +781,7 @@ function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THRE
     at.set([_shadeP.x, _shadeP.y, _shadeP.z], i * 3); out.set([_shadeN.x, _shadeN.y, _shadeN.z], i * 3);
   }
   // (the posed vertices in a grid, a cell the furthest reach: a point's neighbours are in the 27 cells round it)
-  const scale = mesh.getWorldScale(_shadeQ).x, steps = SHUT_SHADE.steps.map((step) => step * scale);
+  const steps = SHUT_SHADE.steps;
   // (its cells numbered, a list a cell: keyed by a string made for each of a point's 27 cells, 1.2 million a hand, the
   // lookups were most of 190 ms of the build's task a hand, 770 ms with the CPU slowed 4 times: `stalls --scenario
   // boot --js`, the wrap's lay shutting the fist for the first time)
@@ -805,7 +833,47 @@ function shutColours(mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute): THRE
  *  finger's curls it runs (m, at the plain hand's size) */
 const FIST_CORE = tunable('fistCore', { r: 0.016, deep: 0.014, past: 0.005 });
 const CORE_SHAPE = new THREE.SphereGeometry(1, 14, 10);
-const CORES = new Map<string, { at: THREE.Vector3; turn: THREE.Quaternion; half: number }>();
+type Core = { at: THREE.Vector3; turn: THREE.Quaternion; half: number; webs: THREE.BufferGeometry };
+const CORES = new Map<string, Core>();
+const WEB_SHAPE = new THREE.SphereGeometry(1, 10, 6);
+/** the skin pressed between a shut fist's neighbouring fingers (`fistWebs`): its radius as a share of the thinner
+ *  finger's, how far past a segment's ends it runs (a share of the segment), and how far it lies in from the
+ *  fingers' fronts towards the palm (a share of that radius) */
+const FIST_WEB = tunable('fistWeb', { r: 0.62, past: 0.25, in: 0.3 });
+
+/**
+ * The skin pressed between each two neighbouring fingers of a shut fist, `pose` its closed pose: a rounded bar along
+ * each pair's middle segments and one along their last, on the line between the two bones, inside the two fingers'
+ * own roundness. The fingers are tubes of their own with 0.3 to 1.9 mm between them, where a real fist's press flat
+ * on each other, and seen end on, from the fingertips' side, the backdrop showed through two of those slits past the
+ * palm (`lab hands --class warrior --poses clenched --wrap=false`: 0.30% of the hand, 0.1% allowed), which neither
+ * the bar inside the curls nor the fingers' fan closed: fanned nearer, they sink into each other first. One geometry
+ * in the hand's frame, made once a side and build and never disposed: a draw a fist.
+ */
+function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
+  const chains = h.f.map((digit, i) => chainOf(digit.j[0].position, digit.len, pose[i]));
+  const webs: THREE.BufferGeometry[] = [];
+  const placed = new THREE.Matrix4();
+  for (let i = 0; i + 1 < h.f.length; i++) {
+    for (const n of [1, 2]) {
+      const [a, b] = [chains[i], chains[i + 1]];
+      const from = a.points[n].clone().add(b.points[n]).multiplyScalar(0.5);
+      const to = a.points[n + 1].clone().add(b.points[n + 1]).multiplyScalar(0.5);
+      const along = to.clone().sub(from), r = Math.min(h.f[i].r, h.f[i + 1].r) * FIST_WEB.r;
+      // (in from the segments' fronts, their nails' side: the flesh shows in the groove's depth, not on its lips)
+      const front = new THREE.Vector3(0, 0, 1).applyQuaternion(a.frames[n].clone().slerp(b.frames[n], 0.5));
+      const at = from.clone().add(to).multiplyScalar(0.5).addScaledVector(front, -FIST_WEB.in * r);
+      const size = new THREE.Vector3(along.length() * (0.5 + FIST_WEB.past), r, r);
+      const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize());
+      webs.push(WEB_SHAPE.clone().applyMatrix4(placed.compose(at, turn, size)));
+    }
+  }
+  const merged = mergeGeometries(webs)!;
+  for (const web of webs) web.dispose();
+  merged.computeVertexNormals();
+  merged.userData.shared = true;
+  return merged;
+}
 
 /**
  * The flesh that fills a fighter's shut fist, `pose` its closed pose (null: the hand is open, and it's put away). The
@@ -825,8 +893,20 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
     core.scale.setScalar(1e-4);
     h.vis.add(core);
     h.vis.userData.core = core;
+    // (the webs between its fingers, `fistWebs`: beside it in the hand's frame, their shape set as the fist first shuts)
+    // (a shape of its own until then: a mesh of no points breaks what reads every mesh's)
+    const webs = new THREE.Mesh(WEB_SHAPE, core.material);
+    webs.castShadow = false;
+    webs.scale.setScalar(1e-4);
+    h.vis.add(webs);
+    core.userData.webs = webs;
   }
-  if (!pose) { core.scale.setScalar(1e-4); return; }
+  const webs = core.userData.webs as THREE.Mesh;
+  if (!pose) {
+    core.scale.setScalar(1e-4);
+    webs.scale.setScalar(1e-4);
+    return;
+  }
   const key = handKey(h.s, h.build);
   let made = CORES.get(key);
   if (!made) {
@@ -839,6 +919,7 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
     made = {
       at: from.clone().add(to).multiplyScalar(0.5), half: along.length() / 2,
       turn: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize()),
+      webs: fistWebs(h, pose),
     };
     CORES.set(key, made);
   }
@@ -848,6 +929,8 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
   core.position.copy(made.at);
   core.quaternion.copy(made.turn);
   core.scale.set(made.half + FIST_CORE.past, r, deep);
+  webs.geometry = made.webs;
+  webs.scale.setScalar(1);
 }
 
 /** Close from rest and aim the knuckle row along `line` (world), keeping the hand along the forearm. */
